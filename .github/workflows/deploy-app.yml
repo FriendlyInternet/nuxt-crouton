@@ -100,6 +100,14 @@ on:
       # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
       STATUS_GITHUB_TOKEN:
         required: false
+      # Read by steps below but never declared (actionlint, #2970): declare every secret a
+      # reusable workflow reads rather than relying on it arriving undeclared.
+      RESEND_API_KEY:
+        required: false
+      HARNESS_APP_ID:
+        required: false
+      HARNESS_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   deploy:
@@ -258,12 +266,51 @@ jobs:
       # with NITRO_PRESET=cloudflare_module, deploys (auto-provisioning id-less
       # D1/KV on first run), syncs the provisioned ids back into wrangler.jsonc,
       # and applies remote D1 migrations.
+      # LIVE SYNC (#2693) — `"collab": true` in the app's deploy.config.json also deploys the
+      # crouton-collab Worker and points the app at it. Runs BEFORE the app build because the
+      # Worker's URL is baked into the client bundle (NUXT_PUBLIC_COLLAB_WORKER_URL, below).
+      # Order: Worker -> D1 migration -> app. Apps that don't set the flag skip it entirely.
+      # Secret: a dedicated COLLAB_TOKEN_SECRET = sha256(REVIEW_SEED_SECRET:app:scope:collab),
+      # derived here (wrangler secrets can't be read back, so nothing is copied) and set on BOTH
+      # the Worker (here) and the app (the "Set COLLAB_TOKEN_SECRET on the app" step below).
+      # Missing seed -> the deploy fails loudly; no fallback to BETTER_AUTH_SECRET.
+      - name: Deploy collab Worker (collab flag)
+        id: collab
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          if [ "$(jq -r '.collab == true' deploy.config.json 2>/dev/null)" != "true" ]; then
+            echo "${{ inputs.app }} has no \"collab\": true in deploy.config.json — no live-sync Worker."
+            exit 0
+          fi
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so the collab token secret cannot be derived. Add it as a repository Actions secret."
+            exit 1
+          fi
+          read -r WORKER SCOPE < <(node --input-type=module -e "
+            import { collabWorkerName } from '$GITHUB_WORKSPACE/scripts/lib/collab-worker.mjs'
+            const [app, environment, pr] = process.argv.slice(1)
+            const scope = environment === 'production' || !pr ? environment : 'pr' + pr
+            console.log(collabWorkerName({ app, environment, pr }), scope)
+          " "${{ inputs.app }}" "$ENVIRONMENT" "$PR_NUM")
+          COLLAB_TOKEN_SECRET="$(printf '%s' "$REVIEW_SEED_SECRET:${{ inputs.app }}:$SCOPE:collab" | sha256sum | cut -d' ' -f1)"
+          echo "::add-mask::$COLLAB_TOKEN_SECRET"
+          export COLLAB_TOKEN_SECRET
+          printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
+          node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
+
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
+          # Live sync (#2693): the collab Worker deployed above, empty when the flag is off.
+          NUXT_PUBLIC_COLLAB_WORKER_URL: ${{ steps.collab.outputs.url }}
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
           # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
           # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
@@ -705,6 +752,22 @@ jobs:
             printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
           fi
 
+      # Live sync (#2693): give the app the SAME derived token secret the collab Worker got, on
+      # every deploy (idempotent). /api/collab/token signs with it; CollabRoom verifies with it.
+      - name: Set COLLAB_TOKEN_SECRET on the app (collab flag)
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          [ -f "$RUNNER_TEMP/collab-token-secret" ] || { echo "No collab flag — nothing to set."; exit 0; }
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ "$ENVIRONMENT" = "production" ]; then ENV_FLAG=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then ENV_FLAG="--config .output/server/wrangler.json"
+          else ENV_FLAG="--env staging"; fi
+          npx wrangler secret put COLLAB_TOKEN_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-token-secret"
+          rm -f "$RUNNER_TEMP/collab-token-secret"
+
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
       # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
@@ -967,13 +1030,13 @@ jobs:
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
             const marker = `<!-- deploy-staging:${app} -->`
-            // Review login (#608). The password and the one-click link that carries it are
-            // NEVER posted here — PR comments are public on this repo (#2358). The link goes
-            // to the owner by email (step above); this only says the login exists.
-            const login = email
-              ? `\n\n🔑 Review login \`${email}\` — the sign-in link comes by email when the epic is ready to test.`
-              : ''
+            // Review login (#608, #2817). No credentials are ever posted here — PR comments
+            // are public on this repo (#2358). The status app signs in server-side and
+            // redirects to this PR's preview, so the link is safe to post.
             const pr = context.issue.number
+            const login = email
+              ? `\n\n🔑 [Open and sign in](https://status.pmcp.dev/api/status/login/${app}?key=pr${pr})\n<sub>The sign-in email is separate: one per epic, once the work is merged and live on staging.</sub>`
+              : ''
             // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
             // changed piece's own review page, not just the gallery's front door.
             let pieces = ''

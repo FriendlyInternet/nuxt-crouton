@@ -99,13 +99,13 @@ jobs:
         if: steps.canary.outputs.any_alert == 'true'
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ vars.DIGEST_EMAIL_FROM }}
+          EMAIL_FROM: ${{ vars.RESEND_FROM }}
           EMAIL_TO: ${{ vars.DIGEST_REPORT_EMAIL }}
           SUMMARY: ${{ steps.canary.outputs.summary }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
-            echo "::warning::RESEND_API_KEY / DIGEST_EMAIL_FROM / DIGEST_DEFAULT_TO not set — skipping email (run stays green)."
+            echo "::warning::RESEND_API_KEY / RESEND_FROM / DIGEST_DEFAULT_TO not set — skipping email (run stays green)."
             exit 0
           fi
           BODY="$SUMMARY

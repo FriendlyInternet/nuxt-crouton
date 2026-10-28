@@ -207,23 +207,15 @@ interface FormDynamicLoaderProps {
 
 ### Component Resolution
 
-The loader uses `useCollections().componentMap` to find the correct component:
+The loader computes the component name from the collection key and loads it lazily from a build-time map (no registry lookup):
 
 ```typescript
-// Resolution logic:
-// 1. Check componentMap for collection
-const componentMap = useCollections().componentMap
-
-// 2. For 'view' action, try Detail component first
-if (action === 'view') {
-  // Try: UsersDetail, then fallback to UsersForm
-  const detailComponent = componentMap.get(`${collection}Detail`)
-  if (detailComponent) return detailComponent
-}
-
-// 3. Return standard form component
-return componentMap.get(`${collection}Form`)
+// Collection key `shopProducts` → canonical name `ShopProducts`
+// view   → ShopProductsDetail → CroutonDetail → ShopProductsForm
+// others → ShopProductsForm
 ```
+
+A component of that name in the app's `app/components` wins over the generated or package one. See [Replace a form or list](/customization/eject).
 
 ### Convention: Detail vs Form Components
 

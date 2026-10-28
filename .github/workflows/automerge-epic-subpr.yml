@@ -59,7 +59,7 @@ name: Auto-merge epic sub-PRs
 # green sub-PR sat unmerged forever, and the owner merged them by hand.
 # `workflow_run` DOES fire for Actions-generated completions. `CI` owns `CI Gate`, so its
 # completion is precisely the moment the answer can change. Same cure #1884 applied to
-# pipeline-pr-status.yml.
+# status.yml.
 # LEVEL-TRIGGERED BACKSTOP (#2091). Everything above is EDGE-triggered — a PR event, or a
 # workflow completing. A PR held at a moment when the answer was legitimately "not yet" is
 # therefore never re-asked, because its edges have all already fired: the pi worker pushes
@@ -85,8 +85,10 @@ on:
     workflows: ["CI"]
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
-  issue_comment:
-    types: [created]
+  # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
+  # (kind=automerge-go). The caller's event is still issue_comment, so the branches below that
+  # read `issue_comment` keep working unchanged.
+  workflow_call:
 
 permissions:
   contents: read
@@ -115,7 +117,11 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+      # Default branch, never the PR's merge ref: the hold decision must not be editable by the PR it judges.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
@@ -219,6 +225,27 @@ jobs:
               if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
+              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // (#2875): start the conflict resolver once per head (marker carries the sha).
+              if (epicToMain && state === 'dirty') {
+                const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
+                const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+                // Concurrent sweeps all see "no marker yet" for the same head (#2914), so also hold off
+                // while ANY resolver note on this PR is under 30 minutes old: one run per branch at a time.
+                const recent = prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:')
+                  && Date.now() - Date.parse(x.created_at) < 30 * 60 * 1000)
+                if (!recent && !prior.some(x => (x.body || '').includes(marker))) {
+                  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
+                  try {
+                    const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                      body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
+                        + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
+                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
+                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
+                    core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
+                  } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
+                }
+              }
               if (['dirty', 'blocked'].includes(state)) {
                 core.info(`#${pull_number} not auto-mergeable (state=${state}) — leaving for a human.`); continue
               }
@@ -250,6 +277,12 @@ jobs:
                 continue
               }
 
+              // Build review (#2777): a green PR still needs the independent reviewer's go.
+              // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
+              // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
+              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
+                core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
+              }
               // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
               // commit after it, releases the shared-code pause and the epic → main hold.
               // Green + presence gates above still apply — `ok` never overrides a red check.
@@ -271,8 +304,11 @@ jobs:
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
               // workflows, but a workflow change never self-merges.
               const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
-              const sharedCode = files.filter(f => f.filename.startsWith('packages/') || f.filename.startsWith('.github/workflows/'))
-              if (sharedCode.length && !go.go) {
+              // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
+              const { decideSharedCodeHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/shared-code-hold.mjs`)
+              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: files.map(f => f.filename) })
+              const sharedCode = hold.held
+              if (hold.action === 'hold' && !go.go) {
                 // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
                 // on an epic branch, and without this guard it re-posted the identical "held for a
                 // human" comment every hour (observed twice, 7 minutes apart, on PR #2148) and
@@ -291,14 +327,13 @@ jobs:
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
                 // #2520: no review request or @mention here — sub-PRs never notify the owner;
                 // only the epic→main PR and real blocking questions do.
-                const hasPkgs = sharedCode.some(f => f.filename.startsWith('packages/'))
-                const hasWf = sharedCode.some(f => f.filename.startsWith('.github/workflows/'))
+                const { hasPkgs, hasWf } = hold
                 const what = hasPkgs && hasWf ? 'shared code under `packages/` and CI workflows under `.github/workflows/`'
                   : hasWf ? 'CI workflows under `.github/workflows/`' : 'shared code under `packages/`'
-                const why = hasPkgs
-                  ? 'a change to `packages/` ripples across every consuming app (the `packages/` HARD GATE, #350), so it is not auto-merged — review it, confirm `pnpm typecheck` across apps, then reply `ok` and it merges itself once green.'
-                  : 'a workflow change never self-merges until you say so (#2442) — review it, then reply `ok` and it merges itself once green.'
-                const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
+                const why = hasWf
+                  ? 'a workflow change never self-merges until you say so (#2442) — review it, then reply `ok` and it merges itself once green.'
+                  : 'a change to `packages/` ripples across every consuming app (the `packages/` HARD GATE, #350) and it is not releasable by this path — review it, confirm `pnpm typecheck` across apps, then reply `ok` and it merges itself once green.'
+                const list = sharedCode.slice(0, 10).map(f => `- \`${f}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
                   body: `⏸️ **Held for a human — this build PR changes ${what}.**\n\n`
@@ -308,10 +343,23 @@ jobs:
                 continue
               }
 
-              try {
-                await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
-                core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
-              } catch (e) {
-                core.warning(`merge #${pull_number} failed: ${e.message}`)
+              // #2904: two merges into the same base seconds apart — the second gets HTTP 405
+              // "Base branch was modified". Retry that (only that) a few times; any other error is final.
+              let merged = false
+              for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
+                try {
+                  await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
+                  merged = true
+                  core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
+                } catch (e) {
+                  const baseMoved = e.status === 405 && /base branch was modified/i.test(e.message || '')
+                  if (baseMoved && attempt < 3) {
+                    core.info(`merge #${pull_number}: base moved, retry ${attempt}/2 in 5s`)
+                    await new Promise(r => setTimeout(r, 5000))
+                    continue
+                  }
+                  core.warning(`merge #${pull_number} failed: ${e.message}`)
+                  break
+                }
               }
             }

@@ -193,7 +193,7 @@ needs prop/slot judgment").
   specifically want "are we on Nuxt UI 4 / crouton components, correctly", with the
   option to comment or fix.
 - **CI runs the same engine automatically** (mirroring the red-team/a11y workflows):
-  `.github/workflows/frontend-review.yml` runs the subagent at `depth=quick` on a PR
+  `.github/workflows/review.yml` runs the subagent at `depth=quick` on a PR
   diff — posts a sticky `<!-- frontend-review -->` comment and **fails the check on a
   🔴 finding** (diff-scoped, so never on the pre-existing backlog). `/frontend-review`
   is the **on-demand** brain and human entry point for the same machinery. The workflow

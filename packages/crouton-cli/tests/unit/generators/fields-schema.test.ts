@@ -209,3 +209,28 @@ describe('buildFieldsTypes — read interface stays narrow (#1403)', () => {
     expect(out).toContain('config?: string | null')
   })
 })
+
+describe('buildFieldsSchema derives from manifest zod (#2909)', () => {
+  const types: Array<[string, string]> = [
+    ['string', 'z.string()'], ['text', 'z.string()'], ['number', 'z.number()'],
+    ['decimal', 'z.number()'], ['boolean', 'z.boolean()'], ['json', 'z.any()'],
+    ['repeater', 'z.array(z.any())'], ['reference', 'z.string()'],
+    ['image', 'z.string()'], ['file', 'z.string()']
+  ]
+
+  it.each(types)('%s: required emits manifest zod (+min(1) only for string/text)', (type, zod) => {
+    const out = build([field('f', type, { required: true }, zod)])
+    const expected = type === 'string' || type === 'text'
+      ? `f: ${zod}.min(1, 'f is required')`
+      : `f: ${zod}`
+    expect(out).toBe(expected)
+  })
+
+  it.each(types)('%s: optional server emits manifest zod + .nullish()', (type, zod) => {
+    expect(build([field('f', type, {}, zod)], null, 'server')).toBe(`f: ${zod}.nullish()`)
+  })
+
+  it('date overrides manifest zod with coerce', () => {
+    expect(build([field('d', 'date', { required: true }, 'z.date()')])).toBe('d: z.coerce.date()')
+  })
+})

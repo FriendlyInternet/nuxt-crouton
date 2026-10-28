@@ -76,16 +76,9 @@
         :class="showInlineEditor ? 'w-2/5 border-r border-default' : 'w-full'"
         class="transition-all duration-200 min-h-0 overflow-auto"
       >
-        <div
-          v-if="componentError"
-          class="text-red-600 p-4 bg-red-50 rounded"
-        >
-          {{ t('collection.componentError', { error: componentError }) }}
-        </div>
-
         <!-- Workspace layout: render CroutonWorkspace directly -->
         <CroutonWorkspace
-          v-else-if="currentLayout === 'workspace'"
+          v-if="currentLayout === 'workspace'"
           :collection="collectionName"
           class="h-full"
         />
@@ -95,9 +88,9 @@
              effectiveLayout gives the component cards-on-mobile (#690) while
              honoring an explicit pick (#1169); the skeleton takes the
              plain-string displayedLayout so it matches what will render. -->
-        <Suspense v-else-if="componentName">
+        <Suspense v-else-if="listComponent">
           <component
-            :is="componentName"
+            :is="listComponent"
             :layout="effectiveLayout"
             class="h-full"
           />
@@ -145,6 +138,7 @@
 
 <script setup lang="ts">
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 import type { CroutonItemAction } from '../types/table'
 
 interface Props {
@@ -157,7 +151,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useT()
-const componentError = ref<string | null>(null)
 const currentLayout = ref(props.defaultLayout)
 
 // Use composable for formatting
@@ -274,20 +267,9 @@ const componentName = computed(() => {
   return `${toPascalCase(props.collectionName)}List`
 })
 
-// Try to resolve the component
-onMounted(async () => {
-  if (!componentName.value) return
-
-  try {
-    // Check if component exists in the global scope
-    const globalComponents = getCurrentInstance()?.appContext.components
-    if (!globalComponents || !globalComponents[componentName.value]) {
-      // Component might be auto-imported but not registered yet
-      // This is fine, Vue will handle it
-      console.debug(`Component ${componentName.value} will be resolved by auto-import`)
-    }
-  } catch (err) {
-    componentError.value = err instanceof Error ? err.message : String(err)
-  }
+// Nuxt's resolved winner (app beats layer) from the build-time map
+const listComponent = computed(() => {
+  if (!componentName.value) return null
+  return collectionForms[componentName.value] ?? null
 })
 </script>

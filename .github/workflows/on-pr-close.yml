@@ -1,0 +1,207 @@
+name: On PR close
+
+# ONE listener for "a pull request closed" (#2893, epic #2889). Before this, closing a PR started
+# six workflows. One run, one job per concern:
+#
+#   job                  was
+#   clear-blocked        clear-blocked-on-pr-close.yml  (#2054)
+#   teardown-preview     teardown-pr-preview.yml        (#2020)
+#   cleanup-epic-branch  cleanup-epic-branches.yml      (PR path, #2788)
+#   close-linked-issues  schedule-waves.yml             (PR path, #283)
+#   release-traffic      traffic-release.yml            (#2786)
+#
+# `clear-blocked` and on-issue-close.yml's `release` are the only two places that remove
+# `status:blocked`. Token rule unchanged: jobs whose writes must cascade use the Harness App
+# token; the cleanups use GITHUB_TOKEN. Permissions live at job level.
+# scripts/workflow-listeners.test.mjs fails CI if any other workflow listens for PR close.
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  clear-blocked:
+    # Held PR closed WITHOUT merging (superseded, abandoned): the issue resolved from the BRANCH
+    # NAME (`work-<N>`), never from body prose, so an unrelated PR can't strip a real hold.
+    # Removing a label raises no `labeled` event and triggers nothing (#572).
+    if: |
+      !github.event.pull_request.merged &&
+      startsWith(github.event.pull_request.head.ref, 'work-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const head = context.payload.pull_request.head.ref
+            const m = head.match(/^work-(\d+)$/)
+            if (!m) { core.info(`head ${head} is not a work-<issue> branch — nothing to clear.`); return }
+            const issue_number = Number(m[1])
+            try {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' })
+              core.info(`Cleared status:blocked from #${issue_number} (PR #${context.payload.pull_request.number} closed unmerged).`)
+            } catch (e) {
+              // 404 = the label wasn't set (non-UI PR, or already cleared) — the normal case.
+              core.info(`No status:blocked to clear on #${issue_number} (${e.status || e.message}).`)
+            }
+
+  teardown-preview:
+    # (#2020) Delete the per-PR preview Worker + D1 + KV. Not gated on `merged`: a closed-unmerged
+    # PR leaks the same resources. Best-effort — must never fail the PR-close event.
+    # Fork PRs never got a preview (no secrets), so there is nothing to tear down.
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      # Which apps could this PR have deployed? Same source of truth as the deploy side —
+      # an app opts in with a deploy.config.json, so anything without one never had a preview.
+      - id: apps
+        run: |
+          set -uo pipefail
+          APPS=""
+          for cfg in apps/*/deploy.config.json pocs/*/deploy.config.json; do
+            [ -f "$cfg" ] || continue
+            APPS="$APPS $(basename "$(dirname "$cfg")")"
+          done
+          echo "list=$(echo $APPS | xargs)" >> "$GITHUB_OUTPUT"
+          echo "candidate apps:$APPS"
+
+      - name: Delete preview Worker + D1 + KV
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.pull_request.number }}
+          APPS: ${{ steps.apps.outputs.list }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::warning::No Cloudflare token — skipping teardown (previews were never deployed either)."
+            exit 0
+          fi
+          REMOVED=0
+          for APP in $APPS; do
+           # The app's preview Worker, then its live-sync one (<app>-pr<N>-collab, #2693).
+           for WORKER in "${APP}-pr${PR}" "${APP}-pr${PR}-collab"; do
+            # `wrangler delete` exits non-zero for a Worker that doesn't exist. For most apps on
+            # most PRs that is the NORMAL case (the PR didn't touch that app), so it is noise,
+            # not an error — count what actually went away instead of trusting exit codes.
+            if npx wrangler delete --name "$WORKER" --force 2>&1 | tee /tmp/del.log | tail -2; then
+              grep -qi "deleted\|success" /tmp/del.log && { echo "  ✓ worker $WORKER"; REMOVED=$((REMOVED+1)); }
+            fi
+            for BINDING in db kv; do
+              RES="${WORKER}-${BINDING}"
+              case "$BINDING" in
+                db) npx wrangler d1 delete "$RES" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ d1 $RES" || true ;;
+                # KV is deleted by ID — "$RES" is its title, which --namespace-id never matches, so
+                # this used to miss on every PR and leak the namespace (#2608).
+                kv)
+                  KV_ID="$(npx wrangler kv namespace list 2>/dev/null | jq -r --arg t "$RES" '.[] | select(.title == $t) | .id' | head -1 || true)"
+                  if [ -n "$KV_ID" ]; then
+                    npx wrangler kv namespace delete --namespace-id "$KV_ID" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ kv $RES" || true
+                  fi ;;
+              esac
+            done
+           done
+          done
+          echo "teardown for PR #${PR}: ${REMOVED} worker(s) removed"
+
+  cleanup-epic-branch:
+    # The epic→main merge half of branch cleanup (#613/#2788): keep the branch while its epic is
+    # still OPEN; the close half lives in on-issue-close.yml.
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'epic/') &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { shouldKeepEpicBranch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-branch-keep.mjs`)
+            const branch = context.payload.pull_request.head.ref
+            let epicState
+            const n = Number(/^epic\/(\d+)-/.exec(branch)?.[1])
+            if (n) {
+              try {
+                epicState = (await github.rest.issues.get({ ...context.repo, issue_number: n })).data.state
+              } catch (e) { core.warning(`Could not read epic #${n}: ${e.message}`) }
+            }
+            if (shouldKeepEpicBranch(branch, epicState)) {
+              core.info(`Keeping ${branch}: its epic is still open (or state unknown).`)
+              return
+            }
+            try {
+              await github.rest.git.deleteRef({ ...context.repo, ref: `heads/${branch}` })
+              core.info(`🧹 Deleted epic branch ${branch} (epic closed).`)
+            } catch (e) {
+              // Already gone (e.g. "delete branch on merge" beat us) — not an error.
+              core.warning(`Could not delete ${branch}: ${e.message}`)
+            }
+
+  close-linked-issues:
+    # A merged PR closes its `Closes #NN` issues (GitHub only auto-closes on the default branch,
+    # not on an epic branch). App token: the close must cascade into on-issue-close.yml's release.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { closeLinkedIssues } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/wave-release.mjs`)
+            await closeLinkedIssues({ github, context, core })
+
+  release-traffic:
+    # (#2786) A pipeline PR (`work-<n>`) closing frees a slot: re-check every ticket parked by the
+    # start-of-run traffic check. App token so the released label cascades into work-issue-pidev.
+    if: ${{ !github.event.pull_request.head.repo.fork && startsWith(github.event.pull_request.head.ref, 'work-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+            const released = await releaseWaiting({ github, context })
+            core.info(released.length ? `released: ${released.map((n) => '#' + n).join(', ')}` : 'nothing to release')

@@ -8,7 +8,7 @@
 # source loop-station-trace reads) plus the agent step's outcome — then emits a
 # ::warning:: annotation and a step-summary block, and always exits 0.
 #
-# Shared by frontend-review.yml / a11y.yml / red-team.yml / loop-station-advisor.yml
+# Shared by review.yml / weekly.yml
 # so the classification logic can't drift per file. Callers pass the verdict file
 # their agent should have written; the advisor (no verdict file) omits it and gates
 # the step on its LLM step's failure instead.

@@ -8,6 +8,7 @@ demotion. `$out/Mtok` is the Claude baseline output price — the cost lever.
 ## Tiers
 - **small** — Claude `claude-haiku-4-5` · pi `claude-haiku-4-5` · ~$5/Mtok out — reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)
 - **medium** — Claude `claude-sonnet-5-5` · pi `claude-sonnet-5-5` · ~$15/Mtok out — most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)
+- **review** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — independent plan reviewer (#2756) — strongest model, read-only, never edits code
 - **large** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
 
 Default tier: **medium**
@@ -15,6 +16,9 @@ Default tier: **medium**
 ## Routes
 | Agent / flow | Current tier | Claude model | pi / local | $out/Mtok | Proposed | Why |
 |---|---|---|---|---|---|---|
+| `ticket-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent ticket review before an epic starts (#2776) — reads the epic, its tickets and the code they name, returns go / no-go / needs-owner per ticket; never edits. Same tier and model as plan-reviewer |
+| `build-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits |
+| `plan-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27 |
 | `task-worker` | large | claude-opus-5-5 | claude-opus-5-5 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
 | `pi-worker` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier |
 | `pi-reviser` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker |
@@ -31,6 +35,6 @@ Default tier: **medium**
 - **decompose-on-issue-pidev** → `claude-sonnet-5` — SUPERSEDED by #1669: ran GLM (zai/glm-5.2) after #1421's eval produced a correct house-style PR at $0 marginal; reverted to the Claude subscription (sonnet, the medium tier). Now matches the medium default, so this override is only kept as the recorded reversal.
 
 ## Known gaps
-The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)
+The top-level workflow loop (fix-ci and the weekly sweeps)
 runs on the `claude-code-action` **default** model — unpinned. Pinning those promotes
 them into the routes table above.

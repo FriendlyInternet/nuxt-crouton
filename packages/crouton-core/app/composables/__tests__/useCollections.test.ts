@@ -20,7 +20,6 @@ describe('useCollections', () => {
     mockCollectionsConfig = {
       products: {
         layer: 'shop',
-        componentName: 'ShopProductsForm',
         apiPath: 'shop-products',
         references: { categoryId: 'categories' }
       },
@@ -29,9 +28,7 @@ describe('useCollections', () => {
         references: { authorId: 'users' },
         dependentFieldComponents: { tags: 'TagsSelector' }
       },
-      users: {
-        componentName: 'UsersForm'
-      },
+      users: {},
       categories: {
         layer: 'shop',
         hierarchy: {
@@ -57,7 +54,6 @@ describe('useCollections', () => {
 
       expect(config).toBeDefined()
       expect(config?.layer).toBe('shop')
-      expect(config?.componentName).toBe('ShopProductsForm')
     })
 
     it('returns undefined for unregistered collection', () => {
@@ -103,30 +99,6 @@ describe('useCollections', () => {
     })
   })
 
-  describe('componentMap', () => {
-    it('builds componentMap from configs with componentName', () => {
-      const { componentMap } = useCollections()
-
-      expect(componentMap.products).toBe('ShopProductsForm')
-      expect(componentMap.users).toBe('UsersForm')
-    })
-
-    it('excludes collections without componentName', () => {
-      const { componentMap } = useCollections()
-
-      expect(componentMap.posts).toBeUndefined()
-      expect(componentMap.categories).toBeUndefined()
-    })
-
-    it('is reactive', () => {
-      const { componentMap } = useCollections()
-
-      // componentMap should be reactive
-      expect(typeof componentMap).toBe('object')
-      expect(componentMap.products).toBe('ShopProductsForm')
-    })
-  })
-
   describe('dependentFieldComponentMap', () => {
     it('builds map from configs with dependentFieldComponents', () => {
       const { dependentFieldComponentMap } = useCollections()
@@ -162,10 +134,9 @@ describe('useCollections', () => {
     it('handles empty config', () => {
       mockCollectionsConfig = {}
 
-      const { getConfig, componentMap, configs } = useCollections()
+      const { getConfig, configs } = useCollections()
 
       expect(getConfig('anything')).toBeUndefined()
-      expect(Object.keys(componentMap)).toHaveLength(0)
       expect(Object.keys(configs)).toHaveLength(0)
     })
 
@@ -178,7 +149,6 @@ describe('useCollections', () => {
 
       const config = getConfig('minimal')
       expect(config).toBeDefined()
-      expect(config?.componentName).toBeUndefined()
       expect(config?.layer).toBeUndefined()
     })
 

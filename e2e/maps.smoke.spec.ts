@@ -12,9 +12,9 @@
  *
  * Uses the saved auth state (the form lives on an authenticated admin route).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { collectionUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
+import { test, collectionUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
 
 const maps = fixtureManifest().maps
 

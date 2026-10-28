@@ -151,7 +151,7 @@ const oauthButtons = computed<ButtonProps[]>(() => {
 async function handleOAuth(provider: string) {
   formError.value = null
   try {
-    await loginWithOAuth(provider)
+    await loginWithOAuth(provider, state.value.redirectTo)
   } catch (e: unknown) {
     const message = e instanceof Error ? localizeError(e, t) : t('auth.oauthLoginFailed')
     formError.value = message
@@ -253,7 +253,7 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
 
 async function handleMagicLink(email: string) {
   try {
-    await loginWithMagicLink(email)
+    await loginWithMagicLink(email, state.value.redirectTo)
     magicLinkSent.value = true
     magicLinkEmail.value = email
     notify.success(t('auth.checkYourInbox'), { description: t('auth.magicLinkSentDescription') })

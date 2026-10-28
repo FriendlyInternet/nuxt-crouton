@@ -99,7 +99,6 @@
   "collection": {
     "noItemsYet": "No items yet",
     "createFirstItem": "Create your first {collection} item to get started",
-    "componentError": "Unable to load collection component: {error}",
     "componentNotFound": "Component not found for collection: {collection}",
     "selectItem": "Select an item to get started",
     "orPressN": "or press N to create new",
@@ -266,5 +265,9 @@
   },
   "calendar": {
     "placeholder": "Select a date"
+  },
+  "collab": {
+    "editingCount": "{count} editing",
+    "currentlyEditing": "Currently editing:"
   }
 }

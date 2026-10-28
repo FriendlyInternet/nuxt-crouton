@@ -46,7 +46,7 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 | **`.claude/routing.json` / agent models** | CI drift check `routing-registry.yml` | run `node scripts/gen-routing.mjs` | CI |
 | A **`spec.json`** entry to `status: "settled"` | hook `gate-spec-signoff.mjs` blocks unless `signedOff` is recorded (#988/#992) | `spec` | recorded sign-off, not assertion |
 
-`harness.config.mjs` also names `code-review` and `sec` in its gate vocabulary, but **no stage declares them required** — in practice per-PR CI review gates (`red-team.yml`, `a11y.yml`, `frontend-review.yml`) fire by changed-path instead (see `crouton-ci-and-deploy-map`).
+`harness.config.mjs` also names `code-review` and `sec` in its gate vocabulary, but **no stage declares them required** — in practice per-PR CI review gates (`review.yml`) fire by changed-path instead (see `crouton-ci-and-deploy-map`).
 
 ## 2. Approval semantics (#572) — one loop for every gate
 
@@ -66,7 +66,7 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 
 **The approved set is the ticket's `pkg:*` labels (#2778).** The worker and the fix-bot take their package scope from the ticket's `pkg:*` labels; the packages guard accepts any of its three declarations (the `Packages-approved:` line, a `packages:approved` label, or a linked `pkg:*` issue). Ticket writers set them once: give `epic-scaffold.mjs` / `apply-decompose-plan.mjs` a plan field `packagesApproved: { why, packages: ["crouton-assets", …] }` and every child gets the `Packages-approved: <why>` line plus one `pkg:<name>` label per package (an unknown label fails loudly). An interactive orchestrator creating tickets by hand must add the same labels.
 
-Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the approval file. The agent pipeline adds a second net: `automerge-epic-subpr.yml` **holds any bot sub-PR touching `packages/`** for a human even on an epic branch (#339).
+Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the approval file. The agent pipeline adds a second net: `automerge-epic-subpr.yml` **holds a bot sub-PR touching `packages/`** for a human unless it targets an `epic/*` branch, touches no `.github/workflows/**`, and carries `build:approved` (#2777; decision in `scripts/shared-code-hold.mjs`). Workflow changes (#2442) always stay held, and PRs into `main` are never auto-merged by this path.
 
 ⚠️ **Contradiction, stated:** root `CLAUDE.md` and the hook's own comment call the file "session-scoped", but open issue [#701](https://github.com/FriendlyInternet/nuxt-crouton/issues/701) documents that `/commit` cleanup deletes the file, so multi-commit package work re-blocks (one epic needed 3 unlocks). Until #701 lands: expect to re-approve after each `/commit`, or use the env-var channel for a whole epic. Never route around the gate itself.
 

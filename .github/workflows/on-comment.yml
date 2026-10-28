@@ -1,0 +1,1005 @@
+name: On comment
+
+# ONE listener for every issue/PR comment (#2890, epic #2889). Before this, nine workflows each
+# started on `issue_comment`, eight exited, and each read the owner's `ok` its own way — a
+# bare `ok` released a draft AND started a merge, and `lgtm` on an epic PR started two merges.
+#
+# Now: the `route` job asks scripts/comment-route.mjs (unit-tested) what the comment means and
+# publishes ONE `kind`; exactly one acting job below matches it. "Is it an approval" is
+# isApproval() in scripts/approval.mjs — the only definition.
+#
+#   kind            job                      was
+#   approve-draft   approve-draft            approve-draft-pr.yml
+#   approve-epic    approve-epic             approve-epic-pr.yml
+#   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
+#                                            its schedule/PR/check triggers stay there)
+#   close-epic      close-epic               close-epic-on-comment.yml
+#   dispatch        dispatch                 comment-dispatch.yml
+#   resume          resume, explain-…        resume-on-comment.yml (both jobs)
+#   revise          revise                   revise-on-pr-comment.yml
+#   test-card       test-card                test-card-reply.yml
+#
+# Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
+# token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
+# The bot filter is here once: a bot's comment exits at the router with kind=none.
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  route:
+    # A bot's comment never routes (also stops our own replies re-triggering anything). Most
+    # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
+    # `performed_via_github_app` also catches an App acting under a user-typed identity. No flow
+    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
+    # and consumed by reading the thread (revise), not by this trigger.
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      github.event.comment.performed_via_github_app == null
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      kind: ${{ steps.route.outputs.kind }}
+      number: ${{ steps.route.outputs.number }}
+      blocked: ${{ steps.route.outputs.blocked }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - id: route
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const i = context.payload.issue
+            const c = context.payload.comment
+            const isPr = Boolean(i.pull_request)
+            let pr
+            if (isPr) {
+              const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
+            }
+            const d = routeComment({
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+              issue: { number: i.number, isPr, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              pr,
+            })
+            core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
+            core.setOutput('kind', d.kind)
+            core.setOutput('number', String(d.number))
+            core.setOutput('blocked', String(d.blocked))
+
+  automerge-go:
+    needs: route
+    if: needs.route.outputs.kind == 'automerge-go'
+    # The merge evaluator lives in automerge-epic-subpr.yml (reusable). The caller's event is
+    # still issue_comment, so it evaluates exactly this PR.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/automerge-epic-subpr.yml
+    secrets: inherit
+
+  approve-draft:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-draft'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # An App token so the ready-for-review event CASCADES into the downstream CI/
+      # auto-merge workflows — a GITHUB_TOKEN action does not re-trigger them (#572).
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Needed so the script can import the unit-tested matcher.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const pull_number = context.payload.issue.number
+
+            const { isApproval, approvalKind } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            const body = context.payload.comment.body || ''
+            if (!isApproval(body)) {
+              core.info(`#${pull_number}: comment mentions approval but does not give it — ignoring.`)
+              return
+            }
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number })
+            if (!pr.draft) {
+              core.info(`#${pull_number} is not a draft — nothing to release.`)
+              return
+            }
+
+            // REST cannot un-draft; this is GraphQL-only. Same mutation resume-on-comment.yml
+            // already uses — it was reachable there and not here, which was the whole bug.
+            await github.graphql(
+              `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
+              { id: pr.node_id })
+
+            // #2054: release the issue-side status:blocked the draft-open step (work-issue-pidev.yml)
+            // may have set. Resolve the issue from "Closes #NN" in the PR body — same pattern
+            // resume-on-comment.yml uses. Best-effort: a PR with no Closes line just has nothing to clear.
+            const closesMatch = (pr.body || '').match(/\bCloses\s+#(\d+)/i)
+            if (closesMatch) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: Number(closesMatch[1]), name: 'status:blocked' })
+              } catch (e) { /* label may not have been set (non-UI PR) — fine */ }
+            }
+
+            const kind = approvalKind(body) === 'check' ? '✅' : '`ok`'
+            await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body:
+              `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
+              + `This does **not** merge it: the green-gated auto-merge takes over from here, so a red check still holds it.\n\n`
+              + `<sub>🤖 agent pipeline (CI) · approve-draft-pr #2051</sub>` })
+            core.info(`Released #${pull_number} (${approvalKind(body)}).`)
+
+  approve-epic:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-epic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const pull_number = context.payload.issue.number
+            const { decideEpicMerge } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number })
+            const checkRuns = await github.paginate(github.rest.checks.listForRef,
+              { owner, repo, ref: pr.head.sha, per_page: 100 })
+            const d = decideEpicMerge({ comment: context.payload.comment, pr, checkRuns })
+            core.info(`#${pull_number}: ${d.action} — ${d.reason}`)
+            const say = body => github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+              body: `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
+
+            if (d.action === 'ignore') return
+            if (d.action === 'red') {
+              await say(`🔴 **Not merged — ${d.failing.map(f => `\`${f}\``).join(', ')} is red.** Fix it and comment \`lgtm\` again.`)
+              return
+            }
+            if (d.action === 'wait') {
+              try {
+                await github.graphql(
+                  `mutation($id:ID!){ enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:MERGE}){ pullRequest { id } } }`,
+                  { id: pr.node_id })
+                await say(`⏳ **Approved — will merge when the checks finish** (${d.pending.map(p => `\`${p}\``).join(', ')} not green yet). Auto-merge is on.`)
+              } catch (e) {
+                await say(`⏳ **Approved, but ${d.pending.map(p => `\`${p}\``).join(', ')} hasn't finished** and auto-merge couldn't be enabled (${e.message}). Comment \`lgtm\` again once it is green.`)
+              }
+              return
+            }
+            await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge', sha: pr.head.sha })
+            await say(`✅ **Merged** — approved by @${context.payload.comment.user.login}, both gates green.`)
+
+  close-epic:
+    needs: route
+    if: needs.route.outputs.kind == 'close-epic'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      # Close with the Harness App token (NOT GITHUB_TOKEN): GitHub suppresses workflow
+      # triggers for GITHUB_TOKEN-initiated events, so a GITHUB_TOKEN close's
+      # `issues: closed` event would NOT reach strip-status-on-close / project-status
+      # (the #572 lesson). An App installation token cascades.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - name: Close the epic
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            const actor = context.payload.comment.user.login
+            const body = context.payload.comment.body || ''
+
+            // Whole-word /close-epic (the `if:` substring test would also match e.g.
+            // "/close-epically"; tighten here).
+            if (!/(^|\s)\/close-epic(\s|$)/i.test(body)) {
+              core.info('Comment does not invoke /close-epic as a command — ignoring.'); return
+            }
+
+            // Re-check server-side: state + the two gating labels.
+            const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            if (issue.state === 'closed') { core.info('Epic already closed — nothing to do.'); return }
+            // Only a maintainer (push access) may close. getCollaboratorPermissionLevel
+            // collapses to admin/write/read/none.
+            let perm = 'none'
+            try {
+              perm = (await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username: actor })).data.permission
+            } catch (e) { core.info(`Permission check failed for @${actor}: ${e.message}`); return }
+            if (!['admin', 'write'].includes(perm)) {
+              core.info(`@${actor} lacks push access (perm=${perm}) — ignoring.`); return
+            }
+
+            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            const missing = ['epic', 'status:ready-to-close'].filter(l => !labels.includes(l))
+            if (missing.length) {
+              // Say why, on the issue (#2501). Plain-language owner brief: what to do, then the depth.
+              const fixes = []
+              if (missing.includes('epic')) fixes.push('add the `epic` label (the pipeline now adds it when it splits an issue, #2501)')
+              if (missing.includes('status:ready-to-close')) fixes.push('run the postmortem first — it stamps `status:ready-to-close` (#856)')
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number,
+                body: `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
+                  + `🔴 **Not closed — this issue is missing ${missing.map(l => `\`${l}\``).join(' and ')}.**\n\n`
+                  + `**You:** ${fixes.join('; then ')}, and comment \`/close-epic\` again.\n`
+                  + `**Depth:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              })
+              core.info(`Not closing #${issue_number}: missing ${missing.join(', ')} — replied.`); return
+            }
+
+            // Close as completed + strip the managed status labels directly (idempotent;
+            // strip-status-on-close also handles this, but don't rely on the cascade).
+            await github.rest.issues.update({
+              ...context.repo, issue_number, state: 'closed', state_reason: 'completed',
+            })
+            for (const name of ['status:ready-to-close', 'status:needs-postmortem']) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch (e) {}
+            }
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number,
+              body: `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
+                + '<sub>🤖 agent pipeline (CI) · close-epic on comment (#856) · was status:ready-to-close</sub>',
+            })
+            core.info(`Closed epic #${issue_number} (requested by @${actor}).`)
+
+  dispatch:
+    needs: route
+    if: needs.route.outputs.kind == 'dispatch'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
+      # `nuxt-harness[bot]`. That makes the dispatched decompose run App-actored, which passes
+      # claude-code-action's bot-actor guard via `allowed_bots` (decompose-on-issue.yml) — no
+      # human PAT needed. An App installation token (unlike the built-in GITHUB_TOKEN) DOES
+      # trigger the downstream `labeled` workflow. (#535 / #519 WS5)
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      # Needed so the script can `require` the unit-tested command parser
+      # (scripts/comment-command.mjs) — same pattern as schedule-waves.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.issue.number
+            const comment_id = context.payload.comment.id
+
+            // Was a command ISSUED, or only MENTIONED? `parseCommand` requires it at the
+            // start of a line, outside code spans/fences and outside `>` quotes, and keeps
+            // the `/delegate-pi` before `/delegate` ordering (#1077). Unit tests, including
+            // the two real comments from the #1791 incident: scripts/comment-command.test.mjs
+            const { parseCommand, resolveLane } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-command.mjs`)
+            const command = parseCommand(context.payload.comment.body)
+            if (!command) {
+              core.info(`#${issue_number}: comment mentions a command but does not issue one — ignoring.`)
+              return
+            }
+
+            // Pick the LANE from observed state, not from the word typed (#2010). `/delegate`
+            // is the reflex gesture, and on an issue whose work is already in flight it sends
+            // the decomposer somewhere it has nothing to plan — no artifact, a failed
+            // artifact-gate (#461), and the owner paged about a working pipeline (#1791).
+            // A `work-<issue>` branch is the evidence that "delegate this" means "finish it".
+            let hasWorkBranch = false
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/work-${issue_number}` })
+              hasWorkBranch = true
+            } catch (e) {
+              if (e.status !== 404) core.warning(`work-branch probe for #${issue_number}: ${e.message}`)
+            }
+            const { label, rerouted } = resolveLane(command, hasWorkBranch)
+
+            // Fire a FRESH labeled event: both decompose workflows only trigger on the
+            // label being *added* (not merely present), so if it's already there, remove first.
+            const cur = (context.payload.issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            if (cur.includes(label)) {
+              try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }) } catch (e) {}
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] })
+
+            // Acknowledge so the commenter sees it registered (handy on mobile).
+            try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content: 'rocket' }) } catch (e) {}
+
+            // Name the lane that was actually chosen — and, when it differs from what was
+            // typed, say why. A silent reroute would be its own small mystery.
+            const lane = label === 'work-this'
+              ? 'single-use worker'
+              : `${label === 'delegate-pi' ? 'pi.dev' : 'claude'} decomposer`
+            const why = rerouted
+              ? `\n\n_Routed to the worker rather than the decomposer because \`work-${issue_number}\` already exists — there is work in flight to finish, not a plan to make (#2010)._`
+              : ''
+            await github.rest.issues.createComment({ owner, repo, issue_number,
+              body: `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
+            core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
+
+  resume:
+    needs: route
+    if: needs.route.outputs.kind == 'resume' && needs.route.outputs.blocked == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      # #2446: dispatch the pi worker in revise mode (workflow_dispatch is allowed from GITHUB_TOKEN).
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      # ── Superseded-close re-check (#1253) ────────────────────────────────────────
+      # The job guard reads labels from the EVENT PAYLOAD snapshot — a close seconds
+      # before the reply still passes it (the #1233 race: PR #1234's stray `Closes`
+      # auto-closed the retest issue 2s before the owner's answer). And the artifact-gate
+      # below counts `closed` as PASS, so a resume against a superseded issue would exit
+      # green having done nothing. Re-fetch live state: if the issue is now CLOSED, tell
+      # the owner plainly and skip the agent run. Fail-OPEN on an API error (proceed as
+      # before) — a transient fetch failure must not eat a legitimate resume. The
+      # merge-on-approval step below stays `if: always()` on purpose: the #572
+      # deterministic-merge fallback must survive this early exit.
+      - name: Re-check the issue is still open
+        id: state
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            let issue
+            try {
+              issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            } catch (e) {
+              core.warning(`state re-check failed (${e.message}) — proceeding as open`)
+              core.setOutput('open', 'true'); return
+            }
+            const open = issue.state === 'open'
+            core.setOutput('open', String(open))
+            if (open) return
+            const closer = issue.closed_by ? issue.closed_by.login : 'unknown'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
+                + '**Fix:** reply on the successor issue/PR, or reopen this one and comment again to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume skipped, issue already closed (#1253)</sub>' })
+            core.info(`Issue #${issue_number} is closed — skipping the resume agent run.`)
+
+      # Acknowledge the trigger comment immediately: 👀 = "picked up, working on it". The
+      # final step swaps this for 🚀 (done) / 😕 (failed). The job guard already ensures we
+      # only get here for comments we actually act on, so the reaction is never spurious.
+      # (GitHub comment reactions have no ✅/❌ — 🚀/😕 are the closest.)
+      - name: React 👀 — resume picked up
+        if: steps.state.outputs.open == 'true'
+        id: eyes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            try {
+              const r = await github.rest.reactions.createForIssueComment({
+                ...context.repo, comment_id: context.payload.comment.id, content: 'eyes',
+              })
+              core.setOutput('id', String(r.data.id))
+            } catch (e) { core.warning(`could not add 👀 reaction: ${e.message}`) }
+
+      # Timestamp run start so the artifact-gate (below) can tell "produced during THIS run".
+      - id: t0
+        if: steps.state.outputs.open == 'true'
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # ── Feedback on a pi-built PR → revise that PR (#2446) ──────────────────────
+      # When this issue already has an open PR on `work-<issue>` (the pi worker's branch), a
+      # change request means "change that PR". The Claude responder below cannot do that — on
+      # #2414 it answered "✅ resumed" and changed nothing. So re-run the pi worker on that branch
+      # with this comment as its instruction (revise mode, the `feedback` input), and skip the
+      # responder. Approvals are untouched: they fall through to the merge step as before.
+      # Same decision as the PR-side route (scripts/revise-route.mjs), so the two can't drift.
+      - name: Route feedback on a pi-built PR to its worker
+        id: revise
+        if: steps.state.outputs.open == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const issue_number = context.payload.issue.number
+            const c = context.payload.comment
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
+            const prs = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:work-${issue_number}`, per_page: 5 })
+            const pr = prs.data[0]
+            if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+              inputs: { issue: String(issue_number), feedback: String(c.id) },
+            })
+            const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
+                + `🔧 **Revising PR #${pr.number} from your reply.** The pi worker is re-running on its branch with your comment as the instruction. `
+                + `Its commit lands on the PR, or it says plainly that it changed nothing. 🔗 [Follow the run](${runs})` })
+            core.setOutput('revise', 'true')
+
+      # ── pi DESIGN-HOLD re-dispatch (#1828) ───────────────────────────────────────
+      # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
+      # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
+      # resume below does not build from it (it just re-blocks and says "still iterating"). So for
+      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:blocked
+      # and re-apply `delegate-pi` (remove-then-add → a fresh `labeled` event) so decompose-on-issue-
+      # pidev re-runs — and with #1828's prompt change it now SPLITS into build children (it reads the
+      # approval/answers in the thread). The label MUST be applied with the App token, or the
+      # `labeled` event won't cascade to the decompose workflow (GITHUB_TOKEN events are suppressed,
+      # #572). When we take this path we set `redispatch=true` and the claude agent step below skips.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token-early
+        if: steps.state.outputs.open == 'true'
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Re-dispatch a pi design-hold to the pi decomposer
+        id: piredispatch
+        if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token-early.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            let noChildren = true
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
+              noChildren = subs.length === 0
+            } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
+            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
+                + '🔁 **Re-running the planner on your reply.** It reads the thread and either revises the design or, if you approved, splits the epic into build children.' })
+            core.setOutput('redispatch', 'true')
+            core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
+
+      # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
+      # The owner may answer in the medium the question came in — a top-level reply, an
+      # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
+      # comment, or an edited Excalidraw diagram. The resume agent only reads the top-level
+      # thread by default, so an in-medium answer would be invisible. This gathers all of
+      # them into `.resume-answer.md` for the prompt below. Dependency-free (system node +
+      # fetch); the `||` fallback guarantees the file exists so the resume never fails on it.
+      - name: Collect the answer payload
+        if: steps.state.outputs.open == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          node scripts/resume-answer-payload.mjs "$ISSUE" > .resume-answer.md \
+            || echo '_(answer-payload collection skipped — resume from the top-level thread)_' > .resume-answer.md
+          echo "── collected answer payload ──"; cat .resume-answer.md
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
+      # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
+      # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
+      # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
+      # on the owner's instruction that Anthropic now permits subscription auth for
+      # unattended automation (#1669; supporting source pending on that issue — if it
+      # does not cover automation, revert). Runs on the mac-mini runner.
+      - id: agent
+        # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
+        # not this generic claude resume (which would just re-block and double-decompose).
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true'
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
+            The owner has replied to a blocking question. Their answer may be in the medium the
+            question came in — this run collected it across every surface into `.resume-answer.md`
+            (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
+            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it flags an edited diagram, run
+            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            Then incorporate the answer, remove the `status:blocked` label, and continue via
+            /task-decompose #${{ github.event.issue.number }}.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
+          show_full_output: true
+
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      # Mint a Nuxt Harness App token for the merge step. CRUCIAL: the merge MUST use the
+      # App token, NOT the default GITHUB_TOKEN — GitHub suppresses workflow triggers for
+      # events initiated by GITHUB_TOKEN, so a GITHUB_TOKEN merge's `pull_request: closed`
+      # event would NOT reach schedule-waves and the chain stalls (the #572 first-attempt
+      # regression). An App installation token is a non-GITHUB_TOKEN actor, so its merge
+      # fires schedule-waves → close issue → release next workstream. (#535/#519 WS5.)
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: always()
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # ── Merge-on-approval (#572) ───────────────────────────────────────────────
+      # The pipeline's design is that a sign-off gate's sub-PR merges into the EPIC
+      # branch once approved — the owner's `approve`/`lgtm` IS the review. Nothing
+      # implemented that, so approved gates STALLED: the gate PR stayed a draft, its
+      # issue never closed, and schedule-waves never released the next workstream.
+      # This deterministically completes the handoff on an approval comment, regardless
+      # of what the agent step above did. Merge commit — NOT squash (preserve curated
+      # commits; merge policy). Merges with the App token so the resulting
+      # `pull_request: closed` event TRIGGERS schedule-waves → close issue → release the
+      # next workstream (a GITHUB_TOKEN merge does NOT cascade — #572).
+      - name: Merge the gate PR on approval
+        id: mergegate
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            const body = context.payload.comment.body || ''
+            // Approval only — a change-request reply must NOT merge anything.
+            // ONE definition of "approval" (#2051/#2094): isApproval() understands the
+            // whole-line ✅ gesture and strips code/quotes first, so a quoted or backticked
+            // `lgtm` can no longer merge a PR (the #2004 shape). The repo is checked out at
+            // the top of this job, so the tested module is importable here.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) {
+              core.info('Comment is not an approval — nothing to merge.'); return
+            }
+
+            // ── Which PR is "the gate PR" for this issue? (#1663) ────────────────────
+            // This used to grep the body for the literal `Closes #NN`. That string was
+            // load-bearing, NOT semantic: a PR into `epic/*` never auto-closes anything
+            // (GitHub honours closing keywords only on merges to the default branch). So
+            // the whole gate hung on one wording — and when an agent wrote `Sub-issue: #NN`
+            // instead (equally correct, arguably more so) the result was a SILENT no-op:
+            // approval seen, block cleared, PR left open, wave chain stalled, and the
+            // artifact-gate told the owner to retry, which reproduced it.
+            // Now: ask GitHub for the STRUCTURED link first, fall back to prose second —
+            // and anchor the prose to line start so a passing mention deep in a body can't
+            // hijack the merge. Keep the `epic/*` base guard: that, not the wording, is
+            // what stops an unrelated PR being merged.
+            const LINK_RE = new RegExp(
+              String.raw`^[\s>*_-]*(closes?d?|fix(e[sd])?|resolves?d?|sub-?issue|refs?)\b[\s:*_-]*#${issue_number}\b`,
+              'im')
+
+            async function linkReason(pr) {
+              // (1) GitHub's own linked-issue relation — populated by a closing keyword OR
+              //     by hand via the PR's Development sidebar. Structured; wording-proof.
+              try {
+                const q = await github.graphql(
+                  `query($owner:String!,$repo:String!,$n:Int!){
+                     repository(owner:$owner,name:$repo){
+                       pullRequest(number:$n){
+                         closingIssuesReferences(first:20){ nodes{ number } } } } }`,
+                  { owner: context.repo.owner, repo: context.repo.repo, n: pr.number })
+                const linked = (q.repository.pullRequest.closingIssuesReferences.nodes || []).map(x => x.number)
+                if (linked.includes(issue_number)) return 'linked-issue relation'
+              } catch (e) { core.warning(`closingIssuesReferences #${pr.number}: ${e.message}`) }
+              // (2) Prose fallback — Closes/Fixes/Resolves/Sub-issue/Refs at line start.
+              if (LINK_RE.test(pr.body || '')) return 'body reference'
+              return null
+            }
+
+            // Candidate PRs = everything cross-referenced from this issue's timeline.
+            const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
+              ...context.repo, issue_number,
+            })
+            const prNums = [...new Set(timeline
+              .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
+              .map(e => e.source.issue.number))]
+
+            let merged = false
+            // Why each candidate was passed over — surfaced to the artifact-gate so a
+            // failure names the PR and the reason instead of saying "retry" (#1663).
+            const skipped = []
+            for (const n of prNums) {
+              let pr
+              try { pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data } catch { continue }
+              if (pr.state !== 'open' || pr.merged) continue
+              const how = await linkReason(pr)
+              if (!how) {
+                skipped.push(`#${n} — no link to this issue (no linked-issue relation, and no \`Closes/Fixes/Resolves/Sub-issue/Refs #${issue_number}\` line)`)
+                continue
+              }
+              if (!/^epic\//.test(pr.base.ref)) {
+                skipped.push(`#${n} — base \`${pr.base.ref}\` is not an \`epic/*\` branch`)
+                core.info(`PR #${n} base ${pr.base.ref} is not an epic branch — skipping.`); continue
+              }
+              // Mark ready (REST can't flip draft→ready; GraphQL can), then merge.
+              if (pr.draft) {
+                try {
+                  await github.graphql(
+                    `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
+                    { id: pr.node_id })
+                } catch (e) { core.warning(`markReady #${n}: ${e.message}`) }
+              }
+              try {
+                await github.rest.pulls.merge({ ...context.repo, pull_number: n, merge_method: 'merge' })
+                merged = true
+                core.info(`Merged gate PR #${n} into ${pr.base.ref} (matched via ${how}).`)
+              } catch (e) {
+                skipped.push(`#${n} — matched via ${how}, but the merge failed: ${e.message}`)
+                core.warning(`merge #${n} failed: ${e.message}`)
+              }
+            }
+            core.setOutput('merged', String(merged))
+            core.setOutput('skipped', skipped.join('\n'))
+            // Clear the block ONLY on a real merge, so the issue can close cleanly (#1665).
+            // This used to be unconditional ("defensively"), which made a failed resume a
+            // ONE-WAY DOOR: the job guard above requires `status:blocked`, so stripping it
+            // after a miss meant every later reply was SILENTLY SKIPPED — no run, hence no
+            // artifact-gate, hence no explanation. #1655 needed the label restored by hand
+            // before the owner's approval could execute at all. If nothing merged, the issue
+            // genuinely IS still blocked; say so by leaving the label on.
+            if (merged) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+              core.info('Gate PR merged — schedule-waves will advance the chain.')
+            } else {
+              core.info('No gate PR merged (none matched / already merged) — leaving status:blocked ON so a re-approval can still trigger.')
+            }
+
+      # ── Artifact-gate (#603 P0) ────────────────────────────────────────────────
+      # A resume must PRODUCE something — otherwise a no-op silently exits green and the
+      # run looks done while nothing advanced. That exact failure bit #590: a plan-gate
+      # `approve` resumed, cleared `status:blocked`, but created ZERO sub-issues; the green
+      # run hid it and it took a manual re-/delegate to notice. `decompose-on-issue` already
+      # has this gate; the resume path didn't. Now a no-op resume goes RED (visible →
+      # re-dispatch). Uses GITHUB_TOKEN (read-only check), never trips the bot-actor guard.
+      # Skipped on the superseded-close path (#1253): with no agent run there's no artifact
+      # to demand, and the state re-check already commented. Exports its facts as outputs
+      # so the success comment below can say WHAT the resume produced.
+      - name: Artifact-gate — fail if the resume produced nothing
+        id: gate
+        if: always() && steps.state.outputs.open == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # Why the merge step passed over each candidate PR, if it did (#1663). Passed via
+          # env, not `${{ }}` inside the script — the value is multi-line and interpolating
+          # it into JS source would break the script.
+          MERGE_SKIPPED: ${{ steps.mergegate.outputs.skipped }}
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const since = '${{ steps.t0.outputs.ts }}'
+            const sinceMs = new Date(since).getTime()
+
+            // (a) sub-issues created this run (a plan/decompose gate proceeding)
+            let createdSubIssues = false
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
+            } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
+
+            // (b) a comment posted this run (an answer / progress / revision note)
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, since })
+            const newComment = comments.length > 0
+
+            // (c) issue state now
+            const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            const closed = issue.state === 'closed'
+            const stillBlocked = issue.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+
+            // (d) a gate PR merged this run (a sign-off gate approved + merged)
+            let mergedPR = false
+            try {
+              const tl = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number })
+              const prNums = [...new Set(tl.filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request).map(e => e.source.issue.number))]
+              for (const n of prNums) {
+                const pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data
+                if (pr.merged_at && new Date(pr.merged_at).getTime() >= sinceMs) { mergedPR = true; break }
+              }
+            } catch (e) { core.warning(`merged-PR check skipped: ${e.message}`) }
+
+            core.setOutput('subIssues', String(createdSubIssues))
+            core.setOutput('mergedPR', String(mergedPR))
+            core.setOutput('closed', String(closed))
+            core.setOutput('stillBlocked', String(stillBlocked))
+            core.setOutput('newComment', String(newComment))
+
+            // PASS if the resume did anything observable, OR it's still holding (legit "still
+            // iterating" — not a no-op). FAIL only when the block was cleared yet nothing came
+            // of it — the silent no-op.
+            if (createdSubIssues || mergedPR || closed || newComment || stillBlocked) {
+              core.info(`Resume artifact OK: subIssues=${createdSubIssues} mergedPR=${mergedPR} closed=${closed} newComment=${newComment} stillBlocked=${stillBlocked}`)
+              return
+            }
+            // A blanket "re-dispatch to retry" is the RIGHT remedy for a genuine no-op, but
+            // the WRONG one when the merge step found a gate PR and passed over it — a retry
+            // reproduces it verbatim (#1663). If we have skip reasons, name them instead.
+            // Belt-and-braces for #1665: whatever cleared the block, this run produced
+            // nothing — so the issue is still blocked and MUST keep the label, or the job
+            // guard above will silently skip every future reply. (We only reach here when
+            // `stillBlocked` was false; the merge step no longer clears on a miss, but any
+            // other path that does must not be able to strand the issue.)
+            if (!stillBlocked) {
+              try {
+                await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['status:blocked'] })
+                core.info('Re-applied status:blocked so a re-approval can trigger.')
+              } catch (e) { core.warning(`could not re-apply status:blocked: ${e.message}`) }
+            }
+            const skipped = (process.env.MERGE_SKIPPED || '').trim()
+            const remedy = skipped
+              ? '**A gate PR was found but not merged — retrying will NOT help.** The merge step passed over:\n\n'
+                + skipped.split('\n').map(s => `- ${s}`).join('\n') + '\n\n'
+                + 'Fix the PR itself (link it to this issue, or retarget it at the `epic/*` branch), then re-approve. '
+                + 'If the link looks correct to you, the matcher is at fault — see #1663.'
+              : '**Fix:** re-dispatch with `/delegate` to retry.'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
+                + remedy + '\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
+            core.setFailed(skipped
+              ? `Resume on #${issue_number}: gate PR found but not merged — see the comment; a retry will not fix it.`
+              : `Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
+
+      # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /
+      # 😕 failed (GitHub reactions have no ✅/❌). Comment ONLY on a hard agent error; a no-op
+      # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
+      - name: React outcome — 🚀 done / 😕 failed
+        if: always() && steps.state.outputs.open == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const comment_id = context.payload.comment.id
+            const ok = '${{ job.status }}' === 'success'
+            const rid = '${{ steps.eyes.outputs.id }}'
+            if (rid) {
+              try { await github.rest.reactions.deleteForIssueComment({ ...context.repo, comment_id, reaction_id: Number(rid) }) }
+              catch (e) { core.warning(`could not remove 👀: ${e.message}`) }
+            }
+            try {
+              await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id, content: ok ? 'rocket' : 'confused' })
+            } catch (e) { core.warning(`could not add outcome reaction: ${e.message}`) }
+            // Comment only when the agent step itself errored (billing / max-turns / tooling) —
+            // the artifact-gate already comments on the no-op case, so this avoids a duplicate.
+            if (!ok && '${{ steps.agent.outcome }}' === 'failure') {
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
+                body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume failed_\n\n'
+                  + '😕 The resume from your comment **errored before finishing** (billing / max-turns / tooling). '
+                  + `🔗 [Run log](${runUrl}) — fix the cause, then comment again to retry.` })
+            }
+
+      # ── Visible success (#1253, Fix A) ───────────────────────────────────────────
+      # A successful resume used to signal ONLY via the 🚀 reaction — easy to miss,
+      # especially on mobile (the #1233 "felt ignored" incident), and our own conventions
+      # call a reaction the weak signal. Post a top-level comment saying what the run
+      # produced, from the artifact-gate's own facts. ORDERING IS LOAD-BEARING: this step
+      # MUST come after the artifact-gate — a comment posted before it would make the
+      # gate's `newComment` check always-true and permanently disable the #603 no-op
+      # detection. Skipped when the agent already replied in-thread this run (no double
+      # ping — the gate's `newComment` flag knows). Posted with GITHUB_TOKEN on purpose:
+      # a Bot actor whose events never re-trigger this workflow (double loop safety on
+      # top of the job's `user.type != 'Bot'` guard).
+      - name: Comment ✅ — visible success
+        if: success() && steps.state.outputs.open == 'true' && steps.gate.outputs.newComment != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const facts = []
+            if ('${{ steps.gate.outputs.subIssues }}' === 'true') facts.push('created sub-issues')
+            if ('${{ steps.gate.outputs.mergedPR }}' === 'true') facts.push('merged the gate PR')
+            if ('${{ steps.gate.outputs.closed }}' === 'true') facts.push('closed this issue')
+            if ('${{ steps.gate.outputs.stillBlocked }}' === 'true') facts.push('still iterating — the block stays on for your next reply')
+            const did = facts.length ? facts.join(' · ') : 'continued the pipeline'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
+                + `✅ **Resumed from your reply** — ${did}. 🔗 [Run log](${runUrl})` })
+
+      # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
+      - name: Flag a timeout / cancellation
+        if: cancelled()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
+                + '⏱️ This resume was **cancelled** — almost always the 30-min job timeout. It may have '
+                + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })
+
+  explain-skipped-approval:
+    needs: route
+    if: needs.route.outputs.kind == 'resume' && needs.route.outputs.blocked != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      # Needed so the script can import the unit-tested matcher (scripts/approval.mjs) —
+      # same pattern as approve-draft-pr.yml (#2051/#2094).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const body = context.payload.comment.body || ''
+            // Re-check precisely — the job `if` is a coarse prefilter; one definition of
+            // "approval" everywhere (#2051/#2094), including the whole-line ✅ gesture.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) return
+
+            // Is there really a gate waiting? Only then is silence a bug worth explaining.
+            let gatePR = null
+            try {
+              const tl = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number })
+              const prNums = [...new Set(tl
+                .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
+                .map(e => e.source.issue.number))]
+              for (const n of prNums) {
+                const pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data
+                if (pr.state === 'open' && !pr.merged && /^epic\//.test(pr.base.ref)) { gatePR = pr; break }
+              }
+            } catch (e) { core.warning(`gate-PR probe failed: ${e.message}`); return }
+            if (!gatePR) { core.info('No pending epic/* gate PR — an approval word here is not a gate reply.'); return }
+
+            // Don't re-explain the same thing on every reply.
+            const recent = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const already = recent.slice(-3).some(c => (c.body || '').includes('<!-- skipped-approval-notice -->'))
+            if (already) { core.info('Already explained recently — staying quiet.'); return }
+
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '<!-- skipped-approval-notice -->\n'
+                + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
+                + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
+                + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
+                + 'The resume workflow only runs while this issue carries `status:blocked`, and the label is gone. '
+                + 'Add `status:blocked` back and reply again, and it will run.\n\n'
+                + '<sub>Root cause of the label going missing: #1665.</sub>' })
+            core.info(`Explained the skipped approval (pending gate PR #${gatePR.number}).`)
+
+  revise:
+    needs: route
+    if: needs.route.outputs.kind == 'revise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      # workflow_dispatch is the one event a GITHUB_TOKEN may still trigger (no App token needed).
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - name: Route the comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const pull_number = context.payload.issue.number
+            const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
+            const c = context.payload.comment
+            const route = routePrComment({
+              pr: { headRef: pr.head.ref, state: pr.state },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+            })
+            core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
+            if (!route.revise) {
+              // A 🛠 action comment that never reached the worker says so, once per comment (#2707).
+              if (route.reply) {
+                const marker = `<!-- revise-ignored:${c.id} -->`
+                const prior = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: pull_number, per_page: 100 })
+                if (!prior.some(x => x.body.includes(marker))) {
+                  await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
+                    body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _comment not routed (#2707)_\n\n`
+                      + 'Not sent to the worker — start a line with `**Worker:**` to ask it for a change.' })
+                }
+              }
+              return
+            }
+
+            try { await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id: c.id, content: 'eyes' }) } catch (e) {}
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+              inputs: { issue: String(route.issue), feedback: String(c.id), branch: route.branch },
+            })
+            const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
+            await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your comment (#2446)_\n\n'
+                + `🔧 **Working on your comment.** The pi worker is re-running on this PR's branch with your comment as its instruction. `
+                + `Its commit lands here, or it says plainly that it changed nothing. 🔗 [Follow the run](${runs})` })
+
+  test-card:
+    needs: route
+    if: needs.route.outputs.kind == 'test-card'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Handle test reply
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          APPLY: 'true'
+        run: node scripts/handle-test-reply.mjs
