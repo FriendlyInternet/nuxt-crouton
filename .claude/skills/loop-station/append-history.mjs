@@ -10,7 +10,7 @@
  * (re-running the workflow on the same merge doesn't double-count). Prints
  * `appended` or `skipped <reason>` to stderr and sets the exit-status-free
  * `LOOP_STATION_APPENDED` marker on stdout (`true`/`false`) for CI to gate the
- * commit-back step.
+ * commit-back step. Also a no-op when the totals equal the previous row's.
  *
  * history.jsonl is COMMITTED (small, in-repo so the metric travels with the code
  * it measures and stays `git blame`-able). The runtime trace (WS2) is the only
@@ -48,19 +48,28 @@ try {
   process.exit(1)
 }
 
-function lastCommit() {
+function lastRecord() {
   if (!existsSync(HISTORY)) return null
   const lines = readFileSync(HISTORY, 'utf8').trim().split('\n').filter(Boolean)
   if (lines.length === 0) return null
   try {
-    return JSON.parse(lines[lines.length - 1]).commit
+    return JSON.parse(lines[lines.length - 1])
   } catch {
     return null
   }
 }
 
-if (record.commit && record.commit === lastCommit()) {
+const last = lastRecord()
+
+if (record.commit && record.commit === last?.commit) {
   console.error(`append-history: skipped — commit ${record.commit.slice(0, 8)} already recorded`)
+  process.stdout.write('false\n')
+  process.exit(0)
+}
+
+// A merge that leaves every total unchanged adds a commit to main for no new information.
+if (last?.totals && JSON.stringify(last.totals) === JSON.stringify(record.totals)) {
+  console.error('append-history: skipped — totals identical to the previous row')
   process.stdout.write('false\n')
   process.exit(0)
 }

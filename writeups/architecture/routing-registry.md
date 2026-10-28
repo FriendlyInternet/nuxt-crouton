@@ -31,6 +31,6 @@ Default tier: **medium**
 - **decompose-on-issue-pidev** → `claude-sonnet-5` — SUPERSEDED by #1669: ran GLM (zai/glm-5.2) after #1421's eval produced a correct house-style PR at $0 marginal; reverted to the Claude subscription (sonnet, the medium tier). Now matches the medium default, so this override is only kept as the recorded reversal.
 
 ## Known gaps
-The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)
+The top-level workflow loop (decompose, fix-ci, the weekly jobs)
 runs on the `claude-code-action` **default** model — unpinned. Pinning those promotes
 them into the routes table above.

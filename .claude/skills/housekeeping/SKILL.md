@@ -87,7 +87,7 @@ housekeeping:
 ## Lossless branch sweep (separate workflow — the only auto-delete)
 
 The digest is **report-only**. The one auto-destructive action lives in its own workflow
-(`.github/workflows/cleanup-merged-branches.yml` → `prune-merged-branches.mjs`), split off by
+(`.github/workflows/weekly.yml` (cleanup job) → `prune-merged-branches.mjs`), split off by
 blast radius so a digest bug can never delete a branch. It deletes a branch **only** if it is
 provably contained in `main` (`git branch -r --merged origin/main`, 0 commits ahead) — lossless
 by construction. It also skips any branch with an **open PR**, anything newer than

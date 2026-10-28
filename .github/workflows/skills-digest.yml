@@ -11,8 +11,8 @@ name: skills-digest
 
 on:
   schedule:
-    # ~06:00 Europe/Brussels (05:00 UTC winter). The gate below decides the actual send day.
-    - cron: '0 5 * * *'
+    # 1st of the month, ~06:00 Europe/Brussels (05:00 UTC winter). The digests.yml gate stays as a second guard.
+    - cron: '0 5 1 * *'
   workflow_dispatch:
 
 permissions:

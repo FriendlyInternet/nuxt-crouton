@@ -177,7 +177,7 @@ node .claude/skills/loop-station/aggregate-usage.mjs --window 7 trace1.jsonl tra
 
 ## In CI
 
-`.github/workflows/loop-station-usage.yml` runs **weekly** (Mondays 06:41 UTC,
+`.github/workflows/weekly.yml` (usage job) runs **weekly** (Mondays 06:30 UTC,
 before the advisor): list the window's `loop-station-trace-*` artifacts →
 download → aggregate → append → commit back `[skip ci]`. Fail-loud contract
 (#1037): a listing failure **fails the job** (an outage must not read as a
@@ -201,7 +201,7 @@ issue assigned to the maintainer with concrete recommendations.
 |------|------|
 | `advisor.mjs` | **deterministic gate** — reads `history.jsonl` + `usage.jsonl`, surfaces candidate findings (scorecard reds, sharp always-on growth, redundancy jumps, dead-weight skills), decides `actionable`. No LLM, no issue. Importable `analyze()` / `usageCoverage()`. |
 | `lib/advisor.test.mjs` | findings logic (reds flag, growth flags, cross-tokenizer deltas are NOT compared, dead-weight coverage gates, deterministic) |
-| `.github/workflows/loop-station-advisor.yml` | weekly: run the gate → **only if actionable** invoke `claude-code-action` to open/update ONE `loop-station-advisor` issue assigned to `pmcp` |
+| `.github/workflows/weekly.yml` (advisor job) | weekly: run the gate → **only if actionable** invoke `claude-code-action` to open/update ONE `loop-station-advisor` issue assigned to `pmcp` |
 
 ### Dead-weight rule (#1066)
 
@@ -280,8 +280,8 @@ Two deterministic sources feed `findings.jsonl` — **no LLM, no CI state machin
    caught* defect; closed ⇒ dropped; open ⇒ left for a later run.
 2. **Reverts** — a `reverted` run in the eval-ledger ⇒ a *confirmed escaped* defect.
 
-`.github/workflows/loop-station-findings.yml` (merge-to-`main` + weekly, mirrors
-`loop-station-usage.yml`) downloads the candidates, resolves them, runs `reconcile`, and
+`.github/workflows/weekly.yml` (findings job, weekly, mirrors
+the usage job) downloads the candidates, resolves them, runs `reconcile`, and
 commits new findings to `main`. **Only this main-context job writes the committed ledger** —
 a PR-branch gate run never does. Rendered in `pocs/loop-station` (the `AccountabilityBoard`
 panel, staged by its `prepare-data.mjs`).

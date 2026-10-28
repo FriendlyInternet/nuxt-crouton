@@ -6,7 +6,7 @@ name: Fix CI on failure
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
-#   - Scope: only pipeline head branches `claude/issue-*` (claude lane) + `work-*` (pi worker,
+#   - Scope: only pipeline head branches `work-*` (pi worker,
 #     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
@@ -47,8 +47,7 @@ jobs:
     # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
-      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
-       startsWith(github.event.workflow_run.head_branch, 'work-'))
+      startsWith(github.event.workflow_run.head_branch, 'work-')
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
@@ -90,7 +89,7 @@ jobs:
             // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
             // the job `if` (a github-script gate can't import without a checkout, and this runs
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
-            const isPipelineRef = r => /^(claude\/issue-|work-)/.test(String(r || ''))
+            const isPipelineRef = r => /^work-/.test(String(r || ''))
             if (full.state !== 'open' || !isPipelineRef(full.head.ref)) {
               core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
             }
@@ -105,8 +104,8 @@ jobs:
             const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            // Both lanes (#2157): `claude/issue-<n>-<slug>` and the pi worker's `work-<n>`.
-            const m = /^(?:claude\/issue-|work-)(\d+)/.exec(full.head.ref)
+            // Both lanes (#2157): the pi worker's `work-<n>`.
+            const m = /^work-(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {

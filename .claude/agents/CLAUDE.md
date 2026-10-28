@@ -311,7 +311,7 @@ all of these by **default** — they're not optional extras; each one has burned
   - **Per-PR verdict gates** (`review.yml`):
     `--allowedTools Bash,Write,Edit,Read,Grep,Glob` in `claude_args`.
   - **Sweeps/advisors that file issues** (`a11y-daily.yml` / `red-team-daily.yml` /
-    `loop-station-advisor.yml`): `--permission-mode bypassPermissions`.
+    `weekly.yml` advisor job): `--permission-mode bypassPermissions`.
   The `gate-package-edits` PreToolUse hook still guards `packages/` either way. Workflows whose
   prompt only steers the action's built-in GitHub flows (`claude.yml`-style mention glue) don't
   need a grant — if you omit one, say why in a workflow comment.

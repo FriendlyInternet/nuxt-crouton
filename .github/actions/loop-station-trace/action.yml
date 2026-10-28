@@ -1,7 +1,7 @@
 # Loop Station trace shipper (WS2 #929 · WS-A #1064).
 #
 # Reconstructs this ephemeral runner's agent invocation trace and uploads it as
-# a run artifact — the weekly loop-station-usage.yml job aggregates these into
+# a run artifact — the weekly weekly.yml usage job aggregates these into
 # the committed usage rollup. One line in any LLM workflow, after the agent step:
 #
 #   - uses: ./.github/actions/loop-station-trace
