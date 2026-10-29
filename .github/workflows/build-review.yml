@@ -8,8 +8,8 @@ name: Build review (independent reviewer — pi.dev)
 #   no-go        → a `**Worker:**` revision with the reasons; after 2 sent-back rounds, hold
 #   needs-owner  → one yes/no question, held `status:blocked`
 #
-# SAFETY: the pi step is READ-ONLY and holds only a read-only App token (#3035; a probe proves it
-# cannot write; persist-credentials:false; the write token is only used by the trusted steps). It checks out the PR head as DATA and never runs it.
+# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (persist-credentials:false; the App
+# token is only used by the trusted steps). It checks out the PR head as DATA and never runs it.
 # No silent model fallback — the preflight fails loudly (same as plan review).
 #
 # Workflow-change: new workflow for the build-review gate (#2777).
@@ -42,21 +42,6 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
-
-      # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
-      # write token above stays on the trusted steps only.
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: ro-token
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-          repositories: ${{ github.event.repository.name }}
-          permission-contents: read
-          permission-issues: read
-          permission-pull-requests: read
-          permission-actions: read
-          permission-checks: read
 
       # Trusted scripts come from the default branch; the PR head is fetched separately as data.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -162,31 +147,12 @@ jobs:
           git diff -C --find-copies-harder --no-color "origin/${BASE}...${SHA}" > "$D/diff.patch"
           wc -c "$D/diff.patch"
 
-      # Prove once that the reviewer token cannot write: a no-op PATCH must come back 403/404. On a
-      # 2xx the reviewer never runs.
-      - name: Probe — the reviewer token is read-only
-        if: steps.pr.outputs.skip == 'false'
-        env:
-          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
-          PROBE_ISSUE: ${{ steps.pr.outputs.issue }}
-        run: |
-          set -uo pipefail
-          OUT="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1)"
-          echo "$OUT" | tail -n 3
-          if echo "$OUT" | grep -qE 'HTTP (403|404)'; then
-            echo "probe: reviewer token cannot write (expected)"
-          else
-            echo "::error::reviewer token can write — review NOT run"
-            exit 1
-          fi
-
-      # ── The reviewer: READ-ONLY GitHub token (ro-token) ──────────────────────
+      # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
       - id: pi
         if: steps.pr.outputs.skip == 'false'
         env:
           PI_MODEL: ${{ steps.model.outputs.model }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
           ISSUE: ${{ steps.pr.outputs.issue }}
           PR: ${{ steps.pr.outputs.pr }}
         run: |
