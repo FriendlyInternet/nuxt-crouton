@@ -1,42 +1,40 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge } from './pr-merge-gate.mjs'
+import { decideReviewGate } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
-const base = { baseRef: 'main', headRef: 'work-1', labels: [], go: { go: true }, red: false, ciGate: 'success', mergeableState: 'clean' }
-const d = (o) => decideLeafMerge({ ...base, ...o })
-
-test('no owner go → never merges, even with build:approved', () => {
-  assert.equal(d({ go: { go: false } }).merge, false)
-  assert.equal(d({ go: { go: false }, labels: ['build:approved'] }).merge, false)
-})
-test('owner go + green, no label → merges', () => assert.equal(d({}).merge, true))
-test('red → no merge', () => assert.equal(d({ red: true }).merge, false))
-test('CI Gate not success → no merge', () => assert.equal(d({ ciGate: 'pending' }).merge, false))
-test('blocked/dirty → no merge, reason names it', () => {
-  for (const s of ['blocked', 'dirty']) {
-    const r = d({ mergeableState: s })
-    assert.equal(r.merge, false)
-    assert.match(r.reason, new RegExp(s))
-  }
-})
-test('epic-based PR without build:approved → no merge even with go', () => {
-  assert.equal(d({ baseRef: 'epic/1-x', headRef: 'work-1' }).merge, false)
-  assert.equal(d({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'] }).merge, true)
-})
-test('non-work head to main → declined', () => assert.equal(d({ headRef: 'feature/x' }).merge, false))
-
-// Ordering lives in ownerMergeGo; feed it real fixtures.
 const owner = 'pmcp'
 const c = (body, at) => ({ user: { login: owner, type: 'User' }, body, created_at: at })
 const k = (date) => ({ parents: [{}], commit: { committer: { date } }, files: ['a.ts'] })
-test('ok then green, and green then ok, both give go', () => {
-  assert.equal(ownerMergeGo({ owner, comments: [c('ok', '2026-10-28T16:00:00Z')], commits: [k('2026-10-28T15:00:00Z')] }).go, true)
+const goFor = (comments, commits = []) => ownerMergeGo({ owner, comments, commits })
+const leaf = (go, labels = []) => decideReviewGate({ baseRef: 'main', headRef: 'work-1', labels, go })
+
+test('leaf → main: owner ok merges without build:approved', () => {
+  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T15:00:00Z')])).merge, true)
 })
-test('ok then a later worker comment → no go', () => {
-  const comments = [c('ok', '2026-10-28T16:00:00Z'), c('**Worker:** pushed a fix', '2026-10-28T16:05:00Z')]
-  assert.equal(ownerMergeGo({ owner, comments, commits: [] }).go, false)
+test('leaf → main: no ok → no merge, even with build:approved', () => {
+  assert.equal(leaf(goFor([]), ['build:approved']).merge, false)
 })
-test('ok then a later non-merge commit → no go', () => {
-  assert.equal(ownerMergeGo({ owner, comments: [c('ok', '2026-10-28T16:00:00Z')], commits: [k('2026-10-28T17:00:00Z')] }).go, false)
+test('ok given while checks red, then checks go green: gate still open (order is irrelevant)', () => {
+  // ok at 16:00; a green check later adds no commit/comment, so the same events give go again.
+  const go = goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T15:00:00Z')])
+  assert.equal(go.go, true)
+  assert.equal(leaf(go).merge, true)
+})
+test('ok then a later worker comment → no merge', () => {
+  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z'), c('**Worker:** pushed a fix', '2026-10-28T16:05:00Z')])).merge, false)
+})
+test('ok then a later non-merge commit → no merge', () => {
+  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T17:00:00Z')])).merge, false)
+})
+test('epic-based PR needs build:approved', () => {
+  const go = { go: false }
+  assert.equal(decideReviewGate({ baseRef: 'epic/1-x', headRef: 'work-1', labels: [], go }).merge, false)
+  assert.equal(decideReviewGate({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], go }).merge, true)
+})
+test('epic → main needs build:approved AND owner ok', () => {
+  const e = (labels, go) => decideReviewGate({ baseRef: 'main', headRef: 'epic/1-x', labels, go: { go } }).merge
+  assert.equal(e([], true), false)
+  assert.equal(e(['build:approved'], false), false)
+  assert.equal(e(['build:approved'], true), true)
 })

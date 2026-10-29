@@ -277,14 +277,6 @@ jobs:
                 continue
               }
 
-              // Build review (#2777): a green PR still needs the independent reviewer's go.
-              // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
-              // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
-              // #3103: a work-* → main PR never gets the label (the reviewer only labels epic-based PRs);
-              // for that shape the owner's `ok` below is the review.
-              if (!leafToMain && !(pr.labels || []).some(l => l.name === 'build:approved')) {
-                core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
-              }
               // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
               // commit after it, releases the shared-code pause and the epic → main hold.
               // Green + presence gates above still apply — `ok` never overrides a red check.
@@ -300,13 +292,11 @@ jobs:
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
-              if ((epicToMain || leafToMain) && !go.go) { core.info(`#${pull_number} ${leafToMain ? 'leaf' : 'epic'} → main PR — waits for the owner's ok.`); continue }
-              if (leafToMain) {
-                const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
-                const verdict = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red: false, ciGate: checkState, mergeableState: state })
-                core.info(`#${pull_number} leaf → main: ${verdict.merge} (${verdict.reason})`)
-                if (!verdict.merge) continue
-              }
+              // Review gate (#2777, #3103): one decision — build:approved for epic-based PRs, the
+              // owner's `ok` for anything → main (for a work-* → main PR the `ok` is the review).
+              const { decideReviewGate } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+              const gate = decideReviewGate({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go })
+              if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
