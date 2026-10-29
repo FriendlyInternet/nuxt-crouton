@@ -60,3 +60,10 @@ test('ok then a later worker comment → no merge', () => {
 test('ok then a later non-merge commit → no merge', () => {
   assert.equal(leaf({ go: goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T17:00:00Z')]) }).merge, false)
 })
+test('ok, then an owner **Worker:** comment, then the worker commit → no merge until a fresh ok', () => {
+  const comments = [c('ok', '2026-10-28T16:00:00Z'), c('**Worker:** adding a case', '2026-10-28T16:05:00Z')]
+  const commits = [k('2026-10-28T16:10:00Z')]
+  assert.equal(leaf({ go: goFor(comments, commits) }).merge, false)
+  const fresh = [...comments, c('ok', '2026-10-28T16:20:00Z')]
+  assert.equal(leaf({ go: goFor(fresh, commits) }).merge, true)
+})
