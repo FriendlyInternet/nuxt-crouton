@@ -56,6 +56,19 @@
         "path": "/api/teams/{teamId}/pages-pages/{id}",
         "method": "DELETE"
       }
-    }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages-pages"
+      },
+      {
+        "path": "/api/collab/token",
+        "expectIncludes": "token"
+      }
+    ]
   }
 }

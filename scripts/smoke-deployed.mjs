@@ -10,7 +10,7 @@
  *     --email review+app-pr12@example.com --password <pw> \
  *     [--app app] [--manifest path/to/deploy.config.json] [--out screenshots]
  *
- * Three checks, each degrading gracefully:
+ * Four checks, each degrading gracefully:
  *   1. LOGIN PROOF (always, when creds given) — sign in over the app's own HTTP auth
  *      and confirm /api/auth/get-session returns an authenticated user. This alone is
  *      already more than "it booted": it proves auth works end-to-end on the real Worker
@@ -18,7 +18,10 @@
  *   2. CRUD + PUBLIC READ (only when the app declares a `smoke.crud` block) — create a
  *      record via its API (authenticated), then read it back (publicly when asked) and
  *      assert the content is there. No declaration → skipped, not failed.
- *   3. SCREENSHOT (always) — drive the CI-preinstalled chromium to the app with the
+ *   3. READS (only when the app declares `smoke.reads`) — GET every listed package endpoint
+ *      or page as the review login and assert status / text, so an endpoint the app consumes
+ *      but CRUD never touches (a 500 from a missing migration) turns the smoke red (#3077).
+ *   4. SCREENSHOT (always) — drive the CI-preinstalled chromium to the app with the
  *      session cookie injected and capture screenshots/<app>-smoke.png, so the run
  *      leaves visual proof (reuses app-shots.mjs' browser discovery).
  *
@@ -38,7 +41,11 @@
  *       "read":       { "path": "/api/teams/{teamId}/posts?ids={id}", "expectIncludes": "<new value>" }, // optional, authenticated
  *       "readPublic": { "path": "/api/.../posts/{id}", "expectIncludes": "<text from body>" },          // optional, anonymous
  *       "delete":     { "path": "/api/teams/{teamId}/posts/{id}", "method": "DELETE" }                   // always attempted after create
- *     }   // placeholders: {id}, {teamId} (session's active team), {rand} (per-run token) — see scripts/lib/smoke-crud.mjs
+ *     },
+ *     "reads": [                        // authenticated GETs; {teamId} as for crud
+ *       { "path": "/api/pkg/teams/{teamId}/status", "expectStatus": 200, "expectIncludes": "<text>" }
+ *     ]
+ *     // crud placeholders: {id}, {teamId} (session's active team), {rand} (per-run token) — see scripts/lib/smoke-crud.mjs
  *   }
  */
 
@@ -46,6 +53,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runCrud } from './lib/smoke-crud.mjs'
+import { runReads } from './lib/smoke-reads.mjs'
 
 // ── args ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -169,6 +177,14 @@ async function crudProof(smoke, loggedIn) {
   for (const f of failed) { failures.push(f); fail(f) }
 }
 
+async function readsProof(smoke, loggedIn) {
+  const reads = smoke?.reads
+  if (!reads?.length) { info('no smoke.reads declared — skipping reads check.'); return }
+  if (!loggedIn) { failures.push('reads: declared but not logged in'); fail('reads declared but login failed — cannot read.'); return }
+  const failed = await runReads(reads, { http, getTeamId: resolveTeamId, log: m => info(m) })
+  for (const f of failed) { failures.push(f); fail(f) }
+}
+
 /** Active team of the logged-in session; activates the account's first team when none is set. */
 async function resolveTeamId() {
   const { json } = await http('GET', '/api/auth/get-session')
@@ -233,6 +249,7 @@ const smoke = await loadSmokeManifest()
 let loggedIn = false
 try { loggedIn = await loginProof() } catch (e) { failures.push(`login: ${e.message}`); fail(`login error: ${e.message}`) }
 try { await crudProof(smoke, loggedIn) } catch (e) { failures.push(`crud: ${e.message}`); fail(`crud error: ${e.message}`) }
+try { await readsProof(smoke, loggedIn) } catch (e) { failures.push(`reads: ${e.message}`); fail(`reads error: ${e.message}`) }
 await screenshot(smoke, loggedIn)
 
 if (failures.length) {
