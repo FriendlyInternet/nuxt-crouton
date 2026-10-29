@@ -4,8 +4,8 @@ import { isPlanHeld } from './plan-held.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const plan = bot('<!-- pipeline-plan:v1 --> plan')
-const hold = bot('<!-- plan-review-verdict:no-go -->\n🔴 **Plan rejected twice** — held')
-const reject1 = bot('<!-- plan-review-verdict:no-go -->\n🔴 Plan rejected — sent back')
+const hold = bot('<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n<!-- plan-review-held -->\n🔴 **Plan rejected twice** — held')
+const reject1 = bot('<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n🔴 Plan rejected — sent back')
 
 test('held: the newest event is the twice-rejected verdict', () => {
   assert.equal(isPlanHeld([plan, reject1, plan, hold]), true)
@@ -21,4 +21,10 @@ test('not held: a person pasting the markers is ignored', () => {
 })
 test('not held: no comments', () => {
   assert.equal(isPlanHeld([]), false)
+})
+test('held: wording changed but the marker is present', () => {
+  assert.equal(isPlanHeld([plan, bot('<!-- plan-review:v1 -->\n<!-- plan-review-held -->\nsomething else')]), true)
+})
+test('not held: wording says rejected twice but there is no marker', () => {
+  assert.equal(isPlanHeld([plan, bot('<!-- plan-review:v1 -->\n🔴 Plan rejected twice')]), false)
 })

@@ -9,13 +9,13 @@
 // Pure, Node-core only. Input: the issue's comments, oldest first.
 
 const PLAN = '<!-- pipeline-plan:v1 -->'
-const NO_GO = '<!-- plan-review-verdict:no-go -->'
-const HOLD = 'Plan rejected twice'
+const REVIEW = '<!-- plan-review:v1 -->'
+const HELD = '<!-- plan-review-held -->'
 
 const fromBot = (c) => c.userType === 'Bot'
 
 /**
- * True when the newest plan/hold event is a bot's "Plan rejected twice" verdict: a plan posted
+ * True when the newest plan/review event is a bot's review carrying the plan-review-held marker: a plan posted
  * after the hold (a re-plan) cancels it, and only bot comments count, so a person pasting the
  * markers cannot fake a hold.
  * @param {{body?:string, userType?:string}[]} comments oldest first
@@ -26,7 +26,7 @@ export function isPlanHeld(comments = []) {
     if (!fromBot(c)) continue
     const body = String(c.body || '')
     if (body.includes(PLAN)) held = false
-    else if (body.includes(NO_GO) && body.includes(HOLD)) held = true
+    else if (body.includes(REVIEW)) held = body.includes(HELD)
   }
   return held
 }
