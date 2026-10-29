@@ -148,7 +148,7 @@ jobs:
               '',
               sections.join('\n\n'),
               '',
-              'A database export was kept for 30 days as the `teardown-db-backups` artifact on the run above.',
+              'The database export is not uploaded (public repo, #3067); it exists only on the short-lived runner.',
               '',
               '</details>',
               '',
