@@ -1063,17 +1063,11 @@ jobs:
       contents: read
       issues: write
       pull-requests: read
-      actions: write
     steps:
-      # App token: the `delegate` label must fire a downstream `labeled` workflow (as in `dispatch`).
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false # the model steps below must not find a token in .git/config
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -1167,6 +1161,13 @@ jobs:
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$RUNNER_TEMP/review-prompt.txt")" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
 
+      # App token, minted only for the final step: the `delegate` label must fire a downstream `labeled`
+      # workflow and the revise dispatch needs write scope. The model steps above never see it.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Act on the decision (one action)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
