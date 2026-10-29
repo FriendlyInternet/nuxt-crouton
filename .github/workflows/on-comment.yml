@@ -11,7 +11,8 @@ name: On comment
 #   kind            job                      was
 #   approve-draft   approve-draft            approve-draft-pr.yml
 #   approve-epic    approve-epic             approve-epic-pr.yml
-#   approve-plan    approve-plan             (new, #3024) owner `ok` on a twice-rejected plan hold
+#   approve-plan    approve-plan             (new, #3024) owner `ok: <reason>` on a twice-rejected plan hold
+#   plan-needs-reason                        (new, #3024) bare `ok` there — asks for the reason
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
@@ -381,7 +382,8 @@ jobs:
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
 
   approve-plan:
-    # #3024: the owner's `ok` on a plan held after two reviewer rejections approves the plan.
+    # #3024: the owner's `ok: <reason>` on a plan held after two reviewer rejections approves the plan,
+    # and the reason is recorded as a decision (here and on the parent epic).
     # The App applies `plan:approved` (remove-then-add so the label event always fires), which
     # plan-approved.yml — bot-only by design — turns into a build from the newest plan comment.
     needs: route
@@ -393,7 +395,11 @@ jobs:
       issues: read
     env:
       ISSUE: ${{ needs.route.outputs.number }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
@@ -405,12 +411,40 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
+          REASON="$(printf '%s' "$COMMENT_BODY" | node scripts/plan-held.mjs)"
+          if [ -z "$REASON" ]; then echo "::error::approve-plan routed without a reason"; exit 1; fi
+          TODAY="$(date -u +%F)"
+          DECISION="**Decision (owner override, $TODAY):** $REASON"
+          # Record the decision FIRST — the build reads it alongside the plan.
+          gh issue comment "$ISSUE" --repo "${{ github.repository }}" --body "$DECISION"
+          EPIC="$(gh issue view "$ISSUE" --repo "${{ github.repository }}" --json body --jq .body | grep -o 'epic=[0-9]*' | head -n1 | cut -d= -f2 || true)"
+          if [ -n "$EPIC" ] && [ "$EPIC" != "$ISSUE" ]; then
+            gh issue comment "$EPIC" --repo "${{ github.repository }}" --body "Decisions log — #$ISSUE: $DECISION"
+          fi
           gh issue edit "$ISSUE" --repo "${{ github.repository }}" --remove-label status:blocked || true
           gh issue edit "$ISSUE" --repo "${{ github.repository }}" --remove-label plan:approved || true
           gh issue edit "$ISSUE" --repo "${{ github.repository }}" --add-label plan:approved
           gh issue comment "$ISSUE" --repo "${{ github.repository }}" --body "> 🤖 **pi.dev harness** · agent pipeline (CI) · _owner approved the held plan_
 
           ✅ Plan approved by you — building from the newest plan comment."
+
+  plan-needs-reason:
+    # #3024: a bare `ok` on a held plan does not approve it — ask for the reason, keep the hold.
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Ask for the reason
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.route.outputs.number }}
+        run: |
+          gh issue comment "$ISSUE" --repo "${{ github.repository }}" --body "> 🤖 **pi.dev harness** · agent pipeline (CI) · _held plan needs a reason_
+
+          To build this anyway, reply \`ok: <why it can go forward>\` — the reason is recorded as a decision."
 
   resume:
     needs: route

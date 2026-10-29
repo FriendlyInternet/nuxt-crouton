@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isPlanHeld } from './plan-held.mjs'
+import { isPlanHeld, overrideReason } from './plan-held.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const plan = bot('<!-- pipeline-plan:v1 --> plan')
@@ -27,4 +27,13 @@ test('held: wording changed but the marker is present', () => {
 })
 test('not held: wording says rejected twice but there is no marker', () => {
   assert.equal(isPlanHeld([plan, bot('<!-- plan-review:v1 -->\n🔴 Plan rejected twice')]), false)
+})
+
+test('overrideReason: needs `ok:`/`lgtm:` opening the reply and a non-empty reason', () => {
+  assert.equal(overrideReason('ok: the reviewer misread the schema'), 'the reviewer misread the schema')
+  assert.equal(overrideReason('LGTM: scope is fine here'), 'scope is fine here')
+  assert.equal(overrideReason('ok'), '')
+  assert.equal(overrideReason('ok:   '), '')
+  assert.equal(overrideReason('I said ok: the reviewer misread it'), '')
+  assert.equal(overrideReason('> ok: the reviewer misread it'), '')
 })

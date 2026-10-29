@@ -9,7 +9,7 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 10)
+  assert.equal(KINDS.length, 11)
 })
 
 test('close-epic: /close-epic on an issue', () => {
@@ -86,11 +86,17 @@ test('none: a comment posted via any other GitHub App is dropped, even under a U
   assert.equal(kind({ comment: viaOther, issue: prIssue, pr: pr() }), 'none')
 })
 
-test('approve-plan: owner ok on a plan held after two rejections; anything else resumes', () => {
+test('approve-plan: owner `ok: reason` on a held plan; a bare ok asks for the reason; anything else resumes', () => {
   const held = { ...issue(['status:blocked']), planHeld: true }
-  assert.equal(kind({ comment: c('ok'), issue: held }), 'approve-plan')
-  assert.equal(kind({ comment: c('lgtm'), issue: held }), 'approve-plan')
+  const why = 'ok: the reviewer misread the schema, it is fine'
+  assert.equal(kind({ comment: c(why), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('lgtm: the reviewer misread the schema'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('lgtm'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c(why, 'CONTRIBUTOR'), issue: held }), 'resume')
   assert.equal(kind({ comment: c('ok', 'CONTRIBUTOR'), issue: held }), 'resume')
   assert.equal(kind({ comment: c('use blue instead'), issue: held }), 'resume')
-  assert.equal(kind({ comment: c('ok'), issue: { ...issue(['status:blocked']), planHeld: false } }), 'resume')
+  const notHeld = { ...issue(['status:blocked']), planHeld: false }
+  assert.equal(kind({ comment: c(why), issue: notHeld }), 'resume')
+  assert.equal(kind({ comment: c('ok'), issue: notHeld }), 'resume')
 })
