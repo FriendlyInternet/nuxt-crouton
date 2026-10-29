@@ -65,9 +65,10 @@ function routePrApproval({ assoc, collab, pr, out }) {
  * @param {{body:string, authorAssociation?:string, userType?:string}} input.comment
  * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
+ * @param {boolean} [input.performedViaApp]  the comment came through a GitHub App (restricts routing to `revise`)
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
  */
-export function routeComment({ comment = {}, issue = {}, pr } = {}) {
+export function routeComment({ comment = {}, issue = {}, pr, performedViaApp = false } = {}) {
   const number = issue.number ?? 0
   const blocked = (issue.labels || []).includes('status:blocked')
   const out = (kind, reason) => ({ kind, number, reason, blocked })
@@ -78,6 +79,16 @@ export function routeComment({ comment = {}, issue = {}, pr } = {}) {
 
   if (comment.userType === 'Bot') return out('none', 'posted by a bot')
   if (!body.trim()) return out('none', 'empty comment')
+
+  // An App-posted comment (the interactive agent posts through the Claude app under the owner's
+  // account, #3033) may do exactly one thing: a `**Worker:**` change request → revise. It can
+  // never approve, merge, close, dispatch or resume, whatever words it contains.
+  if (performedViaApp) {
+    if (!issue.isPr || !pr) return out('none', 'an app-posted comment outside a PR')
+    if (!/^>\s*🤖[^\n]*interactive agent/iu.test(body.trim())) return out('none', 'an app-posted comment that is not from the interactive agent')
+    const r = routePrComment({ pr: { headRef: pr.headRef, state: pr.state }, comment: { body, authorAssociation: assoc, userType: comment.userType } })
+    return r.revise ? out('revise', r.reason) : out('none', r.reason)
+  }
 
   if (!issue.isPr) return routeIssue({ body, collab, issue, out })
 

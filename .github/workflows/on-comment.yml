@@ -31,12 +31,12 @@ jobs:
   route:
     # A bot's comment never routes (also stops our own replies re-triggering anything). Most
     # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
-    # `performed_via_github_app` also catches an App acting under a user-typed identity. No flow
-    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
-    # and consumed by reading the thread (revise), not by this trigger.
+    # A comment posted through a GitHub App is NOT filtered here (#3033): the interactive agent
+    # posts via the Claude app under the owner's account, and its `**Worker:**` change requests
+    # must reach `revise`. comment-route.mjs allows an app-posted comment that one route only and
+    # answers `none` to everything else, so an app comment can never approve, merge or dispatch.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
-      github.event.comment.performed_via_github_app == null
+      github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -68,6 +68,7 @@ jobs:
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
               issue: { number: i.number, isPr, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
+              performedViaApp: Boolean(c.performed_via_github_app),
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
             core.setOutput('kind', d.kind)

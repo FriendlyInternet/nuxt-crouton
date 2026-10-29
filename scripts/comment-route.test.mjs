@@ -74,3 +74,31 @@ test('race: lgtm on an epic PR merges once', () => {
 test('race: ok on an issue with both status:blocked and status:to-test answers the card only', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'status:to-test']) }), 'test-card')
 })
+
+// #3033 — app-posted comments (the interactive agent) may only revise
+const AGENT = '> 🤖 **Claude Code** · interactive agent · _ctx_\n\n**Worker:** please fix the label'
+const viaApp = (body, input = {}) => routeComment({ comment: c(body), issue: prIssue, pr: pr(), performedViaApp: true, ...input })
+
+test('app-posted: an interactive **Worker:** request on a pipeline PR revises', () => {
+  assert.equal(viaApp(AGENT).kind, 'revise')
+  assert.equal(viaApp(AGENT, { pr: pr({ headRef: 'epic/3-x', baseRef: 'main' }) }).kind, 'revise')
+})
+
+test('app-posted: plain issue or no **Worker:** line → none', () => {
+  assert.equal(viaApp(AGENT, { issue: issue(['status:blocked']), pr: undefined }).kind, 'none')
+  assert.equal(viaApp('> 🤖 **Claude Code** · interactive agent\n\nFYI done').kind, 'none')
+})
+
+test('app-posted: never an approval/merge/close/dispatch/resume kind', () => {
+  for (const body of ['ok', 'lgtm', '✅', '/close-epic', '🚀', '/build']) {
+    assert.equal(viaApp(body).kind, 'none', body)
+    assert.equal(viaApp(body, { issue: issue(['status:blocked']), pr: undefined }).kind, 'none', body)
+  }
+  assert.equal(viaApp(`${AGENT}\nok`, { pr: pr({ draft: true }) }).kind, 'revise')
+})
+
+test('app-posted: bots and pipeline comments stay none; hand-typed comments unchanged', () => {
+  assert.equal(routeComment({ comment: c(AGENT, 'OWNER', 'Bot'), issue: prIssue, pr: pr(), performedViaApp: true }).kind, 'none')
+  assert.equal(viaApp('> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n**Worker:** x').kind, 'none')
+  assert.equal(kind({ comment: c('ok'), issue: prIssue, pr: pr({ draft: true }) }), 'approve-draft')
+})
