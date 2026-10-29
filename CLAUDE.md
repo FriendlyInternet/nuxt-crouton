@@ -249,7 +249,7 @@ const comp = resolveComponent('CroutonAssetsPicker')
 
 **Stub locations:**
 - `crouton-core/app/components/stubs/` — for `crouton-editor`, `crouton-maps`, `crouton-collab`, `crouton-assets`
-- `crouton-i18n/app/stubs/` — for `crouton-ai`
+- `crouton-i18n/app/stubs/` — for `crouton-ai`, and crouton-pages editors
 - All stubs dirs use `priority: -1` in nuxt.config.ts
 
 Addon packages must register in `croutonApps` (in `app/app.config.ts`) to be detectable via `hasApp()`.

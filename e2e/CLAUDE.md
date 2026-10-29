@@ -186,6 +186,7 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
     {
       "name": "pages workspace renders",         // test title
       "path": "/admin/{team}/workspace",          // route; {team} -> active team slug
+      "click": ["[aria-label='Create Page']"],  // optional: selector (or list, in order) clicked after load, before asserting
       "expect": { "visible": "[id$='-panel-pages-sidebar']" }  // CSS selector that must be visible
       // or: "expect": { "heading": "Workspace" } // a role=heading name (case-insensitive)
       // add "a11y": false inside "expect" to opt this surface OUT of the axe-core scan
