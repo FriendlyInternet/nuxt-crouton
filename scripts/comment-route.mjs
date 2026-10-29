@@ -74,7 +74,7 @@ function routePrApproval({ assoc, collab, pr, out }) {
 
 /**
  * @param {object} input
- * @param {{body:string, authorAssociation?:string, userType?:string}} input.comment
+ * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null}} input.comment
  * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
@@ -89,6 +89,7 @@ export function routeComment(input = {}) {
 function isInterpretable({ comment = {}, issue = {}, pr } = {}) {
   const body = String(comment.body || '')
   if (!OWNERS.has(comment.authorAssociation) || comment.userType === 'Bot') return false
+  if (comment.performedViaGithubApp) return false // only the owner's own typed comments are interpreted
   const first = body.split('\n').find(l => l.trim()) || ''
   if (!first) return false
   if (/^>\s*🤖/u.test(first.trim())) return false
@@ -107,6 +108,9 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   const collab = COLLABORATORS.has(assoc)
 
   if (comment.userType === 'Bot') return out('none', 'posted by a bot')
+  // An App acting under a user identity is a bot too — except the Claude app, which the
+  // interactive agent uses to post `**Worker:**` change requests as the owner (#3029).
+  if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
   if (!issue.isPr) return routeIssue({ body, collab, issue, out })

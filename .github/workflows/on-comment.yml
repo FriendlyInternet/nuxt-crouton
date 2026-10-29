@@ -32,12 +32,15 @@ jobs:
   route:
     # A bot's comment never routes (also stops our own replies re-triggering anything). Most
     # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
-    # `performed_via_github_app` also catches an App acting under a user-typed identity. No flow
+    # `performed_via_github_app` also catches an App acting under a user-typed identity, except the
+    # Claude app: the interactive agent posts `**Worker:**` change requests through it as the owner
+    # (user.type == User), and dropping those silently ignored them (#3029). No flow
     # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
     # and consumed by reading the thread (revise), not by this trigger.
     if: >-
       github.event.comment.user.type != 'Bot' &&
-      github.event.comment.performed_via_github_app == null
+      (github.event.comment.performed_via_github_app == null ||
+       github.event.comment.performed_via_github_app.name == 'Claude')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -66,7 +69,7 @@ jobs:
               pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
@@ -952,7 +955,7 @@ jobs:
             const c = context.payload.comment
             const route = routePrComment({
               pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {
