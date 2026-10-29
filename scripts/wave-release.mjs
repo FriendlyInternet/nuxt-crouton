@@ -143,7 +143,10 @@ export async function closeLinkedIssues(ctx) {
       if (gi.data.state === 'closed') continue
       // #1035: never auto-close a HELD issue — `status:blocked` means a human step is pending.
       const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-      if (held) { core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue }
+      // #3039: a build:approved PR means the build review went `go` — a leftover status:blocked
+      // is the reviewer's own stale no-go hold, not a pending human step.
+      const approved = (pr.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'build:approved')
+      if (held && !approved) { core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue }
       await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
       core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
     } catch (e) { core.warning(`Could not close #${n}: ${e.message}`) }
