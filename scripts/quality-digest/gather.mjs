@@ -108,6 +108,36 @@ const runsModel = (step) => {
     .some((l) => /(^|[|;&(`]|\$\(|\brun:|\|)\s*(pnpm exec |npx )?(pi|claude)(\s|$)/.test(l.replace(/^\s*\|\s*$/, '')))
 }
 
+const runOf = (step) => step.match(/^\s*run:\s*(\|[^\n]*\n[\s\S]*|[^\n]*)/m)?.[1] || ''
+
+const uploadsDbPaths = (step) => {
+  if (!/uses:\s*actions\/upload-artifact@/.test(step)) return false
+  const path = step.match(/^\s*path:\s*(\|[^\n]*\n(?:\s{2,}[^\n]*\n?)*|[^\n]*)/m)?.[1] || ''
+  return /backup|dump|export|\.sql/i.test(path)
+}
+const isFailOpenGate = (step) =>
+  /^\s*continue-on-error:\s*true\b/m.test(step) && /review|verdict|gate/i.test(field(step, 'name'))
+const interpolatesComment = (step) => runOf(step).includes('github.event.comment.body')
+const modelWithCredentials = (job) =>
+  job.steps.some(runsModel) &&
+  job.steps
+    .filter((s) => /uses:\s*actions\/checkout@/.test(s))
+    .some((s) => !/persist-credentials:\s*false/.test(s))
+
+const stepChecks = [
+  ['artifactUploadsWithDbPaths', uploadsDbPaths],
+  ['failOpenGates', isFailOpenGate],
+  ['commentBodyInRun', interpolatesComment]
+]
+
+const scanJob = (name, job, out) => {
+  for (const step of job.steps) {
+    const where = { workflow: name, job: job.name, step: field(step, 'name') || field(step, 'uses') }
+    for (const [key, check] of stepChecks) if (check(step)) out[key].push(where)
+  }
+  if (modelWithCredentials(job)) out.modelJobsWithCredentials.push({ workflow: name, job: job.name })
+}
+
 /** The four deterministic security scans over `[{name, text}]` workflow files. */
 export function scanWorkflows(files) {
   const out = {
@@ -117,23 +147,7 @@ export function scanWorkflows(files) {
     failOpenGates: []
   }
   for (const { name, text } of files) {
-    for (const job of parseWorkflow(text)) {
-      for (const step of job.steps) {
-        const where = { workflow: name, job: job.name, step: field(step, 'name') || field(step, 'uses') }
-        if (/uses:\s*actions\/upload-artifact@/.test(step)) {
-          const path = step.match(/^\s*path:\s*(\|[^\n]*\n(?:\s{2,}[^\n]*\n?)*|[^\n]*)/m)?.[1] || ''
-          if (/backup|dump|export|\.sql/i.test(path)) out.artifactUploadsWithDbPaths.push(where)
-        }
-        if (/^\s*continue-on-error:\s*true\b/m.test(step) && /review|verdict|gate/i.test(field(step, 'name')))
-          out.failOpenGates.push(where)
-        const run = step.match(/^\s*run:\s*(\|[^\n]*\n[\s\S]*|[^\n]*)/m)?.[1] || ''
-        if (run.includes('github.event.comment.body')) out.commentBodyInRun.push(where)
-      }
-      const runsAModel = job.steps.some(runsModel)
-      const checkouts = job.steps.filter((s) => /uses:\s*actions\/checkout@/.test(s))
-      if (runsAModel && checkouts.some((s) => !/persist-credentials:\s*false/.test(s)))
-        out.modelJobsWithCredentials.push({ workflow: name, job: job.name })
-    }
+    for (const job of parseWorkflow(text)) scanJob(name, job, out)
   }
   return out
 }
