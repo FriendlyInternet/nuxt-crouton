@@ -12,7 +12,7 @@
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
 //   issue: /close-epic → close-epic · slash/rocket command → dispatch · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
-//          status:blocked → resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
+//          status:blocked → (owner `ok: <reason>` on a twice-rejected plan hold → approve-plan; bare `ok` there → plan-needs-reason) · resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
 //   PR:    approval on a draft → approve-draft · approval on a ready epic→main PR from the
 //          owner → approve-epic · any other approval → automerge-go · a non-approval on a
@@ -24,10 +24,11 @@
 import { pathToFileURL } from 'node:url'
 import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
+import { overrideReason } from './plan-held.mjs'
 import { routePrComment } from './revise-route.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
+  'approve-draft', 'approve-epic', 'approve-plan', 'plan-needs-reason', 'automerge-go', 'close-epic',
   'dispatch', 'interpret', 'resume', 'revise', 'test-card', 'none',
 ]
 
@@ -45,14 +46,28 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
   return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l))
 }
 
+/**
+ * On a plan held after two rejections the owner's `ok: <reason>` approves it (#3024) and the
+ * reason is recorded as a decision; a bare `ok` only asks for the reason. Any other reply — or
+ * `ok` from anyone else — returns null and still re-runs the planner via resume.
+ */
+function routeHeldPlan({ body, assoc, issue, out }) {
+  if (!(out.blocked && issue.planHeld && OWNERS.has(assoc))) return null
+  if (overrideReason(body)) return out('approve-plan', 'owner override with a reason on a plan held after two rejections')
+  if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan — ask for a reason')
+  return null
+}
+
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, collab, issue, out }) {
+function routeIssue({ body, collab, assoc, issue, out }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
+  const held = routeHeldPlan({ body, assoc, issue, out })
+  if (held) return held
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
   // resume job (it explains), any other owner comment falls through to `interpret`.
   if (out.blocked && (isPipelineOwned({ body: issue.body, labels }) || isApproval(body))) {
@@ -62,20 +77,36 @@ function routeIssue({ body, collab, issue, out }) {
   return out('none', 'no command, no card reply, issue not blocked')
 }
 
-/** Routing for an approval (`ok`/`lgtm`) on a PR. */
-function routePrApproval({ assoc, collab, pr, out }) {
+/** An approval that cannot act at all: from a non-collaborator, or on a PR that is not open. */
+export function approvalBlocked({ collab, pr, out }) {
   if (!collab) return out('none', 'approval from a non-collaborator')
   if (pr.state !== 'open') return out('none', 'PR is not open')
-  if (pr.draft) return out('approve-draft', 'approval on a held draft PR')
+  return null
+}
+
+/** An approval on a held draft PR. */
+export function approveDraftRoute({ pr, out }) {
+  return pr.draft ? out('approve-draft', 'approval on a held draft PR') : null
+}
+
+/** The owner's approval on a ready epic → main PR. */
+export function approveEpicRoute({ assoc, pr, out }) {
   const epicToMain = pr.baseRef === 'main' && /^epic\//.test(pr.headRef || '')
-  if (epicToMain && OWNERS.has(assoc)) return out('approve-epic', 'owner approval on an epic → main PR')
-  return out('automerge-go', 'approval on a ready PR')
+  return epicToMain && OWNERS.has(assoc) ? out('approve-epic', 'owner approval on an epic → main PR') : null
+}
+
+/** Routing for an approval (`ok`/`lgtm`) on a PR. */
+export function routePrApproval({ assoc, collab, pr, out }) {
+  return approvalBlocked({ collab, pr, out })
+    || approveDraftRoute({ pr, out })
+    || approveEpicRoute({ assoc, pr, out })
+    || out('automerge-go', 'approval on a ready PR')
 }
 
 /**
  * @param {object} input
  * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null}} input.comment
- * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
+ * @param {{number:number, isPr:boolean, labels?:string[], planHeld?:boolean}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
  */
@@ -113,7 +144,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, collab, assoc, issue, out })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })
