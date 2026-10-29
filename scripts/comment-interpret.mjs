@@ -102,6 +102,11 @@ export function noMention(text) {
   return String(text).replace(/@/g, '@\u200b')
 }
 
+/** The one door for model-produced text into a comment: trimmed, and no `@` can ping anyone (rule 6). */
+export function modelText(text, max = 2000) {
+  return noMention(String(text ?? '').slice(0, max))
+}
+
 /** The fixed prompt for the light model; context is trimmed by the caller. */
 export function buildPrompt({ context, comment }) {
   return [

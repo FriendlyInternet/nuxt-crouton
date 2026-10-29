@@ -69,3 +69,11 @@ test('case 6b: model-written reply text is defanged too', async () => {
   const { noMention } = await import('./comment-interpret.mjs')
   assert.ok(!/@(?=pmcp)/.test(noMention('ask @pmcp and @team')))
 })
+
+test('case 6c: modelText defangs a reply and a review body', async () => {
+  const { modelText } = await import('./comment-interpret.mjs')
+  for (const body of ['thanks @someone, see below', '## Review\n- cc @someone and @pmcp']) {
+    assert.ok(!/@(?=\w)/.test(modelText(body)))
+  }
+  assert.equal(modelText('x'.repeat(50), 10).length, 10)
+})
