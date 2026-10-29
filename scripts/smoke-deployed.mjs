@@ -54,6 +54,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runCrud } from './lib/smoke-crud.mjs'
 import { runReads } from './lib/smoke-reads.mjs'
+import { mergeCookies, cookieHeader } from './lib/review-login.mjs'
 
 // ── args ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -86,21 +87,7 @@ try { origin = new URL(args.url).origin } catch {
   fail(`invalid --url "${args.url}"`); process.exit(2)
 }
 
-// ── cookie jar (same approach as seed-review-login.mjs) ──────────────────────
-function mergeCookies(jar, res) {
-  const setCookies = typeof res.headers.getSetCookie === 'function'
-    ? res.headers.getSetCookie()
-    : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : [])
-  for (const sc of setCookies) {
-    const pair = sc.split(';')[0]
-    const eq = pair.indexOf('=')
-    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim())
-  }
-  return jar
-}
-function cookieHeader(jar) {
-  return Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
-}
+// ── cookie jar (shared with seed-review-login.mjs) ───────────────────────────
 let jar = new Map()
 const baseHeaders = { 'content-type': 'application/json', origin }
 
