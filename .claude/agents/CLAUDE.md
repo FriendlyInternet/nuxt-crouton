@@ -130,7 +130,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 |-------|------|-----------|--------------|-------|
 | `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
-**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+**It is ADVISORY on findings — it has no 🔴 and never blocks on what it finds; the check goes red only if simplify did not run (no verdict, #3070).** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
 `.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
@@ -309,6 +309,9 @@ all of these by **default** — they're not optional extras; each one has burned
 - **`anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`** — a real API key, NEVER a
   subscription `CLAUDE_CODE_OAUTH_TOKEN` (subscription OAuth is interactive-only and
   disallowed for CI — Anthropic Legal & Compliance).
+- **`allowed_bots: "nuxt-harness[bot],github-actions[bot]"`** — the action refuses any run
+  started by a bot actor unless listed, and exits green while refusing; pipeline pushes are
+  bot-started, so without it the reviewers silently never run (#3119).
 - **`show_full_output: true`** — the full agent log prints inline; debugging a run must not
   require a debug re-run.
 - **Pin the action to a SHA, kept in sync** across these workflows (bump them together).
