@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
+import { parseVerdict, precheck, decide, renderComment } from './plan-verdict.mjs'
 
 const fx = (n) => readFileSync(new URL(`../fixtures/plan-review/${n}`, import.meta.url), 'utf8')
 
@@ -32,19 +32,9 @@ test('hedging words in Cause fail item 2', () => {
   assert.ok(precheck(plan)['2'])
 })
 
-test('a declared unverified assumption (with a reason) no longer fails item 3, and is surfaced as a note', () => {
-  assert.equal(precheck(fx('refresh-keys.plan.md'))['3'], undefined)
-  assert.ok(planNotes(fx('refresh-keys.plan.md'))['3'])
-})
-
-test('a verified assumption without a link still fails 1b', () => {
+test('an unverified assumption fails item 3; a verified one without a link fails 1b', () => {
+  assert.ok(precheck(fx('refresh-keys.plan.md'))['3'])
   const plan = fx('clean.plan.md').replace(/Evidence: https:\/\/\S+/, 'Evidence: grep output')
-  assert.ok(precheck(plan)['1b'])
-})
-
-test('an unverified assumption with no reason still fails 1b', () => {
-  const plan = fx('refresh-keys.plan.md').replace('— Why: seems right ', '')
-  assert.notEqual(plan, fx('refresh-keys.plan.md'))
   assert.ok(precheck(plan)['1b'])
 })
 
