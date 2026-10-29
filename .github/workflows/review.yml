@@ -5,6 +5,9 @@ name: Review
 # constraint) — what they now share is the setup: ONE `diff` job computes the changed-file
 # list and unified diff once and hands them over as an artifact.
 #
+# Every `claude-code-action` step below MUST set `allowed_bots` (#3119): the action refuses a run
+# started by a bot actor (the pipeline's pushes) otherwise, and exits green while refusing.
+#
 #   red-team          epic → main, non-draft   blocks on high/critical
 #   a11y              epic → main, non-draft   blocks on critical/serious   (needs pnpm install)
 #   simplify          epic → main, non-draft   advisory, never blocks
@@ -100,6 +103,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834): headless CI denies un-allowlisted tools, so without it
           # the agent can't write red-team-verdict.json / post the comment → fails OPEN.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -220,6 +224,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): ARIA/label/alt/tabindex
           # pattern-matching.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -334,6 +339,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): convention pattern-matching.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
@@ -444,6 +450,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Sonnet, not Haiku: simplification is a judgment call and
           # a noisy false positive is the failure mode — precision matters more than the cheaper tier.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
