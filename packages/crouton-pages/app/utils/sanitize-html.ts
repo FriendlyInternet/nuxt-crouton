@@ -66,38 +66,40 @@ export function sanitizeHtml(html: string): string {
   return filter.process(html || '')
 }
 
+const MARK_TAGS: Record<string, string> = {
+  bold: 'strong',
+  italic: 'em',
+  underline: 'u',
+  strike: 's',
+  code: 'code',
+  highlight: 'mark',
+}
+
+function linkToHtml(text: string, attrs: any): string {
+  const href = safeUrl(attrs?.href)
+  const target = attrs?.target === '_blank' || attrs?.target === '_self' ? attrs.target : undefined
+  const hrefAttr = href ? ` href="${escapeHtml(href)}"` : ''
+  const targetAttr = target ? ` target="${target}"` : ''
+  return `<a${hrefAttr}${targetAttr}>${text}</a>`
+}
+
+function applyMark(text: string, mark: any): string {
+  if (mark.type === 'link') return linkToHtml(text, mark.attrs)
+  const tag = MARK_TAGS[mark.type]
+  return tag ? `<${tag}>${text}</${tag}>` : text
+}
+
+function inlineNodeToHtml(node: any): string {
+  if (node.type === 'hardBreak') return '<br>'
+  if (node.type !== 'text') return ''
+  return (node.marks || []).reduce(applyMark, escapeHtml(node.text || ''))
+}
+
 /**
  * Convert inline content (text nodes with marks) to sanitised HTML.
  * Shared by paragraph, heading, and list item renderers.
  */
 export function inlineContentToHtml(content: any[]): string {
   if (!content || !Array.isArray(content)) return ''
-
-  const html = content.map((node: any) => {
-    if (node.type === 'hardBreak') return '<br>'
-    if (node.type === 'text') {
-      let text = escapeHtml(node.text || '')
-      if (node.marks) {
-        for (const mark of node.marks) {
-          if (mark.type === 'bold') text = `<strong>${text}</strong>`
-          else if (mark.type === 'italic') text = `<em>${text}</em>`
-          else if (mark.type === 'underline') text = `<u>${text}</u>`
-          else if (mark.type === 'strike') text = `<s>${text}</s>`
-          else if (mark.type === 'code') text = `<code>${text}</code>`
-          else if (mark.type === 'highlight') text = `<mark>${text}</mark>`
-          else if (mark.type === 'link') {
-            const href = safeUrl(mark.attrs?.href)
-            const target = mark.attrs?.target === '_blank' || mark.attrs?.target === '_self' ? mark.attrs.target : undefined
-            const hrefAttr = href ? ` href="${escapeHtml(href)}"` : ''
-            const targetAttr = target ? ` target="${target}"` : ''
-            text = `<a${hrefAttr}${targetAttr}>${text}</a>`
-          }
-        }
-      }
-      return text
-    }
-    return ''
-  }).join('')
-
-  return sanitizeHtml(html)
+  return sanitizeHtml(content.map(inlineNodeToHtml).join(''))
 }
