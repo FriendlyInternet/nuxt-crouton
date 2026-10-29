@@ -1,6 +1,7 @@
 // Replay fixtures for the build reviewer verdict (#2777). node --test scripts/lib/build-verdict.test.mjs
 // The two real PRs (#2723 @217b2903, #2726 @545e2a7b) are not fetchable in CI, so their SHAPE is
 // reproduced as diffs: #2723 copied files instead of moving them and loosened a Fallow baseline.
+import { readFileSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseDiff, precheck, decide, renderComment, parseVerdict } from './build-verdict.mjs'
@@ -35,7 +36,7 @@ const verdict = (v, rows) => `<!-- build-review:v1 -->
 ### Verdict
 ${v}
 ### Rubric
-${[1, 2, 3, 4, 5].map((i) => `- ${i}: ${rows[i] || 'PASS — ok'}`).join('\n')}
+${[1, 2, 3, 4, 5, 6, 7].map((i) => `- ${i}: ${rows[i] || 'PASS — ok'}`).join('\n')}
 ### Question
 Is the wider scope intended? Recommend yes.
 `
@@ -94,4 +95,20 @@ test('the second no-go is final: held for the owner, no Worker line', () => {
 test('a go that contradicts its own rubric, or a missing item, is malformed', () => {
   assert.equal(decide(cleanDiff, TICKET, verdict('go', { 4: 'FAIL — extra file' })).ok, false)
   assert.equal(parseVerdict('<!-- build-review:v1 -->\n### Verdict\ngo\n### Rubric\n- 1: PASS — x').ok, false)
+})
+
+// Golden fixtures: .claude/gate-fixtures/build-review/<name>/{ticket.md,verdict.md,expected.json}
+const FIX = new URL('../../.claude/gate-fixtures/build-review/', import.meta.url)
+test('golden fixtures (#2966, #2935, #3005, #3007) parse to the expected verdict and failures', () => {
+  const names = readdirSync(FIX, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+  assert.ok(names.length >= 4)
+  for (const n of names) {
+    const read = (f) => readFileSync(new URL(`${n}/${f}`, FIX), 'utf8')
+    const want = JSON.parse(read('expected.json'))
+    const d = decide('', read('ticket.md'), read('verdict.md'))
+    assert.equal(d.ok, true, n)
+    assert.equal(d.verdict, want.verdict, n)
+    assert.deepEqual(d.failed, want.failed, n)
+    if (want.evidence) assert.match(d.items[want.failed[0]].evidence, new RegExp(want.evidence), n)
+  }
 })

@@ -55,3 +55,8 @@ persist it, and the smoke step should treat "the fixture wasn't clearly
 flagged" as a failure, not a silent pass. Do this by hand when validating a
 change to the permission grant; it is not run automatically on every PR
 (that would require deliberately breaking a gate in CI).
+
+## Build reviewer fixtures (#3071)
+
+`build-review/<case>/` holds a ticket, the reviewer's verdict and the expected decision for replays of
+#2966, #2935, #3005 (all `no-go`) and #3007 (`go`). `scripts/lib/build-verdict.test.mjs` runs the parser over them.
