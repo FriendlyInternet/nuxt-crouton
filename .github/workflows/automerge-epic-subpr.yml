@@ -82,7 +82,7 @@ on:
   check_suite:
     types: [completed]
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "E2E"]   # #3103: main also needs E2E Gate; re-ask when it finishes last
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
   # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
@@ -280,7 +280,9 @@ jobs:
               // Build review (#2777): a green PR still needs the independent reviewer's go.
               // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
               // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
-              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
+              // #3103: a work-* → main PR never gets the label (the reviewer only labels epic-based PRs);
+              // for that shape the owner's `ok` below is the review.
+              if (!leafToMain && !(pr.labels || []).some(l => l.name === 'build:approved')) {
                 core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
               }
               // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
@@ -299,6 +301,12 @@ jobs:
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
               if ((epicToMain || leafToMain) && !go.go) { core.info(`#${pull_number} ${leafToMain ? 'leaf' : 'epic'} → main PR — waits for the owner's ok.`); continue }
+              if (leafToMain) {
+                const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+                const verdict = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red: false, ciGate: checkState, mergeableState: state })
+                core.info(`#${pull_number} leaf → main: ${verdict.merge} (${verdict.reason})`)
+                if (!verdict.merge) continue
+              }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
