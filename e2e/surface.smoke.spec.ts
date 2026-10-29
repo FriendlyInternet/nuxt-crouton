@@ -37,6 +37,10 @@ test.describe(`fixture "${FIXTURE}" surfaces`, () => {
       await page.goto(surfaceUrl(base, slug, surface.path), { waitUntil: 'domcontentloaded' })
       await page.waitForLoadState('networkidle').catch(() => {})
 
+      if (surface.click) {
+        await page.locator(surface.click).first().click({ timeout: 180000 })
+      }
+
       const { visible, heading } = surface.expect
       // Generous timeout: the dev server compiles the route on first hit.
       // `.first()` keeps "is this surface present" robust when a selector legitimately
