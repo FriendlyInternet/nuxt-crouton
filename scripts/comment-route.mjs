@@ -60,6 +60,13 @@ function routePrApproval({ assoc, collab, pr, out }) {
   return out('automerge-go', 'approval on a ready PR')
 }
 
+function routeAppComment({ body, assoc, comment, issue, pr, out }) {
+  if (!issue.isPr || !pr) return out('none', 'an app-posted comment outside a PR')
+  if (!/^>\s*🤖[^\n]*interactive agent/iu.test(body.trim())) return out('none', 'an app-posted comment that is not from the interactive agent')
+  const r = routePrComment({ pr: { headRef: pr.headRef, state: pr.state }, comment: { body, authorAssociation: assoc, userType: comment.userType } })
+  return r.revise ? out('revise', r.reason) : out('none', r.reason)
+}
+
 /**
  * @param {object} input
  * @param {{body:string, authorAssociation?:string, userType?:string}} input.comment
@@ -83,12 +90,7 @@ export function routeComment({ comment = {}, issue = {}, pr, performedViaApp = f
   // An App-posted comment (the interactive agent posts through the Claude app under the owner's
   // account, #3033) may do exactly one thing: a `**Worker:**` change request → revise. It can
   // never approve, merge, close, dispatch or resume, whatever words it contains.
-  if (performedViaApp) {
-    if (!issue.isPr || !pr) return out('none', 'an app-posted comment outside a PR')
-    if (!/^>\s*🤖[^\n]*interactive agent/iu.test(body.trim())) return out('none', 'an app-posted comment that is not from the interactive agent')
-    const r = routePrComment({ pr: { headRef: pr.headRef, state: pr.state }, comment: { body, authorAssociation: assoc, userType: comment.userType } })
-    return r.revise ? out('revise', r.reason) : out('none', r.reason)
-  }
+  if (performedViaApp) return routeAppComment({ body, assoc, comment, issue, pr, out })
 
   if (!issue.isPr) return routeIssue({ body, collab, issue, out })
 
