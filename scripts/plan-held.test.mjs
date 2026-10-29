@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isPlanHeld } from './plan-held.mjs'
+import { isPlanHeld, overrideReason } from './plan-held.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const plan = bot('<!-- pipeline-plan:v1 --> plan')
@@ -21,4 +21,13 @@ test('not held: a person pasting the markers is ignored', () => {
 })
 test('not held: no comments', () => {
   assert.equal(isPlanHeld([]), false)
+})
+
+test('overrideReason: needs `ok:`/`lgtm:` opening the reply and at least three words', () => {
+  assert.equal(overrideReason('ok: the reviewer misread the schema'), 'the reviewer misread the schema')
+  assert.equal(overrideReason('LGTM: scope is fine here'), 'scope is fine here')
+  assert.equal(overrideReason('ok'), '')
+  assert.equal(overrideReason('ok: fine'), '')
+  assert.equal(overrideReason('I said ok: the reviewer misread it'), '')
+  assert.equal(overrideReason('> ok: the reviewer misread it'), '')
 })
