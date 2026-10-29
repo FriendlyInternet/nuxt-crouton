@@ -521,6 +521,43 @@ jobs:
             core.setOutput('redispatch', 'true')
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
+      # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
+      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
+      # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
+      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
+      # guard already requires status:blocked) and re-run the planner with the reply as feedback.
+      # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
+      - name: Re-plan a held plan from the reply
+        id: replan
+        if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true' && steps.piredispatch.outputs.redispatch != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url')
+            const { isPlanHold } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
+            const issue_number = context.payload.issue.number
+            const comments = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 }))
+              .map(c => ({ body: c.body, userType: c.user && c.user.type }))
+            if (!isPlanHold(comments)) { core.setOutput('replan', 'false'); core.info('Not a held plan — the claude resume path handles it.'); return }
+            core.setOutput('replan', 'true')
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+                inputs: { issue: String(issue_number), mode: 'plan', feedback: String(context.payload.comment.id) },
+              })
+            } catch (e) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number,
+                body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
+                  + '🔴 **This run produced nothing** — I could not re-run the planner from your reply.\n'
+                  + `**Needs:** action — dispatch \`work-issue-pidev.yml\` with \`mode=plan\` by hand. Reason: ${e.message}. 🔗 [Run log](${runUrl})` })
+              core.setFailed(`plan re-dispatch failed: ${e.message}`)
+              return
+            }
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
+                + `🔁 **Re-planning from your reply.** The planner is re-running with your comment as guidance; the block stays on until the plan review decides. 🔗 [Run log](${runUrl})` })
+
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
       # The owner may answer in the medium the question came in — a top-level reply, an
       # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
@@ -557,7 +594,7 @@ jobs:
       - id: agent
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
-        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true'
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true' && steps.replan.outputs.replan != 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
