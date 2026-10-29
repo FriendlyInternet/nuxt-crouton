@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     // Signed out: send to sign-in and come back here afterwards (path is built from a validated slug).
     const slug = String(getRouterParam(event, 'app') ?? '')
     const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}` : '/'
-    return sendRedirect(event, `/auth/login?redirect=${encodeURIComponent(back)}`, 302)
+    return sendRedirect(event, `/signin?redirect=${encodeURIComponent(back)}`, 302)
   }
   if (!owner || email !== owner) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
