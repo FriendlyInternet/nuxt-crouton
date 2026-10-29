@@ -91,6 +91,16 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
   return decideSplit({ depth, isLeaf, maxDepth }).action === 'leaf' ? WORKER_TRIGGER : 'delegate-pi'
 }
 
+// A REVISION continues an existing PR, so the PR is the unit judged — not the issue (#3061).
+// An epic issue can close while its epic → main PR is still open for review.
+function decideRevision(revision) {
+  if (revision.lookupFailed) return { action: 'proceed', reason: 'could not look up the PR being revised — proceeding' }
+  if (revision.pr == null) return { action: 'refuse', reason: `there is no PR on branch ${revision.branch} to revise` }
+  if (revision.merged) return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is already merged` }
+  if (revision.state === 'closed') return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is closed` }
+  return { action: 'proceed', reason: `revising open PR #${revision.pr}` }
+}
+
 /**
  * INVARIANT 4 — is this issue already claimed? (#1890)
  *
@@ -131,15 +141,7 @@ export function decideClaim({
   self = {},
   revision = null,
 } = {}) {
-  // A REVISION continues an existing PR, so the PR is the unit judged — not the issue (#3061).
-  // An epic issue can close while its epic → main PR is still open for review.
-  if (revision) {
-    if (revision.lookupFailed) return { action: 'proceed', reason: 'could not look up the PR being revised — proceeding' }
-    if (revision.pr == null) return { action: 'refuse', reason: `there is no PR on branch ${revision.branch} to revise` }
-    if (revision.merged) return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is already merged` }
-    if (revision.state === 'closed') return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is closed` }
-    return { action: 'proceed', reason: `revising open PR #${revision.pr}` }
-  }
+  if (revision) return decideRevision(revision)
   if (issueState === 'closed') {
     return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
   }
