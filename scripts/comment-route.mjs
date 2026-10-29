@@ -46,6 +46,18 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
   return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l))
 }
 
+/**
+ * On a plan held after two rejections the owner's `ok: <reason>` approves it (#3024) and the
+ * reason is recorded as a decision; a bare `ok` only asks for the reason. Any other reply — or
+ * `ok` from anyone else — returns null and still re-runs the planner via resume.
+ */
+function routeHeldPlan({ body, assoc, issue, out }) {
+  if (!(out.blocked && issue.planHeld && OWNERS.has(assoc))) return null
+  if (overrideReason(body)) return out('approve-plan', 'owner override with a reason on a plan held after two rejections')
+  if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan — ask for a reason')
+  return null
+}
+
 /** Routing for a comment on a plain issue. */
 function routeIssue({ body, collab, assoc, issue, out }) {
   const labels = issue.labels || []
@@ -54,13 +66,8 @@ function routeIssue({ body, collab, assoc, issue, out }) {
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
-  // On a plan held after two rejections the owner's `ok: <reason>` approves it (#3024) and the
-  // reason is recorded as a decision; a bare `ok` only asks for the reason. Any other reply — or
-  // `ok` from anyone else — still re-runs the planner via resume.
-  if (out.blocked && issue.planHeld && OWNERS.has(assoc)) {
-    if (overrideReason(body)) return out('approve-plan', 'owner override with a reason on a plan held after two rejections')
-    if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan — ask for a reason')
-  }
+  const held = routeHeldPlan({ body, assoc, issue, out })
+  if (held) return held
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
   // resume job (it explains), any other owner comment falls through to `interpret`.
   if (out.blocked && (isPipelineOwned({ body: issue.body, labels }) || isApproval(body))) {
