@@ -54,6 +54,7 @@
   "dependencies": {
     "@fyit/crouton-i18n": "workspace:*",
     "@tiptap/extension-highlight": "^3.20.0",
-    "@vueuse/core": "^13.3.0"
+    "@vueuse/core": "^13.3.0",
+    "xss": "1.0.15"
   }
 }

@@ -12,23 +12,6 @@ import { hasAudienceGate, matchesAudience, viewportClasses } from '../utils/bloc
 // Addon blocks from croutonBlocks registry
 const { getBlock: getAddonBlock } = useCroutonBlocks()
 
-/**
- * Minimal XSS sanitizer — strips <script> tags and on* event handler attributes.
- * SSR-safe: returns the original string unchanged when running server-side.
- */
-function sanitizeHtml(html: string): string {
-  if (typeof window === 'undefined') return html
-  const div = document.createElement('div')
-  div.innerHTML = html
-  div.querySelectorAll('script').forEach(el => el.remove())
-  div.querySelectorAll('*').forEach(el => {
-    ;[...el.attributes].forEach(attr => {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
-    })
-  })
-  return div.innerHTML
-}
-
 interface Props {
   /** Raw JSON content string or parsed PageBlockContent */
   content: string | PageBlockContent | null | undefined
@@ -152,36 +135,6 @@ function isHeading(type: string): boolean {
 // Check if block is a list (native TipTap node)
 function isList(type: string): boolean {
   return type === 'bulletList' || type === 'orderedList'
-}
-
-/**
- * Convert inline content (text nodes with marks) to HTML.
- * Shared by paragraph, heading, and list item renderers.
- */
-function inlineContentToHtml(content: any[]): string {
-  if (!content || !Array.isArray(content)) return ''
-
-  return content.map((node: any) => {
-    if (node.type === 'hardBreak') return '<br>'
-    if (node.type === 'text') {
-      let text = node.text || ''
-      if (node.marks) {
-        for (const mark of node.marks) {
-          if (mark.type === 'bold') text = `<strong>${text}</strong>`
-          else if (mark.type === 'italic') text = `<em>${text}</em>`
-          else if (mark.type === 'underline') text = `<u>${text}</u>`
-          else if (mark.type === 'strike') text = `<s>${text}</s>`
-          else if (mark.type === 'code') text = `<code>${text}</code>`
-          else if (mark.type === 'highlight') text = `<mark>${text}</mark>`
-          else if (mark.type === 'link' && mark.attrs?.href) {
-            text = `<a href="${mark.attrs.href}"${mark.attrs.target ? ` target="${mark.attrs.target}"` : ''}>${text}</a>`
-          }
-        }
-      }
-      return text
-    }
-    return ''
-  }).join('')
 }
 
 /**
