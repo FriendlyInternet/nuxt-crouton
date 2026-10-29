@@ -346,14 +346,35 @@ jobs:
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
       - id: ctx
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FEEDBACK: ${{ inputs.feedback }}
         run: |
           EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+          ISSUE_EPIC="$EPIC_BRANCH"
           # Revising an epic → main PR (#2875): its base is main, whatever the issue block says.
           REV_BRANCH="${{ inputs.branch }}"; [ -n "$REV_BRANCH" ] && EPIC_BRANCH=""
           echo "rev_branch=${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}" >> "$GITHUB_OUTPUT"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
           echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+          # #3072: one base for the revise / conflict / finish steps — the PR's own base, never
+          # inferred from inputs.branch (a leaf PR into an epic used to fall back to main).
+          HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
+          PR_BASE=""; PR_NUM=""
+          if [ -n "$FEEDBACK" ]; then
+            read -r PR_NUM PR_BASE < <(gh pr list --head "$HEAD_REF" --state open --json number,baseRefName -q '.[0] | "\(.number) \(.baseRefName)"' 2>/dev/null || true) || true
+          fi
+          RES="$(PR_BASE="$PR_BASE" HEAD_REF="$HEAD_REF" ISSUE_EPIC="$ISSUE_EPIC" node scripts/resolve-base.mjs)"
+          BASE="$(echo "$RES" | sed -n 's/^base=//p')"
+          BASE_ERR="$(echo "$RES" | sed -n 's/^error=//p')"
+          echo "base=${BASE}" >> "$GITHUB_OUTPUT"
+          echo "resolved base='${BASE}'"
+          if [ -n "$BASE_ERR" ]; then
+            echo "::error::${BASE_ERR}"
+            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
+            exit 1
+          fi
 
       # ── EPIC BRANCH SYNC (#2475) — in-flight epics must run CURRENT pipeline code ──────
       # A sub-PR's `pull_request` run uses the workflows/scripts of its merge commit (head merged
@@ -450,6 +471,7 @@ jobs:
           ISSUE: ${{ inputs.issue }}
           FEEDBACK_ID: ${{ inputs.feedback }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -euo pipefail
@@ -468,7 +490,6 @@ jobs:
           # against a concurrent push. A conflict is NOT aborted (#2848, reverses #2658): the merge
           # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
           # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
@@ -526,6 +547,7 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
@@ -658,10 +680,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -uo pipefail
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
           RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
           say() {
@@ -757,6 +779,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
@@ -781,7 +804,6 @@ jobs:
           # surface the tail as an annotation (job logs are unreachable from an agent session).
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
