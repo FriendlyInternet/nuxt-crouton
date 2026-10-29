@@ -42,7 +42,7 @@ Grouped by role; the file count drifts — count it fresh (`ls .github/workflows
 
 ### LLM review gates (per-PR, agent-run)
 
-All three share one pattern: a claude-code-action run writes a `<name>-verdict.json` at repo root + a sticky PR comment; a deterministic step then fails the check on the worst severities. Missing verdict file = **inconclusive pass** (fail-open by design; see §5 honesty hardening).
+All three share one pattern: a claude-code-action run writes a `<name>-verdict.json` at repo root + a sticky PR comment; a deterministic step then fails the check on the worst severities. Missing verdict file = **red check** with a PR comment (fail-closed, #3070); a cancelled run posts nothing.
 
 | Workflow | Fires on PRs touching | Fails check on |
 |---|---|---|
@@ -148,7 +148,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 | Secret | Used by | Notes |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | all agent workflows | Headless CI MUST use an API key, never a subscription `CLAUDE_CODE_OAUTH_TOKEN` (workflow comments cite Anthropic terms) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | all agent workflows | Auth is the Claude subscription (owner decision 2026-10-29, #3121); don't switch to an API key without an owner decision |
 | `HARNESS_APP_ID` + `HARNESS_APP_PRIVATE_KEY` | many workflows (grep for it) | The "Nuxt Harness" GitHub App — see the cascade rule below |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | deploy/db workflows | Token scopes: account Workers Scripts/D1/KV/R2 Edit + zone Workers Routes + DNS Edit (details: `deploy` skill, Credentials) |
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
@@ -202,7 +202,7 @@ How one `delegate` label becomes merged code (entry/steps verified in the named 
 
 ### Gate-honesty hardening state
 
-The three per-PR review gates shipped **fail-open** (missing tool grant meant the agent could never write its verdict file; outage was indistinguishable from a clean scan — #1034). Grants fixed in #1031/#1033 (per the workflow comments the fail-open comment lines remain as warnings); #1035 added a known-bad fixture smoke per gate. Follow-ups: [#1036](https://github.com/FriendlyInternet/nuxt-crouton/issues/1036) (bake the tool grant into the workflow standard) and [#1037](https://github.com/FriendlyInternet/nuxt-crouton/issues/1037) (distinguish agent-outage from clean scan) — issue state is live data, check GitHub before relying on it. Practical consequence until #1037 lands: **a green review-gate check can still mean "the agent never ran"** — on a security-sensitive PR, open the check and confirm the verdict comment exists. (This paragraph is the owner of the #1034-hardening status; siblings citing it should defer here.)
+The three per-PR review gates shipped **fail-open** (missing tool grant meant the agent could never write its verdict file; outage was indistinguishable from a clean scan — #1034). Grants fixed in #1031/#1033 (per the workflow comments the fail-open comment lines remain as warnings); #1035 added a known-bad fixture smoke per gate. Follow-ups: [#1036](https://github.com/FriendlyInternet/nuxt-crouton/issues/1036) (bake the tool grant into the workflow standard) and [#1037](https://github.com/FriendlyInternet/nuxt-crouton/issues/1037) (distinguish agent-outage from clean scan) — issue state is live data, check GitHub before relying on it. Since #3070 the four review.yml gates fail closed: a reviewer that did not run is a red check with a PR comment, not a green one. (This paragraph is the owner of the #1034-hardening status; siblings citing it should defer here.)
 
 Also volatile: `.claude/routing.json` `_known_gaps` states the top-level workflow loop (fix-ci, the weekly sweeps) runs on the claude-code-action **default model, unpinned** — pinning is an acknowledged follow-up.
 
