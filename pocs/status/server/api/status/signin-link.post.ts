@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   await storage.setItem(key, now)
 
   try {
-    await useServerAuth(event).api.signInMagicLink({
+    await (useServerAuth(event).api as any).signInMagicLink({
       body: { email: owner, callbackURL: redirect },
       headers: event.headers
     })
