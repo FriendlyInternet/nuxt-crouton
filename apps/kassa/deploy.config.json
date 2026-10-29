@@ -48,7 +48,8 @@
         "path": "/api/crouton-sales/teams/{teamId}/devices"
       },
       {
-        "path": "/admin/test1/sales/devices"
+        "path": "/admin/test1/sales/devices",
+        "expectIncludes": "id=\"__nuxt\""
       }
     ]
   }
