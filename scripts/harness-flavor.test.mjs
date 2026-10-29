@@ -81,7 +81,8 @@ test('work-issue-pidev asks the flavor instead of carrying stack commands', asyn
   const wf = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
   const run = (l) => l.trim().startsWith('#') ? '' : l
   const code = wf.split('\n').map(run).join('\n')
-  assert.ok(!/run: pnpm install --frozen-lockfile|user.name  "nuxt-harness|run: pnpm build:packages|pnpm --filter/.test(code))
+  assert.ok(!/run: pnpm install --frozen-lockfile|user.name  "nuxt-harness|pnpm --filter/.test(code))
+  assert.ok(!/nuxt-harness|pnpm |@fyit|crouton generate/.test(code), 'stack literal in work-issue-pidev.yml')
   assert.ok(!/GEN_SUBJECT="generate:/.test(code))
   assert.equal(cli('generated.commitSubject'), 'generate: derived output')
 })

@@ -394,7 +394,7 @@ jobs:
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
       # cache + build-all on miss; a warm cache makes this ~seconds. (#1222)
-      - name: Warm @fyit package builds
+      - name: Warm package builds
         uses: ./.github/actions/warm-packages
 
       # Timestamp the run start so the artifact-gate distinguishes "produced this run"
@@ -946,7 +946,8 @@ jobs:
               echo "revise: base merge pushed by the revise step (#2941)"
               echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
-              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
+              BOT_LOGIN="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
+              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq "[.[] | select(.user.login == \"${BOT_LOGIN}\")] | length" 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
                 echo "revise: answered on the PR without a code change"
                 echo "revised=1" >> "$GITHUB_OUTPUT"
@@ -1249,7 +1250,7 @@ jobs:
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
               echo "- 📝 inputs (hand-authored — schema/config): **${NIN}**"
               [ "$NIN" -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
-              echo "- ⚙️ generated (CLI/MCP output — e.g. \`crouton generate\`): **${NGEN}**"
+              echo "- ⚙️ generated (generator output — e.g. \`$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.commitSubject)\`): **${NGEN}**"
               [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
               [ "$NGEN" -gt 20 ] && echo "  - …and $((NGEN-20)) more"
               echo "- 🗑️ changed but excluded as junk (node_modules/.nuxt/.pi/…): **${EXCL}**"
@@ -1432,7 +1433,7 @@ jobs:
             if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
               core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
-              // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
+              // issue). This comment posts as the Harness App bot — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
               if (process.env.TRIGGER === 'issues') {
                 const freshPR = prRefs
