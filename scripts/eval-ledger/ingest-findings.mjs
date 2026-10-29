@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // ingest-findings.mjs — resolve captured finding CANDIDATES into committed findings (#1570).
 // The main-context rollup (weekly.yml `findings` job) runs this after downloading the
 // gate workflows' `loop-station-finding-*` candidate artifacts. Confirmation comes from

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // provider-key-canary.mjs (#1327) — a provider-agnostic "is our agent key funded?" canary.
 //
 // WHY THIS EXISTS: the pi.dev harness runs on a metered provider key (PI_PROVIDER_KEY).

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2085 contract — the preview must migrate its OWN database, or say why it can't.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // append-finding.mjs — validate + append ONE defect-finding to findings.jsonl (#1570).
 // The capture entry point a review gate (code-review, red-team, …) calls when it
 // raises — or a human confirms/rejects — a defect. Mirrors append.mjs.

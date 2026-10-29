@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2462 contract — every shared package with UI pieces is in the gallery.
  * The last test runs on the REAL repo: adding a package with components and not adding it to

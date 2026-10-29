@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * deploy-failure-report — the decision behind the post-merge deploy watchdog
  * (.github/workflows/report-failed-deploy.yml, #340). Pure + unit-tested (mirrors

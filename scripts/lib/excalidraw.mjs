@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Ticket-diagram emitters — pure, dependency-free.
  *

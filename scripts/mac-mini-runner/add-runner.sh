@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 #
 # add-runner.sh — register an ADDITIONAL GitHub Actions runner on the Mac mini.
 #

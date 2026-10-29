@@ -1,3 +1,4 @@
+// layer: stack
 import { createHash } from 'node:crypto'
 
 // review-login.mjs — sign in to a deployed preview and return the session cookie jar. Extracted

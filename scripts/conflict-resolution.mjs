@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Merge-conflict resolution for the revise worker (#2848, reverses the #2658 abort).
  *

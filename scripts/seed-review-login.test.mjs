@@ -1,3 +1,4 @@
+// layer: stack
 // The review login's password reset (#2358). When REVIEW_SEED_SECRET is rotated, the
 // review account already exists with the OLD password; the deploy must move it to the new
 // one — otherwise the old (guessable) password keeps working and the deploy smoke, which

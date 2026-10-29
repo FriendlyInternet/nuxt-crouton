@@ -1,4 +1,5 @@
 #!/bin/bash
+# layer: stack
 
 # Publish all @fyit/crouton-* packages to npm in dependency order
 # Usage: ./scripts/publish-packages.sh [--dry-run] [--skip-build] [--skip-typecheck]

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Pure helpers for scripts/deploy-collab-worker.mjs (#2693) — kept side-effect free so they
  * are unit-testable without wrangler.

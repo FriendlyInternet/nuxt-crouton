@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * resolve-pipeline-model — the read side of the pi pipeline's LIVE model knob (#2161).
  *

@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * WS2 (#954) contract — the declared stage model resolves correctly, reproduces the
  * #779 test-first table exactly, and a `poc → spike` rename is a one-line config edit

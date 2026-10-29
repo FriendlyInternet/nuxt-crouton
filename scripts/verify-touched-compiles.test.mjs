@@ -1,3 +1,4 @@
+// layer: stack
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { isVueFile, vueFilesOnly, sfcErrors, errText } from './verify-touched-compiles.mjs'

@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * #1688 — the wave scheduler's green-branch gate.
  *

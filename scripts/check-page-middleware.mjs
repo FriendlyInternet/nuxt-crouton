@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * check-page-middleware.mjs — guard the silent unctx gap behind #1839 (#1845).
  *

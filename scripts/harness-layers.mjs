@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Harness layer inventory — classify every skill + agent by which layer of the
  * harness it belongs to, so a foreign-stack team can see at a glance what they
@@ -6,7 +7,8 @@
  *
  *   node scripts/harness-layers.mjs            # print the inventory grouped by layer
  *   node scripts/harness-layers.mjs --json     # machine-readable record on stdout
- *   node scripts/harness-layers.mjs --check    # exit 1 if any skill/agent is untagged
+ *   node scripts/harness-layers.mjs --check    # exit 1 if any skill/agent/workflow/script is untagged,
+ *                                              # or a harness-tagged file mentions a stack token (#2887)
  *
  * The three layers (see epic #952):
  *   method — portable process / universal practice. Keys off git + GitHub + files,
@@ -25,11 +27,23 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = process.env.HARNESS_LAYERS_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..')
 const SKILLS_DIR = join(ROOT, '.claude/skills')
 const AGENTS_DIR = join(ROOT, '.claude/agents')
 
 const LAYERS = ['method', 'stage', 'stack']
+
+// Workflows + scripts use their own vocabulary (epic #2882 / WS4 #2887): `harness` is the
+// portable pipeline, `stage` the lifecycle gates, `stack` the crouton/Cloudflare flavor.
+// The tag is a `# layer: x` (yml/sh) or `// layer: x` (mjs) comment in the first lines.
+const FILE_LAYERS = ['harness', 'stage', 'stack']
+
+// A `harness`-tagged file must not name the stack it runs on. Boundary = measurable.
+const STACK_TOKENS = [
+  'pnpm', 'nuxt', 'nuxthub', 'drizzle', 'crouton', 'wrangler', 'cloudflare', 'vue', 'vite',
+  'vitest', 'playwright', 'nitro', 'better-auth', 'tailwind', 'pinia', 'd1', 'h3', 'nuxt-ui'
+]
+const STACK_RE = new RegExp(`(?<![a-z])(${STACK_TOKENS.join("|")})(?![a-z])`, 'i')
 
 // Legacy single-file skills with no YAML frontmatter — classified here instead.
 // Both are crouton-specific (CRUD generation / crouton-i18n), so: stack.
@@ -90,6 +104,38 @@ function discoverAgents() {
   return out
 }
 
+function discoverFiles() {
+  const out = []
+  const dirs = [['.github/workflows', /\.yml$/, 'workflow'], ['scripts', /\.(mjs|sh)$/, 'script']]
+  for (const [dir, ext, kind] of dirs) {
+    const base = join(ROOT, dir)
+    if (!existsSync(base)) continue
+    // scripts/ nests (eval-ledger/, …) — walk it all; the ticket says every .mjs/.sh.
+    for (const f of readdirSync(base, { recursive: true })) {
+      if (!ext.test(f) || f.split('/').includes('node_modules')) continue
+      const text = readFileSync(join(ROOT, dir, f), 'utf8')
+      const m = text.split('\n').slice(0, 3).join('\n').match(/^(?:#|\/\/) layer: (\S+)/m)
+      const scan = harnessHits(text, f)
+      out.push({ kind, name: `${dir}/${f}`, layer: m ? m[1] : null, hits: scan })
+    }
+  }
+  return out
+}
+
+function harnessHits(text, f) {
+  const hits = new Set()
+  for (const line of text.split('\n')) {
+    if (/^\s*(#|\/\/) layer: /.test(line)) continue
+    const m = line.match(STACK_RE)
+    if (m) hits.add(m[1].toLowerCase())
+  }
+  return [...hits]
+}
+
+const files = discoverFiles()
+const badFiles = files.filter(f => !FILE_LAYERS.includes(f.layer))
+const leaks = files.filter(f => f.layer === 'harness' && f.hits.length)
+
 const items = [...discoverSkills(), ...discoverAgents()].sort((a, b) => a.name.localeCompare(b.name))
 const untagged = items.filter(i => !i.layer || !LAYERS.includes(i.layer))
 
@@ -101,13 +147,25 @@ if (args.includes('--check')) {
     for (const i of untagged) console.error(`  - ${i.kind} ${i.name}${i.layer ? ` (invalid layer: ${i.layer})` : ''}`)
     process.exit(1)
   }
-  console.error(`✓ all ${items.length} skills + agents carry a valid layer`)
+  if (badFiles.length || leaks.length) {
+    if (badFiles.length) {
+      console.error(`✖ ${badFiles.length} workflow/script file(s) without a valid layer — add \`# layer: harness|stage|stack\`:`)
+      for (const f of badFiles) console.error(`  - ${f.name}${f.layer ? ` (invalid layer: ${f.layer})` : ''}`)
+    }
+    if (leaks.length) {
+      console.error(`✖ ${leaks.length} harness-tagged file(s) name a stack token — retag as stack/stage or read it from flavor.config.mjs:`)
+      for (const f of leaks) console.error(`  - ${f.name}: ${f.hits.join(', ')}`)
+    }
+    process.exit(1)
+  }
+  console.error(`✓ all ${items.length} skills + agents and ${files.length} workflows + scripts carry a valid layer; no stack token in harness files`)
   process.exit(0)
 }
 
 if (args.includes('--json')) {
   const byLayer = Object.fromEntries(LAYERS.map(l => [l, items.filter(i => i.layer === l).map(i => ({ kind: i.kind, name: i.name }))]))
-  process.stdout.write(JSON.stringify({ total: items.length, untagged: untagged.length, byLayer }, null, 2) + '\n')
+  const byFileLayer = Object.fromEntries(FILE_LAYERS.map(l => [l, files.filter(f => f.layer === l).map(f => ({ kind: f.kind, name: f.name }))]))
+  process.stdout.write(JSON.stringify({ total: items.length, untagged: untagged.length, byLayer, files: { total: files.length, byLayer: byFileLayer } }, null, 2) + '\n')
   process.exit(0)
 }
 
@@ -124,6 +182,14 @@ for (const layer of LAYERS) {
   for (const i of group) console.log(`    ${i.kind === 'agent' ? '⚙' : 'ƒ'} ${i.name}`)
   console.log('')
 }
+console.log(`Workflows + scripts — ${files.length}\n`)
+for (const layer of FILE_LAYERS) {
+  const group = files.filter(f => f.layer === layer)
+  console.log(`■ ${layer}  (${group.length})`)
+  for (const f of group) console.log(`    ${f.kind === 'workflow' ? '▶' : '·'} ${f.name}`)
+  console.log('')
+}
+if (badFiles.length) console.log(`⚠ untagged workflows/scripts (${badFiles.length}): ${badFiles.map(f => f.name).join(', ')}\n`)
 if (untagged.length) {
   console.log(`⚠ untagged (${untagged.length}) — run --check in CI to block these:`)
   for (const i of untagged) console.log(`    ${i.name}`)

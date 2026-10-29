@@ -1,3 +1,4 @@
+# layer: stack
 name: Deploy Docs
 
 # Self-contained Workers deploy for the docs site (#99). docs is NOT a crouton/NuxtHub

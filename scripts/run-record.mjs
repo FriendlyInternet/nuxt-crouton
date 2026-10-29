@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // run-record.mjs — what a red pi-worker run leaves behind for an agent reviewer (#2464).
 //
 // An agent session can reach neither job logs nor previews, so the run must carry its own

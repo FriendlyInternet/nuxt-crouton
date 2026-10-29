@@ -1,3 +1,4 @@
+// layer: harness
 // Replay fixtures for the build reviewer verdict (#2777). node --test scripts/lib/build-verdict.test.mjs
 // The two real PRs (#2723 @217b2903, #2726 @545e2a7b) are not fetchable in CI, so their SHAPE is
 // reproduced as diffs: #2723 copied files instead of moving them and loosened a Fallow baseline.

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Contract for scripts/deploy-failure-report.mjs (#1639). Proves the watchdog decision:
  *   • classifies the real #1548 (D1 7429) / #1535 (fetch failed) logs as transient, and the

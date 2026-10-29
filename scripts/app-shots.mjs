@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // app-shots.mjs — capture screenshots of a running app with a headless browser.
 //
 // Reusable across apps (epic #265): turns "show me it works" into one command,

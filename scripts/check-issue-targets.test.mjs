@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1689 contract — the reachability probe for `issue-sanity-check`.
  *

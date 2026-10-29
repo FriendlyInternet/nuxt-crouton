@@ -1,3 +1,4 @@
+// layer: stack
 // tasks.mjs — the 3 golden-task definitions for WS6b.3 (#885).
 //
 // Each task is a small, representative, THROWAWAY-issue-shaped probe with a

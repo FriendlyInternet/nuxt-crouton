@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2431 — the pi personas live in .claude/agents/ and are rendered by pipeline-prompt.mjs.
  * Goldens = what the workflows' printf chains produced on main just before the switch, for the

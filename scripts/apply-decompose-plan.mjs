@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // apply-decompose-plan.mjs — WS3 redesign (#1696): pi PLANS, code APPLIES.
 //
 // WHY. The event-driven decomposer had pi hand-build `gh issue create` commands with rich issue

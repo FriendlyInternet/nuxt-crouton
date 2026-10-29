@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * db-clone.mjs — copy one Cloudflare D1 database into another (full mirror).
  *

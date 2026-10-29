@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2757 (epic #2754) — should a `work-this` issue start in PLAN mode (plan → review → build)?
  *

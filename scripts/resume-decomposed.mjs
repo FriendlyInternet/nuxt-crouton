@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // resume-decomposed.mjs — an issue that is ALREADY decomposed is not a leaf (#2048).
 //
 // THE BUG THIS CLOSES. The decomposer's LEAF TEST is applied to the issue's *prose*

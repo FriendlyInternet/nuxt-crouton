@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2004 — decide whether an issue comment is actually *issuing* a dispatch command,
  * as opposed to merely *mentioning* one.

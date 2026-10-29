@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // Revise-run base guard (#2883). The revise step merges the base into the PR head and hands the
 // merge commit to the finish step as REV_BASE. If that hand-off is lost, the finish step stacks
 // its commit on the old PR head and the base's files show up as the PR's own (#2859). This runs

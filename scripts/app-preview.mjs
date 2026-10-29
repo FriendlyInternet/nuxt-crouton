@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * app-preview — one command to LOOK AT a change (#1777).
  *

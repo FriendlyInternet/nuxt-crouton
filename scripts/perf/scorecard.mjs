@@ -1,3 +1,4 @@
+// layer: stack
 // scorecard.mjs — the bundle-size BUDGET bands (#1581). The one place to tune.
 // Scores a gzipped-transfer number green/amber/red on two independent signals:
 //   - size:       absolute weight, graded against per-target bands (client vs server differ)

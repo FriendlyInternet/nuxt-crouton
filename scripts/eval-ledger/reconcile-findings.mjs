@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // reconcile-findings.mjs — derive ESCAPED-DEFECT findings from the run-outcome
 // ledger, deterministically (#1570). A run whose outcome is `reverted` is an
 // unambiguous, already-confirmed escaped defect: it shipped, then had to be undone.

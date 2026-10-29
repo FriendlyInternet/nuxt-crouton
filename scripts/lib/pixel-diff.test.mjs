@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Contract for the pixel-diff step (#2061).
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * requeue-bumped-preview.mjs — self-heal a preview deploy that a queue bump
  * cancelled (#2188, follow-up to #1150).

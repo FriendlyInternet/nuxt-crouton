@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * CLI: before a PR preview's `wrangler deploy`, reuse storage that already exists under the
  * preview's names, so a deploy that once died half-way can't block every later one (#2608).

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Rewrite a built wrangler config into a PER-PR PREVIEW environment (#2020).
  *

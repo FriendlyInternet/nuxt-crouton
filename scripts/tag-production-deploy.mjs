@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * tag-production-deploy — moves a git tag `deployed/<app>/production` to the SHA
  * that was just deployed to production (#2032). This is the missing "what did we

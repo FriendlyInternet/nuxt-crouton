@@ -1,3 +1,4 @@
+// layer: stack
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCollabConfig, collabWorkerName, deriveCollabSecret, extractWorkerUrl } from './lib/collab-worker.mjs'

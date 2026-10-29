@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // seed.template.mjs — TEMPLATE for a per-app idempotent seed script (epic #265).
 //
 // Copy to `<app>/scripts/seed.mjs` and wire `"seed": "node scripts/seed.mjs"` in the

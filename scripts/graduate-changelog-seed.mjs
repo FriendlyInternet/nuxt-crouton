@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Graduation changelog seed — issue #2036 (epic #1600 WS5+6).
  *

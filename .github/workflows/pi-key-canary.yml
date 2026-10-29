@@ -1,3 +1,4 @@
+# layer: harness
 name: Provider key canary
 
 # #1327 — a provider-agnostic "is our agent key funded?" canary.

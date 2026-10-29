@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Contract for scripts/requeue-bumped-preview.mjs (#2188).
  *

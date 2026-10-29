@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 # Local one-command runner for the agent-gate positive-case smoke (#1035).
 #
 # Points a gate's subagent (frontend-review / a11y / red-team) at its

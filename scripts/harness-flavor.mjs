@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Harness flavor resolver — epic #2882 / WS1 (#2884).
  *

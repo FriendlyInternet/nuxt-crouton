@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 # Fix-bot guard (#2719): undo a fix the agent pushed despite being told not to.
 # Usage: revert-pushed-fix.sh <PRE_SHA> <BRANCH> <FIX_SHA> [remote=origin]
 # Reverts ONLY the fix-bot's own commits (PRE..FIX_SHA that reached the remote branch) as new commits

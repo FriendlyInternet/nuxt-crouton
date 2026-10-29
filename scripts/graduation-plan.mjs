@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // graduation-plan.mjs — render a POC's graduation plan as a mobile-first, self-contained HTML page.
 //
 // The plan is DERIVED from two data files so it can't drift from the contract:

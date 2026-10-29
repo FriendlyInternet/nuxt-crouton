@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * #1769 — ratchet against silent app↔package schema drift.
  *

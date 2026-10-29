@@ -1,3 +1,4 @@
+// layer: stack
 // chromium-launch.mjs — discover the CI-preinstalled chromium and launch it, or warn + skip.
 // Extracted from smoke-deployed.mjs / capture-review-surfaces.mjs (the same discovery + launch +
 // non-fatal warn-and-skip). A screenshot is EVIDENCE, never a gate, so a missing/un-launchable

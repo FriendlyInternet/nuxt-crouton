@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Read an agent session transcript → its metered cost (#1268).
  *

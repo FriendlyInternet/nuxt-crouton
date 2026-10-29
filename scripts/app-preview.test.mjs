@@ -1,3 +1,4 @@
+// layer: stack
 // Contract for the `pnpm preview <app>` helpers (#1777) + the shared one-click
 // URL builder. Run: node --test scripts/app-preview.test.mjs
 import { test } from 'node:test'

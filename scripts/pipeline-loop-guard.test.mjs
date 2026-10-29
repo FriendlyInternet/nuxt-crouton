@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1685 WS4 contract — the loop-guards that make the event-driven label handoff (WS3) safe.
  *

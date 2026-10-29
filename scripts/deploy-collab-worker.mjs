@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Deploy the crouton-collab live-sync Worker for an app (#2693) — the deploy-time half of
  * `"collab": true` in deploy.config.json. Order: Worker -> D1 migration -> (caller builds app).

@@ -1,3 +1,4 @@
+// layer: harness
 // The pure model-resolution rule (#2161). A wrong model breaks every dispatch, so these pin
 // the contract: a valid tier returns its configured model; anything unusable throws (so the
 // CLI exits non-zero and the workflow step fails loudly — never an empty or stale model).

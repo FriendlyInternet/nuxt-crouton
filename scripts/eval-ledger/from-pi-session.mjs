@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // from-pi-session.mjs — turn a pi.dev session jsonl into ONE run-outcome ledger record.
 // WS6b.4 (#1203). Reads the native pi telemetry feed documented in #938
 // (writeups/architecture/pi-telemetry-feed.md): each assistant turn carries

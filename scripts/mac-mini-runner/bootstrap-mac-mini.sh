@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 #
 # bootstrap-mac-mini.sh — recreate the WHOLE Mac mini runner box: bare mini → fleet online.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Deterministic skill-freshness checker for .claude/skills/ — no LLM, no deps (epic #1100 WS2).
  *

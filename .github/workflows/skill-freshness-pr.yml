@@ -1,3 +1,4 @@
+# layer: harness
 name: Skill freshness (PR advisory)
 
 # Advisory, NON-BLOCKING signal (#1100 WS4). When a PR changes a file that a knowledge skill

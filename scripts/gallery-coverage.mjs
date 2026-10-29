@@ -1,3 +1,4 @@
+// layer: stack
 // gallery-coverage.mjs — every shared package that has UI pieces must be in the gallery (#2462).
 //
 // The gallery (pocs/gallery) only lists pieces from the layers it pulls in. A new package that

@@ -1,3 +1,4 @@
+// layer: stack
 // Replay fixtures for the ticket reviewer (#2776). node --test scripts/lib/ticket-verdict.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

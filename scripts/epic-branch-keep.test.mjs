@@ -1,3 +1,4 @@
+// layer: harness
 // The "is the epic still open → keep the branch" decision (#2788).
 //   node --test scripts/epic-branch-keep.test.mjs
 import { test } from 'node:test'

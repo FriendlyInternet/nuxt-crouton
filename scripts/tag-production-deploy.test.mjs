@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Contract for scripts/tag-production-deploy.mjs (#2032). Proves the decision:
  *   • the tag name is deterministic per app (`deployed/<app>/production`),

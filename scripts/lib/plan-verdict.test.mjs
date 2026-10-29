@@ -1,3 +1,4 @@
+// layer: harness
 // Rubric fixtures for the plan reviewer verdict (#2756). node --test scripts/lib/plan-verdict.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

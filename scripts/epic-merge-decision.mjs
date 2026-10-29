@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // epic-merge-decision.mjs — should the owner's `lgtm` on an epic PR into main merge it? (#2819)
 //
 // Pure decision; approve-epic-pr.yml only does the calls. The rule: an approval from the

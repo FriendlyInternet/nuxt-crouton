@@ -1,3 +1,4 @@
+# layer: harness
 name: On issue close
 
 # ONE listener for "an issue closed" (#2893, epic #2889). Before this, closing an issue started

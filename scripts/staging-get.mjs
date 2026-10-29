@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * staging-get.mjs — call a path on an app's STAGING as that app's review login (#2760, #2798),
  * so a pipeline worker can reproduce a staging bug (incl. a failing save) with real responses.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * ticket-excalidraw — turn a GitHub epic's sub-issue tree (supplied as a small graph
  * JSON) into an editable Excalidraw scene + a mobile-legible PNG.

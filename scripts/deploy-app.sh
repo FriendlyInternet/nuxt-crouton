@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 set -euo pipefail
 
 # Deploy a crouton app to Cloudflare Pages with D1 + KV

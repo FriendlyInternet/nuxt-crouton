@@ -1,3 +1,4 @@
+// layer: stack
 // The owner's reply to a test card (#2542). A wrong verdict marks an epic verified/failed wrongly.
 //   node --test scripts/handle-test-reply.test.mjs
 import { test } from 'node:test'

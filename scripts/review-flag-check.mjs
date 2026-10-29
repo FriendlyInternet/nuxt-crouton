@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // review-flag-check.mjs — is the review flag in a page this preview serves? (#2456)
 //
 // WHY. deploy-app.yml's "Verify the review overlay is live" grepped only `/` for

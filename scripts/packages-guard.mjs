@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stage
 // packages-guard.mjs — the PR-time half of the packages/ HARD GATE (#1611).
 //
 // The local PreToolUse hook (.claude/hooks/gate-package-edits.sh) only runs inside an

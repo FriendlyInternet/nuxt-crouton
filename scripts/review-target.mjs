@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // review-target.mjs — before an agent asks the owner to look at a PR, check that PR is still live (#2111).
 //
 // WHY. On 2026-08-06 an agent told the owner to pin a review comment on #2039 — already merged —

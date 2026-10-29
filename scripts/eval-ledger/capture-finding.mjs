@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // capture-finding.mjs — turn a gate's verdict file into a finding CANDIDATE (#1570).
 // Runs inside a gate's PR workflow (frontend-review / a11y / red-team), which each
 // write `<gate>-verdict.json` = {"highest":"none|note|warning|critical",...}.

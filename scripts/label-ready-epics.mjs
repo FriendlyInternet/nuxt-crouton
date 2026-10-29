@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stage
 /**
  * Reconcile each open epic's `status:*` label FROM its children — derive, don't
  * hand-apply — the single source of truth both digests (epic-digest, housekeeping)

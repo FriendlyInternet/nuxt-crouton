@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Make a PR preview's deploy repeatable (#2608).
  *
