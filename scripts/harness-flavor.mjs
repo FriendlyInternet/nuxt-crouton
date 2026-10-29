@@ -10,6 +10,7 @@
  *   node scripts/harness-flavor.mjs install            # → pnpm install --frozen-lockfile
  *   node scripts/harness-flavor.mjs typecheck.command  # dotted path into a nested key
  *   node scripts/harness-flavor.mjs bot --json         # objects/arrays print as JSON
+ *   node scripts/harness-flavor.mjs bot.name --require # exit 1 if the value is empty
  *   node scripts/harness-flavor.mjs --check            # validate the config shape (CI)
  *
  * A string prints raw (shell-friendly); anything else prints as JSON. An unknown key
@@ -103,6 +104,10 @@ if (isMain) {
   const value = getKey(flavor, keys[0])
   if (value === undefined) {
     console.error(`unknown flavor key "${keys[0]}" (known: ${Object.keys(flavor).join(', ')})`)
+    process.exit(1)
+  }
+  if (args.includes('--require') && (value === '' || value === null)) {
+    console.error(`::error::flavor key "${keys[0]}" resolved to an empty value`)
     process.exit(1)
   }
   console.log(render(value, { json: args.includes('--json') }))

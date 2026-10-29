@@ -381,7 +381,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: eval "$(node scripts/harness-flavor.mjs install)"
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
@@ -395,7 +395,7 @@ jobs:
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
       # cache + build-all on miss; a warm cache makes this ~seconds. (#1222)
-      - name: Warm @fyit package builds
+      - name: Warm package builds
         uses: ./.github/actions/warm-packages
 
       # Timestamp the run start so the artifact-gate distinguishes "produced this run"
@@ -413,6 +413,9 @@ jobs:
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
+          # The flavor resolver too (pi switches branches mid-run; the finish step still asks it). It
+          # locates flavor.config.mjs at ../ from itself, so stash both under one root.
+          mkdir -p "$RUNNER_TEMP/flavor/scripts" && cp scripts/harness-flavor.mjs "$RUNNER_TEMP/flavor/scripts/" && cp flavor.config.mjs "$RUNNER_TEMP/flavor/"
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
@@ -470,8 +473,9 @@ jobs:
           # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
           # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
           if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
@@ -539,8 +543,9 @@ jobs:
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
           # and not a masquerading human — the #862 lesson).
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
           START=$(date +%s)
           # Front-load the CANONICAL operating contract (#1022) so pi does not stall-and-ask
@@ -783,8 +788,9 @@ jobs:
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           ROOT="$(git rev-parse --show-toplevel)"
 
           # 1) Read THIS run's pi session (per-run --session-dir). The ledger = files pi HAND-EDITED
@@ -892,8 +898,8 @@ jobs:
             # A run with no inputs commit is ONE commit: give it the issue title, not "generate: …".
             # The splitter files every change the session ledger doesn't list as authored under
             # "generated", so a hand-written run lands here entirely (#2427).
-            if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="generate: derived output for #${ISSUE}"; fi
-            git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
+            if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.commitSubject) for #${ISSUE}"; fi
+            git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. $(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.generators --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).join(", "))')), committed separately from the inputs (#1849). Refs #${ISSUE}"
             echo "commit 2: $NGEN generated file(s)"
           fi
           N=$((NIN + NGEN))
@@ -944,7 +950,8 @@ jobs:
               echo "revise: base merge pushed by the revise step (#2941)"
               echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
-              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
+              BOT_LOGIN="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)"
+              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq "[.[] | select(.user.login == \"${BOT_LOGIN}\")] | length" 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
                 echo "revise: answered on the PR without a code change"
                 echo "revised=1" >> "$GITHUB_OUTPUT"
@@ -991,7 +998,7 @@ jobs:
           # sign-off hold commits nothing) versus "the planner never ran" (a harness bug). Only the
           # second is a failure, and it is the one that must be loud.
           PLAN_ERR="$RUNNER_TEMP/plan-stderr.txt"
-          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
+          PLAN_OUT="$(LOGIC_RE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" testsGate.logicPaths)" TEST_RE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" testsGate.testPaths)" node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
           PLAN_RC=$?
           if [ "$PLAN_RC" -ne 0 ]; then
             echo "::error::pi-finish plan exited $PLAN_RC — the harness could not read this run's result. This is a WORKFLOW bug, not an underspecified issue."
@@ -1057,6 +1064,8 @@ jobs:
             if [ -n "$APP_DIR" ]; then BORROWED=1; echo "acceptance: package-only change — borrowing consuming app $APP_DIR (#2709)"; else NO_APP_NA=1; fi
           fi
 
+          TC_PREPARE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" typecheck.prepare)"
+          TC_CMD="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" typecheck.command)"
           ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$NO_APP_NA" = "1" ]; then
             ACCEPT="na"; ACCEPT_MSG="no app touched; CI runs Type Check Apps"
@@ -1085,10 +1094,10 @@ jobs:
                 # fresh poc. Guarded (errexit is on for this step): a failed install just leaves the env
                 # unprepared, and the AUTOIMP→NEUTRAL guard still catches it — never a false FAIL.
                 echo "acceptance: linking $PKG into the workspace before typecheck (#1872)"
-                pnpm install --filter "$PKG..." --no-frozen-lockfile > "$RUNNER_TEMP/acc-install.log" 2>&1 \
+                eval "${TC_PREPARE//\{pkg\}/$PKG}" > "$RUNNER_TEMP/acc-install.log" 2>&1 \
                   || { echo "::warning::acceptance: install for $PKG failed — env may be unprepared (#1872)"; tail -15 "$RUNNER_TEMP/acc-install.log" || true; }
-                echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
-                if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
+                echo "acceptance: ${TC_CMD//\{pkg\}/$PKG} ($APP_DIR)"
+                if eval "${TC_CMD//\{pkg\}/$PKG}" > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
               else
                 echo "acceptance: NEUTRAL — $APP_DIR has no typecheck script (raw nuxt typecheck would false-fail on auto-imports)"
               fi
@@ -1245,7 +1254,7 @@ jobs:
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
               echo "- 📝 inputs (hand-authored — schema/config): **${NIN}**"
               [ "$NIN" -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
-              echo "- ⚙️ generated (CLI/MCP output — e.g. \`crouton generate\`): **${NGEN}**"
+              echo "- ⚙️ generated (generator output — e.g. \`$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.commitSubject)\`): **${NGEN}**"
               [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
               [ "$NGEN" -gt 20 ] && echo "  - …and $((NGEN-20)) more"
               echo "- 🗑️ changed but excluded as junk (node_modules/.nuxt/.pi/…): **${EXCL}**"
@@ -1428,7 +1437,7 @@ jobs:
             if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
               core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
-              // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
+              // issue). This comment posts as the Harness App bot — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
               if (process.env.TRIGGER === 'issues') {
                 const freshPR = prRefs

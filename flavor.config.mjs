@@ -61,7 +61,7 @@ export const flavor = {
     // Junk never committed (scripts/pi-edited-files.mjs DENY):
     junk: '(^|/)(\\.pi|node_modules|\\.nuxt|\\.output|dist)(/|$)|decompose-pidev-(prompt|exec)-\\d+\\.(txt|log)|(^|/)pi-telemetry-out(/|$)',
     generators: ['crouton config', 'generate_collection'],
-    commitSubject: 'chore(generated): generator output'
+    commitSubject: 'generate: derived output'
   },
 
   // Identity the pipeline commits and comments as.

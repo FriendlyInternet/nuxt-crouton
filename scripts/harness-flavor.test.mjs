@@ -9,6 +9,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { loadFlavor, getKey, validate, render, REQUIRED_KEYS } from './harness-flavor.mjs'
 import { planTestsGate } from './pi-finish.mjs'
 import { DENY } from './pi-edited-files.mjs'
@@ -65,4 +68,38 @@ test('validate flags a broken profile', () => {
   assert.ok(validate({}).length > 0)
   assert.ok(validate({ ...flavor, bot: {} }).some((p) => /bot/.test(p)))
   assert.ok(validate({ ...flavor, reviewGates: { x: { paths: [] } } }).length >= 2)
+})
+
+test('planTestsGate honours flavor-supplied patterns', () => {
+  const r = planTestsGate({
+    committedFiles: ['lib/a.py', 'tests/test_a.py'],
+    logicRe: '^lib/.*\\.py$',
+    testRe: '(^|/)tests/'
+  })
+  assert.deepEqual(r.pkgLogic, ['lib/a.py'])
+  assert.equal(r.missing, false)
+})
+
+test('work-issue-pidev asks the flavor instead of carrying stack commands', async () => {
+  const { readFileSync } = await import('node:fs')
+  const wf = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
+  const run = (l) => l.trim().startsWith('#') ? '' : l
+  const code = wf.split('\n').map(run).join('\n')
+  assert.ok(!/run: pnpm install --frozen-lockfile|user.name  "nuxt-harness|pnpm --filter/.test(code))
+  assert.ok(!/nuxt-harness|pnpm |@fyit|crouton generate/.test(code), 'stack literal in work-issue-pidev.yml')
+  assert.ok(!/GEN_SUBJECT="generate:/.test(code))
+  assert.equal(cli('generated.commitSubject'), 'generate: derived output')
+})
+
+test('resolver exits non-zero on an unknown key or an empty required value', () => {
+  const unknown = spawnSync('node', [CLI, 'no.such.key', '--require'], { encoding: 'utf8' })
+  assert.notEqual(unknown.status, 0)
+  assert.match(unknown.stderr, /unknown flavor key/)
+  const dir = mkdtempSync(join(tmpdir(), 'flavor-'))
+  mkdirSync(join(dir, 'scripts'))
+  copyFileSync(CLI, join(dir, 'scripts', 'harness-flavor.mjs'))
+  writeFileSync(join(dir, 'flavor.config.mjs'), "export const flavor = { bot: { name: '', email: 'a@b' } }\n")
+  const empty = spawnSync('node', [join(dir, 'scripts', 'harness-flavor.mjs'), 'bot.name', '--require'], { encoding: 'utf8' })
+  assert.notEqual(empty.status, 0)
+  assert.match(empty.stderr, /empty value/)
 })
