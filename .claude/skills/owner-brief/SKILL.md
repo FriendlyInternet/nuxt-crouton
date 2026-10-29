@@ -135,3 +135,7 @@ recommendation-first rule, the medium-selection table, `status:blocked`, push-be
 This skill is the wrapper that makes **every** comment — including the non-blocking 🔴 / 💡 / ✅
 — arrive in the same scannable shape. When the brief is a hold, use `ask-human`'s template
 inside it.
+
+## Plain comments are read (#2980)
+
+An owner comment that matches no command is read by a default-tier model (Sonnet), which picks one safe action (revise, replan, start, review, answer, ask, ignore). Merge, close, delete, deploy and teardown are never done from a plain comment: the reply is "I read this as X. Reply `ok` to confirm." Irreversible actions still need `ok`.
