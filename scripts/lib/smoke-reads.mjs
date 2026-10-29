@@ -25,19 +25,23 @@ export async function runReads(reads, { http, getTeamId, log = () => {} }) {
   const failures = []
   for (const r of reads) {
     const path = fillPlaceholders(r.path, vars)
-    const wantAny = [].concat(r.expectStatus ?? 200)
-    const want = wantAny.join('|')
     try {
       const { res, text } = await http('GET', path, undefined, { auth: true })
-      const expect = r.expectIncludes == null ? null : fillPlaceholders(r.expectIncludes, vars)
-      if (!wantAny.includes(res.status)) {
-        failures.push(`reads ${path}: HTTP ${res.status}, expected ${want}${bodyExcerpt(text)}`)
-      } else if (expect && !String(text ?? '').includes(expect)) {
-        failures.push(`reads ${path}: missing "${expect}"`)
-      } else {
-        log(`✓ reads ${path} → ${res.status}`)
-      }
+      const failure = checkRead(r, path, res, text, vars)
+      if (failure) failures.push(failure)
+      else log(`✓ reads ${path} → ${res.status}`)
     } catch (e) { failures.push(`reads ${path}: ${e.message}`) }
   }
   return failures
+}
+
+/** One response against its entry: a failure message, or null when it passes. */
+function checkRead(r, path, res, text, vars) {
+  const wantAny = [].concat(r.expectStatus ?? 200)
+  if (!wantAny.includes(res.status)) {
+    return `reads ${path}: HTTP ${res.status}, expected ${wantAny.join('|')}${bodyExcerpt(text)}`
+  }
+  const expect = r.expectIncludes == null ? null : fillPlaceholders(r.expectIncludes, vars)
+  if (expect && !String(text ?? '').includes(expect)) return `reads ${path}: missing "${expect}"`
+  return null
 }
