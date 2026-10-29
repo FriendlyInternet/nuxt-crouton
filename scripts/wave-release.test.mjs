@@ -105,6 +105,13 @@ test('closeLinkedIssues: several Closes lines close each; code spans and blocked
   assert.deepEqual(w.calls.updates.map(u => u.issue_number), [5])
 })
 
+test('closeLinkedIssues: build:approved PR closes an issue left status:blocked by an earlier no-go', async () => {
+  const w = prWorld('Closes #7', { 7: { state: 'open', labels: lbl(['status:blocked']) } })
+  w.context.payload.pull_request.labels = [{ name: 'build:approved' }]
+  await closeLinkedIssues(w)
+  assert.deepEqual(w.calls.updates.map(u => u.issue_number), [7])
+})
+
 test('closeLinkedIssues: unmerged PR does nothing', async () => {
   const w = prWorld('Closes #5', { 5: { state: 'open', labels: [] } })
   w.context.payload.pull_request.merged = false
