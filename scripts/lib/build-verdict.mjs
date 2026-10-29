@@ -10,7 +10,7 @@
  *   ### Verdict
  *   go | no-go | needs-owner
  *   ### Rubric
- *   - 1: PASS|FAIL — one line of evidence        (ids 1..5)
+ *   - 1: PASS|FAIL — one line of evidence        (ids 1..7)
  *   ### Question          (only for needs-owner: ONE yes/no question)
  *
  * Two layers, so a lenient model cannot wave a bad PR through:
@@ -35,6 +35,8 @@ export const RUBRIC = [
   { id: '3', name: 'Gates untouched (no edit to a quality gate\'s config or baseline, no skipped test)' },
   { id: '4', name: 'Scope (matches the ticket and plan; nothing extra)' },
   { id: '5', name: 'Plan followed (where a plan was approved, the diff does what it said)' },
+  { id: '6', name: 'Every ticket step done (each numbered step and acceptance line is done, or dropped with the reason stated in the PR)' },
+  { id: '7', name: 'Docs table (the CLAUDE.md "Maintaining AI Documentation" row for this change type is updated)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 
@@ -61,7 +63,7 @@ export function parseVerdict(body) {
   if (!['go', 'no-go', 'needs-owner'].includes(stated)) errors.push('Verdict must be go, no-go or needs-owner')
   const items = {}
   for (const line of section(body, 'Rubric').split('\n')) {
-    const m = line.match(/^\s*(?:[-*]\s+)?\**([1-5])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
+    const m = line.match(/^\s*(?:[-*]\s+)?\**([1-7])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
     if (m) items[m[1]] = { pass: m[2].toUpperCase() === 'PASS', evidence: m[3].replace(/\*\*/g, '').trim() }
   }
   for (const id of IDS) {
