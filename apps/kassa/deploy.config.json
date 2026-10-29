@@ -31,6 +31,26 @@
         "path": "/api/teams/{teamId}/sales-categories/{id}",
         "method": "DELETE"
       }
-    }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/sync-status"
+      },
+      {
+        "path": "/api/crouton-sales/sync/pull",
+        "expectStatus": [403, 503]
+      },
+      {
+        "path": "/api/teams/{teamId}/sales-events"
+      },
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/devices"
+      },
+      {
+        "path": "/admin/test1/sales/devices",
+        "expectIncludes": "id=\"__nuxt\""
+      }
+    ]
   }
 }
