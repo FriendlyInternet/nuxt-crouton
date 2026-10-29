@@ -72,7 +72,7 @@ const { data: flow, pending: flowPending, refresh: refreshFlow } = await useFetc
 
 // Fetch collection rows when not in sync mode — gated until a non-sync flow
 // is loaded (the empty branch also avoids dereferencing a null flow).
-const { data: rows, pending: rowsPending } = await useFetch(
+const { data: rows, pending: rowsPending } = await useFetch<Record<string, unknown>[]>(
   () => flow.value && !flow.value.syncEnabled && teamId.value
     ? `/api/teams/${teamId.value}/${flow.value.collection}`
     : '',
