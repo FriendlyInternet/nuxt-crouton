@@ -78,20 +78,31 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
       // Check if this is a dependent field (should be stored as JSON array)
       const isDependentField = field.meta?.dependsOn || field.meta?.displayAs === 'slotButtonGroup'
 
-      if (field.type === 'boolean') {
-        const boolDefault = field.meta?.default === true ? 'true' : 'false'
-        return `  ${field.name}: integer('${field.name}', { mode: 'boolean' })${nullable}.$default(() => ${boolDefault})`
-      } else if (field.type === 'number' || field.type === 'decimal') {
-        return `  ${field.name}: ${field.type === 'decimal' ? 'real' : 'integer'}('${field.name}')${nullable}`
-      } else if (field.type === 'date') {
-        return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${dateDefault(field)}`
-      } else if (field.type === 'json' || field.type === 'repeater' || field.type === 'array' || isDependentField) {
-      // Use [] for arrays/repeaters/dependent fields, {} for json objects
-        const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'
-        // Use customType to handle NULL values gracefully in LEFT JOINs
-        return `  ${field.name}: jsonColumn('${field.name}')${nullable}.$default(() => (${defaultValue}))`
-      } else {
-        return `  ${field.name}: text('${field.name}')${nullable}`
+      // The column comes from the manifest's `sqlite` descriptor (one source of truth);
+      // a field with no descriptor (unknown type) falls back to text. A dependent field is always stored as JSON.
+      const sqlite = field.sqlite
+      const column = isDependentField ? 'json' : (sqlite?.column ?? 'text')
+
+      switch (column) {
+        case 'integer':
+          if (sqlite?.mode === 'boolean') {
+            const boolDefault = field.meta?.default === true ? 'true' : 'false'
+            return `  ${field.name}: integer('${field.name}', { mode: 'boolean' })${nullable}.$default(() => ${boolDefault})`
+          }
+          if (sqlite?.mode === 'timestamp') {
+            return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${dateDefault(field)}`
+          }
+          return `  ${field.name}: integer('${field.name}')${nullable}`
+        case 'real':
+          return `  ${field.name}: real('${field.name}')${nullable}`
+        case 'json': {
+          // Use null for arrays/repeaters/dependent fields, {} for json objects
+          const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'
+          // Use customType to handle NULL values gracefully in LEFT JOINs
+          return `  ${field.name}: jsonColumn('${field.name}')${nullable}.$default(() => (${defaultValue}))`
+        }
+        default:
+          return `  ${field.name}: text('${field.name}')${nullable}`
       }
     }).join(',\n')
 

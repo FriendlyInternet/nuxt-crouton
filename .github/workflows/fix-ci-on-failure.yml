@@ -6,7 +6,7 @@ name: Fix CI on failure
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
-#   - Scope: only pipeline head branches `claude/issue-*` (claude lane) + `work-*` (pi worker,
+#   - Scope: only pipeline head branches `work-*` (pi worker,
 #     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
@@ -38,17 +38,13 @@ permissions: {}
 
 jobs:
   fixbot:
-    # Pipeline branches only — human PRs are never auto-edited. BOTH prefixes: `claude/issue-*`
-    # is the claude lane, `work-*` is the pi worker. This listed only the former, and since
-    # AGENT_HARNESS=pi made pi the live lane the condition could not be true for any PR: 1718
-    # runs, 100 of the last 100 `skipped`, zero that ever acted (#2089). A false job `if`
-    # reports `skipped`, which is indistinguishable from "nothing to do", so it was never red
-    # and nobody noticed. `pipeline-pr-status.yml` learned the same lesson in #1815; this
-    # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
+    # Pipeline branches only — human PRs are never auto-edited. `work-*` is the pi worker;
+    # the old `claude/issue-*` lane was dropped (#2892). A false job `if` reports `skipped`,
+    # indistinguishable from "nothing to do" (#2089) — the definition lives once, in
+    # scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
-      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
-       startsWith(github.event.workflow_run.head_branch, 'work-'))
+      startsWith(github.event.workflow_run.head_branch, 'work-')
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
@@ -84,13 +80,13 @@ jobs:
 
             const full = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data
             // #2157: the job `if` above was widened to both lanes (#2089), but THIS inner
-            // re-check still only accepted `claude/issue-*` — so every `work-*` PR (the pi
+            // re-check once accepted only the old claude prefix — so every `work-*` PR (the pi
             // worker, which AGENT_HARNESS=pi makes the LIVE lane) bailed here and the fix-bot
             // never acted on a real PR. Same #2089 bug, one spot the fix missed. The two-prefix
             // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
             // the job `if` (a github-script gate can't import without a checkout, and this runs
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
-            const isPipelineRef = r => /^(claude\/issue-|work-)/.test(String(r || ''))
+            const isPipelineRef = r => /^work-/.test(String(r || ''))
             if (full.state !== 'open' || !isPipelineRef(full.head.ref)) {
               core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
             }
@@ -105,8 +101,8 @@ jobs:
             const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            // Both lanes (#2157): `claude/issue-<n>-<slug>` and the pi worker's `work-<n>`.
-            const m = /^(?:claude\/issue-|work-)(\d+)/.exec(full.head.ref)
+            // The pi worker's `work-<n>` branch.
+            const m = /^work-(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {
@@ -305,7 +301,12 @@ jobs:
           echo "refused=true" >> "$GITHUB_OUTPUT"
           git reset -q --hard "$PRE"
           # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
-          if [ "$PUSHED" = 1 ]; then bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH"; fi
+          # Undo only the fix-bot's own commits; a worker revision pushed meanwhile must survive (#2978).
+          if [ "$PUSHED" = 1 ] && ! bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH" "$HEAD_NOW"; then
+            UNDONE_NOTE="> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
+            UNDONE_NOTE="$UNDONE_NOTE"$'\n\n'"⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
+            gh pr comment "$PR" --body "$UNDONE_NOTE"
+          fi
           LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
           ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
           {

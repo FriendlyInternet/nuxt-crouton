@@ -1,4 +1,7 @@
 <script setup lang="ts">
+// Bound the page to the panel height (calendar fixed, list scrolls) — read by bookings.vue
+definePageMeta({ fillPanel: true })
+
 const route = useRoute()
 const { teamId } = useTeamContext()
 const { t } = useT()
@@ -92,7 +95,7 @@ async function handleBookingChange() {
 </script>
 
 <template>
-  <div class="h-full p-4 sm:p-6 flex flex-col gap-3">
+  <div class="w-full flex-1 min-h-0 p-4 sm:p-6 flex flex-col gap-3">
     <!-- Impersonation banner -->
     <Transition
       enter-active-class="transition-all duration-300 ease-out"

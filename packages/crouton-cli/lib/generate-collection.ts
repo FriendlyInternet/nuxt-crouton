@@ -388,24 +388,11 @@ export function buildFieldsSchema(params: {
         baseZod = `z.array(${itemSchemaName})`
       }
       if (f.meta?.required) {
-        if (isDependentField) {
+        // Manifest zod as-is; only dependent arrays and text get a non-empty check.
+        if (isDependentField || f.type === 'string' || f.type === 'text') {
           return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
-        } else if (f.type === 'date') {
-          // z.coerce.date() (no Zod-3 `required_error`, which is invalid in Zod 4)
-          return `${f.name}: ${baseZod}`
-        } else if (f.type === 'string' || f.type === 'text') {
-          return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
-        } else if (f.type === 'number' || f.type === 'decimal') {
-          return `${f.name}: ${baseZod}`
-        } else if (f.type === 'boolean') {
-          return `${f.name}: ${baseZod}`
-        } else if (f.type === 'json') {
-          return `${f.name}: ${baseZod}`
-        } else if (f.type === 'repeater') {
-          return `${f.name}: ${baseZod}`
-        } else {
-          return `${f.name}: ${baseZod}`
         }
+        return `${f.name}: ${baseZod}`
       } else if (mode !== 'client') {
         // Wire schema: non-required columns are nullable in the DB and
         // round-trip as null (a loaded record PATCHed back, or an explicit
@@ -704,7 +691,7 @@ function resolveTranslationConfig(params: {
         'remarkPrompt', 'terms', 'conditions', 'notes']
       collectionLevelTranslatable = fields
         .filter(f => autoDetectFieldNames.includes(f.name)
-          && (f.type === 'string' || f.type === 'text' || f.type === 'richText'))
+          && (f.type === 'string' || f.type === 'text'))
         .map(f => f.name)
     }
 

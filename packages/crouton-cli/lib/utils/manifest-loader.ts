@@ -17,6 +17,7 @@ import type {
   DetectionResult,
   DetectedField,
   GeneratorContribution,
+  FieldTypeMapping,
 } from '@fyit/crouton-core/shared/manifest'
 import { existsSync, readdirSync } from 'node:fs'
 
@@ -316,8 +317,8 @@ export function getModuleRegistryMap(
  */
 export function getTypeMapping(
   manifests: CroutonManifest[],
-): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> {
-  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> = {}
+): Record<string, FieldTypeMapping> {
+  const mapping: Record<string, FieldTypeMapping> = {}
 
   for (const manifest of manifests) {
     if (!manifest.fieldTypes) continue
@@ -328,10 +329,14 @@ export function getTypeMapping(
       // UInput + text column instead of CroutonCalendar + a timestamp column (#285).
       const entry = {
         db: def.db,
-        drizzle: def.drizzle,
+        sqlite: def.sqlite,
         zod: def.zod,
         default: def.defaultValue,
         tsType: def.tsType,
+        // Sample values for the seed + test generators — carried onto every
+        // field by loadFields instead of private type switches (#2910).
+        seed: def.seed,
+        testSample: def.testSample,
         canonical: name,
         // The form control the manifest declares for this type. Carried onto
         // every field by loadFields so generators render it instead of keeping

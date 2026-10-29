@@ -26,7 +26,6 @@ export interface SeedFixture {
 /** Derive a plausible literal sample value for a field at row `i`. */
 function deriveValue(field: Record<string, any>, i: number): unknown {
   const name = String(field.name || '').toLowerCase()
-  const type = field.type
   const options = field.meta?.options
 
   // A select/enum → cycle options, biased so the newest row leads with the
@@ -41,28 +40,16 @@ function deriveValue(field: Record<string, any>, i: number): unknown {
   if (name === 'title' || name === 'name' || name === 'fullname') return `Sample ${field.name} ${i + 1}`
   if (name.includes('url') || name.includes('website') || name.includes('link')) return 'https://example.com'
 
-  // Type fallbacks
-  switch (type) {
-    case 'number':
-    case 'decimal':
-      return i + 1
-    case 'boolean':
-      return i % 2 === 0
-    case 'date':
-      // unix seconds, staggered one day apart so "newest first" ordering shows
-      return Math.floor(Date.now() / 1000) - i * 86_400
-    case 'json':
-      return {}
-    case 'array':
-      return ['sample']
-    case 'image':
-    case 'file':
-      return ''
-    case 'text':
-      return `Sample ${field.name} content for row ${i + 1}. Lorem ipsum dolor sit amet, consectetur adipiscing elit.`
-    default:
-      return `Sample ${field.name} ${i + 1}`
-  }
+  // Type-based: the manifest's `seed.fixture` expression, evaluated per row.
+  // Only a type the manifest doesn't know falls back to a string sample.
+  if (field.seed?.fixture) return evalFixture(field.seed.fixture, field.name, i)
+  return `Sample ${field.name} ${i + 1}`
+}
+
+/** Evaluate a manifest `seed.fixture` expression with `i`, `name` and `now` in scope. */
+function evalFixture(expr: string, name: string, i: number): unknown {
+  // The expression comes from a package manifest (trusted code we already load).
+  return new Function('i', 'name', 'now', `return (${expr})`)(i, name, Date.now())
 }
 
 /**

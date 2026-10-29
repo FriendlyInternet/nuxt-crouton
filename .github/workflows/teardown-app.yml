@@ -111,17 +111,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Keep the D1 export the script writes before deleting, 30 days — same as the
-      # automatic path (teardown-on-removal.yml, #2858). `always()` so a half-finished
-      # teardown still keeps its backup; skipped on dry runs (nothing is exported).
-      - name: Upload database backups
-        if: ${{ always() && inputs.delete_cloudflare && !inputs.dry_run }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: teardown-db-backups
-          path: teardown-backups/
-          retention-days: 30
-          if-no-files-found: ignore
+      # backups are not uploaded: public repo, see #3067
 
       # Mint a Nuxt Harness App installation token so branch deletes + issue closes
       # are attributed to nuxt-harness[bot] (same pattern as comment-dispatch.yml).

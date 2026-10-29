@@ -101,6 +101,7 @@ Use this skill when the user mentions:
 |-----------|-------------|---------|
 | text, string, name, title | `string` | `"name": { "type": "string" }` |
 | long text, description, content | `text` | `"description": { "type": "text" }` |
+| rich text, formatted content (needs crouton-editor) | `richText` | `"content": { "type": "richText" }` |
 | number, count, quantity | `number` | `"quantity": { "type": "number" }` |
 | price, amount, decimal | `decimal` | `"price": { "type": "decimal", "meta": { "precision": 10, "scale": 2 } }` |
 | boolean, yes/no, active | `boolean` | `"active": { "type": "boolean" }` |

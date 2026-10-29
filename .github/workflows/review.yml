@@ -1,0 +1,521 @@
+name: Review
+
+# One workflow, four reviewer agents (epic #2889, #2895). Each agent keeps its OWN session,
+# prompt, model tier, sticky comment and fail threshold (lean per-agent context is the
+# constraint) — what they now share is the setup: ONE `diff` job computes the changed-file
+# list and unified diff once and hands them over as an artifact.
+#
+#   red-team          epic → main, non-draft   blocks on high/critical
+#   a11y              epic → main, non-draft   blocks on critical/serious   (needs pnpm install)
+#   simplify          epic → main, non-draft   advisory, never blocks
+#   frontend-review   EVERY PR touching .vue, drafts and leaf PRs into epic/* included.
+#                     Advisory (check passes) on a draft or a leaf PR; BLOCKS on 🔴 only on a
+#                     non-draft PR into main. Hand-rolled UI is 🔴 (agent definition).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diff:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      vue: ${{ steps.scope.outputs.vue }}
+      code: ${{ steps.scope.outputs.code }}
+      security: ${{ steps.scope.outputs.security }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Smoke fixtures (#1035) are diff-scope-excluded so touching them never self-flags an
+      # ordinary PR — gate-smoke.yml scans them directly.
+      - name: Compute the diff once
+        id: scope
+        run: |
+          mkdir -p review-diff
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          EXCL=':(exclude).claude/gate-fixtures/**'
+          git diff --name-only "$BASE"...HEAD -- . "$EXCL" > review-diff/changed-files.txt
+          git diff "$BASE"...HEAD -- . "$EXCL" > review-diff/pr.diff
+          # `fixtures/**` has no .vue worth reviewing (frontend-review amendment, #2895).
+          grep -E '\.vue$' review-diff/changed-files.txt | grep -vE '(^|/)fixtures/' > review-diff/changed-vue.txt || true
+          VUE=false; CODE=false; SEC=false
+          [ -s review-diff/changed-vue.txt ] && VUE=true
+          grep -qE '\.(vue|ts|mjs)$' review-diff/changed-files.txt && CODE=true
+          # Only the surfaces the red-team threat model cares about (not pocs/**).
+          grep -qE '(^|/)server/|(^|/)nuxt\.config\.ts$|^packages/|^apps/' review-diff/changed-files.txt && SEC=true
+          { echo "vue=$VUE"; echo "code=$CODE"; echo "security=$SEC"; } >> "$GITHUB_OUTPUT"
+          wc -l review-diff/*
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-diff
+          path: review-diff
+
+  red-team:
+    needs: diff
+    if: >
+      needs.diff.outputs.security == 'true' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == 'main'
+    # Fork PRs never land on the self-hosted box — this job runs an agent (bash) over the PR's code.
+    # Security policy: runbook §5 (#656).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    # permissions MUST live at the job level (a workflow-level block would be shadowed, and
+    # `id-token: write` is needed for the claude-code-action OIDC token).
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-diff
+          path: review-diff
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161).
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        id: agent
+        # The VERDICT FILE is the gate, not this step's exit code (#499, #602, #603): no verdict ⇒
+        # inconclusive pass; a high/critical in the verdict ⇒ fail.
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          # --allowedTools REQUIRED (#834): headless CI denies un-allowlisted tools, so without it
+          # the agent can't write red-team-verdict.json / post the comment → fails OPEN.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **red-team subagent** defined in `.claude/agents/red-team.md`.
+            Input: { scope: "diff", depth: "quick" }.
+
+            The PR diff is precomputed (against `origin/${{ github.event.pull_request.base.ref }}`):
+            `review-diff/changed-files.txt` lists the changed files and `review-diff/pr.diff` is the
+            unified diff. Scan ONLY the changed server/app/config code through the threat model in
+            the agent definition. Be precise and avoid false positives — a red CI check on a
+            wrong call is worse than a comment.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings (severity table + each
+               finding's location + one-line fix). Make it a sticky comment containing the
+               literal marker `<!-- red-team -->` on its own line, and EDIT that comment in
+               place if it already exists rather than posting a new one. If there are no
+               findings, post/update the comment saying the quick scan found nothing.
+
+            2. **Write `red-team-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|low|medium|high|critical>","critical":N,"high":N,"medium":N,"low":N}`
+               where `highest` is the most severe finding's severity (or `none`). This file
+               is the machine signal the gate step reads — always write it, even for a clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code. Do NOT file GitHub issues (the daily
+            sweep and the /red-team skill own issue-filing). Reporting + the verdict file is all.
+
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      # Capture a 🔴-critical verdict as an accountability finding candidate (#1570). Report-only.
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate red-team --verdict red-team-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loop-station-finding-red-team-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
+      # Fail-open must be VISIBLE (#1037).
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: red-team
+          verdict-file: red-team-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
+      - name: Gate on high/critical
+        if: always()
+        run: |
+          if [ ! -f red-team-verdict.json ]; then
+            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
+            exit 0
+          fi
+          echo "Verdict: $(cat red-team-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./red-team-verdict.json').highest||'none').toLowerCase())")
+          case "$HIGHEST" in
+            critical|high)
+              echo "::error::Red-team found a ${HIGHEST}-severity issue in this PR's diff — see the red-team PR comment. Blocking merge (fail on high+)."
+              exit 1
+              ;;
+            *)
+              echo "Red-team highest severity: ${HIGHEST}. No high/critical — check passes."
+              ;;
+          esac
+
+  a11y:
+    needs: diff
+    if: >
+      needs.diff.outputs.vue == 'true' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-diff
+          path: review-diff
+
+      # a11y's engine is eslint-plugin-vuejs-accessibility (in the root eslint config), so the
+      # agent needs node_modules to run `npx eslint`. No lifecycle scripts needed for that.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between self-hosted runners (#1255)
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs light)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        id: agent
+        # Verdict file is the gate, not the exit code (see red-team above).
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): ARIA/label/alt/tabindex
+          # pattern-matching.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **a11y subagent** defined in `.claude/agents/a11y.md`.
+            Input: { scope: "diff", depth: "quick", fix: false }.
+
+            The PR diff is precomputed (against `origin/${{ github.event.pull_request.base.ref }}`):
+            `review-diff/changed-vue.txt` lists the changed `.vue` files and `review-diff/pr.diff` is
+            the unified diff. Scan ONLY those `.vue` files through the engines in the agent
+            definition (run `npx eslint <changed.vue> --format json` for the
+            `vuejs-accessibility/*` rules, then read the templates for the ARIA-without-keyboard
+            / missing-name / missing-label smells). Be precise and avoid false positives — a red
+            CI check on a wrong call is worse than a comment. Do NOT boot a fixture (that's the
+            deep/daily path); quick is static only.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings using the review skill's
+               3-level format (🔴 Critical / 🟡 Warning / 🔵 Note) — a severity table + each
+               finding's `file:line`, rule id, and one-line fix. Make it a sticky comment
+               containing the literal marker `<!-- a11y -->` on its own line, and EDIT that
+               comment in place if it already exists rather than posting a new one. If there
+               are no findings, post/update the comment saying the quick scan found nothing.
+
+            2. **Write `a11y-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|note|warning|critical>","critical":N,"warning":N,"note":N}`
+               where `highest` is the most severe finding's level (🔴→critical, 🟡→warning,
+               🔵→note, or `none`) per the skill's severity map (axe critical/serious +
+               structural eslint rules → 🔴). This file is the machine signal the gate step
+               reads — always write it, even for a clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
+            separate, human-invoked path). Do NOT file GitHub issues (the daily sweep owns that).
+            Reporting + the verdict file is all.
+
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate a11y --verdict a11y-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loop-station-finding-a11y-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: a11y
+          verdict-file: a11y-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
+      - name: Gate on critical/serious
+        if: always()
+        run: |
+          if [ ! -f a11y-verdict.json ]; then
+            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
+            exit 0
+          fi
+          echo "Verdict: $(cat a11y-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./a11y-verdict.json').highest||'none').toLowerCase())")
+          case "$HIGHEST" in
+            critical)
+              echo "::error::a11y found a critical/serious accessibility issue in this PR's diff — see the a11y PR comment. Blocking merge."
+              exit 1
+              ;;
+            *)
+              echo "a11y highest severity: ${HIGHEST}. No critical/serious — check passes."
+              ;;
+          esac
+
+  frontend-review:
+    needs: diff
+    # Every PR touching .vue — drafts and leaf PRs into epic/* included (the pipeline opens UI
+    # PRs as drafts, so skipping drafts meant the check never ran while the owner reviewed).
+    if: needs.diff.outputs.vue == 'true'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    env:
+      # Blocks only on a non-draft PR into main (the epic → main PR); advisory otherwise.
+      BLOCKING: ${{ github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-diff
+          path: review-diff
+
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs light)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        id: agent
+        # Verdict file is the gate, not the exit code (see red-team above).
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): convention pattern-matching.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **frontend-review subagent** defined in `.claude/agents/frontend-review.md`.
+            Input: { scope: "diff", depth: "quick", fix: false }.
+
+            The PR diff is precomputed (against `origin/${{ github.event.pull_request.base.ref }}`):
+            `review-diff/changed-vue.txt` lists the changed `.vue` files and `review-diff/pr.diff` is
+            the unified diff. Scan ONLY those files through the convention checklist in the agent
+            definition (grep the deterministic spine — v3 component names, UCard-in-overlay,
+            Options API — then read the templates for the hand-rolled-UI / overlay-pattern /
+            hardcoded-color smells). Be precise and avoid false positives. Do NOT go deep (no real
+            Nuxt UI component-set cross-check); quick is static only.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings using the review skill's
+               3-level format (🔴 Critical / 🟡 Warning / 🔵 Note). The comment's FIRST line is
+               `Hand-rolled: N (list)` (see the agent definition), then the severity table + each
+               finding's `file:line`, rule id, and one-line fix. Make it a sticky comment
+               containing the literal marker `<!-- frontend-review -->` on its own line, and
+               EDIT that comment in place if it already exists rather than posting a new one. If
+               there are no findings, post/update the comment saying the quick scan found nothing.
+
+            2. **Write `frontend-review-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|note|warning|critical>","critical":N,"warning":N,"note":N}`
+               where `highest` is the most severe finding's level (🔴→critical, 🟡→warning,
+               🔵→note, or `none`) per the agent's severity map. This file is the machine signal
+               the gate step reads — always write it, even for a clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
+            separate, human-invoked path). Do NOT file GitHub issues. Reporting + the verdict
+            file is all.
+
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate frontend-review --verdict frontend-review-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loop-station-finding-frontend-review-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: frontend-review
+          verdict-file: frontend-review-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
+      - name: Gate on critical
+        if: always()
+        run: |
+          if [ ! -f frontend-review-verdict.json ]; then
+            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
+            exit 0
+          fi
+          echo "Verdict: $(cat frontend-review-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./frontend-review-verdict.json').highest||'none').toLowerCase())")
+          if [ "$HIGHEST" = "critical" ]; then
+            if [ "$BLOCKING" = "true" ]; then
+              echo "::error::frontend-review found a critical Nuxt UI 4 convention break (incl. hand-rolled UI) in this PR's diff — see the frontend-review PR comment. Blocking merge."
+              exit 1
+            fi
+            echo "::warning::frontend-review found a critical finding, but this is a draft / leaf PR — advisory only. It blocks on the epic → main PR."
+          else
+            echo "frontend-review highest severity: ${HIGHEST}. No critical — check passes."
+          fi
+
+  simplify:
+    needs: diff
+    if: >
+      needs.diff.outputs.code == 'true' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-diff
+          path: review-diff
+
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        id: agent
+        # Advisory: keep continue-on-error so a flake can't turn the run red.
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          # --allowedTools REQUIRED (#834). Sonnet, not Haiku: simplification is a judgment call and
+          # a noisy false positive is the failure mode — precision matters more than the cheaper tier.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **simplify subagent** defined in `.claude/agents/simplify.md`.
+            Input: { scope: "diff", depth: "quick", fix: false }.
+
+            The PR diff is precomputed (against `origin/${{ github.event.pull_request.base.ref }}`):
+            `review-diff/changed-files.txt` lists the changed files and `review-diff/pr.diff` is the
+            unified diff. Keep only the changed code files (`.vue`/`.ts`/`.mjs`; drop generated
+            layers, `dist`, `_archive`, fixtures), and scan ONLY those through the smell checklist
+            in the agent definition. Be precise and avoid false positives — a wrong advisory on
+            taste teaches people to ignore the whole check, so PRECISION BEATS RECALL: only raise a
+            finding when a concretely cleaner form exists and you can name it. This agent has NO 🔴
+            and NEVER blocks.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings using the review skill's
+               3-level format (🟡 Warning / 🔵 Note — there is no 🔴 here) — a short table + each
+               finding's `file:line`, smell class, one-line "why simpler", and the concrete cleaner
+               form. Make it a sticky comment containing the literal marker `<!-- simplify -->` on
+               its own line, and EDIT that comment in place if it already exists rather than posting
+               a new one. If there are no findings, post/update the comment saying the quick scan
+               found nothing — the diff reads clean.
+
+            2. **Write `simplify-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|note|warning>","warning":N,"note":N,"fixes":F}`
+               where `highest` is the most severe finding's level (🟡→warning, 🔵→note, or `none`),
+               and `fixes` is the TOTAL count of findings raised (`warning + note`; `0` for a clean
+               scan). `highest` is the signal the outage-check reads; `fixes` is the count the
+               accountability scoreboard's quality lane reads (#1584) — always write both, even for a
+               clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
+            separate, human-invoked path). Do NOT file GitHub issues. Reporting + the verdict file
+            is all.
+
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      # Quality lane (#1584): /simplify is a cleanup on correct code, not a defect.
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate simplify --class quality \
+            --verdict simplify-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loop-station-finding-simplify-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: simplify
+          verdict-file: simplify-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
+      - name: Report (advisory — never blocks)
+        if: always()
+        run: |
+          if [ ! -f simplify-verdict.json ]; then
+            echo "No verdict file — outage classified by gate-outage-check above. Advisory check, not blocking."
+            exit 0
+          fi
+          echo "Verdict: $(cat simplify-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./simplify-verdict.json').highest||'none').toLowerCase())")
+          echo "simplify highest severity: ${HIGHEST}. Advisory only — see the simplify PR comment. Never blocks."
+          exit 0

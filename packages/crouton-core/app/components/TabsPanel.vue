@@ -32,20 +32,27 @@ function revealActiveTab() {
 useResizeObserver(tabsEl, revealActiveTab)
 watch(() => route.path, revealActiveTab, { flush: 'post' })
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   /** Section name — shown on desktop, screen-reader only on phones. */
   title: string
   /** The section's tabs (usually `{ label, icon, to }`, `exact` on the index tab), flat or grouped. */
   tabs: NavigationMenuItem[] | NavigationMenuItem[][]
   /** Max width of the content column (left-aligned, so it shares the bar's edge). */
   maxWidth?: string
+  /** Opt-in: bound the body to the panel height (page owns its scrolling) instead of scrolling the whole body. */
+  fill?: boolean
 }>(), {
-  maxWidth: 'max-w-5xl'
+  maxWidth: 'max-w-5xl',
+  fill: false
 })
+
+const panelUi = computed(() => ({
+  body: props.fill ? 'p-0 sm:p-0 gap-0 sm:gap-0 overflow-hidden' : 'p-0 sm:p-0 gap-0 sm:gap-0'
+}))
 </script>
 
 <template>
-  <UDashboardPanel :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0' }">
+  <UDashboardPanel :ui="panelUi">
     <template #header>
       <UDashboardNavbar
         :title="title"
@@ -86,7 +93,7 @@ withDefaults(defineProps<{
     <template #body>
       <div
         class="w-full"
-        :class="maxWidth"
+        :class="[maxWidth, fill && 'flex-1 min-h-0 flex flex-col']"
       >
         <slot />
       </div>
