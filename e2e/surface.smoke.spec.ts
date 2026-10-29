@@ -37,8 +37,8 @@ test.describe(`fixture "${FIXTURE}" surfaces`, () => {
       await page.goto(surfaceUrl(base, slug, surface.path), { waitUntil: 'domcontentloaded' })
       await page.waitForLoadState('networkidle').catch(() => {})
 
-      if (surface.click) {
-        await page.locator(surface.click).first().click({ timeout: 180000 })
+      for (const selector of [surface.click ?? []].flat()) {
+        await page.locator(selector).first().click({ timeout: 180000 })
       }
 
       const { visible, heading } = surface.expect

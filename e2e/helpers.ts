@@ -58,8 +58,8 @@ export interface SurfaceSpec {
   name: string
   /** Route to visit. `{team}` is replaced with the active team slug. */
   path: string
-  /** Optional CSS selector clicked once after load, before asserting (e.g. open a create form). */
-  click?: string
+  /** Optional CSS selector (or list of selectors, clicked in order) clicked after load, before asserting (e.g. open a create form, then its tab). */
+  click?: string | string[]
   /** What must be visible for the surface to count as working. At least one. */
   expect: {
     /** CSS selector that must be visible, e.g. "#pages-sidebar". */
