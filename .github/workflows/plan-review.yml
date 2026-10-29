@@ -7,8 +7,8 @@ name: Plan review (independent reviewer — pi.dev)
 #   no-go        → re-run the plan with the review as feedback; after 2 sent-back rounds, hold
 #   needs-owner  → one yes/no question, held `status:blocked`
 #
-# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false,
-# the App token is only used by the trusted steps). The model comes from the ONE setting — no
+# SAFETY: the pi step is READ-ONLY and holds only a read-only App token (#3035; a probe proves it
+# cannot write; checkout persist-credentials:false, the write token is only used by the trusted steps). The model comes from the ONE setting — no
 # hard-coded model, and NO silent fallback: if the review model does not run on the pipeline's
 # provider, the preflight below fails loudly and says so on the issue.
 #
@@ -44,6 +44,21 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
+      # write token above stays on the trusted steps only.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: ro-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+          permission-actions: read
+          permission-checks: read
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,10 +117,30 @@ jobs:
           echo "$PRIOR" > "$D/prior"
           echo "prior sent-back rounds: $PRIOR"
 
-      # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
+      # Prove once that the reviewer token cannot write: a no-op PATCH must fail (non-zero exit). On
+      # success the reviewer never runs.
+      - name: Probe — the reviewer token is read-only
+        env:
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
+          PROBE_ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -uo pipefail
+          # Decide on gh's exit code only (the step runs under `bash -e`; `|| rc=$?` keeps it alive).
+          rc=0
+          ERR="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1 >/dev/null)" || rc=$?
+          echo "$ERR" | tail -n 3
+          if [ "$rc" -ne 0 ]; then
+            echo "probe: reviewer token cannot write (expected)"
+          else
+            echo "::error::reviewer token can write — review NOT run"
+            exit 1
+          fi
+
+      # ── The reviewer: READ-ONLY GitHub token (ro-token) ──────────────────────
       - id: pi
         env:
           PI_MODEL: ${{ steps.model.outputs.model }}
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail
