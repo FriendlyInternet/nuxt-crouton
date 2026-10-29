@@ -43,7 +43,7 @@ const STACK_TOKENS = [
   'pnpm', 'nuxt', 'nuxthub', 'drizzle', 'crouton', 'wrangler', 'cloudflare', 'vue', 'vite',
   'vitest', 'playwright', 'nitro', 'better-auth', 'tailwind', 'pinia', 'd1', 'h3', 'nuxt-ui'
 ]
-const STACK_RE = new RegExp(`(?<![\\w-])(${STACK_TOKENS.join('|')})(?![\\w])`, 'i')
+const STACK_RE = new RegExp(`(?<![a-z])(${STACK_TOKENS.join("|")})(?![a-z])`, 'i')
 
 // Legacy single-file skills with no YAML frontmatter — classified here instead.
 // Both are crouton-specific (CRUD generation / crouton-i18n), so: stack.

@@ -56,3 +56,10 @@ test('untagged workflow fails', () => {
   assert.equal(r.status, 1)
   assert.match(r.stderr, /workflows\/x\.yml/)
 })
+
+for (const s of ['CLOUDFLARE_API_TOKEN', 'NUXT_PUBLIC_X', 'D1_DATABASE_ID', 'nuxt_hub', 'vue3', 'my-nuxt-app']) {
+  test(`harness file containing ${s} fails`, () => {
+    const r = check({ 'scripts/a.mjs': `// layer: harness\nconst x = '${s}'\n` })
+    assert.equal(r.status, 1)
+  })
+}
