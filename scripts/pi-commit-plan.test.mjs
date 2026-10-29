@@ -1,3 +1,4 @@
+// layer: stack
 // The commit-plan splitter (#1849) — the fix for #1830, where the generated collection was dropped.
 // Pins the classification: inputs = ledger (hand-authored), generated = the rest minus junk, both
 // committed. A false "generated" is at worst a noisy commit; DROPPING generated output is the bug

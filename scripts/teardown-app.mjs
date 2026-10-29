@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * teardown-app.mjs — delete a crouton app's Cloudflare resources (Worker + D1 + KV).
  *

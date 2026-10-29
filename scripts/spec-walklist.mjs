@@ -1,3 +1,4 @@
+// layer: stack
 // spec-walklist.mjs — render a POC spec.json into an interactive, guided A1/C1 walk (self-contained HTML).
 // One card at a time · prev/next + keyboard · progress · localStorage persistence · export verdicts as JSON.
 import { readFileSync, writeFileSync } from 'node:fs'

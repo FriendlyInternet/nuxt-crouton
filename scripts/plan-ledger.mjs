@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * #2757 — one ledger row per plan-reviewed issue, so epic #2754's success measure can be counted.
  *   node scripts/plan-ledger.mjs <issue>   → prints ONE JSON line on stdout

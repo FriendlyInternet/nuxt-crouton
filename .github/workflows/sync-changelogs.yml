@@ -1,3 +1,4 @@
+# layer: stack
 name: Sync Changelogs
 
 on:

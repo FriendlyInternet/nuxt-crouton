@@ -1,3 +1,4 @@
+# layer: stage
 name: Guard package-edit approval
 
 # Safety net for the packages/ HARD GATE (#350). The override file

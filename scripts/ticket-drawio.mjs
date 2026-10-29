@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * ticket-drawio — emit an epic diagram as draw.io (diagrams.net) files. SPIKE for #502.
  *

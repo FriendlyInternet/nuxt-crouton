@@ -1,3 +1,4 @@
+# layer: harness
 name: weekly
 
 # Monday housekeeping, ONE workflow with ordered jobs (#2892). These were five separate

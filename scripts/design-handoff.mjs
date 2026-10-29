@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // design-handoff.mjs — carry design boards TO the pipeline as committed PNGs (#2430).
 //
 // The design for a UI epic often lives in a private canvas the runner cannot open, so

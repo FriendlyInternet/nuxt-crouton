@@ -1,3 +1,4 @@
+// layer: stack
 // Contract for the pure parts of staging-get.mjs (#2760). Run: node --test scripts/staging-get.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

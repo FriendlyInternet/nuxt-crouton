@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * #1611 contract — the PR-time packages/ gate: a diff touching `packages/**` fails unless the
  * edit is *declared* (a `packages:approved` label, a `Packages-approved:` body line, or a linked

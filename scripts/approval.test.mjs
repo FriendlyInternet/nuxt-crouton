@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2051 contract — what counts as an approval.
  *

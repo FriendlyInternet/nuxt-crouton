@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * CLI for the PR-preview config rewrite (#2020). Rewrites a BUILT wrangler config in place
  * so the deploy lands in its own Worker with its own D1/KV, then prints the derived names

@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #1695 contract — the pipeline-context block that carries { epic, depth, epic_branch }
  * ON an issue so a fresh single-use run (WS1's worker, WS3's decomposer) can read it.

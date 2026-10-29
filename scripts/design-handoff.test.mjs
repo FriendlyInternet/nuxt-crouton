@@ -1,3 +1,4 @@
+// layer: stack
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { END, START, readmeFor, sectionFor, titleOf, upsertSection } from './design-handoff.mjs'

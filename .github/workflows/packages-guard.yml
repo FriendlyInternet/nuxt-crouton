@@ -1,3 +1,4 @@
+# layer: stage
 name: Packages guard
 
 # #1611 — the PR-time half of the packages/ HARD GATE. The local PreToolUse hook

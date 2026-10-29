@@ -1,3 +1,4 @@
+// layer: stack
 // The pure epic→main-ready predicate (#1815). A false SKIP is safe; a false OPEN spams main — so
 // these pin the conservative rule: open only when children exist, ALL closed, branch ahead, no PR.
 //   node --test scripts/epic-ready.test.mjs

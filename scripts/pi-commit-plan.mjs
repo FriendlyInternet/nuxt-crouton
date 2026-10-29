@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // pi-commit-plan.mjs — split a pi worker's changed files into TWO commits (#1849).
 //
 // WHY. The old Pattern B committed ONLY files pi hand-edited (the ledger) and dropped everything

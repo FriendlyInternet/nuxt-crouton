@@ -1,3 +1,4 @@
+// layer: stack
 // Every third-party GitHub Action must be pinned to a full commit SHA (#2337).
 //
 // A tag like `actions/checkout@v7` is a pointer its owner (or an attacker with their

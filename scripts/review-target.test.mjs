@@ -1,3 +1,4 @@
+// layer: stack
 // A hold must not send the owner to a dead PR (#2111). The rule: in an ASKING brief, every PR the
 // `You:` line points at must be open. Numbers outside that line are context, and Done briefs ask
 // nothing — neither is checked.

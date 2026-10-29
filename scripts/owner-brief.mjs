@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * owner-brief.mjs — the pure decision behind the `require-owner-brief` hook (#2081).
  *

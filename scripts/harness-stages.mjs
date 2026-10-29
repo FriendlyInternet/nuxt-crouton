@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stage
 /**
  * Harness stage resolver — epic #952 / WS2 (#954).
  *

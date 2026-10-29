@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // pi-finish.mjs — testable decision core for the pi worker's FINISH step (#1893).
 //
 // WHY. Every defect found in `work-issue-pidev.yml`'s finish step so far (#1876: dropped last

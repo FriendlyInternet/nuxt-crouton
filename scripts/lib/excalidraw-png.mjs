@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Excalidraw PNG scene metadata — extract (and embed) the editable scene stored inside a
  * PNG that Excalidraw exported with "Embed scene" on. Dependency-free (Node zlib + manual

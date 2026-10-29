@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Verdict parser + rubric for the independent plan reviewer (#2756, epic #2754).
  *

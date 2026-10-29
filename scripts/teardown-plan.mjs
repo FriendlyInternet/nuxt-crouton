@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2863 — the DECISION half of auto-teardown (epic #2858): given what a merge deleted, which
  * Cloudflare app, database and storage must go. Pure — no Cloudflare, no git, no fs — so every

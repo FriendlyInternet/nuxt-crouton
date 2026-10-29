@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 #
 # runner-healthcheck.sh — watchdog for the Mac mini self-hosted GitHub Actions runner FLEET.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * seed-review-login.mjs — seed a throwaway, loginable test account on a fresh
  * preview deploy so a reviewer can open the URL and be inside the app in one step

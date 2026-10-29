@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2863 — teardown decision contract (epic #2858 cases 1-5, 9, 11).
  *

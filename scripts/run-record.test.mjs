@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2464 contract — a red worker run explains itself via annotations/artifact.
  *

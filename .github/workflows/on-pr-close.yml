@@ -1,3 +1,4 @@
+# layer: stack
 name: On PR close
 
 # ONE listener for "a pull request closed" (#2893, epic #2889). Before this, closing a PR started

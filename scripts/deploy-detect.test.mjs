@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Contract for scripts/deploy-detect.mjs — the #1499 fix. Proves the detect decision:
  *   • never launders a failed diff into a silent empty result (fail loud / fall back),

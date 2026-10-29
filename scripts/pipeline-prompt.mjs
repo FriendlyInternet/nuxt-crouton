@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * Render a pi pipeline persona (#2431, WS9 of #2108) — replaces the printf chains that used
  * to assemble the worker/decomposer prompts inside the workflow YAML.

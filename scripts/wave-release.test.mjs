@@ -1,3 +1,4 @@
+// layer: stage
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { releaseReady, closeLinkedIssues } from './wave-release.mjs'

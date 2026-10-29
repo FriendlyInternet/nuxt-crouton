@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1730 contract — a parked test must link an issue, not an excuse.
  *

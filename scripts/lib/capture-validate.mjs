@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Validation helpers for screenshot capture (#2055): decide whether a captured
  * PNG is worthless (a single flat colour — always a bug, no real UI screenshot

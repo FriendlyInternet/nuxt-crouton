@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2020 contract — a PR preview must be ISOLATED, not just renamed.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // append.mjs — validate + append ONE run-outcome record to the eval ledger (JSONL).
 // WS6b.1 (#883). The capture entry point flows call after a run completes.
 //

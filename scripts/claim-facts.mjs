@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // claim-facts.mjs — the READ side of the claim guard (#1890), extracted so the two pi lanes
 // share one implementation (#2027).
 //

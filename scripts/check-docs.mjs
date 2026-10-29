@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * Check Documentation
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * deploy-detect — decide which apps deploy-apps.yml should deploy, and to which env.
  *

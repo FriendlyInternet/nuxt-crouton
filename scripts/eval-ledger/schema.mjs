@@ -1,3 +1,4 @@
+// layer: harness
 // schema.mjs — the run-outcome ledger record shape + validation + scoring helpers.
 // WS6b.1 of epic #669 (#883, parent #865). One record per agent run; the scoreboard
 // (#884) and golden-task eval (#885) both read records that pass validate() here.

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Issue #2036 contract — a POC changelog seeds an app's changelog origin
  * (validating copy, same `{v, note, commit}` shape), and "is this a POC

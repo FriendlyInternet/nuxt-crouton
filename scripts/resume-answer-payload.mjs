@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // resume-answer-payload.mjs — WS5 of epic #1182 (#1191).
 //
 // When an agent blocks with a scannable handoff (the `ask-human` skill, #1189), the owner

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * inject-wrangler-env.mjs — shared implementation behind each app's
  * `scripts/inject-wrangler-env.mjs` shim (#1238). Apps scaffolded OUTSIDE this

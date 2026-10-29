@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2786 contract — same-package tickets serialise, different packages stay parallel.
  *

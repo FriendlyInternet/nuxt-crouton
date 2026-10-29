@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * #2780 contract — a change is visual only when something on screen can change.
  *

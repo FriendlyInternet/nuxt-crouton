@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1769 contract — the app↔package schema drift ratchet.
  *

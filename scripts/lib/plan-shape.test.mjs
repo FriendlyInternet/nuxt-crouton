@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2755 — the plan comment's shape, incl. the assumption rule (each needs a why + linked evidence).
  *   node --test scripts/lib/plan-shape.test.mjs

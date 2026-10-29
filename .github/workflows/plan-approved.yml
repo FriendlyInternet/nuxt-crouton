@@ -1,3 +1,4 @@
+# layer: stack
 name: Build from approved plan (pi.dev)
 
 # #2757 (epic #2754) — the plan reviewer (plan-review.yml, #2756) labels an issue `plan:approved`;

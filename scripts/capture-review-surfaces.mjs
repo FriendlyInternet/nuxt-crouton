@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // capture-review-surfaces.mjs — screenshot the app's DECLARED review surfaces, logged in, so the
 // sign-off gate (#2171) can SHOW the owner the changed screen instead of just withholding (#2173).
 //

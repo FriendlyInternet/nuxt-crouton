@@ -1,3 +1,4 @@
+// layer: stack
 // gallery-links.mjs — which changed files on a PR are shared UI pieces, and their gallery
 // review links (#2462). A UI change in packages/* has no app of its own to preview, so the
 // gallery POC (pocs/gallery) is deployed for the PR and each changed piece gets a direct link

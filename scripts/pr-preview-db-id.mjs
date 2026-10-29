@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * CLI: write the provisioned D1 ids into a per-PR preview's BUILT wrangler config (#2085).
  * Runs BETWEEN `wrangler deploy` (which provisions) and `d1 migrations apply` (which needs

@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Verdict parser + rubric for the independent TICKET reviewer (#2776, epic #2754).
  *

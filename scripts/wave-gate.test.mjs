@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * #1688 contract — the wave scheduler's green-branch gate.
  *

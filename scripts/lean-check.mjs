@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * lean-check.mjs — a REPORT-ONLY leanness check for the two dead-code shapes a JS import
  * graph (and so `fallow-audit`) structurally cannot see (#2190):

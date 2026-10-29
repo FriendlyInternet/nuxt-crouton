@@ -1,3 +1,4 @@
+// layer: stack
 // tasks.test.mjs — WS6b.3 (#885). Dependency-free: `node scripts/eval-golden/tasks.test.mjs`.
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'

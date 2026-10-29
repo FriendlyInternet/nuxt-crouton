@@ -1,3 +1,4 @@
+// layer: stack
 // Unit tests for the pi finish step's decision logic (#1893) — a pure-ish port so the shell↔script
 // boundary defects from #1876 can be caught locally instead of only in production.
 //   node --test scripts/pi-finish.test.mjs

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stage
 /**
  * ui-touched.mjs — did this change touch something you can SEE? (#2780)
  *

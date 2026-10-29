@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Parser for the worker's PLAN comment (#2755, epic #2754). A plan run posts ONE issue comment
  * carrying PLAN_MARKER and these `### ` sections, in any order:

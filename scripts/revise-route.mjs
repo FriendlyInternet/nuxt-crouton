@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // revise-route.mjs — is this comment a CHANGE REQUEST for a pi-built PR? (#2446)
 //
 // WHY. The owner reviews a pipeline PR on its preview and leaves feedback on the PR. `lgtm`

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // Close a `workflow` (pipeline-fix) issue only when a real worker run shows the fix
 // working — not when its PR merges (#2657). The issue body carries one line,
 // `Evidence-needed: <text a real run will annotate>`; the fix PR uses `Refs #NN` so it

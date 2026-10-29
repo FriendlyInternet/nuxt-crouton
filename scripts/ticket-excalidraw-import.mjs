@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * ticket-excalidraw-import — the round-trip IN. Pull a human-edited Excalidraw scene back
  * into the repo from a comment attachment, with zero Finder/git on their side.

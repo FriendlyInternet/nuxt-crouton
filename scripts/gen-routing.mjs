@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Generate writeups/architecture/routing-registry.md from .claude/routing.json.
  * WS6a of epic #669 (#864) — the human-readable "what runs on what model" registry.

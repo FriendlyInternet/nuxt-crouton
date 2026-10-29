@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2004 contract — a dispatch command must be ISSUED, not merely MENTIONED.
  *

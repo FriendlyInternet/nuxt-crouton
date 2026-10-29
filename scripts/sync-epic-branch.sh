@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 # Merge main into an open epic branch so in-flight work picks up pipeline fixes (#2475).
 #
 # WHY. Sub-PRs target `epic/*`, and a `pull_request` run uses the workflows and scripts of the

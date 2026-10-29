@@ -1,3 +1,4 @@
+// layer: stage
 // The wave scheduler's GitHub-facing half (#283, folded by #2893). Pure decisions live in
 // wave-gate.mjs; this file does the reads/writes, so on-issue-close.yml, on-pr-close.yml and
 // schedule-waves.yml (the CI-finished retry) share ONE release codepath.

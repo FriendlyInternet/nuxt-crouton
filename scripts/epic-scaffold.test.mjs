@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2429 — epic-scaffold plan→issues mapping. Pins the five facts a pipeline-ready epic needs:
  * pipeline block, Blocked-by ordering, labels, Packages-approved, branch name — and the dedup refusal.

@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2048 contract — an already-decomposed issue is never a leaf.
  *

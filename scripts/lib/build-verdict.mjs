@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Verdict parser + deterministic floor for the BUILD reviewer (#2777, epic #2754).
  *

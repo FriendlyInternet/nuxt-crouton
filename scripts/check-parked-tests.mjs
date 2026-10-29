@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * check-parked-tests.mjs — #1730: a parked test must link an issue, not an excuse.
  *

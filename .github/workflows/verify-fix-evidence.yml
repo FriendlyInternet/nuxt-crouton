@@ -1,3 +1,4 @@
+# layer: harness
 name: Verify pipeline-fix evidence
 
 # A `workflow` fix issue stays open after its PR merges (the PR uses `Refs #NN`) and carries

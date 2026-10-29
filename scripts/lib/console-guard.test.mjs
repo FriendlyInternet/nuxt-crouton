@@ -1,3 +1,4 @@
+// layer: stack
 // Contract for the e2e console guard (#2916). Run: node --test scripts/lib/console-guard.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

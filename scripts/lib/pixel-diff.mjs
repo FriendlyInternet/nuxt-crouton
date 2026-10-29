@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Pixel diff for before/after screenshot captures (#2061), building on the
  * blank/error-page validation in capture-validate.mjs (#2055) — a diff is only

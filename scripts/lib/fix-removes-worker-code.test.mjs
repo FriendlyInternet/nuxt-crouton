@@ -1,3 +1,4 @@
+// layer: harness
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { findRemovedWorkerLines, parseDiff } from './fix-removes-worker-code.mjs'

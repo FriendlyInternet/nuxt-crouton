@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Resolve the PR-preview's provisioned D1 ids into its BUILT wrangler config (#2085).
  *

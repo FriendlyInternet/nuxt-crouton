@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2757 — which issues start in plan mode.   node --test scripts/lib/plan-route.test.mjs
  */

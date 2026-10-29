@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2089 contract — who the pipeline is allowed to touch.
  *

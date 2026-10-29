@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // run.mjs — score a candidate model on one golden task and append the result to the
 // WS6b eval ledger, tagged `flow: golden-<task>`. WS6b.3 (#885), parent #865, epic #669.
 //

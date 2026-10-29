@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // canary.mjs — assert a worker-pipeline canary run produced what it was supposed to (#1878).
 //
 // WHY. The pi worker pipeline could only ever be tested by labelling a REAL ticket and watching

@@ -1,3 +1,4 @@
+// layer: harness
 // cli-args.mjs — the tiny no-deps `--flag [value]` parser shared by the harness
 // scripts (eval-ledger; formerly pi-box, retired in #2275). Extracted from its three clones (#1238).
 //
