@@ -82,7 +82,7 @@ on:
   check_suite:
     types: [completed]
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "E2E"]   # #3103: main also needs E2E Gate; re-ask when it finishes last
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
   # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
@@ -246,14 +246,9 @@ jobs:
                   } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
                 }
               }
-              if (['dirty', 'blocked'].includes(state)) {
-                core.info(`#${pull_number} not auto-mergeable (state=${state}) — leaving for a human.`); continue
-              }
-
-              // Green gate (#339): never merge a red PR; pending is fine (see header).
-              if (await isRed(pr.head.sha)) {
-                core.info(`#${pull_number} has a failing check — leaving for a human / fix-bot.`); continue
-              }
+              // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
+              // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
+              const red = await isRed(pr.head.sha)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
@@ -261,7 +256,6 @@ jobs:
               // once, so the PR is visibly stalled rather than silently merged unchecked.
               const checkState = await requiredCheckState(pr.head.sha)
               if (checkState !== 'success') {
-                core.info(`#${pull_number} — '${REQUIRED_CHECK}' is ${checkState}, not merging.`)
                 if (checkState === 'missing') {
                   core.warning(`#${pull_number}: '${REQUIRED_CHECK}' never reported for ${pr.head.sha.slice(0, 8)} — CI likely never triggered (#1698).`)
                   const marker = '<!-- automerge-ci-missing -->'
@@ -274,15 +268,8 @@ jobs:
                         + '<sub>🤖 agent pipeline (CI) · auto-merge presence gate (#1698)</sub>' })
                   }
                 }
-                continue
               }
 
-              // Build review (#2777): a green PR still needs the independent reviewer's go.
-              // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
-              // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
-              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
-                core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
-              }
               // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
               // commit after it, releases the shared-code pause and the epic → main hold.
               // Green + presence gates above still apply — `ok` never overrides a red check.
@@ -298,7 +285,21 @@ jobs:
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
-              if ((epicToMain || leafToMain) && !go.go) { core.info(`#${pull_number} ${leafToMain ? 'leaf' : 'epic'} → main PR — waits for the owner's ok.`); continue }
+              // The merge decision (#2777, #3103): one pure call owns the whole rule — who said yes
+              // (owner `ok` for anything → main, `build:approved` for epic-based PRs), any red check,
+              // CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
+              // Loaded from the default-branch checkout above — never the PR head, so a PR cannot edit the
+              // rule that judges it. Until this file lands on the default branch (bootstrap) it is absent:
+              // fail SAFE — hold the PR for a human instead of crashing the job or merging without the rule.
+              let decideLeafMerge
+              try {
+                ({ decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`))
+              } catch (e) {
+                core.warning(`#${pull_number} not merging — scripts/lib/pr-merge-gate.mjs is not on ${context.payload.repository?.default_branch || 'the default branch'} yet (${e.code || e.message}); held until it lands.`)
+                continue
+              }
+              const gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red, ciGate: checkState, mergeableState: state })
+              if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
