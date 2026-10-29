@@ -559,7 +559,8 @@ jobs:
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
           if [ -n "${PLAN:-}" ]; then
-            node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" > "$PROMPT_FILE"
+            node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" \
+              --var "run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$PROMPT_FILE"
             # #2756: a plan REVIEW sent the plan back — `feedback` is the review comment id. Append
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
@@ -734,6 +735,9 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
+          # #3023: the checkout is depth 1; the SHA-evidence check needs history (treeless = cheap).
+          git fetch --quiet --filter=blob:none --unshallow \
+            || echo "::warning::unshallow fetch failed — commit-SHA evidence in the plan may be wrongly rejected"
           VERDICT="$(node scripts/lib/plan-shape.mjs "$RUNNER_TEMP/plan.md")"; RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then

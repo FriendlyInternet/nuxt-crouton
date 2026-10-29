@@ -11,8 +11,11 @@
  *  - `Needs owner` opens with yes/no
  *  - `Assumptions` is either the single line "none", or a list of bullets, each carrying
  *      `Why: …`, `Evidence: …` and `Status: verified|unverified`
- *    Evidence of a *verified* assumption must contain a link (https://…) — the proof;
- *    an *unverified* one must say why it could not be checked.
+ *    Status is the FIRST word of the field (`unverified (reason)` is unverified; `maybe` fails).
+ *    Evidence of a *verified* assumption must carry checkable proof (see hasProof): an https://
+ *    link (a CI run link counts for in-run observations), a commit SHA that exists in the repo,
+ *    or a `path:line` / `path#Lnn` / `path lines N-M` reference. Prose alone fails.
+ *    An *unverified* one must say why it could not be checked.
  *
  * Assumption bullet shape (one line each):
  *   - <claim> — Why: <why it is taken as true> — Evidence: <permalink/commit/log/doc> — Status: verified
@@ -20,6 +23,7 @@
  *   node scripts/lib/plan-shape.mjs <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
  */
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
@@ -48,6 +52,21 @@ const field = (text, key) => {
   return m ? m[1].replace(/^\**\s*/, '').trim() : ''
 }
 
+const PATH_EXT = 'mjs|cjs|js|ts|vue|json|md|ya?ml|css|sql|sh|html|toml'
+const PATH_LINE = new RegExp(
+  `(?:[\\w.-]+/[\\w./-]*|[\\w-]+\\.(?:${PATH_EXT}))(?:[:#]L?\\d+|\`?\\s+lines?\\s+\\d+)`, 'i')
+
+const shaExists = (sha) => {
+  try { execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { stdio: 'ignore' }); return true } catch { return false }
+}
+
+/** Checkable proof in a verified assumption's Evidence: URL, existing commit SHA, or path:line. */
+export function hasProof(evidence) {
+  if (/https?:\/\/\S+/.test(evidence)) return true
+  if (PATH_LINE.test(evidence)) return true
+  return (evidence.match(/\b[0-9a-f]{7,40}\b/gi) || []).some((t) => /\d/.test(t) && /[a-f]/i.test(t) && shaExists(t))
+}
+
 export function parseAssumptions(text) {
   const errors = []
   const bullets = text.split('\n').map((l) => l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)).filter(Boolean).map((m) => m[1])
@@ -59,14 +78,14 @@ export function parseAssumptions(text) {
     const claim = b.split(/\s+[—–-]+\s+\**(?:Why|Evidence|Status):/i)[0].replace(/\*\*/g, '').trim()
     const why = field(b, 'Why')
     const evidence = field(b, 'Evidence')
-    const status = field(b, 'Status').toLowerCase().replace(/[^a-z]/g, '')
+    const status = (field(b, 'Status').match(/^\W*([a-z]+)/i)?.[1] || '').toLowerCase()
     const n = `assumption ${i + 1}`
     if (!claim) errors.push(`${n}: no claim`)
     if (!why) errors.push(`${n}: no "Why" (the reason it is taken as true)`)
     if (!evidence) errors.push(`${n}: no "Evidence"`)
     if (status !== 'verified' && status !== 'unverified') errors.push(`${n}: Status must be verified or unverified`)
-    if (status === 'verified' && evidence && !/https?:\/\/\S+/.test(evidence)) {
-      errors.push(`${n}: a verified assumption needs a linked proof (permalink, commit, run or doc URL)`)
+    if (status === 'verified' && evidence && !hasProof(evidence)) {
+      errors.push(`${n}: a verified assumption needs a linked proof (https link, existing commit SHA, or path:line)`)
     }
     return { claim, why, evidence, status }
   })

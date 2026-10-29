@@ -4,6 +4,8 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { parsePlan, parseAssumptions, PLAN_MARKER } from './plan-shape.mjs'
 
 const A_OK = '- The bug is in foo — Why: the stack trace ends there — Evidence: https://github.com/o/r/blob/abc/foo.ts#L10 — Status: verified'
@@ -61,6 +63,40 @@ test('an assumption with no evidence is malformed', () => {
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
   assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
+})
+
+const one = (evidence, status = 'verified') => parseAssumptions(`- c — Why: w — Evidence: ${evidence} — Status: ${status}`)
+
+test('#3023 status is the first word', () => {
+  const u = one('could not run it here', 'unverified (needs a prod row)')
+  assert.deepEqual(u.errors, [])
+  assert.equal(u.items[0].status, 'unverified')
+  const v = one('https://x.dev', 'verified — see below')
+  assert.deepEqual(v.errors, [])
+  assert.equal(v.items[0].status, 'verified')
+  assert.ok(one('https://x.dev', 'maybe').errors.some((e) => /Status must be verified or unverified/.test(e)))
+})
+
+test('#3023 verified evidence: url, real sha, path:line', () => {
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  for (const e of ['https://x.dev/run/1', sha, sha.slice(0, 9), 'a/b.ts:12', 'a/b.ts#L12', '`a/b.json` lines 3-8']) {
+    assert.deepEqual(one(e).errors, [], e)
+  }
+})
+
+test('#3023 made-up sha and prose-only evidence still fail, naming the assumption', () => {
+  for (const e of ['1234567', 'I checked it', 'my run output: `1 failed (assets.smoke:31)`']) {
+    assert.ok(one(e).errors.some((m) => /^assumption 1: .*proof/.test(m)), e)
+  }
+})
+
+test('#3023 real #2957 section: only the prose-only bullet 3 fails; a run link fixes it', () => {
+  const real = readFileSync(new URL('./fixtures/plan-2957-assumptions.md', import.meta.url), 'utf8')
+  const r = parseAssumptions(real)
+  assert.equal(r.errors.length, 1)
+  assert.match(r.errors[0], /^assumption 3:/)
+  const fixed = real.replace('my run output:', 'https://github.com/o/r/actions/runs/1 output:')
+  assert.deepEqual(parseAssumptions(fixed).errors, [])
 })
 
 test('status must be verified or unverified', () => {
