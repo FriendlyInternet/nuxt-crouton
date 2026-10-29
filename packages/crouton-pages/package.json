@@ -24,6 +24,9 @@
     "nuxt.config.ts",
     "README.md"
   ],
+  "scripts": {
+    "test": "vitest run"
+  },
   "keywords": [
     "nuxt",
     "nuxt-layer",
