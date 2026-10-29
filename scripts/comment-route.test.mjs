@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { routeComment, KINDS } from './comment-route.mjs'
+import { routeComment, KINDS, routePrApproval, approvalBlocked, approveDraftRoute, approveEpicRoute } from './comment-route.mjs'
 
 const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
@@ -133,4 +133,32 @@ test('interpret: never for an app-posted comment, only revise via **Worker:**', 
   assert.equal(kind({ comment: viaClaude, issue: issue() }), 'none')
   const viaOther = { ...viaClaude, performedViaGithubApp: 'Some App' }
   assert.equal(kind({ comment: viaOther, issue: issue() }), 'none')
+})
+
+// Direct tests for the per-route helpers behind routePrApproval.
+const mkOut = () => (kind, reason) => ({ kind, reason })
+const openPr = { state: 'open', draft: false, baseRef: 'main', headRef: 'pi/x' }
+
+test('approvalBlocked: non-collaborator and closed PR block; otherwise null', () => {
+  assert.equal(approvalBlocked({ collab: false, pr: openPr, out: mkOut() }).kind, 'none')
+  assert.equal(approvalBlocked({ collab: true, pr: { ...openPr, state: 'closed' }, out: mkOut() }).kind, 'none')
+  assert.equal(approvalBlocked({ collab: true, pr: openPr, out: mkOut() }), null)
+})
+
+test('approveDraftRoute: only a draft routes to approve-draft', () => {
+  assert.equal(approveDraftRoute({ pr: { ...openPr, draft: true }, out: mkOut() }).kind, 'approve-draft')
+  assert.equal(approveDraftRoute({ pr: openPr, out: mkOut() }), null)
+})
+
+test('approveEpicRoute: owner on epic → main only', () => {
+  const epic = { ...openPr, headRef: 'epic/1-x' }
+  assert.equal(approveEpicRoute({ assoc: 'OWNER', pr: epic, out: mkOut() }).kind, 'approve-epic')
+  assert.equal(approveEpicRoute({ assoc: 'COLLABORATOR', pr: epic, out: mkOut() }), null)
+  assert.equal(approveEpicRoute({ assoc: 'OWNER', pr: openPr, out: mkOut() }), null)
+})
+
+test('routePrApproval: falls through to automerge-go on a ready PR', () => {
+  assert.equal(routePrApproval({ assoc: 'OWNER', collab: true, pr: openPr, out: mkOut() }).kind, 'automerge-go')
+  assert.equal(routePrApproval({ assoc: 'OWNER', collab: true, pr: { ...openPr, draft: true }, out: mkOut() }).kind, 'approve-draft')
+  assert.equal(routePrApproval({ assoc: 'NONE', collab: false, pr: openPr, out: mkOut() }).kind, 'none')
 })

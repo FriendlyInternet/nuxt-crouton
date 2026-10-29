@@ -77,14 +77,30 @@ function routeIssue({ body, collab, assoc, issue, out }) {
   return out('none', 'no command, no card reply, issue not blocked')
 }
 
-/** Routing for an approval (`ok`/`lgtm`) on a PR. */
-function routePrApproval({ assoc, collab, pr, out }) {
+/** An approval that cannot act at all: from a non-collaborator, or on a PR that is not open. */
+export function approvalBlocked({ collab, pr, out }) {
   if (!collab) return out('none', 'approval from a non-collaborator')
   if (pr.state !== 'open') return out('none', 'PR is not open')
-  if (pr.draft) return out('approve-draft', 'approval on a held draft PR')
+  return null
+}
+
+/** An approval on a held draft PR. */
+export function approveDraftRoute({ pr, out }) {
+  return pr.draft ? out('approve-draft', 'approval on a held draft PR') : null
+}
+
+/** The owner's approval on a ready epic → main PR. */
+export function approveEpicRoute({ assoc, pr, out }) {
   const epicToMain = pr.baseRef === 'main' && /^epic\//.test(pr.headRef || '')
-  if (epicToMain && OWNERS.has(assoc)) return out('approve-epic', 'owner approval on an epic → main PR')
-  return out('automerge-go', 'approval on a ready PR')
+  return epicToMain && OWNERS.has(assoc) ? out('approve-epic', 'owner approval on an epic → main PR') : null
+}
+
+/** Routing for an approval (`ok`/`lgtm`) on a PR. */
+export function routePrApproval({ assoc, collab, pr, out }) {
+  return approvalBlocked({ collab, pr, out })
+    || approveDraftRoute({ pr, out })
+    || approveEpicRoute({ assoc, pr, out })
+    || out('automerge-go', 'approval on a ready PR')
 }
 
 /**
