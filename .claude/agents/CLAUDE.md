@@ -130,7 +130,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 |-------|------|-----------|--------------|-------|
 | `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
-**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+**It is ADVISORY on findings — it has no 🔴 and never blocks on what it finds; the check goes red only if simplify did not run (no verdict, #3070).** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
 `.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
@@ -306,9 +306,12 @@ all of these by **default** — they're not optional extras; each one has burned
   not merge with) the workflow-level block, so a workflow-level `id-token` is silently
   shadowed and the action's OIDC request fails (`Could not fetch an OIDC token`). #284 fixed
   one workflow; the identical bug survived in two siblings until #429. Put it in the job.
-- **Auth is the Claude subscription** — `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`
-  for `claude-code-action`, claude-bridge for pi workers (owner decision 2026-10-29, #3121).
-  Do not switch a workflow to `anthropic_api_key` without an owner decision.
+- **`anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`** — a real API key, NEVER a
+  subscription `CLAUDE_CODE_OAUTH_TOKEN` (subscription OAuth is interactive-only and
+  disallowed for CI — Anthropic Legal & Compliance).
+- **`allowed_bots: "nuxt-harness[bot],github-actions[bot]"`** — the action refuses any run
+  started by a bot actor unless listed, and exits green while refusing; pipeline pushes are
+  bot-started, so without it the reviewers silently never run (#3119).
 - **`show_full_output: true`** — the full agent log prints inline; debugging a run must not
   require a debug re-run.
 - **Pin the action to a SHA, kept in sync** across these workflows (bump them together).
