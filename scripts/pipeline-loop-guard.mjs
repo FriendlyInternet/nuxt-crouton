@@ -91,6 +91,16 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
   return decideSplit({ depth, isLeaf, maxDepth }).action === 'leaf' ? WORKER_TRIGGER : 'delegate-pi'
 }
 
+// A REVISION continues an existing PR, so the PR is the unit judged — not the issue (#3061).
+// An epic issue can close while its epic → main PR is still open for review.
+function decideRevision(revision) {
+  if (revision.lookupFailed) return { action: 'proceed', reason: 'could not look up the PR being revised — proceeding' }
+  if (revision.pr == null) return { action: 'refuse', reason: `there is no PR on branch ${revision.branch} to revise` }
+  if (revision.merged) return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is already merged` }
+  if (revision.state === 'closed') return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is closed` }
+  return { action: 'proceed', reason: `revising open PR #${revision.pr}` }
+}
+
 /**
  * INVARIANT 4 — is this issue already claimed? (#1890)
  *
@@ -129,7 +139,9 @@ export function decideClaim({
   defaultBranch = DEFAULT_BRANCH,
   lastReopenedAt = null,
   self = {},
+  revision = null,
 } = {}) {
+  if (revision) return decideRevision(revision)
   if (issueState === 'closed') {
     return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
   }
@@ -182,11 +194,36 @@ export function decideClaim({
  * run log to learn the run stopped on purpose. Reasons are single-line by construction; strip
  * newlines anyway rather than corrupt the output file. Diagnostics only — never throws.
  */
-function publishClaimReason(reason) {
+function publishClaimReason(reason, pr = null) {
   if (!process.env.GITHUB_OUTPUT) return
   try {
-    appendFileSync(process.env.GITHUB_OUTPUT, `claim_reason=${String(reason).replace(/[\r\n]+/g, ' ')}\n`)
+    appendFileSync(process.env.GITHUB_OUTPUT, `claim_reason=${String(reason).replace(/[\r\n]+/g, ' ')}\n${pr ? `claim_pr=${pr}\n` : ''}`)
   } catch { /* the guard's verdict still stands; only the explanation is lost */ }
+}
+
+/**
+ * Build the comment for a refused claim (#3061). A refused revision is posted on the PR the
+ * owner is waiting on (🔴); a refused build or re-plan keeps the calm ⏸️ note on the issue (#2027).
+ */
+export function claimNotice({ reason, pr = null, issue, runUrl = '', runner = 'github-hosted' } = {}) {
+  const why = reason || 'another run already holds this issue'
+  const log = runUrl ? ` · <a href="${runUrl}">run log</a>` : ''
+  if (pr) {
+    return {
+      target: 'pr',
+      number: Number(pr),
+      body: `🔴 Revision did not run — ${why}.\n\nThe worker stopped before touching the branch. `
+        + `Nothing was changed.\n\n<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #3061${log}</sub>`,
+    }
+  }
+  return {
+    target: 'issue',
+    number: Number(issue),
+    body: `⏸️ **Not picked up — ${why}.**\n\n`
+      + `Nothing is broken and nothing was lost: the worker stopped before starting so two runs `
+      + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
+      + `<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #1890${log}</sub>`,
+  }
 }
 
 function main(argv) {
@@ -207,7 +244,7 @@ function main(argv) {
       console.log(`Claim guard OK — ${verdict.reason}.`)
       return
     }
-    publishClaimReason(verdict.reason)
+    publishClaimReason(verdict.reason, verdict.pr)
     console.log(`::error::Claim guard: refusing to work this issue — ${verdict.reason}. This is a deliberate stop, not a build failure (#1890).`)
     process.exit(1)
   }

@@ -10,8 +10,12 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
-  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim,
+  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim, claimNotice,
   ALLOWED_BOT, MAX_DEPTH, MAX_CHILDREN, WORKER_TRIGGER, CLAIM_TTL_MINUTES,
 } from './pipeline-loop-guard.mjs'
 
@@ -295,4 +299,47 @@ test('unknown merge time fails safe → still refuses even if reopened', () => {
     now: T0,
   })
   assert.equal(v.action, 'refuse')
+})
+
+// ── #3061: a revision is guarded on its PR, not its issue ───────────────────────────
+test('closed epic issue + open epic PR → a revision proceeds (#3061)', () => {
+  const v = decideClaim({ issueState: 'closed', revision: { branch: 'epic/1-x', pr: 3027, state: 'open', merged: false } })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a revision of a closed, merged or missing PR is refused and names it', () => {
+  const closed = decideClaim({ revision: { branch: 'b', pr: 5, state: 'closed', merged: false } })
+  const merged = decideClaim({ revision: { branch: 'b', pr: 6, state: 'closed', merged: true } })
+  const none = decideClaim({ revision: { branch: 'b', pr: null } })
+  assert.equal(closed.action, 'refuse'); assert.equal(closed.pr, 5); assert.match(closed.reason, /#5/)
+  assert.equal(merged.action, 'refuse'); assert.equal(merged.pr, 6); assert.match(merged.reason, /#6/)
+  assert.equal(none.action, 'refuse'); assert.equal(none.pr, undefined)
+})
+
+test('a failed PR lookup fails open even with a closed issue', () => {
+  assert.equal(decideClaim({ issueState: 'closed', revision: { branch: 'b', lookupFailed: true } }).action, 'proceed')
+})
+
+test('no revision + closed issue still refuses', () => {
+  assert.equal(decideClaim({ issueState: 'closed' }).action, 'refuse')
+})
+
+test('claimNotice posts a revision refusal on the PR, no @mention', () => {
+  const n = claimNotice({ reason: 'PR #3027 is already merged', pr: 3027, issue: 2826 })
+  assert.equal(n.target, 'pr'); assert.equal(n.number, 3027)
+  assert.ok(n.body.startsWith('🔴 Revision did not run')); assert.ok(!n.body.includes('@'))
+  const i = claimNotice({ reason: 'x', issue: 9 })
+  assert.equal(i.target, 'issue'); assert.equal(i.number, 9); assert.match(i.body, /Not picked up — x/)
+})
+
+test('CLI: a merged-PR revision exits 1 and publishes claim_pr + claim_reason', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'claim-'))
+  const out = join(dir, 'out')
+  const r = spawnSync('node', [new URL('./pipeline-loop-guard.mjs', import.meta.url).pathname, 'claim-guard'], {
+    input: JSON.stringify({ issueState: 'closed', revision: { branch: 'b', pr: 77, state: 'closed', merged: true } }),
+    env: { ...process.env, GITHUB_OUTPUT: out }, encoding: 'utf8',
+  })
+  assert.equal(r.status, 1)
+  const o = readFileSync(out, 'utf8')
+  assert.match(o, /claim_pr=77/); assert.match(o, /claim_reason=PR #77/)
 })
