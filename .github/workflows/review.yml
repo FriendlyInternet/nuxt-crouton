@@ -5,9 +5,12 @@ name: Review
 # constraint) — what they now share is the setup: ONE `diff` job computes the changed-file
 # list and unified diff once and hands them over as an artifact.
 #
+# Every `claude-code-action` step below MUST set `allowed_bots` (#3119): the action refuses a run
+# started by a bot actor (the pipeline's pushes) otherwise, and exits green while refusing.
+#
 #   red-team          epic → main, non-draft   blocks on high/critical
 #   a11y              epic → main, non-draft   blocks on critical/serious   (needs pnpm install)
-#   simplify          epic → main, non-draft   advisory, never blocks
+#   simplify          epic → main, non-draft   advisory on findings; red if it did not run
 #   frontend-review   EVERY PR touching .vue, drafts and leaf PRs into epic/* included.
 #                     Advisory (check passes) on a draft or a leaf PR; BLOCKS on 🔴 only on a
 #                     non-draft PR into main. Hand-rolled UI is 🔴 (agent definition).
@@ -95,11 +98,12 @@ jobs:
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: agent
         # The VERDICT FILE is the gate, not this step's exit code (#499, #602, #603): no verdict ⇒
-        # inconclusive pass; a high/critical in the verdict ⇒ fail.
+        # red check (the reviewer did not run, #3070); a high/critical in the verdict ⇒ fail.
         continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834): headless CI denies un-allowlisted tools, so without it
           # the agent can't write red-team-verdict.json / post the comment → fails OPEN.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -148,20 +152,33 @@ jobs:
           name: loop-station-finding-red-team-${{ github.run_id }}
           path: finding-candidate.json
           if-no-files-found: ignore
-      # Fail-open must be VISIBLE (#1037).
+      # Classify why a reviewer produced no verdict; the gate step below then fails closed (#3070).
       - uses: ./.github/actions/gate-outage-check
-        if: always()
+        id: outage
+        if: ${{ !cancelled() }}
         with:
           gate: red-team
           verdict-file: red-team-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
       - name: Gate on high/critical
-        if: always()
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          if [ ! -f red-team-verdict.json ]; then
-            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
-            exit 0
+          # A reviewer that did not run is a red check, never a pass (#3070).
+          MARK='<!-- review-gate:red-team -->'
+          if ! node scripts/review-gate.mjs red-team red-team-verdict.json "$CLS" > gate-msg.txt; then
+            cat gate-msg.txt
+            echo "::error::red-team did not run — failing closed."
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
+              || gh pr comment "$PR" --body-file gate-msg.txt || true
+            exit 1
           fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
+            | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat red-team-verdict.json)"
           HIGHEST=$(node -e "process.stdout.write((require('./red-team-verdict.json').highest||'none').toLowerCase())")
           case "$HIGHEST" in
@@ -220,6 +237,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): ARIA/label/alt/tabindex
           # pattern-matching.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -275,18 +293,31 @@ jobs:
           path: finding-candidate.json
           if-no-files-found: ignore
       - uses: ./.github/actions/gate-outage-check
-        if: always()
+        id: outage
+        if: ${{ !cancelled() }}
         with:
           gate: a11y
           verdict-file: a11y-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
       - name: Gate on critical/serious
-        if: always()
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          if [ ! -f a11y-verdict.json ]; then
-            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
-            exit 0
+          # A reviewer that did not run is a red check, never a pass (#3070).
+          MARK='<!-- review-gate:a11y -->'
+          if ! node scripts/review-gate.mjs a11y a11y-verdict.json "$CLS" > gate-msg.txt; then
+            cat gate-msg.txt
+            echo "::error::a11y did not run — failing closed."
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
+              || gh pr comment "$PR" --body-file gate-msg.txt || true
+            exit 1
           fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
+            | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat a11y-verdict.json)"
           HIGHEST=$(node -e "process.stdout.write((require('./a11y-verdict.json').highest||'none').toLowerCase())")
           case "$HIGHEST" in
@@ -334,6 +365,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): convention pattern-matching.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
@@ -387,18 +419,31 @@ jobs:
           path: finding-candidate.json
           if-no-files-found: ignore
       - uses: ./.github/actions/gate-outage-check
-        if: always()
+        id: outage
+        if: ${{ !cancelled() }}
         with:
           gate: frontend-review
           verdict-file: frontend-review-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
       - name: Gate on critical
-        if: always()
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          if [ ! -f frontend-review-verdict.json ]; then
-            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
-            exit 0
+          # A reviewer that did not run is a red check, never a pass (#3070).
+          MARK='<!-- review-gate:frontend-review -->'
+          if ! node scripts/review-gate.mjs frontend-review frontend-review-verdict.json "$CLS" > gate-msg.txt; then
+            cat gate-msg.txt
+            echo "::error::frontend-review did not run — failing closed."
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
+              || gh pr comment "$PR" --body-file gate-msg.txt || true
+            exit 1
           fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
+            | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat frontend-review-verdict.json)"
           HIGHEST=$(node -e "process.stdout.write((require('./frontend-review-verdict.json').highest||'none').toLowerCase())")
           if [ "$HIGHEST" = "critical" ]; then
@@ -444,6 +489,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           # --allowedTools REQUIRED (#834). Sonnet, not Haiku: simplification is a judgment call and
           # a noisy false positive is the failure mode — precision matters more than the cheaper tier.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -503,18 +549,31 @@ jobs:
           path: finding-candidate.json
           if-no-files-found: ignore
       - uses: ./.github/actions/gate-outage-check
-        if: always()
+        id: outage
+        if: ${{ !cancelled() }}
         with:
           gate: simplify
           verdict-file: simplify-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
-      - name: Report (advisory — never blocks)
-        if: always()
+      - name: Report (advisory on findings; red if simplify did not run)
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          if [ ! -f simplify-verdict.json ]; then
-            echo "No verdict file — outage classified by gate-outage-check above. Advisory check, not blocking."
-            exit 0
+          # A reviewer that did not run is a red check, never a pass (#3070).
+          MARK='<!-- review-gate:simplify -->'
+          if ! node scripts/review-gate.mjs simplify simplify-verdict.json "$CLS" > gate-msg.txt; then
+            cat gate-msg.txt
+            echo "::error::simplify did not run — failing closed."
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
+              || gh pr comment "$PR" --body-file gate-msg.txt || true
+            exit 1
           fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
+            | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat simplify-verdict.json)"
           HIGHEST=$(node -e "process.stdout.write((require('./simplify-verdict.json').highest||'none').toLowerCase())")
           echo "simplify highest severity: ${HIGHEST}. Advisory only — see the simplify PR comment. Never blocks."
