@@ -12,7 +12,7 @@
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
 //   issue: /close-epic → close-epic · slash/rocket command → dispatch · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
-//          status:blocked → (owner `ok: <reason>` on a twice-rejected plan hold → approve-plan; bare `ok` there → plan-needs-reason) · resume · an approval on an un-blocked issue → resume with
+//          status:blocked → (owner `ok` on a twice-rejected plan hold → approve-plan) · resume · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
 //   PR:    approval on a draft → approve-draft · approval on a ready epic→main PR from the
 //          owner → approve-epic · any other approval → automerge-go · a non-approval on a
@@ -24,11 +24,10 @@
 import { pathToFileURL } from 'node:url'
 import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
-import { overrideReason } from './plan-held.mjs'
 import { routePrComment } from './revise-route.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'approve-plan', 'plan-needs-reason', 'automerge-go', 'close-epic',
+  'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
   'dispatch', 'resume', 'revise', 'test-card', 'none',
 ]
 
@@ -46,12 +45,10 @@ function routeIssue({ body, collab, assoc, issue, out }) {
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
-  // On a plan held after two rejections the owner's `ok: <reason>` approves it (#3024) and the
-  // reason is recorded as a decision; a bare `ok` only asks for the reason. Any other reply — or
-  // `ok` from anyone else — still re-runs the planner via resume.
-  if (out.blocked && issue.planHeld && OWNERS.has(assoc)) {
-    if (overrideReason(body)) return out('approve-plan', 'owner override with a reason on a plan held after two rejections')
-    if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan — ask for a reason')
+  // `ok` from the owner on a plan held after two rejections approves that plan (#3024); any other
+  // reply — or `ok` from anyone else — still re-runs the planner via resume.
+  if (out.blocked && issue.planHeld && OWNERS.has(assoc) && isApproval(body)) {
+    return out('approve-plan', 'owner approval on a plan held after two rejections')
   }
   if (out.blocked) return out('resume', 'a reply on a status:blocked issue')
   if (isApproval(body)) return out('resume', 'an approval on an issue that is not blocked (explain only)')
