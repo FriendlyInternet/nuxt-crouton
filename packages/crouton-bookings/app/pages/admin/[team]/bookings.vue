@@ -14,6 +14,7 @@ definePageMeta({
 
 const { teamSlug } = useTeamContext()
 const { t } = useT()
+const route = useRoute()
 
 // Tab navigation items
 const tabs = computed(() => [
@@ -52,6 +53,7 @@ const tabs = computed(() => [
   <CroutonTabsPanel
     :title="t('bookings.admin.sectionTitle')"
     :tabs="tabs"
+    :fill="!!route.meta.fillPanel"
   >
     <NuxtPage />
   </CroutonTabsPanel>
