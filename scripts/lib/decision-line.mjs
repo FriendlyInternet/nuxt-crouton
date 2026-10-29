@@ -6,6 +6,8 @@
 // (🤖 header) counts only when its header says "owner decision". Append-only and idempotent:
 // a comment already linked in the section is never added twice.
 
+import { stripGeneratedTrailer } from '../comment-command.mjs'
+
 const OWNERS = new Set(['OWNER', 'MEMBER'])
 const DECISION = /^\s*decision:\s*/i
 const OK_REASON = /^\s*ok:\s*(?=\S)/i
@@ -13,7 +15,7 @@ const OK_REASON = /^\s*ok:\s*(?=\S)/i
 /** @returns {string|null} the decision text (single line, verbatim words), or null */
 export function parseDecision({ body, authorAssociation, userType, held = false } = {}) {
   if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
-  const lines = String(body || '').split('\n')
+  const lines = stripGeneratedTrailer(String(body || '')).split('\n')
   const header = lines.find(l => l.trim())
   const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')
   if (isAgent && !/owner decision/i.test(header)) return null
