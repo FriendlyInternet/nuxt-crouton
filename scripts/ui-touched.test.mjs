@@ -124,3 +124,15 @@ test('underUiKey walks ancestors', () => {
   assert.ok(underUiKey(['a: {', '  ui: {', '    b: 1', '  }', '}'], 3))
   assert.ok(!underUiKey(['a: {', '  ui: {', '    b: 1', '  },', '  c: 2', '}'], 5))
 })
+
+test('#2852: regenerated fixtures/** .vue files are not a visual change', () => {
+  const diff = `diff --git a/fixtures/basic/app/components/Form.vue b/fixtures/basic/app/components/Form.vue
+--- a/fixtures/basic/app/components/Form.vue
++++ b/fixtures/basic/app/components/Form.vue
+@@ -3 +3 @@
+-<UButton>a</UButton>
++<UButton>b</UButton>
+`
+  assert.equal(uiTouched(diff, none), 0)
+  assert.equal(uiTouched(diff.replaceAll('fixtures/basic', 'apps/basic'), none), 1)
+})

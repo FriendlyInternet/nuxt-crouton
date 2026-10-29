@@ -24,30 +24,24 @@ function isDependentField(field: Record<string, any>): boolean {
 }
 
 /**
- * A schema-valid literal for a field. Derived from the field's `zod` expression
- * — the same source the generated schema embeds — so the sample matches the
- * schema whether or not the type manifest resolved (a manifest-less run degrades
- * every field to `z.string()`, and so does the sample). Two overrides mirror
- * the schema generator (see fieldsSchema in generate-collection.ts): dates are
- * forced to `z.coerce.date()` (accept an ISO string) and dependent fields to a
- * non-empty `z.array(z.string()).min(1)`.
+ * A schema-valid literal for a field: the manifest's `testSample` for its type
+ * (stamped by loadFields), so the sample matches the schema the same manifest
+ * produced. Dependent fields override to the non-empty
+ * `z.array(z.string()).min(1)` the schema generator emits (see fieldsSchema in
+ * generate-collection.ts).
  */
 function sampleLiteral(field: Record<string, any>): string {
   if (isDependentField(field)) return "['sample']"
-  if (field.type === 'date') return "'2024-01-01T00:00:00.000Z'"
 
   const zod = String(field.zod || '')
   // enum (defensive — current generator keeps option fields as z.string())
   const enumMatch = zod.match(/z\.enum\(\[\s*'([^']*)'/)
   if (enumMatch) return `'${enumMatch[1]}'`
-  if (/z\.coerce\.date|z\.date/.test(zod)) return "'2024-01-01T00:00:00.000Z'"
-  if (/z\.number/.test(zod)) return '1'
-  if (/z\.boolean/.test(zod)) return 'true'
-  if (/z\.array/.test(zod)) return '[]'
-  if (/z\.record|z\.object/.test(zod)) return '{}'
-  // strings, text, image/file, option fields, and the manifest-less fallback —
-  // required string/text is `.min(1)`, so the value must be non-empty.
-  return "'sample'"
+
+  // The manifest's `testSample` for the field's type. A type the manifest
+  // doesn't know degrades to z.string() (see loadFields), so a non-empty
+  // string is the schema-valid sample.
+  return field.testSample ?? "'sample'"
 }
 
 export function objectLiteral(entries: string[], indent = '      '): string {

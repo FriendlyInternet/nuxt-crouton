@@ -51,10 +51,11 @@ test('children get the pipeline block at depth 1; blocked child waits with dispa
     assert.equal(b.depth, 1)
     assert.equal(b.epic_branch, 'epic/2421-ship-the-thing')
   }
-  assert.equal(parsePipelineBlock(creates[0].body).dispatch, null)
+  // #2776: the plan is reviewed first, so BOTH children wait and record what they will be released with.
+  assert.ok(parsePipelineBlock(creates[0].body).dispatch)
   assert.ok(parsePipelineBlock(creates[1].body).dispatch)
   assert.deepEqual(acts.filter(a => a.type === 'note-blocked').map(a => a.blockedByRefs), [['child0']])
-  assert.deepEqual(acts.filter(a => a.type === 'trigger-label').map(a => a.ref), ['child0'])
+  assert.deepEqual(acts.filter(a => a.type === 'trigger-label').map(a => a.ref), [])
   assert.equal(acts.filter(a => a.type === 'link').every(a => a.parent === 2421), true)
 })
 
@@ -80,12 +81,18 @@ test('renderTree shows branch, blocks and ordering', () => {
   assert.match(out, /<!-- pipeline: epic=N/)
 })
 
-test('scaffoldActions ends with exactly one trigger-label per unblocked child', () => {
+test('scaffoldActions ends by requesting the ticket review, with no trigger-label yet (#2776)', () => {
   const acts = scaffoldActions(parseScaffoldPlan(PLAN()), { epic: 2421, knownLabels: ['type:feat'] })
-  const firstTrigger = acts.findIndex(a => a.type === 'trigger-label')
-  const tail = acts.slice(firstTrigger)
-  assert.equal(tail.length, 1)
-  assert.deepEqual(tail.map(a => [a.type, a.ref]), [['trigger-label', 'child0']])
+  assert.equal(acts.some(a => a.type === 'trigger-label'), false)
+  assert.deepEqual(acts.at(-1), { type: 'request-ticket-review', epic: 2421 })
+})
+
+test('a docs-only epic skips the review: one trigger-label per unblocked child', () => {
+  const p = parseScaffoldPlan(PLAN())
+  p.children.forEach(c => { c.labels = ['type:docs'] })
+  const acts = scaffoldActions(p, { epic: 2421, knownLabels: ['type:docs'] })
+  assert.deepEqual(acts.slice(acts.findIndex(a => a.type === 'trigger-label')).map(a => [a.type, a.ref]), [['trigger-label', 'child0']])
+  assert.equal(acts.some(a => a.type === 'request-ticket-review'), false)
 })
 
 test('resolveMainSha reads main from the remote, not a local origin/main ref (#2708)', async () => {

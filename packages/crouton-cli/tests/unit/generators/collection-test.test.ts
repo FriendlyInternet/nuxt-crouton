@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { withManifest } from '../../helpers/manifest-fields.ts'
 import { generateCollectionTest } from '../../../lib/generators/collection-test.ts'
 
 // Minimal `data` shape the orchestrator passes to generators (see generate-collection.ts).
@@ -12,13 +13,13 @@ const baseData = {
   layerCamelCase: 'shop',
   // `zod`/`default`/`tsType` are what loadFields attaches once the type manifest
   // resolves — the sample is derived from `zod`, so the fixtures carry it.
-  fields: [
+  fields: withManifest([
     { name: 'id', type: 'string', zod: 'z.string()', meta: { primaryKey: true } },
     { name: 'name', type: 'string', zod: 'z.string()', meta: { required: true } },
     { name: 'price', type: 'decimal', zod: 'z.number()', meta: { required: true } },
     { name: 'inStock', type: 'boolean', zod: 'z.boolean()', meta: {} },
     { name: 'releasedAt', type: 'date', zod: 'z.date()', meta: {} },
-  ],
+  ]),
 }
 
 describe('generateCollectionTest (#788)', () => {

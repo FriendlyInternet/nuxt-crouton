@@ -25,7 +25,7 @@ const { t } = useT()
     </template>
 
     <template #body>
-      <CroutonI18nUiList />
+      <TranslationsUiList />
     </template>
   </UDashboardPanel>
 </template>

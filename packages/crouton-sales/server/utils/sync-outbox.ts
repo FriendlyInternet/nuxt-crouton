@@ -18,7 +18,10 @@
  */
 import { nanoid } from 'nanoid'
 
-export type OutboxEntityType = 'order' | 'orderitem' | 'printstatus'
+export type OutboxEntityType
+  = | 'order' | 'orderitem' | 'printstatus'
+  // Config rows (#814): edited on the till, applied on the cloud with the conflict rule.
+    | 'event' | 'eventsetting' | 'category' | 'product' | 'location' | 'printer'
 
 export interface OutboxEvent {
   entityType: OutboxEntityType
@@ -30,7 +33,7 @@ export interface OutboxEvent {
   orderId?: string | null
   teamId?: string | null
   eventId?: string | null
-  /** Defaults to 'upsert' — create and update both upsert by nanoid downstream. */
+  /** Defaults to 'upsert' — create and update both upsert by nanoid downstream. 'delete' removes a config row. */
   operation?: string
 }
 

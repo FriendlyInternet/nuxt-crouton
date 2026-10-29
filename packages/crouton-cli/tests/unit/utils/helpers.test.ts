@@ -1,3 +1,4 @@
+import { withManifest } from '../../helpers/manifest-fields.ts'
 import { describe, it, expect } from 'vitest'
 import {
   pascal,
@@ -192,12 +193,12 @@ describe('getSeedGenerator', () => {
   })
 
   it('falls back to type-based generator for unknown names', () => {
-    expect(getSeedGenerator({ name: 'unknownField', type: 'string' })).toBe('f.loremIpsum({ sentencesCount: 1 })')
-    expect(getSeedGenerator({ name: 'unknownField', type: 'text' })).toBe('f.loremIpsum({ sentencesCount: 3 })')
-    expect(getSeedGenerator({ name: 'unknownField', type: 'number' })).toBe('f.int({ minValue: 0, maxValue: 100 })')
-    expect(getSeedGenerator({ name: 'unknownField', type: 'boolean' })).toBe('f.weightedRandom([{ value: true, weight: 0.5 }, { value: false, weight: 0.5 }])')
-    expect(getSeedGenerator({ name: 'unknownField', type: 'date' })).toBe('f.date({ minDate: "2020-01-01", maxDate: "2025-12-31" })')
-    expect(getSeedGenerator({ name: 'unknownField', type: 'json' })).toBe('f.valuesFromArray({ values: [{}] })')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'string' }])[0])).toBe('f.loremIpsum({ sentencesCount: 1 })')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'text' }])[0])).toBe('f.loremIpsum({ sentencesCount: 3 })')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'number' }])[0])).toBe('f.int({ minValue: 0, maxValue: 100 })')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'boolean' }])[0])).toBe('f.weightedRandom([{ value: true, weight: 0.5 }, { value: false, weight: 0.5 }])')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'date' }])[0])).toBe('f.date({ minDate: "2020-01-01", maxDate: "2025-12-31" })')
+    expect(getSeedGenerator(withManifest([{ name: 'unknownField', type: 'json' }])[0])).toBe('f.valuesFromArray({ values: [{}] })')
   })
 })
 

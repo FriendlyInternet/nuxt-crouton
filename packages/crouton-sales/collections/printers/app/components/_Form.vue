@@ -1,7 +1,7 @@
 <!--
-  SalesPrinterForm
+  SalesPrintersForm
   Package-provided form for the sales printers collection.
-  Replaces the CLI-generated _Form.vue (wired via componentName in
+  Replaces the CLI-generated _Form.vue (picked up by its canonical name,
   useSalesPrinters config). Event is implied by the event workspace.
 -->
 

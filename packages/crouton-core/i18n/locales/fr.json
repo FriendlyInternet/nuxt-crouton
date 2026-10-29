@@ -99,7 +99,6 @@
   "collection": {
     "noItemsYet": "Aucun élément pour le moment",
     "createFirstItem": "Créez votre premier élément {collection} pour commencer",
-    "componentError": "Impossible de charger le composant de collection : {error}",
     "componentNotFound": "Composant introuvable pour la collection : {collection}",
     "selectItem": "Sélectionnez un élément pour commencer",
     "orPressN": "ou appuyez sur N pour créer un nouvel élément",
@@ -266,5 +265,9 @@
   },
   "calendar": {
     "placeholder": "Choisir une date"
+  },
+  "collab": {
+    "editingCount": "{count} en cours d'édition",
+    "currentlyEditing": "En cours d'édition :"
   }
 }
