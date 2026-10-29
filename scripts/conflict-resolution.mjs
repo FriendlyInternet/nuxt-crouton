@@ -16,6 +16,9 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+/** The scripts suite — must match ci.yml's. `node --test scripts/` treats the dir as a module path and fails on Node 22. */
+export const SCRIPTS_TEST_CMD = 'node --test scripts/*.test.mjs scripts/lib/*.test.mjs'
+
 /** Files a generator produces are regenerated, never hand-merged. `inputs` + `outputs` are exact paths or prefixes. */
 export const GENERATORS = [
   {
@@ -90,7 +93,9 @@ const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
 const conflicted = () => sh('git', ['diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean)
 
 function run(cmd) {
-  const r = spawnSync(cmd, { shell: true, stdio: 'inherit' })
+  // stdout -> stderr: `verify` stdout is the file list the workflow captures, so a child's
+  // test output on stdout would flood it (#2954: 126 "Argument list too long" on git commit).
+  const r = spawnSync(cmd, { shell: true, stdio: ['inherit', 2, 2] })
   return r.status === 0
 }
 
@@ -109,7 +114,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     sh('git', ['add', '-u']) // tracked only: never stage runner scratch files
     try { sh('git', ['diff', '--cached', '--check']) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
     for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
-    if (!run('node --test scripts/')) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
+    if (!run(SCRIPTS_TEST_CMD)) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
     const pkgs = [...new Set(files.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
     for (const p of pkgs) if (!run(`pnpm --filter "./packages/${p}" test --if-present`)) { console.error(`::error::${p} tests fail after resolution`); process.exit(1) }
     console.log(files.join('\n'))

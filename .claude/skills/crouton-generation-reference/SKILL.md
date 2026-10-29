@@ -124,8 +124,8 @@ Verified against `writeScaffold` (`lib/generate-collection.ts:880-1155`) and on-
 Per collection, under `layers/{layer}/collections/{plural}/`:
 
 ```
-app/components/_Form.vue            # NOTE THE UNDERSCORE — see below. Skipped when
-                                    #   formComponent is set (config or auto-detected)
+app/components/_Form.vue            # NOTE THE UNDERSCORE — see below.
+                                    #   (registers as <Layer><Plural>Form)
 app/components/List.vue
 app/components/{FieldPascal}/{Input,Select,CardMini}.vue   # one dir per repeater field
 app/composables/use{Layer}{Plurals}.ts   # Zod schema + columns + collection config
@@ -142,7 +142,7 @@ seed.json                           # always, except hierarchy collections (#298
 types.ts   nuxt.config.ts   README.md
 ```
 
-**The `_Form.vue` underscore:** the actual filename is `_Form.vue` (`generate-collection.ts:912`) even though the dry-run output prints `Form.vue` (`:825`) and both the `crouton` skill and crouton-cli/CLAUDE.md draw `Form.vue`. It still registers as `{Layer}{Plurals}Form` — the composable's `componentName` field carries the name (verified `fixtures/minimal/.../useMainItems.ts:44`: `componentName: 'MainItemsForm'`).
+**The `_Form.vue` underscore:** the actual filename is `_Form.vue` (`generate-collection.ts:912`) even though the dry-run output prints `Form.vue` (`:825`) and both the `crouton` skill and crouton-cli/CLAUDE.md draw `Form.vue`. It registers as `{Layer}{Plurals}Form` by the layer's component prefix; there is no `componentName` field. To replace a form or list, add that name in the app's `app/components` (docs `5.customization/2.eject.md`).
 
 Side effects beyond the collection dir (config-mode run, same file `:1091-1152` + `runPostGeneration` `:1165-1293`):
 
@@ -202,7 +202,7 @@ Also: `crouton rollback-bulk --layer=<layer>` / `--config=<path>` (whole layer /
 
 **Regeneration**: re-running `crouton config` / `crouton <layer> <collection>` **overwrites every generated file unconditionally** — `writeScaffold` has no file-existence guard (`fsp.writeFile` loop at `generate-collection.ts:1074-1078`; code-derived, not reproduced end-to-end). Two consequences:
 - The generated file headers saying "regeneration requires --force flag" are stale; `--force` actually means (a) proceed despite missing package dependencies (`:747-754`) and (b) override schema-index export conflicts (`:373-384`).
-- **Hand edits inside generated files are lost on regeneration — including the "editable" `seed.json`** (it is in the unconditional write list, `:1042-1049`). Edit `seed.json` only if you won't regenerate, or re-apply edits after. If you customize a Form, prefer `formComponent:` (skips `_Form.vue` generation entirely) over editing the generated one.
+- **Hand edits inside generated files are lost on regeneration — including the "editable" `seed.json`** (it is in the unconditional write list, `:1042-1049`). Edit `seed.json` only if you won't regenerate, or re-apply edits after. If you customize a Form, put your own `<Layer><Plural>Form.vue` in the app's `app/components` (it wins) rather than editing the generated one.
 
 ## 9. Doc drift in this domain
 

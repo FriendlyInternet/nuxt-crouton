@@ -533,12 +533,12 @@ In an interactive session, do the same by hand. Be conservative — when unsure 
 
 **What counts as approval** (the sign-off signal): a **reply comment that is only `ok`** (`not ok: …` is a change request; `lgtm`/`approve` still accepted). On a PR held for a human (shared code, workflows, epic → main) the owner's `ok` is also the merge go: the pipeline merges once green (#2832).
 That comment is the *only* thing that resumes the pipeline — a 👍 reaction and the `ui-approved`
-label do **not** trigger anything (`resume-on-comment.yml` fires only on `issue_comment`; reactions
+label do **not** trigger anything (`on-comment.yml` (the `resume` job) fires only on `issue_comment`; reactions
 raise no event and no workflow listens for the label) (#572). Anything else is a change request —
 iterate (redeploy for live-preview, re-render for `--static`) until approved (#310). On a
 **pi-built PR** (head `work-<N>`), a change-request comment **on the PR** (or on its issue)
 re-runs the pi worker on that branch with the comment as its instruction and stacks a commit
-on the PR — `revise-on-pr-comment.yml` → `work-issue-pidev.yml` `feedback` input (#2446).
+on the PR — `on-comment.yml` (`revise` job) → `work-issue-pidev.yml` `feedback` input (#2446).
 
 ## Schema Sign-Off (review the data model before you generate) — epic #314
 
@@ -593,6 +593,17 @@ ticket; the hold happens on the ticket, before `delegate`, not on a PR. The pipe
 finish step's tests gate (#1885) opens the PR as a **draft** when a `packages/*` logic file lands
 with no test — visible, not blocking. A worker that meets a ticket asking for a test-first hold
 follows this rule and says so in its done comment.
+
+**Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
+(`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
+data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+`.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
+(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
+`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
+differs, links the plan in its PR body and appends a row to
+`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
 
 ## Documentation Organization
 
@@ -678,7 +689,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Skill | `.claude/skills/graduate/SKILL.md` | The deliberate **"step back and rebuild"** checkpoint after heavy POC iteration — **spec-driven** (#992): the POC *discovers* a behaviour spec (the `<poc>/spec.json` ledger, captured at each sign-off), graduation *freezes* it authoritative, and the app is **rebuilt the crouton way to satisfy it** — never a port. A POC is a **floor, not a ceiling**, so the app is a *superset* in three buckets: **Preserve** (proven experience → C1 side-by-side) · **Replace** (POC fakes → real crouton) · **Add** (completeness the POC left open → its own schema/UI/test gate). Promotes only when **both** acceptance axes are signed off — experience (C1) **and** crouton-conformance (`/conformance`, C2). "Done" is *derived* from a recorded `lgtm`, never a green build (the #988 lesson). Use when a POC is "done" / "graduate this poc" / "make it a real app" (#916, #992) |
 | Skill | `.claude/skills/conformance/SKILL.md` | The **crouton-conformance gate** — graduation's second acceptance axis (C2; the first is the experience side-by-side, C1). Certifies a graduated app is a *real crouton app* — **CLI-scaffolded** (`server/db/schema.ts` present, the #988 500) · **real collections** not stub blocks · **consumes the correct packages without reinventing them** (DRY) — by **composing** the existing probes (`/frontend-review`, `/a11y`, `/e2e-smoke`, `pnpm typecheck`) plus crouton-structural checks, then rendering a *required, signed-off* checklist on the graduation PR (holds on `status:blocked`). A gate, not a finding-rater. Run at `/graduate` stage C2, or "is this app crouton-native" (#992) |
 | Skill | `.claude/skills/bug-archaeology/SKILL.md` | First step of bug work (HARD GATE): research how & when a bug was introduced — `git log -S`/`blame`/`bisect` to the first-bad commit, or rule it a non-code cause (stale install/env/data) — and record the finding on the issue/PR before fixing. Use the moment a bug/regression/broken build is reported (#424) |
-| Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate + the dispatch-only deep sweep (#823). Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
+| Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate (the scheduled deep sweep was deleted, #2892). Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
 | Agent | `.claude/agents/red-team.md` | Adversarial security prober — given `{ scope, depth }` reads code as an attacker (cross-team IDOR, auth bypass, injection, secret exposure, SSRF, upload/cache/rate-limit) and returns structured findings; static-first, `deep` dynamically confirms against a fixture. Reports only, never patches. Steered by `/red-team` + the CI/daily workflows (#540) |
 | Skill | `.claude/skills/a11y/SKILL.md` | Accessibility review — the code-cleaning analog of `/code-review` for WCAG/ARIA. Reviews just your diff (or `--scope <pkg>`/`--file`) via the depth-aware `a11y` subagent (`quick`=eslint-a11y + ARIA/keyboard smells, `standard`=one package, `deep`=boot a fixture + `@axe-core/playwright`), rates findings (axe critical/serious → 🔴, moderate → 🟡, minor → 🔵, reusing `/review`'s 3-level format), then `--comment` (inline PR comments) or `--fix` (safe `alt`/`aria-label`/label-for/`role`+`tabindex` → `pnpm typecheck`). On-demand layer atop the warn-first eslint-a11y rules (#726/#729) |
 | Agent | `.claude/agents/a11y.md` | Accessibility prober — given `{ scope, depth, fix }` reads templates as a screen-reader/keyboard user (ARIA-without-keyboard, missing `alt`/labels, positive `tabindex`, bad roles) and returns structured severity-rated findings; static-first via eslint-a11y, `deep` runs `@axe-core/playwright` against a fixture. Reports only; patches the safe set under `fix:true`. Steered by `/a11y` (#726/#729) |

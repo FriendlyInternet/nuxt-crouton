@@ -34,8 +34,27 @@ test('pi-reviser passes the owner comment through verbatim (backticks, %s, {{…
   assertGolden(renderPrompt('pi-reviser', { pr: '77', issue: '1932', feedback: fx('feedback.txt') }), 'pi-reviser')
 })
 
+test('pi-conflict-resolver, epic PR (#3002)', () => {
+  const task = 'RESOLVE THE MERGE CONFLICT with origin/main. Write the choice file if needed.'
+  const out = renderPrompt('pi-conflict-resolver', { pr: '2989', branch: 'epic/227-x', issue: '227', task, feedback: fx('feedback.txt') })
+  assertGolden(out, 'pi-conflict-resolver')
+  assert.ok(out.includes('RESOLVE THE MERGE CONFLICT'))
+  assert.ok(out.includes('epic/227-x'))
+  assert.ok(!out.split('VISUAL EVIDENCE')[0].includes('work-227'))
+  assert.ok(!out.includes('QUESTION'))
+  assert.ok(!/issue body/i.test(out))
+})
+
+test('pi-conflict-resolver without a task is a hard error', () => {
+  assert.throws(() => renderPrompt('pi-conflict-resolver', { pr: '1', branch: 'b', issue: '1', feedback: 'x' }), /missing --var task/)
+})
+
 test('pi-decomposer (+ shared dedup rule)', () => {
   assertGolden(renderPrompt('pi-decomposer', { issue: '1932' }), 'pi-decomposer')
+})
+
+test('pi-planner (plan mode, #2755)', () => {
+  assertGolden(renderPrompt('pi-planner', { issue: '1932' }), 'pi-planner')
 })
 
 test('a missing variable is a hard error, not an empty string', () => {

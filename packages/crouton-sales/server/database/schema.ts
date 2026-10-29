@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { nanoid } from 'nanoid'
 
 /**
@@ -67,8 +67,11 @@ export const salesSyncOutbox = sqliteTable('sales_sync_outbox', {
  * own DB simply never has a row here.
  */
 export const salesSyncStatus = sqliteTable('sales_sync_status', {
-  // Single global heartbeat row.
+  // One heartbeat row per paired till (the device id, #2725). Legacy
+  // shared-key setups keep writing the single 'live' row.
   id: text('id').primaryKey().$default(() => 'live'),
+  // The device's team (null for the legacy 'live' row).
+  teamId: text('team_id'),
   // Last time the cloud heard from the Pi at all (data batch OR idle ping) —
   // the liveness clock the dashboard reads to detect an offline Pi.
   lastContactAt: integer('last_contact_at', { mode: 'timestamp' }),
@@ -77,5 +80,65 @@ export const salesSyncStatus = sqliteTable('sales_sync_status', {
   lastEventAt: integer('last_event_at', { mode: 'timestamp' }),
   // Rows applied in the most recent non-empty batch (informational hint).
   lastBatchApplied: integer('last_batch_applied').notNull().$default(() => 0),
+  // Last time this till pulled config changes from the cloud (#816).
+  lastPullAt: integer('last_pull_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
 })
+
+/**
+ * Delete markers for synced config rows (#814, epic #801).
+ *
+ * Config deletes are hard deletes, so nothing is left to sync or to lose a
+ * conflict against. A marker per deleted config row keeps every list query
+ * unchanged (a soft-delete column would have touched all of them). Written by
+ * the till's delete endpoints (when cloud sync is on) and by the cloud ingest
+ * when it applies a delete; read by the conflict rule so a stale edit cannot
+ * bring a deleted row back.
+ */
+export const salesSyncTombstones = sqliteTable('sales_sync_tombstones', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  teamId: text('team_id').notNull(),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }).notNull(),
+}, table => [
+  uniqueIndex('uq_sales_sync_tombstones_entity').on(table.entityType, table.entityId),
+])
+
+/**
+ * Till-side pull cursor (#815, epic #801): how far this till has pulled config
+ * changes from the cloud. One row per till (`id` = its device id, else 'default').
+ * `cursor` is epoch ms on the cloud's clock, as returned by the pull endpoint.
+ * The cloud never has a row here.
+ */
+export const salesSyncPullState = sqliteTable('sales_sync_pull_state', {
+  id: text('id').primaryKey(),
+  cursor: integer('cursor').notNull().$default(() => 0),
+  // Changes at exactly `cursor` already applied, while a page is still being drained.
+  skip: integer('skip').notNull().$default(() => 0),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+})
+
+/**
+ * Config edits that lost a conflict on the cloud (#816, epic #801).
+ *
+ * The cloud keeps its own version when a till's config write loses the
+ * conflict rule (#814); without a trace that overwrite is silent. One row per
+ * lost edit: what the till sent (`lostJson`) and what the cloud kept
+ * (`keptJson`), both trimmed snapshots. Cloud-only; the till has no row here.
+ */
+export const salesSyncConflicts = sqliteTable('sales_sync_conflicts', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  teamId: text('team_id').notNull(),
+  // The till whose edit lost; null for the shared-key setup.
+  deviceId: text('device_id'),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  // Why it lost (a ConflictReason). The cloud's version always won here.
+  reason: text('reason').notNull(),
+  lostJson: text('lost_json').notNull(),
+  keptJson: text('kept_json').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+}, table => [
+  index('idx_sales_sync_conflicts_team').on(table.teamId, table.createdAt),
+])

@@ -1,0 +1,13 @@
+{
+ "epic": "## Decisions log\n- 2026-06 experiment on #227: tried `priority: -1` on layer component dirs; it did NOT change resolution \u2014 the app dir beats layers at equal priority, and a negative priority is ignored.\n",
+ "tickets": [
+  {
+   "number": 229,
+   "title": "Let the app's own components win over the layer's",
+   "labels": [
+    "type:fix"
+   ],
+   "body": "## Hypothesis\nWe think that setting `priority: -1` on the package component dirs makes the app's Card win.\n\nRule: an app component always beats a layer component of the same name.\n\n## \ud83e\uddea How to test\nTest: components.test.ts \u2014 app Card beats package Card.\n"
+  }
+ ]
+}

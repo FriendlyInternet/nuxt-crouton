@@ -29,7 +29,7 @@ const tiers = cfg.tiers || {}
 // The full model ids come from the ONE model setting (#2161), so this registry can't
 // disagree with what the workflows actually run.
 const MODELS = JSON.parse(readFileSync(join(ROOT, '.claude/pipeline-models.json'), 'utf8'))
-const FULL = { haiku: MODELS.light, sonnet: MODELS.default, opus: MODELS.hard }
+const FULL = { haiku: MODELS.light, sonnet: MODELS.default, opus: MODELS.hard, fable: MODELS.review }
 const full = (short) => FULL[short] || short
 
 // Read the model actually pinned in an agent file (frontmatter `model:`), or null.
@@ -43,7 +43,7 @@ function agentModel(name) {
 const drift = []
 
 // Drift guard 1 (#2161): routing.json's `pi` column must name the same models as the setting.
-const TIER_SETTING = { small: 'light', medium: 'default', large: 'hard' }
+const TIER_SETTING = { small: 'light', medium: 'default', large: 'hard', review: 'review' }
 for (const [tier, key] of Object.entries(TIER_SETTING)) {
   const pi = tiers[tier]?.pi
   if (pi && pi !== MODELS[key]) {
@@ -111,7 +111,7 @@ ${table}
 ${overrides}
 
 ## Known gaps
-The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)
+The top-level workflow loop (fix-ci and the weekly sweeps)
 runs on the \`claude-code-action\` **default** model — unpinned. Pinning those promotes
 them into the routes table above.
 `

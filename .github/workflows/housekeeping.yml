@@ -76,14 +76,14 @@ jobs:
         if: steps.gate.outputs.send == 'true' && contains(steps.gate.outputs.deliver, 'email')
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ vars.DIGEST_EMAIL_FROM }}
+          EMAIL_FROM: ${{ vars.RESEND_FROM }}
           EMAIL_TO: ${{ steps.gate.outputs.recipients }}
         run: |
           if [ ! -f housekeeping.md ]; then
             echo "::warning::No rendered digest to email."; exit 0
           fi
           if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
-            echo "::warning::RESEND_API_KEY / DIGEST_EMAIL_FROM / recipients not set — skipping email (run stays green)."
+            echo "::warning::RESEND_API_KEY / RESEND_FROM / recipients not set — skipping email (run stays green)."
             exit 0
           fi
           SUBJECT="🧹 Housekeeping digest — $(date -u +%F)"

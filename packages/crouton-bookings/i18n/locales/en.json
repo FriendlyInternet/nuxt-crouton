@@ -46,6 +46,7 @@
       "cancelled": "Cancelled"
     },
     "admin": {
+      "openFullScreen": "Open full screen",
       "title": "Bookings",
       "sectionTitle": "Bookings",
       "overview": "Overview",

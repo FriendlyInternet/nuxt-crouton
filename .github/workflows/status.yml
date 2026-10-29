@@ -1,0 +1,647 @@
+name: Status
+
+# ONE status workflow (#2891, epic #2889): the Projects-v2 board mover (`board` job, formerly
+# project-status.yml) and the pipeline PR sticky comment (`pr-comment` job, formerly
+# pipeline-pr-status.yml) fired on the same events and each paid for its own runner — merged so
+# one run per event, and a newer run for the same PR/issue cancels a stale one (see `concurrency`).
+#
+# Always-on status for the agent pipeline (#337, epic #336). Deterministic, NO LLM:
+# keep exactly ONE "sticky" status comment on each pipeline PR (head branch
+# `work-*`), edited in place across runs — never a new comment per run — plus a
+# single roll-up line on the parent epic so the whole tree's health reads at a glance.
+#
+# The sticky is found by a hidden HTML marker and updated; the epic roll-up by its own
+# marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
+# firing just refreshes the same two comments (no spam).
+#
+# Scope: only PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
+# the dead `claude/issue-*` pipeline branch was dropped in #2891). Human PRs are never touched. Uses
+# GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
+# so no App token is required).
+
+on:
+  # ⚠️ `check_suite` and `status` are NEARLY DEAD TRIGGERS here (#1884) — keep them for
+  # App-generated suites, but they do NOT fire for our own CI. Every check on a pipeline PR is
+  # created by GitHub Actions under GITHUB_TOKEN, and events triggered by GITHUB_TOKEN never
+  # start a new workflow run (the same recursion guard that stops a GITHUB_TOKEN push from
+  # cascading, #572/#626). So the only trigger that ever fired was `pull_request: opened`, and
+  # since the pi worker pushes exactly once there is no `synchronize` either: the sticky was
+  # written ~10s after the PR opened and FROZE there. Every worker PR carried a permanent
+  # "⏳ CI running · 2/11 checks passed" while it was in fact green and mergeable — the one
+  # surface meant to say "ready" saying the opposite, forever.
+  #
+  # `workflow_run` is the trigger that DOES fire for Actions-generated completions, so it is
+  # what actually refreshes the sticky. Add a workflow here when it becomes a gate worth
+  # reflecting; an unlisted one simply doesn't trigger a refresh (the next listed one will).
+  workflow_run:
+    workflows: ["CI", "E2E", "Review", "Packages guard"]
+    types: [completed]
+  check_suite:
+    types: [completed]
+  status: {}
+  # Union of both old files: sticky wants synchronize, board wants converted_to_draft/closed.
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, closed]
+  # Refresh the epic's live card on the build-progress transitions PR/check events miss —
+  # a child issue closing (schedule-waves closes it when its sub-PR merges) advances the
+  # done/total count (#1838). Scoped to closed/reopened so we don't fire on every repo label change.
+  # (board also wants assigned/labeled; the `pr-comment` job's `if` keeps it to closed/reopened.)
+  issues:
+    types: [assigned, reopened, labeled, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read # job logs for the red-PR log tail (#2677)
+
+# One run per PR/issue at a time; a newer run supersedes a stale one so an old comment never
+# overwrites a fresh one (#2891).
+#
+# ⚠️ #1989: a CANCELLED run leaves a cancelled check-run on the commit it ran for, and both
+# `ciState()` below and `automerge-epic-subpr.yml`'s RED list read `cancelled` as red — that once
+# froze every pipeline sub-PR's auto-merge. A `pull_request` run is attached to the PR head SHA, so
+# those runs (a) sit in their own `-pr` group and (b) queue instead of cancelling. Every other event
+# (workflow_run, check_suite, status, issues) attaches to the default-branch SHA or none, so
+# cancelling there is harmless. Do NOT set cancel-in-progress to a bare `true`.
+concurrency:
+  group: status-${{ github.event_name == 'pull_request' && 'pr-' || '' }}${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.sha || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  pr-comment:
+    # Sticky comment: PR open/refresh (pipeline `work-*` branches only), CI completions, and
+    # epic-card refresh on child close/reopen. Board-only events skip this job entirely.
+    if: >
+      (github.event_name == 'pull_request' &&
+        contains(fromJSON('["opened","reopened","synchronize","ready_for_review"]'), github.event.action) &&
+        startsWith(github.event.pull_request.head.ref, 'work-')) ||
+      (github.event_name == 'issues' && contains(fromJSON('["closed","reopened"]'), github.event.action)) ||
+      github.event_name == 'workflow_run' || github.event_name == 'check_suite' || github.event_name == 'status'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Default branch only (never PR code) — just the pure log-tail helper (#2677).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/lib
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const OWNER = process.env.OWNER_LOGIN || 'pmcp'
+            const PR_STICKY = '<!-- crouton-pipeline-status -->'
+            const EPIC_ROLLUP = '<!-- crouton-epic-rollup -->'
+            const now = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z'
+
+            // Upsert a marker-tagged comment: edit the existing one in place, else create.
+            async function upsert(issue_number, marker, body) {
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number, per_page: 100 })
+              const existing = comments.find(c => (c.body || '').includes(marker))
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body })
+              }
+            }
+
+            // Aggregate every check-run + commit-status for a SHA into one verdict.
+            async function ciState(ref) {
+              let success = 0, pending = 0, failure = 0, cancelled = 0
+              const failing = [] // #1909 — the ping must say WHICH checks, not just how many
+              const runs = await github.paginate(github.rest.checks.listForRef,
+                { owner, repo, ref, per_page: 100 })
+              for (const r of runs) {
+                if (r.status !== 'completed') { pending++; continue }
+                if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
+                // Cancelled ≠ failed (#1150/#2474): a preview deploy bumped off its queue slot
+                // — or a run superseded by a newer push — proved nothing about the code, so it
+                // must not drive the 🔴 ping. It is still not green: counted apart, shown apart.
+                else if (r.conclusion === 'cancelled') cancelled++
+                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, timed_out, action_required, stale
+              }
+              try {
+                const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
+                for (const s of combined.statuses || []) {
+                  if (s.state === 'pending') pending++
+                  else if (s.state === 'success') success++
+                  else { failure++; failing.push({ name: s.context }) } // error, failure — a commit status carries no annotations
+                }
+              } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
+              const total = success + pending + failure + cancelled
+              let icon = '⏳', word = 'pending'
+              if (total === 0) { icon = '⏳'; word = 'queued' }
+              else if (failure > 0) { icon = '❌'; word = 'failing' }
+              else if (pending > 0) { icon = '⏳'; word = 'running' }
+              else if (cancelled > 0) { icon = '⏹️'; word = 'incomplete' } // bumped, not broken — no ping
+              else { icon = '✅'; word = 'passing' }
+              return { icon, word, success, pending, failure, cancelled, total, failing }
+            }
+
+            // One sticky status note on the pipeline PR.
+            async function updatePr(pr) {
+              const st = await ciState(pr.head.sha)
+              const labels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+              const fix = labels.map(l => /^ci-fix-attempts:(\d+)$/.exec(l)).find(Boolean) // forward-compat with #338
+              const parts = [`${st.success}/${st.total} checks passed`]
+              if (st.pending) parts.push(`${st.pending} running`)
+              if (st.failure) parts.push(`${st.failure} failing`)
+              if (st.cancelled) parts.push(`${st.cancelled} cancelled (bumped, not failed — re-run or push to refresh)`)
+              const body =
+                `${PR_STICKY}\n` +
+                `### ${st.icon} CI ${st.word}\n` +
+                `${parts.join(' · ')}.` +
+                (fix ? ` · 🔧 auto-fix ×${fix[1]}` : '') + `\n\n` +
+                `<sub>🤖 agent pipeline (#337) · \`${pr.head.ref}\` → \`${pr.base.ref}\` · ` +
+                `<a href="${pr.html_url}/checks">checks</a> · updated ${now}</sub>`
+              await upsert(pr.number, PR_STICKY, body)
+              if (st.word === 'failing') await pingOnRed(pr, st)
+              const epicMatch = /^epic\/(\d+)-/.exec(pr.base.ref)
+              if (epicMatch) await updateEpic(Number(epicMatch[1]))
+            }
+
+            // One-shot @mention on a fresh failure — the ONLY loud signal (#1815). A red pipeline
+            // PR won't auto-merge into its epic (automerge-epic-subpr.yml leaves it open), so it
+            // needs the owner. Keyed by head SHA so a re-fired check_suite for the SAME commit
+            // never re-pings; a new failing commit (new SHA) does. Mentions don't fire on comment
+            // EDITS, so this is a distinct create guarded by the SHA marker (never the sticky).
+            async function pingOnRed(pr, st) {
+              const marker = `<!-- ci-fail-ping:${pr.head.sha} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: pr.number, per_page: 100 })
+              // Already pinged this SHA? The @MENTION stays one-shot (a mention doesn't re-fire on
+              // an edit, so re-creating would be pure spam) — but the BODY is refreshed below if
+              // more checks have gone red since (#2029). Checks finish minutes apart: on PR #2025
+              // the ping fired naming one failure and `Type Check Apps` went red 42s later, so the
+              // owner was left reading a permanently understated count while the sticky comment
+              // said three. A stale loud signal is worse than a quiet accurate one.
+              const existing = comments.find(c => (c.body || '').includes(marker))
+              // Name the failing checks (#1909) AND quote what actually went wrong (#2015).
+              // Names alone still meant leaving the notification, opening the checks tab, picking
+              // a job and scrolling a log — on a phone that is the entire task.
+              //
+              // `CI Gate` / `E2E Gate` are AGGREGATES (`if: always()` over 14 needs). It is never an
+              // independent cause; naming it beside the real failure doubles the apparent problem
+              // and sends the reader to a log that only says "not every job succeeded". Drop it
+              // whenever something else is red — but keep it when it is the ONLY red check, since
+              // that means something genuinely different (a needed job cancelled or stuck).
+              const ROLLUPS = new Set(['CI Gate', 'E2E Gate']) // every aggregate gate (#2710)
+              const all = st.failing || []
+              const causes = all.length > 1 ? all.filter(f => !ROLLUPS.has(f.name)) : all
+              const names = causes.slice(0, 5)
+              const more = causes.length - names.length
+              const list = names.length
+                ? names.map(f => `\`${f.name}\``).join(', ') + (more > 0 ? ` +${more} more` : '')
+                : 'see the checks tab'
+
+              // The distilled failure: a step's `::error::` output becomes a check-run annotation,
+              // which is already the short form of the log. Two per check, truncated — enough to
+              // diagnose, collapsed so the notification itself stays scannable.
+              //
+              // FILTER BY LEVEL (#2029). `listAnnotations` returns `notice`/`warning`/`failure`
+              // together, in creation order — and CI emits its noise first (the Node-20
+              // deprecation notice, "no files found for playwright-report/"). Taking the first two
+              // of ANY level therefore quoted two things that did not fail, under a heading that
+              // said "what failed". Fetch a page, keep the failures. Fall back to any level only
+              // when a check produced no failure annotation at all, and say so, so a reader is
+              // never told a warning is the cause.
+              const excerpts = []
+              for (const f of names) {
+                if (!f.id) continue // a commit status has no annotations
+                try {
+                  const anns = (await github.rest.checks.listAnnotations(
+                    { owner, repo, check_run_id: f.id, per_page: 50 })).data
+                  const hard = anns.filter(a => a.annotation_level === 'failure')
+                  const use = hard.length ? hard : anns
+                  const label = hard.length ? f.name : `${f.name} (no error annotation — showing context)`
+                  for (const a of use.slice(0, 2)) {
+                    const msg = String(a.message || '').trim().slice(0, 400)
+                    if (msg) excerpts.push(`${label}: ${msg}`)
+                  }
+                } catch (e) { core.warning(`annotations for ${f.name}: ${e.message}`) }
+              }
+              const why = excerpts.length
+                ? `\n\n<details><summary>what failed</summary>\n\n\`\`\`\n${excerpts.join('\n\n')}\n\`\`\`\n</details>`
+                : ''
+
+              // The actual end of each failing job's log (#2677): annotations are often noise or
+              // absent (a deploy failure has none). For Actions checks the check-run id IS the job
+              // id. Fenced, so no @mention in a log can ping. Any failure to fetch is skipped.
+              let tails = ''
+              let budget = 20000
+              try {
+                const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
+                for (const f of names.slice(0, 3)) {
+                  if (!f.id || budget <= 0) continue
+                  try {
+                    const res = await github.rest.actions.downloadJobLogsForWorkflowRun(
+                      { owner, repo, job_id: f.id })
+                    const raw = typeof res.data === 'string' ? res.data : String(res.data || '')
+                    const { text, truncated } = logTail(raw, { maxLines: 80, maxBytes: Math.min(4096, budget) })
+                    if (!text) continue
+                    const tail = text.replace(/```/g, "'''")
+                    budget -= tail.length
+                    const cut = truncated ? ' (truncated)' : ''
+                    tails += `\n\n<details><summary>log tail — ${f.name}${cut}</summary>\n\n\`\`\`\n${tail}\n\`\`\`\n</details>`
+                  } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
+                }
+              } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
+              const body =
+                `${marker}\n` +
+                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${causes.length} failing ` +
+                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}${tails}\n\n` +
+                `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
+                `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
+                `epic, so it sits until one of those happens — **it does not mean the work is ` +
+                `finished and waiting on your approval**.\n\n` +
+                `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
+                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909)</sub>`
+              if (existing) {
+                if ((existing.body || '').trim() === body.trim()) return // nothing new to say
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+                core.info(`Refreshed the red ping on #${pr.number} (${causes.length} failing now).`)
+                return
+              }
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
+              core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
+            }
+
+            // #2135: one-shot @mention the moment an epic shows "Awaiting your sign-off" — the
+            // rollup card above is silent otherwise, so a fresh sign-off hold produced ZERO signal
+            // an owner would notice (three real PRs — #2132/#2133/#2134 — sat unpinged until asked
+            // about directly). Keyed by epic number only, deduped like pingOnRed's SHA marker: a
+            // repeat status refresh on the SAME still-held epic must never re-ping. Known
+            // limitation, accepted deliberately: if this epic is unblocked and later blocked again
+            // by a second, unrelated hold, it will NOT re-ping — pingOnRed's per-SHA key can afford
+            // per-instance precision because a SHA changes; a sign-off hold has no equally cheap
+            // "which instance" signal, and a false skip here is safe (the rollup card still shows
+            // it), while spamming on every sweep re-evaluation would not be.
+            async function pingOnSignoffHold(epicNumber, title) {
+              const marker = `<!-- signoff-ping:${epicNumber} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: epicNumber, per_page: 100 })
+              if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this hold
+              const body =
+                `${marker}\n` +
+                `🎨 **@${OWNER} — this needs your sign-off** (${title}).\n\n` +
+                `A draft PR is waiting on your reply (\`ok\`, or \`not ok: what's wrong\`) before it can build or ` +
+                `merge — open this issue's latest comment (or its PR) to see what changed.\n\n` +
+                `<sub>🤖 agent pipeline (CI) · sign-off notify (#1815/#2135)</sub>`
+              await github.rest.issues.createComment({ owner, repo, issue_number: epicNumber, body })
+              core.info(`Pinged @${OWNER} on fresh sign-off hold for epic #${epicNumber}.`)
+            }
+
+            // #2171: never ASK for a visual sign-off the flow can't SHOW. Read the PR's OWN
+            // committed files (not a body claim — the #1849 rule). `isVisual` mirrors
+            // work-issue-pidev.yml's UI_TOUCHED EXACTLY — a looser match would wrongly FREEZE a
+            // non-visual sign-off. `hasEvidence` = a capture under writeups/ui-proposals/ (the
+            // worker's EVIDENCE_ATTACHED signal).
+            async function visualEvidenceState(prNumber) {
+              const files = await github.paginate(github.rest.pulls.listFiles,
+                { owner, repo, pull_number: prNumber, per_page: 100 })
+              const paths = files.map(f => f.filename || '')
+              const isVisual = paths.some(p =>
+                /\.(vue|css)$/.test(p) || /\/app\/(components|layouts|pages)\//.test(p) || /app\.config\.ts$/.test(p))
+              const hasEvidence = paths.some(p => /^writeups\/ui-proposals\//.test(p))
+              return { isVisual, hasEvidence }
+            }
+
+            // A visual PR with NO capture must not become a sign-off ASK — that sends the owner to
+            // approve a surface the flow never showed them (#2057). Say so ONCE, and do NOT
+            // @mention: there is no action for the owner here — closing the gap (a capture, or a
+            // real preview of the changed surface) is the flow's job. When a capture later lands,
+            // pingOnSignoffHold fires normally (its marker is independent of this one), so this
+            // self-heals rather than wedging the PR.
+            async function withholdSignoffNoCapture(epicNumber, prNumber, title) {
+              const marker = `<!-- signoff-withheld-nocapture:${epicNumber} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: epicNumber, per_page: 100 })
+              if (comments.some(c => (c.body || '').includes(marker))) return
+              const body =
+                `${marker}\n` +
+                `🚫 **Sign-off withheld — nothing to show yet** (${title}).\n\n` +
+                `PR #${prNumber} changes a visual surface, but no screenshot was captured this run ` +
+                `(none under \`writeups/ui-proposals/\`). The flow will not ask you to approve a ` +
+                `surface it hasn't shown you — a capture (or a working preview of the changed ` +
+                `surface) has to land first. Nothing for you to do here; the gap is the flow's to ` +
+                `close (#2057).\n\n` +
+                `<sub>🤖 agent pipeline (CI) · visual sign-off gate (#2171)</sub>`
+              await github.rest.issues.createComment({ owner, repo, issue_number: epicNumber, body })
+              core.info(`Withheld sign-off for epic #${epicNumber}: visual PR #${prNumber} has no capture.`)
+            }
+
+            // A live flow-status CARD on the epic (#1838) — stage + child tree + current activity,
+            // computed deterministically from sub-issue state + each child's work-<n> PR. Replaces
+            // the old thin count line. Renders even with 0 children (the sign-off / decompose stages).
+            async function updateEpic(epicNumber) {
+              let subs = []
+              try {
+                subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                  { owner, repo, issue_number: epicNumber, per_page: 100 })
+              } catch (e) { core.warning(`sub-issues for #${epicNumber}: ${e.message}`) }
+
+              let epic
+              try { epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data }
+              catch (e) { core.warning(`epic #${epicNumber}: ${e.message}`); return }
+              const names = x => (x.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+              const epicBlocked = names(epic).includes('status:blocked')
+              const title = (epic.title || '').replace(/^(Epic|Initiative):\s*/i, '').trim()
+
+              const total = subs.length
+              const done = subs.filter(s => s.state === 'closed').length
+
+              // Newest work-<n> PR for a child (bounded — a handful of children per epic).
+              async function childPr(n) {
+                try {
+                  const prs = await github.paginate(github.rest.pulls.list,
+                    { owner, repo, state: 'all', head: `${owner}:work-${n}`, per_page: 10 })
+                  return prs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null
+                } catch { return null }
+              }
+
+              // Child tree lines.
+              const lines = []
+              for (const s of subs) {
+                let icon = '⏳', note = 'queued'
+                if (s.state === 'closed') { icon = '✅'; note = '' }
+                // Two different holds, two different asks (#2083): `blocked` wants a reply,
+                // `needs-merge` wants the merge button. A rollup that shows both as "held"
+                // tells the owner to go find out which — the thing the split exists to avoid.
+                else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held — needs your reply' }
+                else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
+                else {
+                  const pr = await childPr(s.number)
+                  if (pr && pr.merged_at) { icon = '✅'; note = `PR #${pr.number} merged` }
+                  else if (pr && pr.state === 'open') { icon = '🔨'; note = `PR #${pr.number}` }
+                }
+                lines.push(`- ${icon} #${s.number} ${s.title}${note ? ` — ${note}` : ''}`)
+              }
+
+              // Stage: 0 children + blocked ⇒ sign-off · 0 + open ⇒ decomposing · some open ⇒ build ·
+              // all closed ⇒ assembled/review.
+              const stages = ['sign-off', 'build', 'assemble', 'review']
+              const curIdx = total === 0 ? (epicBlocked ? 0 : 0) : (done < total ? 1 : 2)
+              const bar = stages.map((s, i) => i === curIdx ? `**${s}** ◀` : i < curIdx ? `${s} ✓` : s).join(' → ')
+
+              let head, activity
+              if (total === 0) {
+                head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
+                activity = epicBlocked ? '_now: waiting for your `ok` / answer on the design_' : '_now: the decomposer is planning this epic_'
+                // #2156: only ASK for sign-off once the held PR is actually reviewable — its CI
+                // is green. Pinging the instant the draft opens asks for a decision that can't be
+                // made yet: on #2156 the sign-off ping fired 4 minutes BEFORE CI went red on a
+                // real type error, so the owner got "needs your sign-off" and "CI failed" back to
+                // back. A red or still-running draft is the red-ping's / fix-bot's job, not a
+                // sign-off ask. This re-fires on the next CI-completion event (workflow_run,
+                // above), so a later green still pings — and the signoff-ping marker keeps it
+                // one-shot. A design-only hold (#1821) has no work-<n> PR yet and already
+                // @mentions the owner at creation (apply-decompose-plan.mjs), so skipping it here
+                // avoids a double-ping rather than dropping a signal.
+                if (epicBlocked) {
+                  const heldPr = await childPr(epicNumber)
+                  if (!heldPr) {
+                    core.info(`epic #${epicNumber}: sign-off hold with no work-<n> PR (design hold?) — owner already @mentioned at creation; not double-pinging.`)
+                  } else {
+                    const heldSt = await ciState(heldPr.head.sha)
+                    if (heldSt.word !== 'passing') {
+                      core.info(`epic #${epicNumber}: held PR #${heldPr.number} CI is ${heldSt.word} — deferring sign-off ping until green.`)
+                    } else {
+                      // Green — but never ASK for a visual sign-off the flow can't SHOW (#2171/#2057).
+                      const vis = await visualEvidenceState(heldPr.number)
+                      if (vis.isVisual && !vis.hasEvidence) await withholdSignoffNoCapture(epicNumber, heldPr.number, title)
+                      else await pingOnSignoffHold(epicNumber, title)
+                    }
+                  }
+                }
+              } else if (done < total) {
+                head = `## 🔨 Building — ${title}  (${done}/${total})`
+                activity = `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`
+              } else {
+                head = `## ✅ Assembled — ${title}  (${total}/${total})`
+                activity = '_now: all children merged — the epic→main PR opens for your review next_'
+              }
+
+              const body =
+                `${EPIC_ROLLUP}\n` +
+                `${head}\n\n` +
+                `\`${bar}\`\n\n` +
+                (lines.length ? lines.join('\n') + '\n\n' : '') +
+                `${activity}\n\n` +
+                `<sub>🤖 agent pipeline · live status (#1838) · updated ${now}</sub>`
+              await upsert(epicNumber, EPIC_ROLLUP, body)
+            }
+
+            // ── issues event (#1838): a child closed/reopened → refresh its epic's card ──
+            // Resolve the epic: the issue itself if it has sub-issues, else its parent via the
+            // WS2 pipeline block (`<!-- pipeline: epic=N … -->`) in the body.
+            if (context.eventName === 'issues') {
+              const issue = context.payload.issue
+              let epicNum = null
+              try {
+                const own = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                  { owner, repo, issue_number: issue.number, per_page: 1 })
+                if (own.length) epicNum = issue.number
+              } catch (e) { /* not an epic */ }
+              if (!epicNum) {
+                const m = /epic=(\d+)/.exec(issue.body || '')
+                if (m) epicNum = Number(m[1])
+              }
+              if (epicNum) { await updateEpic(epicNum); core.info(`Refreshed epic card #${epicNum} (issues:${context.payload.action}).`) }
+              else core.info(`#${issue.number} is not a pipeline epic/child — nothing to do.`)
+              return
+            }
+
+            // Resolve candidate PR numbers from whatever event fired.
+            const prNumbers = new Set()
+            if (context.eventName === 'pull_request') {
+              prNumbers.add(context.payload.pull_request.number)
+            } else {
+              // `workflow_run` first — it is the only one of the three that actually fires for
+              // our Actions-generated checks (#1884). It also carries `pull_requests`, but that
+              // array is empty for a run from a fork, so resolve by head SHA like the others.
+              const sha = context.payload.workflow_run?.head_sha
+                || context.payload.check_suite?.head_sha
+                || context.payload.sha
+              if (sha) {
+                const assoc = await github.paginate(
+                  github.rest.repos.listPullRequestsAssociatedWithCommit,
+                  { owner, repo, commit_sha: sha, per_page: 100 })
+                assoc.forEach(p => prNumbers.add(p.number))
+              }
+            }
+            if (!prNumbers.size) { core.info('No associated PRs — nothing to do.'); return }
+
+            for (const pull_number of prNumbers) {
+              let pr
+              try { pr = (await github.rest.pulls.get({ owner, repo, pull_number })).data } catch { continue }
+              if (pr.state !== 'open') continue
+              // Pipeline-authored branches: the pi pipeline (`work-*`; `claude/issue-*` dropped in #2891). The pi branches were silently skipped before #1815, so no pi
+              // worker PR ever got a status note — the main reason the owner saw no signal at all.
+              const isPipeline = pr.head.ref.startsWith('work-')
+              if (!isPipeline) {
+                core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
+              }
+              await updatePr(pr)
+              core.info(`Updated sticky status for #${pull_number}.`)
+            }
+
+# ── board job: Auto-moves cards on the GitHub Project board (Status field) so it reflects
+# reality without manual dragging:
+#   - PR opened / reopened / ready for review  -> In review
+#   - PR back to draft                          -> In progress
+#   - PR closed (merged or not)                 -> Done
+#   - Issue assigned or reopened                -> In progress
+#   - Issue labeled status:in-progress          -> In progress
+#   - Issue labeled status:blocked              -> Blocked
+#   - Issue closed                              -> Done
+# The label triggers are the reliable signal: the github-tasks flow (and
+# agents) mark "work started" by applying status:in-progress, not by
+# assigning — so without these an issue would skip In progress entirely and
+# jump straight to In review when its PR opens.
+# We own merged/closed -> Done here rather than delegating to the Project's
+# built-in workflow, so the board advances deterministically without depending
+# on a UI toggle that can silently be off. When a merged PR auto-closes its
+# linked issues, each fires its own `issues: closed` event, so those cards move
+# to Done too — including a parent epic once you close it.
+# (Item added -> Backlog is still handled by the Project's built-in workflow.)
+#
+# ── Auth (#546): org-scoped Nuxt Harness App token, no PAT ──────────────────
+# The board is now the FriendlyInternet **org** Projects v2 board ("Crouton").
+# GITHUB_TOKEN can't write a Projects v2 board, but the Nuxt Harness App can:
+# installed on the org with Organization → Projects: Read & write, it mints a
+# short-lived installation token at runtime. This retires the PROJECTS_TOKEN PAT
+# (the repo is fully PAT-free). Needs Actions secrets HARNESS_APP_ID +
+# HARNESS_APP_PRIVATE_KEY (org-level). Set repo variable PROJECT_NAME only if
+# the board isn't named "Crouton".
+#
+# The board is resolved by title at the ORG level (organization.projectsV2), NOT via
+# repository.projectsV2 — a private org board isn't reliably returned by the repo-link
+# lookup to an App token even when linked, which silently no-op'd this on every event.
+# So card-moving no longer depends on the repo<->project link. (#646)
+  board:
+    # Card moves: every PR/issue event except a plain push (synchronize) or a check completion.
+    if: >
+      (github.event_name == 'pull_request' && github.event.action != 'synchronize') ||
+      github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Mint an org-scoped Nuxt Harness App installation token. `owner` (no
+      # `repositories`) yields a token carrying the org-level grants — here
+      # Organization → Projects: Read & write — which is what writing the
+      # org board requires. (#546)
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PROJECT_NAME: ${{ vars.PROJECT_NAME || 'Crouton' }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const projectName = process.env.PROJECT_NAME
+            const { owner, repo } = context.repo
+
+            // Map a status:* label to a board column. Returning null means
+            // "ignore this label" so unrelated labels are a clean no-op.
+            const labelToStatus = (name) => {
+              switch ((name || '').toLowerCase()) {
+                case 'status:in-progress': return 'In progress'
+                case 'status:blocked':     return 'Blocked'
+                // #2083 — the auto-merge shared-code hold moved off `status:blocked` onto its
+                // own label. This case is load-bearing: the switch returns null for anything
+                // unknown, which is a silent no-op, so without it those PRs would simply stop
+                // appearing on the board with nothing in the log to say so. Same column —
+                // they are still parked awaiting a human — but a distinguishable label.
+                case 'status:needs-merge': return 'Blocked'
+                default:                   return null
+              }
+            }
+
+            // Decide the target Status from the event
+            let target = null
+            if (context.eventName === 'pull_request') {
+              const a = context.payload.action
+              // closed covers both merge and close-without-merge — either way
+              // the PR is off the board's active lanes.
+              if (a === 'closed') target = 'Done'
+              else if (a === 'converted_to_draft') target = 'In progress'
+              else target = 'In review' // opened / reopened / ready_for_review
+            } else if (context.eventName === 'issues') {
+              const a = context.payload.action
+              // A merged PR's `Closes #NN` auto-closes its issues, firing this
+              // `closed` event — that's what advances sub-issues (and a manually
+              // closed parent epic) to Done.
+              if (a === 'closed') target = 'Done'
+              // `labeled` is the reliable "work started/blocked" signal; the
+              // label name decides the column. assigned/reopened keep the old
+              // In-progress behaviour as a fallback.
+              else if (a === 'labeled') target = labelToStatus(context.payload.label?.name)
+              else target = 'In progress'
+            }
+            if (!target) return
+
+            const contentNodeId = context.payload.pull_request?.node_id
+              ?? context.payload.issue?.node_id
+            if (!contentNodeId) return
+
+            // 1) Find the project + its Status field/options by title, among the ORG's
+            //    Projects v2 boards. Resolving at the org level (not repository.projectsV2)
+            //    keeps this working without the repo<->project link, which doesn't reliably
+            //    surface a private org board to the App token even when linked. (#646)
+            let project = null
+            let pcursor = null
+            do {
+              const projQ = await github.graphql(`
+                query($org:String!,$cursor:String){
+                  organization(login:$org){
+                    projectsV2(first:100, after:$cursor){
+                      pageInfo{ hasNextPage endCursor }
+                      nodes {
+                        id title
+                        field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } }
+                      }
+                    }
+                  }
+                }`, { org: owner, cursor: pcursor })
+              const conn = projQ.organization.projectsV2
+              project = conn.nodes.find(p => p.title === projectName)
+              pcursor = (!project && conn.pageInfo.hasNextPage) ? conn.pageInfo.endCursor : null
+            } while (pcursor)
+            if (!project || !project.field) { core.warning(`Project "${projectName}" or its Status field not found`); return }
+            const option = project.field.options.find(o => o.name.toLowerCase() === target.toLowerCase())
+            if (!option) { core.warning(`Status option "${target}" not found`); return }
+
+            // 2) Find this item on the project (add it if missing)
+            const itemQ = await github.graphql(`
+              query($id:ID!){ node(id:$id){
+                ... on Issue { projectItems(first:50){ nodes { id project { id } } } }
+                ... on PullRequest { projectItems(first:50){ nodes { id project { id } } } }
+              } }`, { id: contentNodeId })
+            let item = (itemQ.node.projectItems?.nodes || []).find(i => i.project.id === project.id)
+            if (!item) {
+              const added = await github.graphql(`
+                mutation($project:ID!,$content:ID!){
+                  addProjectV2ItemById(input:{projectId:$project,contentId:$content}){ item { id } }
+                }`, { project: project.id, content: contentNodeId })
+              item = { id: added.addProjectV2ItemById.item.id }
+            }
+
+            // 3) Set Status
+            await github.graphql(`
+              mutation($project:ID!,$item:ID!,$field:ID!,$opt:String!){
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$project, itemId:$item, fieldId:$field,
+                  value:{ singleSelectOptionId:$opt }
+                }){ projectV2Item { id } }
+              }`, { project: project.id, item: item.id, field: project.field.id, opt: option.id })
+
+            core.info(`Set "${projectName}" status -> ${target} for ${contentNodeId}`)

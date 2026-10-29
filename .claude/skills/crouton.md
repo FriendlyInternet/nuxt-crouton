@@ -101,6 +101,7 @@ Use this skill when the user mentions:
 |-----------|-------------|---------|
 | text, string, name, title | `string` | `"name": { "type": "string" }` |
 | long text, description, content | `text` | `"description": { "type": "text" }` |
+| rich text, formatted content (needs crouton-editor) | `richText` | `"content": { "type": "richText" }` |
 | number, count, quantity | `number` | `"quantity": { "type": "number" }` |
 | price, amount, decimal | `decimal` | `"price": { "type": "decimal", "meta": { "precision": 10, "scale": 2 } }` |
 | boolean, yes/no, active | `boolean` | `"active": { "type": "boolean" }` |
@@ -362,7 +363,7 @@ the LLM `/layout` pass (#711) is gated and out of scope.
 layers/{layer}/collections/{collection}/
 ├── app/
 │   ├── components/
-│   │   ├── _Form.vue         # CRUD form with Zod validation (note the underscore; skipped when formComponent is set)
+│   │   ├── _Form.vue         # CRUD form with Zod validation (note the underscore; named `<Layer><Plural>Form`; eject by adding that name in the app's `app/components`)
 │   │   └── List.vue          # Data table with actions
 │   └── composables/
 │       └── use{Layer}{Collection}s.ts  # Schema, columns, config

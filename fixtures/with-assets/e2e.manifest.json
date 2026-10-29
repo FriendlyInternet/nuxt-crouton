@@ -1,5 +1,11 @@
 {
   "packages": ["crouton-assets"],
+  "allowConsole": [
+    {
+      "pattern": "Failed to resolve component: CroutonPagesEditorBlockEditor",
+      "reason": "crouton-i18n Input.vue looks up the crouton-pages block editors with no stub, so Vue warns on every render when crouton-pages isn't extended. Needs a stub in packages/crouton-i18n (own ticket)."
+    }
+  ],
   "collections": [
     {
       "key": "mainItems",

@@ -64,7 +64,6 @@ const _salesEventsConfig = {
   name: 'salesEvents',
   layer: 'sales',
   apiPath: 'sales-events',
-  componentName: 'SalesEventsForm',
   defaultValues: {
     title: '',
     slug: '',

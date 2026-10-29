@@ -7,13 +7,13 @@ import { loadFields } from '../../../lib/utils/load-fields.ts'
 // Mirrors the shape getTypeMapping() produces: alias keys carry the canonical
 // type via `canonical`, so loadFields can normalize them (#285).
 const typeMapping = {
-  string: { db: '', drizzle: '', zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput' },
-  number: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
-  date: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
-  repeater: { db: '', drizzle: '', zod: 'z.array(z.any())', default: '[]', tsType: 'any[]', canonical: 'repeater', component: 'CroutonFormRepeater' },
+  string: { db: '', sqlite: { column: 'text' }, zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput' },
+  number: { db: '', sqlite: { column: 'text' }, zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
+  date: { db: '', sqlite: { column: 'text' }, zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
+  repeater: { db: '', sqlite: { column: 'text' }, zod: 'z.array(z.any())', default: '[]', tsType: 'any[]', canonical: 'repeater', component: 'CroutonFormRepeater' },
   // aliases — same def as their canonical, with canonical pointing back
-  integer: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
-  datetime: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
+  integer: { db: '', sqlite: { column: 'text' }, zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
+  datetime: { db: '', sqlite: { column: 'text' }, zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
 }
 
 async function loadFromSchema(schema: Record<string, unknown>) {

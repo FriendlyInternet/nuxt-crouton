@@ -80,7 +80,6 @@ const _pagesPagesConfig = {
   name: 'pagesPages',
   layer: 'pages',
   apiPath: 'pages-pages',
-  componentName: 'CroutonPagesForm',
   defaultValues: {
     title: '',
     slug: '',

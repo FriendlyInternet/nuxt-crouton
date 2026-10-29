@@ -45,6 +45,17 @@ evidence just moved the planning roles' price point down. Remaining cost levers 
 (drop fixed daily sweeps; route reports-only flows to Haiku via pi). Caveat: N=4, single judge —
 a strong signal, not proof; the #865 eval scoreboard is where this gets validated continuously.
 
+**Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
+(`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
+data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+`.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
+(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
+`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
+differs, links the plan in its PR body and appends a row to
+`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
+
 ## The red-team agent (standalone — not part of the pipeline)
 
 `red-team.md` is an **adversarial security prober** (epic #540), independent of the
@@ -58,7 +69,7 @@ Static-first; at `depth=deep` it may dynamically confirm high/criticals against 
 | `red-team` | `red-team.md` | no | no (reports only) | `sonnet` |
 
 It's steered by the **`/red-team` skill** (on demand) and run by
-`.github/workflows/red-team.yml` (per-PR `quick`, fails the check on high+) and
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on high+) and
 `red-team-daily.yml` (daily `deep`). Findings → a report under `writeups/reports/` + (for
 confirmed high/criticals) `security`/`sec:*` GitHub issues.
 
@@ -77,7 +88,7 @@ against a fixture. It reports; it patches the safe set (`alt`/`aria-label`/label
 | `a11y` | `a11y.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
 It's steered by the **`/a11y` skill** (on demand) and run by
-`.github/workflows/a11y.yml` (per-PR `quick`, fails the check on 🔴 critical/serious) and
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on 🔴 critical/serious) and
 `a11y-daily.yml` (daily `deep`, posts a public standing issue + files `a11y` issues for new
 criticals). Severity maps axe critical/serious → 🔴, moderate → 🟡, minor → 🔵.
 
@@ -99,7 +110,7 @@ deterministic set (v3→v4 renames, redundant-overlay-`UCard` unwraps) under `fi
 | `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
 It's steered by the **`/frontend-review` skill** (on demand) and run by
-`.github/workflows/frontend-review.yml` (per-PR `quick`, fails the check on a 🔴
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on a 🔴
 critical convention break, diff-scoped so never the backlog). Its lens is conventions
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
@@ -122,7 +133,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 **It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
-`.github/workflows/simplify-review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
+`.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
 sticky comment + writes a verdict for the outage-check, always exits 0). Sonnet (not Haiku)
 because judgment/false-positive cost dominates here — see `routing.json`. Its lens is
 **simpler/less-duplicated/more-idiomatic** only — not bugs (`/code-review`, `red-team`),
@@ -190,7 +201,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   `parent_issue_url` is set / it carries a parent epic), do **NOT** mint a fresh
   `epic/<child>-<slug>` off `main`. Resolve the parent epic and use its existing
   `epic/<parent>-<slug>` as the integration base, then work just that child there. Only a
-  true top-level epic creates a new epic branch. (This is what makes a human/`comment-dispatch`
+  true top-level epic creates a new epic branch. (This is what makes a human/`on-comment` dispatch job
   `delegate`/`/deploy` on a single child issue land on the right branch instead of off `main`.)
 - **Stop-conditions live in `task-decomposer.md`:** `MAX_DEPTH = 3`, `MAX_CHILDREN = 6`,
   and the four-part LEAF TEST. Tune them there (+ orchestrator's MAX_CHILDREN).
@@ -213,7 +224,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   sign-off" (needs an *approval*) — keyed off the ask-human template's mandatory
   `## 🔀 Blocked —` first line, so a question can't read as an approval request.
 - **A block comment is a HANDOFF, not just a question (#639) — emit it via the `ask-human`
-  skill (#1189).** The owner's reply spawns a **brand-new session** (`resume-on-comment.yml`)
+  skill (#1189).** The owner's reply spawns a **brand-new session** (`on-comment.yml`)
   that has **zero memory** of your reasoning and checks out `main` — not your worktree, which
   is gone. So the blocking comment must be self-contained enough for a cold agent to resume
   from, **and** 10-second-scannable for an owner holding many threads: lead with the one
@@ -288,7 +299,7 @@ package). Threaded through `epic_branch` in the agent contract:
 ### Claude-action workflow standard (any `anthropics/claude-code-action` workflow)
 
 When you add or copy a workflow that runs `anthropics/claude-code-action` (the event→agent
-glue like `claude.yml` / `decompose-on-issue.yml` / `resume-on-comment.yml`), it MUST carry
+glue like `claude.yml` / `decompose-on-issue.yml` / `on-comment.yml`), it MUST carry
 all of these by **default** — they're not optional extras; each one has burned us:
 
 - **`id-token: write` at the JOB level.** Job-level `permissions` *fully overrides* (does
@@ -308,10 +319,10 @@ all of these by **default** — they're not optional extras; each one has burned
   retries, hits max_turns — and the gate fails **OPEN** as a hollow green. This shipped broken
   in `frontend-review`, `a11y`, `red-team` (fixed #1031/#1033) *and* the loop-station advisor
   (fixed #1037). Two standard forms:
-  - **Per-PR verdict gates** (`frontend-review.yml` / `a11y.yml` / `red-team.yml`):
+  - **Per-PR verdict gates** (`review.yml`):
     `--allowedTools Bash,Write,Edit,Read,Grep,Glob` in `claude_args`.
   - **Sweeps/advisors that file issues** (`a11y-daily.yml` / `red-team-daily.yml` /
-    `loop-station-advisor.yml`): `--permission-mode bypassPermissions`.
+    `weekly.yml`): `--permission-mode bypassPermissions`.
   The `gate-package-edits` PreToolUse hook still guards `packages/` either way. Workflows whose
   prompt only steers the action's built-in GitHub flows (`claude.yml`-style mention glue) don't
   need a grant — if you omit one, say why in a workflow comment.

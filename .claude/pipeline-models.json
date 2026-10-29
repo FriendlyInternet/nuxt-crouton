@@ -1,7 +1,8 @@
 {
-  "_about": "The ONE model setting for every Claude workflow (#2161). Three tiers: `light` (reviews/reports — a11y, frontend-review), `default` (most work — @claude, fix-CI, resume, red-team, the issue worker + decomposer), `hard` (the `delegate-hard` escalation). Every workflow reads its tier at run time via scripts/resolve-pipeline-model.mjs — change a model HERE, no workflow edit. Runs on the Claude subscription (provider claude-bridge → Claude Code + CLAUDE_CODE_OAUTH_TOKEN, #1669/#2275). `node scripts/gen-routing.mjs --check` (CI) fails if a workflow hard-codes a model or routing.json's `pi` column disagrees with this file.",
+  "_about": "The ONE model setting for every Claude workflow (#2161). Four tiers: `light` (reviews/reports — a11y, frontend-review), `default` (most work — @claude, fix-CI, resume, red-team, the issue worker + decomposer), `hard` (the `delegate-hard` escalation), `review` (the independent plan reviewer, #2756 — the strongest model, read-only). Every workflow reads its tier at run time via scripts/resolve-pipeline-model.mjs — change a model HERE, no workflow edit. Runs on the Claude subscription (provider claude-bridge → Claude Code + CLAUDE_CODE_OAUTH_TOKEN, #1669/#2275). `node scripts/gen-routing.mjs --check` (CI) fails if a workflow hard-codes a model or routing.json's `pi` column disagrees with this file.",
   "provider": "claude-bridge",
   "light": "claude-haiku-4-5",
   "default": "claude-sonnet-5-5",
-  "hard": "claude-opus-5-5"
+  "hard": "claude-opus-5-5",
+  "review": "claude-opus-5-5"
 }

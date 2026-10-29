@@ -7,6 +7,9 @@
       "create": { "name": "e2e item" }
     }
   ],
+  "ejectedForm": { "collectionKey": "bookingsLocations", "marker": "EJECTED-FORM-WINS" },
+  "ejectedList": { "collectionKey": "bookingsEmailtemplates", "marker": "EJECTED-LIST-WINS" },
+  "cardRenders": { "collectionKey": "mainItems", "apiPath": "main-items", "create": { "name": "e2e card" }, "marker": "CARD-RENDERS" },
   "surfaces": [
     {
       "name": "bookings admin section renders",

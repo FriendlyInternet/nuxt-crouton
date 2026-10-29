@@ -4,7 +4,13 @@
 // `sales_sync_outbox` + `sales_sync_status` in `db:generate` migrations
 // automatically — no manual schema import needed in the app (same pattern as
 // crouton-flow/crouton-collab).
-export { salesSyncOutbox, salesSyncStatus } from '../database/schema'
+export {
+  salesSyncOutbox,
+  salesSyncStatus,
+  salesSyncTombstones,
+  salesSyncPullState,
+  salesSyncConflicts,
+} from '../database/schema'
 
 // The sales collection tables (#2278) — owned by this package, so an app's
 // migrations pick them up from here, not from a generated app layer.

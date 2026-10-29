@@ -59,7 +59,7 @@ name: Auto-merge epic sub-PRs
 # green sub-PR sat unmerged forever, and the owner merged them by hand.
 # `workflow_run` DOES fire for Actions-generated completions. `CI` owns `CI Gate`, so its
 # completion is precisely the moment the answer can change. Same cure #1884 applied to
-# pipeline-pr-status.yml.
+# status.yml.
 # LEVEL-TRIGGERED BACKSTOP (#2091). Everything above is EDGE-triggered — a PR event, or a
 # workflow completing. A PR held at a moment when the answer was legitimately "not yet" is
 # therefore never re-asked, because its edges have all already fired: the pi worker pushes
@@ -85,8 +85,10 @@ on:
     workflows: ["CI"]
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
-  issue_comment:
-    types: [created]
+  # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
+  # (kind=automerge-go). The caller's event is still issue_comment, so the branches below that
+  # read `issue_comment` keep working unchanged.
+  workflow_call:
 
 permissions:
   contents: read
@@ -115,7 +117,11 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+      # Default branch, never the PR's merge ref: the hold decision must not be editable by the PR it judges.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
@@ -271,6 +277,12 @@ jobs:
                 continue
               }
 
+              // Build review (#2777): a green PR still needs the independent reviewer's go.
+              // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
+              // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
+              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
+                core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
+              }
               // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
               // commit after it, releases the shared-code pause and the epic → main hold.
               // Green + presence gates above still apply — `ok` never overrides a red check.
@@ -292,8 +304,11 @@ jobs:
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
               // workflows, but a workflow change never self-merges.
               const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
-              const sharedCode = files.filter(f => f.filename.startsWith('packages/') || f.filename.startsWith('.github/workflows/'))
-              if (sharedCode.length && !go.go) {
+              // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
+              const { decideSharedCodeHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/shared-code-hold.mjs`)
+              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: files.map(f => f.filename) })
+              const sharedCode = hold.held
+              if (hold.action === 'hold' && !go.go) {
                 // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
                 // on an epic branch, and without this guard it re-posted the identical "held for a
                 // human" comment every hour (observed twice, 7 minutes apart, on PR #2148) and
@@ -312,14 +327,13 @@ jobs:
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
                 // #2520: no review request or @mention here — sub-PRs never notify the owner;
                 // only the epic→main PR and real blocking questions do.
-                const hasPkgs = sharedCode.some(f => f.filename.startsWith('packages/'))
-                const hasWf = sharedCode.some(f => f.filename.startsWith('.github/workflows/'))
+                const { hasPkgs, hasWf } = hold
                 const what = hasPkgs && hasWf ? 'shared code under `packages/` and CI workflows under `.github/workflows/`'
                   : hasWf ? 'CI workflows under `.github/workflows/`' : 'shared code under `packages/`'
-                const why = hasPkgs
-                  ? 'a change to `packages/` ripples across every consuming app (the `packages/` HARD GATE, #350), so it is not auto-merged — review it, confirm `pnpm typecheck` across apps, then reply `ok` and it merges itself once green.'
-                  : 'a workflow change never self-merges until you say so (#2442) — review it, then reply `ok` and it merges itself once green.'
-                const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
+                const why = hasWf
+                  ? 'a workflow change never self-merges until you say so (#2442) — review it, then reply `ok` and it merges itself once green.'
+                  : 'a change to `packages/` ripples across every consuming app (the `packages/` HARD GATE, #350) and it is not releasable by this path — review it, confirm `pnpm typecheck` across apps, then reply `ok` and it merges itself once green.'
+                const list = sharedCode.slice(0, 10).map(f => `- \`${f}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
                   body: `⏸️ **Held for a human — this build PR changes ${what}.**\n\n`

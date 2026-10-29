@@ -60,7 +60,7 @@ export default defineNuxtConfig({
 | `app/composables/useDisplayConfig.ts` | Resolves display config (title/subtitle/image/badge/description) with auto-inference |
 | `app/components/Collection.vue` | Multi-layout display (table, list, grid, tree, kanban) |
 | `app/components/CollectionSkeleton.vue` | `CroutonCollectionSkeleton` — layout-aware shimmer (table/list/grid) used as the `<Suspense>` fallback in `CollectionViewer` so the viewer reveals the populated result at once instead of flashing a loader + filling in row-by-row |
-| `app/components/Form.vue` | Main CRUD form handler with nested modal support |
+| `app/components/Form.vue` | Main CRUD form handler with nested modal support. Resolves the form by canonical name `<Layer><Plural>Form` (`app/utils/form-resolver.ts`, lazy via the build-time map) — no per-collection setting. To replace one, add `app/components/<Layer><Plural>Form.vue` (or `…List.vue`) in the app; it wins, delete it to revert (docs: `5.customization/2.eject.md`) |
 | `app/utils/init-form-state.ts` | `initFormState(defaultValue, activeItem)` — builds an edit form's initial state, coercing a nullable column's loaded `null` back to the form default so it never reaches the narrow client schema and silently blocks submit (#1498; the hand-written form analog of the generator's #1415 coercion). Used by `RedirectsForm` + `crouton-sales`'s `useSalesCollectionForm`. |
 | `app/components/Detail.vue` | `CroutonDetail` — Generic detail view using display config and runtime field metadata |
 | `app/components/DefaultCard.vue` | `CroutonDefaultCard` — Display-aware card (title/image/badge from display config) |
