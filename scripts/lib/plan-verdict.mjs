@@ -16,7 +16,7 @@
  *
  * Two layers, so a lenient model cannot wave a bad plan through:
  *  - `precheck(plan)` is DETERMINISTIC — it fails items 1, 1b, 2, 3 straight from the plan's own
- *    text (not reproduced, unlinked evidence, hedging words in Cause, unverified assumptions).
+ *    text (not reproduced, unlinked evidence, hedging words in Cause).
  *  - `decide(plan, verdict)` merges both: any precheck FAIL overrides the model's PASS, and the
  *    stated verdict must agree with the rubric (a `go` with a FAIL is rejected, not trusted).
  *
@@ -32,7 +32,7 @@ export const RUBRIC = [
   { id: '1', name: 'Reproduced? (observed, not reasoned)' },
   { id: '1b', name: 'Every assumption has a reason and a working evidence link' },
   { id: '2', name: 'Cause proven? (evidence ties symptom to cause)' },
-  { id: '3', name: 'No unverified assumptions' },
+  { id: '3', name: 'No undeclared assumptions' },
   { id: '4', name: 'Smallest change (no over-engineering)' },
   { id: '5', name: 'Best practice, no hacks' },
   { id: '6', name: 'Scope matches the issue' },
@@ -80,11 +80,17 @@ export function precheck(planBody) {
   const hedge = cause.match(HEDGE)
   if (!cause) fails['2'] = { pass: false, evidence: 'Cause section is missing or empty' }
   else if (hedge) fails['2'] = { pass: false, evidence: `Cause is stated without a check ("${hedge[0]}")` }
-  const unverified = plan.assumptions.filter((a) => a.status === 'unverified')
-  if (unverified.length) fails['3'] = { pass: false, evidence: `plan relies on ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` }
+  // Declared `unverified` assumptions (with a reason, enforced by plan-shape → 1b) are not a floor
+  // failure: a reviewer with a read-only token checks them itself. See `planNotes`.
   const shapeErr = plan.errors.filter((e) => !/^Reproduced/.test(e) && !/^assumption \d+/.test(e))
   if (shapeErr.length) fails['1'] ||= { pass: false, evidence: `plan is malformed: ${shapeErr.join('; ')}` }
   return fails
+}
+
+/** PURE. Declared-unverified claims, surfaced under check 3 instead of failing it (#3035). */
+export function planNotes(planBody) {
+  const unverified = parsePlan(planBody).assumptions.filter((a) => a.status === 'unverified')
+  return unverified.length ? { 3: `plan declares ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` } : {}
 }
 
 /** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision. */
@@ -106,13 +112,13 @@ export function decide(planBody, verdictBody) {
   }
   if (verdict === 'needs-owner' && !v.question) errors.push('needs-owner needs a Question section')
   if (errors.length) return { ok: false, errors }
-  return { ok: true, verdict, stated: v.stated, items, failed, question: v.question, overridden: Object.keys(floor) }
+  return { ok: true, verdict, stated: v.stated, items, failed, question: v.question, overridden: Object.keys(floor), notes: planNotes(planBody) }
 }
 
 /** PURE. The typed-brief comment (plain language, depth collapsed). */
 export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) {
   const final = d.verdict === 'no-go' && round >= maxRounds
-  const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}`).join('\n')
+  const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}${d.notes?.[r.id] ? `\n  - _Declared:_ ${d.notes[r.id]}` : ''}`).join('\n')
   const head = {
     go: '✅ **Plan approved** — safe to build from it.\n**Next:** none, the build can start.',
     'no-go': final
