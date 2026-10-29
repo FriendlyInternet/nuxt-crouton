@@ -26,6 +26,8 @@ export default defineNuxtConfig({
   // Owner-only sign-in by emailed link: no passwords, no passkeys. Who may request
   // a link (and that nobody can sign up) is enforced in server/middleware/owner-only.ts.
   croutonAuth: {
+    // Signed-out visitors land on the status-only /signin (not /auth/*: the shared auth modal grabs those)
+    ui: { redirects: { unauthenticated: '/signin' } },
     methods: {
       password: false,
       passkeys: false,
