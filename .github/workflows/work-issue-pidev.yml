@@ -366,7 +366,7 @@ jobs:
           HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
           PR_BASE=""; PR_NUM=""
           if [ -n "$FEEDBACK" ]; then
-            read -r PR_NUM PR_BASE < <(gh pr list --head "$HEAD_REF" --state open --json number,baseRefName -q '.[0] | "\(.number) \(.baseRefName)"' 2>/dev/null || true) || true
+            read -r PR_NUM PR_BASE < <(gh pr list --head "$HEAD_REF" --state open --json number,baseRefName -q '.[0] // empty | "\(.number) \(.baseRefName)"' 2>/dev/null || true) || true
           fi
           RES="$(PR_BASE="$PR_BASE" HEAD_REF="$HEAD_REF" ISSUE_EPIC="$ISSUE_EPIC" node scripts/resolve-base.mjs)"
           BASE="$(echo "$RES" | sed -n 's/^base=//p')"
