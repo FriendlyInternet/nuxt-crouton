@@ -3,7 +3,7 @@
  * Pure: HTTP and team lookup are injected so it is unit-testable without a network.
  *
  * Each entry is one authenticated GET against the deployed app:
- *   { path, expectStatus?: 200, expectIncludes? }
+ *   { path, expectStatus?: 200 | number[], expectIncludes? }
  * A miss (wrong status, or the body lacks `expectIncludes`) is a failure. `{teamId}` is the
  * logged-in session's active team, as for `smoke.crud`. This is how a package endpoint the app
  * consumes (e.g. sync-status) gets exercised on the real Worker, not just a single CRUD route.
@@ -11,7 +11,7 @@
 import { fillPlaceholders, bodyExcerpt } from './smoke-crud.mjs'
 
 /**
- * @param {Array<{path:string, expectStatus?:number, expectIncludes?:string}>} reads
+ * @param {Array<{path:string, expectStatus?:number|number[], expectIncludes?:string}>} reads
  * @param {object} deps  { http(method, path, body, {auth}) → {res:{status}, text}, getTeamId(), log(msg) }
  * @returns {Promise<string[]>} failure messages (empty = pass)
  */
@@ -25,11 +25,12 @@ export async function runReads(reads, { http, getTeamId, log = () => {} }) {
   const failures = []
   for (const r of reads) {
     const path = fillPlaceholders(r.path, vars)
-    const want = r.expectStatus ?? 200
+    const wantAny = [].concat(r.expectStatus ?? 200)
+    const want = wantAny.join('|')
     try {
       const { res, text } = await http('GET', path, undefined, { auth: true })
       const expect = r.expectIncludes == null ? null : fillPlaceholders(r.expectIncludes, vars)
-      if (res.status !== want) {
+      if (!wantAny.includes(res.status)) {
         failures.push(`reads ${path}: HTTP ${res.status}, expected ${want}${bodyExcerpt(text)}`)
       } else if (expect && !String(text ?? '').includes(expect)) {
         failures.push(`reads ${path}: missing "${expect}"`)

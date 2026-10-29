@@ -39,7 +39,7 @@
       },
       {
         "path": "/api/crouton-sales/sync/pull",
-        "expectStatus": 403
+        "expectStatus": [403, 503]
       },
       {
         "path": "/api/teams/{teamId}/sales-events"

@@ -55,3 +55,14 @@ test('{teamId} with no active team fails without calling anything', async () => 
 test('no reads declared is a pass', async () => {
   assert.deepEqual(await runReads(undefined, deps(fake({}).http)), [])
 })
+
+test('expectStatus may be a list; any listed status passes, others fail', async () => {
+  const { http } = fake({ '/a': resp(503), '/b': resp(403), '/c': resp(200) })
+  const failed = await runReads([
+    { path: '/a', expectStatus: [403, 503] },
+    { path: '/b', expectStatus: [403, 503] },
+    { path: '/c', expectStatus: [403, 503] },
+  ], deps(http))
+  assert.equal(failed.length, 1)
+  assert.match(failed[0], /\/c: HTTP 200, expected 403\|503/)
+})
