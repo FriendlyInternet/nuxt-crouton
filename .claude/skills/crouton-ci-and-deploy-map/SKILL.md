@@ -148,7 +148,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 | Secret | Used by | Notes |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | all agent workflows | Headless CI MUST use an API key, never a subscription `CLAUDE_CODE_OAUTH_TOKEN` (workflow comments cite Anthropic terms) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | all agent workflows | Auth is the Claude subscription (owner decision 2026-10-29, #3121); don't switch to an API key without an owner decision |
 | `HARNESS_APP_ID` + `HARNESS_APP_PRIVATE_KEY` | many workflows (grep for it) | The "Nuxt Harness" GitHub App — see the cascade rule below |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | deploy/db workflows | Token scopes: account Workers Scripts/D1/KV/R2 Edit + zone Workers Routes + DNS Edit (details: `deploy` skill, Credentials) |
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
