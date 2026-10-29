@@ -16,6 +16,8 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, a
 4. Scope: matches the ticket and plan; nothing extra, no drive-by changes.
 5. Plan followed: where a plan was approved, the diff does what it said. No plan → PASS "no approved plan".
 
+The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
+
 Verdict: `no-go` if any item is FAIL; else `needs-owner` only if the change is correct but needs a product, data or cost decision from the owner; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 
 <!-- build-review:v1 -->

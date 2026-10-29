@@ -19,6 +19,7 @@ name: On comment
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
+#   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
@@ -1007,6 +1008,45 @@ jobs:
           COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs
+
+  # Not routed by `kind`: a decision comment ("Decision: …", or "ok: <reason>" on a held plan) is
+  # recognised by format in scripts/lib/decision-line.mjs and copied into the ticket's
+  # `## Decisions` section so the plan/build reviewers judge against it (#3054). It runs beside
+  # whatever the router decides, so it needs no `route` output. Agent comments (🤖 header) pass
+  # the pre-filter, so the interactive agent's "owner decision" comments are not dropped (#3029).
+  record-decision:
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      (contains(github.event.comment.body, 'Decision:') || contains(github.event.comment.body, 'ok:'))
+    concurrency:
+      group: record-decision-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { parseDecision, decisionLine, appendDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`)
+            const c = context.payload.comment
+            const number = context.payload.issue.number
+            const held = (context.payload.issue.labels || []).some(l => (l.name ?? l) === 'status:blocked')
+            const text = parseDecision({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, held })
+            if (!text) return core.info('not a decision')
+            // Re-read the body: the payload copy may be stale if two decisions land together.
+            const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number: number })
+            const line = decisionLine({ text, date: c.created_at, url: c.html_url })
+            const next = appendDecision(issue.body, line, c.html_url)
+            if (next === issue.body) return core.info('already recorded')
+            await github.rest.issues.update({ ...context.repo, issue_number: number, body: next })
+            core.info(`recorded decision from comment ${c.id} on #${number}`)
 
   # Last resort (#2980): an OWNER's plain comment that matched no command. A default-tier model proposes
   # ONE action; scripts/comment-interpret.mjs validates it and refuses merge/close/delete/deploy
