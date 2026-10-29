@@ -17,13 +17,19 @@
  * Assumption bullet shape (one line each):
  *   - <claim> — Why: <why it is taken as true> — Evidence: <permalink/commit/log/doc> — Status: verified
  *
- *   node scripts/lib/plan-shape.mjs <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
+ * A RE-PLAN (`--revised`, #3149) also needs `### Ticket re-read`: bullets
+ *   - <ticket item> — Covered: <where in this plan>   (or `— Not covered: <reason>`)
+ * It proves the section was written, not that it is true. First plans are unchanged.
+ *
+ *   node scripts/lib/plan-shape.mjs [--revised] <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Assumptions', 'Needs owner']
+// Required only on a re-plan (`--revised`, #3149): proof the planner re-read the ticket.
+export const REREAD = 'Ticket re-read'
 
 const norm = (s) => s.toLowerCase().replace(/[^a-z]/g, '')
 
@@ -33,7 +39,7 @@ function splitSections(body) {
   for (const line of body.split('\n')) {
     const h = line.match(/^#{2,4}\s+\**\s*(.+?)\s*\**\s*$/)
     if (h) {
-      cur = SECTIONS.find((s) => norm(s) === norm(h[1])) || null
+      cur = [...SECTIONS, REREAD].find((s) => norm(s) === norm(h[1])) || null
       if (cur) out[cur] = ''
       continue
     }
@@ -87,24 +93,51 @@ function parseNeedsOwner(text, errors) {
   return m[1].toLowerCase() === 'yes'
 }
 
-export function parsePlan(body) {
+// `- <ticket item> — Covered: <where in this plan>` or `— Not covered: <reason>`
+export function parseReread(text) {
+  const errors = []
+  const bullets = text.split('\n').map((l) => l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)).filter(Boolean).map((m) => m[1])
+  if (!bullets.length) return { items: [], errors: [`${REREAD} must be bullets: - <ticket item> — Covered: <where> | Not covered: <reason>`] }
+  const items = bullets.map((b, i) => {
+    const m = b.match(/^(.*?)\s+[—–-]+\s+\**(not covered|covered)\**:\**\s*(.*)$/i)
+    if (!m || !m[1].trim() || !m[3].trim()) {
+      errors.push(`${REREAD} item ${i + 1}: needs "<ticket item> — Covered: <where>" or "— Not covered: <reason>"`)
+      return { item: b, covered: null, note: '' }
+    }
+    return { item: m[1].replace(/\*\*/g, '').trim(), covered: m[2].toLowerCase() === 'covered', note: m[3].trim() }
+  })
+  return { items, errors }
+}
+
+export function parsePlan(body, { revised = false } = {}) {
   const errors = []
   if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
   const sections = splitSections(body)
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
   }
+  let reread = []
+  if (revised) {
+    if (!sections[REREAD]) errors.push(`missing or empty section: ${REREAD} (required on a re-plan)`)
+    else {
+      const r = parseReread(sections[REREAD])
+      reread = r.items
+      errors.push(...r.errors)
+    }
+  }
   const reproduced = sections.Reproduced ? parseReproduced(sections.Reproduced, errors) : null
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
   errors.push(...a.errors)
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, unverified: reproduced === false }
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, reread, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const file = process.argv[2]
-  if (!file) { console.error('usage: plan-shape.mjs <comment-body-file>'); process.exit(2) }
-  const verdict = parsePlan(readFileSync(file, 'utf8'))
+  const args = process.argv.slice(2)
+  const revised = args.includes('--revised')
+  const file = args.find((a) => !a.startsWith('--'))
+  if (!file) { console.error('usage: plan-shape.mjs [--revised] <comment-body-file>'); process.exit(2) }
+  const verdict = parsePlan(readFileSync(file, 'utf8'), { revised })
   console.log(JSON.stringify(verdict))
   process.exit(verdict.ok ? 0 : 1)
 }
