@@ -70,6 +70,20 @@ const SHARED_LEAVES = new Set(['email-logs', 'email-templates'])
 /** Keep the row scannable on a phone: shallowest screens first, at most this many per package. */
 const MAX_SCREENS_PER_PKG = 6
 
+/** One route as a screen link, or null when it needs more than the team or is shared infrastructure. */
+function toScreen(r: { path: string, file?: string }): ReviewScreen | null {
+  const pkg = r.file ? PAGE_RE.exec(realPath(r.file))?.[1] : undefined
+  if (!pkg || !r.path.includes(':team')) return null
+  const to = r.path.replace(/:team(\([^)]*\))?/, DEMO_TEAM_SLUG)
+  if (to.includes(':')) return null
+  const segments = to.split('/').filter(Boolean)
+  const rest = segments.slice(segments.indexOf(DEMO_TEAM_SLUG) + 1)
+  if (rest.length && SHARED_LEAVES.has(rest[rest.length - 1]!)) return null
+  // A package's own section (`bookings` in crouton-bookings) is its home: its root is the overview.
+  const shown = rest[0] === pkg.replace(/^crouton-/, '') ? rest.slice(1) : rest
+  return { pkg, label: shown.join('/') || 'overview', to }
+}
+
 /**
  * A package's own pages as links: only routes that need nothing but the team (no `:id`), labelled
  * by the full path after the team slug (`bookings/locations`; the team home is `overview`),
@@ -77,22 +91,11 @@ const MAX_SCREENS_PER_PKG = 6
  */
 export function selectScreens(routes: { path: string, file?: string }[]): ReviewScreen[] {
   const byPkg = new Map<string, Map<string, ReviewScreen>>()
-  for (const r of routes) {
-    const pkg = r.file ? PAGE_RE.exec(realPath(r.file))?.[1] : undefined
-    if (!pkg || !r.path.includes(':team')) continue
-    const to = r.path.replace(/:team(\([^)]*\))?/, DEMO_TEAM_SLUG)
-    if (to.includes(':')) continue
-    const segments = to.split('/').filter(Boolean)
-    const slugAt = segments.indexOf(DEMO_TEAM_SLUG)
-    const rest = segments.slice(slugAt + 1)
-    if (rest.length && SHARED_LEAVES.has(rest[rest.length - 1]!)) continue
-    // A package's own section (`bookings` in crouton-bookings) is its home: its root is the overview.
-    const own = pkg.replace(/^crouton-/, '')
-    const shown = rest[0] === own ? rest.slice(1) : rest
-    const label = shown.join('/') || 'overview'
-    const list = byPkg.get(pkg) ?? new Map<string, ReviewScreen>()
-    if (!list.has(to)) list.set(to, { pkg, label, to })
-    byPkg.set(pkg, list)
+  for (const screen of routes.map(toScreen)) {
+    if (!screen) continue
+    const list = byPkg.get(screen.pkg) ?? new Map<string, ReviewScreen>()
+    if (!list.has(screen.to)) list.set(screen.to, screen)
+    byPkg.set(screen.pkg, list)
   }
   return [...byPkg.values()].flatMap(list =>
     [...list.values()]
