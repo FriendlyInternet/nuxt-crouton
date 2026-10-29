@@ -9,7 +9,8 @@
  */
 export default defineNuxtPlugin(() => {
   try {
-    // @ts-expect-error Auto-import from crouton-charts
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore Optional auto-import from crouton-charts: unresolved when bookings loads alone, resolved when both layers load
     const { registerChartPreset } = useCroutonChartRegistry()
 
     registerChartPreset({
