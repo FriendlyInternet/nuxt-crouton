@@ -62,7 +62,7 @@ function routePrApproval({ assoc, collab, pr, out }) {
 
 /**
  * @param {object} input
- * @param {{body:string, authorAssociation?:string, userType?:string}} input.comment
+ * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null}} input.comment
  * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
@@ -77,6 +77,9 @@ export function routeComment({ comment = {}, issue = {}, pr } = {}) {
   const collab = COLLABORATORS.has(assoc)
 
   if (comment.userType === 'Bot') return out('none', 'posted by a bot')
+  // An App acting under a user identity is a bot too — except the Claude app, which the
+  // interactive agent uses to post `**Worker:**` change requests as the owner (#3029).
+  if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
   if (!issue.isPr) return routeIssue({ body, collab, issue, out })
