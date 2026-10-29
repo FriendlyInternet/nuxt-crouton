@@ -32,3 +32,6 @@ Every assumption the plan rests on, one bullet each, on ONE line:
 Open with `yes` or `no`, then why. `yes` only for a genuinely owner-level fork (irreversible, not derivable, taste or priority).
 
 Post it with `gh issue comment {{issue}} --body-file <file>` (author the file with the write tool). Posting no plan comment is a FAILED run.
+
+CHECK BEFORE POSTING — the rule: a plan that fails `scripts/lib/plan-shape.mjs` is never posted. Write the draft to /tmp (NOT inside the repo, so there are no file changes), run `node scripts/lib/plan-shape.mjs <draft>`, and read the JSON verdict. On exit 1, fix every entry in `errors` one by one and re-run until exit 0; only then post. If it cannot be made to pass, do NOT post: end the run with the verdict printed in the log so the "no plan comment" handling fires.
+If a human or interactive comment on the issue is newer than the last plan, you were restarted with guidance: address each point of it in the plan (change the plan, or say why not). Never re-post the previous plan unchanged.
