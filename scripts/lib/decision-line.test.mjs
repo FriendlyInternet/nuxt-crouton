@@ -1,0 +1,42 @@
+// node --test scripts/lib/decision-line.test.mjs
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { parseDecision, decisionLine, appendDecision } from './decision-line.mjs'
+
+const owner = { authorAssociation: 'OWNER', userType: 'User' }
+const url = 'https://github.com/o/r/issues/1#issuecomment-9'
+
+test('owner Decision: comment is parsed verbatim', () => {
+  assert.equal(parseDecision({ ...owner, body: 'Decision: keep the gallery in the check' }), 'keep the gallery in the check')
+})
+test('non-owner Decision: is ignored', () => {
+  assert.equal(parseDecision({ authorAssociation: 'CONTRIBUTOR', userType: 'User', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ authorAssociation: 'OWNER', userType: 'Bot', body: 'Decision: x' }), null)
+})
+test('Decision: mid-comment or quoted is ignored', () => {
+  assert.equal(parseDecision({ ...owner, body: 'I think\nDecision: x' }), null)
+  assert.equal(parseDecision({ ...owner, body: '> Decision: x\nok' }), null)
+})
+test('agent comment passes only with "owner decision" in its header', () => {
+  assert.equal(parseDecision({ ...owner, body: '> 🤖 **Claude** · owner decision\n\nDecision: a rule' }), 'a rule')
+  assert.equal(parseDecision({ ...owner, body: '> 🤖 **Claude** · status\n\nDecision: a rule' }), null)
+})
+test('ok: reason counts only on a held plan', () => {
+  assert.equal(parseDecision({ ...owner, body: 'ok: ship it' }), null)
+  assert.equal(parseDecision({ ...owner, body: 'ok: ship it', held: true }), 'ship it')
+})
+test('multi-line text collapses to one line', () => {
+  assert.equal(parseDecision({ ...owner, body: 'Decision: a\n\nb' }), 'a b')
+})
+test('appends under a new section, then idempotently', () => {
+  const line = decisionLine({ text: 'x', date: '2026-10-29T10:00:00Z', url })
+  assert.equal(line, `- 2026-10-29 · x · [comment](${url})`)
+  const once = appendDecision('Body\n', line, url)
+  assert.equal(once, `Body\n\n## Decisions\n${line}\n`)
+  assert.equal(appendDecision(once, line, url), once)
+})
+test('appends to an existing section without touching earlier lines or later sections', () => {
+  const body = '## Decisions\n- old · [comment](u1)\n\n## Acceptance\n- [ ] a\n'
+  const out = appendDecision(body, '- new · [comment](u2)', 'u2')
+  assert.equal(out, '## Decisions\n- old · [comment](u1)\n- new · [comment](u2)\n\n## Acceptance\n- [ ] a\n')
+})
