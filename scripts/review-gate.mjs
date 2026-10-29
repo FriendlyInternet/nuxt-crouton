@@ -6,24 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const REASONS = {
-  billing_error: 'the API key is out of credit',
-  error_max_turns: 'it ran out of turns before finishing',
-  auth_error: 'the API rejected the key',
-  agent_error: 'it crashed before finishing',
-  no_verdict: 'it finished but wrote no result',
-}
-
 export const markerFor = reviewer => `<!-- review-gate:${reviewer} -->`
-
-export const SKIP_SIGNATURE = 'Skipping action due to workflow validation'
-
-/** True when the agent step log shows the action refused to run because review.yml differs from main. */
-export function wasSkipped(logPath) {
-  if (!logPath || !existsSync(logPath)) return false
-  try { return readFileSync(logPath, 'utf8').includes(SKIP_SIGNATURE) }
-  catch { return false }
-}
 
 export function decide({ reviewer, verdictPath, classification, logPath }) {
   let ok = false
@@ -35,16 +18,9 @@ export function decide({ reviewer, verdictPath, classification, logPath }) {
     catch { ok = false }
   }
   if (ok) return { pass: true, message: '' }
-  if (wasSkipped(logPath)) {
-    return {
-      pass: false,
-      message: `🔴 ${reviewer} was skipped: this branch's review.yml differs from main. Update the branch (merge main), then re-run.\n\n${markerFor(reviewer)}`,
-    }
-  }
-  const reason = REASONS[classification] || 'it produced no usable result'
   return {
     pass: false,
-    message: `🔴 ${reviewer} did not run (${reason}). This PR is not approved; re-run the check or fix the reviewer.\n\n${markerFor(reviewer)}`,
+    message: `🔴 ${reviewer} did not run (refused, crashed or out of credit — the action reports no reason). This PR is not approved; open the run, fix the cause, re-run.\n\n${markerFor(reviewer)}`,
   }
 }
 
