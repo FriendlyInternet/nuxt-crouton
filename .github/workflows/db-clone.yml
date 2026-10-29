@@ -8,7 +8,7 @@ name: db-clone
 # Cloudflare. Wraps scripts/db-clone.mjs (full mirror: source → target).
 #
 # Cloning INTO prod is guarded: set `confirm_target_db` to the exact target db
-# name or the run aborts. The pre-clone prod backup is uploaded as an artifact.
+# name or the run aborts. The pre-clone prod backup stays on the runner (never uploaded: public repo, #3137).
 
 on:
   workflow_dispatch:
@@ -85,16 +85,7 @@ jobs:
           if [ -n "$CONFIRM" ]; then ARGS+=(--confirm "$CONFIRM"); fi
           node scripts/db-clone.mjs "${ARGS[@]}"
 
-      # Prod-target runs write a timestamped backup to .db-backups/ before
-      # overwriting — keep it as a downloadable artifact.
-      - name: Upload pre-clone backup
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: db-clone-backup-${{ inputs.app }}-${{ github.run_id }}
-          path: .db-backups/**
-          if-no-files-found: ignore
-          retention-days: 30
+      # backups are not uploaded: public repo, see #3067 and #3137
 
       - name: Summary
         if: always()
