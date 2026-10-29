@@ -59,8 +59,8 @@ docs references — those land as a normal **PR** on a feature branch.
 - **Back up first for prod.** Before tearing down a launched app's prod D1, take a
   backup with the `db-clone` skill (clone prod → a keep-safe env) or
   `wrangler d1 export`. Both teardown paths (manual `teardown-app.yml` and the
-  automatic `teardown-on-removal.yml`) keep the D1 export as a
-  `teardown-db-backups` run artifact for 30 days.
+  automatic `teardown-on-removal.yml`) export the D1 on the runner only — it is
+  NOT uploaded as an artifact (public repo, #3067), so take your own backup first.
 - This skill removes infrastructure on purpose — it is exempt from the
   "staging-only deploy" standing rule, but prod teardown stays deliberate +
   guarded, exactly like prod deploys.

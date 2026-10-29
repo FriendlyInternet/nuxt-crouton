@@ -1051,7 +1051,11 @@ jobs:
   # Last resort (#2980): an OWNER's plain comment that matched no command. A default-tier model proposes
   # ONE action; scripts/comment-interpret.mjs validates it and refuses merge/close/delete/deploy
   # in code (they only ever become "reply `ok` to confirm"). One run per thread at a time.
-  interpret:
+  # SPLIT BY TRUST (#3068). A model that reads a comment has a shell, so it can rewrite any file in its
+  # working folder or append to $GITHUB_ENV. Every job that runs a model therefore holds NO write token
+  # and runs no repo code afterwards; the jobs that DO hold a token (decide, act) are separate runners
+  # with a fresh checkout and receive only data files (model text, the decision) as artifacts.
+  interpret-read:
     needs: route
     if: needs.route.outputs.kind == 'interpret'
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
@@ -1061,19 +1065,13 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
-      issues: write
+      issues: read
       pull-requests: read
-      actions: write
     steps:
-      # App token: the `delegate` label must fire a downstream `labeled` workflow (as in `dispatch`).
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false # no token in .git/config
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -1117,8 +1115,7 @@ jobs:
         id: model
         run: |
           echo "reader=$(node scripts/resolve-pipeline-model.mjs default)" >> "$GITHUB_OUTPUT"
-          echo "hard=$(node scripts/resolve-pipeline-model.mjs hard)" >> "$GITHUB_OUTPUT"
-
+          
       # The reader model only READS and proposes; a failed/empty run becomes `ask` in decideAction.
       - name: Read the comment (default model)
         env:
@@ -1128,6 +1125,39 @@ jobs:
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" \
             "$(cat "$RUNNER_TEMP/interpret-prompt.txt")" > "$RUNNER_TEMP/interpret-model.txt" 2>"$RUNNER_TEMP/interpret-model.err" \
             || echo "reader model run failed (becomes ask)"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: interpret-read
+          path: |
+            ${{ runner.temp }}/interpret-model.txt
+            ${{ runner.temp }}/interpret-context.txt
+            ${{ runner.temp }}/interpret-diff.txt
+            ${{ runner.temp }}/interpret-diff-trimmed
+          if-no-files-found: ignore
+
+  # No model runs here: this job turns the model's text into a validated decision.
+  interpret-decide:
+    needs: [route, interpret-read]
+    if: needs.route.outputs.kind == 'interpret'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      action: ${{ steps.decide.outputs.action }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false # no token in .git/config
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: interpret-read
+          merge-multiple: true
+          path: ${{ runner.temp }}
 
       - name: Decide
         id: decide
@@ -1149,9 +1179,47 @@ jobs:
             fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-decision.json`, JSON.stringify(d))
             core.setOutput('action', d.action)
 
-      # Reviews stay strong: the reading above uses the default tier. Read-only, no git/gh credentials.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: interpret-decision
+          path: |
+            ${{ runner.temp }}/interpret-decision.json
+          if-no-files-found: ignore
+
+  interpret-review:
+    needs: [route, interpret-decide]
+    if: needs.interpret-decide.outputs.action == 'review'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false # no token in .git/config
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: interpret-read
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Resolve models
+        id: model
+        run: |
+          echo "hard=$(node scripts/resolve-pipeline-model.mjs hard)" >> "$GITHUB_OUTPUT"
+
+      # Reviews stay strong: the reading uses the default tier. Read-only, no git/gh credentials.
       - name: Independent review (hard model)
-        if: steps.decide.outputs.action == 'review'
         env:
           PI_MODEL: ${{ steps.model.outputs.hard }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -1167,6 +1235,41 @@ jobs:
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$RUNNER_TEMP/review-prompt.txt")" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: interpret-review
+          path: |
+            ${{ runner.temp }}/interpret-review.md
+          if-no-files-found: ignore
+
+  # The only job with a write token. It runs after (never alongside) any model, on a fresh runner.
+  interpret-act:
+    needs: [route, interpret-decide, interpret-review]
+    if: ${{ always() && needs.interpret-decide.result == 'success' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false # no token in .git/config
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: interpret-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      # App token, minted only for the final step: the `delegate` label must fire a downstream `labeled`
+      # workflow and the revise dispatch needs write scope. The model steps above never see it.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Act on the decision (one action)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
