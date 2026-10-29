@@ -1,40 +1,62 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideReviewGate } from './pr-merge-gate.mjs'
+import { decideLeafMerge } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
 const c = (body, at) => ({ user: { login: owner, type: 'User' }, body, created_at: at })
 const k = (date) => ({ parents: [{}], commit: { committer: { date } }, files: ['a.ts'] })
 const goFor = (comments, commits = []) => ownerMergeGo({ owner, comments, commits })
-const leaf = (go, labels = []) => decideReviewGate({ baseRef: 'main', headRef: 'work-1', labels, go })
+const okGo = { go: true }
+// A work-* → main PR with everything green; override one fact per case.
+const leaf = (o = {}) => decideLeafMerge({
+  baseRef: 'main', headRef: 'work-1', labels: [], go: okGo, red: false, ciGate: 'success', mergeableState: 'clean', ...o,
+})
 
-test('leaf → main: owner ok merges without build:approved', () => {
-  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T15:00:00Z')])).merge, true)
+test('1. no owner ok + everything green → no merge, even with build:approved (the key safety case)', () => {
+  assert.equal(leaf({ go: { go: false } }).merge, false)
+  assert.equal(leaf({ go: { go: false }, labels: ['build:approved'] }).merge, false)
 })
-test('leaf → main: no ok → no merge, even with build:approved', () => {
-  assert.equal(leaf(goFor([]), ['build:approved']).merge, false)
+test('2. owner ok, CI Gate success, not red, clean, no label → merge', () => {
+  assert.equal(leaf().merge, true)
 })
-test('ok given while checks red, then checks go green: gate still open (order is irrelevant)', () => {
-  // ok at 16:00; a green check later adds no commit/comment, so the same events give go again.
-  const go = goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T15:00:00Z')])
-  assert.equal(go.go, true)
-  assert.equal(leaf(go).merge, true)
+test('3. owner ok but a check is red → no merge', () => {
+  const r = leaf({ red: true })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'red')
 })
-test('ok then a later worker comment → no merge', () => {
-  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z'), c('**Worker:** pushed a fix', '2026-10-28T16:05:00Z')])).merge, false)
+test('4. owner ok but CI Gate not success → no merge', () => {
+  for (const ciGate of ['pending', 'missing', 'failure']) assert.equal(leaf({ ciGate }).merge, false)
 })
-test('ok then a later non-merge commit → no merge', () => {
-  assert.equal(leaf(goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T17:00:00Z')])).merge, false)
+test('5. owner ok but blocked/dirty → no merge, reason names it', () => {
+  for (const mergeableState of ['blocked', 'dirty']) {
+    const r = leaf({ mergeableState })
+    assert.equal(r.merge, false)
+    assert.match(r.reason, new RegExp(mergeableState))
+  }
 })
-test('epic-based PR needs build:approved', () => {
-  const go = { go: false }
-  assert.equal(decideReviewGate({ baseRef: 'epic/1-x', headRef: 'work-1', labels: [], go }).merge, false)
-  assert.equal(decideReviewGate({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], go }).merge, true)
+test('6. epic-based PR needs build:approved, even with go', () => {
+  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, red: false, ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(e([]).merge, false)
+  assert.equal(e(['build:approved']).merge, true)
 })
-test('epic → main needs build:approved AND owner ok', () => {
-  const e = (labels, go) => decideReviewGate({ baseRef: 'main', headRef: 'epic/1-x', labels, go: { go } }).merge
+test('7. non-work-* head into main is declined; epic → main needs build:approved AND ok', () => {
+  assert.equal(leaf({ headRef: 'feature/x' }).merge, false)
+  const e = (labels, go) => decideLeafMerge({ baseRef: 'main', headRef: 'epic/1-x', labels, go: { go }, ciGate: 'success', mergeableState: 'clean' }).merge
   assert.equal(e([], true), false)
   assert.equal(e(['build:approved'], false), false)
   assert.equal(e(['build:approved'], true), true)
+})
+
+// Ordering lives in ownerMergeGo, fed real comment/commit fixtures.
+test('ok then green and green then ok give the same go → merge', () => {
+  const go = goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T15:00:00Z')])
+  assert.equal(go.go, true)
+  assert.equal(leaf({ go }).merge, true)
+})
+test('ok then a later worker comment → no merge', () => {
+  assert.equal(leaf({ go: goFor([c('ok', '2026-10-28T16:00:00Z'), c('**Worker:** pushed a fix', '2026-10-28T16:05:00Z')]) }).merge, false)
+})
+test('ok then a later non-merge commit → no merge', () => {
+  assert.equal(leaf({ go: goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T17:00:00Z')]) }).merge, false)
 })
