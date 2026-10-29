@@ -589,8 +589,7 @@ jobs:
                 printf '\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\nAlso append this ONE line to writeups/reports/plan-review-ledger.jsonl (create the file if missing; otherwise read it and keep every existing line; use the edit/write tool): %s\n\n--- APPROVED PLAN ---\n' "$APPROVED_PLAN_ID" "$LEDGER_ROW"
                 cat "$RUNNER_TEMP/approved-plan.txt"
                 # #3024: an owner override of a twice-rejected plan carries its written reason.
-                OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" \
-                  --jq '[.[] | select(.body | startswith("**Decision (owner override"))] | last | .body // empty' | tail -n 1)"
+                OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" --jq '.[]' | jq -s '.' | node scripts/plan-held.mjs --decision)"
                 if [ -n "$OVERRIDE" ]; then
                   printf '\n\n--- OWNER OVERRIDE ---\nThe reviewer rejected this plan twice; the owner overruled it. Their reason (build with it in mind):\n%s\n' "$OVERRIDE"
                 fi

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isPlanHeld, overrideReason } from './plan-held.mjs'
+import { currentOverrideDecision, isPlanHeld, overrideReason } from './plan-held.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const plan = bot('<!-- pipeline-plan:v1 --> plan')
@@ -36,4 +36,18 @@ test('overrideReason: needs `ok:`/`lgtm:` opening the reply and a non-empty reas
   assert.equal(overrideReason('ok:   '), '')
   assert.equal(overrideReason('I said ok: the reviewer misread it'), '')
   assert.equal(overrideReason('> ok: the reviewer misread it'), '')
+})
+
+const by = (login, body) => ({ body, user: { login } })
+const decision = by('nuxt-harness[bot]', '**Decision (owner override, 2026-10-29):** build it anyway')
+const planC = by('nuxt-harness[bot]', '<!-- pipeline-plan:v1 --> plan')
+
+test('currentOverrideDecision: the bot decision after the newest plan is picked up', () => {
+  assert.equal(currentOverrideDecision([planC, decision]), decision.body)
+})
+test('currentOverrideDecision: the same text from another author is ignored', () => {
+  assert.equal(currentOverrideDecision([planC, by('someone', decision.body)]), '')
+})
+test('currentOverrideDecision: a decision older than the newest plan is ignored', () => {
+  assert.equal(currentOverrideDecision([planC, decision, planC]), '')
 })

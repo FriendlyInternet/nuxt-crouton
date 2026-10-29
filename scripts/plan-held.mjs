@@ -11,10 +11,12 @@
 
 import { pathToFileURL } from 'node:url'
 import { stripNonCommandRegions } from './comment-command.mjs'
+import { HELD_MARKER } from './lib/plan-verdict.mjs'
 
 const PLAN = '<!-- pipeline-plan:v1 -->'
 const REVIEW = '<!-- plan-review:v1 -->'
-const HELD = '<!-- plan-review-held -->'
+const DECISION_AUTHOR = 'nuxt-harness[bot]'
+const DECISION_PREFIX = '**Decision (owner override'
 
 const fromBot = (c) => c.userType === 'Bot'
 
@@ -30,7 +32,7 @@ export function isPlanHeld(comments = []) {
     if (!fromBot(c)) continue
     const body = String(c.body || '')
     if (body.includes(PLAN)) held = false
-    else if (body.includes(REVIEW)) held = body.includes(HELD)
+    else if (body.includes(REVIEW)) held = body.includes(HELD_MARKER)
   }
   return held
 }
@@ -46,8 +48,26 @@ export function overrideReason(body) {
   return m ? m[1].trim().replace(/\s+/g, ' ') : ''
 }
 
+/**
+ * The body of the owner-override decision the build should honour: the newest comment authored by
+ * the harness bot that opens with the decision prefix AND comes after the newest plan comment.
+ * Anyone else's lookalike, or a decision recorded for an older plan, is ignored. '' when none.
+ * @param {{body?:string, user?:{login?:string}}[]} comments oldest first (GitHub API shape)
+ */
+export function currentOverrideDecision(comments = []) {
+  let found = ''
+  for (const c of comments) {
+    const body = String(c.body || '')
+    if (body.includes(PLAN)) found = ''
+    else if (c.user?.login === DECISION_AUTHOR && body.startsWith(DECISION_PREFIX)) found = body
+  }
+  return found
+}
+
+// CLI: `node scripts/plan-held.mjs --decision < comments.json` → prints the current override decision.
 // CLI: `node scripts/plan-held.mjs < comment-body` → prints the override reason (empty if none).
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const { readFileSync } = await import('node:fs')
-  process.stdout.write(overrideReason(readFileSync(0, 'utf8')))
+  const input = readFileSync(0, 'utf8')
+  process.stdout.write(process.argv.includes('--decision') ? currentOverrideDecision(JSON.parse(input || '[]')) : overrideReason(input))
 }
