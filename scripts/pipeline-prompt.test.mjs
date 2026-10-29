@@ -54,7 +54,7 @@ test('pi-decomposer (+ shared dedup rule)', () => {
 })
 
 test('pi-planner (plan mode, #2755)', () => {
-  assertGolden(renderPrompt('pi-planner', { issue: '1932' }), 'pi-planner')
+  assertGolden(renderPrompt('pi-planner', { issue: '1932', run_url: 'https://github.com/o/r/actions/runs/1' }), 'pi-planner')
 })
 
 test('a missing variable is a hard error, not an empty string', () => {

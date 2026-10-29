@@ -26,8 +26,8 @@ A bullet per file you would touch.
 The test to write (name, cases) or why none applies.
 ### Assumptions
 Every assumption the plan rests on, one bullet each, on ONE line:
-`- <claim> — Why: <why it is taken as true> — Evidence: <permalink, commit, log excerpt, test run or doc URL> — Status: verified|unverified`
-`verified` = you checked it in this run; its Evidence MUST contain a link and show the check. `unverified` = Evidence says why it could not be checked. A bullet with no Why or no Evidence is rejected. If there are truly none, the section is the single word `none`.
+`- <claim> — Why: <why it is taken as true> — Evidence: <proof, see below> — Status: verified|unverified`
+`verified` = you checked it in this run; its Evidence MUST carry one of exactly these: an `https://` link; a commit SHA (7-40 hex) that exists in the repo; or `path/file.ext:12` / `path/file.ext#L12` / `` `path/file.ext` lines 3-8 ``. Prose alone ("I checked", "my run output: …") is rejected. Anything you observed in this run (test output, command results): cite this run, {{run_url}}, plus the quoted output. The Status is the first word: `verified` or `unverified` (a note may follow in brackets). `unverified` = Evidence says why it could not be checked. A bullet with no Why or no Evidence is rejected. If there are truly none, the section is the single word `none`.
 ### Needs owner
 Open with `yes` or `no`, then why. `yes` only for a genuinely owner-level fork (irreversible, not derivable, taste or priority).
 
