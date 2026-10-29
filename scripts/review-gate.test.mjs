@@ -63,3 +63,19 @@ test('review.yml gate steps are skipped on cancel, not run under always()', () =
     assert.doesNotMatch(s, /if: always\(\)/)
   }
 })
+
+test('agent log with the workflow-validation skip gets the update-branch message', () => {
+  const log = join(dir, 'agent.log')
+  writeFileSync(log, 'Skipping action due to workflow validation: identical content to the default branch')
+  const res = spawnSync('node', [script, 'simplify', join(dir, 'nope.json'), 'no_verdict', log], { encoding: 'utf8' })
+  assert.equal(res.status, 1)
+  assert.match(res.stdout, /simplify was skipped: this branch's review\.yml differs from main\. Update the branch \(merge main\), then re-run\./)
+})
+
+test('agent log without the skip signature keeps the no-verdict message', () => {
+  const log = join(dir, 'agent-ok.log')
+  writeFileSync(log, 'all good')
+  const res = spawnSync('node', [script, 'simplify', join(dir, 'nope.json'), 'no_verdict', log], { encoding: 'utf8' })
+  assert.equal(res.status, 1)
+  assert.match(res.stdout, /did not run \(it finished but wrote no result\)/)
+})

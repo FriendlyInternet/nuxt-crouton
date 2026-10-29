@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Review-gate decision (#3070): a reviewer that did not run never shows as a pass.
-//   node scripts/review-gate.mjs <reviewer> <verdict-file> <classification>
+//   node scripts/review-gate.mjs <reviewer> <verdict-file> <classification> [agent-log-file]
 // exit 0 = a verdict exists (severity thresholds stay in the workflow step);
 // exit 1 = no usable verdict; stdout is the PR comment to post.
 import { existsSync, readFileSync } from 'node:fs'
@@ -16,7 +16,16 @@ const REASONS = {
 
 export const markerFor = reviewer => `<!-- review-gate:${reviewer} -->`
 
-export function decide({ reviewer, verdictPath, classification }) {
+export const SKIP_SIGNATURE = 'Skipping action due to workflow validation'
+
+/** True when the agent step log shows the action refused to run because review.yml differs from main. */
+export function wasSkipped(logPath) {
+  if (!logPath || !existsSync(logPath)) return false
+  try { return readFileSync(logPath, 'utf8').includes(SKIP_SIGNATURE) }
+  catch { return false }
+}
+
+export function decide({ reviewer, verdictPath, classification, logPath }) {
   let ok = false
   if (verdictPath && existsSync(verdictPath)) {
     try {
@@ -26,6 +35,12 @@ export function decide({ reviewer, verdictPath, classification }) {
     catch { ok = false }
   }
   if (ok) return { pass: true, message: '' }
+  if (wasSkipped(logPath)) {
+    return {
+      pass: false,
+      message: `🔴 ${reviewer} was skipped: this branch's review.yml differs from main. Update the branch (merge main), then re-run.\n\n${markerFor(reviewer)}`,
+    }
+  }
   const reason = REASONS[classification] || 'it produced no usable result'
   return {
     pass: false,
@@ -40,8 +55,8 @@ export function markersToDelete(comments, reviewer) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [reviewer, verdictPath, classification] = process.argv.slice(2)
-  const r = decide({ reviewer, verdictPath, classification })
+  const [reviewer, verdictPath, classification, logPath] = process.argv.slice(2)
+  const r = decide({ reviewer, verdictPath, classification, logPath })
   if (!r.pass) {
     process.stdout.write(r.message + '\n')
     process.exit(1)
