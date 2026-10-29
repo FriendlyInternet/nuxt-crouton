@@ -473,8 +473,9 @@ jobs:
           # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
           # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "$(node scripts/harness-flavor.mjs bot.name)"
-          git config user.email "$(node scripts/harness-flavor.mjs bot.email)"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
           if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
@@ -542,8 +543,9 @@ jobs:
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
           # and not a masquerading human — the #862 lesson).
-          git config user.name  "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
-          git config user.email "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email)"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
           START=$(date +%s)
           # Front-load the CANONICAL operating contract (#1022) so pi does not stall-and-ask
@@ -786,8 +788,9 @@ jobs:
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
-          git config user.email "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email)"
+          BOT_NAME="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)" && BOT_EMAIL="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email --require)" || { echo "::error::harness flavor bot identity is empty or unresolvable"; exit 1; }
+          git config user.name  "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           ROOT="$(git rev-parse --show-toplevel)"
 
           # 1) Read THIS run's pi session (per-run --session-dir). The ledger = files pi HAND-EDITED
@@ -947,7 +950,7 @@ jobs:
               echo "revise: base merge pushed by the revise step (#2941)"
               echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
-              BOT_LOGIN="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
+              BOT_LOGIN="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name --require)"
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq "[.[] | select(.user.login == \"${BOT_LOGIN}\")] | length" 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
                 echo "revise: answered on the PR without a code change"

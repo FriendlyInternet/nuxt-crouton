@@ -9,6 +9,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { loadFlavor, getKey, validate, render, REQUIRED_KEYS } from './harness-flavor.mjs'
 import { planTestsGate } from './pi-finish.mjs'
 import { DENY } from './pi-edited-files.mjs'
@@ -86,4 +89,17 @@ test('work-issue-pidev asks the flavor instead of carrying stack commands', asyn
   assert.ok(!/nuxt-harness|pnpm |@fyit|crouton generate/.test(code), 'stack literal in work-issue-pidev.yml')
   assert.ok(!/GEN_SUBJECT="generate:/.test(code))
   assert.equal(cli('generated.commitSubject'), 'generate: derived output')
+})
+
+test('resolver exits non-zero on an unknown key or an empty required value', () => {
+  const unknown = spawnSync('node', [CLI, 'no.such.key', '--require'], { encoding: 'utf8' })
+  assert.notEqual(unknown.status, 0)
+  assert.match(unknown.stderr, /unknown flavor key/)
+  const dir = mkdtempSync(join(tmpdir(), 'flavor-'))
+  mkdirSync(join(dir, 'scripts'))
+  copyFileSync(CLI, join(dir, 'scripts', 'harness-flavor.mjs'))
+  writeFileSync(join(dir, 'flavor.config.mjs'), "export const flavor = { bot: { name: '', email: 'a@b' } }\n")
+  const empty = spawnSync('node', [join(dir, 'scripts', 'harness-flavor.mjs'), 'bot.name', '--require'], { encoding: 'utf8' })
+  assert.notEqual(empty.status, 0)
+  assert.match(empty.stderr, /empty value/)
 })
