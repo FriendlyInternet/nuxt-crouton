@@ -130,7 +130,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 |-------|------|-----------|--------------|-------|
 | `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
-**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+**It is ADVISORY on findings — it has no 🔴 and never blocks on what it finds; the check goes red only if simplify did not run (no verdict, #3070).** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
 `.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
