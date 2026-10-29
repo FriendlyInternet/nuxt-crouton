@@ -75,3 +75,14 @@ test('race: lgtm on an epic PR merges once', () => {
 test('race: ok on an issue with both status:blocked and status:to-test answers the card only', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'status:to-test']) }), 'test-card')
 })
+
+test('revise: an interactive-agent **Worker:** request (posted via the Claude app as a User) routes (#3029)', () => {
+  const body = '> 🤖 **Claude Code** · interactive agent · posted from pmcp\n\n**Worker:** rename the header'
+  const viaClaude = { ...c(body, 'MEMBER'), performedViaGithubApp: 'Claude' }
+  assert.equal(kind({ comment: viaClaude, issue: prIssue, pr: pr() }), 'revise')
+})
+test('none: a comment posted via any other GitHub App is dropped, even under a User identity', () => {
+  const body = '**Worker:** rename the header'
+  const viaOther = { ...c(body, 'MEMBER'), performedViaGithubApp: 'Some App' }
+  assert.equal(kind({ comment: viaOther, issue: prIssue, pr: pr() }), 'none')
+})
