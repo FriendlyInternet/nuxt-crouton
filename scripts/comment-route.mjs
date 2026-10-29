@@ -12,7 +12,7 @@
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
 //   issue: /close-epic → close-epic · slash/rocket command → dispatch · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
-//          status:blocked → resume · an approval on an un-blocked issue → resume with
+//          status:blocked → (owner `ok` on a twice-rejected plan hold → approve-plan) · resume · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
 //   PR:    approval on a draft → approve-draft · approval on a ready epic→main PR from the
 //          owner → approve-epic · any other approval → automerge-go · a non-approval on a
@@ -27,7 +27,7 @@ import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
+  'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
   'dispatch', 'resume', 'revise', 'test-card', 'none',
 ]
 
@@ -38,12 +38,17 @@ const OWNERS = new Set(['OWNER', 'MEMBER'])
 const CLOSE_EPIC = /(^|\s)\/close-epic(\s|$)/i
 
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, collab, issue, out }) {
+function routeIssue({ body, collab, assoc, issue, out }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
+  }
+  // `ok` from the owner on a plan held after two rejections approves that plan (#3024); any other
+  // reply — or `ok` from anyone else — still re-runs the planner via resume.
+  if (out.blocked && issue.planHeld && OWNERS.has(assoc) && isApproval(body)) {
+    return out('approve-plan', 'owner approval on a plan held after two rejections')
   }
   if (out.blocked) return out('resume', 'a reply on a status:blocked issue')
   if (isApproval(body)) return out('resume', 'an approval on an issue that is not blocked (explain only)')
@@ -63,7 +68,7 @@ function routePrApproval({ assoc, collab, pr, out }) {
 /**
  * @param {object} input
  * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null}} input.comment
- * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
+ * @param {{number:number, isPr:boolean, labels?:string[], planHeld?:boolean}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
  */
@@ -82,7 +87,7 @@ export function routeComment({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, collab, assoc, issue, out })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })
