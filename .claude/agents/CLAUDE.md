@@ -306,9 +306,9 @@ all of these by **default** — they're not optional extras; each one has burned
   not merge with) the workflow-level block, so a workflow-level `id-token` is silently
   shadowed and the action's OIDC request fails (`Could not fetch an OIDC token`). #284 fixed
   one workflow; the identical bug survived in two siblings until #429. Put it in the job.
-- **`anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`** — a real API key, NEVER a
-  subscription `CLAUDE_CODE_OAUTH_TOKEN` (subscription OAuth is interactive-only and
-  disallowed for CI — Anthropic Legal & Compliance).
+- **Auth is the Claude subscription** — `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`
+  for `claude-code-action`, claude-bridge for pi workers (owner decision 2026-10-29, #3121).
+  Do not switch a workflow to `anthropic_api_key` without an owner decision.
 - **`show_full_output: true`** — the full agent log prints inline; debugging a run must not
   require a debug re-run.
 - **Pin the action to a SHA, kept in sync** across these workflows (bump them together).
