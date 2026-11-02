@@ -14,7 +14,7 @@
 
 // A CI-fix commit (#3104): the fix-bot's commit carries this trailer and is committed by claude[bot].
 // Owner decision (#3058): such a commit keeps the owner's `ok`; a worker revision commit voids it.
-export const CI_FIX_MARKER = 'CI-Fix-Bot: true'
+export const CI_FIX_MARKER = 'CI-Fix: true'
 
 function isCiFixCommit(k) {
   const msg = k.commit?.message || ''

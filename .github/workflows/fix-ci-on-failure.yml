@@ -209,7 +209,7 @@ jobs:
           # its turns on denials and crashes with max_turns, never reaching the fix (the first real
           # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
           # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
-          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)'"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)' 'Bash(git commit:*)'"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
@@ -245,12 +245,27 @@ jobs:
                  PR still holds for a human to merge (the shared-code merge guard), so you are producing
                  the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
             4. Verify green: re-run the command from step 1 and confirm it passes.
-            5. Commit with the /commit skill (reference the issue) but do NOT push — the workflow
-               checks your commit and pushes it. CI then re-runs automatically; if it still fails,
+            5. Do NOT run `git commit` or `git push`. Stage ONLY the files you changed (`git add <files>`)
+               and write your commit message (conventional, reference the issue) to
+               `$RUNNER_TEMP/ci-fix-message`. The workflow makes the one commit from that message
+               and pushes it; no message file means nothing is committed. CI then re-runs automatically; if it still fails,
                the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
             issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop.
+
+      # #3104: the ONE commit is made here, not by the agent. The script is read from the default
+      # branch (trusted — the PR branch can't alter it) and commits what the agent staged with the
+      # agent's message + `CI-Fix: true`, under the fix-bot identity. No message file -> no commit.
+      - name: Commit the staged fix
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "$DEFAULT_BRANCH"
+          git show "origin/$DEFAULT_BRANCH:scripts/commit-ci-fix.sh" > "$RUNNER_TEMP/commit-ci-fix.sh"
+          bash "$RUNNER_TEMP/commit-ci-fix.sh" "$RUNNER_TEMP/ci-fix-message"
 
       # ── Guard (#2719): refuse a "fix" that deletes the worker's own new code ────────────
       # Compare the fix commit(s) with what the PR's worker commits added. If the fix removes any
@@ -294,12 +309,7 @@ jobs:
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
           if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then
-              # #3104: stamp the fix commits so the owner-merge-go check can tell a CI fix (keeps the
-              # owner's ok) from a worker revision (voids it). New commits only; nothing pushed is rewritten.
-              git rebase "$PRE" --exec 'git commit --amend --no-edit --trailer "CI-Fix-Bot: true"' >/dev/null
-              git push origin "HEAD:$BRANCH"
-            fi
+            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
             exit 0
           fi
 

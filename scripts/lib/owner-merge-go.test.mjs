@@ -56,8 +56,30 @@ test('commits touching only writeups/ui-proposals do not void an approval; mixed
 test('a claude[bot] CI-fix commit with the marker keeps the ok; unmarked or other committers void it', () => {
   const comments = [c('pmcp', 'ok', '2026-10-27T10:00:00Z')]
   const fix = (msg, login) => ({ ...k('2026-10-27T11:00:00Z'), committer: { login }, commit: { message: msg, committer: { name: login, date: '2026-10-27T11:00:00Z' } } })
-  const body = 'fix(root): fold record-decision (#3054)\n\nCI-Fix-Bot: true\n'
+  const body = 'fix(root): fold record-decision (#3054)\n\nCI-Fix: true\n'
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'claude[bot]')] }).go, true)
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix('fix(root): x', 'claude[bot]')] }).go, false)
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'nuxt-harness[bot]')] }).go, false)
+})
+
+test('real CI-fix commit e2b04d2b8 (made by the fix-bot, unmarked) still voids the ok; the same commit made by commit-ci-fix.sh keeps it', async () => {
+  const { execFileSync } = await import('node:child_process')
+  let raw
+  try { raw = execFileSync('git', ['show', '-s', '--format=%an%n%cn%n%B', 'e2b04d2b8'], { encoding: 'utf8' }) } catch { return } // shallow clone
+  const [, cn, ...rest] = raw.split('\n')
+  const date = '2026-10-27T11:00:00Z'
+  const real = { ...k(date), committer: { login: cn }, commit: { message: rest.join('\n'), committer: { name: cn, date } } }
+  const comments = [c('pmcp', 'ok', '2026-10-27T10:00:00Z')]
+  assert.equal(ownerMergeGo({ owner, comments, commits: [real] }).go, false) // no marker -> not trusted
+  const stamped = { ...real, commit: { ...real.commit, message: `${real.commit.message.trim()}\n\nCI-Fix: true\n` } }
+  assert.equal(ownerMergeGo({ owner, comments, commits: [stamped] }).go, true)
+})
+
+test('ok -> CI fix -> worker revision -> waits for a fresh ok', () => {
+  const fix = { ...k('2026-10-27T11:00:00Z'), committer: { login: 'claude[bot]' }, commit: { message: 'fix: x\n\nCI-Fix: true\n', committer: { name: 'claude[bot]', date: '2026-10-27T11:00:00Z' } } }
+  const revision = k('2026-10-27T12:00:00Z')
+  const ok1 = c('pmcp', 'ok', '2026-10-27T10:00:00Z')
+  assert.equal(ownerMergeGo({ owner, comments: [ok1], commits: [fix] }).go, true)
+  assert.equal(ownerMergeGo({ owner, comments: [ok1], commits: [fix, revision] }).go, false)
+  assert.equal(ownerMergeGo({ owner, comments: [ok1, c('pmcp', 'ok', '2026-10-27T13:00:00Z')], commits: [fix, revision] }).go, true)
 })
