@@ -91,3 +91,32 @@ test('workflow runs the script from a copy of origin/<default>, and fails loudly
   assert.equal(failed, true)
   assert.equal(sh(work, 'rev-list', '--count', 'HEAD').trim(), '1')
 })
+
+test('guard step end-to-end: branch cut before the script gets it from origin/main and commits as claude[bot]', () => {
+  const wf = readFileSync(resolve('.github/workflows/fix-ci-on-failure.yml'), 'utf8')
+  const m = wf.match(/- name: Commit the staged fix[\s\S]*?run: \|\n([\s\S]*?)\n\s*\n/)
+  assert.ok(m, 'commit step present')
+  const snippet = m[1].split('\n').map(l => l.replace(/^ {10}/, '')).join('\n')
+  const root = mkdtempSync(join(tmpdir(), 'ci-fix-e2e-'))
+  const sh = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' })
+  const origin = join(root, 'origin'); mkdirSync(origin)
+  sh(origin, 'init', '-q', '-b', 'main'); sh(origin, 'config', 'user.name', 'x'); sh(origin, 'config', 'user.email', 'x@x')
+  writeFileSync(join(origin, 'a'), '1'); sh(origin, 'add', '.'); sh(origin, 'commit', '-qm', 'base')
+  sh(origin, 'branch', 'feature') // cut before the script exists
+  mkdirSync(join(origin, 'scripts'))
+  writeFileSync(join(origin, 'scripts/commit-ci-fix.sh'), readFileSync(script))
+  sh(origin, 'add', '.'); sh(origin, 'commit', '-qm', 'add script')
+  const work = join(root, 'work'); execFileSync('git', ['clone', '-q', '-b', 'feature', origin, work])
+  sh(work, 'config', 'user.name', 'x'); sh(work, 'config', 'user.email', 'x@x')
+  assert.equal(existsSync(join(work, 'scripts/commit-ci-fix.sh')), false)
+  writeFileSync(join(work, 'a'), '2'); sh(work, 'add', 'a')
+  writeFileSync(join(root, 'ci-fix-message'), 'fix(root): e2e\n')
+  execFileSync('bash', ['-c', snippet], { cwd: work, stdio: 'pipe', env: { ...process.env, DEFAULT_BRANCH: 'main', RUNNER_TEMP: root } })
+  assert.equal(sh(work, 'rev-list', '--count', 'origin/feature..HEAD').trim(), '1')
+  assert.equal(sh(work, 'log', '-1', '--format=%B').split('\n').filter(l => l.trim() === 'CI-Fix: true').length, 1)
+  assert.equal(sh(work, 'log', '-1', '--format=%cn').trim(), 'claude[bot]')
+  const [cn, date, body] = sh(work, 'log', '-1', '--format=%cn%x00%cI%x00%B').split('\0')
+  const commit = { parents: [{}], committer: { login: cn }, commit: { message: body, committer: { name: cn, date } } }
+  const ok = { user: { login: 'pmcp', type: 'User' }, body: 'ok', created_at: '2000-01-01T00:00:00Z' }
+  assert.equal(ownerMergeGo({ owner: 'pmcp', comments: [ok], commits: [commit] }).go, true)
+})
