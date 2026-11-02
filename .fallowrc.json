@@ -65,6 +65,8 @@
     "docs/scripts/**",
     // Package test harnesses incl. mocks wired via vitest config aliases
     "packages/*/tests/**",
+    // jiti alias targets for a worker thread (join(here, 'stubs/...') — computed path, invisible to the graph)
+    "packages/*/test/stubs/**",
     "pocs/*/scripts/**",
     // Nuxt `#alias` targets (nuxt.config alias maps) — invisible to import analysis (#1239):
     // '#crouton/types' → collections.ts (crouton-core/nuxt.config.ts:175), consumed by
