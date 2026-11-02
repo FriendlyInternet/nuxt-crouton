@@ -3,12 +3,13 @@
  *
  * Flow:
  * 1. Client fetches this endpoint (same-origin, session cookies sent automatically)
- * 2. Server validates session, creates token with userId + expiry, signs with HMAC
+ * 2. Server validates session + team membership, creates token with userId, team, room + expiry, signs with HMAC
  * 3. Client passes token as query param when connecting to cross-origin collab worker
  * 4. CollabRoom DO verifies HMAC signature and expiry — no callback needed
  */
 import { signCollabToken } from '../../../utils/collabToken'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
+import { getMembership, getTeamById, getTeamBySlug } from '@fyit/crouton-auth/server/utils/team'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -22,7 +23,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 500, statusText: 'Server misconfigured: COLLAB_TOKEN_SECRET is not set' })
   }
 
-  const token = await signCollabToken(session.user.id, secret)
+  const query = getQuery(event)
+  const teamIdent = typeof query.teamId === 'string' ? query.teamId : ''
+  const room = typeof query.room === 'string' ? query.room : ''
+  if (!teamIdent || !room) {
+    throw createError({ status: 400, statusText: 'teamId and room are required' })
+  }
 
-  return { token }
+  // The client may send a slug or an id; the token and room key carry the canonical id.
+  const team = (await getTeamById(event, teamIdent)) ?? (await getTeamBySlug(event, teamIdent))
+  if (!team) throw createError({ status: 404, statusText: 'Team not found' })
+
+  const membership = await getMembership(event, team.id, session.user.id)
+  if (!membership) throw createError({ status: 403, statusText: 'Forbidden' })
+
+  // The room must belong to the team it is requested for (client may use the slug prefix).
+  const rest = room.startsWith(`${teamIdent}:`) ? room.slice(teamIdent.length + 1)
+    : room.startsWith(`${team.id}:`) ? room.slice(team.id.length + 1) : null
+  if (!rest) throw createError({ status: 403, statusText: 'Room is not in this team' })
+  const roomKey = `${team.id}:${rest}`
+
+  const token = await signCollabToken({ userId: session.user.id, teamId: team.id, room: roomKey }, secret)
+
+  return { token, teamId: team.id }
 })

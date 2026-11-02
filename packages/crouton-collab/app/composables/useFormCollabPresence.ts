@@ -15,6 +15,7 @@ import { ref, watch, type Ref } from 'vue'
 import { tryOnScopeDispose } from '@vueuse/core'
 import type { CollabAwarenessState } from '../types/collab'
 import { generateUserColor } from '../utils/avatar'
+import { useCollabTeamId } from './useCollabTeamId'
 
 export interface FormCollabConnection {
   stateId: string
@@ -100,9 +101,13 @@ export function useFormCollabPresence(): UseFormCollabPresenceReturn {
     const roomId = `${collection}-${itemId}`
     const roomType = collection
 
+    // Rooms are team-scoped; without a team there is no room to join
+    const teamId = useCollabTeamId()
+    if (!teamId) return
+
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/api/collab/${roomId}/ws?type=${roomType}`
+      const url = `${protocol}//${window.location.host}/api/collab/${roomId}/ws?type=${roomType}&teamId=${encodeURIComponent(teamId)}`
 
       const ws = new WebSocket(url)
 
