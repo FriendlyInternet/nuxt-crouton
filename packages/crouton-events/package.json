@@ -46,5 +46,8 @@
     "nuxt": "^4.0.0",
     "@nuxt/ui": "^4.3.0",
     "@fyit/crouton-core": "workspace:*"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }
