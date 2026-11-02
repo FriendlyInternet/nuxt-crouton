@@ -25,6 +25,7 @@
     "README.md"
   ],
   "scripts": {
+    "typecheck": "nuxt typecheck",
     "test": "vitest run"
   },
   "keywords": [

@@ -37,6 +37,7 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt typecheck",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build"

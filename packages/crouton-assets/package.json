@@ -11,6 +11,7 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

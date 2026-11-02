@@ -17,6 +17,7 @@
     "./app/composables/useCroutonComposeGestures": "./app/composables/useCroutonComposeGestures.ts"
   },
   "scripts": {
+    "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "test:watch": "vitest"
   },

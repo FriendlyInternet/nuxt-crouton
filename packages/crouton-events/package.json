@@ -48,6 +48,7 @@
     "@fyit/crouton-core": "workspace:*"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
   }
 }
