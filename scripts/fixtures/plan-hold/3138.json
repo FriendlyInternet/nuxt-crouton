@@ -1,0 +1,64 @@
+{
+ "issue": 3138,
+ "labels": [
+  "status:blocked"
+ ],
+ "comments": [
+  {
+   "body": "<!-- work-run:3138 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40963388926\n\nIts PR + preview land here when it finishes.",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _via the `delegate-pi` label_\n\ndecomposed → sub-issues created (see the tree)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nThis issue is an epic already split into #3141, #3142, #3143. Each child is a leaf; the builder works them, not #3138. Plan below is per child.\n\n### Reproduced\nyes. Read the code at HEAD e01156021c508cf9e028ac1c90352e12791cdcc6; all five gaps are visible as config/code, no runtime needed:\n- `sendOnSignUp: false`, no `requireEmailVerification` in the password config: https://github.com/FriendlyInternet/nuxt-crou",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- ticket-review:v1 -->\n<!-- ticket-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review on `claude-opus-5-5`_\n\n🔴 **Tickets sent back** — 3 of 3 would build something wrong. Nothing has started.\n**Needs:** action — fix the tickets listed below, then re-run the ticket review.\n\n<details><summary>Review checklist per ticket</summary>\n\n#### ❌ #3141 Sign-in hardening: require email verification and revoke sessions on password reset — no-go\n\n- ❌ **3. No unverified",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan sent back** (round 1 of 2) — 5 check(s) failed. The planner is re-run with these reasons.\n\n<details><summary>Review checklist</summary>\n\n- ❌ **1. Reproduced? (observed, not reasoned)** — Reproduced\" means the planner read the code at e011560 and declared \"no runtime needed\". Nothing was run. A simple test would have shown the gap: an unverified ",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nEpic already split into #3141, #3142, #3143; the builder works the children, not #3138. Part of #3141 is held for one owner decision (see Needs owner); #3142 and #3143 can proceed.\n\n### Reproduced\nyes. Ran a probe test (temporary file, deleted; no repo changes) that calls the real `createAuth()` from `packages/crouton-auth` with better-auth mocked, the same harness as `tests/unit/server/auth-config.test.ts` (21",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 6 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The planner ran a test against the real `createAuth()` and captured its settings. The output matches the cod",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision, agreed in chat 2026-10-29 22:46_\n\nDecision: email verification is required for NEW sign-ups only; a migration marks every existing user `emailVerified = true` in each app's database, so nobody is locked out. Rate limit: better-auth `rateLimit.storage: 'database'` (a table in the existing D1), no KV; the test must prove two requests share one counter, not check a config value. Keep `sanitizeR",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40960702737)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nEpic already split into #3141, #3142, #3143; the builder works the children. This plan applies the owner's decision (2026-10-29 comment): verification for NEW sign-ups only plus a backfill; database rate limit; keep `sanitizeRedirectUrl`; add tab/newline tests. Nothing is held for the owner.\n\n### Reproduced\nyes. At HEAD 284e374c55dabb921b630f15a17badc9d6f40afa (`git fetch --unshallow` was needed here; afterward",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 2 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The planner ran tests and recorded what they printed. I re-ran the `sanitizeRedirectUrl` logic in node and g",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision — orchestrator guidance within the decisions already recorded, 2026-10-29 23:10_\n\nDecision: round-3 corrections, all within what the owner already decided. (1) Include the 8 e2e apps in `fixtures/` in the migration + verified-user backfill, alongside apps/ and pocs/. (2) Rate limit: when no `cf-connecting-ip` is present (local dev, e2e), don't put everyone on one shared counter — disable the ",
+   "userType": "User"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nRevised plan: applies the owner's round-3 corrections (2026-10-29 23:10) on top of the earlier decisions (verification for NEW sign-ups + backfill, database rate-limit table, keep `sanitizeRedirectUrl`, tab/newline tests). Epic already split into #3141, #3142, #3143; the builder works the children. Nothing is held for the owner.\n\n### Reproduced\nyes. HEAD 06ae7ebfd2b990c7dba04be64a54d6e009b3d64c, checkout unshal",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The planner ran real probes and recorded the output. I checked them against the code. `auth.ts:127` has `sen",
+   "userType": "Bot"
+  }
+ ]
+}
