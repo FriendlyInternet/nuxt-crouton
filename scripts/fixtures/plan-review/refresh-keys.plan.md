@@ -10,7 +10,7 @@ Call refreshNuxtData with the keys after every save.
 ### Files
 - packages/crouton-core/app/composables/useSave.ts
 ### Test
-none
+- [ ] T1 — keys refresh after a team switch — Run: `node --test useList.test.ts`
 ### Assumptions
 - refreshing is enough — Why: seems right — Evidence: not checked — Status: unverified
 ### Needs owner
