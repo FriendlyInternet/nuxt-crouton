@@ -10,13 +10,13 @@
  * - JSON: Returns array of events
  */
 import { and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { croutonEvents } from '../../../../database/schema'
 import { buildEventConditions, parseEventFilterQuery } from '../../../../utils/event-filters'
 
 export default defineEventHandler(async (event) => {
   // Authenticate and check team membership
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team } = await requireTeamAdmin(event)
   const db = useDB()
 
   // Parse query parameters
