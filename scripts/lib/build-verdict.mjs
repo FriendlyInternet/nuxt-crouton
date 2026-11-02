@@ -137,11 +137,11 @@ export function renderComment(d, { round = 1, model = '' } = {}) {
   const head = {
     go: '✅ **Build checked against its ticket** — nothing wrong found, safe to merge.\n**Next:** none.',
     'no-go': final
-      ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply with how this should change.`
+      ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.`
       : `🔴 **Build sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.length} problem(s) found.\n**Worker:** fix these, then push again:\n${reasons}`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
-  return `${REVIEW_MARKER}\n<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
+  return `${REVIEW_MARKER}\n<!-- build-review-verdict:${d.verdict} -->\n${final ? '<!-- build-review-final -->\n' : ''}> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

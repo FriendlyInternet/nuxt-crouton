@@ -89,6 +89,8 @@ test('the second no-go is final: held for the owner, no Worker line', () => {
   const d = decide(copiedDiff, TICKET, verdict('go', {}))
   const c = renderComment(d, { round: 2 })
   assert.match(c, /rejected twice/)
+  assert.match(c, /<!-- build-review-final -->/)
+  assert.match(c, /reply `ok` to merge as is/)
   assert.doesNotMatch(c, /^\*\*Worker:\*\*/m)
 })
 

@@ -280,12 +280,6 @@ jobs:
               // Build review (#2777): a green PR still needs the independent reviewer's go.
               // build-review.yml adds `build:approved` when the diff holds the ticket's rule; a
               // missing label leaves the PR open (stalled is cheap, an unreviewed merge is not).
-              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
-                core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
-              }
-              // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
-              // commit after it, releases the shared-code pause and the epic → main hold.
-              // Green + presence gates above still apply — `ok` never overrides a red check.
               const prComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
               const prCommits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number, per_page: 100 })
               // listCommits omits files; fetch them for non-merge commits so review-capture
@@ -295,6 +289,36 @@ jobs:
                 const full = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
                 k.files = (full.data.files || []).map(f => f.filename)
               }
+              if (!(pr.labels || []).some(l => l.name === 'build:approved')) {
+                // #3173: the owner's `ok` on a build the reviewer sent back must not be ignored.
+                const { decideBuildOverride } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-override.mjs`)
+                const ov = decideBuildOverride({ comments: prComments, commits: prCommits, owner: OWNER })
+                if (ov.action === 'approve') {
+                  await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['build:approved'] })
+                  await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                    body: `<!-- build-override -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review override_\n\n✅ Build review overridden by the owner's ok — merging once green.` })
+                  core.info(`#${pull_number} — owner ok overrides the rejected build; labelled build:approved.`)
+                } else if (ov.action === 'reply') {
+                  const rm = `<!-- build-ok-waiting:${ov.reason}:${pr.head.sha} -->`
+                  if (!prComments.some(c => (c.body || '').includes(rm))) {
+                    const text = {
+                      round1: "Your ok is noted, but the build review only sent this back once (round 1) — the worker is fixing it. An ok after the final verdict will merge it.",
+                      failed: "Your ok is noted, but the build review itself failed, so there is no verdict yet. Re-run the build review; no worker is coming. Then reply ok again if it is rejected twice.",
+                      noverdict: "Your ok is noted, but there is no build review verdict yet. Re-run the build review, then reply ok again.",
+                      'stale-ok': "Your ok came before the final verdict. Reply ok again now that the build is rejected twice, and it will merge.",
+                      revised: "Code changed after your ok, so it needs a fresh ok.",
+                    }[ov.reason]
+                    await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                      body: `${rm}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review hold_\n\n${text}` })
+                  }
+                  continue
+                } else {
+                  core.info(`#${pull_number} — no 'build:approved' yet (build review pending or sent back), not merging.`); continue
+                }
+              }
+              // Owner go (#2832): an owner `ok` (or legacy lgtm) on the PR, with no non-merge
+              // commit after it, releases the shared-code pause and the epic → main hold.
+              // Green + presence gates above still apply — `ok` never overrides a red check.
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
