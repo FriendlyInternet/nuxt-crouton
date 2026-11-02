@@ -66,6 +66,24 @@ describe('safeUrl', () => {
   })
 })
 
+describe('sanitizeHtml entity-encoded schemes', () => {
+  it.each([
+    'jav&#x61;script:alert(1)',
+    'javascript&colon;alert(1)',
+    'java&Tab;script:alert(1)',
+    'javascript&#58;alert(1)',
+  ])('%s is inert', (href) => {
+    const out = sanitizeHtml(`<a href="${href}">x</a>`)
+    expect(out).not.toMatch(/href/i)
+    expect(sanitizeHtml(`<img src="${href}">`)).not.toMatch(/src/i)
+  })
+
+  it('keeps safe urls and re-escapes the decoded value', () => {
+    expect(sanitizeHtml('<a href="https://a.b/?x=1&amp;y=2">x</a>')).toContain('href="https://a.b/?x=1&amp;y=2"')
+    expect(sanitizeHtml('<a href="relative/path">x</a>')).not.toMatch(/href/i)
+  })
+})
+
 describe('inlineContentToHtml', () => {
   it('escapes text nodes', () => {
     const out = inlineContentToHtml([{ type: 'text', text: '<img src=x onerror=1>' }])

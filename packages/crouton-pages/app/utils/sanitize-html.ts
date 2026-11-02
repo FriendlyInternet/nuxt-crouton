@@ -5,19 +5,39 @@
  */
 import { FilterXSS } from 'xss'
 
-const SAFE_URL = /^(?:https?:|mailto:|tel:|\/|#|\?|\.)/i
-const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+const SAFE_URL = /^(?:https?:|mailto:|tel:|\/|#|\?)/i
 
-/** Returns the url when its scheme is safe, otherwise undefined. */
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", colon: ':', sol: '/', num: '#',
+  quest: '?', lpar: '(', rpar: ')', period: '.', comma: ',', semi: ';', equals: '=',
+  Tab: '\t', NewLine: '\n', nbsp: '\u00a0',
+}
+
+/** Decode HTML character references the way a browser does in attribute values. */
+export function decodeEntities(text: string): string {
+  return text.replace(/&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|([a-zA-Z][a-zA-Z0-9]*));?/g, (m, hex, dec, name) => {
+    if (hex || dec) {
+      const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10)
+      return cp > 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : ''
+    }
+    return NAMED_ENTITIES[name] ?? m
+  })
+}
+
+/** Strict allow-list: returns the url when it is https/http/mailto/tel/relative-root/#/?, else undefined. */
 export function safeUrl(url: string | null | undefined): string | undefined {
   if (typeof url !== 'string') return undefined
   // Browsers ignore control chars/whitespace inside and before the scheme
   // eslint-disable-next-line no-control-regex
   const cleaned = url.replace(/[\u0000-\u0020\u007F-\u009F]/g, '')
   if (!cleaned) return undefined
-  if (SAFE_URL.test(cleaned)) return url.trim()
-  if (HAS_SCHEME.test(cleaned)) return undefined
-  return url.trim()
+  return SAFE_URL.test(cleaned) ? url.trim() : undefined
+}
+
+/** For URLs taken from HTML attribute values: judge the entity-DECODED value. */
+export function safeAttrUrl(raw: string | null | undefined): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  return safeUrl(decodeEntities(raw))
 }
 
 export function escapeHtml(text: string): string {
@@ -44,14 +64,15 @@ const filter = new FilterXSS({
   css: false,
   safeAttrValue(tag, name, value, cssFilter) {
     if (name === 'href' || name === 'src') {
-      return safeUrl(value) === undefined ? '' : escapeHtml(value.trim()).replace(/&amp;/g, '&')
+      const url = safeAttrUrl(value)
+      return url === undefined ? '' : escapeHtml(url)
     }
     if (name === 'target') return value === '_blank' || value === '_self' ? value : ''
     return escapeHtml(value)
   },
   onTagAttr(tag, name, value) {
     // Drop href/src entirely when the url is unsafe
-    if ((name === 'href' || name === 'src') && safeUrl(value) === undefined) return ''
+    if ((name === 'href' || name === 'src') && safeAttrUrl(value) === undefined) return ''
     return undefined
   },
   onTag(tag, html, options) {
