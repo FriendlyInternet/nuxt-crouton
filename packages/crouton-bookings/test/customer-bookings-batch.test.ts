@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { Worker } from 'node:worker_threads'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,7 +15,7 @@ vi.mock('../server/utils/email-service', () => ({ triggerBookingCreatedEmail: as
 
 export const DDL = `
 CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer);
-CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
 `
 const DATE = '2026-11-10T00:00:00.000Z'
 let dir: string
@@ -99,34 +98,29 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()).toHaveLength(1)
   })
 
+  it('stock booking stores JSON text null in the NOT NULL slot column', async () => {
+    loc('inv', { inventoryMode: 1, quantity: 5 })
+    await call([item('inv', { quantity: 2 })])
+    expect(rows()[0].slot).toBe('null')
+  })
+
+  it('race through the handler: two connections, last place, exactly one wins', async () => {
+    loc('inv', { inventoryMode: 1, quantity: 1 })
+    const other = drizzle(new Database(join(dir, 'db.sqlite')))
+    const first = call([item('inv')])
+    vi.stubGlobal('useDB', () => other)
+    const second = call([item('inv')])
+    const res = await Promise.allSettled([first, second])
+    other.$client.close()
+    expect(res.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
+  })
+
   it('500 body carries no DB error text', async () => {
     loc('inv', { inventoryMode: 1, quantity: 2 })
     db.$client.exec('drop table bookings_bookings')
     const err: any = await call([item('inv')]).catch(e => e)
     expect(err.status).toBe(500)
     expect(err.statusText).toBe('Failed to create bookings')
-  })
-
-  it('race: two connections, last place, exactly one row', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 1 })
-    const file = join(dir, 'db.sqlite')
-    const barrier = new Int32Array(new SharedArrayBuffer(4))
-    const code = `
-      const { workerData } = require('node:worker_threads')
-      const Database = require('better-sqlite3')
-      const d = new Database(workerData.file); d.pragma('busy_timeout = 5000')
-      const flag = new Int32Array(workerData.sab)
-      while (Atomics.load(flag, 0) === 0) {}
-      let n = 0
-      try {
-        n = d.prepare("INSERT INTO bookings_bookings SELECT ?, 't1','u',0,'inv',1789000000,NULL,NULL,1,'active',1,1,'u','u' WHERE (SELECT coalesce(sum(quantity),0) FROM bookings_bookings WHERE location='inv' AND status<>'cancelled') + 1 <= 1").run(workerData.id).changes
-      } catch (e) { n = 0 }
-      require('node:worker_threads').parentPort.postMessage(n)`
-    const results = await Promise.all([1, 2, 3, 4].map(i => new Promise<number>((resolve, reject) => {
-      const w = new Worker(code, { eval: true, workerData: { file, sab: barrier.buffer, id: `r${i}` } })
-      w.on('message', resolve); w.on('error', reject)
-    })).concat([(async () => { await new Promise(r => setTimeout(r, 200)); Atomics.store(barrier, 0, 1); return 0 })()]))
-    expect(results.reduce((a, c) => a + c, 0)).toBe(1)
-    expect(rows()).toHaveLength(1)
   })
 })

@@ -338,7 +338,8 @@ export default defineEventHandler(async (event) => {
           : sql`(SELECT count(*) FROM (${dayRows}) d WHERE EXISTS (SELECT 1 FROM json_each(d.slot) WHERE value IN (${c.slotId}, ${FULL_DAY_ID}))) < ${c.cap}`)
       const id = nanoid()
       const ts = Math.floor(now.getTime() / 1000)
-      const slotJson = row.slot ? JSON.stringify(row.slot) : null
+      // slot is NOT NULL JSON: stock bookings store the text 'null', as the old insert did
+      const slotJson = JSON.stringify(row.slot ?? null)
       const inserted = await db.all(sql`INSERT INTO bookings_bookings (id, teamId, owner, "order", location, date, slot, "group", quantity, status, createdAt, updatedAt, createdBy, updatedBy)
         SELECT ${id}, ${row.teamId}, ${row.owner}, ${row.order}, ${row.location}, ${Math.floor(row.date.getTime() / 1000)}, ${slotJson}, ${row.group}, ${row.quantity}, ${row.status}, ${ts}, ${ts}, ${row.createdBy}, ${row.updatedBy}
         WHERE ${sql.join(guards, sql` AND `)}
