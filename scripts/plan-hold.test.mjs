@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { isPlanHold, resumeOutcome } from './plan-hold.mjs'
+import { isPlanHold, resumeOutcome, replanDispatch } from './plan-hold.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const person = (body) => ({ body, userType: 'User' })
@@ -35,6 +35,11 @@ test('replayed real held threads each re-plan, never "still iterating"', () => {
     const comments = heldPrefix(fx.comments)
     assert.equal(isPlanHold({ comments, labels: fx.labels, replyBody: 'Use the existing helper.' }), true, `#${fx.issue}`)
     assert.equal(resumeOutcome({ planHold: true, dispatched: true, newComment: true }), 'replan', `#${fx.issue}`)
+    const replyId = 900000 + fx.issue
+    assert.deepEqual(replanDispatch({ issue: fx.issue, commentId: replyId }), {
+      workflow_id: 'work-issue-pidev.yml',
+      inputs: { issue: String(fx.issue), mode: 'plan', feedback: String(replyId) },
+    }, `#${fx.issue}`)
   }
 })
 
@@ -88,5 +93,6 @@ test('on-comment.yml wires the helper: replan step, agent skip, gate outcome', (
   assert.match(wf, /id: replan/)
   assert.match(wf, /steps\.replan\.outputs\.replan != 'true'/)
   assert.match(wf, /resumeOutcome\(/)
+  assert.match(wf, /\.\.\.replanDispatch\(\{ issue: issue_number, commentId: context\.payload\.comment\.id \}\)/)
   assert.match(wf, /replyBody: context\.payload\.comment\.body/)
 })

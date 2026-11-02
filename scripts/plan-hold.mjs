@@ -48,3 +48,14 @@ export function resumeOutcome({ planHold, dispatched, newComment }) {
   if (dispatched) return 'replan'
   return newComment ? 'ok' : 'nothing'
 }
+
+/**
+ * The workflow_dispatch a held-plan reply makes: re-run the planner with the reply as feedback.
+ * @param {{issue: number|string, commentId: number|string}} input
+ */
+export function replanDispatch({ issue, commentId }) {
+  return {
+    workflow_id: 'work-issue-pidev.yml',
+    inputs: { issue: String(issue), mode: 'plan', feedback: String(commentId) },
+  }
+}

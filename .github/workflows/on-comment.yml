@@ -534,7 +534,7 @@ jobs:
         with:
           script: |
             const { pathToFileURL } = require('node:url')
-            const { isPlanHold } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
+            const { isPlanHold, replanDispatch } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
             const issue_number = context.payload.issue.number
             const comments = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 }))
               .map(c => ({ body: c.body, userType: c.user && c.user.type }))
@@ -547,8 +547,8 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             try {
               await github.rest.actions.createWorkflowDispatch({
-                ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
-                inputs: { issue: String(issue_number), mode: 'plan', feedback: String(context.payload.comment.id) },
+                ...context.repo, ref: context.payload.repository.default_branch,
+                ...replanDispatch({ issue: issue_number, commentId: context.payload.comment.id }),
               })
             } catch (e) {
               const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
