@@ -22,7 +22,9 @@
   "scripts": {
     "build": "unbuild",
     "dev": "unbuild --stub",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "nuxt",
