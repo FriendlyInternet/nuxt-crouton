@@ -1,10 +1,20 @@
 export default {
   // Feature flags - which crouton packages to enable.
-  // `maps: true` wires @fyit/crouton-maps into the extends; the map + geocoding
+  // `maps: {
+      "config": {
+        "style": "liberty",
+        "geocodingUrl": "https://nominatim.openstreetmap.org"
+      }
+    }` wires @fyit/crouton-maps into the extends; the map + geocoding
   // form is auto-injected because the `locations` collection has address +
   // coordinate fields (the crouton-maps generator detector fires on them).
   features: {
-    maps: true
+    maps: {
+      "config": {
+        "style": "liberty",
+        "geocodingUrl": "https://nominatim.openstreetmap.org"
+      }
+    }
   },
 
   // Single locale — this fixture exercises maps, not i18n locale-switching.
