@@ -52,3 +52,12 @@ test('commits touching only writeups/ui-proposals do not void an approval; mixed
   assert.equal(ownerMergeGo({ owner, comments, commits: [cap] }).go, true)
   assert.equal(ownerMergeGo({ owner, comments, commits: [mixed] }).go, false)
 })
+
+test('a claude[bot] CI-fix commit with the marker keeps the ok; unmarked or other committers void it', () => {
+  const comments = [c('pmcp', 'ok', '2026-10-27T10:00:00Z')]
+  const fix = (msg, login) => ({ ...k('2026-10-27T11:00:00Z'), committer: { login }, commit: { message: msg, committer: { name: login, date: '2026-10-27T11:00:00Z' } } })
+  const body = 'fix(root): fold record-decision (#3054)\n\nCI-Fix-Bot: true\n'
+  assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'claude[bot]')] }).go, true)
+  assert.equal(ownerMergeGo({ owner, comments, commits: [fix('fix(root): x', 'claude[bot]')] }).go, false)
+  assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'nuxt-harness[bot]')] }).go, false)
+})

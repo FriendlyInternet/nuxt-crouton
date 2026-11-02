@@ -294,7 +294,12 @@ jobs:
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
           if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            if [ "$HEAD_NOW" != "$PRE" ]; then
+              # #3104: stamp the fix commits so the owner-merge-go check can tell a CI fix (keeps the
+              # owner's ok) from a worker revision (voids it). New commits only; nothing pushed is rewritten.
+              git rebase "$PRE" --exec 'git commit --amend --no-edit --trailer "CI-Fix-Bot: true"' >/dev/null
+              git push origin "HEAD:$BRANCH"
+            fi
             exit 0
           fi
 

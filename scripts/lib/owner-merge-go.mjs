@@ -12,6 +12,17 @@
 // commit touching only `writeups/ui-proposals/**` — the bot's review-screenshot captures). The
 // workflow supplies `files` (filenames) on each commit so those capture commits can be told apart.
 
+// A CI-fix commit (#3104): the fix-bot's commit carries this trailer and is committed by claude[bot].
+// Owner decision (#3058): such a commit keeps the owner's `ok`; a worker revision commit voids it.
+export const CI_FIX_MARKER = 'CI-Fix-Bot: true'
+
+function isCiFixCommit(k) {
+  const msg = k.commit?.message || ''
+  if (!msg.split('\n').some(l => l.trim() === CI_FIX_MARKER)) return false
+  const who = [k.committer?.login, k.commit?.committer?.name].filter(Boolean).map(x => String(x).toLowerCase())
+  return who.some(x => x === 'claude[bot]' || x === 'claude')
+}
+
 import { isAgentComment, isApproval } from '../approval.mjs'
 
 /**
@@ -36,6 +47,7 @@ export function ownerMergeGo({ comments = [], commits = [], owner }) {
   const approvedAt = new Date(verdict.at)
   const revised = commits.some(k => {
     if ((k.parents || []).length > 1) return false // a merge commit (main/epic into branch)
+    if (isCiFixCommit(k)) return false // fix-bot commit after a red check keeps the ok
     const names = (k.files || []).map(f => (typeof f === 'string' ? f : f.filename))
     if (names.length && names.every(n => n.startsWith('writeups/ui-proposals/'))) return false // review captures
     const d = k.commit?.committer?.date || k.commit?.author?.date
