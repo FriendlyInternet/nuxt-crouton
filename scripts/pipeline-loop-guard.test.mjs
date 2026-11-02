@@ -332,6 +332,13 @@ test('claimNotice posts a revision refusal on the PR, no @mention', () => {
   assert.equal(i.target, 'issue'); assert.equal(i.number, 9); assert.match(i.body, /Not picked up — x/)
 })
 
+test('claimNotice replan-failed is a 🔴 on the issue; the ⏸️ case is unchanged', () => {
+  const n = claimNotice({ reason: 'x', issue: 9, kind: 'replan-failed' })
+  assert.equal(n.target, 'issue'); assert.equal(n.number, 9)
+  assert.ok(n.body.startsWith('🔴 Your reply on the held plan produced no new plan — x'))
+  assert.match(claimNotice({ reason: 'x', issue: 9 }).body, /^⏸️/)
+})
+
 test('CLI: a merged-PR revision exits 1 and publishes claim_pr + claim_reason', () => {
   const dir = mkdtempSync(join(tmpdir(), 'claim-'))
   const out = join(dir, 'out')
