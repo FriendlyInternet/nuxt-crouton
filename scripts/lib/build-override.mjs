@@ -8,10 +8,15 @@
 
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
+// Pipeline bots allowed to post a build-review verdict (same list the merge evaluator uses).
+export const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
+const isReviewBot = (u) => !!u && u.type === 'Bot' && BOTS.includes(u.login)
+
 const isFinal = (b) => b.includes('<!-- build-review-final -->') || b.includes('Build rejected twice')
 
 export function decideBuildOverride({ comments = [], commits = [], owner, reviewRunning = false }) {
   const states = comments
+    .filter(c => isReviewBot(c.user))
     .filter(c => /<!-- build-review-verdict:|<!-- build-review-failed -->/.test(c.body || '') || (c.body || '').includes('Build rejected twice'))
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const newest = states[states.length - 1]
@@ -26,6 +31,8 @@ export function decideBuildOverride({ comments = [], commits = [], owner, review
   if (body.includes('<!-- build-review-failed -->')) return { action: 'reply', reason: reviewRunning ? 'running' : 'failed' }
   // A needs-owner verdict is a question to the owner — their ok answers it, same as after the final hold.
   const needsOwner = body.includes('<!-- build-review-verdict:needs-owner -->')
+  // A go verdict with the label missing is not a "round 1" send-back — say what is actually wrong.
+  if (body.includes('<!-- build-review-verdict:go -->')) return { action: 'reply', reason: 'go-nolabel' }
   if (!isFinal(body) && !needsOwner) return { action: 'reply', reason: 'round1' }
   if (new Date(go.approvedAt) > new Date(newest.created_at)) return { action: 'approve' }
   return { action: 'reply', reason: 'stale-ok' }

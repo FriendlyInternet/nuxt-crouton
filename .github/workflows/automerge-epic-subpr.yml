@@ -314,6 +314,7 @@ jobs:
                       running: "The build review is still running — your ok will count once it finishes.",
                       noverdict: "Your ok is noted, but there is no build review verdict yet. Re-run the build review, then reply ok again.",
                       'stale-ok': "Your ok came before the final verdict. Reply ok again now that the build is rejected twice, and it will merge.",
+                      'go-nolabel': "The build review passed, but the build:approved label is missing. Re-run the build review so it re-applies the label; your ok will then merge it.",
                       revised: "Code changed after your ok, so it needs a fresh ok.",
                     }[ov.reason]
                     await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,

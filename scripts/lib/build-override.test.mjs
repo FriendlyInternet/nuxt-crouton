@@ -4,7 +4,7 @@ import { decideBuildOverride } from './build-override.mjs'
 
 const owner = 'pmcp'
 const u = (body, at) => ({ user: { login: 'pmcp', type: 'User' }, body, created_at: at })
-const bot = (body, at) => ({ user: { login: 'bot', type: 'Bot' }, body: `> 🤖 x\n${body}`, created_at: at })
+const bot = (body, at) => ({ user: { login: 'nuxt-harness[bot]', type: 'Bot' }, body: `> 🤖 x\n${body}`, created_at: at })
 const k = (date, parents = 1) => ({ parents: Array(parents).fill({}), commit: { committer: { date } } })
 const FINAL = '<!-- build-review-verdict:no-go -->\n<!-- build-review-final -->\n🔴 **Build rejected twice**'
 const LEGACY = '<!-- build-review-verdict:no-go -->\n🔴 **Build rejected twice**'
@@ -52,4 +52,18 @@ test('review still running → running reply, not failed/noverdict', () => {
   const d = (comments) => decideBuildOverride({ owner, comments, commits: [], reviewRunning: true })
   assert.equal(d([u('ok', '2026-11-01T11:00:00Z')]).reason, 'running')
   assert.equal(d([bot(FAILED, '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')]).reason, 'running')
+})
+
+test('owner comment quoting "Build rejected twice" after round-1 → not approved', () => {
+  const r = run([bot(R1, '2026-11-01T10:00:00Z'), u('Build rejected twice', '2026-11-01T10:30:00Z'), u('ok', '2026-11-01T11:00:00Z')])
+  assert.deepEqual(r, { action: 'reply', reason: 'round1' })
+})
+test('non-bot needs-owner marker ignored', () => {
+  const fake = { user: { login: 'other', type: 'User' }, body: '<!-- build-review-verdict:needs-owner -->', created_at: '2026-11-01T10:30:00Z' }
+  const r = run([bot(R1, '2026-11-01T10:00:00Z'), fake, u('ok', '2026-11-01T11:00:00Z')])
+  assert.equal(r.reason, 'round1')
+})
+test('go verdict but label missing → go-nolabel', () => {
+  const r = run([bot('<!-- build-review-verdict:go -->\n🟢 go', '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')])
+  assert.deepEqual(r, { action: 'reply', reason: 'go-nolabel' })
 })
