@@ -19,7 +19,7 @@ A bullet per file you would touch.
 One checklist line per check, in order, so a machine can run it later:
 `- [ ] T1 — <what it proves> — Run: `<one command>``
 `- [ ] T2 — <what it proves> — Manual: <why a person must look>`
-IDs are T1, T2… unique and ascending. At least one `Run:`. Each command must test the ticket's rule, not just that the code ran.
+IDs are T1, T2… unique and ascending. If nothing can be run, say so with the single line `- [ ] T0 — no runnable test — Manual: <why>` instead. Each command must test the ticket's rule, not just that the code ran.
 ### Assumptions
 Every assumption the plan rests on, one bullet each, on ONE line:
 `- <claim> — Why: <why it is taken as true> — Evidence: <permalink, commit, log excerpt, test run or doc URL> — Status: verified|unverified`

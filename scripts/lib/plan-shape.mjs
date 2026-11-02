@@ -124,7 +124,6 @@ export function parsePlan(body, { revised = false } = {}) {
     const t = parseChecklist(sections.Test)
     tests = t.items
     errors.push(...t.errors)
-    if (!t.errors.length && !tests.some((i) => i.type === 'run')) errors.push('Test needs at least one "Run:" line (a command that can be run)')
   }
   let reread = []
   if (revised) {

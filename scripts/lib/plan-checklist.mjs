@@ -4,6 +4,7 @@
  *   - [ ] T1 — <what it proves> — Run: `<command>`
  *   - [ ] T2 — <what it proves> — Manual: <why a person must look>
  *
+ * A plan with nothing runnable says so with a single `- [ ] T0 — no runnable test — Manual: <why>` line.
  * Pure: text in, { items, errors } out. IDs are `T<number>`, unique, and in order.
  */
 const LINE = /^\s*(?:[-*]|\d+\.)\s+(.*)$/
@@ -14,7 +15,7 @@ export function parseChecklist(text) {
   const bullets = String(text || '').split('\n').map((l) => l.match(LINE)).filter(Boolean).map((m) => m[1])
   if (!bullets.length) return { items, errors: ['Test must be a checklist: - [ ] T1 — <what> — Run: `cmd` | Manual: <why>'] }
   const seen = new Set()
-  let last = 0
+  let last = -1
   bullets.forEach((b, i) => {
     const n = `test line ${i + 1}`
     const m = b.match(/^\[[ xX]\]\s+(T\d+)\s+[—–-]+\s+(.*)$/)
@@ -35,6 +36,7 @@ export function parseChecklist(text) {
     const num = Number(id.slice(1))
     if (num <= last) errors.push(`${n}: ${id} is out of order`)
     last = Math.max(last, num)
+    if (num === 0 && (bullets.length > 1 || type !== 'manual')) errors.push(`${n}: T0 (no runnable test) must be the only line and use Manual:`)
     items.push({ id, what: kind[1].replace(/\*\*/g, '').trim(), type, detail })
   })
   return { items, errors }

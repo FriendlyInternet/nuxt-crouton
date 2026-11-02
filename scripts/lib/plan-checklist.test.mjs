@@ -37,9 +37,12 @@ ${test_}
 none
 ### Needs owner
 no — mechanical`
-test('plan-shape: no Test section, or only Manual, is rejected', () => {
+test('plan-shape: Manual-only and T0 are valid; prose or no Test section is rejected', () => {
   assert.equal(parsePlan(plan(OK)).ok, true)
-  assert.equal(parsePlan(plan('- [ ] T1 — look — Manual: x')).ok, false)
+  assert.equal(parsePlan(plan('- [ ] T1 — look — Manual: x')).ok, true)
+  assert.equal(parsePlan(plan('- [ ] T0 — no runnable test — Manual: docs only')).ok, true)
+  assert.equal(parsePlan(plan('- [ ] T0 — no runnable test — Run: `x`')).ok, false)
+  assert.equal(parsePlan(plan(OK + '\n- [ ] T0 — none — Manual: x')).ok, false)
   assert.equal(parsePlan(plan('write foo.test.ts')).ok, false)
   assert.equal(parsePlan(plan(OK).replace('### Test', '### Nope')).ok, false)
 })
