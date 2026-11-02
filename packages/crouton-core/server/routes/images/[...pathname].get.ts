@@ -1,4 +1,4 @@
-import { RASTER_IMAGE_TYPES } from '../../utils/upload-types'
+import { RASTER_IMAGE_TYPES, SVG_TYPE, SVG_SERVE_HEADERS } from '../../utils/upload-types'
 
 export default eventHandler(async (event) => {
   const { pathname } = event.context.params || {}
@@ -13,7 +13,7 @@ export default eventHandler(async (event) => {
     'X-Content-Type-Options': 'nosniff'
   })
 
-  // Only raster images render inline; everything else (pdf, svg, html...) downloads
+  // Only raster images render inline; everything else (pdf, html...); svg gets sandbox headers downloads
   let contentType: string | undefined
   try {
     contentType = (await blob.head(pathname)).contentType
@@ -22,7 +22,10 @@ export default eventHandler(async (event) => {
     if (code === 404) throw createError({ status: 404, statusText: 'Not found' })
     throw error
   }
-  if (!contentType || !RASTER_IMAGE_TYPES.includes(contentType.split(';')[0]!.trim().toLowerCase())) {
+  const baseType = contentType?.split(';')[0]!.trim().toLowerCase()
+  if (baseType === SVG_TYPE) {
+    setResponseHeaders(event, SVG_SERVE_HEADERS)
+  } else if (!contentType || !RASTER_IMAGE_TYPES.includes(baseType!)) {
     setResponseHeader(event, 'Content-Disposition', 'attachment')
   }
 

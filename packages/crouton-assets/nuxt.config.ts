@@ -31,7 +31,7 @@ export default defineNuxtConfig({
     public: {
       croutonUpload: {
         maxSize: '10MB'
-        // allowedTypes omitted = server defaults (raster images, PDF, Office)
+        // allowedTypes omitted = server defaults (raster images, SVG, PDF, Office)
       }
     }
   },

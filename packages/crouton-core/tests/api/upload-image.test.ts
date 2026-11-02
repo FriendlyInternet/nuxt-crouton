@@ -70,9 +70,14 @@ const reject = async (p: Promise<unknown>, status: number) => {
 }
 
 describe('POST upload-image', () => {
-  it.each(['text/html', 'image/svg+xml', 'video/mp4'])('rejects %s with 400', async (type) => {
+  it.each(['text/html', 'video/mp4'])('rejects %s with 400', async (type) => {
     await reject(upload(type), 400)
     expect(blob.put).not.toHaveBeenCalled()
+  })
+
+  it('accepts svg', async () => {
+    await upload('image/svg+xml', 'logo.svg')
+    expect(blob.put).toHaveBeenCalled()
   })
 
   it('accepts png under the team prefix', async () => {
@@ -144,10 +149,23 @@ describe('GET images/[...pathname]', () => {
     expect(headers['X-Content-Type-Options']).toBe('nosniff')
     expect(headers['Content-Disposition']).toBeUndefined()
   })
-  it.each(['application/pdf', 'image/svg+xml'])('attachment for %s', async (contentType) => {
+  it.each(['application/pdf'])('attachment for %s', async (contentType) => {
     state.headResult = { contentType }
     await get()
     expect(headers['Content-Disposition']).toBe('attachment')
+  })
+  it('svg with script/onload is served sandboxed, nosniff, attachment', async () => {
+    state.headResult = { contentType: 'image/svg+xml' }
+    await get()
+    expect(headers['Content-Security-Policy']).toBe("sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+    expect(headers['X-Content-Type-Options']).toBe('nosniff')
+    expect(headers['Content-Disposition']).toBe('attachment')
+  })
+  it('svg logo still renders in an <img> (served as an image type, not blocked)', async () => {
+    state.headResult = { contentType: 'image/svg+xml; charset=utf-8' }
+    await get()
+    expect(headers['Content-Security-Policy']).toContain('sandbox')
+    expect(blob.serve).toHaveBeenCalled()
   })
   it('missing file is 404', async () => {
     state.headError = { statusCode: 404 }
