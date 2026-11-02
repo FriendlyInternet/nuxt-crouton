@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const body = await readBody(event)
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const dbTimer = timing.start('db')
-  const result = await reorderSiblingsPagesPages(team.id, body.updates)
+  const result = await reorderSiblingsPagesPages(team.id, body.updates, user.id, { role: membership.role })
   dbTimer.end()
   return result
 })
