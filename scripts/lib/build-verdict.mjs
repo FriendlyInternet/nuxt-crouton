@@ -15,7 +15,7 @@
  *
  * Two layers, so a lenient model cannot wave a bad PR through:
  *  - `precheck(diff, ticket)` is DETERMINISTIC, read from `git diff -C --find-copies-harder`:
- *    item 2 fails on a file that is a copy of another (the original left behind), item 3 fails on
+ *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits), item 3 fails on
  *    an edit to a quality gate (`.fallow*`, lint/test config, the CI workflow) or a newly skipped
  *    test — unless the ticket names that file.
  *  - `decide(diff, ticket, verdict)` merges both: a precheck FAIL overrides the model's PASS.
