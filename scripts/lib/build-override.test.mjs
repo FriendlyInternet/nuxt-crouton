@@ -44,3 +44,12 @@ test('legacy final text without marker still approves', () => {
 test('merge-only commit after ok still approves', () => {
   assert.equal(run([bot(FINAL, '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')], [k('2026-11-01T12:00:00Z', 2)]).action, 'approve')
 })
+test('needs-owner verdict + ok after → approve', () => {
+  const NO = '<!-- build-review-verdict:needs-owner -->\n🔀 **Needs your call**'
+  assert.equal(run([bot(NO, '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')]).action, 'approve')
+})
+test('review still running → running reply, not failed/noverdict', () => {
+  const d = (comments) => decideBuildOverride({ owner, comments, commits: [], reviewRunning: true })
+  assert.equal(d([u('ok', '2026-11-01T11:00:00Z')]).reason, 'running')
+  assert.equal(d([bot(FAILED, '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')]).reason, 'running')
+})

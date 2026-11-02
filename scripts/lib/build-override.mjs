@@ -10,7 +10,7 @@ import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const isFinal = (b) => b.includes('<!-- build-review-final -->') || b.includes('Build rejected twice')
 
-export function decideBuildOverride({ comments = [], commits = [], owner }) {
+export function decideBuildOverride({ comments = [], commits = [], owner, reviewRunning = false }) {
   const states = comments
     .filter(c => /<!-- build-review-verdict:|<!-- build-review-failed -->/.test(c.body || '') || (c.body || '').includes('Build rejected twice'))
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
@@ -21,10 +21,12 @@ export function decideBuildOverride({ comments = [], commits = [], owner }) {
     if (go.approvedAt) return { action: 'reply', reason: 'revised' }
     return { action: 'none' }
   }
-  if (!newest) return { action: 'reply', reason: 'noverdict' }
+  if (!newest) return { action: 'reply', reason: reviewRunning ? 'running' : 'noverdict' }
   const body = newest.body || ''
-  if (body.includes('<!-- build-review-failed -->')) return { action: 'reply', reason: 'failed' }
-  if (!isFinal(body)) return { action: 'reply', reason: 'round1' }
+  if (body.includes('<!-- build-review-failed -->')) return { action: 'reply', reason: reviewRunning ? 'running' : 'failed' }
+  // A needs-owner verdict is a question to the owner — their ok answers it, same as after the final hold.
+  const needsOwner = body.includes('<!-- build-review-verdict:needs-owner -->')
+  if (!isFinal(body) && !needsOwner) return { action: 'reply', reason: 'round1' }
   if (new Date(go.approvedAt) > new Date(newest.created_at)) return { action: 'approve' }
   return { action: 'reply', reason: 'stale-ok' }
 }
