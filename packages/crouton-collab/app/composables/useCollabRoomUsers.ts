@@ -1,6 +1,7 @@
 import { type Ref, type ComputedRef } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import type { CollabAwarenessState } from '../types/collab'
+import { useCollabTeamId } from './useCollabTeamId'
 
 // $fetch is auto-imported by Nuxt at runtime
 declare const $fetch: typeof import('ofetch')['$fetch']
@@ -122,7 +123,7 @@ export function useCollabRoomUsers(options: UseCollabRoomUsersOptions): UseColla
   // Normalize teamId to ref
   const teamIdRef = typeof options.teamId === 'string'
     ? ref(options.teamId)
-    : (options.teamId as Ref<string | undefined>) ?? ref(undefined)
+    : (options.teamId as Ref<string | undefined>) ?? ref(useCollabTeamId() ?? undefined)
 
   // Normalize currentUserId to ref
   const currentUserIdRef = typeof options.currentUserId === 'string'
