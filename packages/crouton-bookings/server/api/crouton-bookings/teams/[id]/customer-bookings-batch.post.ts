@@ -49,6 +49,34 @@ interface BatchRequestBody {
   locale?: string
 }
 
+// Offset (ms) of `tz` from UTC at the instant `ms`
+function tzOffsetMs(ms: number, tz: string): number {
+  const p: Record<string, number> = {}
+  for (const x of new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms))) {
+    if (x.type !== 'literal') p[x.type] = Number(x.value)
+  }
+  return Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!) - Math.floor(ms / 1000) * 1000
+}
+
+// UTC instant (ms) at which calendar day y-m-d begins in `tz`
+function dayStartMs(y: number, m: number, d: number, tz: string): number {
+  const guess = Date.UTC(y, m - 1, d)
+  const first = guess - tzOffsetMs(guess, tz)
+  return guess - tzOffsetMs(first, tz)
+}
+
+// [start, end) of the booking-timezone day containing `date`, in unix seconds
+function dayRangeTs(date: Date, tz: string): [number, number] {
+  // en-CA formats as YYYY-MM-DD
+  const key = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  const [y, m, d] = key.split('-').map(Number) as [number, number, number]
+  const next = new Date(Date.UTC(y, m - 1, d + 1))
+  return [
+    Math.floor(dayStartMs(y, m, d, tz) / 1000),
+    Math.floor(dayStartMs(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz) / 1000),
+  ]
+}
+
 function parseSlots(slots: unknown): { id: string, capacity?: number | null }[] {
   if (Array.isArray(slots)) return slots
   if (typeof slots === 'string') {
@@ -90,6 +118,8 @@ export default defineEventHandler(async (event) => {
     }
     locationMonthPairs.get(item.locationId)!.add(monthKey)
   }
+
+  const bookingTz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
 
   const db = useDB()
 
@@ -330,13 +360,9 @@ export default defineEventHandler(async (event) => {
         { inventoryMode: dbLocation.inventoryMode, quantity: dbLocation.quantity, slots: parseSlots(dbLocation.slots) },
         item.slotIds ?? [],
       )
-      // Capacity counts by calendar day (the same local day key as the calendar), not by exact second
-      const dayStart = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate())
-      const dayEnd = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate() + 1)
-      const dayStartTs = Math.floor(dayStart.getTime() / 1000)
-      const dayEndTs = Math.floor(dayEnd.getTime() / 1000)
-      // Stock bookings are stored at the start of their day
-      const storedTs = plan.kind === 'inventory' ? dayStartTs : Math.floor(row.date.getTime() / 1000)
+      // Capacity counts by calendar day in the app's booking timezone; the date is stored as sent
+      const [dayStartTs, dayEndTs] = dayRangeTs(row.date, bookingTz)
+      const storedTs = Math.floor(row.date.getTime() / 1000)
       const dayRows = sql`SELECT b.* FROM bookings_bookings b WHERE b.teamId = ${team.id} AND b.location = ${row.location} AND b.date >= ${dayStartTs} AND b.date < ${dayEndTs} AND b.status <> 'cancelled'`
       const guards = plan.kind === 'inventory'
         ? [sql`(SELECT coalesce(sum(d.quantity), 0) FROM (${dayRows}) d) + ${row.quantity} <= ${plan.cap}`]

@@ -4,6 +4,12 @@ import { workerData, parentPort } from 'node:worker_threads'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+// static imports keep the jiti alias targets reachable for dead-code analysis
+import { resolveTeamAndCheckMembership } from './stubs/team.mjs'
+import { useNitroApp } from './stubs/nitro.mjs'
+
+// the jiti aliases below load these same modules for the handler
+globalThis.__raceStubs = { resolveTeamAndCheckMembership, useNitroApp }
 
 const here = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)

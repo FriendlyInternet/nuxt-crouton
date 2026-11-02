@@ -42,6 +42,7 @@ beforeEach(async () => {
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)
   vi.stubGlobal('createError', (e: any) => Object.assign(new Error(e.statusText), e, { statusCode: e.status }))
   vi.stubGlobal('useDB', () => db)
+  vi.stubGlobal('useRuntimeConfig', () => ({}))
   handler = (await import('../server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post')).default
 })
 afterEach(() => { db.$client.close(); rmSync(dir, { recursive: true, force: true }); vi.unstubAllGlobals() })
@@ -89,6 +90,7 @@ describe('customer-bookings-batch (#3139)', () => {
     const res = await call([item('inv', { quantity: 3 }), item('s', { slotIds: ['am'] })])
     expect(res.count).toBe(2)
     expect(rows().map((r: any) => r.quantity).sort()).toEqual([1, 3])
+    expect(rows().map((r: any) => r.date)).toEqual([Date.parse(DATE) / 1000, Date.parse(DATE) / 1000])
   })
 
   it('a failing item rolls back earlier rows of the request', async () => {
@@ -126,12 +128,22 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()).toHaveLength(1)
   }, 30000)
 
-  it('counts by day: a booking at T00:00:00Z blocks the same day at other times', async () => {
+  it('Brussels pick of 10 Nov is stored as sent and blocks only 10 Nov', async () => {
     loc('inv', { inventoryMode: 1, quantity: 1 })
-    await call([item('inv', { date: '2026-11-10T00:00:00Z' })])
-    await expect(call([item('inv', { date: '2026-11-10T00:00:01Z' })])).rejects.toMatchObject({ status: 409 })
-    await expect(call([item('inv', { date: '2026-11-10T15:30:00Z' })])).rejects.toMatchObject({ status: 409 })
-    expect(rows()).toHaveLength(1)
+    await call([item('inv', { date: '2026-11-09T23:00:00Z' })])
+    expect(rows()[0].date).toBe(Date.parse('2026-11-09T23:00:00Z') / 1000)
+    await expect(call([item('inv', { date: '2026-11-10T10:00:00Z' })])).rejects.toMatchObject({ status: 409 })
+    await call([item('inv', { date: '2026-11-08T23:00:00Z' })]) // 9 Nov
+    await call([item('inv', { date: '2026-11-10T23:00:00Z' })]) // 11 Nov
+    expect(rows()).toHaveLength(3)
+  })
+
+  it('DST day (29 Mar 2026, 23h long) counts as one day', async () => {
+    loc('inv', { inventoryMode: 1, quantity: 1 })
+    await call([item('inv', { date: '2026-03-28T23:00:00Z' })]) // 29 Mar 00:00 CET
+    await expect(call([item('inv', { date: '2026-03-29T21:30:00Z' })])).rejects.toMatchObject({ status: 409 }) // 23:30 CEST
+    await call([item('inv', { date: '2026-03-29T22:00:00Z' })]) // 30 Mar 00:00 CEST
+    expect(rows()).toHaveLength(2)
   })
 
   it('race: different times of day on the same day — exactly one stored', async () => {
