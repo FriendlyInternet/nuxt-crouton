@@ -1,9 +1,6 @@
 {
   "name": "@fyit/crouton-maps",
   "version": "0.2.0",
-  "scripts": {
-    "typecheck": "nuxt typecheck"
-  },
   "description": "Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required",
   "type": "module",
   "main": "./nuxt.config.ts",
@@ -47,6 +44,7 @@
     "@nuxt/ui": "^4.3.0"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
   }
 }
