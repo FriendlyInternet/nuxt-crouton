@@ -17,6 +17,8 @@
  * Assumption bullet shape (one line each):
  *   - <claim> — Why: <why it is taken as true> — Evidence: <permalink/commit/log/doc> — Status: verified
  *
+ * `Test` is a checklist (#3194): `- [ ] T1 — <what> — Run: `cmd`` or `— Manual: <why>`, with at least one Run.
+ *
  * A RE-PLAN (`--revised`, #3149) also needs `### Ticket re-read`: bullets
  *   - <ticket item> — Covered: <where in this plan>   (or `— Not covered: <reason>`)
  * It proves the section was written, not that it is true. First plans are unchanged.
@@ -25,6 +27,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { parseChecklist } from './plan-checklist.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Assumptions', 'Needs owner']
@@ -116,6 +119,13 @@ export function parsePlan(body, { revised = false } = {}) {
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
   }
+  let tests = []
+  if (sections.Test) {
+    const t = parseChecklist(sections.Test)
+    tests = t.items
+    errors.push(...t.errors)
+    if (!t.errors.length && !tests.some((i) => i.type === 'run')) errors.push('Test needs at least one "Run:" line (a command that can be run)')
+  }
   let reread = []
   if (revised) {
     if (!sections[REREAD]) errors.push(`missing or empty section: ${REREAD} (required on a re-plan)`)
@@ -129,7 +139,7 @@ export function parsePlan(body, { revised = false } = {}) {
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
   errors.push(...a.errors)
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, reread, unverified: reproduced === false }
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, tests, reread, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

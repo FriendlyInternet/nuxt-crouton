@@ -19,7 +19,7 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 6. Scope: matches the issue; no drive-by changes.
 7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step.
 
-8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.
+8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran. Each `Run:` command in the `### Test` checklist must exercise the ticket's rule; a command that would pass on the unfixed code is FAIL.
 9. Contradicts the record? No step contradicts the epic's Decisions log, a recorded experiment, or a merged PR's finding. Read the epic body and its comments (the issue file names the epic) and check each step against them. A plan that sets `priority: -1` on package component dirs while the epic records "app dir beats layers at equal priority" is FAIL.
 
 The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
