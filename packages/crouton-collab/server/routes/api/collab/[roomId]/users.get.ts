@@ -14,7 +14,7 @@
  */
 import { getRoomUsers } from '../../../../utils/collabRoomStore'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
-import { getMembership, getTeamById, getTeamBySlug } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamMember } from '../../../../utils/collabTeamAccess'
 
 export default defineEventHandler(async (event) => {
   // --- Auth check: require a valid session ---
@@ -42,11 +42,7 @@ export default defineEventHandler(async (event) => {
   if (!teamIdent) {
     throw createError({ status: 400, message: 'Missing teamId' })
   }
-  const team = (await getTeamById(event, teamIdent)) ?? (await getTeamBySlug(event, teamIdent))
-  const membership = team ? await getMembership(event, team.id, session.user.id) : null
-  if (!team || !membership) {
-    throw createError({ status: 403, message: 'Forbidden' })
-  }
+  const team = await requireTeamMember(event, teamIdent, session.user.id)
 
   const roomId = `${team.id}:${rawRoomId}`
   const users = getRoomUsers(roomType, roomId)

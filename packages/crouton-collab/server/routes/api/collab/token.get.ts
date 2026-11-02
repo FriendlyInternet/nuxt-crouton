@@ -9,7 +9,7 @@
  */
 import { signCollabToken } from '../../../utils/collabToken'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
-import { getMembership, getTeamById, getTeamBySlug } from '@fyit/crouton-auth/server/utils/team'
+import { resolveTokenRoom } from '../../../utils/collabTeamAccess'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -23,27 +23,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 500, statusText: 'Server misconfigured: COLLAB_TOKEN_SECRET is not set' })
   }
 
-  const query = getQuery(event)
-  const teamIdent = typeof query.teamId === 'string' ? query.teamId : ''
-  const room = typeof query.room === 'string' ? query.room : ''
-  if (!teamIdent || !room) {
-    throw createError({ status: 400, statusText: 'teamId and room are required' })
-  }
-
   // The client may send a slug or an id; the token and room key carry the canonical id.
-  const team = (await getTeamById(event, teamIdent)) ?? (await getTeamBySlug(event, teamIdent))
-  if (!team) throw createError({ status: 404, statusText: 'Team not found' })
+  const { teamId, roomKey } = await resolveTokenRoom(event, getQuery(event), session.user.id)
 
-  const membership = await getMembership(event, team.id, session.user.id)
-  if (!membership) throw createError({ status: 403, statusText: 'Forbidden' })
+  const token = await signCollabToken({ userId: session.user.id, teamId, room: roomKey }, secret)
 
-  // The room must belong to the team it is requested for (client may use the slug prefix).
-  const rest = room.startsWith(`${teamIdent}:`) ? room.slice(teamIdent.length + 1)
-    : room.startsWith(`${team.id}:`) ? room.slice(team.id.length + 1) : null
-  if (!rest) throw createError({ status: 403, statusText: 'Room is not in this team' })
-  const roomKey = `${team.id}:${rest}`
-
-  const token = await signCollabToken({ userId: session.user.id, teamId: team.id, room: roomKey }, secret)
-
-  return { token, teamId: team.id }
+  return { token, teamId }
 })
