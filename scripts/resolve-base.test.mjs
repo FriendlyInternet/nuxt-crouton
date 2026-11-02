@@ -24,3 +24,9 @@ test('mismatch names both branches', () => {
   const r = resolveBase({ prBase: 'epic/A', headRef: 'work-5', issueEpic: 'epic/B' })
   assert.match(r.error, /epic\/A/); assert.match(r.error, /epic\/B/)
 })
+
+test('literal "null" prBase is treated as empty (#3154)', () => {
+  const r = resolveBase({ prBase: 'null', headRef: 'work-1', issueEpic: 'epic/9-z' })
+  assert.equal(r.base, 'epic/9-z')
+  assert.equal(r.error, '')
+})
