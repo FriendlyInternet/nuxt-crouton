@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write # commit the new history.jsonl line back to main
+  actions: write  # dispatch deploy-pocs so the page rebuilds with the new data
 
 concurrency:
   group: loop-station-inventory
@@ -86,6 +87,12 @@ jobs:
             echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
           done
           exit 1
+
+      - name: Redeploy the loop-station page with the new data
+        if: steps.append.outputs.appended == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
 
       - name: Upload record artifact
         if: always()
