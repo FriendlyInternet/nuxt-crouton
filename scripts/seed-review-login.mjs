@@ -132,6 +132,9 @@ function sqlStr(v) {
  * so resolve it from crouton-auth — the package every crouton app's auth comes from.
  */
 async function loadHashPassword() {
+  // Test seam: a checkout without better-auth installed (CI's node-checks) can still drive
+  // the whole flow with a stand-in hasher. Never set outside tests.
+  if (process.env.SEED_REVIEW_TEST_HASH_PREFIX) return async pw => `${process.env.SEED_REVIEW_TEST_HASH_PREFIX}${pw}`
   const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
   const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
   return hashPassword

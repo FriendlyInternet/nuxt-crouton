@@ -122,7 +122,7 @@ test('existing unverified account + old password + sign-up 200 without session â
   await new Promise(r => server.listen(0, r))
   const url = `http://127.0.0.1:${server.address().port}`
   const code = await new Promise((resolve) => {
-    const p = spawn(process.execPath, ['scripts/seed-review-login.mjs', '--url', url, '--email', 'review+x@example.com', '--password', 'new-pass', '--sqlite', file], { stdio: 'ignore' })
+    const p = spawn(process.execPath, ['scripts/seed-review-login.mjs', '--url', url, '--email', 'review+x@example.com', '--password', 'new-pass', '--sqlite', file], { stdio: 'ignore', env: { ...process.env, SEED_REVIEW_TEST_HASH_PREFIX: 'test-hash:' } })
     p.on('exit', resolve)
   })
   server.close()
