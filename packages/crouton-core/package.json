@@ -27,6 +27,7 @@
     }
   },
   "scripts": {
+    "typecheck": "nuxt typecheck",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build",

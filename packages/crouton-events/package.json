@@ -1,6 +1,9 @@
 {
   "name": "@fyit/crouton-events",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "nuxt typecheck"
+  },
   "description": "Event tracking layer for Nuxt Crouton - Audit trail for all CRUD operations",
   "type": "module",
   "main": "./nuxt.config.ts",
