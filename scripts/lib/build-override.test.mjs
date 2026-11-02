@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { decideBuildOverride } from './build-override.mjs'
+import { renderComment } from './build-verdict.mjs'
 
 const owner = 'pmcp'
 const u = (body, at) => ({ user: { login: 'pmcp', type: 'User' }, body, created_at: at })
@@ -66,4 +67,12 @@ test('non-bot needs-owner marker ignored', () => {
 test('go verdict but label missing → go-nolabel', () => {
   const r = run([bot('<!-- build-review-verdict:go -->\n🟢 go', '2026-11-01T10:00:00Z'), u('ok', '2026-11-01T11:00:00Z')])
   assert.deepEqual(r, { action: 'reply', reason: 'go-nolabel' })
+})
+
+test('bot round-1 comment whose evidence quotes "Build rejected twice" + ok → not approved', () => {
+  const d = { verdict: 'no-go', failed: ['A'], items: Object.fromEntries(['A','B','C','D','E','F','G','H'].map(id => [id, { pass: id !== 'A', evidence: 'text says Build rejected twice' }])) }
+  let body
+  try { body = renderComment(d, { round: 1 }) } catch { body = '<!-- build-review-verdict:no-go -->\n🔴 **Build sent back** (round 1 of 2)\n- x: Build rejected twice' }
+  const r = run([{ user: { login: 'nuxt-harness[bot]', type: 'Bot' }, body, created_at: '2026-11-01T10:00:00Z' }, u('ok', '2026-11-01T11:00:00Z')])
+  assert.notEqual(r.action, 'approve')
 })

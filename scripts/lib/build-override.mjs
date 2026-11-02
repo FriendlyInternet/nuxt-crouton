@@ -12,12 +12,15 @@ import { ownerMergeGo } from './owner-merge-go.mjs'
 export const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
 const isReviewBot = (u) => !!u && u.type === 'Bot' && BOTS.includes(u.login)
 
-const isFinal = (b) => b.includes('<!-- build-review-final -->') || b.includes('Build rejected twice')
+// Final hold = the marker, or (comments from before the marker) the FIRST heading line is the
+// final head. Evidence text that merely quotes the phrase must not count.
+const headLine = (b) => b.split('\n').find(l => /^(🔴|✅|🔀) \*\*/.test(l)) || ''
+const isFinal = (b) => b.includes('<!-- build-review-final -->') || headLine(b).startsWith('🔴 **Build rejected twice**')
 
 export function decideBuildOverride({ comments = [], commits = [], owner, reviewRunning = false }) {
   const states = comments
     .filter(c => isReviewBot(c.user))
-    .filter(c => /<!-- build-review-verdict:|<!-- build-review-failed -->/.test(c.body || '') || (c.body || '').includes('Build rejected twice'))
+    .filter(c => /<!-- build-review-verdict:|<!-- build-review-failed -->/.test(c.body || '') || isFinal(c.body || ''))
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const newest = states[states.length - 1]
   const go = ownerMergeGo({ comments, commits, owner })
