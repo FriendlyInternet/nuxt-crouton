@@ -11,7 +11,7 @@ Read: the ticket ({{issue_file}}), the approved plan if any ({{plan_file}}, may 
 
 Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, a command you ran). "Looks fine" is not evidence.
 1. Rule held: find the rule the ticket states (the invariant, not the mechanism). The diff must keep it, and at least one test must aim at the rule itself. A test that only proves the mechanism ran is FAIL. Try to break the rule: e.g. can another team's row still be reached by id? Then, for each case in the plan's `### Test` section (or the ticket's `## 🧪 How to test` when there is no plan), name the test that asserts it and the entry point it calls. A case with no test, or a test that feeds the code hand-built input instead of going through the real loader/endpoint/composable/`main`, is FAIL.
-2. Moved, not copied: no new file duplicates an existing one (a `copy from` line is FAIL); anything the change orphans (last caller of a symbol, i18n key, route, the old file) is removed (AGENTS.md "Remove what you orphan").
+2. Moved, not copied: no new file duplicates an existing one (a `copy from` whose source is named in the ticket or sits in a package the diff also edits is FAIL); anything the change orphans (last caller of a symbol, i18n key, route, the old file) is removed (AGENTS.md "Remove what you orphan").
 3. Gates untouched: no edit to a quality gate's config or baseline (`.fallow*`, lint/test config, CI thresholds, skipped or deleted tests) unless the ticket asks for it. Any such edit is FAIL by default.
 4. Scope: matches the ticket and plan; nothing extra, no drive-by changes.
 5. Plan followed: where a plan was approved, the diff does what it said. No plan → PASS "no approved plan".

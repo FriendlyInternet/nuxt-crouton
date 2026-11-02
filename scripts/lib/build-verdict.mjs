@@ -94,7 +94,16 @@ export function parseDiff(diff) {
 export function precheck(diff, ticket = '') {
   const files = parseDiff(diff)
   const fails = {}
-  const copies = files.filter((f) => f.status === 'copied')
+  // --find-copies-harder reports a copy of ANY tracked file, so a copy only means "original left
+  // behind" when its source is named in the ticket or sits in a package the diff also edits (#3160).
+  const scopeOf = (p) => {
+    const seg = p.split('/')
+    if (['packages', 'apps', 'pocs'].includes(seg[0]) && seg.length > 2) return `${seg[0]}/${seg[1]}`
+    if (['scripts', '.github'].includes(seg[0])) return seg[0]
+    return null
+  }
+  const touched = new Set(files.filter((f) => f.status !== 'copied' && f.status !== 'added').map((f) => scopeOf(f.from)).filter(Boolean))
+  const copies = files.filter((f) => f.status === 'copied' && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
   if (copies.length) {
     fails['2'] = { pass: false, evidence: `copied, original left behind: ${copies.map((f) => `${f.from} → ${f.path}`).join('; ')}` }
   }
