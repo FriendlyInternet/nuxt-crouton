@@ -447,7 +447,7 @@ jobs:
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
           # can predate the current scripts (an epic branch cut earlier) — the first run printed an
           # old error instead of the tool line. Run it from a copy taken now, like pi-finish.
-          rm -rf "$RUNNER_TEMP/loop-station" && cp -r .claude/skills/loop-station "$RUNNER_TEMP/loop-station"
+          rm -rf "$RUNNER_TEMP/.claude/skills/loop-station" "$RUNNER_TEMP/scripts/lib" && mkdir -p "$RUNNER_TEMP/.claude/skills" "$RUNNER_TEMP/scripts" && cp -r .claude/skills/loop-station "$RUNNER_TEMP/.claude/skills/loop-station" && cp -r scripts/lib "$RUNNER_TEMP/scripts/lib"
 
       # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
       # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
@@ -1690,33 +1690,21 @@ jobs:
         run: |
           set +e
           mkdir -p pi-telemetry-out
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
-          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
-          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
-          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
-          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
-          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
-            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$TELE_DIR" ]; then
-            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          fi
-          # Skill loads come from THIS run's session JSONL (#2403): pi has no skill tool — the
-          # model `read`s `.claude/skills/<name>/SKILL.md` — so the adapter traces those reads as
-          # `kind:'skill'` events. A single-use worker spawns no subagents, so before #2403 it
-          # produced NO trace at all (the 2026-10-24 canary uploaded nothing); now it always does.
+          # Read ONLY this run's per-run session folder (never the shared ~/.pi sessions, which
+          # on a shared runner can hold another run's files). Helper artifacts land inside it
+          # (pi-subagents writes them next to the session file), at any nesting depth (#3158).
           SESSION_DIR="$RUNNER_TEMP/pi-session"
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then echo "pi telemetry dir: $TELE_DIR"; else TELE_DIR="/nonexistent"; fi
-          if node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+          TELE_DIR="$SESSION_DIR"
+          if node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" "$SESSION_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
             # ::notice:: so the result is readable via the check-runs annotations API, not only the raw log (#2435)
             echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines, $(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads, $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s)"
           else
             rm -f pi-telemetry-out/pi-trace.jsonl
-            echo "::notice title=pi telemetry::no trace — no subagents and no skill loads; $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s) in $SESSION_DIR"
+            echo "::notice title=pi telemetry::no trace — no billable turns, subagents or skill loads; $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s) in $SESSION_DIR"
           fi
           # #2548: which tools did pi call, and were the repo MCP servers blocked? Tells "pi ignored
           # the skill guides" apart from "telemetry miscounts reads", and confirms #2445.
-          echo "::notice title=pi tools::$(node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
+          echo "::notice title=pi tools::$(node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
           # No log = no evidence either way: say "unknown", never a false "not blocked".
           if [ -z "$PI_EXEC_LOG" ] || [ ! -f "$PI_EXEC_LOG" ]; then
             echo "::notice title=pi mcp::unknown — no pi log to check (${PI_EXEC_LOG:-path not set})"
@@ -1726,7 +1714,7 @@ jobs:
             echo "::notice title=pi mcp::not blocked ($(wc -l < "$PI_EXEC_LOG") log lines checked)"
           fi
           if [ -d "$TELE_DIR" ]; then
-            node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+            node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
             echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
             cat pi-telemetry-out/ledger-rows.jsonl || true
           fi
