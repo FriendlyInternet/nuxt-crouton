@@ -2,6 +2,7 @@
 
 import * as Y from 'yjs'
 import { verifyCollabToken } from '../utils/collabToken'
+import { signInternalRequest } from '../utils/internalSignature'
 
 interface Env {
   DB: D1Database
@@ -82,16 +83,26 @@ export class CollabRoom implements DurableObject {
     const origin = this._appOrigin
     if (!origin) return
 
-    fetch(`${origin}/api/_crouton/operation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type,
-        source: 'crouton-collab',
-        teamId: this.teamId ?? undefined,
-        metadata,
-      }),
-    }).catch(() => { /* non-blocking */ })
+    const secret = this.env.COLLAB_TOKEN_SECRET
+    if (!secret) return
+    const body = JSON.stringify({
+      type,
+      source: 'crouton-collab',
+      teamId: this.teamId ?? undefined,
+      metadata,
+    })
+    const timestamp = String(Date.now())
+    signInternalRequest(secret, timestamp, body)
+      .then(signature => fetch(`${origin}/api/_crouton/operation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-crouton-timestamp': timestamp,
+          'x-crouton-signature': signature,
+        },
+        body,
+      }))
+      .catch(() => { /* non-blocking */ })
   }
 
   /** App origin derived on first fetch request, used for emitOperation calls */
