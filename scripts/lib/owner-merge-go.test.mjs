@@ -64,8 +64,9 @@ test('a claude[bot] CI-fix commit with the marker keeps the ok; unmarked or othe
 
 test('real CI-fix commit e2b04d2b8 (made by the fix-bot, unmarked) still voids the ok; the same commit made by commit-ci-fix.sh keeps it', async () => {
   const { execFileSync } = await import('node:child_process')
-  let raw
-  try { raw = execFileSync('git', ['show', '-s', '--format=%an%n%cn%n%B', 'e2b04d2b8'], { encoding: 'utf8' }) } catch { return } // shallow clone
+  // Fetch the fixture explicitly: a shallow clone must fail here, never skip.
+  try { execFileSync('git', ['cat-file', '-e', 'e2b04d2b8'], { stdio: 'ignore' }) } catch { execFileSync('git', ['fetch', '--depth', '1', 'origin', 'e2b04d2b8'], { stdio: 'ignore' }) }
+  const raw = execFileSync('git', ['show', '-s', '--format=%an%n%cn%n%B', 'e2b04d2b8'], { encoding: 'utf8' })
   const [, cn, ...rest] = raw.split('\n')
   const date = '2026-10-27T11:00:00Z'
   const real = { ...k(date), committer: { login: cn }, commit: { message: rest.join('\n'), committer: { name: cn, date } } }

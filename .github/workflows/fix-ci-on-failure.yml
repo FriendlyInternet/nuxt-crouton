@@ -252,7 +252,7 @@ jobs:
                the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
-            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop.
+            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop. Do NOT write the message file.
 
       # #3104: the ONE commit is made here, not by the agent. The script is read from the default
       # branch (trusted — the PR branch can't alter it) and commits what the agent staged with the
