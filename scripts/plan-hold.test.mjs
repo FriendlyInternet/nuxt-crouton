@@ -53,6 +53,8 @@ test('plan:approved ⇒ not a hold (late reply, #3057 shape)', () => {
 test('an `ok` approval is not feedback to re-plan from', () => {
   assert.equal(hold(heldThread(), { replyBody: 'ok' }), false)
   assert.equal(hold(heldThread(), { replyBody: 'lgtm' }), false)
+  assert.equal(hold(heldThread(), { replyBody: 'ok: ship it' }), false)
+  assert.equal(hold(heldThread(), { replyBody: 'ok: reason' }), false)
 })
 
 test('a single no-go (round 1 re-plans by itself) is not a hold', () => {

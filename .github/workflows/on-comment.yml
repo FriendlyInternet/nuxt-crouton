@@ -551,10 +551,9 @@ jobs:
                 inputs: { issue: String(issue_number), mode: 'plan', feedback: String(context.payload.comment.id) },
               })
             } catch (e) {
-              await github.rest.issues.createComment({ ...context.repo, issue_number,
-                body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
-                  + '🔴 **This run produced nothing** — I could not re-run the planner from your reply.\n'
-                  + `**Needs:** action — dispatch \`work-issue-pidev.yml\` with \`mode=plan\` by hand. Reason: ${e.message}. 🔗 [Run log](${runUrl})` })
+              const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
+              const n = claimNotice({ reason: `I could not re-run the planner from your reply (${e.message}) — dispatch work-issue-pidev.yml with mode=plan by hand`, issue: issue_number, runUrl })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
               core.setFailed(`plan re-dispatch failed: ${e.message}`)
               return
             }
@@ -822,10 +821,9 @@ jobs:
               const { resumeOutcome } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
               const outcome = resumeOutcome({ planHold, dispatched: '${{ steps.replan.outputs.dispatched }}' === 'true', newComment })
               if (outcome !== 'nothing') { core.info(`Held-plan resume outcome: ${outcome}`); return }
-              await github.rest.issues.createComment({ ...context.repo, issue_number,
-                body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
-                  + '🔴 **This run produced nothing** — your reply on the held plan started no re-plan and posted no answer.\n'
-                  + '**Needs:** action — dispatch `work-issue-pidev.yml` with `mode=plan` by hand.' })
+              const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
+              const n = claimNotice({ reason: 'your reply on the held plan started no re-plan and posted no answer — dispatch work-issue-pidev.yml with mode=plan by hand', issue: issue_number })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
               core.setFailed(`Held plan #${issue_number}: resume produced nothing.`)
               return
             }

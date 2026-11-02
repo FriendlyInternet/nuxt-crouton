@@ -10,6 +10,9 @@ import { isApproval } from './approval.mjs'
 
 const VERDICT = /<!--\s*plan-review-verdict:(go|no-go|needs-owner)\s*-->/
 
+// `ok: <reason>` is an approval with a reason (the #3041 override), never a re-plan.
+const OK_REASON = /^[ \t\r\n]*ok[ \t]*:/i
+
 const isHuman = (c) => c?.userType === 'User' || c?.user?.type === 'User'
 
 /** Newest plan-review verdicts, oldest first, bot-authored only. */
@@ -29,7 +32,7 @@ function verdicts(comments) {
  */
 export function isPlanHold({ comments, labels = [], replyBody = '' } = {}) {
   if (!labels.includes('status:blocked') || labels.includes('plan:approved')) return false
-  if (replyBody && isApproval(replyBody)) return false
+  if (replyBody && (isApproval(replyBody) || OK_REASON.test(replyBody))) return false
   const v = verdicts(comments)
   return v.length > 0 && v[v.length - 1] === 'no-go' && v.filter((x) => x === 'no-go').length >= 2
 }
