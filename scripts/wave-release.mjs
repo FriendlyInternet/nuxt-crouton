@@ -114,6 +114,8 @@ export async function retryOnCiFinished(ctx) {
   await releaseReady(ctx, { branch: wr.head_branch })
 }
 
+const hasLabel = (labels, name) => (labels || []).some(l => (typeof l === 'string' ? l : l.name) === name)
+
 /**
  * A merged PR closes its `Closes #NN` issues. Sub-PRs merge into the EPIC branch, so GitHub does
  * NOT auto-close them (auto-close is default-branch only) — close them here; the resulting
@@ -142,10 +144,10 @@ export async function closeLinkedIssues(ctx) {
       const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
       if (gi.data.state === 'closed') continue
       // #1035: never auto-close a HELD issue — `status:blocked` means a human step is pending.
-      const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+      const held = hasLabel(gi.data.labels, 'status:blocked')
       // #3039: a build:approved PR means the build review went `go` — a leftover status:blocked
       // is the reviewer's own stale no-go hold, not a pending human step.
-      const approved = (pr.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'build:approved')
+      const approved = hasLabel(pr.labels, 'build:approved')
       // #3202: the owner merging a held PR by hand is the human step — a bot merge keeps the hold.
       const ownerMerged = !!pr.merged_by && pr.merged_by.login === (process.env.OWNER_LOGIN || 'pmcp')
       if (held && !approved && !ownerMerged) { core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue }
