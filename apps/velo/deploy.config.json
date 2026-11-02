@@ -66,6 +66,13 @@
         "path": "/api/teams/{teamId}/pages-pages"
       },
       {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
         "path": "/api/collab/token",
         "expectIncludes": "token"
       }
