@@ -589,7 +589,7 @@ jobs:
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK by the plan reviewer. Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording:\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
+              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK by the plan reviewer. Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
             fi
           elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
@@ -751,6 +751,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
           SINCE: ${{ steps.t0.outputs.ts }}
+          REVISED: ${{ inputs.mode == 'plan' && inputs.feedback != '' && '1' || '' }}
         run: |
           set -uo pipefail
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
@@ -759,7 +760,7 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
-          VERDICT="$(node scripts/lib/plan-shape.mjs "$RUNNER_TEMP/plan.md")"; RC=$?
+          VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")"; RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
