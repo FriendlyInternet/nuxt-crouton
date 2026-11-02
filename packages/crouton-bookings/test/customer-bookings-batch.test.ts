@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Worker } from 'node:worker_threads'
 
 let db: any
 const hoisted = vi.hoisted(() => ({ member: { team: { id: 't1', name: 'T', metadata: {} }, user: { id: 'u1', name: 'U', email: 'u@x' } } }))
@@ -104,17 +105,26 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()[0].slot).toBe('null')
   })
 
-  it('race through the handler: two connections, last place, exactly one wins', async () => {
+  it('race: two threads, own connections, last place — exactly one booking stored', async () => {
     loc('inv', { inventoryMode: 1, quantity: 1 })
-    const other = drizzle(new Database(join(dir, 'db.sqlite')))
-    const first = call([item('inv')])
-    vi.stubGlobal('useDB', () => other)
-    const second = call([item('inv')])
-    const res = await Promise.allSettled([first, second])
-    other.$client.close()
-    expect(res.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    const barrier = new SharedArrayBuffer(8) // [0]=release flag, [1]=threads ready
+    const flag = new Int32Array(barrier)
+    const spawn = () => new Promise<{ ok: boolean, status?: number }>((resolve, reject) => {
+      const w = new Worker(new URL('./race-worker.mjs', import.meta.url), {
+        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv')] } },
+      })
+      w.once('message', resolve)
+      w.once('error', reject)
+    })
+    const both = Promise.all([spawn(), spawn()])
+    while (Atomics.load(flag, 1) < 2) await new Promise(r => setTimeout(r, 10))
+    Atomics.store(flag, 0, 1)
+    Atomics.notify(flag, 0)
+    const res = await both
+    expect(res.filter(r => r.ok)).toHaveLength(1)
+    expect(res.filter(r => !r.ok).map(r => r.status)).toEqual([409])
     expect(rows()).toHaveLength(1)
-  })
+  }, 30000)
 
   it('500 body carries no DB error text', async () => {
     loc('inv', { inventoryMode: 1, quantity: 2 })
