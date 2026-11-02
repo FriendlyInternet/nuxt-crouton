@@ -76,3 +76,16 @@ test('isoWeek: the append idempotence unit', () => {
   assert.notEqual(isoWeek('2026-07-06T06:30:00.000Z'), isoWeek('2026-07-13T00:00:01.000Z')) // next week
   assert.equal(isoWeek('not a date'), null)
 })
+
+test('estimatedUsd sums meta.cost.estimatedUsd; worker trace counted once under its workflow (#3158)', () => {
+  const wf = 'Work issue (pi.dev · single-use worker)'
+  const mk = (run, workflow, cost) =>
+    JSON.stringify({ kind: 'meta', generatedAt: NOW, run, workflow, cost }) + '\n'
+  const worker = mk('9', wf, { usd: 1.5, estimatedUsd: 1.5, tokens: 100, turns: 3 })
+  const reviewer = mk('10', 'review.yml', { usd: 2, tokens: 50, turns: 2 }) // older trace: no estimatedUsd
+  const r = aggregate([worker, reviewer], { windowDays: 7, now: NOW })
+  assert.equal(r.cost.usd, 3.5)
+  assert.equal(r.cost.estimatedUsd, 1.5)
+  assert.equal(r.cost.runs, 2)
+  assert.equal(r.cost.byWorkflow[wf], 1.5)
+})
