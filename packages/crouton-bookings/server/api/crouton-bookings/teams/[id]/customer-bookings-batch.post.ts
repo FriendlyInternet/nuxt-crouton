@@ -330,7 +330,14 @@ export default defineEventHandler(async (event) => {
         { inventoryMode: dbLocation.inventoryMode, quantity: dbLocation.quantity, slots: parseSlots(dbLocation.slots) },
         item.slotIds ?? [],
       )
-      const dayRows = sql`SELECT b.* FROM bookings_bookings b WHERE b.teamId = ${team.id} AND b.location = ${row.location} AND b.date = ${Math.floor(row.date.getTime() / 1000)} AND b.status <> 'cancelled'`
+      // Capacity counts by calendar day (the same local day key as the calendar), not by exact second
+      const dayStart = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate())
+      const dayEnd = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate() + 1)
+      const dayStartTs = Math.floor(dayStart.getTime() / 1000)
+      const dayEndTs = Math.floor(dayEnd.getTime() / 1000)
+      // Stock bookings are stored at the start of their day
+      const storedTs = plan.kind === 'inventory' ? dayStartTs : Math.floor(row.date.getTime() / 1000)
+      const dayRows = sql`SELECT b.* FROM bookings_bookings b WHERE b.teamId = ${team.id} AND b.location = ${row.location} AND b.date >= ${dayStartTs} AND b.date < ${dayEndTs} AND b.status <> 'cancelled'`
       const guards = plan.kind === 'inventory'
         ? [sql`(SELECT coalesce(sum(d.quantity), 0) FROM (${dayRows}) d) + ${row.quantity} <= ${plan.cap}`]
         : plan.checks.map(c => c.slotId === null
@@ -341,7 +348,7 @@ export default defineEventHandler(async (event) => {
       // slot is NOT NULL JSON: stock bookings store the text 'null', as the old insert did
       const slotJson = JSON.stringify(row.slot ?? null)
       const inserted = await db.all(sql`INSERT INTO bookings_bookings (id, teamId, owner, "order", location, date, slot, "group", quantity, status, createdAt, updatedAt, createdBy, updatedBy)
-        SELECT ${id}, ${row.teamId}, ${row.owner}, ${row.order}, ${row.location}, ${Math.floor(row.date.getTime() / 1000)}, ${slotJson}, ${row.group}, ${row.quantity}, ${row.status}, ${ts}, ${ts}, ${row.createdBy}, ${row.updatedBy}
+        SELECT ${id}, ${row.teamId}, ${row.owner}, ${row.order}, ${row.location}, ${storedTs}, ${slotJson}, ${row.group}, ${row.quantity}, ${row.status}, ${ts}, ${ts}, ${row.createdBy}, ${row.updatedBy}
         WHERE ${sql.join(guards, sql` AND `)}
         RETURNING id`) as { id: string }[]
       if (inserted.length === 0) {

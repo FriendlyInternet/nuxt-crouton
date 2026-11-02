@@ -126,6 +126,34 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()).toHaveLength(1)
   }, 30000)
 
+  it('counts by day: a booking at T00:00:00Z blocks the same day at other times', async () => {
+    loc('inv', { inventoryMode: 1, quantity: 1 })
+    await call([item('inv', { date: '2026-11-10T00:00:00Z' })])
+    await expect(call([item('inv', { date: '2026-11-10T00:00:01Z' })])).rejects.toMatchObject({ status: 409 })
+    await expect(call([item('inv', { date: '2026-11-10T15:30:00Z' })])).rejects.toMatchObject({ status: 409 })
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('race: different times of day on the same day — exactly one stored', async () => {
+    loc('inv', { inventoryMode: 1, quantity: 1 })
+    const barrier = new SharedArrayBuffer(8)
+    const flag = new Int32Array(barrier)
+    const spawn = (date: string) => new Promise<{ ok: boolean, status?: number }>((resolve, reject) => {
+      const w = new Worker(new URL('./race-worker.mjs', import.meta.url), {
+        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv', { date })] } },
+      })
+      w.once('message', resolve)
+      w.once('error', reject)
+    })
+    const both = Promise.all([spawn('2026-11-10T09:00:00Z'), spawn('2026-11-10T09:00:30Z')])
+    while (Atomics.load(flag, 1) < 2) await new Promise(r => setTimeout(r, 10))
+    Atomics.store(flag, 0, 1)
+    Atomics.notify(flag, 0)
+    const res = await both
+    expect(res.filter(r => r.ok)).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
+  }, 30000)
+
   it('500 body carries no DB error text', async () => {
     loc('inv', { inventoryMode: 1, quantity: 2 })
     db.$client.exec('drop table bookings_bookings')
