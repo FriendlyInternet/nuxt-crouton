@@ -71,7 +71,13 @@
     // useCollectionQuery/Mutation + every generated crouton-collections.d.ts;
     // '#crouton-audio/types/player' → player.ts, consumed by useAudioPlayer + Player.vue
     "packages/crouton-core/app/types/collections.ts",
-    "packages/crouton-audio/app/types/player.ts"
+    "packages/crouton-audio/app/types/player.ts",
+    // devframe-spike: dev-only Devframe panel wired by path, not import — the server/devframe/*
+    // files are pushed into Nitro via resolve() in modules/crouton-devframe.ts (deliberately NOT
+    // server/plugins/, so prod builds never scan them), and client/main.ts is the vite entry of
+    // client/index.html (build:df-client)
+    "pocs/devframe-spike/server/devframe/**",
+    "pocs/devframe-spike/client/main.ts"
   ],
   "workspaces": {
     "packages": [
@@ -120,6 +126,7 @@
     "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
     "@libsql/client",             // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
     "@fyit/crouton-feedback",     // crouton-devtools loads it via installModule('@fyit/crouton-feedback') — string ref, invisible to import analysis (verified src/module.ts:63) — #1324
+    "@devframes/agentic",         // devframe-spike: optional peer of devframe, loaded by devframe/initiate for the `mcp` option — never imported by our code
     "agents"                      // docs: optional peer of @nuxtjs/mcp-toolkit; its cloudflare transport imports agents/mcp, never our code — #2251
   ],
   // ONE health block only: this file briefly carried two "health" keys and JSON
@@ -205,7 +212,9 @@
       "packages/*/collections/**", // generated collections a package owns (#2278)
       // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
       "**/server/db/translations-ui.ts",
-      "**/server/utils/_cf-stubs/**"
+      "**/server/utils/_cf-stubs/**",
+      // Generated poc scaffold config — same crouton template as every other poc's nuxt.config.ts
+      "pocs/devframe-spike/nuxt.config.ts"
     ]
   },
   // Complexity/unit-size (CRAP, big functions) is advisory, not walling (#1235/#1236).
