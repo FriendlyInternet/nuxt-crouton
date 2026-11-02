@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseUsageLine, costFromText } from './session-cost.mjs'
+import { parseUsageLine, costFromText, costForPiUsage } from './session-cost.mjs'
+import { costForUsage } from './anthropic-pricing.mjs'
 
 const piLine = (cost) =>
   JSON.stringify({ type: 'message', message: { role: 'assistant', usage: { cost: { total: cost }, input_tokens: 100 } } })
@@ -42,7 +43,42 @@ test('claude dedup: the same message.id logged 3× counts ONCE (#1268 overcount 
 })
 
 test('mixed/empty is handled; pi role tagged as message still counts', () => {
-  assert.deepEqual(costFromText(''), { usd: 0, tokens: 0, turns: 0, model: null, exact: true })
+  assert.deepEqual(costFromText(''), { usd: 0, estimatedUsd: 0, tokens: 0, turns: 0, model: null, exact: true })
   // pi line has top-level type:'message' — must NOT be filtered out
   assert.equal(costFromText(piLine(2)).turns, 1)
+})
+
+const piTok = (cost, model, u = { input: 1000, output: 2000, cacheRead: 5000, cacheWrite: 300 }) =>
+  JSON.stringify({ type: 'message', message: { role: 'assistant', model, usage: { ...u, cost: { total: cost } } } })
+const expected = (model, u = { input: 1000, output: 2000, cacheRead: 5000, cacheWrite: 300 }) =>
+  costForUsage(
+    { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
+    model
+  )
+
+test('pi cost 0 + tokens → priced via table, flagged as estimate (#3158)', () => {
+  const r = costFromText(piTok(0, 'claude-sonnet-5'))
+  assert.ok(r.usd > 0)
+  assert.equal(r.usd, Math.round(expected('claude-sonnet-5') * 1e6) / 1e6)
+  assert.equal(r.estimatedUsd, r.usd)
+  assert.equal(r.exact, false)
+  assert.equal(r.tokens, 8300)
+})
+
+test('pi cost > 0 stays verbatim, estimatedUsd 0', () => {
+  const r = costFromText(piTok(0.42, 'claude-sonnet-5'))
+  assert.equal(r.usd, 0.42)
+  assert.equal(r.estimatedUsd, 0)
+})
+
+test('one reported + one computed turn → estimatedUsd is only the computed part', () => {
+  const r = costFromText([piTok(0.5, 'claude-sonnet-5'), piTok(0, 'claude-sonnet-5')].join('\n'))
+  assert.equal(r.estimatedUsd, Math.round(expected('claude-sonnet-5') * 1e6) / 1e6)
+  assert.equal(r.usd, Math.round((0.5 + expected('claude-sonnet-5')) * 1e6) / 1e6)
+})
+
+test('mixed models priced per turn', () => {
+  const r = costFromText([piTok(0, 'claude-sonnet-5'), piTok(0, 'claude-haiku-4-5')].join('\n'))
+  assert.equal(r.usd, Math.round((expected('claude-sonnet-5') + expected('claude-haiku-4-5')) * 1e6) / 1e6)
+  assert.equal(costForPiUsage({ input: 1e6 }, 'claude-sonnet-5'), costForUsage({ input_tokens: 1e6 }, 'claude-sonnet-5'))
 })

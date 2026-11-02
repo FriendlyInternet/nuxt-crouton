@@ -387,7 +387,11 @@ jobs:
           # DEDUP (#297) — the decomposer is the only pi lane that creates issues, so the
           # create-time dedup gate belongs here and nowhere else. The interactive path is
           # enforced by a PreToolUse hook, which cannot reach a CI run.
-          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+          # --session-dir: a PER-RUN folder so the telemetry step reads only this run's session
+          # (and its helpers' subagent-artifacts), never a shared runner's other runs (#3158).
+          PI_SESSION_DIR="$RUNNER_TEMP/pi-session"
+          mkdir -p "$PI_SESSION_DIR"
+          pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
@@ -770,26 +774,22 @@ jobs:
         run: |
           set +e
           mkdir -p pi-telemetry-out
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
-          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
-          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
-          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
-          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
-          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
-            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$TELE_DIR" ]; then
-            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          fi
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
-            echo "pi telemetry dir: $TELE_DIR"
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
-            echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
-            cat pi-telemetry-out/ledger-rows.jsonl || true
+          # Read ONLY this run's per-run session folder (#3158); mirror the repo layout so the
+          # adapter's ../../../scripts/lib import resolves from a copied location.
+          SESSION_DIR="$RUNNER_TEMP/pi-session"
+          rm -rf "$RUNNER_TEMP/.claude/skills/loop-station" "$RUNNER_TEMP/scripts/lib"
+          mkdir -p "$RUNNER_TEMP/.claude/skills" "$RUNNER_TEMP/scripts"
+          cp -r .claude/skills/loop-station "$RUNNER_TEMP/.claude/skills/loop-station"
+          cp -r scripts/lib "$RUNNER_TEMP/scripts/lib"
+          PT="$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs"
+          if node "$PT" "$SESSION_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+            echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines"
           else
-            echo "no pi subagent telemetry found — a decompose-only run (sub-issues, no worker) writes none. Skipping."
+            rm -f pi-telemetry-out/pi-trace.jsonl
+            echo "::notice title=pi telemetry::no trace — no billable turns, subagents or skill loads"
           fi
+          node "$PT" "$SESSION_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+          cat pi-telemetry-out/ledger-rows.jsonl || true
 
       - name: Upload pi telemetry artifact
         if: always()

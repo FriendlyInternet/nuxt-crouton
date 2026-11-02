@@ -68,7 +68,7 @@ const alignClass = computed(() => {
         <!-- Download button -->
         <a
           v-if="btn.download && btn.file"
-          :href="btn.file"
+          :href="safeUrl(btn.file)"
           download
           class="inline-flex items-center gap-2"
         >
@@ -85,7 +85,7 @@ const alignClass = computed(() => {
         <UButton
           v-else
           :label="btn.label || t('pages.blockRender.button')"
-          :to="resolveHref(btn)"
+          :to="safeUrl(resolveHref(btn))"
           :target="btn.external ? '_blank' : undefined"
           :color="btn.color || 'primary'"
           :variant="btn.variant || 'solid'"
