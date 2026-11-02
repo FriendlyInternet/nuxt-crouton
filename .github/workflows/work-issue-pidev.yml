@@ -1,5 +1,8 @@
 name: Work issue (pi.dev · single-use worker)
 
+# #3210: dispatched runs carry the issue number + mode, e.g. "#3207 · plan".
+run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode || 'build' }}${{ inputs.feedback != '' && ' · revise' || '' }}"
+
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
 # artifact-gate (#461) and the telemetry capture are preserved VERBATIM. What differs:
@@ -332,6 +335,17 @@ jobs:
             } catch (e) {
               core.warning(`follow-along breadcrumb failed (non-fatal): ${e.message}`)
             }
+
+      # #3210 — tick the per-ticket flow checklist (one comment, edited in place). Cosmetic: never fails the job.
+      - name: Tick flow checklist (routed)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/flow-checklist.mjs "${{ inputs.issue || github.event.issue.number }}" routed \
+            --note "${{ inputs.mode || 'build' }}" \
+            --link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
       # The single-use worker has no Agent-prompt channel; the parent wrote the context into a
