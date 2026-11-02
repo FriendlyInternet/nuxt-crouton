@@ -1,4 +1,4 @@
 {
-  "stagingUrl": "",
+  "stagingUrl": "https://devframe-spike.pmcp.dev",
   "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n"
 }
