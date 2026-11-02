@@ -112,6 +112,19 @@ test('closeLinkedIssues: build:approved PR closes an issue left status:blocked b
   assert.deepEqual(w.calls.updates.map(u => u.issue_number), [7])
 })
 
+for (const [name, mergedBy, expected] of [
+  ['owner merge closes a held issue (replay #3124 → #3077)', { login: 'pmcp' }, [3077]],
+  ['bot merge keeps the hold', { login: 'nuxt-harness[bot]' }, []],
+  ['absent merged_by keeps the hold', undefined, []],
+]) {
+  test(`closeLinkedIssues: ${name}`, async () => {
+    const w = prWorld('Closes #3077', { 3077: { state: 'open', labels: lbl(['status:blocked']) } })
+    w.context.payload.pull_request.merged_by = mergedBy
+    await closeLinkedIssues(w)
+    assert.deepEqual(w.calls.updates.map(u => u.issue_number), expected)
+  })
+}
+
 test('closeLinkedIssues: unmerged PR does nothing', async () => {
   const w = prWorld('Closes #5', { 5: { state: 'open', labels: [] } })
   w.context.payload.pull_request.merged = false
