@@ -88,7 +88,7 @@ on:
   # `opened` added for the WS7 flip (#1077): when AGENT_HARNESS=pi, an issue *created with* the
   # plain `delegate` label must land here (the claude flow handles that shape and now yields).
   issues:
-    types: [labeled, opened]
+    types: [labeled]
 
 jobs:
   decompose-pi:
@@ -97,12 +97,14 @@ jobs:
     # the same plain-`delegate` shapes the claude flow handles (which then yields via its own
     # guard). The specific-label checks are what stop a re-fire loop when the worker adds its
     # own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
+    # #3208: `work-this` is the ONE label a human applies. Its router (work-issue-pidev.yml) sends a
+    # big issue here by `workflow_dispatch`. The `delegate*` labels are INTERNAL hand-offs only
+    # (the decomposer's own needsSplit children, wave release, comment re-dispatch): they start a run
+    # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-pi') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
+        contains(fromJSON('["delegate-pi","delegate-hard","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both

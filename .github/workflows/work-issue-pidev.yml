@@ -7,9 +7,12 @@ name: Work issue (pi.dev · single-use worker)
 #     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
 #   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
 #     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
-# ⚠️ CLEANUP PENDING (#1686): many inherited comments/vars below still say "decompose"/"decompose-pi"
-#   and describe the tree flow — they are stale here. Functional edits (trigger, if, prompt) are done;
-#   the comment sweep + on-box test (label a leaf → PR on claude-bridge) are the remaining WS1 items.
+# DISPATCH RULE (#3208): `work-this` is the ONE label a human applies. The Route job reads the
+#   issue: an `epic`-labelled (big) issue is handed to decompose-on-issue-pidev.yml (the splitter);
+#   anything else is built here as a single leaf. `delegate` / `delegate-pi` / `delegate-hard` are
+#   internal hand-offs only (bot-applied) — a human adding one starts nothing. `delegate-hard` still
+#   picks the metered model lane.
+# NOTE: inherited comments below still say "decompose" — they describe the shared machinery, not the trigger.
 # ── original decompose-flow header follows (context for the shared machinery) ──
 
 # WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
@@ -169,6 +172,13 @@ jobs:
           if echo ",$LABELS," | grep -q ',plan:approved,'; then
             echo "issue #$ISSUE already carries plan:approved → build"
             echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
+          if echo ",$LABELS," | grep -q ',epic,'; then
+            echo "issue #$ISSUE is an epic → splitter"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            gh workflow run decompose-on-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f harness=pi
+            exit 0
           fi
           R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
           echo "route: $R"

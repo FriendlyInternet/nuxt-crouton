@@ -594,6 +594,8 @@ finish step's tests gate (#1885) opens the PR as a **draft** when a `packages/*`
 with no test — visible, not blocking. A worker that meets a ticket asking for a test-first hold
 follows this rule and says so in its done comment.
 
+**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` / `delegate-hard` are internal hand-offs: they start a run only when applied by the Harness App, so a human adding one starts nothing. `delegate-hard` still selects the metered model lane.
+
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
 data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
