@@ -2,6 +2,7 @@
 // The gallery's index (#2462): every shared UI piece, grouped by package, each opening its own
 // review page. Like themes.pmcp.dev, for every part. Review-only — 404 outside dev/review builds.
 import { pieces } from '#build/gallery-pieces.mjs'
+import { screens } from '#build/gallery-screens.mjs'
 
 definePageMeta({ layout: false })
 
@@ -27,7 +28,12 @@ const groups = computed(() => {
     list.push(p.name)
     byPkg.set(p.pkg, list)
   }
-  return [...byPkg.entries()].map(([pkg, names]) => ({ pkg, label: pkg.replace(/^crouton-/, ''), names }))
+  return [...byPkg.entries()].map(([pkg, names]) => ({
+    pkg,
+    label: pkg.replace(/^crouton-/, ''),
+    names,
+    screens: screens.filter(s => s.pkg === pkg),
+  }))
 })
 
 const shown = computed(() => groups.value.reduce((n, g) => n + g.names.length, 0))
@@ -66,6 +72,21 @@ const shown = computed(() => groups.value.reduce((n, g) => n + g.names.length, 0
             size="sm"
           />
         </h2>
+        <div
+          v-if="g.screens.length"
+          class="flex flex-wrap items-center gap-2"
+        >
+          <span class="text-xs font-medium text-muted">Screens</span>
+          <UButton
+            v-for="s in g.screens"
+            :key="s.to"
+            :to="s.to"
+            :label="s.label"
+            size="xs"
+            color="neutral"
+            variant="subtle"
+          />
+        </div>
         <ul class="divide-y divide-default overflow-hidden rounded-lg border border-default">
           <li
             v-for="name in g.names"
