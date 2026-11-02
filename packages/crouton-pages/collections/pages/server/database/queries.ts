@@ -247,9 +247,12 @@ export async function updatePositionPagesPage(
   teamId: string,
   id: string,
   newParentId: string | null,
-  newOrder: number
+  newOrder: number,
+  userId?: string,
+  options?: { role?: string }
 ) {
   const db = useDB()
+  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
 
   // Get the current item to find its path
   const [current] = await (db as any)
@@ -267,6 +270,11 @@ export async function updatePositionPagesPage(
       status: 404,
       statusText: 'PagesPage not found'
     })
+  }
+
+  // Non-admins may only move pages they own (checked before any write)
+  if (!isAdmin && (!userId || (current as any).owner !== userId)) {
+    throw createError({ status: 403, statusText: 'Forbidden' })
   }
 
   // Calculate new path and depth
@@ -358,9 +366,29 @@ export async function updatePositionPagesPage(
 
 export async function reorderSiblingsPagesPages(
   teamId: string,
-  updates: { id: string; order: number }[]
+  updates: { id: string; order: number }[],
+  userId?: string,
+  options?: { role?: string }
 ) {
   const db = useDB()
+  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+
+  // Non-admins may only reorder pages they own; reject the whole batch before writing
+  if (!isAdmin) {
+    const ids = updates.map(u => u.id)
+    const rows: { id: string; owner: string | null }[] = ids.length
+      ? await (db as any)
+        .select({ id: tables.pagesPages.id, owner: tables.pagesPages.owner })
+        .from(tables.pagesPages)
+        .where(and(inArray(tables.pagesPages.id, ids), eq(tables.pagesPages.teamId, teamId)))
+      : []
+    if (rows.length !== new Set(ids).size) {
+      throw createError({ status: 404, statusText: 'PagesPage not found' })
+    }
+    if (!userId || rows.some(r => r.owner !== userId)) {
+      throw createError({ status: 403, statusText: 'Forbidden' })
+    }
+  }
 
   const results = []
 
