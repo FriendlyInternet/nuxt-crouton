@@ -1,6 +1,6 @@
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
 import type { Booking, LocationData } from '../types/booking'
-import { FULL_DAY_ID } from './full-day'
+import { isLocationFull } from './capacity'
 import { parseLocationSlots, parseSlotIds } from '../composables/useBookingSlots'
 
 /**
@@ -23,22 +23,12 @@ export function isDayFullyBooked(
   const dayBookings = bookings.filter(b => b.status !== 'cancelled' && toDateKey(new Date(b.date)) === key)
 
   return locations.every((location) => {
-    const mine = dayBookings.filter(b => b.location === location.id)
-
-    if (location.inventoryMode) {
-      const booked = mine.reduce((sum, b) => sum + (b.quantity ?? 1), 0)
-      return booked >= (location.quantity ?? 1)
-    }
-
-    const slots = parseLocationSlots(location)
-    if (slots.length === 0) return mine.length >= 1
-
-    return slots.every((slot) => {
-      const booked = mine.filter((b) => {
-        const ids = parseSlotIds(b.slot)
-        return ids.includes(slot.id) || ids.includes(FULL_DAY_ID)
-      }).length
-      return booked >= (slot.capacity ?? 1)
-    })
+    const mine = dayBookings
+      .filter(b => b.location === location.id)
+      .map(b => ({ quantity: b.quantity, slotIds: parseSlotIds(b.slot) }))
+    return isLocationFull(
+      { inventoryMode: location.inventoryMode, quantity: location.quantity, slots: parseLocationSlots(location) },
+      mine,
+    )
   })
 }

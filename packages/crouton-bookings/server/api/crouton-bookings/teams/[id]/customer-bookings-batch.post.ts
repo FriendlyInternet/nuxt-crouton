@@ -16,11 +16,13 @@
  *   emailsSent?: number
  * }
  */
-import { eq, and, gte, lte, sum } from 'drizzle-orm'
+import { eq, and, gte, lte, sum, sql, inArray } from 'drizzle-orm'
+import { nanoid } from 'nanoid'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
 import { FULL_DAY_ID, fullDayConflict } from '../../../../../app/utils/full-day'
+import { capacityPlan } from '../../../../../app/utils/capacity'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../../../../collections/locations/server/database/schema'
 import { isBookingEmailEnabled, resolveTranslatedField, resolveSlotLabels } from '../../../../utils/booking-emails'
@@ -45,6 +47,14 @@ interface CartItem {
 interface BatchRequestBody {
   bookings: CartItem[]
   locale?: string
+}
+
+function parseSlots(slots: unknown): { id: string, capacity?: number | null }[] {
+  if (Array.isArray(slots)) return slots
+  if (typeof slots === 'string') {
+    try { const p = JSON.parse(slots); return Array.isArray(p) ? p : [] } catch { return [] }
+  }
+  return []
 }
 
 export default defineEventHandler(async (event) => {
@@ -96,6 +106,8 @@ export default defineEventHandler(async (event) => {
           translations: bookingsLocations.translations,
           slots: bookingsLocations.slots,
           maxBookingsPerMonth: bookingsLocations.maxBookingsPerMonth,
+          quantity: bookingsLocations.quantity,
+          inventoryMode: bookingsLocations.inventoryMode,
         })
         .from(bookingsLocations)
         .where(
@@ -105,6 +117,29 @@ export default defineEventHandler(async (event) => {
         )
     : []
   const dbLocationMap = new Map(allLocations.map((l: any) => [l.id, l]))
+
+  // --- Validate items (#3139): known team location, sane quantity ---
+  for (const item of body.bookings) {
+    const dbLocation = dbLocationMap.get(item.locationId) as any
+    if (!dbLocation) {
+      throw createError({ status: 404, statusText: 'Location not found' })
+    }
+    if (Number.isNaN(new Date(item.date).getTime())) {
+      throw createError({ status: 400, statusText: 'Invalid date' })
+    }
+    if (dbLocation.inventoryMode) {
+      const q = item.quantity ?? 1
+      if (!Number.isInteger(q) || q < 1) {
+        throw createError({ status: 400, statusText: 'Quantity must be a whole number of at least 1' })
+      }
+      item.quantity = q
+      item.isInventoryMode = true
+    }
+    else {
+      item.quantity = 1
+      item.isInventoryMode = false
+    }
+  }
 
   // Check limits for each location
   if (locationIds.length > 0) {
@@ -282,12 +317,48 @@ export default defineEventHandler(async (event) => {
     updatedBy: user.id,
   }))
 
+  // Each row goes in through ONE statement that checks capacity itself, so two
+  // requests racing for the last place can't both win (#3139). A refused item
+  // removes the rows this request already stored.
+  const insertedIds: string[] = []
   try {
-    // Insert all bookings in a single transaction
+    for (let i = 0; i < bookingsToInsert.length; i++) {
+      const row = bookingsToInsert[i]!
+      const item = body.bookings[i]!
+      const dbLocation = dbLocationMap.get(item.locationId) as any
+      const plan = capacityPlan(
+        { inventoryMode: dbLocation.inventoryMode, quantity: dbLocation.quantity, slots: parseSlots(dbLocation.slots) },
+        item.slotIds ?? [],
+      )
+      const dayRows = sql`SELECT b.* FROM bookings_bookings b WHERE b.teamId = ${team.id} AND b.location = ${row.location} AND b.date = ${Math.floor(row.date.getTime() / 1000)} AND b.status <> 'cancelled'`
+      const guards = plan.kind === 'inventory'
+        ? [sql`(SELECT coalesce(sum(d.quantity), 0) FROM (${dayRows}) d) + ${row.quantity} <= ${plan.cap}`]
+        : plan.checks.map(c => c.slotId === null
+          ? sql`(SELECT count(*) FROM (${dayRows}) d) < ${c.cap}`
+          : sql`(SELECT count(*) FROM (${dayRows}) d WHERE EXISTS (SELECT 1 FROM json_each(d.slot) WHERE value IN (${c.slotId}, ${FULL_DAY_ID}))) < ${c.cap}`)
+      const id = nanoid()
+      const ts = Math.floor(now.getTime() / 1000)
+      const slotJson = row.slot ? JSON.stringify(row.slot) : null
+      const inserted = await db.all(sql`INSERT INTO bookings_bookings (id, teamId, owner, "order", location, date, slot, "group", quantity, status, createdAt, updatedAt, createdBy, updatedBy)
+        SELECT ${id}, ${row.teamId}, ${row.owner}, ${row.order}, ${row.location}, ${Math.floor(row.date.getTime() / 1000)}, ${slotJson}, ${row.group}, ${row.quantity}, ${row.status}, ${ts}, ${ts}, ${row.createdBy}, ${row.updatedBy}
+        WHERE ${sql.join(guards, sql` AND `)}
+        RETURNING id`) as { id: string }[]
+      if (inserted.length === 0) {
+        if (insertedIds.length > 0) {
+          await db.delete(bookingsBookings).where(inArray(bookingsBookings.id as any, insertedIds))
+        }
+        throw createError({
+          status: 409,
+          statusText: `No room left at "${dbLocation.title}" on ${item.date}`,
+        })
+      }
+      insertedIds.push(id)
+    }
+
     const created = await db
-      .insert(bookingsBookings)
-      .values(bookingsToInsert as any)
-      .returning()
+      .select()
+      .from(bookingsBookings)
+      .where(inArray(bookingsBookings.id as any, insertedIds))
 
     const nitroApp = useNitroApp()
 
@@ -399,11 +470,14 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
-    console.error('Failed to create batch bookings:', msg, error)
+    if ((error as any)?.statusCode || (error as any)?.status) throw error
+    console.error('Failed to create batch bookings:', error)
+    if (insertedIds.length > 0) {
+      await db.delete(bookingsBookings).where(inArray(bookingsBookings.id as any, insertedIds)).catch(() => {})
+    }
     throw createError({
       status: 500,
-      statusText: `Failed to create bookings: ${msg}`,
+      statusText: 'Failed to create bookings',
     })
   }
 })
