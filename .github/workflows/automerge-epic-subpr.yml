@@ -284,7 +284,9 @@ jobs:
               const prCommits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number, per_page: 100 })
               // listCommits omits files; fetch them for non-merge commits so review-capture
               // commits (writeups/ui-proposals/** only) don't void an approval.
-              for (const k of prCommits) {
+              // Only when the owner has commented at all — keeps the hourly sweep cheap (#3173).
+              const ownerCommented = prComments.some(c => c.user?.login === OWNER)
+              for (const k of ownerCommented ? prCommits : []) {
                 if ((k.parents || []).length > 1) continue
                 const full = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
                 k.files = (full.data.files || []).map(f => f.filename)
