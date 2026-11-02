@@ -49,7 +49,7 @@
       },
       {
         "path": "/admin/test1/sales/devices",
-        "expectIncludes": "id=\"__nuxt\""
+        "expectIncludes": "Tills"
       }
     ]
   }
