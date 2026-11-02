@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const uploadConfig = (config.public as any)?.croutonUpload || {} as Record<string, any>
   const maxSize = uploadConfig.maxSize || '10MB'
   // `[]` must mean "use defaults" — ensureBlob skips the check on an empty list
-  const allowedTypes = (uploadConfig.allowedTypes?.length ? uploadConfig.allowedTypes : DEFAULT_ALLOWED_TYPES) as NonNullable<Parameters<typeof ensureBlob>[1]['types']>
+  const allowedTypes: string[] = uploadConfig.allowedTypes?.length ? uploadConfig.allowedTypes : DEFAULT_ALLOWED_TYPES
 
   const form = await readFormData(event)
   const file = form.get('image') || form.get('file')
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   try {
     ensureBlob(file, {
       maxSize,
-      types: allowedTypes
+      types: allowedTypes as NonNullable<Parameters<typeof ensureBlob>[1]['types']>
     })
   } catch (error: unknown) {
     throw createError({
