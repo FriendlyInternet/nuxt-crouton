@@ -822,7 +822,7 @@ jobs:
               const outcome = resumeOutcome({ planHold, dispatched: '${{ steps.replan.outputs.dispatched }}' === 'true', newComment })
               if (outcome !== 'nothing') { core.info(`Held-plan resume outcome: ${outcome}`); return }
               const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
-              const n = claimNotice({ reason: 'your reply on the held plan started no re-plan and posted no answer — dispatch work-issue-pidev.yml with mode=plan by hand', issue: issue_number })
+              const n = claimNotice({ reason: 'your reply on the held plan produced no new plan', pr: issue_number, issue: issue_number })
               await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
               core.setFailed(`Held plan #${issue_number}: resume produced nothing.`)
               return
