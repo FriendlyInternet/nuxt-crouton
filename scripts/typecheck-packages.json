@@ -1,0 +1,18 @@
+{
+  "gate": ["@fyit/crouton-devtools", "@fyit/crouton-feedback", "@fyit/crouton-themes"],
+  "excluded": {
+    "@fyit/crouton-ai": "#3186",
+    "@fyit/crouton-assets": "#3186",
+    "@fyit/crouton-audio": "#3186",
+    "@fyit/crouton-bookings": "#3186",
+    "@fyit/crouton-core": "#3186",
+    "@fyit/crouton-editor": "#3186",
+    "@fyit/crouton-events": "#3186",
+    "@fyit/crouton-i18n": "#3186",
+    "@fyit/crouton-layout": "#3186",
+    "@fyit/crouton-maps": "#3186",
+    "@fyit/crouton-pages": "#3186",
+    "@fyit/crouton-printing": "#3186",
+    "@fyit/crouton-sales": "#3186"
+  }
+}
