@@ -205,9 +205,17 @@ function publishClaimReason(reason, pr = null) {
  * Build the comment for a refused claim (#3061). A refused revision is posted on the PR the
  * owner is waiting on (🔴); a refused build or re-plan keeps the calm ⏸️ note on the issue (#2027).
  */
-export function claimNotice({ reason, pr = null, issue, runUrl = '', runner = 'github-hosted' } = {}) {
+export function claimNotice({ reason, pr = null, issue, kind = '', runUrl = '', runner = 'github-hosted' } = {}) {
   const why = reason || 'another run already holds this issue'
   const log = runUrl ? ` · <a href="${runUrl}">run log</a>` : ''
+  if (kind === 'replan-failed') {
+    return {
+      target: 'issue',
+      number: Number(issue),
+      body: `🔴 Your reply on the held plan produced no new plan — ${why}.\n\n`
+        + `<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #3061${log}</sub>`,
+    }
+  }
   if (pr) {
     return {
       target: 'pr',

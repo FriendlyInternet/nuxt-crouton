@@ -521,6 +521,47 @@ jobs:
             core.setOutput('redispatch', 'true')
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
+      # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
+      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
+      # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
+      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
+      # guard already requires status:blocked) and re-run the planner with the reply as feedback.
+      # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
+      - name: Re-plan a held plan from the reply
+        id: replan
+        if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true' && steps.piredispatch.outputs.redispatch != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url')
+            const { isPlanHold, replanDispatch } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
+            const issue_number = context.payload.issue.number
+            const comments = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 }))
+              .map(c => ({ body: c.body, userType: c.user && c.user.type }))
+            const labels = (context.payload.issue.labels || []).map(l => typeof l === 'string' ? l : l.name)
+            // An `ok` is an approval (the resume path explains it), and `plan:approved` means the plan
+            // already passed — neither is feedback to re-plan from.
+            if (!isPlanHold({ comments, labels, replyBody: context.payload.comment.body })) { core.setOutput('replan', 'false'); core.info('Not a held plan — the claude resume path handles it.'); return }
+            core.setOutput('replan', 'true')
+            core.setOutput('dispatched', 'false')
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo, ref: context.payload.repository.default_branch,
+                ...replanDispatch({ issue: issue_number, commentId: context.payload.comment.id }),
+              })
+            } catch (e) {
+              const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
+              const n = claimNotice({ reason: `I could not re-run the planner from your reply (${e.message}) — dispatch work-issue-pidev.yml with mode=plan by hand`, issue: issue_number, kind: 'replan-failed', runUrl })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+              core.setFailed(`plan re-dispatch failed: ${e.message}`)
+              return
+            }
+            core.setOutput('dispatched', 'true')
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
+                + `🔁 **Re-planning from your reply.** The planner is re-running with your comment as guidance; the block stays on until the plan review decides. 🔗 [Run log](${runUrl})` })
+
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
       # The owner may answer in the medium the question came in — a top-level reply, an
       # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
@@ -557,7 +598,7 @@ jobs:
       - id: agent
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
-        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true'
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true' && steps.replan.outputs.replan != 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -772,6 +813,21 @@ jobs:
             core.setOutput('stillBlocked', String(stillBlocked))
             core.setOutput('newComment', String(newComment))
 
+            // A held plan (#3116): the block staying on is NOT "still iterating" — only a dispatched
+            // re-plan or a posted comment counts, otherwise say plainly that this run produced nothing.
+            const planHold = '${{ steps.replan.outputs.replan }}' === 'true'
+            if (planHold) {
+              const { pathToFileURL } = require('node:url')
+              const { resumeOutcome } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
+              const outcome = resumeOutcome({ planHold, dispatched: '${{ steps.replan.outputs.dispatched }}' === 'true', newComment })
+              if (outcome !== 'nothing') { core.info(`Held-plan resume outcome: ${outcome}`); return }
+              const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
+              const n = claimNotice({ reason: 'your reply on the held plan produced no new plan', kind: 'replan-failed', issue: issue_number })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+              core.setFailed(`Held plan #${issue_number}: resume produced nothing.`)
+              return
+            }
+
             // PASS if the resume did anything observable, OR it's still holding (legit "still
             // iterating" — not a no-op). FAIL only when the block was cleared yet nothing came
             // of it — the silent no-op.
@@ -858,7 +914,7 @@ jobs:
             if ('${{ steps.gate.outputs.subIssues }}' === 'true') facts.push('created sub-issues')
             if ('${{ steps.gate.outputs.mergedPR }}' === 'true') facts.push('merged the gate PR')
             if ('${{ steps.gate.outputs.closed }}' === 'true') facts.push('closed this issue')
-            if ('${{ steps.gate.outputs.stillBlocked }}' === 'true') facts.push('still iterating — the block stays on for your next reply')
+            if ('${{ steps.gate.outputs.stillBlocked }}' === 'true' && '${{ steps.replan.outputs.replan }}' !== 'true') facts.push('still iterating — the block stays on for your next reply')
             const did = facts.length ? facts.join(' · ') : 'continued the pipeline'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
