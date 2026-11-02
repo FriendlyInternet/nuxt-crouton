@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { releaseReady, closeLinkedIssues } from './wave-release.mjs'
+import { releaseReady, closeLinkedIssues, mayCloseHeldIssue } from './wave-release.mjs'
 
 const lbl = names => names.map(name => ({ name }))
 
@@ -131,3 +131,11 @@ test('closeLinkedIssues: unmerged PR does nothing', async () => {
   await closeLinkedIssues(w)
   assert.equal(w.calls.updates.length, 0)
 })
+
+const held = [{ name: 'status:blocked' }]
+const may = (o) => mayCloseHeldIssue({ labels: [], prLabels: [], mergedBy: 'bot', owner: 'pmcp', ...o })
+test('mayCloseHeldIssue: unheld issue closes', () => assert.equal(may({}), true))
+test('mayCloseHeldIssue: bot merge keeps the hold', () => assert.equal(may({ labels: held }), false))
+test('mayCloseHeldIssue: missing mergedBy keeps the hold', () => assert.equal(may({ labels: held, mergedBy: undefined }), false))
+test('mayCloseHeldIssue: owner merge closes a held issue', () => assert.equal(may({ labels: held, mergedBy: 'pmcp' }), true))
+test('mayCloseHeldIssue: build:approved closes a held issue', () => assert.equal(may({ labels: held, prLabels: ['build:approved'] }), true))
