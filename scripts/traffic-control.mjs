@@ -17,6 +17,8 @@
  * already carries fires no event (#1750).
  */
 
+import { routeIssue } from './lib/plan-route.mjs'
+
 export const WAIT_MARKER = '<!-- traffic-wait -->'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
 
@@ -37,6 +39,8 @@ function isBlocker(o) {
   const n = names(o.labels)
   if (n.includes('epic')) return false
   if (o.openPr) return true
+  // #3214: a ticket still in plan mode (no approved plan, no PR) changes no code — never a blocker.
+  if (o.planning) return false
   return n.includes('status:in-progress') && n.some((l) => PIPELINE_LABELS.includes(l))
 }
 
@@ -46,7 +50,7 @@ function isBlocker(o) {
  * @param {object}   o
  * @param {number}   o.issue           the ticket about to start
  * @param {string[]|object[]} o.labels the ticket's labels
- * @param {Array<{number:number,labels:any[],openPr?:boolean}>} o.others
+ * @param {Array<{number:number,labels:any[],openPr?:boolean,planning?:boolean}>} o.others
  *        open pipeline tickets (issues, not PRs). `openPr` = an open `work-<number>` PR exists.
  * @returns {{action:'proceed'|'wait', waitingFor:number[], reason:string}}
  */
@@ -80,7 +84,14 @@ export async function gatherTrafficFacts({ github, context, issueNumber, labels 
   for (const it of seen.values()) {
     const { data: prs } = await github.rest.pulls.list(
       { owner, repo, state: 'open', head: `${owner}:work-${it.number}`, per_page: 5 })
-    others.push({ number: it.number, labels: names(it.labels), openPr: prs.length > 0 })
+    const lbls = names(it.labels)
+    const openPr = prs.length > 0
+    let planning = false
+    try {
+      planning = !openPr && !lbls.includes('plan:approved')
+        && routeIssue({ labels: lbls, text: `${it.title || ''}\n${it.body || ''}` }).mode === 'plan'
+    } catch { /* unreadable routing config: treat as a builder (safe side) */ }
+    others.push({ number: it.number, labels: lbls, openPr, planning })
   }
   return others
 }

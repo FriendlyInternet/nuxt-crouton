@@ -87,3 +87,11 @@ test('releaseWaiting releases only the lowest number per scope', async () => {
   const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
   assert.deepEqual(released, [5, 7])
 })
+
+test('a plan-mode ticket never blocks others, but once it has a PR it does (#3214)', () => {
+  const w = (o) => decideTraffic({ issue: 9, labels: ['pkg:b'], others: [o] }).action
+  const base = { number: 1, labels: ['pkg:b', 'status:in-progress', 'work-this'] }
+  assert.equal(w({ ...base, planning: true }), 'proceed')
+  assert.equal(w({ ...base, planning: false }), 'wait')
+  assert.equal(w({ ...base, planning: true, openPr: true }), 'wait')
+})
