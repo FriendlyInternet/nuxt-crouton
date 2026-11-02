@@ -83,6 +83,7 @@
     "or": "ou",
     "magicLinkSentTo": "Nous avons envoyé un lien magique à",
     "resetLinkSentTo": "Nous avons envoyé un lien de réinitialisation du mot de passe à",
+    "verifyLinkSentTo": "Nous avons envoyé un lien de vérification à",
     "passwordResetSuccessDescription": "Votre mot de passe a été réinitialisé.",
     "passwordResetFailed": "La réinitialisation du mot de passe a échoué",
     "signedOut": "Déconnecté",

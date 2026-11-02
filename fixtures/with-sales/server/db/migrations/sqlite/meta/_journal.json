@@ -15,6 +15,20 @@
       "when": 1792838919488,
       "tag": "0001_great_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793640041569,
+      "tag": "0002_brainy_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640108251,
+      "tag": "0003_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

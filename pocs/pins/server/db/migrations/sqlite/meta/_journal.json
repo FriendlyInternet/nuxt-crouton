@@ -15,6 +15,20 @@
       "when": 1793009321003,
       "tag": "0001_layout_configs_team_key",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793640056149,
+      "tag": "0002_slow_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640096247,
+      "tag": "0003_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

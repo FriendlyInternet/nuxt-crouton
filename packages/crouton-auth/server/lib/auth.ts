@@ -68,6 +68,27 @@ export interface CreateAuthOptions {
   baseURL: string
   /** Optional Drizzle schema for custom table names */
   schema?: Record<string, unknown>
+  /**
+   * Override the "crouton-email is installed" signal (default: detected from
+   * `public.crouton.email` in the runtime config). Email verification is only
+   * required when a mailer exists to deliver the link.
+   */
+  emailInstalled?: boolean
+}
+
+/**
+ * The one place that decides whether email verification is required:
+ * crouton-email defines `public.crouton.email` by default; apps without it
+ * have no way to send the verify link.
+ */
+function isEmailInstalled(): boolean {
+  try {
+    const rc = (globalThis as any).useRuntimeConfig?.()
+    return !!rc?.public?.crouton?.email
+  }
+  catch {
+    return false
+  }
 }
 
 /**
@@ -91,6 +112,7 @@ export function createAuth(options: CreateAuthOptions) {
     baseURL,
     schema
   } = options
+  const verifyEmail = options.emailInstalled ?? isEmailInstalled()
 
   // Build Better Auth configuration
   const authConfig: BetterAuthOptions = {
@@ -107,7 +129,7 @@ export function createAuth(options: CreateAuthOptions) {
     secret,
 
     // Email and password configuration
-    emailAndPassword: buildEmailPasswordConfig(config),
+    emailAndPassword: buildEmailPasswordConfig(config, verifyEmail),
 
     // Email verification (required for changeEmail)
     emailVerification: {
@@ -124,7 +146,22 @@ export function createAuth(options: CreateAuthOptions) {
           userName: user.name
         }).catch(() => {})
       },
-      sendOnSignUp: false
+      // Verification is required only where a mailer exists (crouton-email)
+      sendOnSignUp: verifyEmail,
+      // The token proves control of the mailbox, so land the invitee signed in
+      ...(verifyEmail && { autoSignInAfterVerification: true })
+    },
+
+    // Throttle sign-in-type attempts per real client IP using better-auth's own
+    // limits, counted in the database (shared across Worker isolates). Requests
+    // with no client IP (local dev, e2e) skip the limiter.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      customRules: {
+        '/**': (req: Request, current: unknown) =>
+          req.headers.get('cf-connecting-ip') ? (current as any) : false
+      }
     },
 
     // User configuration (changeEmail)
@@ -138,6 +175,7 @@ export function createAuth(options: CreateAuthOptions) {
 
     // Advanced options
     advanced: {
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
       // Generate secure IDs - moved to database config in Better Auth 1.4.x
       database: {
         generateId: () => crypto.randomUUID()
@@ -181,7 +219,7 @@ export function createAuth(options: CreateAuthOptions) {
 /**
  * Build email/password configuration from @crouton/auth config
  */
-function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions['emailAndPassword'] {
+function buildEmailPasswordConfig(config: CroutonAuthConfig, verifyEmail = false): BetterAuthOptions['emailAndPassword'] {
   const passwordConfig = config.methods?.password
 
   // Check if password auth is enabled
@@ -195,6 +233,8 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
       enabled: true,
       autoSignIn: true,
       minPasswordLength: 8,
+      ...(verifyEmail && { requireEmailVerification: true }),
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
         if (config.debug) {
           console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
@@ -217,6 +257,8 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
     enabled: customConfig.enabled !== false,
     autoSignIn: true,
     minPasswordLength: customConfig.minLength ?? 8,
+    ...(verifyEmail && { requireEmailVerification: true }),
+    revokeSessionsOnPasswordReset: true,
     // Password reset
     sendResetPassword: customConfig.resetEnabled !== false
       ? async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
@@ -1161,7 +1203,9 @@ function buildOrganizationConfig(
       if (config.debug) {
         console.log(`[crouton/auth] Invitation for ${data.email} to ${data.organization.name} (id: ${data.id})`)
       }
-      console.log(`[crouton/auth] 📧 sendInvitationEmail called for ${data.email} to org "${data.organization.name}" (invitationId: ${data.id})`)
+      if (config.debug) {
+        console.log(`[crouton/auth] 📧 sendInvitationEmail called for ${data.email} to org "${data.organization.name}" (invitationId: ${data.id})`)
+      }
       let _event: any; try { _event = useEvent() } catch {}
       try {
         await useNitroApp().hooks.callHook('crouton:auth:email', {
@@ -1175,10 +1219,12 @@ function buildOrganizationConfig(
           role: data.role,
           expiresAt: data.expiresAt
         })
-        console.log(`[crouton/auth] ✅ crouton:auth:email hook completed for ${data.email}`)
+        if (config.debug) {
+          console.log(`[crouton/auth] ✅ crouton:auth:email hook completed for ${data.email}`)
+        }
       }
       catch (err) {
-        console.error(`[crouton/auth] ❌ crouton:auth:email hook FAILED for ${data.email}:`, err)
+        console.error(`[crouton/auth] ❌ crouton:auth:email hook FAILED:`, err)
       }
     },
 

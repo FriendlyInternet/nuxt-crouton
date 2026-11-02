@@ -15,6 +15,20 @@
       "when": 1793009295201,
       "tag": "0001_layout_configs_team_key",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793640035664,
+      "tag": "0002_broad_northstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640102723,
+      "tag": "0003_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

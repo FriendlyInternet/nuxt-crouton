@@ -15,6 +15,20 @@
       "when": 1793009297478,
       "tag": "0001_layout_configs_team_key",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793640040270,
+      "tag": "0002_giant_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640107036,
+      "tag": "0003_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

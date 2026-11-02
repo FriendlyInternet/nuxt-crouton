@@ -22,6 +22,20 @@
       "when": 1793009317902,
       "tag": "0002_layout_configs_team_key",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640054107,
+      "tag": "0003_naive_jubilee",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793640092112,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

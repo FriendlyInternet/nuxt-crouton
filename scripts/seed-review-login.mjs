@@ -148,6 +148,11 @@ export async function resetPasswordSql(email, password, hashPassword) {
     `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
 }
 
+/** SQL that marks the review user's email verified (needed once verification is required, #3138). */
+export function verifyEmailSql(email) {
+  return `UPDATE "user" SET "emailVerified" = 1 WHERE "email" = ${sqlStr(email)};`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -227,33 +232,39 @@ async function main() {
   let signedUp = false
   try {
     const { res, json } = await post('/api/auth/sign-up/email', { name, email, password })
-    if (res.ok) {
+    const code = json?.code || json?.message || `HTTP ${res.status}`
+    const existing = res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))
+    // With email verification required (#3138) sign-up answers 200 with NO session —
+    // for a brand-new account and for an existing email alike — so a missing token
+    // means "go through the reuse path", not "signed up".
+    const noSession = res.ok && !json?.token
+    if (res.ok && !noSession) {
       signedUp = true
       info(`signed up ${email}`)
-    } else {
-      const code = json?.code || json?.message || `HTTP ${res.status}`
-      if (res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))) {
-        info(`user ${email} already exists — already seeded, reusing.`)
-        // Re-establish a session for the org check below.
-        let { res: si } = await post('/api/auth/sign-in/email', { email, password })
-        if (!si.ok && (args.db || args.sqlite)) {
-          // The account holds an old password (secret rotated, #2358) — reset it, retry.
-          info('existing user refuses this password — resetting it to the current one.')
-          try {
-            execSeedSql(args, await resetPasswordSql(email, password))
-            ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
-          } catch (e) {
-            warn(`password reset failed: ${e?.message || e}`)
-          }
+    } else if (existing || noSession) {
+      info(`user ${email} ${existing ? 'already exists' : 'needs verification'} — reusing the seeded account.`)
+      const canSql = !!(args.db || args.sqlite)
+      let si = null
+      if (!noSession) ({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+      if (!si?.ok && canSql) {
+        // Old password (secret rotated, #2358) and/or unverified email (#3138) — fix both
+        // server-side, then sign in. Re-hashing the password is harmless for a new account.
+        info('resetting the password and marking the email verified.')
+        try {
+          execSeedSql(args, await resetPasswordSql(email, password))
+          execSeedSql(args, verifyEmailSql(email))
+          ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+        } catch (e) {
+          warn(`password reset / verify failed: ${e?.message || e}`)
         }
-        if (!si.ok) {
-          warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
-          process.exit(1)
-        }
-      } else {
-        warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)
-        process.exit(0)
       }
+      if (!si?.ok) {
+        warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+        process.exit(1)
+      }
+    } else {
+      warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)
+      process.exit(0)
     }
   } catch (e) {
     warn(`sign-up request error: ${e?.message || e} — skipping.`)

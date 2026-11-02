@@ -83,6 +83,7 @@
     "or": "of",
     "magicLinkSentTo": "We hebben een magic link gestuurd naar",
     "resetLinkSentTo": "We hebben een link om je wachtwoord te resetten gestuurd naar",
+    "verifyLinkSentTo": "We hebben een verificatielink gestuurd naar",
     "passwordResetSuccessDescription": "Je wachtwoord is succesvol gereset.",
     "passwordResetFailed": "Wachtwoord resetten mislukt",
     "signedOut": "Uitgelogd",

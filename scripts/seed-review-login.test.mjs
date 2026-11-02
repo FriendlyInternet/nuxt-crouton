@@ -70,3 +70,65 @@ test('the default hasher is better-auth\'s, so a login can verify the stored val
   const hash = sql.match(/SET "password" = '([^']+)'/)[1]
   assert.equal(await verifyPassword({ hash, password: 'new-secret' }), true)
 })
+
+// ── #3138 R4: the review login keeps working once email verification is required ─────
+// With verification on, sign-up for an existing email answers 200 with NO session, and an
+// unverified/old-password sign-in is refused. Drive the real script against a fake auth
+// server + a real SQLite file: it must reset the password, mark the email verified, and
+// end with a working sign-in (exit 0, not the "NOT advertising this login" exit 1).
+import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { verifyEmailSql } from './seed-review-login.mjs'
+
+test('verifyEmailSql marks only the review user verified', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`CREATE TABLE "user" ("id" TEXT, "email" TEXT, "emailVerified" INTEGER);
+    INSERT INTO "user" VALUES ('u1','r@example.com',0),('u2','o@example.com',0);`)
+  d.exec(verifyEmailSql('r@example.com'))
+  assert.deepEqual(d.prepare('SELECT "id","emailVerified" FROM "user" ORDER BY "id"').all().map(r => [r.id, r.emailVerified]), [['u1', 1], ['u2', 0]])
+})
+
+test('existing unverified account + old password + sign-up 200 without session → reset, verify, sign in', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-login-'))
+  const file = join(dir, 'sqlite.db')
+  const d = new DatabaseSync(file)
+  d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER);
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
+    INSERT INTO "user" VALUES ('u1','review+x@example.com',0);
+    INSERT INTO "account" VALUES ('a1','u1','credential','old-hash');`)
+  d.close()
+  const calls = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', c => (body += c))
+    req.on('end', () => {
+      calls.push(req.url)
+      res.setHeader('content-type', 'application/json')
+      if (req.url === '/api/auth/sign-up/email') return res.end(JSON.stringify({ token: null, user: null }))
+      if (req.url === '/api/auth/sign-in/email') {
+        // Works only after the script reset the password AND verified the email.
+        const check = new DatabaseSync(file)
+        const ok = check.prepare('SELECT 1 AS ok FROM "user" u JOIN "account" a ON a."userId"=u."id" WHERE u."emailVerified"=1 AND a."password"<>\'old-hash\'').get()
+        check.close()
+        res.statusCode = ok ? 200 : 403
+        return res.end(JSON.stringify(ok ? { token: 't' } : { code: 'EMAIL_NOT_VERIFIED' }))
+      }
+      res.end('{}')
+    })
+  })
+  await new Promise(r => server.listen(0, r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const code = await new Promise((resolve) => {
+    const p = spawn(process.execPath, ['scripts/seed-review-login.mjs', '--url', url, '--email', 'review+x@example.com', '--password', 'new-pass', '--sqlite', file], { stdio: 'ignore' })
+    p.on('exit', resolve)
+  })
+  server.close()
+  assert.equal(code, 0)
+  assert.ok(calls.filter(c => c === '/api/auth/sign-in/email').length >= 1)
+  const after = new DatabaseSync(file)
+  assert.equal(after.prepare('SELECT "emailVerified" AS v FROM "user"').get().v, 1)
+  after.close()
+})

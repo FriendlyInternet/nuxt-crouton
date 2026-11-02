@@ -83,6 +83,7 @@
     "or": "or",
     "magicLinkSentTo": "We sent a magic link to",
     "resetLinkSentTo": "We sent a password reset link to",
+    "verifyLinkSentTo": "We sent a verification link to",
     "passwordResetSuccessDescription": "Your password has been reset successfully.",
     "passwordResetFailed": "Password reset failed",
     "signedOut": "Signed out",

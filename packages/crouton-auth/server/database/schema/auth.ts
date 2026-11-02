@@ -96,6 +96,18 @@ export const verification = sqliteTable('verification', {
   index('verification_identifier_idx').on(table.identifier)
 ])
 
+/**
+ * Rate limit table - better-auth's database-backed rate limiter
+ *
+ * Counters shared across Worker isolates (`rateLimit.storage: 'database'`).
+ */
+export const rateLimit = sqliteTable('rateLimit', {
+  id: text('id').primaryKey(),
+  key: text('key'),
+  count: integer('count'),
+  lastRequest: integer('lastRequest')
+})
+
 // ============================================================================
 // Organization Plugin Tables
 // ============================================================================

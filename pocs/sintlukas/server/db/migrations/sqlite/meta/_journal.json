@@ -22,6 +22,20 @@
       "when": 1773676498823,
       "tag": "0002_clean_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640030547,
+      "tag": "0003_noisy_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793640097449,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

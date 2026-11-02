@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { localizeError } from '../../utils/errors'
+import { sanitizeRedirectUrl } from '../../utils/security'
 /**
  * AuthRouteModal
  *
@@ -62,6 +63,8 @@ const { hasPasskeys, loginWithPasskey, isWebAuthnSupported } = usePasskeys()
 
 const formError = ref<string | null>(null)
 const submitting = ref(false)
+// Set when sign-up needs email verification first (no session was created)
+const verifySentTo = ref('')
 
 // Reset per-form state whenever mode changes
 watch(() => state.value.mode, () => {
@@ -72,6 +75,7 @@ watch(() => state.value.mode, () => {
   magicLinkEmail.value = ''
   emailSent.value = false
   sentEmail.value = ''
+  verifySentTo.value = ''
 })
 
 // Screen reader title mapped from current mode
@@ -308,7 +312,18 @@ async function onRegisterSubmit(event: FormSubmitEvent<{ name: string, email: st
   formError.value = null
   submitting.value = true
   try {
-    await register({ name: event.data.name, email: event.data.email, password: event.data.password })
+    const { verificationRequired } = await register({
+      name: event.data.name,
+      email: event.data.email,
+      password: event.data.password,
+      // Keep the page the user came for (e.g. an invite) through the verify link
+      callbackURL: sanitizeRedirectUrl(state.value.redirectTo || '/')
+    })
+    if (verificationRequired) {
+      submitting.value = false
+      verifySentTo.value = event.data.email
+      return
+    }
     notify.success(t('auth.accountCreated'), { description: t('auth.accountCreatedDescription') })
     await handleSuccess()
   } catch (e: unknown) {
@@ -537,8 +552,35 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
           v-else-if="state.mode === 'register'"
           key="register"
         >
+          <div
+            v-if="verifySentTo"
+            class="space-y-6 text-center"
+          >
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <UIcon
+                name="i-lucide-mail-check"
+                class="h-6 w-6 text-primary"
+              />
+            </div>
+            <h2 class="text-xl font-semibold text-highlighted">
+              {{ t('auth.checkYourInbox') }}
+            </h2>
+            <p class="text-muted">
+              {{ t('auth.verifyLinkSentTo') }}
+              <span class="font-medium text-highlighted">{{ verifySentTo }}</span>
+            </p>
+            <UButton
+              color="neutral"
+              variant="outline"
+              block
+              @click="authModal.setMode('login')"
+            >
+              {{ t('auth.backToSignIn') }}
+            </UButton>
+          </div>
+
           <UAuthForm
-            v-if="hasPassword"
+            v-else-if="hasPassword"
             ref="registerForm"
             :fields="registerFields"
             :providers="oauthButtons"

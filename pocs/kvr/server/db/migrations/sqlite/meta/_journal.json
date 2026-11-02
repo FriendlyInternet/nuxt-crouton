@@ -22,6 +22,20 @@
       "when": 1777800000000,
       "tag": "0002_add_werkvergunningens_form_pdf_path",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793640028306,
+      "tag": "0003_complete_surge",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793640094361,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

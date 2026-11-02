@@ -8,6 +8,20 @@
       "when": 1793012602690,
       "tag": "0000_empty_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793640027255,
+      "tag": "0001_yielding_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793640093157,
+      "tag": "0002_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

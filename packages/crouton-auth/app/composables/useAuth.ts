@@ -35,6 +35,8 @@ export interface RegisterData {
   email: string
   password: string
   name?: string
+  /** Where the email-verification link lands afterwards (relative path) */
+  callbackURL?: string
 }
 
 export interface PasskeyInfo {
@@ -268,7 +270,7 @@ export function useAuth() {
   /**
    * Register a new user with email and password
    */
-  async function register(data: RegisterData): Promise<void> {
+  async function register(data: RegisterData): Promise<{ verificationRequired: boolean }> {
     loading.value = true
     error.value = null
 
@@ -282,7 +284,8 @@ export function useAuth() {
       const result = await requireAuthClient().signUp.email({
         email: data.email,
         password: data.password,
-        name: displayName
+        name: displayName,
+        ...(data.callbackURL && { callbackURL: data.callbackURL })
       })
 
       if (debug) {
@@ -302,6 +305,11 @@ export function useAuth() {
         console.log('[@crouton/auth] register: refreshing session state')
       }
 
+      // With email verification required the server creates no session
+      if (result.data && result.data.token === null) {
+        return { verificationRequired: true }
+      }
+
       // Pull the new session into shared state (the server already set its org)
       await refresh()
 
@@ -312,6 +320,7 @@ export function useAuth() {
           activeOrg: activeOrganization.value?.slug ?? null
         })
       }
+      return { verificationRequired: false }
     } catch (e: unknown) {
       if (debug) {
         console.error('[@crouton/auth] register: error', e)
