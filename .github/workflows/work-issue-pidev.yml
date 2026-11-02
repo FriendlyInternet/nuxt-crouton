@@ -271,7 +271,8 @@ jobs:
       # Revision runs (inputs.feedback, #2446) finish work already in flight — they never wait.
       - name: Traffic control
         id: traffic
-        if: ${{ inputs.feedback == '' }}
+        # #3214: plan mode changes no code and can't collide — only the BUILD waits its turn.
+        if: ${{ inputs.feedback == '' && inputs.mode != 'plan' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
