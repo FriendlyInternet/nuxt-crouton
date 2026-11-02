@@ -36,7 +36,7 @@ describe('sanitizeHtml (server path, no DOM)', () => {
     const html = '<p><strong>a</strong> <em>b</em> <a href="https://a.b/c?x=1&y=2">l</a></p><ul><li>i</li></ul><img src="/x.png">'
     const out = sanitizeHtml(html)
     expect(out).toContain('<strong>a</strong>')
-    expect(out).toContain('href="https://a.b/c?x=1&y=2"')
+    expect(out).toContain('href="https://a.b/c?x=1&amp;y=2"')
     expect(out).toContain('<li>i</li>')
     expect(out).toContain('src="/x.png"')
   })
