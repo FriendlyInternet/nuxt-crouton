@@ -28,6 +28,12 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
       - name: Dispatch the build with the approved plan
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -41,4 +47,7 @@ jobs:
             exit 1
           fi
           echo "building #$ISSUE from approved plan comment $PLAN_ID"
+          # #3210 — tick "Owner ok" (the plan is approved; the build is about to start). Cosmetic.
+          GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" ok \
+            --link "https://github.com/${{ github.repository }}/issues/${ISSUE}#issuecomment-${PLAN_ID}" || true
           gh workflow run work-issue-pidev.yml --repo "${{ github.repository }}" -f issue="$ISSUE" -f mode=build -f plan="$PLAN_ID"

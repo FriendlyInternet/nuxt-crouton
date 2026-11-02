@@ -787,6 +787,10 @@ jobs:
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
+          # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
+          PLAN_URL="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .html_url // empty' | tail -n 1)"
+          GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" plan --link "$PLAN_URL" || true
           if [ "$(echo "$VERDICT" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).unverified)')" = "true" ]; then
             gh issue edit "$ISSUE" --add-label "plan:unverified" || true
           fi
@@ -1269,6 +1273,10 @@ jobs:
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
           fi
+
+          # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
+          TICK_PR="$(gh pr list --head "$BR" --base "$BASE" --json url -q '.[0].url' 2>/dev/null || true)"
+          [ -n "$TICK_PR" ] && GITHUB_REPOSITORY="$GITHUB_REPOSITORY" node scripts/flow-checklist.mjs "$ISSUE" pr --link "$TICK_PR" || true
 
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.

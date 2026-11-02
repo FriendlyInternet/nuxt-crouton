@@ -18,6 +18,12 @@ export const STEPS = [
   ['merged', 'Merged']
 ]
 
+/** The issue a PR closes, from its body's leading "Closes #N" line (the pipeline's contract). */
+export function issueFromPrBody(body = '') {
+  const m = body.match(/\bcloses\s+#(\d+)/i)
+  return m ? Number(m[1]) : null
+}
+
 export const marker = issue => `<!-- flow-checklist:${issue} -->`
 
 /** Parse ticked steps ({key: detail}) out of an existing comment body. */
