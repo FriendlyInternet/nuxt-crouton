@@ -19,8 +19,7 @@ export const CI_FIX_MARKER = 'CI-Fix: true'
 function isCiFixCommit(k) {
   const msg = k.commit?.message || ''
   if (!msg.split('\n').some(l => l.trim() === CI_FIX_MARKER)) return false
-  const who = [k.committer?.login, k.commit?.committer?.name].filter(Boolean).map(x => String(x).toLowerCase())
-  return who.some(x => x === 'claude[bot]' || x === 'claude')
+  return k.commit?.committer?.name === 'claude[bot]'
 }
 
 import { isAgentComment, isApproval } from '../approval.mjs'

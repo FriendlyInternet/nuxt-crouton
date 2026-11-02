@@ -228,13 +228,13 @@ jobs:
                group/key/route is referenced but undefined, IMPLEMENT the missing piece, taking the
                intent from the linked issue (`gh issue view ${{ steps.gate.outputs.issue_number }}`)
                and the latest owner/orchestrator comments on the PR and issue — not just the log. If
-               you cannot implement it confidently, do not commit; comment on the issue, @mention
+               you cannot implement it confidently, do not commit and do NOT write the message file; comment on the issue, @mention
                @pmcp, apply `status:blocked`, and stop. A deterministic check after you rejects any
                commit that removes lines the worker added (blank lines and imports excepted).
             3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
                - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
                - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
-                 correct fix would require one, STOP: do not commit. Instead comment on issue
+                 correct fix would require one, STOP: do not commit and do NOT write the message file. Instead comment on issue
                  #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
                  `status:blocked` label to that issue, and end your run.
                - If packages_allowed is `true`: this is a `pkg:*` issue — the owner already approved

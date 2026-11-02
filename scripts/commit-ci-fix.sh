@@ -7,7 +7,7 @@
 set -euo pipefail
 MSG="${1:?usage: commit-ci-fix.sh <message-file>}"
 # Whatever the agent left behind (unstaged edits, untracked files) must never reach the push.
-clean() { git reset -q --hard && git clean -fdq; }
+clean() { git reset -q --hard && git clean -fdq && rm -f .claude/.package-edit-approved; }
 if [ ! -s "$MSG" ]; then clean; echo "No CI-fix message — nothing committed."; exit 0; fi
 if git diff --cached --quiet; then clean; echo "Nothing staged — nothing committed."; exit 0; fi
 export GIT_AUTHOR_NAME="claude[bot]" GIT_AUTHOR_EMAIL="41898282+claude[bot]@users.noreply.github.com"

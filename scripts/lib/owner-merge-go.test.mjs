@@ -60,6 +60,10 @@ test('a claude[bot] CI-fix commit with the marker keeps the ok; unmarked or othe
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'claude[bot]')] }).go, true)
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix('fix(root): x', 'claude[bot]')] }).go, false)
   assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'nuxt-harness[bot]')] }).go, false)
+  assert.equal(ownerMergeGo({ owner, comments, commits: [fix(body, 'claude')] }).go, false)
+  // login alone is not enough: only the committer NAME counts
+  const loginOnly = { ...fix(body, 'x'), committer: { login: 'claude[bot]' } }
+  assert.equal(ownerMergeGo({ owner, comments, commits: [loginOnly] }).go, false)
 })
 
 test('real CI-fix commit e2b04d2b8 (made by the fix-bot, unmarked) still voids the ok; the same commit made by commit-ci-fix.sh keeps it', async () => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ownerMergeGo } from './lib/owner-merge-go.mjs'
@@ -54,4 +54,40 @@ test('leftovers (unstaged edits, untracked files) are wiped, staged or not', () 
   const m = join(d, '..', `o-${Date.now()}`); writeFileSync(m, 'fix: z')
   run(m)
   assert.equal(g('status', '--porcelain').trim(), '')
+})
+
+test('the gitignored package-edit approval file does not survive the clean', () => {
+  const { d, g, run } = repo()
+  mkdirSync(join(d, '.claude'))
+  writeFileSync(join(d, '.gitignore'), '.claude/.package-edit-approved\n'); g('add', '.gitignore'); g('commit', '-qm', 'ignore')
+  writeFileSync(join(d, '.claude/.package-edit-approved'), 'pkg\n')
+  writeFileSync(join(d, 'a'), '2'); g('add', 'a')
+  const m = join(d, '..', `p-${Date.now()}`); writeFileSync(m, 'fix: p')
+  run(m)
+  assert.equal(existsSync(join(d, '.claude/.package-edit-approved')), false)
+})
+
+test('workflow runs the script from a copy of origin/<default>, and fails loudly when it is missing there', () => {
+  const wf = readFileSync(resolve('.github/workflows/fix-ci-on-failure.yml'), 'utf8')
+  const m = wf.match(/- name: Commit the staged fix[\s\S]*?run: \|\n([\s\S]*?)\n\s*\n/)
+  assert.ok(m, 'commit step present')
+  const snippet = m[1].split('\n').map(l => l.replace(/^ {10}/, '')).join('\n')
+  assert.match(snippet, /git show "origin\/\$DEFAULT_BRANCH:scripts\/commit-ci-fix\.sh" > "\$RUNNER_TEMP\/commit-ci-fix\.sh"/)
+  assert.match(snippet, /bash "\$RUNNER_TEMP\/commit-ci-fix\.sh"/)
+  // origin/main exists but has no script -> the step must exit non-zero and commit nothing
+  const root = mkdtempSync(join(tmpdir(), 'ci-fix-wf-'))
+  const sh = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' })
+  const origin = join(root, 'origin'); mkdirSync(origin)
+  sh(origin, 'init', '-q', '-b', 'main'); sh(origin, 'config', 'user.name', 'x'); sh(origin, 'config', 'user.email', 'x@x')
+  writeFileSync(join(origin, 'a'), '1'); sh(origin, 'add', '.'); sh(origin, 'commit', '-qm', 'base')
+  const work = join(root, 'work'); execFileSync('git', ['clone', '-q', origin, work])
+  sh(work, 'config', 'user.name', 'x'); sh(work, 'config', 'user.email', 'x@x')
+  writeFileSync(join(work, 'a'), '2'); sh(work, 'add', 'a')
+  writeFileSync(join(root, 'ci-fix-message'), 'fix: q')
+  let failed = false
+  try {
+    execFileSync('bash', ['-c', snippet], { cwd: work, stdio: 'pipe', env: { ...process.env, DEFAULT_BRANCH: 'main', RUNNER_TEMP: root } })
+  } catch { failed = true }
+  assert.equal(failed, true)
+  assert.equal(sh(work, 'rev-list', '--count', 'HEAD').trim(), '1')
 })
