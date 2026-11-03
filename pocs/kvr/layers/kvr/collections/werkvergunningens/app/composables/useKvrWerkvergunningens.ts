@@ -43,7 +43,8 @@ export const kvrWerkvergunningensPhotoItemSchema = z.object({
 // Keep schema outside of objects that might be serialized/cloned during SSR
 export const kvrWerkvergunningenSchema = z.object({
   sblNumber: z.string().min(1, 'Verplicht'),
-  datum: z.date({ message: 'Kies een datum' }),
+  // explicit `: boolean` stops TS inferring a type predicate that would narrow out null
+  datum: z.date({ message: 'Kies een datum' }).nullable().refine((d): boolean => d !== null, { message: 'Kies een datum' }),
   workType: z.string().min(1, 'Kies een type werk'),
   cables: z.array(kvrWerkvergunningensCableItemSchema).optional(),
   straat: z.string().min(1, 'Verplicht'),
@@ -54,7 +55,7 @@ export const kvrWerkvergunningenSchema = z.object({
   lat: z.number().nullable().optional(),
   ploegLeden: z.string().optional(),
   plaats: z.string().optional(),
-  opgemaaktOp: z.date().optional(),
+  opgemaaktOp: z.date().nullable().optional(),
   werkverantwoordelijkeNaam: z.string().optional(),
   werkverantwoordelijkeVoornaam: z.string().optional(),
   werkverantwoordelijkeHoedanigheid: z.string().optional(),

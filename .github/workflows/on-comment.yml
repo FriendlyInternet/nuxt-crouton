@@ -164,6 +164,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
+      # #3105: start the CI fix-bot (workflow_dispatch) when the PR is red.
+      actions: write
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -177,6 +180,8 @@ jobs:
           fetch-depth: 1
 
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -184,18 +189,39 @@ jobs:
             const pull_number = context.payload.issue.number
             const { decideEpicMerge } = await import(
               `${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
+            const { ownerMergeGo } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
 
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number })
             const checkRuns = await github.paginate(github.rest.checks.listForRef,
               { owner, repo, ref: pr.head.sha, per_page: 100 })
-            const d = decideEpicMerge({ comment: context.payload.comment, pr, checkRuns })
+            // One decision (#3105): the owner's standing `ok` (ownerMergeGo — survives a CI-Fix
+            // commit, voided by a worker revision) AND both gates green. The sweep in
+            // automerge-epic-subpr.yml runs the very same call whenever a check finishes.
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+            const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number, per_page: 100 })
+            for (const k of commits) {
+              if ((k.parents || []).length > 1) continue
+              const full = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
+              k.files = (full.data.files || []).map(f => f.filename)
+            }
+            const go = ownerMergeGo({ comments, commits, owner: process.env.OWNER_LOGIN || 'pmcp' })
+            const d = decideEpicMerge({ comment: context.payload.comment, pr, checkRuns, go })
             core.info(`#${pull_number}: ${d.action} — ${d.reason}`)
             const say = body => github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
               body: `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
 
             if (d.action === 'ignore') return
+            if (!go.go) return // red/wait only matter while the ok stands
             if (d.action === 'red') {
-              await say(`🔴 **Not merged — ${d.failing.map(f => `\`${f}\``).join(', ')} is red.** Fix it and comment \`lgtm\` again.`)
+              const names = d.failing.map(f => `\`${f}\``).join(', ')
+              try {
+                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'fix-ci-on-failure.yml', ref: 'main',
+                  inputs: { pr: String(pull_number) } })
+                await say(`🔴 **${names} red — the CI fix is running.** This merges when green while your \`ok\` stands.`)
+              } catch (e) {
+                await say(`🔴 **${names} red, and the CI fix could not be started** (${e.message}). Your \`ok\` stands; fix it and it merges when green.`)
+              }
               return
             }
             // #3227: a conflicting PR must never reach the wait/merge branches (false "will merge"
@@ -221,14 +247,8 @@ jobs:
               }
             }
             if (d.action === 'wait') {
-              try {
-                await github.graphql(
-                  `mutation($id:ID!){ enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:MERGE}){ pullRequest { id } } }`,
-                  { id: pr.node_id })
-                await say(`⏳ **Approved — will merge when the checks finish** (${d.pending.map(p => `\`${p}\``).join(', ')} not green yet). Auto-merge is on.`)
-              } catch (e) {
-                await say(`⏳ **Approved, but ${d.pending.map(p => `\`${p}\``).join(', ')} hasn't finished** and auto-merge couldn't be enabled (${e.message}). Comment \`lgtm\` again once it is green.`)
-              }
+              // No GitHub auto-merge (it never consults the ok): the sweep merges when the checks finish.
+              await say(`⏳ **Approved — merges when the checks finish** (${d.pending.map(p => `\`${p}\``).join(', ')} not green yet) while your \`ok\` stands.`)
               return
             }
             try {

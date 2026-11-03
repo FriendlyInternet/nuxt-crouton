@@ -70,3 +70,36 @@ test('the default hasher is better-auth\'s, so a login can verify the stored val
   const hash = sql.match(/SET "password" = '([^']+)'/)[1]
   assert.equal(await verifyPassword({ hash, password: 'new-secret' }), true)
 })
+
+// ── #3162: verify the reviewer address, without revoking on redeploy ──────────
+import { markReviewerVerifiedSql } from './seed-review-login.mjs'
+
+function vdb() {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    INSERT INTO "user" VALUES ('u1','review+velo-pr5@example.com',0),('u2','other@example.com',0);
+    INSERT INTO "session" VALUES ('s1','u1'),('s2','u2');
+  `)
+  return d
+}
+const count = (d, id) => d.prepare('SELECT count(*) c FROM "session" WHERE "id"=?').get(id).c
+const verified = (d, id) => d.prepare('SELECT "emailVerified" v FROM "user" WHERE "id"=?').get(id).v
+
+test('unverified reviewer: sessions dropped, then marked verified; others untouched', () => {
+  const d = vdb()
+  d.exec(markReviewerVerifiedSql('Review+velo-pr5@example.com'))
+  assert.equal(count(d, 's1'), 0)
+  assert.equal(verified(d, 'u1'), 1)
+  assert.equal(count(d, 's2'), 1)
+  assert.equal(verified(d, 'u2'), 0)
+})
+
+test('second run (redeploy) revokes nothing', () => {
+  const d = vdb()
+  d.exec(markReviewerVerifiedSql('review+velo-pr5@example.com'))
+  d.exec(`INSERT INTO "session" VALUES ('s3','u1')`)
+  d.exec(markReviewerVerifiedSql('review+velo-pr5@example.com'))
+  assert.equal(count(d, 's3'), 1)
+})
