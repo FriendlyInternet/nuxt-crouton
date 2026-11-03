@@ -72,6 +72,45 @@ function rank(w: PileWrite, existing: Map<string, PileRow>) {
   return existing.has(w.pileId) ? 1 : 0
 }
 
+type Audit = { teamId: string, owner: string, createdBy: string, updatedBy: string }
+interface Group { audit: Audit, groupId: string, summary: string, undoOf: string | null, userId: string }
+
+async function trackStatements(g: Group, writes: TagWrite[]) {
+  const db = useDB()
+  const before = await currentTags(g.audit.teamId, writes.map(w => w.trackId))
+  const applied = writes.filter(w => before.has(w.trackId))
+  const statements = applied.flatMap(w => [
+    db.update(crateTracks).set({ tags: w.tags, updatedBy: g.userId, updatedAt: new Date() })
+      .where(and(eq(crateTracks.teamId, g.audit.teamId), eq(crateTracks.id, w.trackId))),
+    db.insert(crateChanges).values({ ...g.audit, groupId: g.groupId, trackId: w.trackId, before: before.get(w.trackId), after: w.tags, summary: g.summary, undoOf: g.undoOf })
+  ])
+  return { applied, statements }
+}
+
+function pileStatement(g: Group, w: PileWrite, prev: PileRow | undefined) {
+  const db = useDB()
+  const where = and(eq(cratePiles.teamId, g.audit.teamId), eq(cratePiles.id, w.pileId))
+  if (!w.after) return db.delete(cratePiles).where(where)
+  if (prev) return db.update(cratePiles).set({ ...w.after, updatedBy: g.userId }).where(where)
+  return db.insert(cratePiles).values({ ...g.audit, id: w.pileId, ...w.after })
+}
+
+async function pileStatements(g: Group, writes: PileWrite[]) {
+  if (!writes.length) return []
+  const existing = new Map((await loadPiles(g.audit.teamId)).map(p => [p.id, p]))
+  return [...writes]
+    .sort((a, b) => rank(a, existing) - rank(b, existing))
+    .filter(w => w.after || existing.has(w.pileId))
+    .flatMap((w) => {
+      const prev = existing.get(w.pileId)
+      const before: PileSnap | null = prev ? { name: prev.name, parentId: prev.parentId, order: prev.order } : null
+      return [
+        pileStatement(g, w, prev),
+        useDB().insert(crateChanges).values({ ...g.audit, groupId: g.groupId, trackId: null, pileId: w.pileId, before, after: w.after, summary: g.summary, undoOf: g.undoOf })
+      ]
+    })
+}
+
 /** Write new tags and/or pile states as ONE undoable action. */
 export async function writeChanges(
   actor: Actor,
@@ -79,41 +118,22 @@ export async function writeChanges(
   summary: string,
   undoOf: string | null = null
 ): Promise<ChangeResult> {
-  const db = useDB()
-  const groupId = nanoid()
-  const audit = { teamId: actor.teamId, owner: actor.userId, createdBy: actor.userId, updatedBy: actor.userId }
-  const statements: unknown[] = []
-
-  const trackWrites = change.tracks ?? []
-  const beforeTags = await currentTags(actor.teamId, trackWrites.map(w => w.trackId))
-  const applied = trackWrites.filter(w => beforeTags.has(w.trackId))
-  for (const w of applied) {
-    statements.push(db.update(crateTracks).set({ tags: w.tags, updatedBy: actor.userId, updatedAt: new Date() })
-      .where(and(eq(crateTracks.teamId, actor.teamId), eq(crateTracks.id, w.trackId))))
-    statements.push(db.insert(crateChanges).values({ ...audit, groupId, trackId: w.trackId, before: beforeTags.get(w.trackId), after: w.tags, summary, undoOf }))
+  const g: Group = {
+    audit: { teamId: actor.teamId, owner: actor.userId, createdBy: actor.userId, updatedBy: actor.userId },
+    groupId: nanoid(),
+    summary,
+    undoOf,
+    userId: actor.userId
   }
-
   const pileWrites = change.piles ?? []
-  const beforePiles = new Map((pileWrites.length ? await loadPiles(actor.teamId) : []).map(p => [p.id, p]))
-  const ordered = [...pileWrites].sort((a, b) => rank(a, beforePiles) - rank(b, beforePiles))
-  for (const w of ordered) {
-    const prev = beforePiles.get(w.pileId)
-    if (!w.after && !prev) continue
-    const before: PileSnap | null = prev ? { name: prev.name, parentId: prev.parentId, order: prev.order } : null
-    const where = and(eq(cratePiles.teamId, actor.teamId), eq(cratePiles.id, w.pileId))
-    if (!w.after) statements.push(db.delete(cratePiles).where(where))
-    else if (prev) statements.push(db.update(cratePiles).set({ ...w.after, updatedBy: actor.userId }).where(where))
-    else statements.push(db.insert(cratePiles).values({ ...audit, id: w.pileId, ...w.after }))
-    statements.push(db.insert(crateChanges).values({ ...audit, groupId, trackId: null, pileId: w.pileId, before, after: w.after, summary, undoOf }))
-  }
-
-  await run(statements)
+  const tracks = await trackStatements(g, change.tracks ?? [])
+  await run([...tracks.statements, ...await pileStatements(g, pileWrites)])
   if (pileWrites.length) await syncTreePaths(actor.teamId)
 
   const touched = new Set(pileWrites.filter(w => w.after).map(w => w.pileId))
   return {
-    groupId,
-    tracks: applied,
+    groupId: g.groupId,
+    tracks: tracks.applied,
     piles: touched.size ? (await loadPiles(actor.teamId)).filter(p => touched.has(p.id)) : [],
     removedPileIds: pileWrites.filter(w => !w.after).map(w => w.pileId)
   }

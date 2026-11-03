@@ -77,32 +77,37 @@ export function planMove(piles: PileRow[], tracks: TrackRow[], pileId: string, n
   const after = piles.map(p => p.id === pileId ? { ...p, parentId: newParentId, order } : p)
   const t2 = tree(after)
 
-  const movedNames = new Set(moved.map(p => lower(p.name)))
-  const oldAncestors = t.ancestors(pile).map(p => p.name)
-  const oldAncestorKeys = new Set(oldAncestors.map(lower))
+  const oldAncestors = new Set(t.ancestors(pile).map(p => lower(p.name)))
   const newAncestors = parent ? [...t.ancestors(parent), parent].map(p => p.name) : []
   const pileByName = new Map(after.map(p => [lower(p.name), p]))
-
-  const writes: TagWrite[] = []
-  for (const track of tracks) {
-    if (!track.tags.some(tag => movedNames.has(lower(tag)))) continue
-    // Every ancestor tag the track still needs after the move, from every pile it is in.
-    // Old ancestors' own tags don't count as a reason: they are what's being questioned.
-    const needed = new Set<string>()
-    for (const tag of track.tags) {
-      if (oldAncestorKeys.has(lower(tag))) continue
-      const p = pileByName.get(lower(tag))
-      if (p) t2.ancestors(p).forEach(a => needed.add(lower(a.name)))
-    }
-    // An old ancestor's tag stays only if another pile the track is in still needs it. A track in a
-    // sub-pile is never "loose" in the parent, so that tag came from the ancestor rule.
-    const drop = new Set([...oldAncestorKeys].filter(n => !needed.has(n)))
-    const kept = track.tags.filter(tag => !drop.has(lower(tag)))
-    const tags = uniq([...kept, ...newAncestors.filter(n => !kept.some(k => lower(k) === lower(n)))])
-    if (changed(track.tags, tags)) writes.push({ trackId: track.id, tags })
+  const movedNames = new Set(moved.map(p => lower(p.name)))
+  const ancestorsOf = (tag: string) => {
+    const p = pileByName.get(lower(tag))
+    return p ? t2.ancestors(p) : null
   }
+  const retag = (tags: string[]) => retagAfterMove(tags, oldAncestors, newAncestors, ancestorsOf)
+
+  const writes: TagWrite[] = tracks
+    .filter(track => track.tags.some(tag => movedNames.has(lower(tag))))
+    .map(track => ({ trackId: track.id, tags: retag(track.tags), before: track.tags }))
+    .filter(w => changed(w.before, w.tags))
+    .map(({ trackId, tags }) => ({ trackId, tags }))
   const where = parent ? `into ${t.label(parent)}` : 'to the top level'
   return { piles: [{ pileId, after: { ...snap(pile), parentId: newParentId, order } }], tracks: writes, summary: `Move ${pile.name} ${where}` }
+}
+
+/**
+ * One track's tags after its pile moved: add the new ancestors, and drop each old ancestor that no
+ * other pile the track is in still needs. A track in a sub-pile is never "loose" in the parent, so
+ * those tags came from the ancestor rule. Old ancestors' own tags don't count as a reason to keep
+ * themselves — they are what's being questioned.
+ */
+function retagAfterMove(tags: string[], oldAncestors: Set<string>, newAncestors: string[], ancestorsOf: (tag: string) => PileRow[] | null) {
+  const needed = new Set(tags
+    .filter(tag => !oldAncestors.has(lower(tag)))
+    .flatMap(tag => (ancestorsOf(tag) ?? []).map(a => lower(a.name))))
+  const kept = tags.filter(tag => !oldAncestors.has(lower(tag)) || needed.has(lower(tag)))
+  return uniq([...kept, ...newAncestors])
 }
 
 /** Move a pile up to its parent's level, right after its old parent. */
