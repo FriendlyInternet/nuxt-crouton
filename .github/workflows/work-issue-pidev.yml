@@ -148,7 +148,7 @@ jobs:
             echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
-          if echo ",$LABELS," | grep -q ',epic,'; then
+          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
             echo "issue #$ISSUE is an epic → splitter"
             echo "build=false" >> "$GITHUB_OUTPUT"
             gh workflow run decompose-on-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f harness=pi
