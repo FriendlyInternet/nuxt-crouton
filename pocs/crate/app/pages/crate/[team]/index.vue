@@ -167,6 +167,27 @@ async function onFiles(event: Event) {
     show(tracks.value.find(t => t.id === added[0]!.id), false)
   }
 }
+// ── Template helpers: keep the template flat (fallow template complexity) ──
+const deckSrc = computed(() => current.value?.hasAudio ? audioUrl(current.value) : null)
+const deckChecked = computed(() => !!current.value && isChecked(current.value))
+const searchPool = computed(() => level.value ? null : tracks.value)
+function pileTicked(pile: CratePile) {
+  return !!current.value && isIn(current.value, pile)
+}
+function pileGlow(pile: CratePile) {
+  return deckCollapsed.value ? null : hints.glow(pile)
+}
+function onPileToggle(pile: CratePile) {
+  if (deckCollapsed.value) openLevel(pile)
+  else togglePile(pile)
+}
+function isInPileId(id: string) {
+  const pile = crate.piles.value.find(p => p.id === id)
+  return !!current.value && !!pile && isIn(current.value, pile)
+}
+function startNewPile() {
+  newPile.value?.start({ parentId: levelId.value })
+}
 </script>
 
 <template>
@@ -204,10 +225,10 @@ async function onFiles(event: Event) {
             :key="pile.id"
             :pile="pile"
             :count="counts.get(pile.id) ?? 0"
-            :ticked="!!current && isIn(current, pile)"
+            :ticked="pileTicked(pile)"
             :disabled="!current && !deckCollapsed"
-            :glow="deckCollapsed ? null : hints.glow(pile)"
-            @toggle="deckCollapsed ? openLevel(pile) : togglePile(pile)"
+            :glow="pileGlow(pile)"
+            @toggle="onPileToggle(pile)"
             @open="openLevel(pile)"
           />
           <UButton
@@ -216,7 +237,7 @@ async function onFiles(event: Event) {
             icon="i-lucide-plus"
             label="New pile"
             class="w-full rounded-none px-3 py-2 text-muted"
-            @click="newPile?.start({ parentId: levelId })"
+            @click="startNewPile"
           />
         </div>
       </UCard>
@@ -228,12 +249,12 @@ async function onFiles(event: Event) {
       :track="current"
       :prev-track="prevTrack"
       :next-track="nextTrack"
-      :src="current?.hasAudio ? audioUrl(current) : null"
+      :src="deckSrc"
       :in-piles="inPiles"
       :other-tags="deckOther"
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
-      :checked="!!current && isChecked(current)"
+      :checked="deckChecked"
       @next="next"
       @previous="previous"
       @done="done"
@@ -245,13 +266,13 @@ async function onFiles(event: Event) {
           :sources="hints.sources.value"
           :suggestions="hints.suggestions.value"
           :path-label="pathLabel"
-          :is-in-pile="(id) => !!current && isIn(current, crate.piles.value.find(p => p.id === id)!)"
+          :is-in-pile="isInPileId"
           :empty="hints.empty.value"
           @word="onWord"
           @file="fileSuggestion"
           @hold="openListen"
           @listen="listener?.start()"
-          @new="newPile?.start({ parentId: levelId })"
+          @new="startNewPile"
         />
       </template>
     </CrateDeck>
@@ -268,7 +289,7 @@ async function onFiles(event: Event) {
       :tray="trayTracks"
       v-model:top-tray="topTray"
       :at-top="!level"
-      :search-pool="level ? null : tracks"
+      :search-pool="searchPool"
       :current-id="currentId"
       @pick="pick"
     />

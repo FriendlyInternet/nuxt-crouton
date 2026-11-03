@@ -92,6 +92,28 @@ watch(() => props.src, () => {
   duration.value = 0
 })
 
+// ── Template helpers: keep the template flat (fallow template complexity) ──
+const barIcon = computed(() => playing.value ? 'i-lucide-audio-lines' : 'i-lucide-music')
+const barLabel = computed(() => props.track ? `${props.track.name} · ${props.track.artist || 'Unknown artist'}` : '')
+const hasAudio = computed(() => !!props.src)
+const seekMax = computed(() => duration.value || 1)
+const audioSrc = computed(() => props.src ?? undefined)
+/** The middle slide is the live card; the others are neighbours sliding in. */
+function isLive(item: CrateTrack | null, index: number) {
+  return !!item && index === 1
+}
+const hasTags = computed(() => props.inPiles.length > 0 || props.otherTags.length > 0)
+/** Drags that start on the seek bar or a sideways-scrolling chip row stay theirs. */
+function canSwipe(_api: unknown, evt: Event) {
+  return !(evt.target as HTMLElement | null)?.closest('[data-no-swipe]')
+}
+function onSeek(v: number | undefined) {
+  if (v !== undefined) seek(v)
+}
+function onTimeUpdate() {
+  position.value = audio.value?.currentTime ?? 0
+}
+
 defineExpose({ playSrc, pause: () => audio.value?.pause() })
 </script>
 
@@ -108,8 +130,8 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
         color="neutral"
         variant="soft"
         trailing-icon="i-lucide-chevron-up"
-        :icon="playing ? 'i-lucide-audio-lines' : 'i-lucide-music'"
-        :label="`${track.name} · ${track.artist || 'Unknown artist'}`"
+        :icon="barIcon"
+        :label="barLabel"
         :ui="{ label: 'truncate' }"
         aria-label="Show the track card"
         @click="collapsed = false"
@@ -122,18 +144,18 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
       :start-index="1"
       :contain-scroll="false"
       class="select-none"
-      :watch-drag="(_api, evt) => !(evt.target as HTMLElement | null)?.closest('[data-no-swipe]')"
+      :watch-drag="canSwipe"
       :ui="{ container: '-ms-3 items-stretch', item: 'ps-3 basis-[calc(100%-2.5rem)] max-w-2xl' }"
       @select="onSlide"
     >
       <template #default="{ item, index }">
-        <div v-if="item && index === 1" ref="card" class="h-full">
+        <div v-if="isLive(item, index)" ref="card" class="h-full">
         <UCard class="h-full rounded-2xl shadow-lg" :ui="{ root: 'bg-elevated', body: 'space-y-2.5 p-3 sm:p-3' }">
           <CrateNowPlaying
-            :track="item"
-            :meta="metaFor(item, true)"
+            :track="item!"
+            :meta="metaFor(item!, true)"
             :playing="playing"
-            :has-audio="!!src"
+            :has-audio="hasAudio"
             :can-next="canNext"
             :checked="checked"
             @toggle="toggle"
@@ -143,11 +165,11 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
             @edit="emit('edit')"
           />
 
-          <USlider v-if="src" data-no-swipe :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
+          <USlider v-if="src" data-no-swipe :model-value="position" :max="seekMax" :step="1" size="sm" aria-label="Seek" @update:model-value="onSeek" />
 
           <slot name="hints" />
 
-          <CrateInRow v-if="inPiles.length || otherTags.length" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
+          <CrateInRow v-if="hasTags" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
         </UCard>
         </div>
         <!-- A neighbour, shown while it slides in: its title card, controls inert. -->
@@ -167,10 +189,10 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
 
     <audio
       ref="audio"
-      :src="src ?? undefined"
+      :src="audioSrc"
       preload="metadata"
       @loadedmetadata="onLoaded"
-      @timeupdate="position = audio?.currentTime ?? 0"
+      @timeupdate="onTimeUpdate"
       @play="playing = true"
       @pause="playing = false"
       @ended="playing = false"
