@@ -177,3 +177,20 @@ test('no reviseBranch → no revision key and no pulls.list call', async () => {
   assert.equal('revision' in f, false)
   assert.equal(calls.length, 0)
 })
+
+// ── #2990: run mode reaches the guard through the gathered facts ─────────────────────
+test('plain run on an open own PR: the guard refuses (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  github.rest.pulls.list = async () => ({ data: [] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50 })
+  assert.equal('revision' in f, false)
+  assert.equal(decideClaim(f).action, 'refuse')
+})
+
+test('revise run (reviseBranch) passes the revision through, and the same open own PR proceeds (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  github.rest.pulls.list = async () => ({ data: [{ number: 7, state: 'open', merged_at: null }] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50, reviseBranch: 'work-50' })
+  assert.deepEqual(f.revision, { branch: 'work-50', pr: 7, state: 'open', merged: false })
+  assert.equal(decideClaim(f).action, 'proceed')
+})
