@@ -228,23 +228,11 @@ jobs:
               // An epic → main PR that conflicts with main would otherwise sit forever with no checks
               // (#2875): start the conflict resolver once per head (marker carries the sha).
               if (epicToMain && state === 'dirty') {
-                const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
-                const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
-                // Concurrent sweeps all see "no marker yet" for the same head (#2914), so also hold off
-                // while ANY resolver note on this PR is under 30 minutes old: one run per branch at a time.
-                const recent = prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:')
-                  && Date.now() - Date.parse(x.created_at) < 30 * 60 * 1000)
-                if (!recent && !prior.some(x => (x.body || '').includes(marker))) {
-                  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
-                  try {
-                    const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                      body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
-                        + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
-                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
-                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
-                    core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
-                  } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
-                }
+                // Shared with the owner-`ok` path in on-comment.yml (#3227).
+                const { startConflictResolver } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
+                const res = await startConflictResolver({ github, owner, repo, pr })
+                if (res.reason === 'dispatch-failed') core.warning(`#${pull_number}: could not start the conflict resolver: ${res.error}`)
+                else core.info(`#${pull_number} conflicts with main — resolver: ${res.reason} (#2875).`)
               }
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
