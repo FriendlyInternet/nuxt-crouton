@@ -56,7 +56,7 @@ CroutonBooking
 |------|--------|---------|
 | `/api/crouton-bookings/teams/[id]/availability` | GET | Get booked slots for date range |
 | `/api/crouton-bookings/teams/[id]/customer-bookings` | GET | Get user's bookings with email stats |
-| `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout) |
+| `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (any team member) |

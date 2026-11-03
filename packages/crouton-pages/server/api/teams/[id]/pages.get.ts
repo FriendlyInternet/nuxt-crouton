@@ -9,11 +9,12 @@
  *
  * Query params:
  * - navigation=true: Only return pages with showInNavigation=true
- * - visibility: Filter by visibility (public, members, hidden)
+ * - visibility: Narrow to one visibility (public, members, admin, scoped); never widens what the caller may see
  * - locale: Locale for translated title/slug (e.g., 'en', 'nl', 'fr')
  * - pageType: Filter by page type (e.g., 'pages:footer') — includes content in response
  */
 import { eq, and, or, asc, inArray } from 'drizzle-orm'
+import { allowedVisibilities, resolveVisibilities } from '../../../utils/page-visibility'
 
 // NOTE: This is a plain (uncached) handler on purpose. The response is
 // auth-dependent (members/admins see more pages via the visibility filter), and
@@ -125,18 +126,14 @@ export default defineEventHandler(async (event) => {
       // Add visibility filter based on auth status. Members always include
       // 'scoped' (they pass the slug endpoint's session fallback); anonymous
       // visitors include it only with a valid scoped token for this team.
-      if (visibilityFilter) {
-        conditions.push(eq(pagesSchema.pagesPages.visibility as any, visibilityFilter))
-      } else if (isAdmin) {
-        conditions.push(inArray(pagesSchema.pagesPages.visibility as any, ['public', 'members', 'admin', 'scoped']))
-      } else if (isMember) {
-        conditions.push(inArray(pagesSchema.pagesPages.visibility as any, ['public', 'members', 'scoped']))
-      } else if (hasScopedAccess) {
-        conditions.push(inArray(pagesSchema.pagesPages.visibility as any, ['public', 'scoped']))
-      } else {
-        // Default: only show public pages
-        conditions.push(eq(pagesSchema.pagesPages.visibility as any, 'public'))
+      const visibilities = resolveVisibilities(
+        allowedVisibilities({ isAdmin, isMember, hasScopedAccess }),
+        visibilityFilter
+      )
+      if (visibilities.length === 0) {
+        return { data: [], meta: { teamId: team.id, total: 0, locale } }
       }
+      conditions.push(inArray(pagesSchema.pagesPages.visibility as any, visibilities))
 
       // Build select fields — translations/config columns are optional (depends on generated schema)
       const hasTranslations = 'translations' in pagesSchema.pagesPages
