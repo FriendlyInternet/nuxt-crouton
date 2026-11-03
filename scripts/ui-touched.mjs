@@ -92,6 +92,7 @@ function readHeader(cur, line) {
   const p = line.slice(4).replace(/^b\//, '')
   cur.isDeleted = p === '/dev/null'
   cur.path = cur.isDeleted ? cur.oldPath : p
+  cur.isRenamed = !cur.isNew && !cur.isDeleted && cur.oldPath !== cur.path // a rename changes a tag/route
 }
 
 /** Parse `git diff -U0` into [{ path, oldPath, changes: [{ side: 'old'|'new', n, text }] }]. */
@@ -102,9 +103,11 @@ export function parseDiff(diff) {
   let newN = 0
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git ')) {
-      cur = { path: '', oldPath: '', isNew: false, isDeleted: false, changes: [] }
+      cur = { path: '', oldPath: '', isNew: false, isDeleted: false, isRenamed: false, changes: [] }
       files.push(cur)
     } else if (!cur) continue
+    else if (line.startsWith('rename from ')) { cur.oldPath = line.slice(12); cur.isRenamed = true }
+    else if (line.startsWith('rename to ')) { cur.path = line.slice(10); cur.isRenamed = true }
     else if (line.startsWith('--- ') || line.startsWith('+++ ')) readHeader(cur, line)
     else if (line.startsWith('@@')) {
       const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/)
@@ -157,7 +160,7 @@ function appConfigTouchesUi(f, getLines) {
 function visualFileChanged(f, getLines) {
   if (f.changes.length === 0) return true
   const isVue = /\.vue$/.test(f.path)
-  if (isVue && (f.isNew || f.isDeleted)) return true
+  if (isVue && (f.isNew || f.isDeleted || f.isRenamed)) return true
   const cache = {}
   const regions = {}
   return f.changes.some(c => {

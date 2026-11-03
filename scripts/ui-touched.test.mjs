@@ -243,3 +243,10 @@ test('#3228 -U3 template change right after </script> is visual; script tag line
   const tag = '@@ -1 +1 @@\n-<script setup>\n+<script setup lang="ts">'
   assert.equal(await uiTouchedFromFiles([file('x.vue', tag)], reader(SFC)), 1)
 })
+
+test('a renamed .vue with a script-only edit is visual (#3228)', async () => {
+  const scr = '@@ -2 +2 @@\n-const a = 1\n+const a = 2'
+  assert.equal(await uiTouchedFromFiles([file('B.vue', scr, { status: 'renamed', previous_filename: 'A.vue' })], reader(SFC)), 1)
+  const diff = `diff --git a/A.vue b/B.vue\n--- a/A.vue\n+++ b/B.vue\n${scr}\n`
+  assert.equal(uiTouched(diff, () => SFC), 1)
+})
