@@ -1,22 +1,48 @@
-<mxfile host="app.diagrams.net" type="device">
+<mxfile host="app.diagrams.net">
   <diagram id="ticket-diagram" name="Epic 479">
-    <mxGraphModel dx="866" dy="824" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="866" pageHeight="824" math="0" shadow="0">
+    <mxGraphModel dx="796" dy="1170" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="866" pageHeight="824" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="Epic #479 — Make tickets human-readable" style="text;html=1;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontColor=#111827;" vertex="1" parent="1"><mxGeometry x="40" y="10" width="786" height="30" as="geometry"/></mxCell>
-        <mxCell id="n1" value="W1&#10;Template redesign — TL;DR + fold" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="136" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="n2" value="W2&#10;Auto-render dep graph → PNG (#483)" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#a5d8ff;strokeColor=#1971c2;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="318" y="136" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="n4" value="W4&#10;Status-at-a-glance table" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="596" y="136" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="n3" value="W3&#10;Surface visuals in epic rollup" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="318" y="320" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="n5" value="W5&#10;Mobile pass (acceptance bar)" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="318" y="504" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="ngoal" value="🎯 Epic reads at a glance on mobile · no Loading" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="318" y="688" width="230" height="96" as="geometry"/></mxCell>
-        <mxCell id="e_2_3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_1_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n1" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_2_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n2" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_3_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n3" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_4_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_5_goal" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" edge="1" parent="1" source="n5" target="ngoal"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontColor=#111827;" value="Epic #479 — Make tickets human-readable" vertex="1">
+          <mxGeometry height="30" width="786" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="W1&#xa;Template redesign — TL;DR + fold" vertex="1">
+          <mxGeometry height="96" width="230" x="46" y="232" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#a5d8ff;strokeColor=#1971c2;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="W2&#xa;Auto-render dep graph → PNG (#483)" vertex="1">
+          <mxGeometry height="96" width="230" x="318" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="test" vertex="1">
+          <mxGeometry height="75" width="230" x="596" y="232" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="W3&#xa;Surface visuals in epic rollup" vertex="1">
+          <mxGeometry height="96" width="230" x="318" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="W5&#xa;Mobile pass (acceptance bar)" vertex="1">
+          <mxGeometry height="96" width="230" x="318" y="504" as="geometry" />
+        </mxCell>
+        <mxCell id="ngoal" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="🎯 Epic reads at a glance on mobile · no Loading" vertex="1">
+          <mxGeometry height="96" width="230" x="318" y="693" as="geometry" />
+        </mxCell>
+        <mxCell id="e_2_3" edge="1" parent="1" source="n2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_1_5" edge="1" parent="1" source="n1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_2_5" edge="1" parent="1" source="n2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_3_5" edge="1" parent="1" source="n3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_4_5" edge="1" parent="1" source="n4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_5_goal" edge="1" parent="1" source="n5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="ngoal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
