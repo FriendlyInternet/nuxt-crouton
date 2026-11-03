@@ -204,13 +204,7 @@ jobs:
       # Drift gate (#3152): the committed fixture must equal what the current
       # generator emits. `git status --porcelain` catches changed AND new files.
       - name: Fail on generated-output drift
-        run: |
-          drift="$(git status --porcelain -- fixtures/${{ matrix.fixture }})"
-          if [ -n "$drift" ]; then
-            echo "::error::fixtures/${{ matrix.fixture }} drifted from generator output — regenerate (crouton config --force) and commit:"
-            echo "$drift"
-            exit 1
-          fi
+        run: node scripts/fixture-drift.mjs fixtures/${{ matrix.fixture }}
 
       - name: Type-check the generated fixture
         run: pnpm --filter "e2e-fixture-${{ matrix.fixture }}" typecheck
