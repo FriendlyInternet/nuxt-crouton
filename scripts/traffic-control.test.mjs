@@ -179,3 +179,11 @@ test('parked ticket with an open work PR is not re-dispatched', async () => {
   assert.deepEqual(await h.run(), [])
   assert.deepEqual(h.calls, [])
 })
+
+test('blocked again after the wait comment, no open PR → left alone', async () => {
+  const h = releaseHarness({
+    comments: [wait('2026-11-02T16:18:01Z')],
+    events: [blocked('2026-11-02T16:18:00Z'), blocked('2026-11-03T17:01:00Z')], ownPr: false })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
