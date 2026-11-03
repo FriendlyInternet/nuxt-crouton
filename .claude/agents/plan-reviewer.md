@@ -11,7 +11,7 @@ Read: the issue ({{issue_file}}), the plan ({{plan_file}}), and the code the pla
 
 Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, commit, or what you ran). "Looks fine" is not evidence.
 1. Reproduced? It must be OBSERVED (app booted, test run), not reasoned from code. For a workflow/CI change nothing can be booted: observed means the real run logs or API timeline were read, by the planner or by you. "no" with a reason that is not real is FAIL.
-1b. Every assumption has a Why and a working evidence link that says what the plan claims.
+1b. Every assumption has a Why and evidence that says what the plan claims. Accepted forms: an https link, a commit SHA, or `path:line` / `path#Lnn`; the parser checks shape only, so you check that a cited SHA exists and the link/line supports the claim.
 2. Cause proven? Evidence ties the symptom to the cause. Any claim stated without a check ("should", "probably", "likely") is FAIL.
 3. Undeclared assumptions the plan relies on → FAIL. Declared `unverified` assumptions with a reason → PASS; list each with what you found when you checked it yourself.
 4. Over-engineering: is there a smaller change, an existing helper, a VueUse/Nuxt primitive or config option? A new abstraction must earn its place.

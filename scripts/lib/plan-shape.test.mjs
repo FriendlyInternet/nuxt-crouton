@@ -64,7 +64,7 @@ test('an assumption with no evidence is malformed', () => {
 })
 
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
-  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
+  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /checkable proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
 })
 
@@ -114,4 +114,20 @@ test('CLI: --revised before or after the file fails a plan missing the section',
   assert.equal(spawnSync('node', [script, '--revised', f]).status, 1)
   assert.equal(spawnSync('node', [script, f, '--revised']).status, 1)
   assert.equal(spawnSync('node', [script, f]).status, 0)
+})
+
+const pa = (ev, st) => parseAssumptions(`- c — Why: w — Evidence: ${ev} — Status: ${st}`)
+test('Status reads first word; trailing reason allowed', () => {
+  const r = pa('no staging access', 'unverified (could not reach staging)')
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.items[0].status, 'unverified')
+  assert.ok(pa('x', 'maybe').errors.some((e) => /Status/.test(e)))
+})
+test('verified evidence forms', () => {
+  assert.ok(pa('I looked at it', 'verified').errors.length)
+  assert.ok(pa('defaced', 'verified').errors.length)
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs:74', 'verified').errors, [])
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs#L74', 'verified').errors, [])
+  assert.deepEqual(pa('commit dd1b002a4', 'verified').errors, [])
+  assert.deepEqual(pa('https://x.dev/a', 'verified').errors, [])
 })
