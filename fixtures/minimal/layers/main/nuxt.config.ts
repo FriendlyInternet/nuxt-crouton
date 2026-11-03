@@ -13,6 +13,8 @@ export default defineNuxtConfig({
     ]
   },
   extends: [
-    './collections/items'
+    './collections/items',
+    './collections/admindocs',
+    './collections/membernotes'
   ]
 })

@@ -4,17 +4,18 @@ export default defineMcpTool({
   inputSchema: {},
   async handler() {
     const { queryCollection } = await import('@nuxt/content/server')
+    const { useEvent } = await import('nitropack/runtime')
 
-    const results = await queryCollection('docs')
-      .where('_path', 'NOT LIKE', '/landing%')
-      .order('_path', 'ASC')
+    const results = await queryCollection(useEvent(), 'docs')
+      .where('path', 'NOT LIKE', '/landing%')
+      .order('path', 'ASC')
       .all()
 
     // Group by section
     const sections: Record<string, Array<{ title: string; path: string; description?: string }>> = {}
 
     for (const doc of results) {
-      const pathParts = doc._path?.split('/').filter(Boolean) || []
+      const pathParts = doc.path?.split('/').filter(Boolean) || []
       const section = pathParts[0] || 'root'
 
       if (!sections[section]) {
@@ -23,7 +24,7 @@ export default defineMcpTool({
 
       sections[section].push({
         title: doc.title || 'Untitled',
-        path: doc._path || '',
+        path: doc.path || '',
         description: doc.description
       })
     }
