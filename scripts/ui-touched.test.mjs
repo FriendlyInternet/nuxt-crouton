@@ -5,6 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { uiTouched, uiTouchedFromFiles, commentLines, underUiKey, isCandidatePath, githubFileDiff } from './ui-touched.mjs'
 
 const none = () => null
@@ -173,14 +174,52 @@ test('#3228 -U3 context lines give the same verdict as -U0', async () => {
   assert.equal(await uiTouchedFromFiles([file('x.vue', u3)], reader(SFC)), 0)
 })
 
-test('#3228 removed lines are read from the merge-base text', async () => {
-  // old-side line 2 is in <template> at the merge base, but <script> in the (different) tip text
-  const mb = ['<script setup>', '</script>', '<template>', '<div/>', '</template>']
+test('#3228 removed lines are read from the merge-base text, not the tip', async () => {
+  // Removed line is old-side line 2. At the merge base it is inside <script>; at the tip the
+  // file was reshuffled so line 2 sits inside <template>.
+  const mb = ['<script setup>', 'const a = 1', '</script>', '<template>', '<div/>', '</template>']
+  const tip = ['<template>', '<div class="old"/>', '</template>', '<script setup>', '</script>']
   const seen = []
-  const readText = (ref) => { seen.push(ref); return (ref === 'merge-base' ? mb : SFC).join('\n') }
-  const p = '@@ -4 +3 @@\n-<div class="old"/>'
-  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], readText), 1)
+  const readText = (ref) => { seen.push(ref); return (ref === 'merge-base' ? mb : tip).join('\n') }
+  const p = '@@ -2 +1 @@\n-const a = 1'
+  // reading the merge base (correct) -> script -> 0
+  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], readText), 0)
   assert.ok(seen.includes('merge-base'))
+  // reading the tip (the old bug) -> template -> 1; proves the fixtures tell the two apart
+  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], () => tip.join('\n')), 1)
+})
+
+test('status.yml passes merge_base_commit as the old-side source', () => {
+  const yml = readFileSync(new URL('../.github/workflows/status.yml', import.meta.url), 'utf8')
+  assert.match(yml, /merge_base_commit/)
+  assert.match(yml, /ref: ref === 'head' \? pr\.head\.sha : mergeBase/)
+})
+
+test('#3228 real PR #3216 patches (script-only .vue) replay as not visual', async () => {
+  const dir = new URL('./fixtures/ui-touched/', import.meta.url)
+  const rd = (n) => readFileSync(new URL(n, dir), 'utf8')
+  const files = [
+    ['pocs/kvr/app/components/PublicWerkvergunningForm.vue', 'pr3216-components-PublicWerkvergunningForm'],
+    ['pocs/kvr/layers/kvr/collections/settings/app/components/Recipient/Input.vue', 'pr3216-Recipient-Input']
+  ].map(([filename, base]) => file(filename, rd(`${base}.patch`).trimEnd(), { _base: rd(`${base}.base.txt`) }))
+  // head text = merge-base text with the patch's single -/+ line swap applied
+  const headOf = (f) => {
+    const lines = f._base.split('\n')
+    const m = f.patch.match(/^@@ -(\d+)/)
+    const minus = f.patch.split('\n').filter(l => l.startsWith('-'))
+    const plus = f.patch.split('\n').filter(l => l.startsWith('+'))
+    assert.equal(minus.length, 1)
+    // hunk starts with 3 context lines before the change
+    const at = Number(m[1]) - 1 + f.patch.split('\n').findIndex(l => l.startsWith('-')) - 1
+    assert.equal(lines[at], minus[0].slice(1))
+    lines[at] = plus[0].slice(1)
+    return lines.join('\n')
+  }
+  const readText = (ref, path) => {
+    const f = files.find(x => x.filename === path)
+    return ref === 'merge-base' ? f._base : headOf(f)
+  }
+  assert.equal(await uiTouchedFromFiles(files, readText), 0)
 })
 
 test('isCandidatePath: visual and app.config paths yes, fixtures and docs no', () => {
