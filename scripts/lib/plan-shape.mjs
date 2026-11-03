@@ -11,7 +11,9 @@
  *  - `Needs owner` opens with yes/no
  *  - `Assumptions` is either the single line "none", or a list of bullets, each carrying
  *      `Why: …`, `Evidence: …` and `Status: verified|unverified`
- *    Evidence of a *verified* assumption must contain a link (https://…) — the proof;
+ *    Status is read from its first word (a trailing `(reason…)` is fine).
+ *    Evidence of a *verified* assumption must contain ONE of: an https link, a commit SHA
+ *    (7–40 hex, with a digit), or `path:line` / `path#Lnn` — the proof;
  *    an *unverified* one must say why it could not be checked.
  *
  * Assumption bullet shape (one line each):
@@ -54,6 +56,9 @@ const field = (text, key) => {
   return m ? m[1].replace(/^\**\s*/, '').trim() : ''
 }
 
+// Shape-only checks (no git call, works in a shallow clone); SHA existence is the reviewer's job.
+const EVIDENCE_FORMS = [/https?:\/\/\S+/, /\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/, /[\w./-]+\.\w+(?::\d+|#L\d+)\b/]
+
 export function parseAssumptions(text) {
   const errors = []
   const bullets = text.split('\n').map((l) => l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)).filter(Boolean).map((m) => m[1])
@@ -65,14 +70,14 @@ export function parseAssumptions(text) {
     const claim = b.split(/\s+[—–-]+\s+\**(?:Why|Evidence|Status):/i)[0].replace(/\*\*/g, '').trim()
     const why = field(b, 'Why')
     const evidence = field(b, 'Evidence')
-    const status = field(b, 'Status').toLowerCase().replace(/[^a-z]/g, '')
+    const status = field(b, 'Status').toLowerCase().match(/^[^a-z]*([a-z]+)/)?.[1] || ''
     const n = `assumption ${i + 1}`
     if (!claim) errors.push(`${n}: no claim`)
     if (!why) errors.push(`${n}: no "Why" (the reason it is taken as true)`)
     if (!evidence) errors.push(`${n}: no "Evidence"`)
     if (status !== 'verified' && status !== 'unverified') errors.push(`${n}: Status must be verified or unverified`)
-    if (status === 'verified' && evidence && !/https?:\/\/\S+/.test(evidence)) {
-      errors.push(`${n}: a verified assumption needs a linked proof (permalink, commit, run or doc URL)`)
+    if (status === 'verified' && evidence && !EVIDENCE_FORMS.some((re) => re.test(evidence))) {
+      errors.push(`${n}: a verified assumption needs a checkable proof: an https link, a commit SHA, or path:line / path#Lnn`)
     }
     return { claim, why, evidence, status }
   })
