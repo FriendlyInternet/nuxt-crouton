@@ -392,7 +392,14 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo
-            const { needsReview } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/build-review-sweep.mjs`)
+            // Bootstrap-safe: PR runs execute the default branch's checkout, where this script may not exist yet.
+            let needsReview
+            try {
+              ({ needsReview } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/build-review-sweep.mjs`))
+            } catch (e) {
+              core.warning(`build review sweep skipped — scripts/build-review-sweep.mjs is not on the checked-out branch yet (${e.code || e.message})`)
+              return
+            }
             const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
             for (const p of open.filter(x => !x.draft && /^work-\d+$/.test(x.head.ref)).slice(0, 50)) {
               try {
