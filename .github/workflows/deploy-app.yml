@@ -611,8 +611,34 @@ jobs:
           APP_ID: ${{ secrets.HARNESS_APP_ID }}
           INSTALLATION_ID: ${{ steps.review-app-token.outputs.installation-id }}
           PRIVATE_KEY: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
         run: |
+          # Who may post into the PR thread (#3162): the preview's verified review login.
+          # NO CREDENTIAL, NO BRIDGE — without a reviewer the sink stays unconfigured
+          # (refuses visibly) rather than open to anyone who can reach the overlay.
+          CFG="$WORKSPACE/$APP/deploy.config.json"
+          if [ "$(jq -r '.reviewLogin == false' "$CFG" 2>/dev/null)" = "true" ]; then
+            REVIEWERS=""
+            WHY="${APP} has no sign-in (reviewLogin false)"
+          elif [ "$(jq -r '.reviewLogin.method == "preview-token"' "$CFG" 2>/dev/null)" = "true" ]; then
+            REVIEWERS="$OWNER_EMAIL"
+            WHY="no REVIEW_LOGIN_EMAIL / DIGEST_REPORT_EMAIL variable for the link-only owner"
+          elif [ -z "$REVIEW_SEED_SECRET" ]; then
+            REVIEWERS=""
+            WHY="REVIEW_SEED_SECRET is not set, so no review login is seeded"
+          else
+            REVIEWERS="review+${APP}-pr${PR}@example.com"
+            WHY=""
+          fi
+          if [ -z "$REVIEWERS" ]; then
+            echo "::warning::Skipping preview-review bridge for ${APP}: ${WHY}. Feedback pins stay off (#3162)."
+            exit 0
+          fi
           jq -n \
+            --arg reviewers "$REVIEWERS" \
             --arg repo "$REPOSITORY" \
             --arg pr "$PR" \
             --arg appId "$APP_ID" \
@@ -621,6 +647,7 @@ jobs:
             '{
               NUXT_CROUTON_REVIEW_REPOSITORY: $repo,
               NUXT_CROUTON_REVIEW_PR: $pr,
+              NUXT_CROUTON_FEEDBACK_REVIEWER_EMAILS: $reviewers,
               NUXT_CROUTON_REVIEW_GITHUB_APP_ID: $appId,
               NUXT_CROUTON_REVIEW_GITHUB_APP_INSTALLATION_ID: $inst,
               NUXT_CROUTON_REVIEW_GITHUB_APP_PRIVATE_KEY: $key
@@ -811,6 +838,7 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_PR: ${{ inputs.review-pr }}
           REF_NAME: ${{ github.ref_name }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           # Per-PR preview: attach the review login's team membership to the preview's OWN
@@ -831,7 +859,9 @@ jobs:
             echo "preview_token=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Stable per-preview key: the PR number when this is a PR, else the ref.
+          # Stable per-preview key: the PR number when this is a PR (or a dispatch with
+          # review_pr, #3162 — must match the bridge's reviewer list), else the ref.
+          PR_NUMBER="${PR_NUMBER:-$REVIEW_PR}"
           if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
           EMAIL="review+${APP}-${KEY}@example.com"
           # Deterministic password so redeploys reuse the same working login. Derived from
