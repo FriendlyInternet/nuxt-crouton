@@ -28,9 +28,15 @@ test('dirty + no marker → one note + one dispatch', async () => {
   assert.deepEqual(f.calls.dispatches[0].inputs, { issue: '42', feedback: '99', branch: 'epic/42-thing' })
 })
 
-test('marker for this head → no dispatch', async () => {
-  const f = fake([{ body: '<!-- epic-conflict-resolve:abc123 -->', created_at: '2020-01-01T00:00:00Z' }])
-  assert.equal((await run(f)).reason, 'marker-exists')
+test('same-head note 40 min old → dispatches', async () => {
+  const f = fake([{ body: '<!-- epic-conflict-resolve:abc123 -->', created_at: new Date(NOW - 40 * 60000).toISOString() }])
+  assert.equal((await run(f)).reason, 'started')
+  assert.equal(f.calls.dispatches.length, 1)
+})
+
+test('same-head note 10 min old → no dispatch (already running)', async () => {
+  const f = fake([{ body: '<!-- epic-conflict-resolve:abc123 -->', created_at: new Date(NOW - 10 * 60000).toISOString() }])
+  assert.equal((await run(f)).reason, 'recent-resolver')
   assert.equal(f.calls.dispatches.length, 0)
 })
 

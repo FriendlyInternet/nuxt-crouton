@@ -240,6 +240,8 @@ jobs:
                   await say('🔧 **Approved — this PR conflicts with `main`, so the pipeline is merging `main` in first.** It merges itself once the checks pass after that.')
                 } else if (res.reason === 'dispatch-failed') {
                   await say(`⚠️ **Approved, but this PR conflicts with \`main\` and the resolver could not be started** (${res.error}). Resolve it, then comment \`ok\` again.`)
+                } else if (res.reason !== 'recent-resolver') {
+                  await say('⚠️ **Approved, but this PR conflicts with `main` and the resolver could not be started.** Resolve it, then comment `ok` again.')
                 } else {
                   await say('🔧 **Approved — conflicts with `main`; a resolver is already running**, no second one started.')
                 }

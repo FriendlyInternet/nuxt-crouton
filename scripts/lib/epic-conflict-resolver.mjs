@@ -20,14 +20,14 @@ export async function waitForMergeableState({
   return pr
 }
 
-/** Start the conflict resolver once per head (marker) and once per 30 min (any resolver note). */
+/** Start the conflict resolver unless a resolver note under 30 min old exists. */
 export async function startConflictResolver({ github, owner, repo, pr, now = Date.now }) {
   const pull_number = pr.number
   const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
   const prior = await github.paginate(github.rest.issues.listComments,
     { owner, repo, issue_number: pull_number, per_page: 100 })
-  if (prior.some(x => (x.body || '').includes(marker))) return { started: false, reason: 'marker-exists' }
-  // Concurrent runs all see "no marker yet" for the same head (#2914): hold off while ANY note is fresh.
+  // Concurrent runs all see "no marker yet" for the same head (#2914): hold off while ANY note is
+  // fresh (<30 min). A same-head note older than that is stale (the run never finished) — start again.
   const recent = prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:')
     && now() - Date.parse(x.created_at) < RESOLVER_WINDOW_MS)
   if (recent) return { started: false, reason: 'recent-resolver' }
