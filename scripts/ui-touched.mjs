@@ -82,6 +82,18 @@ function startComment(t, close, from, st, flag) {
   return r
 }
 
+/** Apply a `--- ` / `+++ ` header line to the current file entry. */
+function readHeader(cur, line) {
+  if (line.startsWith('--- ')) {
+    cur.oldPath = line.slice(4).replace(/^a\//, '')
+    cur.isNew = cur.oldPath === '/dev/null'
+    return
+  }
+  const p = line.slice(4).replace(/^b\//, '')
+  cur.isDeleted = p === '/dev/null'
+  cur.path = cur.isDeleted ? cur.oldPath : p
+}
+
 /** Parse `git diff -U0` into [{ path, oldPath, changes: [{ side: 'old'|'new', n, text }] }]. */
 export function parseDiff(diff) {
   const files = []
@@ -93,15 +105,8 @@ export function parseDiff(diff) {
       cur = { path: '', oldPath: '', isNew: false, isDeleted: false, changes: [] }
       files.push(cur)
     } else if (!cur) continue
-    else if (line.startsWith('--- ')) {
-      cur.oldPath = line.slice(4).replace(/^a\//, '')
-      cur.isNew = cur.oldPath === '/dev/null'
-    }
-    else if (line.startsWith('+++ ')) {
-      const p = line.slice(4).replace(/^b\//, '')
-      cur.isDeleted = p === '/dev/null'
-      cur.path = cur.isDeleted ? cur.oldPath : p
-    } else if (line.startsWith('@@')) {
+    else if (line.startsWith('--- ') || line.startsWith('+++ ')) readHeader(cur, line)
+    else if (line.startsWith('@@')) {
       const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/)
       if (m) { oldN = Number(m[1]); newN = Number(m[2]) }
     } else if (line.startsWith(' ')) { oldN++; newN++ } // context line: advances both sides (#3228)
