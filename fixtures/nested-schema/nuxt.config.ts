@@ -7,35 +7,15 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   extends: ['@fyit/crouton-core', '@fyit/crouton-sales'],
-
   hub: {
     db: 'sqlite'
   },
 
   // Match the other fixtures' Cloudflare-free prepare settings.
   ogImage: { enabled: false },
-
   croutonAuth: {
     methods: {
       passkeys: false
     }
-  },
-
-  runtimeConfig: {
-    croutonSales: {
-      print: {
-        enabled: false
-      }
-    },
-
-    public: {
-      croutonSales: {
-        print: {
-          enabled: false
-        }
-      }
-    }
-  },
-
-  css: ['~/assets/css/main.css']
+  }
 })
