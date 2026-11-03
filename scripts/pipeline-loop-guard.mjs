@@ -37,7 +37,7 @@ import { appendFileSync, readFileSync } from 'node:fs'
 export const ALLOWED_BOT = 'nuxt-harness[bot]'
 export const MAX_DEPTH = 3
 export const MAX_CHILDREN = 6
-// The labels that legitimately DRIVE a fresh pipeline run (a human or the App may apply them).
+// The labels that legitimately DRIVE a fresh pipeline run (only the pipeline app applies `delegate` / `delegate-pi`; people apply `work-this`).
 export const WORKER_TRIGGER = 'work-this'
 export const DECOMPOSE_TRIGGERS = ['delegate-pi']
 

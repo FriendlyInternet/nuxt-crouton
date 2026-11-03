@@ -138,7 +138,7 @@ test('the hold comment is deduped, self-resolving and overridable', () => {
   assert.ok(c.startsWith(HOLD_MARKER))
   assert.match(c, /epic\/1652-sales-paste-import` is red/)
   assert.match(c, /releases itself/)       // no human action needed in the normal case
-  assert.match(c, /apply `delegate` by hand to override/) // but an escape hatch exists
+  assert.match(c, /apply `work-this` by hand to override/) // but an escape hatch exists
 })
 
 test('the release comment names the blocker and only claims green when it is', () => {

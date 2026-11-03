@@ -42,7 +42,7 @@ name: Work issue (pi.dev · single-use worker)
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
 # label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
 # on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
