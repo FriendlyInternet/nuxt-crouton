@@ -10,8 +10,11 @@ import { seedPiles, mergeLookupSource, type ImportAudit, type PileIn } from '~~/
 import { BLOB_PREFIX, UPLOAD_ID_PREFIX } from '~~/server/utils/crate-uploads'
 
 export const demoSeedEnabled = () => {
-  const v = (useRuntimeConfig() as { crateDemoSeed?: unknown }).crateDemoSeed
-  return v === true || v === 'true' || !!import.meta.dev
+  const cfg = useRuntimeConfig() as { crateDemoSeed?: unknown, public?: { croutonReview?: unknown } }
+  const v = cfg.crateDemoSeed
+  // PR previews are review builds (public.croutonReview, set only at build for a preview) with no staging var.
+  const review = cfg.public?.croutonReview
+  return v === true || v === 'true' || review === true || review === 'true' || !!import.meta.dev
 }
 
 const PILES: PileIn[] = [

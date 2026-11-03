@@ -90,3 +90,19 @@ describe('library.get demo seed (#3299)', () => {
     }
   })
 })
+
+describe('demoSeedEnabled (#3299)', () => {
+  const withConfig = (cfg: object) => vi.stubGlobal('useRuntimeConfig', () => cfg)
+  it('seeds when the staging var is on', () => {
+    withConfig({ crateDemoSeed: 'true' })
+    expect(demoSeedEnabled()).toBe(true)
+  })
+  it('seeds on a review (PR preview) build', () => {
+    withConfig({ public: { croutonReview: true } })
+    expect(demoSeedEnabled()).toBe(true)
+  })
+  it('does not seed with neither (production)', () => {
+    withConfig({ public: {} })
+    expect(demoSeedEnabled()).toBe(import.meta.dev === true)
+  })
+})
