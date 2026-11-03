@@ -128,6 +128,7 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+           try {
             const { owner, repo } = context.repo
             const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
@@ -364,8 +365,54 @@ jobs:
                     await new Promise(r => setTimeout(r, 5000))
                     continue
                   }
+                  // Out of API allowance is not a per-PR failure: let the outer handler defer it.
+                  if (e.status === 429 || String(e.response?.headers?.['x-ratelimit-remaining']) === '0' || /rate limit/i.test(e.message || '')) throw e
                   core.warning(`merge #${pull_number} failed: ${e.message}`)
                   break
                 }
               }
+            }
+           } catch (e) {
+            // GitHub API allowance exhausted (#3287): not a failure of the PR. End green with a warning;
+            // the hourly schedule re-evaluates every open PR. Any other error still goes red.
+            let deferOrThrow
+            try {
+              ({ deferOrThrow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`))
+            } catch { throw e }
+            deferOrThrow(e, core.warning)
+           }
+
+      # Build-review safety net (#3218): a green pipeline PR with no review gets ONE dispatch per head SHA.
+      # Dispatches with the App token minted above — no `actions: write` here, because on-comment.yml
+      # calls this file and a called workflow cannot ask for more than its caller grants.
+      - name: Sweep — dispatch build review for green PRs that never got one
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            // Bootstrap-safe: PR runs execute the default branch's checkout, where this script may not exist yet.
+            let needsReview
+            try {
+              ({ needsReview } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/build-review-sweep.mjs`))
+            } catch (e) {
+              core.warning(`build review sweep skipped — scripts/build-review-sweep.mjs is not on the checked-out branch yet (${e.code || e.message})`)
+              return
+            }
+            const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
+            for (const p of open.filter(x => !x.draft && /^work-\d+$/.test(x.head.ref)).slice(0, 50)) {
+              try {
+                const sha = p.head.sha
+                const checks = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, per_page: 100 })
+                const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: p.number, per_page: 100 })
+                const commit = (await github.rest.repos.getCommit({ owner, repo, ref: sha })).data
+                const pr = { headRefName: p.head.ref, baseRefName: p.base.ref, headRefOid: sha, state: 'OPEN', isDraft: p.draft, author: { login: p.user.login } }
+                if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) continue
+                // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
+                await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
+                  body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
+                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } })
+                core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
+              } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
             }

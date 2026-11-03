@@ -284,12 +284,19 @@ jobs:
               const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
               const labels = issue.labels.map((l) => l.name || l)
               const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
-              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, body: issue.body, others })
             } catch (e) {
               core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
               return
             }
-            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            if (verdict.action === 'proceed') {
+              core.info(`Traffic control OK — ${verdict.reason}.`)
+              if (verdict.unblocking?.length) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+                  `⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
+              }
+              return
+            }
             await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
             core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
 
@@ -1047,8 +1054,8 @@ jobs:
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
           # the same reason the acceptance verdict is (#1849). A change the owner has to LOOK at
           # cannot be reviewed from a diff on a phone, so it opens as a draft and waits.
-          # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
-          # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
+          # #3228: a .vue change that sits wholly inside <script> is NOT visual; template/style are.
+          # server/**, config, tests and docs do not count either (#307's scope).
           UI_TOUCHED=0
           # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
           # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
