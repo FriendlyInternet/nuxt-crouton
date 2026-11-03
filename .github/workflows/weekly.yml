@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # commit the new usage.jsonl line back to main
-      actions: read   # list + download trace artifacts
+      actions: write  # list + download trace artifacts; dispatch deploy-pocs
     steps:
       # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -114,6 +114,12 @@ jobs:
           done
           exit 1
 
+      - name: Redeploy the loop-station page with the new data
+        if: steps.append.outputs.appended == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
+
       - name: Upload record artifact
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -129,7 +135,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # commit new findings.jsonl lines back to main
-      actions: read   # list + download candidate artifacts
+      actions: write  # list + download candidate artifacts; dispatch deploy-pocs
       pull-requests: read # resolve each candidate PR's merge state
     steps:
       # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
@@ -204,6 +210,7 @@ jobs:
         run: node scripts/eval-ledger/reconcile-findings.mjs
 
       - name: Commit new findings (if any)
+        id: commit
         run: |
           if git diff --quiet -- writeups/loop-station/findings.jsonl; then
             echo "no new findings — nothing to commit"
@@ -214,10 +221,19 @@ jobs:
           git add writeups/loop-station/findings.jsonl
           git commit -m "chore(loop-station): record accountability findings [skip ci]"
           for i in 1 2 3 4; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "committed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
           done
           exit 1
+
+      - name: Redeploy the loop-station page with the new data
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
 
   advisor:
     needs: findings

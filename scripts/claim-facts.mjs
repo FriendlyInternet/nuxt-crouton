@@ -65,6 +65,24 @@ async function fetchEventFacts({ github, owner, repo, issueNumber, issue, linked
 }
 
 /**
+ * The PR a revision continues (#3061): newest PR on the branch, any state. A lookup failure
+ * returns `lookupFailed` so the guard fails open rather than refuse a revision on a glitch.
+ */
+async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
+  try {
+    const { data } = await github.rest.pulls.list({
+      owner, repo, head: `${owner}:${branch}`, state: 'all', sort: 'created', direction: 'desc', per_page: 5,
+    })
+    const pr = (data || [])[0]
+    if (!pr) return { branch, pr: null }
+    return { branch, pr: pr.number, state: pr.state, merged: Boolean(pr.merged_at) }
+  } catch (e) {
+    warn(`claim facts: could not look up the PR on ${branch} (${e.message})`)
+    return { branch, lookupFailed: true }
+  }
+}
+
+/**
  * Gather the claim facts for one issue.
  *
  * @param {object}  o
@@ -72,9 +90,11 @@ async function fetchEventFacts({ github, owner, repo, issueNumber, issue, linked
  * @param {object}  o.context       the github-script `context`
  * @param {number}  o.issueNumber
  * @param {object} [o.core]         optional logger; only `warning` is used
+ * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
+ *                                  Adds `revision` so the guard judges that PR, not the issue.
  * @returns {Promise<object>} the shape `decideClaim` consumes
  */
-export async function gatherClaimFacts({ github, context, issueNumber, core }) {
+export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '' }) {
   const { owner, repo } = context.repo
   const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
 
@@ -102,7 +122,12 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
     github, owner, repo, issueNumber, issue, linkedPRs,
   })
 
+  const revision = reviseBranch
+    ? await fetchRevisionFacts({ github, owner, repo, branch: reviseBranch, warn })
+    : undefined
+
   return {
+    ...(revision ? { revision } : {}),
     issueState: issue.state,
     linkedPRs,
     inProgressSince,

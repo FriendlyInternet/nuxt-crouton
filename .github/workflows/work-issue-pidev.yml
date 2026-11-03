@@ -253,7 +253,10 @@ jobs:
             // fake Octokit — the two subtle fields (`self.pr`, `baseRef`) are the ones whose
             // absence refused #1791 five times. Contract: scripts/claim-facts.test.mjs.
             const { gatherClaimFacts } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/claim-facts.mjs`)
-            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core })
+            // A revision (feedback, not a re-plan) is guarded on its PR, not its issue (#3061).
+            const isRevision = '${{ inputs.feedback }}' !== '' && '${{ inputs.mode }}' !== 'plan'
+            const reviseBranch = isRevision ? ('${{ inputs.branch }}' || `work-${issue_number}`) : ''
+            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core, reviseBranch })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/claim-facts.json`, JSON.stringify(facts))
             core.info(`claim facts: ${JSON.stringify(facts)}`)
       - name: Claim guard
@@ -268,7 +271,8 @@ jobs:
       # Revision runs (inputs.feedback, #2446) finish work already in flight — they never wait.
       - name: Traffic control
         id: traffic
-        if: ${{ inputs.feedback == '' }}
+        # #3214: plan mode changes no code and can't collide — only the BUILD waits its turn.
+        if: ${{ inputs.feedback == '' && inputs.mode != 'plan' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -280,12 +284,19 @@ jobs:
               const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
               const labels = issue.labels.map((l) => l.name || l)
               const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
-              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, body: issue.body, others })
             } catch (e) {
               core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
               return
             }
-            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            if (verdict.action === 'proceed') {
+              core.info(`Traffic control OK — ${verdict.reason}.`)
+              if (verdict.unblocking?.length) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+                  `⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
+              }
+              return
+            }
             await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
             core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
 
@@ -346,14 +357,35 @@ jobs:
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
       - id: ctx
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FEEDBACK: ${{ inputs.feedback }}
         run: |
           EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+          ISSUE_EPIC="$EPIC_BRANCH"
           # Revising an epic → main PR (#2875): its base is main, whatever the issue block says.
           REV_BRANCH="${{ inputs.branch }}"; [ -n "$REV_BRANCH" ] && EPIC_BRANCH=""
           echo "rev_branch=${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}" >> "$GITHUB_OUTPUT"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
           echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+          # #3072: one base for the revise / conflict / finish steps — the PR's own base, never
+          # inferred from inputs.branch (a leaf PR into an epic used to fall back to main).
+          HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
+          PR_BASE=""; PR_NUM=""
+          if [ -n "$FEEDBACK" ]; then
+            read -r PR_NUM PR_BASE < <(gh pr list --head "$HEAD_REF" --state open --json number,baseRefName -q '.[0] // empty | "\(.number) \(.baseRefName)"' 2>/dev/null || true) || true
+          fi
+          RES="$(PR_BASE="$PR_BASE" HEAD_REF="$HEAD_REF" ISSUE_EPIC="$ISSUE_EPIC" node scripts/resolve-base.mjs)"
+          BASE="$(echo "$RES" | sed -n 's/^base=//p')"
+          BASE_ERR="$(echo "$RES" | sed -n 's/^error=//p')"
+          echo "base=${BASE}" >> "$GITHUB_OUTPUT"
+          echo "resolved base='${BASE}'"
+          if [ -n "$BASE_ERR" ]; then
+            echo "::error::${BASE_ERR}"
+            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
+            exit 1
+          fi
 
       # ── EPIC BRANCH SYNC (#2475) — in-flight epics must run CURRENT pipeline code ──────
       # A sub-PR's `pull_request` run uses the workflows/scripts of its merge commit (head merged
@@ -423,7 +455,7 @@ jobs:
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
           # can predate the current scripts (an epic branch cut earlier) — the first run printed an
           # old error instead of the tool line. Run it from a copy taken now, like pi-finish.
-          rm -rf "$RUNNER_TEMP/loop-station" && cp -r .claude/skills/loop-station "$RUNNER_TEMP/loop-station"
+          rm -rf "$RUNNER_TEMP/.claude/skills/loop-station" "$RUNNER_TEMP/scripts/lib" && mkdir -p "$RUNNER_TEMP/.claude/skills" "$RUNNER_TEMP/scripts" && cp -r .claude/skills/loop-station "$RUNNER_TEMP/.claude/skills/loop-station" && cp -r scripts/lib "$RUNNER_TEMP/scripts/lib"
 
       # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
       # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
@@ -450,6 +482,7 @@ jobs:
           ISSUE: ${{ inputs.issue }}
           FEEDBACK_ID: ${{ inputs.feedback }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -euo pipefail
@@ -468,7 +501,6 @@ jobs:
           # against a concurrent push. A conflict is NOT aborted (#2848, reverses #2658): the merge
           # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
           # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
@@ -526,6 +558,7 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
@@ -564,7 +597,12 @@ jobs:
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK by the plan reviewer. Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording:\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
+              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ]; then
+                WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
+              else
+                WHO='by the plan reviewer'
+              fi
+              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK (%s). Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n' "$WHO"; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
             fi
           elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
@@ -658,10 +696,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -uo pipefail
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
           RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
           say() {
@@ -726,6 +764,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
           SINCE: ${{ steps.t0.outputs.ts }}
+          REVISED: ${{ inputs.mode == 'plan' && inputs.feedback != '' && '1' || '' }}
         run: |
           set -uo pipefail
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
@@ -734,7 +773,7 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
-          VERDICT="$(node scripts/lib/plan-shape.mjs "$RUNNER_TEMP/plan.md")"; RC=$?
+          VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")"; RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
@@ -757,6 +796,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
@@ -781,7 +821,6 @@ jobs:
           # surface the tail as an annotation (job logs are unreachable from an agent session).
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
-          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
@@ -1015,8 +1054,8 @@ jobs:
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
           # the same reason the acceptance verdict is (#1849). A change the owner has to LOOK at
           # cannot be reviewed from a diff on a phone, so it opens as a draft and waits.
-          # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
-          # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
+          # #3228: a .vue change that sits wholly inside <script> is NOT visual; template/style are.
+          # server/**, config, tests and docs do not count either (#307's scope).
           UI_TOUCHED=0
           # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
           # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
@@ -1294,16 +1333,19 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
+          CLAIM_PR: ${{ steps.claim.outputs.claim_pr }}
         with:
           script: |
-            const issue_number = Number(process.env.ISSUE_NUMBER)
-            const reason = process.env.CLAIM_REASON || 'another run already holds this issue'
+            const { claimNotice } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`)
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-              `⏸️ **Not picked up — ${reason}.**\n\n`
-              + `Nothing is broken and nothing was lost: the worker stopped before starting so two runs `
-              + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
-              + `<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
+            const n = claimNotice({
+              reason: process.env.CLAIM_REASON,
+              pr: process.env.CLAIM_PR || null,
+              issue: Number(process.env.ISSUE_NUMBER),
+              runUrl,
+              runner: '${{ vars.AGENT_RUNNER || 'github-hosted' }}',
+            })
+            await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
 
       # Run record (#2464): a red finish step explains itself through the check-runs API —
       # the last 40 lines as one ::error:: annotation plus a run-record artifact.
@@ -1662,33 +1704,21 @@ jobs:
         run: |
           set +e
           mkdir -p pi-telemetry-out
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
-          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
-          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
-          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
-          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
-          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
-            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$TELE_DIR" ]; then
-            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          fi
-          # Skill loads come from THIS run's session JSONL (#2403): pi has no skill tool — the
-          # model `read`s `.claude/skills/<name>/SKILL.md` — so the adapter traces those reads as
-          # `kind:'skill'` events. A single-use worker spawns no subagents, so before #2403 it
-          # produced NO trace at all (the 2026-10-24 canary uploaded nothing); now it always does.
+          # Read ONLY this run's per-run session folder (never the shared ~/.pi sessions, which
+          # on a shared runner can hold another run's files). Helper artifacts land inside it
+          # (pi-subagents writes them next to the session file), at any nesting depth (#3158).
           SESSION_DIR="$RUNNER_TEMP/pi-session"
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then echo "pi telemetry dir: $TELE_DIR"; else TELE_DIR="/nonexistent"; fi
-          if node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+          TELE_DIR="$SESSION_DIR"
+          if node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" "$SESSION_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
             # ::notice:: so the result is readable via the check-runs annotations API, not only the raw log (#2435)
             echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines, $(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads, $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s)"
           else
             rm -f pi-telemetry-out/pi-trace.jsonl
-            echo "::notice title=pi telemetry::no trace — no subagents and no skill loads; $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s) in $SESSION_DIR"
+            echo "::notice title=pi telemetry::no trace — no billable turns, subagents or skill loads; $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s) in $SESSION_DIR"
           fi
           # #2548: which tools did pi call, and were the repo MCP servers blocked? Tells "pi ignored
           # the skill guides" apart from "telemetry miscounts reads", and confirms #2445.
-          echo "::notice title=pi tools::$(node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
+          echo "::notice title=pi tools::$(node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
           # No log = no evidence either way: say "unknown", never a false "not blocked".
           if [ -z "$PI_EXEC_LOG" ] || [ ! -f "$PI_EXEC_LOG" ]; then
             echo "::notice title=pi mcp::unknown — no pi log to check (${PI_EXEC_LOG:-path not set})"
@@ -1698,7 +1728,7 @@ jobs:
             echo "::notice title=pi mcp::not blocked ($(wc -l < "$PI_EXEC_LOG") log lines checked)"
           fi
           if [ -d "$TELE_DIR" ]; then
-            node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+            node "$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs" "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
             echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
             cat pi-telemetry-out/ledger-rows.jsonl || true
           fi

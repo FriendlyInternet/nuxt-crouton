@@ -52,3 +52,23 @@ test('conflict path is skipped', () => {
   const { dir } = repo()
   assert.equal(ensureBaseMerged({ cwd: dir, baseRef: 'main', conflict: true }).action, 'skipped')
 })
+
+// Leaf cut from `epic`; main moves on afterwards. The base choice decides what the PR diff contains.
+test('merging the epic keeps the leaf diff to its own file; merging main drags in main\'s', () => {
+  const setup = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'revbase-epic-'))
+    const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' }).trim()
+    git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+    const put = (f) => { writeFileSync(join(dir, f), f); git('add', '-A'); git('commit', '-qm', f) }
+    put('a.txt'); git('checkout', '-qb', 'epic'); put('epic.txt')
+    git('checkout', '-qb', 'work'); put('leaf.txt')
+    git('checkout', '-q', 'main'); put('later.txt'); git('checkout', '-q', 'work')
+    return { dir, git }
+  }
+  const a = setup()
+  ensureBaseMerged({ cwd: a.dir, baseRef: 'epic' })
+  assert.equal(a.git('diff', '--name-only', 'epic...work'), 'leaf.txt')
+  const b = setup()
+  ensureBaseMerged({ cwd: b.dir, baseRef: 'main' })
+  assert.match(b.git('diff', '--name-only', 'epic...work'), /later\.txt/)
+})

@@ -117,17 +117,19 @@ jobs:
           echo "$PRIOR" > "$D/prior"
           echo "prior sent-back rounds: $PRIOR"
 
-      # Prove once that the reviewer token cannot write: a no-op PATCH must come back 403/404. On a
-      # 2xx the reviewer never runs.
+      # Prove once that the reviewer token cannot write: a no-op PATCH must fail (non-zero exit). On
+      # success the reviewer never runs.
       - name: Probe — the reviewer token is read-only
         env:
           GH_TOKEN: ${{ steps.ro-token.outputs.token }}
           PROBE_ISSUE: ${{ github.event.issue.number }}
         run: |
           set -uo pipefail
-          OUT="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1)"
-          echo "$OUT" | tail -n 3
-          if echo "$OUT" | grep -qE 'HTTP (403|404)'; then
+          # Decide on gh's exit code only (the step runs under `bash -e`; `|| rc=$?` keeps it alive).
+          rc=0
+          ERR="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1 >/dev/null)" || rc=$?
+          echo "$ERR" | tail -n 3
+          if [ "$rc" -ne 0 ]; then
             echo "probe: reviewer token cannot write (expected)"
           else
             echo "::error::reviewer token can write — review NOT run"
