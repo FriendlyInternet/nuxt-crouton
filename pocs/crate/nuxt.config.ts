@@ -11,6 +11,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   extends: [
+    // KO II look — makes the 'ko' team-theme preset available; the team's theme setting
+    // (admin → settings, or PATCH settings/theme { preset: 'ko' }) switches it on.
+    '@fyit/crouton-themes/ko',
     '@fyit/crouton-core',
     '@fyit/crouton-layout',
     '@fyit/crouton-i18n',

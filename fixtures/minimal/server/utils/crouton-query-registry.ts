@@ -18,17 +18,31 @@
  * ```
  *
  * ## Registered Collections
+ * - mainAdmindocs (main/admindocs)
  * - mainItems (main/items)
+ * - mainMembernotes (main/membernotes)
  */
 
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
 }> = {
+  mainAdmindocs: {
+    getAll: () => import('~~/layers/main/collections/admindocs/server/database/queries')
+      .then(m => m.getAllMainAdmindocs),
+    getByIds: () => import('~~/layers/main/collections/admindocs/server/database/queries')
+      .then(m => m.getMainAdmindocsByIds),
+  },
   mainItems: {
     getAll: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getAllMainItems),
     getByIds: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getMainItemsByIds),
+  },
+  mainMembernotes: {
+    getAll: () => import('~~/layers/main/collections/membernotes/server/database/queries')
+      .then(m => m.getAllMainMembernotes),
+    getByIds: () => import('~~/layers/main/collections/membernotes/server/database/queries')
+      .then(m => m.getMainMembernotesByIds),
   },
 }
