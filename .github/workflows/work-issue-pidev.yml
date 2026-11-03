@@ -269,12 +269,19 @@ jobs:
               const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
               const labels = issue.labels.map((l) => l.name || l)
               const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
-              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, body: issue.body, others })
             } catch (e) {
               core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
               return
             }
-            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            if (verdict.action === 'proceed') {
+              core.info(`Traffic control OK — ${verdict.reason}.`)
+              if (verdict.unblocking?.length) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+                  `⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
+              }
+              return
+            }
             await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
             core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
 
