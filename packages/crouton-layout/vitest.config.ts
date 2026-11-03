@@ -7,7 +7,8 @@ export default defineConfig({
     include: [
       'app/utils/__tests__/**/*.test.ts',
       'app/composables/__tests__/**/*.test.ts',
-      'app/components/__tests__/**/*.test.ts'
+      'app/components/__tests__/**/*.test.ts',
+      'server/**/__tests__/**/*.test.ts'
     ],
     exclude: [
       '**/node_modules/**',

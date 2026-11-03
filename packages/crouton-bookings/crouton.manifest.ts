@@ -1,4 +1,4 @@
-import { defineCroutonManifest, defineGeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import { defineCroutonManifest } from '@fyit/crouton-core/shared/manifest'
 import bookingSchema from './schemas/booking.json'
 import locationSchema from './schemas/location.json'
 import settingsSchema from './schemas/settings.json'
@@ -21,9 +21,14 @@ export default defineCroutonManifest({
   },
 
   dependencies: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-auth'
   ],
+
+  // The collections below ship from this package (collections/*), end to end (#2278).
+  // The CLI refuses to generate them into an app; `collections` stays as the
+  // package's self-description for AI hints and docs.
+  ownsCollections: true,
 
   collections: [
     {
@@ -113,8 +118,7 @@ export default defineCroutonManifest({
     components: [
       { name: 'CroutonBookingPanel', description: 'Main booking sidebar container', props: ['locationId', 'teamId'] },
       { name: 'CroutonBookingCalendar', description: 'Calendar date picker for booking', props: ['modelValue', 'availableDates'] },
-      { name: 'CroutonBookingWeekStrip', description: 'Week date navigation strip', props: ['modelValue', 'startDate'] },
-      { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
+            { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
       { name: 'CroutonBookingCard', description: 'Individual booking display card', props: ['booking'] },
       { name: 'CroutonBookingSlotIndicator', description: 'Visual slot availability indicator', props: ['slots', 'bookings'] },
       { name: 'CroutonBookingDateBadge', description: 'Date display badge', props: ['date', 'format'] }
@@ -128,21 +132,5 @@ export default defineCroutonManifest({
       '/api/crouton-bookings/teams/[teamId]/bookings/[bookingId]',
       '/api/crouton-bookings/teams/[teamId]/bookings/[bookingId]/resend-email'
     ]
-  }
-})
-
-// The package ships a bespoke location form (PanelMap-based). Declaring it here
-// wires the composable's componentName + skips the generic generated _Form.vue
-// for ANY consuming app — no per-app `formComponent` config needed (velo set it
-// by hand), and it survives regen. Without this, the maps generator detector
-// (location has address + coordinate fields) injects a CroutonMapsMap/useGeocode
-// form into a package that doesn't extend crouton-maps → broken codegen (#558).
-export const generatorContribution = defineGeneratorContribution({
-  getFormComponent({ collectionName }) {
-    const forms: Record<string, string> = {
-      location: 'CroutonBookingsLocationForm',
-      locations: 'CroutonBookingsLocationForm',
-    }
-    return forms[collectionName] ?? null
   }
 })

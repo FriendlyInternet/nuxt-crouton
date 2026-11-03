@@ -5,14 +5,15 @@ name: skills-digest
 # (reusing scripts/gen-skills-doc.mjs) and computes the git delta, render.mjs makes email-safe
 # HTML + a plain-text mirror. Cadence + delivery live in .github/digests.yml (#838/#841).
 #
-# The cron fires DAILY (cheap wake-up); .claude/skills/housekeeping/schedule.mjs reads
-# digests.yml and exits early unless today is the configured send day (monthly:1 by default) —
-# so changing the cadence is a one-line YAML edit, never a cron change.
+# The cron fires on the 1st only (was daily, waking 30x a month to send once, #2892);
+# .claude/skills/housekeeping/schedule.mjs still reads digests.yml as a second guard and exits
+# early unless today is the configured send day. Moving the send day off the 1st now needs
+# the cron edited as well.
 
 on:
   schedule:
     # ~06:00 Europe/Brussels (05:00 UTC winter). The gate below decides the actual send day.
-    - cron: '0 5 * * *'
+    - cron: '0 5 1 * *'
   workflow_dispatch:
 
 permissions:
@@ -25,17 +26,18 @@ concurrency:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # FULL history — the "what changed" delta needs the previous-send-date commit to be
           # reachable; a shallow clone can't reach a month-ago commit (gather.mjs would fall
           # back to firstRun=true and show no delta).
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       # Cadence gate — send only on the configured day-of-month. A manual dispatch forces it.
       - name: Decide if today is a send day
@@ -96,7 +98,7 @@ jobs:
 
       - name: Upload digest artifacts
         if: always() && steps.gate.outputs.send == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: skills-digest
           path: |

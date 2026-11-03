@@ -144,6 +144,14 @@ target. The POC's epic is the *input*; this is the *output*. Reference the spec 
 
 ## Stage B — Build the crouton way, to satisfy the spec (handoff)
 
+**Seed the app's changelog from the POC's history.** The app's in-app changelog (the
+`@fyit/crouton-feedback` Changelog tool) should not start empty at graduation — the POC's history
+becomes its seed, and app commits accrue on top from here onward. Run
+`node scripts/graduate-changelog-seed.mjs <poc-changelog.json> <app-changelog.json>` — it validates
+the POC changelog resolves to an incubator (preview-deploy) stage via `harness.config.mjs`, not a
+hardcoded `poc`/`spike` path guess, then copies/normalizes its `{ v, note, commit? }` entries into
+the app's `changelog.json` (same shape crouton-feedback already expects, so no transform is needed).
+
 **Build the app as a real crouton app — CLI-scaffolded, never hand-assembled, never a copy of the
 POC.** Hand-assembly silently omits standard scaffold (and 500s at runtime on a green build, #988);
 copying `spike-*` re-imports the POC's workarounds and skips the architecture revision. If you catch

@@ -54,8 +54,9 @@ function canonicalNode(node: LayoutNode): Record<string, unknown> {
   if (node.type === 'leaf') {
     out.type = 'leaf'
     out.blockId = node.blockId
+    put(out, 'id', node.id)
     put(out, 'config', sortedRecord(node.config))
-    if (node.collapse) put(out, 'collapse', { edge: node.collapse.edge, affordance: node.collapse.affordance })
+    if (node.collapse) put(out, 'collapse', { edge: node.collapse.edge, affordance: node.collapse.affordance, placement: node.collapse.placement, reveal: node.collapse.reveal })
   } else if (node.type === 'split') {
     out.type = 'split'
     out.direction = node.direction
@@ -75,7 +76,10 @@ function canonicalBreakpoint(bp: LayoutBreakpoint): Record<string, unknown> {
   const out: Record<string, unknown> = { minWidth: bp.minWidth }
   put(out, 'label', bp.label)
   if (bp.root) out.root = canonicalNode(bp.root)
-  put(out, 'collapsed', bp.collapsed ? [...bp.collapsed].sort() : undefined)
+  // An explicit `collapsed: []` is a statement ("nothing hidden from here up"), not an
+  // omission — the precedence model is per-field last-wins — so it must survive, unlike
+  // the other empties `put` folds away (#2418).
+  if (bp.collapsed) out.collapsed = [...bp.collapsed].sort()
   put(out, 'variants', sortedRecord(bp.variants))
   put(out, 'collapseStyle', bp.collapseStyle)
   return out

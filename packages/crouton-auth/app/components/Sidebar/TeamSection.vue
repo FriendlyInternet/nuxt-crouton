@@ -89,6 +89,8 @@ const dropdownItems = computed(() => {
         <UAvatar
           v-if="currentTeam?.logo"
           :src="currentTeam.logo"
+          :ui="{ image: 'object-contain' }"
+          :as="{ img: 'img' }"
           :alt="currentTeam.name"
           size="xs"
         />
@@ -116,6 +118,8 @@ const dropdownItems = computed(() => {
           <UAvatar
             v-if="currentTeam?.logo"
             :src="currentTeam.logo"
+            :ui="{ image: 'object-contain' }"
+            :as="{ img: 'img' }"
             :alt="currentTeam.name"
             size="2xs"
           />

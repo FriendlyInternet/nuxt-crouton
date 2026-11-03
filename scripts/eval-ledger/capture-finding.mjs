@@ -5,7 +5,7 @@
 //
 // It emits a candidate to stdout — it does NOT write findings.jsonl. PR-branch runs
 // must never commit the committed ledger; the candidate is uploaded as an artifact
-// and the merge/scheduled rollup (loop-station-findings.yml) resolves + commits it
+// and the merge/scheduled rollup (weekly.yml `findings` job) resolves + commits it
 // to main. The candidate carries `_pr` so the rollup can check the durable merge fact.
 //
 // DEFECT gates (default --class defect): captured ONLY for a 🔴 critical verdict —

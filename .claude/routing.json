@@ -5,15 +5,22 @@
   "_tiers": "Each tier maps to a concrete model per harness. out_per_mtok is the Claude baseline output price ($/Mtok) — the cost lever. pi_local = the local (~$0) option on the Mac mini (informational; the generator reads `pi`).",
   "tiers": {
     "small":  { "claude": "haiku",  "pi": "claude-haiku-4-5", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)" },
-    "medium": { "claude": "sonnet", "pi": "claude-sonnet-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
-    "large":  { "claude": "opus",   "pi": "claude-opus-4-8", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
+    "medium": { "claude": "sonnet", "pi": "claude-sonnet-5-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
+    "review": { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "independent plan reviewer (#2756) — strongest model, read-only, never edits code" },
+    "large":  { "claude": "opus",   "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
   "default": "medium",
 
   "_routes": "One entry per agent/flow. tier = what it runs on TODAY (must match the agent frontmatter — --check is the guard). proposed = where the cheap-but-good re-tiering would put it, pending the #865 quality measurement. Omit proposed to mean \"no change proposed\".",
   "routes": {
+    "ticket-reviewer":   { "tier": "review", "why": "independent ticket review before an epic starts (#2776) — reads the epic, its tickets and the code they name, returns go / no-go / needs-owner per ticket; never edits. Same tier and model as plan-reviewer" },
+    "build-reviewer":    { "tier": "review", "why": "independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits" },
+    "plan-reviewer":     { "tier": "review", "why": "independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27" },
     "task-worker":       { "tier": "large",  "why": "writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model" },
+    "pi-worker":         { "tier": "medium", "why": "pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier" },
+    "pi-reviser":        { "tier": "medium", "why": "pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker" },
+    "pi-decomposer":     { "tier": "medium", "why": "pi event-driven decomposer persona (#2431) — plan-only, no code written; extracted from decompose-on-issue-pidev.yml" },
     "task-orchestrator": { "tier": "medium", "why": "reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against." },
     "task-decomposer":   { "tier": "medium", "why": "LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824." },
     "red-team":          { "tier": "medium", "why": "security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824." },
@@ -28,5 +35,5 @@
     { "flow": "decompose-on-issue-pidev", "model": "claude-sonnet-5", "why": "SUPERSEDED by #1669: ran GLM (zai/glm-5.2) after #1421's eval produced a correct house-style PR at $0 marginal; reverted to the Claude subscription (sonnet, the medium tier). Now matches the medium default, so this override is only kept as the recorded reversal." }
   ],
 
-  "_known_gaps": "The top-level workflow loop (claude.yml, decompose-on-issue.yml, resume-on-comment, fix-ci-on-failure, a11y[-daily], frontend-review, red-team[-daily], gate-smoke, loop-station-advisor) is now PINNED to claude-sonnet-5 via `--model` in each step's claude_args (#1158, closing the earlier UNPINNED gap that let the action default to the older claude-sonnet-4-6). `--model` sets only the MAIN loop; Task-spawned sub-agents still resolve their own frontmatter model (task-worker = opus). OPEN: whether a sub-agent's `model: sonnet` frontmatter alias also resolves to sonnet-4-6 in the pinned action SHA — verify against a post-merge run's modelUsage and, if so, pin the full id in frontmatter too."
+  "_known_gaps": "Every workflow's main loop now reads its model from .claude/pipeline-models.json via `--model` (#2161; was pinned per-workflow in #1158, which closed the earlier UNPINNED gap that let the action default to the older claude-sonnet-4-6). `--model` sets only the MAIN loop; Task-spawned sub-agents still resolve their own frontmatter model (task-worker = opus). OPEN: whether a sub-agent's `model: sonnet` frontmatter alias also resolves to sonnet-4-6 in the pinned action SHA — verify against a post-merge run's modelUsage and, if so, pin the full id in frontmatter too."
 }

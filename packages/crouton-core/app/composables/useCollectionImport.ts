@@ -306,7 +306,7 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
             result.failed++
             result.errors.push({
               rowIndex: i,
-              error: batchResult.reason?.data?.message || batchResult.reason?.message || 'Creation failed'
+              error: batchResult.reason?.data?.message || batchResult.reason?.message || t('mutations.creationFailed')
             })
           }
         }

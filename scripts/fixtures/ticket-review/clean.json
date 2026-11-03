@@ -1,0 +1,21 @@
+{
+ "epic": "## Decisions log\n- none yet\n",
+ "tickets": [
+  {
+   "number": 1,
+   "title": "Cache the list per team",
+   "labels": [
+    "type:feat"
+   ],
+   "body": "Rule: no request may read another team's cached list.\n\nTest: a request for team B never returns team A's list.\n"
+  },
+  {
+   "number": 2,
+   "title": "Document the cache",
+   "labels": [
+    "type:docs"
+   ],
+   "body": "Docs only.\n"
+  }
+ ]
+}

@@ -11,6 +11,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const emit = defineEmits<{
   'update:modelValue': [value: StatItem[]]
@@ -29,7 +30,7 @@ function emitChange() {
 function addStat() {
   stats.value.push({
     value: 100,
-    label: 'New Stat',
+    label: t('pages.blockEditors.newStat'),
     prefix: '',
     suffix: ''
   })
@@ -67,7 +68,7 @@ function moveStat(index: number, direction: 'up' | 'down') {
     >
       <!-- Header with move/delete -->
       <div class="flex items-center justify-between">
-        <span class="text-sm font-medium">Stat {{ index + 1 }}</span>
+        <span class="text-sm font-medium">{{ t('pages.blockEditors.statN', { n: index + 1 }) }}</span>
         <div class="flex items-center gap-1">
           <UButton
             color="neutral"
@@ -96,21 +97,21 @@ function moveStat(index: number, direction: 'up' | 'down') {
       </div>
 
       <!-- Value -->
-      <UFormField label="Value">
+      <UFormField :label="t('pages.blockEditors.value')">
         <UInput
           :model-value="String(stat.value)"
           type="number"
-          placeholder="e.g. 10000"
+          :placeholder="t('pages.blockEditors.valuePlaceholder')"
           size="sm"
           @update:model-value="updateStat(index, 'value', $event)"
         />
       </UFormField>
 
       <!-- Label -->
-      <UFormField label="Label">
+      <UFormField :label="t('pages.blockEditors.label')">
         <UInput
           :model-value="stat.label"
-          placeholder="e.g. Happy Customers"
+          :placeholder="t('pages.blockEditors.labelPlaceholder')"
           size="sm"
           @update:model-value="updateStat(index, 'label', $event)"
         />
@@ -118,18 +119,18 @@ function moveStat(index: number, direction: 'up' | 'down') {
 
       <!-- Prefix + Suffix row -->
       <div class="grid grid-cols-2 gap-2">
-        <UFormField label="Prefix">
+        <UFormField :label="t('pages.blockEditors.prefix')">
           <UInput
             :model-value="stat.prefix || ''"
-            placeholder="e.g. $"
+            :placeholder="t('pages.blockEditors.prefixPlaceholder')"
             size="sm"
             @update:model-value="updateStat(index, 'prefix', $event)"
           />
         </UFormField>
-        <UFormField label="Suffix">
+        <UFormField :label="t('pages.blockEditors.suffix')">
           <UInput
             :model-value="stat.suffix || ''"
-            placeholder="e.g. %, +, /7"
+            :placeholder="t('pages.blockEditors.suffixPlaceholder')"
             size="sm"
             @update:model-value="updateStat(index, 'suffix', $event)"
           />
@@ -146,7 +147,7 @@ function moveStat(index: number, direction: 'up' | 'down') {
       block
       @click="addStat"
     >
-      Add Stat
+      {{ t('pages.blockEditors.addStat') }}
     </UButton>
   </div>
 </template>

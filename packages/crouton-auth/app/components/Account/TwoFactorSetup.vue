@@ -111,8 +111,8 @@ async function handlePasswordSubmit() {
     backupCodes.value = data.backupCodes
     setupStep.value = 'qr'
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to enable 2FA'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.twoFactor.failedToEnable')
+    notify.error(t('common.error'), { description: message })
   } finally {
     setupLoading.value = false
   }
@@ -121,7 +121,7 @@ async function handlePasswordSubmit() {
 // Handle TOTP verification
 async function handleVerifySubmit() {
   if (!verifyCode.value || verifyCode.value.length !== 6) {
-    notify.error('Invalid code', { description: 'Please enter a 6-digit code' })
+    notify.error(t('account.twoFactor.invalidCode'), { description: t('auth.twoFactor.enter6DigitCode') })
     return
   }
 
@@ -135,8 +135,8 @@ async function handleVerifySubmit() {
 
     setupStep.value = 'backup'
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Invalid code'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.twoFactor.invalidCode')
+    notify.error(t('common.error'), { description: message })
   } finally {
     setupLoading.value = false
   }
@@ -146,7 +146,7 @@ async function handleVerifySubmit() {
 async function completeSetup() {
   showSetupModal.value = false
   await loadStatus()
-  notify.success('2FA enabled', { description: 'Two-factor authentication is now active.' })
+  notify.success(t('account.twoFactor.enabled'), { description: t('account.twoFactor.enabledDescription') })
 }
 
 // Disable 2FA
@@ -164,10 +164,10 @@ async function handleDisable() {
     disablePassword.value = ''
     await loadStatus()
 
-    notify.success('2FA disabled', { description: 'Two-factor authentication has been turned off.' })
+    notify.success(t('account.twoFactor.disabled'), { description: t('account.twoFactor.disabledDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to disable 2FA'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.twoFactor.failedToDisable')
+    notify.error(t('common.error'), { description: message })
   } finally {
     disableLoading.value = false
   }
@@ -187,8 +187,8 @@ async function handleViewBackupCodes() {
     // Previous codes are invalidated when generating new ones
     viewedBackupCodes.value = await generateBackupCodes(backupPassword.value)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to generate backup codes'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.twoFactor.failedToGenerateCodes')
+    notify.error(t('common.error'), { description: message })
   } finally {
     viewCodesLoading.value = false
   }
@@ -198,7 +198,7 @@ async function handleViewBackupCodes() {
 async function copyBackupCodes(codes: string[]) {
   const text = codes.join('\n')
   await navigator.clipboard.writeText(text)
-  notify.success('Copied', { description: 'Backup codes copied to clipboard' })
+  notify.success(t('account.twoFactor.copied'), { description: t('account.twoFactor.codesCopied') })
 }
 </script>
 

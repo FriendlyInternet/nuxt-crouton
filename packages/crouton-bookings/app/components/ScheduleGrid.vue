@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import type { SlotItem, SlotSchedule } from '../types/booking'
+import { parseLocationSlots } from '../composables/useBookingSlots'
 
 interface Props {
   modelValue?: SlotSchedule | string | null
   slots?: SlotItem[] | string | null
+  /** Location's open days (0=Sun…6=Sat). Empty/null = open every day. */
+  openDays?: number[] | string | null
   readonly?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: null,
   slots: null,
+  openDays: null,
   readonly: false,
 })
 
@@ -30,18 +34,7 @@ const days = computed(() => [
 ])
 
 // Parse slots
-const parsedSlots = computed<SlotItem[]>(() => {
-  if (!props.slots) return []
-  if (typeof props.slots === 'string') {
-    try {
-      const parsed = JSON.parse(props.slots)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return Array.isArray(props.slots) ? props.slots : []
-})
+const parsedSlots = computed<SlotItem[]>(() => parseLocationSlots({ slots: props.slots }))
 
 // Parse schedule
 const schedule = computed<SlotSchedule>(() => {
@@ -62,7 +55,25 @@ const ALL_DAY_KEY = '_allDay'
 const hasSlots = computed(() => parsedSlots.value.length > 0)
 const hasSchedule = computed(() => Object.keys(schedule.value).length > 0)
 
+// Parse open days — null/empty means every day is open
+const parsedOpenDays = computed<number[] | null>(() => {
+  let value = props.openDays
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  return Array.isArray(value) && value.length > 0 ? value : null
+})
+
+function isDayOpen(dayValue: number): boolean {
+  return !parsedOpenDays.value || parsedOpenDays.value.includes(dayValue)
+}
+
 function isActive(slotId: string, dayValue: number): boolean {
+  if (!isDayOpen(dayValue)) return false
   const slotDays = schedule.value[slotId]
   // No entry = follows open days = all active
   if (!slotDays) return true
@@ -147,6 +158,7 @@ function clearSchedule() {
                 :color="isActive(slot.id, day.value) ? 'primary' : 'neutral'"
                 variant="soft"
                 square
+                :disabled="!isDayOpen(day.value)"
                 class="w-6 h-6 p-0 justify-center rounded"
                 @click="toggle(slot.id, day.value)"
               >
@@ -184,6 +196,7 @@ function clearSchedule() {
                 :color="isActive(ALL_DAY_KEY, day.value) ? 'primary' : 'neutral'"
                 variant="soft"
                 square
+                :disabled="!isDayOpen(day.value)"
                 class="w-6 h-6 p-0 justify-center rounded"
                 @click="toggle(ALL_DAY_KEY, day.value)"
               >

@@ -5,7 +5,7 @@
  * crouton-i18n is bundled by core, so every fixture already *boots* it — but
  * nothing asserts it *behaves*. A broken LanguageSwitcher, a stuck locale, or
  * missing-key fallthrough would pass every other spec. This one flips locale
- * through the package-owned switcher (a Nuxt UI USelect) and asserts a known UI
+ * through the user pill's Language submenu and asserts a known UI
  * string changes language; if locale state regresses, the target string never
  * appears and this goes red.
  *
@@ -14,9 +14,9 @@
  * Uses the saved auth state (the switcher + the asserted string live on the
  * authenticated home page).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
+import { test, surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
 
 const i18n = fixtureManifest().i18n
 
@@ -43,11 +43,13 @@ test.describe(`fixture "${FIXTURE}" i18n`, () => {
     // Generous: the dev server compiles the route on first hit.
     await expect(page.getByText(before, { exact: false }).first()).toBeVisible({ timeout: 180000 })
 
-    // The package-owned control: crouton-i18n's LanguageSwitcher renders as a
-    // Nuxt UI USelect, whose trigger is the page's locale combobox. Open it and
-    // pick the target locale by its uppercase-code label.
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: new RegExp(`^${switchTo}$`, 'i') }).click()
+    // The control lives in the bottom-left user pill's menu (Language submenu),
+    // which lists each locale as "<flag> <native name>" (or the uppercase code
+    // when the locale has no known name).
+    await page.getByRole('button', { name: 'Account and status' }).click()
+    await page.getByRole('menuitem', { name: 'Language' }).click()
+    const nativeName = new Intl.DisplayNames([switchTo.toLowerCase()], { type: 'language' }).of(switchTo.toLowerCase()) ?? switchTo
+    await page.getByRole('menuitem', { name: new RegExp(`(^|\\s)(${switchTo}|${nativeName})$`, 'i') }).click()
 
     // The same string now renders in the target language — proof the switcher
     // drove a real locale change, not just a cosmetic select value.

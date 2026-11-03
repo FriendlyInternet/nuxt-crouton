@@ -1,22 +1,55 @@
 {
   "stagingUrl": "https://kassa.pmcp.dev",
   "productionUrl": "https://kassa.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email @fyit/crouton",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email",
   "reviewLogin": {
     "landing": "/admin/test1/sales/events/vlaamsekermis"
   },
-  "watchPaths": [
-    "apps/kassa/**",
-    "packages/crouton/**",
-    "packages/crouton-core/**",
-    "packages/crouton-auth/**",
-    "packages/crouton-email/**",
-    "packages/crouton-i18n/**",
-    "packages/crouton-charts/**",
-    "packages/crouton-pages/**",
-    "packages/crouton-sales/**",
-    "packages/crouton-themes/**",
-    "packages/crouton-admin/**",
-    "pnpm-lock.yaml"
-  ]
+  "smoke": {
+    "crud": {
+      "create": {
+        "path": "/api/teams/{teamId}/sales-categories",
+        "method": "POST",
+        "body": {
+          "eventId": "smoke-check",
+          "title": "smoke-{rand}"
+        }
+      },
+      "idFrom": "id",
+      "update": {
+        "path": "/api/teams/{teamId}/sales-categories/{id}",
+        "method": "PATCH",
+        "body": {
+          "title": "smoke-{rand}-b"
+        }
+      },
+      "read": {
+        "path": "/api/teams/{teamId}/sales-categories?ids={id}",
+        "expectIncludes": "smoke-{rand}-b"
+      },
+      "delete": {
+        "path": "/api/teams/{teamId}/sales-categories/{id}",
+        "method": "DELETE"
+      }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/sync-status"
+      },
+      {
+        "path": "/api/crouton-sales/sync/pull",
+        "expectStatus": [403, 503]
+      },
+      {
+        "path": "/api/teams/{teamId}/sales-events"
+      },
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/devices"
+      },
+      {
+        "path": "/admin/test1/sales/devices"
+      }
+    ]
+  }
 }

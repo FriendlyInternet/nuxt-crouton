@@ -11,7 +11,7 @@ definePageMeta({
 
 const { t } = useT()
 
-useSeoMeta({ title: 'Teams - Super Admin' })
+useSeoMeta({ title: () => t('superAdmin.pageTitle', { page: t('superAdmin.teams.title') }) })
 
 const { data, status, error } = await useFetch('/api/admin/teams', {
   query: { pageSize: 100 }

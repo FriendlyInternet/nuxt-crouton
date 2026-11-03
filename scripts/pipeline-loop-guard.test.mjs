@@ -10,8 +10,12 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
-  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim,
+  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim, claimNotice,
   ALLOWED_BOT, MAX_DEPTH, MAX_CHILDREN, WORKER_TRIGGER, CLAIM_TTL_MINUTES,
 } from './pipeline-loop-guard.mjs'
 
@@ -252,4 +256,97 @@ test('a strong signal outranks a stale label — closed issue still refuses', ()
     now: T0,
   })
   assert.equal(v.action, 'refuse')
+})
+
+// ── #2779: a reopened issue can be worked again ───────────────────────────────────
+test('reopened AFTER the merge → claim proceeds (#813: PR #817 merged 2026-06-24, reopened 2026-10-27)', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-06-24T10:00:00Z' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('merged AFTER the reopen → still refuses', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 900, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-10-28T10:00:00Z' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 900)
+  assert.match(v.reason, /reopened after it/)
+})
+
+test('never reopened → a merged PR still refuses', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-06-24T10:00:00Z' }],
+    lastReopenedAt: null,
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
+
+test('unknown merge time fails safe → still refuses even if reopened', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
+
+// ── #3061: a revision is guarded on its PR, not its issue ───────────────────────────
+test('closed epic issue + open epic PR → a revision proceeds (#3061)', () => {
+  const v = decideClaim({ issueState: 'closed', revision: { branch: 'epic/1-x', pr: 3027, state: 'open', merged: false } })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a revision of a closed, merged or missing PR is refused and names it', () => {
+  const closed = decideClaim({ revision: { branch: 'b', pr: 5, state: 'closed', merged: false } })
+  const merged = decideClaim({ revision: { branch: 'b', pr: 6, state: 'closed', merged: true } })
+  const none = decideClaim({ revision: { branch: 'b', pr: null } })
+  assert.equal(closed.action, 'refuse'); assert.equal(closed.pr, 5); assert.match(closed.reason, /#5/)
+  assert.equal(merged.action, 'refuse'); assert.equal(merged.pr, 6); assert.match(merged.reason, /#6/)
+  assert.equal(none.action, 'refuse'); assert.equal(none.pr, undefined)
+})
+
+test('a failed PR lookup fails open even with a closed issue', () => {
+  assert.equal(decideClaim({ issueState: 'closed', revision: { branch: 'b', lookupFailed: true } }).action, 'proceed')
+})
+
+test('no revision + closed issue still refuses', () => {
+  assert.equal(decideClaim({ issueState: 'closed' }).action, 'refuse')
+})
+
+test('claimNotice posts a revision refusal on the PR, no @mention', () => {
+  const n = claimNotice({ reason: 'PR #3027 is already merged', pr: 3027, issue: 2826 })
+  assert.equal(n.target, 'pr'); assert.equal(n.number, 3027)
+  assert.ok(n.body.startsWith('🔴 Revision did not run')); assert.ok(!n.body.includes('@'))
+  const i = claimNotice({ reason: 'x', issue: 9 })
+  assert.equal(i.target, 'issue'); assert.equal(i.number, 9); assert.match(i.body, /Not picked up — x/)
+})
+
+test('claimNotice replan-failed is a 🔴 on the issue; the ⏸️ case is unchanged', () => {
+  const n = claimNotice({ reason: 'x', issue: 9, kind: 'replan-failed' })
+  assert.equal(n.target, 'issue'); assert.equal(n.number, 9)
+  assert.ok(n.body.startsWith('🔴 Your reply on the held plan produced no new plan — x'))
+  assert.match(claimNotice({ reason: 'x', issue: 9 }).body, /^⏸️/)
+})
+
+test('CLI: a merged-PR revision exits 1 and publishes claim_pr + claim_reason', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'claim-'))
+  const out = join(dir, 'out')
+  const r = spawnSync('node', [new URL('./pipeline-loop-guard.mjs', import.meta.url).pathname, 'claim-guard'], {
+    input: JSON.stringify({ issueState: 'closed', revision: { branch: 'b', pr: 77, state: 'closed', merged: true } }),
+    env: { ...process.env, GITHUB_OUTPUT: out }, encoding: 'utf8',
+  })
+  assert.equal(r.status, 1)
+  const o = readFileSync(out, 'utf8')
+  assert.match(o, /claim_pr=77/); assert.match(o, /claim_reason=PR #77/)
 })

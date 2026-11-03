@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import consola from 'consola'
 
 // Import utilities
-import { toCase, toSnakeCase } from './utils/helpers.ts'
+import { toCase, toSnakeCase, toLayerCamelCase, pascal } from './utils/helpers.ts'
 import { removeFromNuxtConfigExtends } from './utils/update-nuxt-config.ts'
 import { removeSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
 import { removeFromAppConfig } from './utils/update-app-config.ts'
@@ -59,10 +59,7 @@ export async function cleanSchemaIndex(collectionName: string, layer: string, dr
 
   try {
     const cases = toCase(collectionName)
-    const layerCamelCase = layer
-      .split(/[-_]/)
-      .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-      .join('')
+    const layerCamelCase = toLayerCamelCase(layer)
     const exportName = `${layerCamelCase}${cases.pascalCasePlural}`
     const pattern = `${layer}/collections/${cases.plural}`
 
@@ -106,10 +103,7 @@ export async function cleanAppConfig(collectionName: string, layer: string, dryR
   }
 
   try {
-    const layerCamelCase = layer
-      .split(/[-_]/)
-      .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-      .join('')
+    const layerCamelCase = toLayerCamelCase(layer)
 
     const collectionKey = `${layerCamelCase}${cases.pascalCasePlural}`
     const configExportName = `${layerCamelCase}${cases.pascalCasePlural}Config`

@@ -8,11 +8,12 @@
  * When @fyit/crouton-themes is active, also shows the global theme switcher
  * (ko/minimal/kr11) so changes are reflected here in real-time.
  */
+import type {
+  THEME_PRESETS } from '../composables/useTeamTheme'
 import {
   PRIMARY_COLORS,
   NEUTRAL_COLORS,
   DEFAULT_THEME,
-  THEME_PRESETS,
   useAvailableThemePresets,
   type ThemePreset,
   type TeamThemeSettings
@@ -93,12 +94,10 @@ async function handleSave() {
     notify.success(t('themeSettings.saved'), { icon: 'i-lucide-palette' })
 
     emit('saved', saved)
-  }
-  catch (e: unknown) {
+  } catch (e: unknown) {
     const message = e instanceof Error ? e.message : t('common.error')
     notify.error(t('common.error'), { description: message })
-  }
-  finally {
+  } finally {
     isSaving.value = false
   }
 }
@@ -130,7 +129,7 @@ const presetEntries = computed(() =>
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="@container space-y-6">
     <div>
       <h3 class="text-lg font-semibold">
         {{ $t('themeSettings.title') }}
@@ -143,7 +142,9 @@ const presetEntries = computed(() =>
     <!-- Allow users to switch themes -->
     <div class="flex items-center justify-between">
       <div>
-        <p class="text-sm font-medium text-default">{{ $t('themeSettings.allowUserThemes') }}</p>
+        <p class="text-sm font-medium text-default">
+          {{ $t('themeSettings.allowUserThemes') }}
+        </p>
         <p class="text-xs text-muted mt-0.5">
           {{ $t('themeSettings.allowUserThemesDescription') }}
         </p>
@@ -168,13 +169,15 @@ const presetEntries = computed(() =>
     </div>
 
     <template v-else>
-      <!-- Two-column layout: controls left, preview right -->
-      <div class="flex gap-8 items-start">
+      <!-- Controls + preview: side by side when the pane is wide, stacked when narrow -->
+      <div class="flex flex-col @2xl:flex-row gap-6 @2xl:gap-8 @2xl:items-start">
         <!-- Left: Selection Controls -->
         <div class="flex-1 min-w-0 space-y-5">
           <!-- Preset Picker (vertical) -->
           <div class="space-y-2">
-            <label class="text-sm font-medium text-default">{{ $t('themeSettings.preset') }}</label>
+            <p class="text-sm font-medium text-default">
+              {{ $t('themeSettings.preset') }}
+            </p>
             <!-- Preset cards — UButton (not raw buttons) so themes reach the
                  theme picker itself (#1410); selection ring wins via class merge -->
             <div class="flex flex-col gap-2">
@@ -202,10 +205,10 @@ const presetEntries = computed(() =>
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium text-default">
-                    {{ preset.label }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustom') : preset.label }}
                   </div>
                   <div class="text-xs text-muted truncate">
-                    {{ preset.description }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustomDescription') : preset.description }}
                   </div>
                 </div>
                 <UIcon
@@ -243,57 +246,59 @@ const presetEntries = computed(() =>
         </div>
 
         <!-- Right: Live Preview -->
-        <div class="w-64 shrink-0 space-y-2 sticky top-4">
-          <label class="text-sm font-medium text-default">{{ $t('themeSettings.livePreview') }}</label>
+        <div class="space-y-2 @2xl:w-64 @2xl:shrink-0 @2xl:sticky @2xl:top-4">
+          <p class="text-sm font-medium text-default">
+            {{ $t('themeSettings.livePreview') }}
+          </p>
           <div class="p-4 border border-muted rounded-lg bg-muted/10 space-y-4">
             <div class="flex flex-wrap gap-2">
               <UButton
                 color="primary"
                 size="sm"
               >
-                Primary
+                {{ t('themeSettings.previewPrimary') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="outline"
                 size="sm"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="soft"
                 size="sm"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="ghost"
                 size="sm"
               >
-                Ghost
+                {{ t('themeSettings.previewGhost') }}
               </UButton>
             </div>
             <div class="flex flex-wrap gap-2">
               <UBadge color="primary">
-                Badge
+                {{ t('themeSettings.previewBadge') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="outline"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="soft"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UBadge>
             </div>
             <UInput
-              placeholder="Sample input..."
+              :placeholder="t('themeSettings.previewInput')"
               icon="i-lucide-search"
             />
           </div>
@@ -303,7 +308,7 @@ const presetEntries = computed(() =>
       <USeparator />
 
       <!-- Actions -->
-      <div class="flex justify-between items-center">
+      <div class="flex flex-wrap justify-between items-center gap-3">
         <UButton
           variant="ghost"
           color="neutral"

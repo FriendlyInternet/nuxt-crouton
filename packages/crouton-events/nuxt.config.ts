@@ -10,12 +10,6 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-events'
 
 export default defineNuxtConfig({
 
-  hub: {
-    migrations: {
-      dir: './server/database/migrations'
-    }
-  },
-
   // Runtime config for event tracking
   runtimeConfig: {
     public: {
@@ -34,5 +28,15 @@ export default defineNuxtConfig({
       }
     }
   },
-  compatibilityDate: '2024-10-16'
+  compatibilityDate: '2024-10-16',
+
+  // i18n translations
+  i18n: {
+    locales: [
+      { code: 'en', name: 'English', file: 'en.json' },
+      { code: 'nl', name: 'Nederlands', file: 'nl.json' },
+      { code: 'fr', name: 'Français', file: 'fr.json' }
+    ],
+    langDir: '../i18n/locales'
+  }
 })

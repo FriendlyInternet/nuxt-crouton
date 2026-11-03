@@ -7,6 +7,8 @@ name: Deploy POCs (preview)
 #
 # Triggers:
 #   • pull_request touching pocs/**  → deploy each CHANGED, opted-in POC (auto preview).
+#   • push to main touching pocs/**  → redeploy each CHANGED, opted-in POC's staging Worker
+#                                      (trunk = staging, like deploy-apps.yml; #2896).
 #   • workflow_dispatch(app)         → deploy one named POC (the bot can call this via the
 #                                      API with only `actions` perms — no `workflows` scope).
 #
@@ -14,9 +16,16 @@ name: Deploy POCs (preview)
 # Staging-only and safe-to-fail; promote pocs/<name> → apps/<name> for production.
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pocs/**'
   pull_request:
     paths:
       - 'pocs/**'
+      # A shared UI piece changed → deploy the gallery so the PR gets a review link (#2462).
+      - 'packages/*/app/components/**'
       - '.github/workflows/deploy-pocs.yml'
       - '.github/workflows/deploy-app.yml'
   workflow_dispatch:
@@ -41,6 +50,13 @@ on:
         options:
           - deploy
           - version
+      refresh:
+        description: >-
+          Data-refresh redeploy (e.g. loop-station after its jsonl is committed). Gets its
+          own concurrency slot so it never bumps another POC's queued deploy (#3157).
+        required: false
+        default: false
+        type: boolean
       review_pr:
         description: >-
           Optional PR number to wire the preview-review bridge to (#607). Set it
@@ -55,18 +71,22 @@ on:
 # caller; the reusable deploy-app.yml inherits it, so groups are per-POC/PR (not on the
 # leaf) — no cross-POC cancellation. (#1523)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # Keyed on the PR when there is one (#2608): a manual dispatch with review_pr deploys the SAME
+  # preview as the PR's own run, but has no head_ref, so keying on head_ref || ref put the two in
+  # different groups and they raced (#2571).
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || (github.event.inputs.refresh == 'true' && format('refresh-{0}', github.event.inputs.app)) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Figure out which opted-in POCs to deploy → a matrix the deploy job fans out over.
   detect:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: set
@@ -75,11 +95,26 @@ jobs:
           DISPATCH_APP: ${{ github.event.inputs.app }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
           names=()
           if [ "$EVENT" = "workflow_dispatch" ]; then
             [ -n "${DISPATCH_APP:-}" ] && names+=("$DISPATCH_APP")
+          elif [ "$EVENT" = "push" ]; then
+            # Merge to main: diff the pushed range. A brand-new/zero `before` falls back to the
+            # tip commit alone. Gallery is PR-only (review links), so it is not added here.
+            if [ -z "${PUSH_BEFORE//0/}" ]; then
+              changed=$(git diff-tree --no-commit-id --name-only -r "$PUSH_AFTER" || true)
+            else
+              changed=$(git diff --name-only "$PUSH_BEFORE" "$PUSH_AFTER" || true)
+            fi
+            while IFS= read -r f; do
+              case "$f" in
+                pocs/*/*) names+=("$(printf '%s' "$f" | cut -d/ -f2)");;
+              esac
+            done <<< "$changed"
           else
             changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
             while IFS= read -r f; do
@@ -87,6 +122,12 @@ jobs:
                 pocs/*/*) names+=("$(printf '%s' "$f" | cut -d/ -f2)");;
               esac
             done <<< "$changed"
+            # #2462: a changed shared UI piece (packages/*/app/components/**.vue) has no app of
+            # its own to preview — the gallery shows every piece, so it deploys for this PR and
+            # deploy-app.yml comments a direct link per changed piece.
+            if [ "$(printf '%s\n' "$changed" | node scripts/gallery-links.mjs --touches)" = "true" ]; then
+              names+=("gallery")
+            fi
           fi
 
           include='[]'
@@ -160,6 +201,7 @@ jobs:
     needs: detect
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'version' && needs.detect.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: staging
     permissions:
       contents: read
@@ -176,8 +218,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Fail in seconds, not after a full install + package build (#1836). This
       # mode runs the POC's own `cf:version`, which nothing generates and which
       # a hand-wired POC can simply lack — and pnpm's own error for that is
@@ -208,10 +249,9 @@ jobs:
           fi
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'

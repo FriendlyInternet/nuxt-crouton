@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame } from './capture-review-surfaces.mjs'
+import { readFileSync } from 'node:fs'
+import { inflateSync } from 'node:zlib'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces } from './capture-review-surfaces.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -61,4 +63,125 @@ test('isFlatFrame: a single-colour frame is flat (blank), a varied one is not', 
     }
   }
   assert.equal(isFlatFrame({ width: 8, height: 8, channels: 4, data: varied }), false)
+})
+
+// #2433 — the PR (copied from its issue) names the page that shows the change. Without it the
+// capture shot each app's fixed landing page, and that unrelated screenshot satisfied the
+// sign-off gate (#2420: the kassa POS launcher, for a page-editor change).
+const HOLD = '<!-- deploy-preview: full-watch -->'
+const EDITOR = '<!-- review-surface: kassa /admin/test1/workspace?page=seed:page:test1:vlaamsekermis name:editor wait:2500 -->'
+
+test('outName: includes the app so two apps on one PR do not overwrite each other', () => {
+  assert.equal(outName(2420, 'preview', 'kassa'), 'pr2420-kassa-preview.png')
+  assert.equal(outName(2420, 'preview', 'velo'), 'pr2420-velo-preview.png')
+})
+
+test('parsePrSurfaces: picks this app\'s markers, with path query, name and steps', () => {
+  const body = `Closes #1\n${EDITOR}\n<!-- review-surface: velo /admin/test1/pages -->`
+  assert.deepEqual(parsePrSurfaces(body, 'kassa'), [
+    { name: 'editor', path: '/admin/test1/workspace?page=seed:page:test1:vlaamsekermis', do: ['wait:2500'] },
+  ])
+  assert.deepEqual(parsePrSurfaces(body, 'velo'), [{ name: 'pages', path: '/admin/test1/pages', do: [] }])
+  assert.deepEqual(parsePrSurfaces(body, 'triage'), [])
+  assert.deepEqual(parsePrSurfaces('', 'kassa'), [])
+})
+
+test('resolveSurfaces: a declared surface replaces the app default', () => {
+  const manifest = { reviewLogin: { landing: '/admin/test1/sales/events/vlaamsekermis' } }
+  const s = resolveSurfaces({ manifest, prBody: `${HOLD}\n${EDITOR}`, app: 'kassa' })
+  assert.equal(s.surfaces[0].name, 'editor')
+  assert.equal(s.surfaces.length, 1)
+})
+
+test('resolveSurfaces: a held PR that declares nothing for this app gets NO start-page shot', () => {
+  const manifest = { reviewLogin: { landing: '/admin/test1/sales/events/vlaamsekermis' } }
+  const s = resolveSurfaces({ manifest, prBody: `Closes #1${HOLD}`, app: 'kassa' })
+  assert.deepEqual(s.surfaces, [])
+  assert.match(s.reason, /declares no review-surface/)
+})
+
+test('resolveSurfaces: an ordinary app PR keeps the manifest surfaces', () => {
+  const manifest = { reviewLogin: { landing: '/admin/test1/sales' } }
+  assert.deepEqual(resolveSurfaces({ manifest, prBody: 'Closes #5', app: 'kassa' }).surfaces,
+    [{ name: 'preview', path: '/admin/test1/sales', do: [] }])
+})
+
+// Minimal decoder for the 8-bit non-interlaced RGB(A) fixture — the scripts CI job has no
+// `pnpm install`, so `sharp` is not resolvable there.
+function idatPayload(buf) {
+  const idat = []
+  for (let o = 8; o < buf.length;) {
+    const len = buf.readUInt32BE(o)
+    if (buf.toString('latin1', o + 4, o + 8) === 'IDAT') idat.push(buf.subarray(o + 8, o + 8 + len))
+    o += 12 + len
+  }
+  return Buffer.concat(idat)
+}
+
+function paethPredictor(a, b, c) {
+  const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c)
+  if (pa <= pb && pa <= pc) return a
+  return pb <= pc ? b : c
+}
+
+function unfilterRow(raw, data, y, stride, channels) {
+  const filter = raw[y * (stride + 1)]
+  for (let x = 0; x < stride; x++) {
+    const v = raw[y * (stride + 1) + 1 + x]
+    const a = x >= channels ? data[y * stride + x - channels] : 0
+    const b = y > 0 ? data[(y - 1) * stride + x] : 0
+    const c = x >= channels && y > 0 ? data[(y - 1) * stride + x - channels] : 0
+    data[y * stride + x] = (v + [0, a, b, (a + b) >> 1, paethPredictor(a, b, c)][filter]) & 255
+  }
+}
+
+function decodePng(buf) {
+  const width = buf.readUInt32BE(16)
+  const height = buf.readUInt32BE(20)
+  const channels = buf[25] === 6 ? 4 : 3
+  const raw = inflateSync(idatPayload(buf))
+  const stride = width * channels
+  const data = Buffer.alloc(stride * height)
+  for (let y = 0; y < height; y++) unfilterRow(raw, data, y, stride, channels)
+  return { data, width, height, channels }
+}
+
+test('isFlatFrame: rejects the committed all-white 390px capture (#2526)', () => {
+  const frame = decodePng(readFileSync(new URL('./lib/__fixtures__/blank-white-390.png', import.meta.url)))
+  assert.equal(isFlatFrame(frame), true)
+})
+
+test('resultLine is one machine-readable line per surface (#2572)', () => {
+  assert.equal(resultLine('month', 'rejected', 'blank/flat\ncapture'), 'surface=month status=rejected reason=blank/flat capture')
+})
+
+test("parsePrSurfaces keeps a quoted has-text('Month') selector intact (#2572)", () => {
+  const body = "<!-- review-surface: velo /admin/test1/bookings name:month click:button:has-text('Month') wait:1500 -->"
+  assert.deepEqual(parsePrSurfaces(body, 'velo'), [{ name: 'month', path: '/admin/test1/bookings', do: ["click:button:has-text('Month')", 'wait:1500'] }])
+})
+
+test('deriveSurfaces: page file → route, team segment → seeded team (#2698)', () => {
+  const s = deriveSurfaces({ app: 'velo', changedFiles: [
+    'apps/velo/app/pages/admin/[team]/sales/index.vue',
+    'apps/velo/app/pages/index.vue',
+    'apps/velo/app/pages/posts/[id].vue', // unknown dynamic segment → skipped
+    'apps/velo/app/components/Foo.vue', // not a page, not gallery → skipped
+    'README.md'
+  ] })
+  assert.deepEqual(s.map(x => x.path), ['/admin/test1/sales', '/'])
+})
+
+test('deriveSurfaces: package component only maps for the gallery', () => {
+  const f = ['packages/crouton-core/app/components/Pill.vue']
+  assert.deepEqual(deriveSurfaces({ app: 'velo', changedFiles: f }), [])
+  const g = deriveSurfaces({ app: 'gallery', changedFiles: f })
+  assert.equal(g[0].path, '/__review?file=packages%2Fcrouton-core%2Fapp%2Fcomponents%2FPill.vue')
+})
+
+test('resolveSurfaces: declared wins over derived; derived wins over the landing page', () => {
+  const changedFiles = ['apps/velo/app/pages/about.vue']
+  const body = '<!-- review-surface: velo /x -->'
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: body, app: 'velo', changedFiles }).surfaces[0].path, '/x')
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles }).surfaces[0].path, '/about')
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: [] }).surfaces[0].path, '/')
 })

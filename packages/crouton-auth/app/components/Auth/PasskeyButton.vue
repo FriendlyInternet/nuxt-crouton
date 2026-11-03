@@ -25,7 +25,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  text: 'Sign in with Passkey',
+  text: '',
   variant: 'outline',
   color: 'neutral',
   forceShow: false
@@ -36,6 +36,7 @@ const emit = defineEmits<{
   click: []
 }>()
 
+const { t } = useT()
 const { hasPasskeys, isWebAuthnSupported } = usePasskeys()
 
 // Check if passkey is available
@@ -60,6 +61,6 @@ function handleClick() {
     :loading="loading"
     @click="handleClick"
   >
-    {{ text }}
+    {{ text || t('auth.signInWithPasskey') }}
   </UButton>
 </template>

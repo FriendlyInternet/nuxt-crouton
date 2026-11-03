@@ -23,6 +23,8 @@
 </template>
 
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
+
 interface Props {
   modelValue?: string[] | null
   dependentValue?: string | null
@@ -59,8 +61,8 @@ const resolvedComponent = computed(() => {
   // Check if there's a custom component registered for this field
   const customComponent = dependentFieldComponentMap[props.dependentCollection]?.[props.dependentField]
 
-  if (customComponent) {
-    return resolveComponent(customComponent)
+  if (customComponent && Object.hasOwn(collectionForms, customComponent)) {
+    return collectionForms[customComponent]
   }
 
   // Fall back to default FormDependentButtonGroup

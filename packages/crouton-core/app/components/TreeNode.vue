@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
             color="neutral"
             variant="ghost"
             size="xs"
-            aria-label="Actions"
+            :aria-label="t('table.actions')"
             @click.stop
           />
         </UDropdownMenu>
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
             color="neutral"
             variant="ghost"
             size="xs"
-            aria-label="Add"
+            :aria-label="t('tree.add')"
             @click.stop
           />
         </UDropdownMenu>

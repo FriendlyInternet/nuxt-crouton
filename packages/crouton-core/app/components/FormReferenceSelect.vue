@@ -49,7 +49,7 @@
             color="neutral"
             variant="ghost"
             size="xs"
-            :aria-label="t('actions.edit')"
+            :aria-label="t('common.edit')"
             @click.stop.prevent="handleEdit((item as Record<string, any>)?.id)"
           />
         </span>

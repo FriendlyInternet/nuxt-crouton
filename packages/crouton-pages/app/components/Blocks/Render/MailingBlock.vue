@@ -16,6 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const email = ref('')
 const submitted = ref(false)
@@ -45,8 +46,8 @@ const submitted = ref(false)
         v-if="!attrs.actionUrl"
         color="neutral"
         icon="i-lucide-mail"
-        title="No form URL configured"
-        description="Edit this block to enter a subscribe endpoint URL."
+        :title="t('pages.blockRender.noFormUrlTitle')"
+        :description="t('pages.blockRender.noFormUrlDescription')"
       />
 
       <!-- Success message -->
@@ -55,7 +56,7 @@ const submitted = ref(false)
         class="flex items-center gap-2 p-3 rounded-lg bg-[var(--ui-bg-elevated)] text-sm text-[var(--ui-text-highlighted)]"
       >
         <UIcon name="i-lucide-check-circle" class="size-5 text-green-500 shrink-0" />
-        <span>Thanks for subscribing!</span>
+        <span>{{ t('pages.blockRender.subscribed') }}</span>
       </div>
 
       <!-- Subscribe form -->
@@ -72,12 +73,12 @@ const submitted = ref(false)
           v-model="email"
           type="email"
           :name="attrs.emailFieldName || 'EMAIL'"
-          :placeholder="attrs.placeholder || 'Enter your email'"
+          :placeholder="attrs.placeholder || t('pages.blockRender.emailPlaceholder')"
           required
           class="flex-1 min-w-0"
         />
         <UButton type="submit" color="primary">
-          {{ attrs.buttonLabel || 'Subscribe' }}
+          {{ attrs.buttonLabel || t('pages.blockRender.subscribe') }}
         </UButton>
 
         <!-- Honeypot (bot protection) -->

@@ -5,7 +5,7 @@
  * Renders a booking panel on public pages.
  * BlockContent.vue already wraps this in <ClientOnly> (clientOnly: true in definition).
  *
- * When access is 'members', shows a login prompt for unauthenticated users.
+ * Logged-out visitors get a login prompt (default) or nothing (`loggedOut: 'hide'`).
  *
  * NOTE: This component must NOT use top-level await (no async setup).
  */
@@ -13,7 +13,8 @@
 interface BookingBlockAttrs {
   title?: string
   emptyMessage?: string
-  access?: 'public' | 'members'
+  /** What a logged-out visitor sees (#2263). Older pages may still carry `access`. */
+  loggedOut?: 'prompt' | 'hide'
   scope?: 'personal' | 'team'
 }
 
@@ -27,14 +28,18 @@ const { loggedIn } = useAuth()
 const { t } = useI18n()
 const route = useRoute()
 
-const requiresLogin = computed(() => props.attrs.access === 'members' && !loggedIn.value)
+// Booking needs an account: a logged-out visitor gets a login prompt (default)
+// or nothing. Pages saved with the old `access` attr fall back to the prompt.
+const loggedOutMode = computed(() => props.attrs.loggedOut ?? 'prompt')
+const requiresLogin = computed(() => !loggedIn.value)
+const hiddenForVisitor = computed(() => requiresLogin.value && loggedOutMode.value === 'hide')
 
 const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route.fullPath)}`)
 </script>
 
 <template>
-  <div class="booking-block">
-    <!-- Members-only: show login prompt when not authenticated -->
+  <div v-if="!hiddenForVisitor" class="booking-block">
+    <!-- Logged out: show a login prompt (booking needs an account) -->
     <div
       v-if="requiresLogin"
       class="bg-muted/80 backdrop-blur-sm rounded-3xl border border-default shadow-lg shadow-neutral-950/5 p-8 text-center"
@@ -60,7 +65,7 @@ const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route
       </div>
     </div>
 
-    <!-- Authenticated or public: show the booking panel -->
+    <!-- Logged in: show the booking panel -->
     <div
       v-else
       class="bg-default backdrop-blur-sm rounded-3xl border border-default shadow-lg shadow-neutral-950/5 overflow-clip"

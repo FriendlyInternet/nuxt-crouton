@@ -135,7 +135,7 @@ crouton-generate seed-translations --layer shop # Specific layer
 // Layer nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-i18n'
   ],
   i18n: {
@@ -202,7 +202,7 @@ langDir: './locales'
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Bundled by**: `@fyit/crouton-core` (extends this layer; apps may list it explicitly too)
 - **Peer deps**: `@nuxtjs/i18n ^9.0.0`, `drizzle-orm >=0.30.0`, `zod ^3.20.0`
 
 ## Testing

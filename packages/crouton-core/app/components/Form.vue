@@ -5,8 +5,8 @@
     v-for="(state, index) in modalStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`Form for ${state.action || 'managing'} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormDescription(state)"
     size="lg"
     @update:open="(val: boolean) => handleClose(state.id, val)"
     @after:leave="() => handleAfterLeave(state.id)"
@@ -34,8 +34,8 @@
     v-for="(state, index) in dialogStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormTitle(state)"
     @update:open="(val: boolean) => handleClose(state.id, val)"
     @after:leave="() => handleAfterLeave(state.id)"
   >
@@ -43,8 +43,7 @@
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
           <h2>
-            <span class="capitalize">{{ state.action }}</span>
-            {{ getCollectionName(state.collection) }}
+            {{ getFormTitle(state) }}
           </h2>
           <UButton
             icon="i-lucide-x"
@@ -78,8 +77,8 @@
     v-for="(state, index) in slideoverStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`Form for ${state.action || 'managing'} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormDescription(state)"
     side="right"
     :close="false"
     :ui="getSlideoverUi(state, index)"
@@ -111,6 +110,7 @@
           variant="ghost"
           color="neutral"
           size="xs"
+          class="hidden md:inline-flex"
           :title="state.isExpanded ? t('form.collapse') : t('form.expand')"
           @click.stop="toggleExpand(state.id)"
         />
@@ -177,6 +177,16 @@ const getCollectionName = (collection: string | null): string => {
   return collection ? collectionWithCapitalSingular(collection) : ''
 }
 
+// Translated title, e.g. "Create Booking"
+const getFormTitle = (state: CroutonState): string => {
+  const collection = getCollectionName(state.collection)
+  return state.action ? t(`form.titles.${state.action}`, { collection }) : collection
+}
+
+// Translated (screen-reader) description of the open form
+const getFormDescription = (state: CroutonState): string =>
+  t(`form.descriptions.${state.action || 'manage'}`, { collection: getCollectionName(state.collection) })
+
 // Helper for getting previous slideover safely
 const getPreviousSlideover = (index: number) => {
   const prev = slideoverStates.value[index - 1]
@@ -231,7 +241,9 @@ const getSlideoverUi = (state: CroutonState, index: number) => {
       content: `fixed inset-0 w-screen max-w-none ${baseTransition}`,
       overlay: 'fixed inset-0 bg-gray-900/80 backdrop-blur-sm transition-opacity duration-300',
       body: `flex-1 overflow-y-auto p-6 ${baseTransition}`,
-      header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 border-b border-gray-200 dark:border-gray-700'
+      header: 'flex items-center gap-1.5 px-4 py-2 sm:p-4 sm:px-6 sm:min-h-16 border-b border-gray-200 dark:border-gray-700',
+      // Phones: the description repeats the title — keep it for screen readers only
+      description: 'sr-only sm:not-sr-only'
     }
   }
 
@@ -239,7 +251,9 @@ const getSlideoverUi = (state: CroutonState, index: number) => {
   return {
     content: `fixed right-0 inset-y-0 w-full max-w-2xl ${baseTransition}`,
     body: `flex-1 overflow-y-auto p-4 ${baseTransition}`,
-    header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 border-b border-gray-200 dark:border-gray-700'
+    header: 'flex items-center gap-1.5 px-4 py-2 sm:p-4 sm:px-6 sm:min-h-16 border-b border-gray-200 dark:border-gray-700',
+      // Phones: the description repeats the title — keep it for screen readers only
+      description: 'sr-only sm:not-sr-only'
   }
 }
 

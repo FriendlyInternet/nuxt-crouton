@@ -12,7 +12,7 @@
 // Idempotent: skips any ref that ALREADY has an escaped finding (in ANY gate), so
 // a manually-recorded escape (e.g. the #862 human-revert seed) is never doubled.
 //
-// Runs in a MAIN-context rollup (loop-station-findings.yml) — writing the committed
+// Runs in a MAIN-context rollup (weekly.yml `findings` job) — writing the committed
 // findings.jsonl here is correct; a PR-branch run must not call this.
 //
 // Usage:

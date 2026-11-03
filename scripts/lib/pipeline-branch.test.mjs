@@ -20,8 +20,8 @@ test('the pi worker branch is a pipeline branch — the case that was missing', 
   assert.equal(isPipelineBranch('work-1642'), true)
 })
 
-test('the claude lane still matches', () => {
-  assert.equal(isPipelineBranch('claude/issue-123'), true)
+test('the retired claude lane no longer matches', () => {
+  assert.equal(isPipelineBranch('claude/issue-123'), false)
 })
 
 test('HUMAN branches are NOT pipeline branches — the half that protects your PRs', () => {
@@ -42,7 +42,7 @@ test('empty and nullish refs are safe', () => {
 })
 
 test('the prefix list is exported so the workflows share one definition', () => {
-  assert.deepEqual(PIPELINE_BRANCH_PREFIXES, ['claude/issue-', 'work-'])
+  assert.deepEqual(PIPELINE_BRANCH_PREFIXES, ['work-'])
 })
 
 /* ── Drift guard: the workflows CANNOT import this module ──────────────────────
@@ -50,7 +50,7 @@ test('the prefix list is exported so the workflows share one definition', () => 
  * A GitHub `if:` expression is not JavaScript, and neither workflow checks out the repo
  * before it evaluates — so both must repeat the prefixes as literals. That duplication is
  * unavoidable; leaving it *undetectable* is not, and undetectable duplication is precisely
- * how the fix-bot's guard fell behind `pipeline-pr-status.yml` for the entire pi era.
+ * how the fix-bot's guard fell behind the status workflow for the entire pi era.
  *
  * So this test reads the actual workflow files and asserts they agree with the module. It
  * fails if someone adds a prefix here and forgets a workflow, or vice versa.
@@ -62,7 +62,6 @@ import { dirname, join } from 'node:path'
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const WORKFLOWS = [
   '.github/workflows/fix-ci-on-failure.yml',
-  '.github/workflows/pipeline-pr-status.yml',
 ]
 
 for (const wf of WORKFLOWS) {

@@ -11,29 +11,10 @@ export default {
     sales: { config: { print: { enabled: true } } }
   },
 
-  collections: [
-    { name: 'events', fieldsFile: './schemas/events.json' },
-    { name: 'products', fieldsFile: './schemas/products.json', sortable: true },
-    { name: 'categories', fieldsFile: './schemas/categories.json' },
-    { name: 'orders', fieldsFile: './schemas/orders.json' },
-    { name: 'orderitems', fieldsFile: './schemas/orderItems.json' },
-    { name: 'locations', fieldsFile: './schemas/locations.json' },
-    { name: 'clients', fieldsFile: './schemas/clients.json' },
-    { name: 'eventsettings', fieldsFile: './schemas/eventSettings.json' },
-    { name: 'printers', fieldsFile: './schemas/printers.json' },
-    { name: 'printqueues', fieldsFile: './schemas/printQueues.json' }
-  ],
-
-  targets: [
-    {
-      layer: 'sales',
-      collections: [
-        'events', 'products', 'categories', 'orders',
-        'orderitems', 'locations', 'clients', 'eventsettings',
-        'printers', 'printqueues'
-      ]
-    }
-  ],
+  // The sales collections ship with @fyit/crouton-sales (#2278) — nothing to
+  // generate here.
+  collections: [],
+  targets: [],
 
   dialect: 'sqlite'
 }

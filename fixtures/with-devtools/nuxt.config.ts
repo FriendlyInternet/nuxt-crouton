@@ -3,7 +3,7 @@ export default defineNuxtConfig({
   // @fyit/crouton-devtools is what `crouton init` adds (#595). In dev it
   // installModule's @fyit/crouton-feedback → the glasses launcher mounts. This
   // fixture exists to smoke that devtools → feedback wiring (#978).
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },

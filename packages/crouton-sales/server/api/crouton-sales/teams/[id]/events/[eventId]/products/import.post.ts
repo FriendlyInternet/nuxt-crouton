@@ -32,9 +32,9 @@ import {
   type TitleRow,
 } from '../../../../../../../utils/plan-product-import'
 import { chunkRowsForTable } from '@fyit/crouton-core/shared/utils/d1'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
-import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
-import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
+import { salesProducts } from '../../../../../../../../collections/products/server/database/schema'
+import { salesCategories } from '../../../../../../../../collections/categories/server/database/schema'
+import { salesLocations } from '../../../../../../../../collections/locations/server/database/schema'
 
 /**
  * Insert freshly-minted relation rows (if any) and fold their ids into the lookup the

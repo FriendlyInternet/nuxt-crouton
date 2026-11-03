@@ -19,7 +19,7 @@
  * toggle via the pane header when it binds v-model:filters-open.
  */
 import { SALES_CHART_KINDS } from '../../utils/chart-blocks'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{
   event: SalesEvent

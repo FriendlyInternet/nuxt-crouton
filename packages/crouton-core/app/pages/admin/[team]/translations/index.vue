@@ -19,13 +19,13 @@ const { t } = useT()
     <template #header>
       <UDashboardNavbar :title="t('navigation.translations') || 'Translations'">
         <template #leading>
-          <UDashboardSidebarCollapse />
+          <UDashboardSidebarCollapse class="hidden lg:flex" />
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <CroutonI18nUiList />
+      <TranslationsUiList />
     </template>
   </UDashboardPanel>
 </template>

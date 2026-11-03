@@ -1,16 +1,14 @@
 // Generator for Field component folder (Input.vue, Select.vue, CardMini.vue)
-import { toCase } from '../utils/helpers.ts'
+import { toCase, jsString, htmlAttr } from '../utils/helpers.ts'
 
 /**
  * Generate field-specific components for dependent field rendering
  * Creates [FieldName]/Input.vue, Select.vue, and CardMini.vue
  *
- * @param {string|object} fieldOrName - Field name string or field object
+ * @param {object} field - Field object
  * @param {object} collectionData - Collection data with layer info
  */
-export function generateFieldComponents(fieldOrName: string | Record<string, any>, collectionData: Record<string, any>): { input: string; select: string; cardMini: string } {
-  // Support both old signature (fieldName string) and new signature (field object)
-  const field = typeof fieldOrName === 'object' ? fieldOrName : { name: fieldOrName }
+export function generateFieldComponents(field: Record<string, any>, collectionData: Record<string, any>): { input: string; select: string; cardMini: string } {
   const fieldName = field.name
   const { pascalCase: fieldPascalCase } = toCase(fieldName)
   const { pascalCase, pascalCasePlural, layerPascalCase } = collectionData
@@ -35,14 +33,14 @@ export function generateFieldComponents(fieldOrName: string | Record<string, any
 function generateInputComponent(field: Record<string, any>, fieldPascalCase: string, collectionData: Record<string, any>): string {
   const { layerPascalCase, pascalCasePlural } = collectionData
   const interfaceName = `${layerPascalCase}${pascalCasePlural}${fieldPascalCase}Item`
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
   const hasProperties = Object.keys(properties).length > 0
 
   // Generate interface fields from schema properties
   const interfaceFields = ['id: string']
   if (hasProperties) {
     for (const [propName, propDef] of Object.entries(properties)) {
-      const tsType = mapPropertyTypeToTS((propDef as any).type)
+      const tsType = (propDef as any).tsType || 'string'
       const optional = (propDef as any).required !== true ? '?' : ''
       interfaceFields.push(`${propName}${optional}: ${tsType}`)
     }
@@ -56,38 +54,44 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
     for (const [propName, propDef] of Object.entries(properties)) {
       const def = propDef as any
       const label = def.label || capitalizeFirst(propName)
-      const inputInfo = getInputInfoForProperty(def.type)
+      // The manifest decides the control (attached by loadFields as def.component);
+      // a property that reaches us without one renders UInput (#2286).
+      const component = def.component || 'UInput'
 
-      if (inputInfo.component === 'UInputNumber') {
+      if (component === 'UInputNumber') {
         const minAttr = def.min != null ? ` :min="${def.min}"` : ''
-        const placeholder = def.default != null ? ` placeholder="${def.default}"` : ''
+        const placeholder = def.default != null ? ` placeholder="${htmlAttr(def.default)}"` : ''
         formFields.push(`      <UFormField class="w-24">
         <UInputNumber
           v-model="model.${propName}"
           size="xl"${minAttr}${placeholder}
         />
       </UFormField>`)
-      } else if (inputInfo.component === 'USwitch') {
+      } else if (component === 'UCheckbox') {
         formFields.push(`      <UFormField>
-        <USwitch v-model="model.${propName}" />
-        <span class="text-sm ml-2">${label}</span>
+        <UCheckbox v-model="model.${propName}" />
+        <span class="text-sm ml-2">${htmlAttr(label)}</span>
       </UFormField>`)
-      } else if (inputInfo.component === 'UTextarea') {
+      } else if (component === 'CroutonCalendar') {
+        formFields.push(`      <UFormField class="flex-1">
+        <CroutonCalendar v-model:date="model.${propName}" />
+      </UFormField>`)
+      } else if (component === 'UTextarea') {
         formFields.push(`      <UFormField class="flex-1">
         <UTextarea
           v-model="model.${propName}"
           class="w-full"
           size="xl"
-          placeholder="Enter ${label.toLowerCase()}"
+          placeholder="${htmlAttr(`Enter ${label.toLowerCase()}`)}"
         />
       </UFormField>`)
       } else {
         formFields.push(`      <UFormField class="flex-1">
-        <UInput
+        <${component}
           v-model="model.${propName}"
           class="w-full"
           size="xl"
-          placeholder="Enter ${label.toLowerCase()}"
+          placeholder="${htmlAttr(`Enter ${label.toLowerCase()}`)}"
         />
       </UFormField>`)
       }
@@ -139,12 +143,12 @@ function generateTranslatableInputComponent(field: Record<string, any>, fieldPas
   const interfaceName = `${layerPascalCase}${pascalCasePlural}${fieldPascalCase}Item`
 
   const translatableProps = field.meta?.translatableProperties || []
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
 
   // Generate interface fields
   const interfaceFields = ['id: string']
   for (const [propName, propDef] of Object.entries(properties)) {
-    const tsType = mapPropertyTypeToTS(propDef.type)
+    const tsType = propDef.tsType || 'string'
     const optional = propDef.required !== true ? '?' : ''
     interfaceFields.push(`${propName}${optional}: ${tsType}`)
   }
@@ -293,16 +297,21 @@ ${englishFormFields.join('\n\n')}
 /**
  * Generate form field markup for a translatable property
  */
+/** Escape for embedding in a backtick template literal inside a Vue binding. */
+function tplString(value: unknown): string {
+  return jsString(value).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')
+}
+
 function generateTranslatableFormField(propName: string, label: string, propDef: Record<string, any>, isRequired: boolean): string {
   const inputType = propDef.type === 'text' ? 'UTextarea' : 'UInput'
   const placeholder = propDef.placeholder || `Enter ${label.toLowerCase()}`
 
   // Generate proper label with optional required asterisk
   const labelExpr = isRequired
-    ? `\`${label} (\${editingLocale.toUpperCase()})\${editingLocale === 'en' ? ' *' : ''}\``
-    : `\`${label} (\${editingLocale.toUpperCase()})\``
+    ? `\`${htmlAttr(tplString(label))} (\${editingLocale.toUpperCase()})\${editingLocale === 'en' ? ' *' : ''}\``
+    : `\`${htmlAttr(tplString(label))} (\${editingLocale.toUpperCase()})\``
 
-  return `    <!-- ${label} (translatable) -->
+  return `    <!-- ${htmlAttr(label)} (translatable) -->
     <UFormField
       :label="${labelExpr}"
       ${isRequired ? `:required="editingLocale === 'en'"` : ''}
@@ -311,7 +320,7 @@ function generateTranslatableFormField(propName: string, label: string, propDef:
         :model-value="getValue('${propName}')"
         :placeholder="editingLocale !== 'en' && getEnglishValue('${propName}')
           ? \`Fallback: \${getEnglishValue('${propName}')}\`
-          : '${placeholder}'"
+          : '${htmlAttr(jsString(placeholder))}'"
         class="w-full"
         @update:model-value="setValue('${propName}', $event)"
       />
@@ -325,69 +334,25 @@ function generateTranslatableFormField(propName: string, label: string, propDef:
  * Generate form field markup for a non-translatable property
  */
 function generateNonTranslatableFormField(propName: string, label: string, propDef: Record<string, any>, isRequired: boolean): string {
-  const inputType = getInputTypeForProperty(propDef.type)
+  // Manifest control (def.component via loadFields); CroutonCalendar binds v-model:date.
+  const inputType = propDef.component || 'UInput'
+  const vModel = inputType === 'CroutonCalendar' ? 'v-model:date' : 'v-model'
   const placeholder = propDef.placeholder || `Enter ${label.toLowerCase()}`
 
   // Non-translatable fields only shown in English locale
   // Use v-if with model check to ensure model is defined before accessing properties
-  return `    <!-- ${label} (non-translatable, English only) -->
+  return `    <!-- ${htmlAttr(label)} (non-translatable, English only) -->
     <UFormField
       v-if="editingLocale === 'en' && model"
-      label="${label}"
+      label="${htmlAttr(label)}"
       ${isRequired ? 'required' : ''}
     >
       <${inputType}
-        v-model="model.${propName}"
-        placeholder="${placeholder}"
+        ${vModel}="model.${propName}"
+        placeholder="${htmlAttr(placeholder)}"
         class="w-full"
       />
     </UFormField>`
-}
-
-/**
- * Get appropriate input component for property type (legacy, used by translatable generator)
- */
-function getInputTypeForProperty(type: string): string {
-  const inputMap: Record<string, string> = {
-    string: 'UInput',
-    text: 'UTextarea',
-    number: 'UInputNumber',
-    boolean: 'USwitch',
-    date: 'UInput type="date"'
-  }
-  return inputMap[type] || 'UInput'
-}
-
-/**
- * Get component name for property type (clean, no inline attrs)
- */
-function getInputInfoForProperty(type: string): { component: string } {
-  const map: Record<string, string> = {
-    string: 'UInput',
-    text: 'UTextarea',
-    number: 'UInputNumber',
-    decimal: 'UInputNumber',
-    boolean: 'USwitch',
-    date: 'UInput'
-  }
-  return { component: map[type] || 'UInput' }
-}
-
-/**
- * Map property type to TypeScript type
- */
-function mapPropertyTypeToTS(type: string): string {
-  const typeMap = {
-    string: 'string',
-    text: 'string',
-    number: 'number',
-    decimal: 'number',
-    boolean: 'boolean',
-    date: 'Date | null',
-    json: 'Record<string, any>',
-    array: 'string[]'
-  }
-  return typeMap[type] || 'string'
 }
 
 /**

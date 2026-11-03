@@ -19,7 +19,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   modelValue: '',
   size: 'sm',
-  placeholder: 'Select icon',
+  placeholder: undefined,
   collections: () => ['lucide', 'simple-icons']
 })
 
@@ -175,7 +175,7 @@ watch(open, (isOpen) => {
         />
       </template>
       <span :class="modelValue ? '' : 'text-muted'">
-        {{ modelValue || placeholder }}
+        {{ modelValue || placeholder || t('iconPicker.placeholder') }}
       </span>
       <template #trailing>
         <UButton
@@ -197,7 +197,7 @@ watch(open, (isOpen) => {
         <UInput
           v-model="searchQuery"
           icon="i-lucide-search"
-          :placeholder="`Search ${collectionLabels[activeCollection] || activeCollection} icons...`"
+          :placeholder="t('iconPicker.searchPlaceholder', { set: collectionLabels[activeCollection] || activeCollection })"
           size="sm"
           autofocus
         />

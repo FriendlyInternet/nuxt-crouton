@@ -175,24 +175,24 @@ crouton-generate install
 ```
 
 This installs:
-- `@fyit/crouton`
+- `@fyit/crouton-core` (bundles auth, admin and i18n)
 - Required peer dependencies
 - Updates nuxt.config.ts with extends
 
 **Manual installation**:
 ```bash
-pnpm add @fyit/crouton
+pnpm add @fyit/crouton-core
 ```
 
 Then update nuxt.config.ts:
 ```typescript
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton']
+  extends: ['@fyit/crouton-core']
 })
 ```
 
 ::callout{icon="i-lucide-info" color="blue"}
-**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, `seed-translations`, `db-pull`, and `deploy-check` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
+**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, and `db-pull` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
 ::
 
 ## Rollback Commands
@@ -206,9 +206,6 @@ crouton rollback <layer> <collection>
 
 # Remove entire layer
 crouton rollback-bulk --layer=<name>
-
-# Interactive removal
-crouton rollback-interactive
 ```
 
 ## Complete CLI Flags Reference

@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamBySlugOrId } from '@fyit/crouton-auth/server/utils/team'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { salesEvents } from '../../../../../../collections/events/server/database/schema'
 
 // Public endpoint: resolve event by slug for helper login flow.
 // The first segment carries the team's UUID or slug. The folder/param is named

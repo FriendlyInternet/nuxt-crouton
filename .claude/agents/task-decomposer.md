@@ -36,7 +36,7 @@ Run `echo "$PIPELINE_MODE"` (Bash) **once at the start**. It selects how you han
 - **Unset / anything but `event-driven` → IN-PROCESS mode (default, the claude harness).**
   You hand off by **spawning** a child decomposer or a worker via the `Agent` tool and waiting
   for it (Steps 3–4 as written). This is the proven flow; nothing below changes it.
-- **`event-driven` → LABEL mode (the pi harness, #1685 WS3).** pi-claude-cli can't drive an
+- **`event-driven` → LABEL mode (the pi harness, #1685 WS3).** the pi harness (claude-bridge provider) can't drive an
   in-process `Agent` tree, so instead of spawning you **write the WS2 context block onto each
   child and apply a trigger label via the Harness App token**, then **STOP** — a fresh single-use
   workflow run picks each child up. See **“Event-driven mode”** below; it overrides Steps 3–4.

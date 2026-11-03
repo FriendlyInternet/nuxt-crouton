@@ -8,8 +8,8 @@ Nuxt Crouton is a collection of Nuxt Layers that provide instant CRUD functional
 
 ### Core
 
-#### [@fyit/crouton](./packages/crouton)
-Base CRUD layer with essential components and composables for data management.
+#### [@fyit/crouton-core](./packages/crouton-core)
+Base CRUD layer with essential components and composables for data management. Bundles auth, admin and i18n (it extends `@fyit/crouton-auth`, `@fyit/crouton-admin` and `@fyit/crouton-i18n`) and registers Nuxt UI, NuxtHub, VueUse, Nuxt Image and Nuxt SEO for you.
 
 #### [@fyit/crouton-cli](./packages/crouton-cli)
 CLI tool to generate complete CRUD collections with API endpoints, components, and database schema.
@@ -17,7 +17,7 @@ CLI tool to generate complete CRUD collections with API endpoints, components, a
 ### Addon Layers
 
 #### [@fyit/crouton-i18n](./packages/crouton-i18n)
-Multi-language support extending the base layer with i18n capabilities.
+Multi-language support. Bundled by `@fyit/crouton-core` — no separate install or `extends` entry needed.
 
 #### [@fyit/crouton-editor](./packages/crouton-editor)
 Rich text editor integration extending the base layer with Tiptap.
@@ -45,14 +45,13 @@ Development tools and debugging utilities for Crouton applications.
 ### Installation
 
 ```bash
-# Core (always required)
-pnpm add @fyit/crouton
+# Core (always required — bundles auth, admin and i18n)
+pnpm add @fyit/crouton-core
 
 # CLI scaffolding tool (dev dependency)
 pnpm add -D @fyit/crouton-cli
 
 # Addon layers (install as needed)
-pnpm add @fyit/crouton-i18n       # Multi-language support
 pnpm add @fyit/crouton-editor    # Rich text editing
 pnpm add @fyit/crouton-ai        # AI chat/completion
 pnpm add @fyit/crouton-assets    # Asset management
@@ -69,11 +68,10 @@ Add to your `nuxt.config.ts`:
 ```typescript
 export default defineNuxtConfig({
   extends: [
-    // Base layer (always required)
-    '@fyit/crouton',
+    // Base layer (always required — bundles auth, admin and i18n)
+    '@fyit/crouton-core',
 
     // Optional addon layers (add only what you need)
-    '@fyit/crouton-i18n',      // Multi-language support
     '@fyit/crouton-editor',    // Rich text editing
     '@fyit/crouton-ai',        // AI chat/completion
     '@fyit/crouton-assets',    // Asset management
@@ -113,9 +111,9 @@ const { t } = useT()
 ## 🏗️ Architecture
 
 ```
-@fyit/crouton (base layer - always required)
+@fyit/crouton-core (base layer - always required)
+    │   bundles @fyit/crouton-auth, @fyit/crouton-admin, @fyit/crouton-i18n
     │
-    ├── @fyit/crouton-i18n        (addon - multi-language)
     ├── @fyit/crouton-editor      (addon - rich text)
     ├── @fyit/crouton-ai          (addon - AI chat)
     ├── @fyit/crouton-assets      (addon - asset management)
@@ -132,7 +130,7 @@ const { t } = useT()
 
 ## 🎯 Features
 
-### Base Layer (`@fyit/crouton`)
+### Base Layer (`@fyit/crouton-core`)
 - ✅ **CrudButton** - Generic action buttons
 - ✅ **CroutonReferenceSelect** - Entity selection dropdowns
 - ✅ **ExpandableSlideover** - Expandable panels

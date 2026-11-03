@@ -58,6 +58,13 @@ test('growth across DIFFERENT tokenizers is NOT compared (no false alarm)', () =
   assert.ok(!r.findings.some((f) => f.dim === 'growth'), 'no growth finding across tokenizers')
 })
 
+test('growth across a record SCHEMA change is NOT compared (#2387 counted imports → +26%)', () => {
+  const prev = { ...rec({ tokens: 19860 }), schema: 2 }
+  const next = { ...rec({ tokens: 25057 }), schema: 3 }
+  const r = analyze([prev, next])
+  assert.ok(!r.findings.some((f) => f.dim === 'growth'), 'no growth finding across schemas')
+})
+
 test('redundancy jump (same tokenizer) flags', () => {
   const prev = rec({ red: 5 })
   const next = rec({ red: 5 + ADVISOR.redundancyJumpPct + 1 })

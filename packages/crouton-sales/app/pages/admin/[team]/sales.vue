@@ -54,6 +54,11 @@ const tabs = computed(() => [
       to: `/admin/${teamSlug.value}/sales/printers`
     },
     {
+      label: t('sales.sidebar.devices'),
+      icon: 'i-lucide-monitor-smartphone',
+      to: `/admin/${teamSlug.value}/sales/devices`
+    },
+    {
       label: t('sales.sidebar.helpers'),
       icon: 'i-lucide-users',
       to: `/admin/${teamSlug.value}/sales/helpers`
@@ -68,27 +73,11 @@ const tabs = computed(() => [
 </script>
 
 <template>
-  <UDashboardPanel>
-    <template #header>
-      <UDashboardNavbar :title="t('sales.admin.sectionTitle')">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
-
-      <UNavigationMenu
-        :items="tabs"
-        orientation="horizontal"
-        highlight
-        highlight-color="primary"
-        class="border-b border-default px-4"
-      />
-    </template>
-
-    <template #body>
-      <div class="max-w-6xl mx-auto w-full">
-        <NuxtPage />
-      </div>
-    </template>
-  </UDashboardPanel>
+  <CroutonTabsPanel
+    :title="t('sales.admin.sectionTitle')"
+    :tabs="tabs"
+    max-width="max-w-6xl"
+  >
+    <NuxtPage />
+  </CroutonTabsPanel>
 </template>

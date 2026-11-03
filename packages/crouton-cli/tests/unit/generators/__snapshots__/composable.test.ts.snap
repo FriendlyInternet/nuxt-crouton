@@ -5,7 +5,6 @@ exports[`generateComposable > generates correct composable for basic collection 
  * @crouton-generated
  * @collection products
  * @layer shop
- * @generated 2025-01-01
  *
  * ## AI Context
  * - Composable: useShopProducts
@@ -47,7 +46,6 @@ const _shopProductsConfig = {
   name: 'shopProducts',
   layer: 'shop',
   apiPath: 'shop-products',
-  componentName: 'ShopProductsForm',
   defaultValues: {
     name: '',
     description: '',

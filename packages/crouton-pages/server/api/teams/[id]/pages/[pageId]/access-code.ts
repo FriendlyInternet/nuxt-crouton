@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the page exists and belongs to this team
-  const pagesSchema = await import('~~/layers/pages/collections/pages/server/database/schema')
+  const pagesSchema = await import('../../../../../../collections/pages/server/database/schema')
   const database = useDB()
   const [page] = await database
     .select({ id: pagesSchema.pagesPages.id as any })

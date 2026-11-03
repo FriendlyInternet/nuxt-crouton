@@ -21,7 +21,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { resolve, extname } from 'node:path'
 import { contentArticles } from '~~/layers/content/collections/articles/server/database/schema'
 import { contentAgendas } from '~~/layers/content/collections/agendas/server/database/schema'
-import { croutonAssets } from '~~/layers/crouton/collections/assets/server/database/schema'
+import { croutonAssets } from '@fyit/crouton-assets/collections/assets/server/database/schema'
 import { organization, member } from '~~/server/db/schema'
 
 // ---------------------------------------------------------------------------

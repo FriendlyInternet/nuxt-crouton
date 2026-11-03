@@ -13,7 +13,7 @@
 import { nanoid } from 'nanoid'
 import { eq } from 'drizzle-orm'
 import { organization, member } from '~~/server/db/schema'
-import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
+import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const db = useDB()

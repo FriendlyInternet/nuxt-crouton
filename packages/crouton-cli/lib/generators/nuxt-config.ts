@@ -20,8 +20,7 @@ export default defineNuxtConfig({
     dirs: [
       {
         path: join(currentDir, 'app/components'),
-        prefix: '${layerPascalCase}${pascalCasePlural}',
-        global: true
+        prefix: '${layerPascalCase}${pascalCasePlural}'
       }
     ]
   }

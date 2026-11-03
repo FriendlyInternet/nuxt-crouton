@@ -20,7 +20,7 @@
 //   --ref <url>         PR/issue/run URL for traceability
 //   --notes <s>         free text (default names the session file)
 //   --provider <s>      only count turns from this provider for COST (default anthropic —
-//                       pi-claude-cli/subscription reports zero/unreliable usage, #938 caveat)
+//                       subscription providers (claude-bridge, formerly pi-claude-cli) report zero/unreliable usage, #938 caveat)
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { parseArgs } from '../lib/cli-args.mjs'
@@ -62,7 +62,7 @@ for (const line of lines) {
 }
 
 if (turns === 0) {
-  process.stderr.write(`⚠ no ${costProvider}-provider assistant turns in ${basename(file)} — cost_usd will be null (subscription/pi-claude-cli runs don't report usage, per #938).\n`)
+  process.stderr.write(`⚠ no ${costProvider}-provider assistant turns in ${basename(file)} — cost_usd will be null (subscription runs via claude-bridge don't report usage, per #938).\n`)
 }
 
 const model = topKey(modelCount) || anyModel || 'unknown/unknown'

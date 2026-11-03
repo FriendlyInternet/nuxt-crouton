@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection venues
  * @layer main
- * @generated 2026-06-21
  *
  * ## AI Context
  * - Composable: useMainVenues

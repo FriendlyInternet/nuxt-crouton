@@ -120,7 +120,7 @@ describe.skip('Integration: Login Flow', () => {
 
       expect(mockClient.signIn.social).toHaveBeenCalledWith({
         provider: 'github',
-        callbackURL: expect.stringContaining('/auth/callback')
+        callbackURL: expect.stringMatching(/^https?:\/\/[^/]+\/$/)
       })
     })
 
@@ -197,7 +197,7 @@ describe.skip('Integration: Login Flow', () => {
 
       expect(mockClient.signIn.magicLink).toHaveBeenCalledWith({
         email: 'test@example.com',
-        callbackURL: expect.stringContaining('/auth/callback')
+        callbackURL: expect.stringMatching(/^https?:\/\/[^/]+\/$/)
       })
     })
 

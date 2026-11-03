@@ -16,6 +16,10 @@ export default defineNuxtConfig({
     name: 'crouton-assets'
   },
 
+  // The assets collection this package owns end to end (#2278):
+  // schema, queries, routes, list, composable.
+  extends: [join(currentDir, 'collections/assets')],
+
   // Enable blob storage for asset uploads
   // NuxtHub will merge this with the app's hub config
   hub: {
@@ -26,8 +30,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       croutonUpload: {
-        maxSize: '10MB',
-        allowedTypes: [] // Empty = use server defaults (all common types)
+        maxSize: '10MB'
+        // allowedTypes omitted = server defaults (raster images, SVG, PDF, Office)
       }
     }
   },

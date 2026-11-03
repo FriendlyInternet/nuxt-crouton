@@ -1,6 +1,6 @@
 # @fyit/crouton-i18n
 
-Multi-language support layer extending `@fyit/crouton` for FYIT scaffolded collections.
+Multi-language support layer for FYIT scaffolded collections. Bundled by `@fyit/crouton-core` (which extends it), so every crouton app has it.
 
 ## Features
 
@@ -14,8 +14,8 @@ Multi-language support layer extending `@fyit/crouton` for FYIT scaffolded colle
 ## Installation
 
 ```bash
-# Install both base and addon
-pnpm add @fyit/crouton @fyit/crouton-i18n
+# Install core (it bundles i18n); add i18n explicitly only to pin or override it
+pnpm add @fyit/crouton-core @fyit/crouton-i18n
 ```
 
 ## Quick Start (Using Generator)
@@ -85,8 +85,8 @@ If you're not using the generator, follow these steps:
 ```typescript
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',       // Base layer (required)
-    '@fyit/crouton-i18n'   // i18n addon
+    '@fyit/crouton-core',  // Base layer (required; already bundles i18n)
+    '@fyit/crouton-i18n'   // Optional: list explicitly to override its config
   ]
 })
 ```
@@ -365,7 +365,7 @@ Override default locales in your nuxt.config:
 ```typescript
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-i18n'
   ],
 
@@ -382,9 +382,8 @@ export default defineNuxtConfig({
 ## Layer Architecture
 
 ```
-@fyit/crouton (base CRUD - required)
-    +
-@fyit/crouton-i18n (addon - this layer)
+@fyit/crouton-core (base CRUD - required)
+    └─ extends @fyit/crouton-i18n (this layer - bundled)
 ```
 
 ## Troubleshooting

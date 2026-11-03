@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { t } = useT()
 /**
  * OptionsFieldCardMini - Display options field values from a settings collection
  *
@@ -73,7 +74,7 @@ const getLabel = (item: any): string => {
       v-else-if="error"
       class="text-red-500 text-xs"
     >
-      Error loading
+      {{ t('errors.errorLoading') }}
     </span>
 
     <!-- Empty state -->
@@ -102,7 +103,7 @@ const getLabel = (item: any): string => {
         color="neutral"
         variant="subtle"
       >
-        +{{ resolvedItems.length - 3 }} more
+        {{ t('common.moreCount', { count: resolvedItems.length - 3 }) }}
       </UBadge>
     </div>
   </div>

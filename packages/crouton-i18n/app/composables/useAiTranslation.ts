@@ -12,6 +12,7 @@ export function useAiTranslation(
   isBlockEditorField: (field: string) => boolean,
 ) {
   const notify = useNotify()
+  const { t } = useT()
 
   // Per-field-locale translation loading state
   const isTranslating = ref<Record<string, boolean>>({})
@@ -116,8 +117,8 @@ export function useAiTranslation(
 
   function getTranslateTooltip(field: string, targetLocale: string): string {
     const sourceLang = findBestSourceLocale(field, targetLocale)
-    if (!sourceLang) return 'Translate'
-    return `Translate from ${sourceLang.toUpperCase()}`
+    if (!sourceLang) return t('i18n.ai.translate')
+    return t('i18n.ai.translateFrom', { locale: sourceLang.toUpperCase() })
   }
 
   function getBestSourceText(field: string, targetLocale: string): string | undefined {
@@ -130,12 +131,12 @@ export function useAiTranslation(
 
   function showTranslationError(errorMessage: string) {
     if (errorMessage.includes('API key not configured') || errorMessage.includes('No AI API key')) {
-      notify.warning('AI Translation Not Configured', {
-        description: 'Set NUXT_ANTHROPIC_API_KEY or NUXT_OPENAI_API_KEY in your .env file',
+      notify.warning(t('i18n.ai.notConfigured'), {
+        description: t('i18n.ai.notConfiguredDescription'),
         icon: 'i-lucide-key',
       })
     } else {
-      notify.error('Translation Failed', {
+      notify.error(t('i18n.ai.failed'), {
         description: errorMessage,
         icon: 'i-lucide-alert-circle',
       })
@@ -193,15 +194,15 @@ export function useAiTranslation(
       }
     } catch (err: any) {
       console.error('Translation error:', err)
-      const errorMessage = err?.data?.statusMessage || err?.message || 'Translation failed'
+      const errorMessage = err?.data?.statusMessage || err?.message || t('i18n.ai.failed')
 
       if (errorMessage.includes('API key not configured')) {
-        notify.warning('AI Translation Not Configured', {
-          description: 'Set NUXT_OPENAI_API_KEY or NUXT_ANTHROPIC_API_KEY in your .env file',
+        notify.warning(t('i18n.ai.notConfigured'), {
+          description: t('i18n.ai.notConfiguredDescription'),
           icon: 'i-lucide-key',
         })
       } else {
-        notify.error('Translation Failed', {
+        notify.error(t('i18n.ai.failed'), {
           description: errorMessage,
           icon: 'i-lucide-alert-circle',
         })
@@ -240,13 +241,13 @@ export function useAiTranslation(
 
         if (collab.value?.setContentJson) {
           collab.value.setContentJson(targetLocale, result.content, true)
-          notify.success('Translation Complete', {
-            description: `Translated ${result.translatedCount} text blocks.`,
+          notify.success(t('i18n.ai.complete'), {
+            description: t('i18n.ai.translatedBlocks', { count: result.translatedCount ?? 0 }),
             icon: 'i-lucide-check',
           })
         } else if (collab.value) {
-          notify.success('Translation Saved', {
-            description: `Translated ${result.translatedCount} text blocks. Save and reload to see in editor.`,
+          notify.success(t('i18n.ai.saved'), {
+            description: t('i18n.ai.translatedBlocksReload', { count: result.translatedCount ?? 0 }),
             icon: 'i-lucide-check',
           })
         }
@@ -255,7 +256,7 @@ export function useAiTranslation(
         blockEditorRefreshKey.value++
       }
     } catch (err: any) {
-      const errorMessage = err?.data?.statusMessage || err?.message || 'Translation failed'
+      const errorMessage = err?.data?.statusMessage || err?.message || t('i18n.ai.failed')
       showTranslationError(errorMessage)
     } finally {
       isTranslating.value[translationKey] = false

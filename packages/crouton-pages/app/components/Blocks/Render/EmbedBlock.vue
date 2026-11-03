@@ -17,6 +17,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 function extractYouTubeId(url: string): string | null {
   // Handle youtu.be/ID
@@ -63,8 +64,8 @@ const height = computed(() => {
       v-if="!attrs.url"
       color="neutral"
       icon="i-lucide-youtube"
-      title="No URL configured"
-      description="Edit this block to enter an embeddable URL."
+      :title="t('pages.blockRender.noUrlTitle')"
+      :description="t('pages.blockRender.noUrlDescription')"
     />
 
     <!-- Render iframe -->

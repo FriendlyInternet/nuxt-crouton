@@ -21,9 +21,10 @@
  *
  * Uses the saved auth state (see auth.setup.ts).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import {
+  test,
   collectionUrl,
   surfaceUrl,
   ensureAuthed,

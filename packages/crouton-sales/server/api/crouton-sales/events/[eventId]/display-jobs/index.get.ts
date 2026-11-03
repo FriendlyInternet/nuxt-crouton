@@ -34,11 +34,11 @@
  * the logic; the app owns the tables).
  */
 import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
-import { salesKdsbumps } from '~~/layers/sales/collections/kdsbumps/server/database/schema'
-import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
+import { salesOrders } from '../../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../../../../../collections/products/server/database/schema'
+import { salesKdsbumps } from '../../../../../../collections/kdsbumps/server/database/schema'
+import { salesLocations } from '../../../../../../collections/locations/server/database/schema'
 import {
   planDisplayJobsQuery,
   shapeDisplayTickets,

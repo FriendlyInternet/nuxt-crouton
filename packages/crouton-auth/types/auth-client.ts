@@ -56,7 +56,7 @@ export type CroutonAuthClient = typeof _typedAuthClient
  */
 export function useAuthClient(): CroutonAuthClient | null {
   const nuxtApp = useNuxtApp()
-  return (nuxtApp.$authClient ?? null) as CroutonAuthClient | null
+  return (nuxtApp.$authClient ?? null) as unknown as CroutonAuthClient | null
 }
 
 /**

@@ -17,21 +17,26 @@
 //       "do": ["click:[data-review=data-tab]", "wait:800", "click:[aria-label='Filters']"] }
 //   ]
 // Falls back to a single surface at reviewLogin.landing (or "/") when none are declared.
+// A PR can name its own surface instead (`<!-- review-surface: <app> <path> -->`, #2433), and a
+// PR held for visual sign-off that names none gets no capture rather than the landing page.
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--manifest apps/<app>/deploy.config.json] [--out writeups/ui-proposals] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
+//   PR_BODY (env): the PR body, read for review-surface markers (#2433).
+//   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
+//   shoot is derived from them (#2698).
 //
-// Output: writeups/ui-proposals/pr<N>-<name>.png for each surface that captured a NON-blank page.
+// Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
 // Prints `captured=<file>` per kept shot (the workflow commits them). NEVER exits non-zero on a
 // capture miss — a missing capture just means no evidence, and the sign-off gate withholds.
 
 import { resolve } from 'node:path'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
-import { signIn, jarToContextCookies } from './lib/review-login.mjs'
+import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -40,9 +45,91 @@ export function slug(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'surface'
 }
 
-/** The committed filename for one surface of one PR. */
-export function outName(pr, name) {
-  return `pr${String(pr).replace(/\D/g, '')}-${slug(name)}.png`
+/**
+ * The committed filename for one surface of one PR. With `app`, the app is part of the name:
+ * a packages PR deploys several apps, and without it their captures overwrote each other
+ * (#2420: kassa's replaced velo's) (#2433).
+ */
+export function outName(pr, name, app) {
+  const prefix = `pr${String(pr).replace(/\D/g, '')}`
+  return app ? `${prefix}-${slug(app)}-${slug(name)}.png` : `${prefix}-${slug(name)}.png`
+}
+
+// The marker work-issue-pidev.yml puts on a PR held for visual sign-off (deploy-detect.mjs #2140).
+const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
+
+/**
+ * Surfaces a PR declares for one app (#2433), copied there from its issue:
+ *   <!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->
+ * The worker knows which screen it changed; the app's fixed landing page usually doesn't show it.
+ */
+export function parsePrSurfaces(prBody, app) {
+  const out = []
+  for (const m of String(prBody || '').matchAll(/<!--\s*review-surface:\s*(.+?)\s*-->/g)) {
+    const [forApp, path, ...rest] = m[1].split(/\s+/)
+    if (forApp !== app || !path) continue
+    const nameTok = rest.find(t => t.startsWith('name:'))
+    const steps = rest.filter(t => !t.startsWith('name:'))
+    const base = nameTok ? nameTok.slice(5) : (path.split('?')[0].split('/').filter(Boolean).pop() || 'surface')
+    let name = slug(base)
+    while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
+    out.push({ name, path: path.startsWith('/') ? path : `/${path}`, do: steps })
+  }
+  return out
+}
+
+// The seeded review team every preview is signed into (#2698).
+const SEEDED_TEAM = 'test1'
+
+/**
+ * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
+ *  - a page file (`…/app/pages/**.vue`) → its route, with a `[team]`-style segment → the seeded team;
+ *    pages with any other dynamic segment are skipped (no data to open them with);
+ *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
+ *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
+ */
+export function deriveSurfaces({ changedFiles, app }) {
+  const out = []
+  const add = (path, label) => {
+    if (out.some(s => s.path === path)) return
+    let name = slug(label)
+    while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
+    out.push({ name, path, do: [] })
+  }
+  for (const raw of changedFiles || []) {
+    const file = String(raw).trim()
+    if (!file.endsWith('.vue')) continue
+    const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
+    if (page) {
+      if (page[1].startsWith('__review')) continue
+      const segs = page[1].split('/').filter(s => s !== 'index')
+      const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
+      if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) continue
+      const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+      add(route, segs.join('-') || 'index')
+    } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
+      add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
+    }
+  }
+  return out
+}
+
+/**
+ * What to capture for one app on one PR (#2433):
+ *  - surfaces the PR declares for this app win;
+ *  - a PR held for visual sign-off that declares none gets NOTHING: the landing page would pass
+ *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
+ *  - any other PR keeps the manifest's surfaces / landing, as before.
+ */
+export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
+  const declared = parsePrSurfaces(prBody, app)
+  if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
+  const derived = deriveSurfaces({ changedFiles, app })
+  if (derived.length) return { surfaces: derived, reason: 'derived from the changed files (#2698)' }
+  if (String(prBody || '').includes(HOLD_MARKER)) {
+    return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
+  }
+  return { surfaces: parseSurfaces(manifest), reason: 'app default' }
 }
 
 /**
@@ -93,7 +180,18 @@ export function isFlatFrame({ data, width, height, channels }) {
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
+// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
+// for the dev server's first build; later surfaces/widths reuse the warmed server.
+// Declared before `await main()` below — a later `let` would be in its TDZ when main runs.
+let warmDeadline = 0
+
 const log = m => console.log(`[capture] ${m}`)
+
+/** One machine-readable line per surface (#2572) — the deploy step quotes these on the PR. `reason` runs to end of line. */
+export function resultLine(name, status, reason = '') {
+  return `surface=${name} status=${status} reason=${String(reason).replace(/\s+/g, ' ').trim()}`
+}
+const report = (name, status, reason) => console.log(resultLine(name, status, reason))
 if (import.meta.url === `file://${process.argv[1]}`) await main()
 
 async function main() {
@@ -105,30 +203,42 @@ async function main() {
   const origin = String(args.url).replace(/\/$/, '')
   const outDir = args.out || 'writeups/ui-proposals'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
-  const surfaces = parseSurfaces(loadManifest(args.manifest))
-  log(`origin=${origin} surfaces=${surfaces.length} viewport=${viewport.width}x${viewport.height}`)
+  const app = args.app || ''
+  const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app, changedFiles: (process.env.CHANGED_FILES || '').split('\n') })
+  log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
+  if (!surfaces.length) { report('-', 'none', reason); return }
 
-  const { loggedIn, jar } = await signIn(origin, args.email, args.password, log)
+  const kept = await captureAll({ origin, args, viewport, surfaces, outDir, app })
+
+  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
+  // sign-off gate withholds (honest), rather than a decoy.
+  for (const f of kept) console.log(`captured=${f}`)
+  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+}
+
+/** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
+async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
+  // A link-only app has no password: it trades a derived preview-only token for a session (#2700).
+  const { loggedIn, jar } = args['preview-token']
+    ? await previewSignIn(origin, args['preview-token'], log)
+    : await signIn(origin, args.email, args.password, log)
   const browser = await launchChromium(log)
-  if (!browser) return // evidence is not a gate — no browser ⇒ the sign-off gate withholds
+  if (!browser) { for (const sf of surfaces) report(sf.name, 'error', 'no chromium browser available'); return [] } // evidence is not a gate — no browser ⇒ the sign-off gate withholds
 
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 })
     if (loggedIn && jar.size) await context.addCookies(jarToContextCookies(jar, origin))
+    if (surfaces.length) await warmUp(context, origin, surfaces[0])
     for (const surface of surfaces) {
-      const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name)}`)
+      const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
       if (file) kept.push(file)
     }
   } finally {
     await browser.close().catch(() => {})
   }
-
-  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
-  // sign-off gate withholds (honest), rather than a decoy.
-  for (const f of kept) console.log(`captured=${f}`)
-  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+  return kept
 }
 
 /**
@@ -141,29 +251,90 @@ async function captureSurface(context, origin, surface, file) {
     page = await context.newPage()
     const url = origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`)
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
-    const status = resp ? resp.status() : 0
+    let status = resp ? resp.status() : 0
+    // The dev server serves Nuxt's loading template until its first build finishes (#2526):
+    // reload until real app content renders. The budget is per run (warmedUp), not per width.
+    while (await isLoading(page) && Date.now() < warmDeadline) {
+      await page.waitForTimeout(3000)
+      const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
+      if (again) status = again.status()
+    }
+    if (await isLoading(page)) {
+      log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
+      report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
+      return null
+    }
+    await waitForHydration(page)
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
     await runInteractions(page, surface, log)
     await page.waitForTimeout(600)
     const title = await page.title().catch(() => '')
     const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
-    if (looksLikeErrorPage({ status, text: bodyText, title })) {
-      log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
-      return null
-    }
-    const raw = await loadPng(file)
-    if (raw && isFlatFrame(raw)) {
-      log(`✗ ${surface.name}: blank/flat capture — discarding`)
+    const rejection = await captureRejection({ status, text: bodyText, title, file, browser: context.browser() })
+    if (rejection) {
+      log(`✗ ${surface.name}: ${rejection} — discarding`)
+      report(surface.name, 'rejected', rejection)
       return null
     }
     log(`✓ ${surface.name} → ${file}`)
+    report(surface.name, 'ok', okReason(file, surface))
     return file
   } catch (e) {
     log(`⚠ ${surface.name}: capture failed (non-fatal): ${e.message.split('\n')[0]}`)
+    report(surface.name, 'error', `capture failed: ${e.message.split('\n')[0]}`)
     return null
   } finally {
     await page?.close().catch(() => {})
+  }
+}
+
+/** Why a screenshot is NOT evidence (loader, error page, blank frame), or null when it is. Fails closed: an undecodable frame is rejected (#2526). */
+async function captureRejection({ status, text, title, file, browser }) {
+  if (looksLikeLoadingScreen({ text, title })) return "stuck on Nuxt's loading screen"
+  if (looksLikeErrorPage({ status, text, title })) return `error page (status ${status}, title "${title}")`
+  const flat = await frameIsFlat(file, browser)
+  if (flat === true) return 'blank/flat capture'
+  return flat === false ? null : 'could not verify the frame is not blank'
+}
+
+// A function declaration, not a const: main() runs at module top level before the
+// declarations below it, so a const here threw "Cannot access 'okReason' before
+// initialization" and turned every successful capture into an error (PR #2601).
+function okReason(file, surface) {
+  return file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
+}
+
+/** True while the page is Nuxt's dev loading template or no app content is visible yet. */
+async function isLoading(page) {
+  const html = await page.content().catch(() => '')
+  const textLen = await page.evaluate(() => (document.body?.innerText || '').trim().length).catch(() => 0)
+  return looksLikeLoadingScreen({ html }) || textLen <= 50
+}
+
+/** Wait (≤15s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699). Best-effort: a miss falls through to the rejection checks. */
+async function waitForHydration(page) {
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#__nuxt')
+    if (!root || (root.innerText || '').trim().length <= 50) return false
+    const nuxt = window.useNuxtApp?.()
+    return nuxt ? !nuxt.isHydrating : true
+  }, null, { timeout: 15000 }).catch(() => {})
+}
+
+/** Request the first surface until the server answers with the app, not the loader. */
+async function warmUp(context, origin, surface) {
+  warmDeadline = Date.now() + 300_000
+  const page = await context.newPage()
+  try {
+    await page.goto(origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`), { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
+    while (await isLoading(page) && Date.now() < warmDeadline) {
+      await page.waitForTimeout(3000)
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
+    }
+  } finally {
+    await page.close().catch(() => {})
   }
 }
 
@@ -175,6 +346,7 @@ async function runInteractions(page, surface, logFn) {
         await page.click(step.selector, { timeout: 6000 })
       } catch (e) {
         logFn(`⚠ ${surface.name}: click '${step.selector}' failed (${e.message.split('\n')[0]}) — capturing as-is`)
+        surface.clickFailed = step.selector
       }
     } else if (step.verb === 'wait') {
       await page.waitForTimeout(step.ms)
@@ -189,6 +361,15 @@ function loadManifest(path) {
   } catch {
     return {}
   }
+}
+
+/** true = flat/blank, false = real content, null = could not decode (treated as NOT evidence). */
+async function frameIsFlat(file, browser) {
+  const raw = await loadPng(file)
+  if (raw) return isFlatFrame(raw)
+  try {
+    return colorsAreFlat(await sampleFlatness(readFileSync(resolve(file)), browser))
+  } catch { return null }
 }
 
 async function loadPng(file) {

@@ -21,10 +21,8 @@
  * answers. If the two ever disagree, a test fails instead of the Bestellingen
  * counter and the product view quietly showing different numbers mid-service.
  *
- * Tables are injected rather than imported, for the reason `handover.ts`
- * already documents: they live in the CONSUMING app's generated layer
- * (`~~/layers/sales/...`), which a package test cannot resolve. Keeping them
- * parameters is what makes this behaviour testable at all.
+ * Tables are injected rather than imported, so this runs against a throwaway
+ * in-memory schema instead of the Nuxt-bound `collections/*` tables.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'

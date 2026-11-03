@@ -1,0 +1,44 @@
+name: Build from approved plan (pi.dev)
+
+# #2757 (epic #2754) — the plan reviewer (plan-review.yml, #2756) labels an issue `plan:approved`;
+# this dispatches the BUILD run with that plan's comment id, so the worker implements exactly the
+# approved plan (work-issue-pidev.yml, input `plan`). The label is applied by the Harness App, so
+# it cascades; a human label is ignored here (only the reviewer's approval starts a build).
+#
+# Workflow-change: new workflow closing the plan → review → build loop (#2757).
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  build:
+    if: ${{ github.event.label.name == 'plan:approved' && github.actor == 'nuxt-harness[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Dispatch the build with the approved plan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # The plan the reviewer approved = the newest plan comment (a sent-back plan is replaced).
+          PLAN_ID="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .id // empty' | tail -n 1)"
+          if [ -z "$PLAN_ID" ]; then
+            echo "::error::plan:approved on #$ISSUE but no plan comment found — nothing to build from"
+            exit 1
+          fi
+          echo "building #$ISSUE from approved plan comment $PLAN_ID"
+          gh workflow run work-issue-pidev.yml --repo "${{ github.repository }}" -f issue="$ISSUE" -f mode=build -f plan="$PLAN_ID"

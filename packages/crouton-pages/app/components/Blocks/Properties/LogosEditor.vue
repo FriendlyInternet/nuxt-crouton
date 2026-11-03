@@ -106,7 +106,7 @@ function resolveType(item: LogoItem): LogoItemType {
 }
 
 function addIconItem() {
-  items.value.push(assignId({ type: 'icon', value: 'i-simple-icons-github' }))
+  items.value.push(assignId({ type: 'icon', value: 'i-lucide-github' }))
   emitChange()
 }
 
@@ -411,7 +411,7 @@ function getImageMode(index: number): string {
         <!-- Link input (shared by both icon and image modes) -->
         <UInput
           :model-value="item.link || ''"
-          placeholder="https://example.com (optional link)"
+          :placeholder="t('pages.blockEditors.optionalLinkPlaceholder')"
           size="sm"
           class="w-full"
           @update:model-value="updateItem(index, 'link', $event)"

@@ -91,22 +91,34 @@ on:
       # secrets manually (they persist across deploys).
       WORKER_SECRETS_JSON:
         required: false
-      # Optional repo-level secret used only to derive the throwaway review login's
-      # password (#608). Absent → a fixed fallback salt is used (fine: staging is
-      # throwaway + isolated and the creds are posted publicly on the PR anyway).
+      # Repo-level secret the review login's password is derived from (#608). There is
+      # deliberately NO fallback salt: one written here would let anyone reading this
+      # public repo compute every review password (#2358). Absent → no review login is
+      # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
+        required: false
+      # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
+      STATUS_GITHUB_TOKEN:
+        required: false
+      # Read by steps below but never declared (actionlint, #2970): declare every secret a
+      # reusable workflow reads rather than relying on it arriving undeclared.
+      RESEND_API_KEY:
+        required: false
+      HARNESS_APP_ID:
+        required: false
+      HARNESS_APP_PRIVATE_KEY:
         required: false
 
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    # Routed to the self-hosted box behind the AGENT_RUNNER toggle (#654/#658 — wrangler
-    # deploy is cross-platform Node; verified from macOS by the #654 proof run). The fork
-    # guard implements the runbook §5 policy: deploy-pocs.yml calls this on `pull_request`
-    # of pocs/**, so a fork PR must never reach the box — it routes back to GitHub-hosted
-    # structurally (fork PRs also get no secrets, but the guard keeps their code off our
-    # hardware in the first place). Delete the AGENT_RUNNER repo var to fall back.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Runs on vars.HOSTED_RUNNER (unset = ubuntu-latest). Deploys use no AI, so they don't
+    # need the subscription box behind AGENT_RUNNER — split off when the mac-mini went
+    # away (#2275; history #654/#658). The fork guard implements the runbook §5 policy:
+    # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
+    # reach a self-hosted box if HOSTED_RUNNER is ever pointed at one.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).
@@ -116,16 +128,23 @@ jobs:
       pull-requests: write   # for the staging-URL PR comment
     # Serialize (don't cancel — a cancel mid-migration is unsafe) deploys to the
     # same app+env so concurrent runs can't race on auto-provisioning / sync / D1.
+    #
+    # PR previews get their OWN slot (#2474): a per-PR preview is a separate Worker with
+    # its own D1 (`<app>-pr<N>`, #2020), so two of them cannot race — but they all shared
+    # `deploy-<app>-staging`. GitHub keeps ONE waiting run per group, so a wave of sibling
+    # sub-PRs bumped each other ("Canceling since a higher priority waiting request for
+    # deploy-kassa-staging exists" on #2471) and the owner got a red ping for a bump.
+    # Only shared staging and production keep the per-app slot. The PR number comes from
+    # the caller's event (same source the deploy step uses to pick the preview path).
     concurrency:
-      group: deploy-${{ inputs.app }}-${{ inputs.environment }}
+      group: deploy-${{ inputs.app }}-${{ inputs.environment }}${{ github.event.pull_request.number && format('-pr{0}', github.event.pull_request.number) || '' }}
       cancel-in-progress: false
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Hosted runners ship jq; a self-hosted mac starts bare (runbook §2a installs
       # node/pnpm/gh/wrangler but jq wasn't on the list). Self-heals via Homebrew —
       # already on the runner PATH through its `.path` file. No-op when jq exists.
@@ -133,17 +152,18 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v jq >/dev/null 2>&1 || brew install jq
 
-      # dest is keyed per app+env: on the self-hosted mini several app deploys run
-      # in parallel and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir,
-      # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
-      # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
+      # dest is keyed exactly like the concurrency group above (app+env, plus the PR number
+      # for a preview, #2474): on the self-hosted mini several app deploys run in parallel
+      # and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir, #1254/#1255). The group
+      # guarantees one writer per dest; the dest set is bounded (apps × envs, plus open
+      # PRs; each dest is just a pnpm binary, a few MB), so no disk creep. (#1258)
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
+          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}${{ github.event.pull_request.number && format('-pr{0}', github.event.pull_request.number) || '' }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs['node-version'] }}
           cache: 'pnpm'
@@ -171,7 +191,12 @@ jobs:
             exit 1
           fi
           # Same deterministic creds the staging seed step derives on push to main.
-          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so there is no staging review login to smoke with (#2358). Add it as a repository Actions secret, let a merge to main redeploy staging, then re-dispatch."
+            exit 1
+          fi
+          SALT="$REVIEW_SEED_SECRET"
+          echo "::add-mask::$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
           EMAIL="review+${APP}-main@example.com"
           PW="$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
@@ -222,7 +247,7 @@ jobs:
         uses: ./.github/actions/warm-packages
 
       - name: Cache Nuxt build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ inputs.workspace }}/${{ inputs.app }}/node_modules/.cache
@@ -241,12 +266,51 @@ jobs:
       # with NITRO_PRESET=cloudflare_module, deploys (auto-provisioning id-less
       # D1/KV on first run), syncs the provisioned ids back into wrangler.jsonc,
       # and applies remote D1 migrations.
+      # LIVE SYNC (#2693) — `"collab": true` in the app's deploy.config.json also deploys the
+      # crouton-collab Worker and points the app at it. Runs BEFORE the app build because the
+      # Worker's URL is baked into the client bundle (NUXT_PUBLIC_COLLAB_WORKER_URL, below).
+      # Order: Worker -> D1 migration -> app. Apps that don't set the flag skip it entirely.
+      # Secret: a dedicated COLLAB_TOKEN_SECRET = sha256(REVIEW_SEED_SECRET:app:scope:collab),
+      # derived here (wrangler secrets can't be read back, so nothing is copied) and set on BOTH
+      # the Worker (here) and the app (the "Set COLLAB_TOKEN_SECRET on the app" step below).
+      # Missing seed -> the deploy fails loudly; no fallback to BETTER_AUTH_SECRET.
+      - name: Deploy collab Worker (collab flag)
+        id: collab
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          if [ "$(jq -r '.collab == true' deploy.config.json 2>/dev/null)" != "true" ]; then
+            echo "${{ inputs.app }} has no \"collab\": true in deploy.config.json — no live-sync Worker."
+            exit 0
+          fi
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so the collab token secret cannot be derived. Add it as a repository Actions secret."
+            exit 1
+          fi
+          read -r WORKER SCOPE < <(node --input-type=module -e "
+            import { collabWorkerName } from '$GITHUB_WORKSPACE/scripts/lib/collab-worker.mjs'
+            const [app, environment, pr] = process.argv.slice(1)
+            const scope = environment === 'production' || !pr ? environment : 'pr' + pr
+            console.log(collabWorkerName({ app, environment, pr }), scope)
+          " "${{ inputs.app }}" "$ENVIRONMENT" "$PR_NUM")
+          COLLAB_TOKEN_SECRET="$(printf '%s' "$REVIEW_SEED_SECRET:${{ inputs.app }}:$SCOPE:collab" | sha256sum | cut -d' ' -f1)"
+          echo "::add-mask::$COLLAB_TOKEN_SECRET"
+          export COLLAB_TOKEN_SECRET
+          printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
+          node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
+
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
+          # Live sync (#2693): the collab Worker deployed above, empty when the flag is off.
+          NUXT_PUBLIC_COLLAB_WORKER_URL: ${{ steps.collab.outputs.url }}
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
           # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
           # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
@@ -257,6 +321,10 @@ jobs:
           # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
           # stay overlay-free — and the bridge needs a PR to post to anyway.
           NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
+          # SEARCH ENGINES (#2244) — only production may be indexed. Read by nuxt-site-config
+          # at build; non-indexable makes @nuxtjs/robots serve `Disallow: /` (staging + PR previews).
+          NUXT_SITE_ENV: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
+          NUXT_SITE_INDEXABLE: ${{ inputs.environment == 'production' && 'true' || 'false' }}
         run: |
           set -o pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
@@ -271,11 +339,30 @@ jobs:
             # way the app's own first deploy does) and no custom-domain route.
             echo "PR preview for #$PR_NUM — rewriting the built config"
             NITRO_PRESET=cloudflare_module npx nuxt build
-            node scripts/inject-wrangler-env.mjs
+            # Crouton apps ship inject-wrangler-env.mjs; a standalone viewer (e.g. pocs/loop-station,
+            # no NuxtHub, no DB) doesn't — skip it there instead of failing the preview (#2377).
+            if [ -f scripts/inject-wrangler-env.mjs ]; then node scripts/inject-wrangler-env.mjs; fi
             PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
               .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
-            npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
+            # Reuse storage this preview already has (#2608). A deploy that died after creating
+            # its D1/KV but before the Worker existed leaves them bound to nothing; wrangler then
+            # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
+            # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
+            # Cloudflare's assets-upload-session sometimes answers "unknown error [code: 10013]"
+            # on a fresh PR Worker; the same deploy passes on retry. Retry, and say why on failure.
+            for attempt in 1 2 3; do
+              if npx wrangler deploy --config .output/server/wrangler.json 2>&1 | tee deploy.log; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::wrangler deploy failed 3 times for the PR preview — last error: $(grep -m1 -E 'ERROR|code:' deploy.log | sed 's/\x1b\[[0-9;]*m//g')"
+                exit 1
+              fi
+              echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
+              sleep 15
+            done
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
@@ -286,20 +373,27 @@ jobs:
             # first, so passing --config cannot re-create #138's doubled path (a green step that
             # migrates nothing) — the silent version of the same bug.
             if [ -z "$PREVIEW_DB" ]; then
-              echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
-              exit 1
+              # An app that declares no D1 database has no schema to migrate (#2377). One that DOES
+              # declare a database but got no name back is still the #2078 failure — keep failing it.
+              if [ "$(jq '(.d1_databases // []) | length' .output/server/wrangler.json)" = "0" ]; then
+                echo "No D1 database declared for ${{ inputs.app }} — preview deployed without one."
+              else
+                echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
+                exit 1
+              fi
             fi
             # Expose the preview DB so the seed + review-login steps target IT, not shared
             # staging (#2169 — the seed-side sibling of #2167's secret targeting).
-            echo "preview_db=$PREVIEW_DB" >> "$GITHUB_OUTPUT"
-            # The deploy above just PROVISIONED that database, but the built config still
-            # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
-            # (#2020). Remote D1 operations need the id, so resolve it by name now that it
-            # exists. Without this the migrate fails "missing a database_id" (#2085).
-            node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
-            npx wrangler d1 migrations apply "$PREVIEW_DB" \
-              --config .output/server/wrangler.json --remote
-            (pnpm db:seed:staging || true)
+            if [ -n "$PREVIEW_DB" ]; then
+              echo "preview_db=$PREVIEW_DB" >> "$GITHUB_OUTPUT"
+              # The deploy above just PROVISIONED that database, but the built config still
+              # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
+              # (#2020). Remote D1 operations need the id, so resolve it by name now that it
+              # exists. Without this the migrate fails "missing a database_id" (#2085).
+              node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
+              npx wrangler d1 migrations apply "$PREVIEW_DB" \
+                --config .output/server/wrangler.json --remote
+            fi
           else
             pnpm run cf:staging | tee deploy.log
           fi
@@ -390,6 +484,104 @@ jobs:
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
 
+      # The status app (pocs/status) derives every app's review-login password to offer one-tap
+      # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
+      # from GitHub, so push them to THAT Worker only — no other app ever receives them.
+      # On a PR the Worker is the PR-scoped preview (`status-pr<N>`, via the built config);
+      # `--env staging` there would write to shared staging instead. Values are never echoed.
+      - name: Push status-app secrets
+        if: ${{ inputs.app == 'status' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          if [ "$DEPLOY_ENV" = "production" ]; then
+            TARGET=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            TARGET="--config .output/server/wrangler.json"
+          else
+            TARGET="--env staging"
+          fi
+          push() {
+            if [ -z "$2" ]; then
+              echo "::notice::$3 is not set — skipping $1."
+              return 0
+            fi
+            printf '%s' "$2" | npx wrangler secret put "$1" $TARGET
+          }
+          push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
+          # PR previews only: switches on the preview-only sign-in route the screenshot check uses
+          # (#2700). Never set on staging or production, where that route stays a 404.
+          if [ "$DEPLOY_ENV" != "production" ] && [ -n "$PR_NUM" ]; then
+            push NUXT_REVIEW_PREVIEW_KEY "pr${PR_NUM}" PR_NUM
+          fi
+          push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
+          # Magic-link sign-in mail + the owner-only guard (previews have no other source of these).
+          push NUXT_EMAIL_RESEND_API_KEY "$RESEND_API_KEY" RESEND_API_KEY
+          push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
+          push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
+
+      # Magic-link mail swallows every error (crouton-auth `.catch(() => {})`, crouton-email's
+      # try/catch), so a preview can look fine while nothing is sent (#2557). Prove it from CI:
+      # tail the Worker, request a link for the owner, and print the `[crouton-email]` lines
+      # (URLs masked). It mails Resend's test inbox, never the owner (#2702).
+      - name: Probe status magic-link send (PR preview)
+        if: ${{ inputs.app == 'status' && github.event.pull_request.number != '' && inputs.environment != 'production' }}
+        continue-on-error: true
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          # Resend's test inbox: the send is real (and logged) but never reaches the owner (#2702).
+          PROBE_EMAIL: delivered@resend.dev
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
+            echo "::notice::magic-link probe skipped (URL or built config missing)."
+            exit 0
+          fi
+          npx wrangler tail --config .output/server/wrangler.json --format pretty > "$RUNNER_TEMP/tail.log" 2>&1 &
+          TAIL_PID=$!
+          sleep 15
+          BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
+          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+            -H 'Content-Type: application/json' -d "$BODY" || true)
+          echo "probe request → HTTP $CODE"
+          sleep 10
+          kill "$TAIL_PID" 2>/dev/null || true
+          echo "--- [crouton-email] lines from the Worker tail ---"
+          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/tail.log" \
+            | grep -F -e '[crouton-email]' -e 'Error' -e 'POST' \
+            | sed -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
+            | head -40 || echo "(no matching lines)"
+
+      # Send the owner a sign-in link when status updates on staging, so they never have to type
+      # an email on a phone. Owner address is never printed.
+      - name: Email owner a status sign-in link
+        # Only when status itself updates on staging (push to main), never on PR previews (#2702).
+        if: ${{ inputs.app == 'status' && github.event_name == 'push' && steps.deploy.outputs.url != '' }}
+        continue-on-error: true
+        env:
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ]; then
+            echo "::notice::sign-in mail skipped (REVIEW_LOGIN_EMAIL / DIGEST_REPORT_EMAIL not set)."
+            exit 0
+          fi
+          BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
+          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+            -H 'Content-Type: application/json' -d "$BODY" || echo 000)
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::status sign-in mail request returned HTTP $CODE (expected 200)."
+          else
+            echo "Sign-in link requested (HTTP 200)."
+          fi
+
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
       # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via
@@ -404,7 +596,7 @@ jobs:
         id: review-app-token
         if: ${{ inputs.environment == 'staging' && inputs.review-pr != '' }}
         continue-on-error: true
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -419,8 +611,34 @@ jobs:
           APP_ID: ${{ secrets.HARNESS_APP_ID }}
           INSTALLATION_ID: ${{ steps.review-app-token.outputs.installation-id }}
           PRIVATE_KEY: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
         run: |
+          # Who may post into the PR thread (#3162): the preview's verified review login.
+          # NO CREDENTIAL, NO BRIDGE — without a reviewer the sink stays unconfigured
+          # (refuses visibly) rather than open to anyone who can reach the overlay.
+          CFG="$WORKSPACE/$APP/deploy.config.json"
+          if [ "$(jq -r '.reviewLogin == false' "$CFG" 2>/dev/null)" = "true" ]; then
+            REVIEWERS=""
+            WHY="${APP} has no sign-in (reviewLogin false)"
+          elif [ "$(jq -r '.reviewLogin.method == "preview-token"' "$CFG" 2>/dev/null)" = "true" ]; then
+            REVIEWERS="$OWNER_EMAIL"
+            WHY="no REVIEW_LOGIN_EMAIL / DIGEST_REPORT_EMAIL variable for the link-only owner"
+          elif [ -z "$REVIEW_SEED_SECRET" ]; then
+            REVIEWERS=""
+            WHY="REVIEW_SEED_SECRET is not set, so no review login is seeded"
+          else
+            REVIEWERS="review+${APP}-pr${PR}@example.com"
+            WHY=""
+          fi
+          if [ -z "$REVIEWERS" ]; then
+            echo "::warning::Skipping preview-review bridge for ${APP}: ${WHY}. Feedback pins stay off (#3162)."
+            exit 0
+          fi
           jq -n \
+            --arg reviewers "$REVIEWERS" \
             --arg repo "$REPOSITORY" \
             --arg pr "$PR" \
             --arg appId "$APP_ID" \
@@ -429,6 +647,7 @@ jobs:
             '{
               NUXT_CROUTON_REVIEW_REPOSITORY: $repo,
               NUXT_CROUTON_REVIEW_PR: $pr,
+              NUXT_CROUTON_FEEDBACK_REVIEWER_EMAILS: $reviewers,
               NUXT_CROUTON_REVIEW_GITHUB_APP_ID: $appId,
               NUXT_CROUTON_REVIEW_GITHUB_APP_INSTALLATION_ID: $inst,
               NUXT_CROUTON_REVIEW_GITHUB_APP_PRIVATE_KEY: $key
@@ -478,6 +697,8 @@ jobs:
         if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
         env:
           URL: ${{ steps.deploy.outputs.url || inputs['staging-url'] }}
+          WORKSPACE: ${{ inputs.workspace }}
+          APP: ${{ inputs.app }}
         run: |
           set -o pipefail
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
@@ -501,8 +722,11 @@ jobs:
           # correct build ("This preview cannot be reviewed") for every such app. The flag lives
           # in the public runtime config of the real page a reviewer actually lands on, so follow
           # the redirect and grep THAT. Strictly safer: a non-redirecting `/` (200) is unaffected.
-          if curl -sL --max-time 30 "$URL/" | grep -q 'croutonReview'; then
-            echo "✓ review flag present in the served HTML"
+          # A POC may have no start page (pins: only `__pill-preview`), so `/` alone tests the
+          # wrong page (#2456). scripts/review-flag-check.mjs also tries the app's review
+          # landing + surfaces and, on failure, annotates what each URL returned.
+          if node scripts/review-flag-check.mjs "$URL" "$WORKSPACE/$APP/deploy.config.json"; then
+            :
           else
             echo "::error::The review flag did not reach the build at $URL."
             echo "::error::NUXT_PUBLIC_CROUTON_REVIEW must be 'true' at BUILD time (#2070)."
@@ -555,11 +779,28 @@ jobs:
             printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
           fi
 
+      # Live sync (#2693): give the app the SAME derived token secret the collab Worker got, on
+      # every deploy (idempotent). /api/collab/token signs with it; CollabRoom verifies with it.
+      - name: Set COLLAB_TOKEN_SECRET on the app (collab flag)
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          [ -f "$RUNNER_TEMP/collab-token-secret" ] || { echo "No collab flag — nothing to set."; exit 0; }
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ "$ENVIRONMENT" = "production" ]; then ENV_FLAG=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then ENV_FLAG="--config .output/server/wrangler.json"
+          else ENV_FLAG="--env staging"; fi
+          npx wrangler secret put COLLAB_TOKEN_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-token-secret"
+          rm -f "$RUNNER_TEMP/collab-token-secret"
+
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
       # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
       # review-login step for exactly that reason — the login lands in a populated team, not a
-      # phantom one. Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
+      # phantom one. The ONLY place staging seeds — apps don't seed in their own cf:staging (#2366).
+      # Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
       # no-op); best-effort — warns, never reds the deploy. Skipped cleanly when the app doesn't
       # depend on @fyit/crouton-cli (crouton-seed unresolvable via pnpm exec). Staging only.
       - name: Seed collection + demo data (staging only, #1370)
@@ -568,11 +809,18 @@ jobs:
         run: |
           # Per-PR preview seeds its OWN DB (#2169); non-preview staging falls back to the
           # shared staging DB exactly as before (preview_db is empty off the preview path).
+          # Opt out with `"seed": false` in deploy.config.json (#2366). NB `.seed == false`, not
+          # `.seed // true` — jq's `//` treats false as missing, so that would never opt out.
+          if [ "$(jq -r '.seed == false' deploy.config.json 2>/dev/null)" = "true" ]; then
+            echo "${{ inputs.app }} opts out of the demo seed (deploy.config.json \"seed\": false)."
+            exit 0
+          fi
           DB="${{ steps.deploy.outputs.preview_db }}"; [ -n "$DB" ] || DB="${{ inputs.app }}-staging-db"
           if pnpm exec crouton-seed --db "$DB" --remote; then
             echo "✓ seeded $DB (collection fixtures + demo team)"
           else
-            echo "::warning::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+            echo "::warning title=Staging seed failed::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+            echo "### ⚠️ Demo seed failed (${{ inputs.app }}) — the review login's team may be missing; see this step's log." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # Seed a throwaway, loginable test account on the (isolated, staging-only)
@@ -590,6 +838,7 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_PR: ${{ inputs.review-pr }}
           REF_NAME: ${{ github.ref_name }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           # Per-PR preview: attach the review login's team membership to the preview's OWN
@@ -597,11 +846,32 @@ jobs:
           PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
         run: |
           set -o pipefail
-          # Stable per-preview key: the PR number when this is a PR, else the ref.
+          # An app without sign-in (e.g. pocs/loop-station) sets "reviewLogin": false — no account
+          # to create and no sign-in email to send (#2377).
+          if [ "$(jq -r '.reviewLogin == false' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null)" = "true" ]; then
+            echo "${APP} has no sign-in (deploy.config.json \"reviewLogin\": false) — no review login."
+            exit 0
+          fi
+          # A link-only app (no password to seed, e.g. pocs/status) is captured through a preview-only
+          # token instead (#2700): nothing to seed here, but the screenshot check must still run.
+          if [ "$(jq -r '.reviewLogin.method == "preview-token"' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null)" = "true" ]; then
+            echo "${APP} is link-only (reviewLogin.method preview-token) — no password login to seed; the screenshot signs in with a preview-only token."
+            echo "preview_token=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Stable per-preview key: the PR number when this is a PR (or a dispatch with
+          # review_pr, #3162 — must match the bridge's reviewer list), else the ref.
+          PR_NUMBER="${PR_NUMBER:-$REVIEW_PR}"
           if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
           EMAIL="review+${APP}-${KEY}@example.com"
-          # Deterministic password so redeploys reprint the same working login.
-          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          # Deterministic password so redeploys reuse the same working login. Derived from
+          # the secret ONLY — no fallback salt, which would make it public (#2358).
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::warning::REVIEW_SEED_SECRET is not set — no review login seeded for ${APP} (#2358). Add it as a repository Actions secret."
+            echo "### ⚠️ No review login (${APP}) — \`REVIEW_SEED_SECRET\` is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
           # Attach the review login to the SEEDED demo team (#832) so the advertised
@@ -624,78 +894,44 @@ jobs:
             LANDING="$(node -p "(require('./$WORKSPACE/$APP/deploy.config.json').reviewLogin||{}).landing||''" 2>/dev/null || echo '')"
             LOGIN_URL="$(node -e 'const [u,e,p,l]=process.argv.slice(1); const q=new URLSearchParams({email:e,password:p}); if(l) q.set("redirect",l); process.stdout.write(`${u}/auth/login?${q}`)' "$DEPLOY_URL" "$EMAIL" "$PW" "$LANDING")"
             echo "login_url=$LOGIN_URL" >> "$GITHUB_OUTPUT"
+            echo "::add-mask::$LOGIN_URL"
+            # The password and the one-click link (which carries it) are NOT written here:
+            # Actions summaries are public on this repo (#2358). The link is emailed to
+            # the owner in the per-epic test mail (post-test-card.yml, #2518).
             {
-              echo "### 🔑 Review test login (${APP})"
-              echo "- **One-click:** [open ${APP} signed-in]($LOGIN_URL) — the form arrives prefilled; click Sign in."
+              echo "### 🔑 Review login ready (${APP})"
               echo "- **URL:** $DEPLOY_URL"
               echo "- **Email:** \`$EMAIL\`"
-              echo "- **Password:** \`$PW\`"
-              echo "_Disposable account on an isolated, throwaway staging DB._"
+              echo "- The one-click sign-in link is emailed with the per-epic test mail (never posted here)."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # ── Capture the review surfaces so the flow can SHOW the change (#2173) ──────────
-      # Deploy-side on purpose: THIS env boots the app; the pi worker's often can't ("could not
-      # typecheck the touched app"). Logs into the live preview, drives the app to each DECLARED
-      # review surface (deploy.config.json `reviewSurfaces`, else reviewLogin.landing), validates
-      # the shot isn't blank/error, and commits the PNG(s) to writeups/ui-proposals/ — where the
-      # #2172 sign-off gate looks. The push (App token) re-runs CI so that gate re-evaluates and
-      # finds the evidence; a ui-proposals-only change matches NO app watchPaths, so it does NOT
-      # re-deploy (no loop). Never fails the deploy — no capture ⇒ the gate withholds (honest).
-      - name: Mint token for review-capture push
-        id: capture-token
-        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
-        continue-on-error: true
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-
-      - name: Capture + commit review-surface evidence (#2173)
-        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' && steps.capture-token.outputs.token != '' }}
+      # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
+      # The screenshot used to be captured inline here (#2173), so a miss could only be retried
+      # by redeploying. It is now its own workflow ("Preview screenshot" check): this step only
+      # records WHERE the preview is. No secrets in the file — the review login is re-derived
+      # downstream from REVIEW_SEED_SECRET, since artifacts are readable by anyone with repo access.
+      - name: Record preview for the screenshot check (#2697)
+        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && (steps.seed.outputs.email != '' || steps.seed.outputs.preview_token == 'true') && steps.deploy.outputs.url != '' }}
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-          EMAIL: ${{ steps.seed.outputs.email }}
-          PASSWORD: ${{ steps.seed.outputs.password }}
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REF: ${{ github.head_ref }}
-          REPO: ${{ github.repository }}
-          GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
         run: |
-          set -o pipefail
-          [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
-          npx playwright install chromium >/dev/null 2>&1 || true
-          # Capture to a temp dir so the commit is done in a CLEAN clone, never the dirty deploy
-          # workspace (build output / sync:ids-modified wrangler.jsonc would otherwise ride along).
-          OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
-          node scripts/capture-review-surfaces.mjs \
-            --url "$DEPLOY_URL" --email "$EMAIL" --password "$PASSWORD" \
-            --manifest "$WORKSPACE/$APP/deploy.config.json" --pr "$PR_NUMBER" --out "$OUT" || true
-          shopt -s nullglob; PNGS=("$OUT"/*.png)
-          if [ ${#PNGS[@]} -eq 0 ]; then
-            echo "no valid captures — the sign-off gate will withhold (nothing to show)"; exit 0
-          fi
-          BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
-          git clone --depth=1 --branch "$HEAD_REF" \
-            "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
-              echo "::warning::could not clone $HEAD_REF for capture commit — skipping (non-fatal)"; exit 0; }
-          mkdir -p "$BR/writeups/ui-proposals"
-          cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR" || { echo "::warning::could not cd into the capture clone — skipping (non-fatal)"; exit 0; }
-          git config user.name "nuxt-harness[bot]"
-          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
-          git add writeups/ui-proposals/*.png
-          if git commit -q -m "chore(review): capture ${APP} review surface(s) for PR #${PR_NUMBER} (#2173)"; then
-            git push origin "HEAD:${HEAD_REF}" && echo "✓ committed ${#PNGS[@]} capture(s) → the sign-off gate can now show them"
-          else
-            echo "captures unchanged — nothing to commit"
-          fi
+          mkdir -p "$RUNNER_TEMP/preview-meta"
+          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
+            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+
+      - name: Upload preview record
+        if: ${{ hashFiles(format('{0}/preview-meta/meta.json', runner.temp)) != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-meta-${{ inputs.app }}
+          path: ${{ runner.temp }}/preview-meta/meta.json
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
@@ -718,8 +954,21 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
         run: |
+          set -o pipefail
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
-          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
+          # No sign-in to smoke ("reviewLogin": false, #2377): just check the page answers 200.
+          if [ "$(jq -r '.reviewLogin == false' "$MANIFEST" 2>/dev/null)" = "true" ]; then
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$URL" 2>/dev/null)" || true
+            if [ "$CODE" = "200" ]; then
+              echo "result=pass" >> "$GITHUB_OUTPUT"
+              echo "### ✅ Deployed-preview smoke ($APP) — page answers 200 (no sign-in to check)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "result=fail" >> "$GITHUB_OUTPUT"
+              echo "### ❌ Deployed-preview smoke ($APP) — page answered $CODE" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST" 2>&1 | tee "$RUNNER_TEMP/smoke.log"; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "### ✅ Deployed-preview smoke ($APP) — passed" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -727,10 +976,37 @@ jobs:
             echo "### ❌ Deployed-preview smoke ($APP) — failed (see step log)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # A report-only failure must not pass unseen (#2812): put the failing step lines and the
+      # server's response on the PR, one sticky comment per head SHA. No @mention, no gate.
+      - name: Comment smoke failure on PR
+        if: ${{ steps.smoke.outputs.result == 'fail' && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          APP: ${{ inputs.app }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { APP: app, SHA: sha } = process.env
+            let log = ''
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/smoke.log`, 'utf8') } catch { /* page-only smoke has no log */ }
+            const lines = log.split('\n').filter(l => l.includes('✗')).map(l => l.replace(/^\[smoke\] /, '')).slice(0, 20)
+            const detail = lines.length ? lines.join('\n') : 'The page did not answer 200 (see the run log).'
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+            const marker = `<!-- deploy-smoke-fail:${app}:${sha} -->`
+            const body = `${marker}\n⚠️ **${app}** deployed-preview smoke failed (report-only, so the PR is not blocked) — [run log](${runUrl})\n\n\`\`\`\n${detail.slice(0, 6000)}\n\`\`\`\n\n<sub>🤖 Set \`smoke.required: true\` in \`${app}/deploy.config.json\` to make this block the PR.</sub>`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 })
+            const existing = comments.find(c => c.body && c.body.includes(marker))
+            if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body })
+
       - name: Upload smoke screenshot
         if: ${{ always() && steps.smoke.outputs.result != '' }}
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: smoke-${{ inputs.app }}
           path: screenshots/${{ inputs.app }}-smoke.png
@@ -770,27 +1046,37 @@ jobs:
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 
+      # No per-deploy sign-in mail (#2518): the owner gets ONE mail per epic that is ready to
+      # test, sent by post-test-card.yml. The link carries the password, so it stays email-only
+      # (#2358) — never in a PR comment, run summary or log.
+
       # On PRs, post/update a sticky comment with the isolated staging URL.
       - name: Comment staging URL on PR
         if: ${{ inputs.environment != 'production' && github.event_name == 'pull_request' && steps.deploy.outputs.url != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const url = '${{ steps.deploy.outputs.url }}'
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
-            const password = `${{ steps.seed.outputs.password }}`
-            const loginUrl = `${{ steps.seed.outputs.login_url }}`
             const marker = `<!-- deploy-staging:${app} -->`
-            // Disposable test login (#608) — only present when the seed step ran + produced creds.
-            // Leads with the one-click link (the form arrives prefilled — #1153 fixed the apply,
-            // it never auto-submits) and keeps the raw creds as the paste-in fallback.
-            const oneClick = loginUrl ? `\n\n🔑 **[Open ${app} signed-in](${loginUrl})** — prefilled login, one click on Sign in.` : ''
-            const login = (email && password)
-              ? `${oneClick}\n\n<details><summary>…or paste the creds</summary>\n\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n</details>\n_Disposable account on this isolated, throwaway staging DB._`
-              : ''
+            // Review login (#608, #2817). No credentials are ever posted here — PR comments
+            // are public on this repo (#2358). The status app signs in server-side and
+            // redirects to this PR's preview, so the link is safe to post.
             const pr = context.issue.number
-            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
+            const login = email
+              ? `\n\n🔑 [Open and sign in](https://status.pmcp.dev/api/status/login/${app}?key=pr${pr})\n<sub>The sign-in email is separate: one per epic, once the work is merged and live on staging.</sub>`
+              : ''
+            // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
+            // changed piece's own review page, not just the gallery's front door.
+            let pieces = ''
+            if (app === 'gallery') {
+              const { galleryLinks } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/gallery-links.mjs`)
+              const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: pr, per_page: 100 })
+              const links = galleryLinks(url, files)
+              if (links.length) pieces = `\n\n👀 **Changed pieces:**\n${links.map(l => `- [${l.file.split('/').pop().replace(/\.vue$/, '')}](${l.url}) · \`${l.file.split('/')[1]}\``).join('\n')}`
+            }
+            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${pieces}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })

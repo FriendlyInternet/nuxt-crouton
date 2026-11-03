@@ -15,6 +15,13 @@
       "when": 1783024281632,
       "tag": "0001_wandering_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793009317902,
+      "tag": "0002_layout_configs_team_key",
+      "breakpoints": true
     }
   ]
 }

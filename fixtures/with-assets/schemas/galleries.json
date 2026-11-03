@@ -1,0 +1,4 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } },
+  "imageId": { "type": "string", "refTarget": "assets", "meta": { "label": "Image" } }
+}

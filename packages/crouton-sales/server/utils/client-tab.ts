@@ -7,9 +7,9 @@
  * exactly what the receipt will print.
  */
 import { eq, and, ne, inArray } from 'drizzle-orm'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
+import { salesOrders } from '../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../collections/products/server/database/schema'
 import { resolvePrintOptionLabels } from './option-labels'
 
 export interface ClientTabLine {

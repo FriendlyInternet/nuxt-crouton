@@ -7,12 +7,13 @@ import { loadFields } from '../../../lib/utils/load-fields.ts'
 // Mirrors the shape getTypeMapping() produces: alias keys carry the canonical
 // type via `canonical`, so loadFields can normalize them (#285).
 const typeMapping = {
-  string: { db: '', drizzle: '', zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string' },
-  number: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number' },
-  date: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date' },
+  string: { db: '', sqlite: { column: 'text' }, zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput' },
+  number: { db: '', sqlite: { column: 'text' }, zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
+  date: { db: '', sqlite: { column: 'text' }, zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
+  repeater: { db: '', sqlite: { column: 'text' }, zod: 'z.array(z.any())', default: '[]', tsType: 'any[]', canonical: 'repeater', component: 'CroutonFormRepeater' },
   // aliases — same def as their canonical, with canonical pointing back
-  integer: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number' },
-  datetime: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date' },
+  integer: { db: '', sqlite: { column: 'text' }, zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
+  datetime: { db: '', sqlite: { column: 'text' }, zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
 }
 
 async function loadFromSchema(schema: Record<string, unknown>) {
@@ -41,10 +42,37 @@ describe('loadFields alias resolution (#285)', () => {
     expect(byName.count.zod).toBe('z.number()')
   })
 
-  it('leaves canonical types and unknown types untouched', async () => {
-    const byName = await loadFromSchema({ title: { type: 'string' }, when: { type: 'date' }, weird: { type: 'nope' } })
+  it('leaves canonical types untouched and rejects unknown types (#2732)', async () => {
+    const byName = await loadFromSchema({ title: { type: 'string' }, when: { type: 'date' } })
     expect(byName.title.type).toBe('string')
     expect(byName.when.type).toBe('date')
-    expect(byName.weird.type).toBe('string') // unknown → string fallback
+    await expect(loadFromSchema({ weird: { type: 'nope' } })).rejects.toThrow(/Field "weird" has unknown type "nope"/)
+  })
+})
+
+describe('loadFields attaches the manifest-declared form component (#2286)', () => {
+  // The manifest's `component` column is the single source for "which form
+  // control renders this type". Before #2286 generators kept their own
+  // type→component switch and never read it, so a manifest change was silent.
+  it('copies `component` from the type mapping onto the field', async () => {
+    const byName = await loadFromSchema({ title: { type: 'string' }, when: { type: 'date' } })
+    expect(byName.title.component).toBe('UInput')
+    expect(byName.when.component).toBe('CroutonCalendar')
+  })
+
+  it('resolves an alias to its canonical type\'s component', async () => {
+    const byName = await loadFromSchema({ at: { type: 'datetime' }, n: { type: 'integer' } })
+    expect(byName.at.component).toBe('CroutonCalendar')
+    expect(byName.n.component).toBe('UInputNumber')
+  })
+
+  it('attaches `component` to each repeater property as well (aliases resolved)', async () => {
+    const byName = await loadFromSchema({
+      slots: { type: 'repeater', meta: { properties: { label: { type: 'string' }, at: { type: 'datetime' }, n: { type: 'integer' } } } }
+    })
+    const props = byName.slots.meta.properties
+    expect(props.label.component).toBe('UInput')
+    expect(props.at.component).toBe('CroutonCalendar')
+    expect(props.n.component).toBe('UInputNumber')
   })
 })

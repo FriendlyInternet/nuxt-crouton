@@ -3,6 +3,7 @@ import { useRuntimeConfig } from 'nuxt/app'
 import type { ComposedPlan } from '../tools/plan-data'
 import {
   walkEntries,
+  parseWalkParam,
   stepsOf,
   selectorFor,
   exportText as buildExport,
@@ -37,6 +38,9 @@ const started = ref(false)
 const idx = ref(0)
 const verdicts = ref<VerdictMap>({})
 const scopeIds = ref<string[] | null>(null)
+// An ad-hoc walk from the link (`?walk=`) — replaces the plan walk while set.
+const adhoc = ref<WalkEntry[] | null>(null)
+const adhocTitle = ref('')
 
 let _walk: WalkEntry[] | null = null
 let _store = ''
@@ -75,19 +79,19 @@ export function useSpecWalk() {
   // tool sets when you tap its Walk buttons. `active` is the list you're walking:
   // the scope when set, else the whole thing. Verdicts stay global (keyed by id),
   // so a scoped pass still counts toward the overall marked/total.
-  const allWalk = walk
+  const allWalk = computed<WalkEntry[]>(() => adhoc.value ?? walk)
   const active = computed<WalkEntry[]>(() => {
     const s = scopeIds.value
-    return s && s.length ? allWalk.filter(e => s.includes(e.id)) : allWalk
+    return s && s.length ? allWalk.value.filter(e => s.includes(e.id)) : allWalk.value
   })
   const scoped = computed(() => !!(scopeIds.value && scopeIds.value.length))
 
   const marked = computed(() => active.value.filter(e => verdicts.value[e.id]?.verdict).length)
-  const markedTotal = computed(() => allWalk.filter(e => verdicts.value[e.id]?.verdict).length)
-  const total = computed(() => allWalk.length)
+  const markedTotal = computed(() => allWalk.value.filter(e => verdicts.value[e.id]?.verdict).length)
+  const total = computed(() => allWalk.value.length)
   const current = computed(() => active.value[idx.value])
   // The launcher badge tracks OVERALL progress (not the current scope).
-  const badge = computed<string | null>(() => (allWalk.length ? `${markedTotal.value}/${allWalk.length}` : null))
+  const badge = computed<string | null>(() => (allWalk.value.length ? `${markedTotal.value}/${allWalk.value.length}` : null))
 
   function setVerdict(v: Verdict) {
     const e = current.value
@@ -108,7 +112,7 @@ export function useSpecWalk() {
   // Open the walk focused on a single behaviour id (Plan → a behaviour's "Walk &
   // sign off"): scope to JUST that one. Returns false if it isn't a live entry.
   function jumpTo(id: string): boolean {
-    if (!allWalk.some(e => e.id === id)) return false
+    if (!allWalk.value.some(e => e.id === id)) return false
     scopeIds.value = [id]
     idx.value = 0
     open.value = true
@@ -118,7 +122,7 @@ export function useSpecWalk() {
   // Walk a SECTION (Plan → an increment's / phase's "Walk & sign off"): scope to
   // its live behaviours. Empty ⇒ falls back to the full walk.
   function walkScoped(ids: string[]) {
-    const valid = ids.filter(id => allWalk.some(e => e.id === id))
+    const valid = ids.filter(id => allWalk.value.some(e => e.id === id))
     scopeIds.value = valid.length ? valid : null
     idx.value = 0
     open.value = true
@@ -131,26 +135,38 @@ export function useSpecWalk() {
     open.value = true
     started.value = true
   }
+  // Open an ad-hoc walk from the link's `walk` param. Bad input is ignored (false).
+  function startAdhoc(raw: unknown): boolean {
+    const w = parseWalkParam(raw)
+    if (!w) return false
+    adhoc.value = w.entries
+    adhocTitle.value = w.title
+    scopeIds.value = null
+    idx.value = 0
+    open.value = true
+    started.value = true
+    return true
+  }
   // Fully leave the walk session (from the re-entry pill's ✕) — clears the pill.
   function end() {
     open.value = false
     started.value = false
   }
-  const isWalkable = (id: string) => allWalk.some(e => e.id === id)
+  const isWalkable = (id: string) => allWalk.value.some(e => e.id === id)
   const verdictOf = (id: string) => verdicts.value[id]?.verdict
 
   // Sign-off export: the current scope when scoped (sign off just what you
   // checked), else the whole accumulated set — stamped with the environment it
   // was checked in (#1181) so the sign-off says WHERE it was taken.
   const text = computed(() => buildExport(
-    scoped.value ? active.value : allWalk,
+    scoped.value ? active.value : allWalk.value,
     verdicts.value,
     import.meta.client ? formatEnv(readEnvProfile()) : '',
   ))
 
   return {
     open, started, idx, walk: active, verdicts, marked, markedTotal, total, current, badge, scoped,
-    setVerdict, setNote, go, jumpTo, walkScoped, walkAll, end, isWalkable, verdictOf,
+    setVerdict, setNote, go, jumpTo, walkScoped, walkAll, startAdhoc, adhocTitle, end, isWalkable, verdictOf,
     exportText: text, stepsOf, selectorFor
   }
 }

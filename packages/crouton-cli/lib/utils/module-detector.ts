@@ -1,6 +1,8 @@
 // module-detector.ts - Detect and validate required Nuxt modules
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { resolveExtendedPackages } from './extended-packages.ts'
+import { addToNuxtConfigExtends, isInNuxtConfigExtends } from './update-nuxt-config.ts'
 
 interface MissingDependency {
   type: 'package' | 'layer'
@@ -48,9 +50,9 @@ interface DetectorConfig {
  * Check if a package/layer is installed in package.json
  * Handles both npm package names and local file: paths
  */
-async function isPackageInstalled(packageName: string): Promise<boolean> {
+async function isPackageInstalled(packageName: string, appDir: string): Promise<boolean> {
   try {
-    const packageJsonPath = path.resolve('package.json')
+    const packageJsonPath = path.join(appDir, 'package.json')
     const packageJson = JSON.parse(await fsp.readFile(packageJsonPath, 'utf-8'))
 
     const deps: Record<string, string> = {
@@ -63,14 +65,8 @@ async function isPackageInstalled(packageName: string): Promise<boolean> {
       return true
     }
 
-    // If @fyit/crouton (unified module) is installed, all @fyit/crouton-* packages are available
-    // because they're bundled as dependencies of the unified module
-    if (packageName.startsWith('@fyit/crouton-') && '@fyit/crouton' in deps) {
-      return true
-    }
-
     // Check for local file: paths that reference the package
-    // e.g., "file:/path/to/nuxt-crouton" for "@fyit/crouton"
+    // e.g., "file:/path/to/crouton-core" for "@fyit/crouton-core"
     const packageShortName = packageName.replace('@fyit/', '')
     for (const [name, version] of Object.entries(deps)) {
       // Check if the dependency value is a file: path containing the package name
@@ -93,55 +89,22 @@ async function isPackageInstalled(packageName: string): Promise<boolean> {
 }
 
 /**
- * Check if a layer is extended in nuxt.config
- * Handles both npm package names and local file paths
+ * Check if a layer is extended in the app's nuxt.config — directly or through
+ * another layer (`@fyit/crouton-core` brings i18n). Reads the AST, so a name in
+ * a comment doesn't count.
  */
-async function isLayerExtended(layerName: string): Promise<boolean> {
-  try {
-    const nuxtConfigPath = path.resolve('nuxt.config.ts')
-    const nuxtConfig = await fsp.readFile(nuxtConfigPath, 'utf-8')
-
-    // Check if using getCroutonLayers() helper - this includes all crouton packages dynamically
-    if (nuxtConfig.includes('getCroutonLayers')) {
-      // getCroutonLayers() returns all @fyit/crouton-* packages based on options
-      // If the layer is a crouton package, assume it's included
-      if (layerName.startsWith('@fyit/crouton')) {
-        return true
-      }
-    }
-
-    // Check if layer is in extends array
-    const extendsMatch = nuxtConfig.match(/extends:\s*\[([\s\S]*?)\]/)
-    if (extendsMatch) {
-      const extendsContent = extendsMatch[1]
-
-      // Direct match for npm package name
-      if (extendsContent.includes(layerName)) {
-        return true
-      }
-
-      // Check for local path match (e.g., /path/to/nuxt-crouton or /path/to/nuxt-crouton-auth)
-      // Extract the package short name from @fyit/crouton-auth -> nuxt-crouton-auth
-      const packageShortName = layerName.replace('@fyit/', '')
-      // Match paths ending with the package name (with possible trailing quote/comma)
-      const localPathRegex = new RegExp(`[/\\\\]${packageShortName}['"\`\\s,\\]]`)
-      if (localPathRegex.test(extendsContent)) {
-        return true
-      }
-    }
-    return false
-  } catch (e: any) {
-    console.warn(`Warning: Could not read nuxt.config.ts: ${e.message}`)
-    return false
-  }
+async function isLayerExtended(layerName: string, appDir: string): Promise<boolean> {
+  const id = layerName.replace('@fyit/', '')
+  if (resolveExtendedPackages(appDir).includes(id)) return true
+  return isInNuxtConfigExtends(path.join(appDir, 'nuxt.config.ts'), layerName)
 }
 
 /**
  * Check if a layer exists in the project
  */
-async function layerExists(layerName: string): Promise<boolean> {
+async function layerExists(layerName: string, appDir: string): Promise<boolean> {
   try {
-    const layerPath = path.resolve('layers', layerName)
+    const layerPath = path.join(appDir, 'layers', layerName)
     const stats = await fsp.stat(layerPath)
     return stats.isDirectory()
   } catch {
@@ -175,44 +138,44 @@ function hasFieldWithComponent(config: DetectorConfig | null | undefined, compon
 /**
  * Detect required layers for a collection configuration
  */
-export async function detectRequiredDependencies(config: DetectorConfig): Promise<DependencyResult> {
+export async function detectRequiredDependencies(config: DetectorConfig, appDir: string = process.cwd()): Promise<DependencyResult> {
   const required: DependencyResult = {
     layers: [],
     missing: [],
   }
 
   // Always check for base Crouton layer first
-  const baseLayerInstalled = await isPackageInstalled('@fyit/crouton')
-  const baseLayerExtended = await isLayerExtended('@fyit/crouton')
+  const baseLayerInstalled = await isPackageInstalled('@fyit/crouton-core', appDir)
+  const baseLayerExtended = await isLayerExtended('@fyit/crouton-core', appDir)
 
   // Check base layer status first
   if (baseLayerInstalled && !baseLayerExtended) {
     // Package installed but not added to nuxt.config.ts extends[]
     required.missing.push({
       type: 'layer',
-      name: '@fyit/crouton',
+      name: '@fyit/crouton-core',
       reason: 'Package is installed but NOT added to nuxt.config.ts extends[]',
       installCmd: '(already installed)',
-      configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton']`,
+      configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-core']`,
       critical: true,
       note: 'Auth, admin, and i18n are automatically included when using the core package.',
     })
   } else if (!baseLayerInstalled) {
     // Fallback to check for local crouton layer
-    const croutonLayerExists = await layerExists('crouton')
+    const croutonLayerExists = await layerExists('crouton', appDir)
     if (!croutonLayerExists) {
       // Core not installed - check if standalone auth is available
-      const authPackageInstalled = await isPackageInstalled('@fyit/crouton-auth')
-      const authLayerExtended = await isLayerExtended('@fyit/crouton-auth')
+      const authPackageInstalled = await isPackageInstalled('@fyit/crouton-auth', appDir)
+      const authLayerExtended = await isLayerExtended('@fyit/crouton-auth', appDir)
 
       if (!authPackageInstalled && !authLayerExtended) {
         // Neither core nor auth available - recommend installing core (which includes auth)
         required.missing.push({
           type: 'package',
-          name: '@fyit/crouton',
+          name: '@fyit/crouton-core',
           reason: 'Required for Crouton collections (includes auth, admin, and i18n)',
-          installCmd: 'pnpm add @fyit/crouton',
-          configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton']`,
+          installCmd: 'pnpm add @fyit/crouton-core',
+          configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-core']`,
           critical: true,
         })
       } else if (authPackageInstalled && !authLayerExtended) {
@@ -224,7 +187,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
           installCmd: '(already installed)',
           configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-auth']`,
           critical: true,
-          note: 'Consider using @fyit/crouton instead (includes auth + admin + i18n).',
+          note: 'Consider using @fyit/crouton-core instead (includes auth + admin + i18n).',
         })
       }
       // If auth is extended standalone, that's fine too
@@ -233,7 +196,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
     }
   } else {
     // Core is installed AND extended - auth is bundled, no separate check needed
-    required.layers.push('@fyit/crouton')
+    required.layers.push('@fyit/crouton-core')
   }
 
   // Check if translations are needed
@@ -242,14 +205,14 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
 
   if (hasTranslations && !config.noTranslations) {
     // Check for nuxt-crouton-i18n layer (addon)
-    const layerInstalled = await isPackageInstalled('@fyit/crouton-i18n')
-    const layerExtended = await isLayerExtended('@fyit/crouton-i18n')
+    const layerInstalled = await isPackageInstalled('@fyit/crouton-i18n', appDir)
+    const layerExtended = await isLayerExtended('@fyit/crouton-i18n', appDir)
 
     if (layerInstalled && layerExtended) {
       required.layers.push('@fyit/crouton-i18n')
     } else {
       // Fallback to check for local translations layer
-      const translationsLayerExists = await layerExists('translations')
+      const translationsLayerExists = await layerExists('translations', appDir)
       if (translationsLayerExists) {
         required.layers.push('translations')
       } else {
@@ -258,7 +221,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
           name: '@fyit/crouton-i18n',
           reason: 'Required addon for translation fields',
           installCmd: 'pnpm add @fyit/crouton-i18n',
-          configCmd: `Add BOTH '@fyit/crouton' and '@fyit/crouton-i18n' to extends array`,
+          configCmd: `Add BOTH '@fyit/crouton-core' and '@fyit/crouton-i18n' to extends array`,
         })
       }
     }
@@ -268,8 +231,8 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
   const hasEditorFields = hasFieldWithComponent(config, 'CroutonEditorSimple')
 
   if (hasEditorFields) {
-    const editorInstalled = await isPackageInstalled('@fyit/crouton-editor')
-    const editorExtended = await isLayerExtended('@fyit/crouton-editor')
+    const editorInstalled = await isPackageInstalled('@fyit/crouton-editor', appDir)
+    const editorExtended = await isLayerExtended('@fyit/crouton-editor', appDir)
 
     if (editorInstalled && editorExtended) {
       required.layers.push('@fyit/crouton-editor')
@@ -288,8 +251,8 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
   const useMaps = config?.flags?.useMaps === true
 
   if (useMaps) {
-    const mapsInstalled = await isPackageInstalled('@fyit/crouton-maps')
-    const mapsExtended = await isLayerExtended('@fyit/crouton-maps')
+    const mapsInstalled = await isPackageInstalled('@fyit/crouton-maps', appDir)
+    const mapsExtended = await isLayerExtended('@fyit/crouton-maps', appDir)
 
     if (mapsInstalled && mapsExtended) {
       required.layers.push('@fyit/crouton-maps')
@@ -350,18 +313,18 @@ export function displayMissingDependencies(dependencies: DependencyResult): bool
   }
 
   // Check if core package is being added (which includes auth/admin/i18n)
-  const hasCoreMissing = dependencies.missing.some(d => d.name === '@fyit/crouton')
+  const hasCoreMissing = dependencies.missing.some(d => d.name === '@fyit/crouton-core')
 
   console.log('\nThen add to nuxt.config.ts:')
   console.log(`   extends: [`)
 
   if (hasCoreMissing) {
     // Core includes auth, admin, and i18n - only show core
-    console.log(`     '@fyit/crouton',  // Includes auth, admin, i18n`)
+    console.log(`     '@fyit/crouton-core',  // Includes auth, admin, i18n`)
     // Show other addon layers (not auth/admin/i18n since they're bundled)
     dependencies.missing.forEach((dep) => {
       const bundledPackages = [
-        '@fyit/crouton',
+        '@fyit/crouton-core',
         '@fyit/crouton-auth',
         '@fyit/crouton-admin',
         '@fyit/crouton-i18n',
@@ -395,85 +358,29 @@ function isNpmPackage(layerName: string): boolean {
 /**
  * Ensure nuxt.config extends required layers
  */
-export async function ensureLayersExtended(layers: string[]): Promise<void> {
+export async function ensureLayersExtended(layers: string[], appDir: string = process.cwd()): Promise<void> {
   if (layers.length === 0) return
 
-  try {
-    const nuxtConfigPath = path.resolve('nuxt.config.ts')
-    let content = await fsp.readFile(nuxtConfigPath, 'utf-8')
+  const nuxtConfigPath = path.join(appDir, 'nuxt.config.ts')
+  const failed: string[] = []
+  let changed = 0
 
-    // Check if extends exists
-    if (!content.includes('extends:')) {
-      // Add extends array
-      const moduleIndex = content.indexOf('modules:')
-      if (moduleIndex !== -1) {
-        const insertPoint = content.lastIndexOf('}', moduleIndex)
-        const layerPaths = layers.map((l) => {
-          const layerPath = isNpmPackage(l) ? l : `./layers/${l}`
-          return `    '${layerPath}'`
-        }).join(',\n')
-        const extendsBlock = `\n  extends: [\n${layerPaths}\n  ],\n`
-        content = content.slice(0, insertPoint) + extendsBlock + content.slice(insertPoint)
-      }
-    } else {
-      // Check each layer is extended
-      for (const layer of layers) {
-        // Determine the correct path format
-        const layerPath = isNpmPackage(layer) ? `'${layer}'` : `'./layers/${layer}'`
-
-        // For npm packages, check if already extended (in any format including local paths)
-        if (isNpmPackage(layer)) {
-          // Direct match for npm package name
-          if (content.includes(`'${layer}'`)) {
-            continue // Already extended
-          }
-
-          // Check for local path match (e.g., /path/to/nuxt-crouton or /path/to/nuxt-crouton-auth)
-          const packageShortName = layer.replace('@fyit/', '')
-          const localPathRegex = new RegExp(`[/\\\\]${packageShortName}['"\`\\s,\\]]`)
-          if (localPathRegex.test(content)) {
-            continue // Already extended via local path
-          }
-        }
-
-        if (!content.includes(layerPath)) {
-          // Add to extends array - use multiline regex to capture the full array content
-          const extendsMatch = content.match(/extends:\s*\[([\s\S]*?)\]/)
-          if (extendsMatch) {
-            const currentExtends = extendsMatch[1]
-            // Find the last non-whitespace character position
-            const trimmedExtends = currentExtends.trimEnd()
-
-            // Check if there's already content (not empty)
-            if (trimmedExtends) {
-              // Remove trailing comma if present, then add our entry with comma
-              const withoutTrailingComma = trimmedExtends.replace(/,\s*$/, '')
-              const newExtends = `${withoutTrailingComma},\n    ${layerPath}\n  `
-              content = content.replace(
-                /extends:\s*\[([\s\S]*?)\]/,
-                `extends: [${newExtends}]`,
-              )
-            } else {
-              // Empty extends array
-              const newExtends = `\n    ${layerPath}\n  `
-              content = content.replace(
-                /extends:\s*\[([\s\S]*?)\]/,
-                `extends: [${newExtends}]`,
-              )
-            }
-          }
-        }
-      }
-    }
-
-    await fsp.writeFile(nuxtConfigPath, content, 'utf-8')
-    console.log(`✓ Updated nuxt.config.ts to extend required layers`)
-  } catch (e: any) {
-    console.warn(`⚠️  Could not update nuxt.config.ts: ${e.message}`)
-    console.log(`   Please manually add to extends array:`)
-    layers.forEach((layer) => {
-      const layerPath = isNpmPackage(layer) ? layer : `./layers/${layer}`
-      console.log(`     '${layerPath}'`)
-    })
+  for (const layer of layers) {
+    const spec = isNpmPackage(layer) ? layer : `./layers/${layer}`
+    // For npm packages, "already extended" includes a local path to the package
+    // or another layer that extends it.
+    if (isNpmPackage(layer) && await isLayerExtended(layer, appDir)) continue
+    const result = await addToNuxtConfigExtends(nuxtConfigPath, spec)
+    if (result.added) changed++
+    else if (result.reason !== 'already in config') failed.push(spec)
   }
+
+  if (failed.length === 0) {
+    // Only report a write that happened — a dry run or an already-wired app must stay silent (#2731)
+    if (changed > 0) console.log(`✓ Updated nuxt.config.ts to extend required layers`)
+    return
+  }
+  console.warn(`⚠️  Could not update nuxt.config.ts`)
+  console.log(`   Please manually add to extends array:`)
+  failed.forEach(spec => console.log(`     '${spec}'`))
 }

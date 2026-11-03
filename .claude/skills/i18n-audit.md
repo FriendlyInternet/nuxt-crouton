@@ -64,7 +64,7 @@ Group packages into batches of 2 (to balance agent load):
 | Agent B | crouton-admin + crouton-assets |
 | Agent C | crouton-bookings + crouton-pages |
 | Agent D | crouton-sales + crouton-triage |
-| Agent E | crouton-designer + crouton-core |
+| Agent E | crouton-core |
 | Agent F | crouton-editor + crouton-flow + crouton-collab (+ any other small packages) |
 
 Adjust groupings based on what packages actually exist. Skip packages with no `.vue` files.
@@ -273,7 +273,6 @@ Last full audit: `docs/reports/translation-audit-report-20260220.md`
 
 Known state after that audit:
 - Perfectly synced locale files: crouton-i18n, crouton-admin, crouton-assets, crouton-bookings, crouton-pages, crouton-sales, crouton-triage
-- Missing nl/fr: crouton-designer
 - No locale infrastructure: crouton-core, crouton-editor, crouton-flow, crouton-collab
 - Fully complete: crouton-auth, crouton-triage
 - Critical (zero t() usage): crouton-sales

@@ -9,8 +9,8 @@
 # Setup:
 #   1. Replace all {{PLACEHOLDER}} values below
 #   2. Set the shared auth secret:
-#        npx wrangler secret put BETTER_AUTH_SECRET
-#      (must match the BETTER_AUTH_SECRET in your Pages app)
+#        npx wrangler secret put COLLAB_TOKEN_SECRET
+#      (must match the COLLAB_TOKEN_SECRET in your Pages app)
 #   3. Deploy:
 #        npx wrangler deploy
 #   4. Set in your Pages app environment:

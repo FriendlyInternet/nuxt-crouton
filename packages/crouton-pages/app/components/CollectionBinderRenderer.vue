@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 /**
  * Collection Binder Renderer
  *
@@ -218,24 +219,11 @@ const { data: detailItem, status: detailStatus } = await useFetch<Record<string,
 const detailComponent = computed(() => {
   if (!collectionName.value) return null
   const config = colConfig.value
-  if (!config?.componentName) return null
+  if (!config) return null
 
-  const detailName = config.componentName.replace(/Form$/, 'Detail')
-  try {
-    const component = resolveComponent(detailName)
-    if (typeof component !== 'string') return component
-  } catch {
-    // Not found
-  }
-
-  try {
-    const generic = resolveComponent('CroutonDetail')
-    if (typeof generic !== 'string') return generic
-  } catch {
-    // Not available
-  }
-
-  return null
+  const detailName = canonicalDetailName(collectionName.value)
+  // Per-collection detail wins (app beats layer), else the generic CroutonDetail
+  return collectionForms[detailName] ?? collectionForms.CroutonDetail ?? null
 })
 
 const isLoading = computed(() => {

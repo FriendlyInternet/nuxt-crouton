@@ -16,7 +16,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `app/composables/useHelperAuth.ts` | Helper authentication (wraps nuxt-crouton-auth; PIN login via generic redeem, gate-session adoption) |
 | `app/utils/printer-led.ts` | Printer online-LED attribution pure logic (#1507): `attributePrinterStates(printers, jobs)` → per-printer `LedState` (`online`/`offline`/`printing`/`unknown`). Matches a job to a printer row by `printerId` first, else by an **unambiguous** `printerTitle` (drift-proof so a re-created printer's failures still show red, not a false grey); latest job wins by `completedAt ?? createdAt`. Behaviour contract: `test/printer-led.test.ts` |
 | `server/utils/kds-tickets.ts` | **KDS feed — pure plan + shaper (#1766).** `planDisplayJobsQuery` decides what the board asks for, making the query's cost a function of the operator's config and never of event size (`MAX_CONFIGURABLE_LOCATIONS` keeps it well under D1's cap — the cap itself lives in `@fyit/crouton-core/shared/utils/d1`, don't redeclare it). `shapeDisplayTickets` groups the flat rows into `(order × location)` tickets and returns `{ tickets, unroutable }` — an item whose product has no prep location reaches **no** station (it's malformed data, see #1769) but is **counted**, so the drop is observable instead of the bare `continue` it used to be. Contracts: `test/kds-tickets.test.ts`, `test/kds-query-plan.test.ts` |
-| `app/composables/useBlockEditRequest.ts` | Opens a block's property panel from inside a tiptap NodeView (#1762) — the `findEditorId` DOM walk + the bubbling `block-edit-request` dispatch that every `Blocks/*View.vue` had its own copy of. Imported explicitly (VueNodeViewRenderer mounts NodeViews outside Nuxt's auto-import context — that applies to *composables*, **not** components: Nuxt UI components resolve fine in a NodeView template, which is why `PassScreenView` uses `UButton`/`UIcon` rather than raw HTML). The other 8 views still carry their copies — #1791 |
+| `app/components/Blocks/*View.vue` | Editor NodeViews. Chrome (border, label row, edit/delete, dblclick) comes from `<CroutonBlockFrame>` in crouton-core (#2414), which wraps `useBlockEditRequest` (also moved to crouton-core). All eight views use the frame; none carries its own copy |
 | `app/composables/useBlockEvent.ts` | Resolves a block's configured event **slug** → id against the public by-slug endpoint (#1762). Blocks store the slug, not the id, so page content survives a regenerated event row; every renderer had duplicated this. `notFound` is deliberately distinct from "not resolved yet" — a deleted event must render an explanation, not an empty board that merely looks quiet |
 | `server/utils/pass-tickets.ts` | **Pass-screen feed — pure plan + shaper (#1761).** `planPassJobsQuery` (no order ids, so event size can't reach D1's cap) + `shapePassTickets`, which decides readiness: an order is offered only when every location it touches has gone ready. Un-split items (the runner carries the whole order). An unroutable item is excluded from readiness — no station ever sees it, so no bump can arrive, and counting it would stall the order at the pass forever — and the ticket is flagged `incomplete`. Also exports `OUTSTANDING_DEFINITION`, the single source of "still waiting" that WS4's admin page and dashboard both read so they can't disagree. Contracts: `test/pass-tickets.test.ts`, `test/pass-query-plan.test.ts` |
 | `server/utils/handover.ts` | **Conflict-tolerant handover write (#1761).** `recordHandover(db, input)` inserts one `salesHandovers` row; a uniqueness conflict returns `{ created: false }` rather than throwing, because the row it collided with IS the handover the caller wanted. Any other error rethrows — swallowing them would lose handovers silently and drift the outstanding count from reality. The table is **injected**, not imported: it lives in the consuming app's generated layer, which a package unit test can't resolve, and injecting it is what makes the concurrency behaviour testable. Contract: `test/handover-idempotency.test.ts` |
@@ -33,12 +33,13 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/utils/my-orders-shape.ts` | Pure assembly for the `my-orders` endpoint — `shapeMyOrders(orders, items, jobs)` groups items per order, resolves option ids → labels (`resolveOptionLabels`), sums the order total, and buckets the combined print status (`bucketFromStatuses`: failed > busy > done, display jobs excluded). No DB/Nitro deps → unit-tested (`test/my-orders-shape.test.ts`) |
 | `server/utils/sync-outbox.ts` | Pi-side capture for the D1 live mirror (#176) — `recordOutboxEvents()` + `isCloudSyncEnabled()`; gated by `CROUTON_SALES_CLOUD_SYNC` |
 | `server/utils/sync-ingest.ts` | Cloud-side apply (#178) — `applyOutboxEvents()` idempotent upsert by nanoid |
-| `server/utils/cloud-sync-auth.ts` | Fail-closed `x-sync-key` auth for the ingest (#178) |
+| `server/utils/cloud-sync-auth.ts` | Ingest auth (#2725): `authenticateSync()` — paired till sends `x-device-id` + `x-device-secret` (verified via crouton-auth grant; rows scoped to the grant's team). `x-sync-key` shared secret is **deprecated**, honoured only when no device headers are sent |
 | `server/utils/cloud-sync-pusher.ts` | Pi-side push loop (#177) — `pushPendingOutbox()` drains outbox → ingest; `pingHeartbeat()` idle empty-batch ping (#179) |
 | `server/plugins/cloud-sync-pusher.ts` | Nitro plugin running the push loop (gated, backoff) + idle heartbeat ping (#179) |
-| `server/utils/sync-status.ts` | Cloud-side freshness heartbeat (#179) — `recordSyncHeartbeat()` (best-effort upsert on every ingest) + `readSyncStatus()` |
+| `server/utils/sync-status.ts` | Cloud-side freshness heartbeat (#179) — `recordSyncHeartbeat()` (best-effort upsert on every ingest, keyed per device id since #2725) + `readSyncStatuses()` + `toStatusPayload()` (the status endpoint's response shape); #816 adds per-till `lastPullAt` (`recordSyncPull()`, stamped by `pull.get.ts`) and `lostEdits` (`recordLostEdits()` from ingest conflicts → `sales_sync_conflicts`, `readLostEdits()`) |
 | `server/api/crouton-sales/sync/ingest.post.ts` | Cloud D1 ingest endpoint (#178); also stamps the freshness heartbeat (#179) |
-| `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, serverNow }` |
+| `server/utils/sync-pull.ts` + `sync/pull.get.ts` | Cloud → till config sync (#815): `collectConfigChanges()` (cloud, device-authed, per team, cursor + `skip` paging) and `pullConfigChanges()` (till, runs after each push; applies via `resolveConflict` side=till; cursor in `sales_sync_pull_state`; never writes the outbox). Equal timestamps keep the till's version on both sides. Delete markers are written on both sides (`captureConfigWrite`) |
+| `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, devices[], serverNow }` (headline = freshest till) |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |
 | `app/components/Dashboard/SalesSummary.vue` | `SalesDashboardSalesSummary` — live revenue/orders/avg + top products (#179), built on the chart endpoints |
 | `app/components/Dashboard/PerProductTotals.vue` | `SalesDashboardPerProductTotals` — **per-product Verkocht + Nog uit** in the Data pane (#1867): the mid-event "moeten we nog pils bijbestellen?" question, with the kitchen backlog beside it. `outstanding: null` renders as **—**, never `0` — an opt-out location *cannot* have a backlog, which is a different statement from "has none right now" (a `0` reads as "all caught up" and invites waiting for a number that never moves). Presentation decisions live in computeds, not template branches |
@@ -47,15 +48,17 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/utils/chart-scope.ts` | `chartOrderScope(salesOrders, { teamId, eventId, personnel }, { includeCancelled? })` — the WHERE **every** chart endpoint shares, plus `salesOrderDay()` (the `'unixepoch'` day bucket; without that modifier SQLite reads the seconds as a Julian day). Eight copies of this clause is exactly how the cancelled filter came to be missing from all of them at once (#1925); now a ninth endpoint inherits every rule by construction. `orders-by-status` is the ONE opt-out (`includeCancelled: true`) because it groups BY status — enforced from both sides in `test/order-status.test.ts` |
 | `server/utils/cancel-order.ts` | `cancelOrder(db, { table, orderId, teamId, eventId, actor })` → `cancelled` / `already-cancelled` / `not-found` (#1941). A status write, **never** a cascade — the line items are the record being kept. Team AND event are in the WHERE (an id from a URL is attacker-controlled), and the status predicate lives IN the update so a double-tap is a no-op rather than a race (same reasoning as `handover.ts`). Also exports `actorLabel`. Contract: `test/cancel-order.test.ts` |
 | `server/utils/per-product-totals.ts` | **Per-product aggregation (#1867).** `buildPerProductTotals(db, tables, { teamId, eventId, personnel })` → one row per product with `sold` (units gone from the cellar) + `outstanding` (units a location still owes, or `null` when no backlog is possible). **Two queries on purpose**: `sales_kdsbumps` has no uniqueness constraint, so joining bumps in to compute both at once would let a double-tapped location fan the item rows out and silently double `sold`. Cancelled orders are excluded from BOTH (a mis-punch is not consumption) — ⚠️ note this deliberately differs from `product-day-matrix`, which filters no status at all. Tables injected (same reason as `handover.ts`). Contract: `test/per-product-totals.test.ts` |
-| `server/utils/personnel-condition.ts` | The staff-order rule as a condition over an **injected column** (`personnelConditionOn`) + `parsePersonnelMode`. Split out of `personnel-filter.ts` (#1867) because that module imports `salesOrders` from the generated layer at module scope, so it's unresolvable from a package unit test or from a query that receives its tables as parameters. `personnel-filter.ts` is now the thin binding that supplies the table — and deliberately does **not** re-export these (Nitro auto-imports every `server/utils/` export, so a re-export makes the symbol resolvable from two modules and Nuxt warns "Duplicated imports") |
+| `server/utils/personnel-condition.ts` | The staff-order rule as a condition over an **injected column** (`personnelConditionOn`) + `parsePersonnelMode`. Split out of `personnel-filter.ts` (#1867) because that module imports the Nuxt-bound `salesOrders` table at module scope, so it can't run in a plain package unit test or from a query that receives its tables as parameters. `personnel-filter.ts` is now the thin binding that supplies the table — and deliberately does **not** re-export these (Nitro auto-imports every `server/utils/` export, so a re-export makes the symbol resolvable from two modules and Nuxt warns "Duplicated imports") |
 | `server/database/schema.ts` | Package-owned Drizzle schema: `salesSyncOutbox` (`sales_sync_outbox`) + `salesSyncStatus` (`sales_sync_status`, #179 heartbeat) |
-| `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps auto-pick-up `sales_sync_outbox` + `sales_sync_status` in `db:generate` |
+| `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps auto-pick-up the package tables in `db:generate`: `sales_sync_outbox` + `sales_sync_status` and the 11 collection tables (`salesEvents` … `salesKdsbumps`, #2278) |
+| `collections/<name>/` | **The 11 sales collections, owned end to end (#2278)** — `server/database/{schema,queries}.ts`, `server/api/teams/[id]/sales-<plural>/*`, `types.ts`, `app/composables/useSales<Plural>.ts` (Zod schema), `app/components/List.vue` (+ `_Form.vue` where no bespoke form exists). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate (deployed D1s depend on them). Moved verbatim from kassa's generated layer, hand edits included. Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Types are importable as `@fyit/crouton-sales/collections/<name>/types` |
 | `server/database/migrations/0001_sales_sync_outbox.sql` | Package migration creating `sales_sync_outbox` |
 | `server/database/migrations/0002_sales_sync_status.sql` | Package migration creating `sales_sync_status` (#179 heartbeat) |
-| `schemas/` | JSON schema files for crouton generate |
+| `server/database/migrations/0003_sales_sync_status_per_device.sql` | Adds `team_id`; heartbeat rows keyed per device (#2725) |
+| `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
 | `seed/index.ts` | Seed provider (`@fyit/crouton-sales/seed`) — event `vlaamsekermis` (PIN `1234`) + categories/products + a scoped kassa demo page |
 
-**Note:** Collection composables like `useSalesProducts()`, `useSalesCategories()`, etc. are auto-generated by crouton in the user's `./layers/sales/` layer, not provided by this package.
+**Note:** Since #2278 the collection composables (`useSalesProducts()`, `useSalesCategories()`, …), tables and CRUD routes ship from this package (`collections/*`). A consuming app only extends `@fyit/crouton-sales`; it generates nothing for sales. Changing a column = edit `collections/<name>/server/database/schema.ts` here, then `db:generate` in each app.
 
 ## Architecture
 
@@ -93,8 +96,8 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 > **DELETED from this package** (now in crouton-printing): `server/utils/{receipt-formatter,print-queue-service,print-job-complete,escpos-drainer,print-server-auth}.ts`,
 > `server/plugins/escpos-drainer.ts`, `server/api/print-server/`,
 > `server/api/crouton-sales/events/[eventId]/browser-print-jobs/`, and the
-> RUT956 `print-server/` scripts. **KEPT:** `salesPrinters` (printer config in
-> the generated layer), `sync-outbox.ts` (cloud sync), and the cloud-mirror
+> RUT956 `print-server/` scripts. **KEPT:** `salesPrinters` (printer config,
+> `collections/printers`), `sync-outbox.ts` (cloud sync), and the cloud-mirror
 > `salesPrintqueues` table the D1 ingest writes into. Sections below that
 > reference the deleted sales files describe the behaviour that now lives in
 > crouton-printing.
@@ -688,8 +691,7 @@ syncing now, or is this a stale snapshot?
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',  // Required for helper auth
+    '@fyit/crouton-core',  // bundles crouton-auth (helper auth)
     '@fyit/crouton-sales',
     './layers/sales'  // Generated layer
   ],
@@ -900,7 +902,7 @@ deleted row is still re-created, an existing one is left alone.
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Extends**: `@fyit/crouton-core` (required)
 - **Peer deps**: `@fyit/crouton-auth`, `@nuxtjs/i18n ^9.0.0`, `zod ^3.0.0`
 - **Receipt printing**: zero runtime deps. `receipt-formatter.ts` is a self-contained
   ESC/POS byte builder (CP858 encoding via `ESC t 19`). It does **not** use

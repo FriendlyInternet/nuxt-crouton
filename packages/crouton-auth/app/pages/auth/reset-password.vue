@@ -40,13 +40,13 @@ const fields = computed<AuthFormField[]>(() => [{
   name: 'password',
   type: 'password',
   label: t('auth.newPassword'),
-  placeholder: `At least ${minPasswordLength} characters`,
+  placeholder: t('auth.placeholders.atLeastChars', { min: minPasswordLength }),
   required: true
 }, {
   name: 'confirmPassword',
   type: 'password',
   label: t('auth.confirmNewPassword'),
-  placeholder: 'Confirm your new password',
+  placeholder: t('auth.placeholders.confirmNewPassword'),
   required: true
 }])
 
@@ -81,18 +81,18 @@ async function onSubmit(event: FormSubmitEvent<{ password: string, confirmPasswo
 
   if (!token.value) {
     submitting.value = false
-    notify.error('Invalid link', { description: 'The reset link is invalid or has expired.' })
+    notify.error(t('auth.invalidResetLink'), { description: t('auth.invalidResetLinkDescription') })
     return
   }
 
   try {
     await resetPassword(token.value, event.data.password)
     resetSuccess.value = true
-    notify.success('Password reset', { description: 'Your password has been reset successfully.' })
+    notify.success(t('auth.passwordUpdated'), { description: t('auth.passwordResetSuccessDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Password reset failed'
+    const message = e instanceof Error ? e.message : t('auth.passwordResetFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   } finally {
     submitting.value = false
   }

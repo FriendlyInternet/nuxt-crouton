@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { colorsAreFlat, looksLikeErrorPage } from './capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen } from './capture-validate.mjs'
 
 test('colorsAreFlat: uniform samples are flat', () => {
   const samples = Array.from({ length: 16 }, () => [255, 255, 255, 255])
@@ -44,4 +44,14 @@ test('looksLikeErrorPage: Nuxt/Nitro error text is an error page', () => {
 
 test('looksLikeErrorPage: normal UI content is not an error page', () => {
   assert.equal(looksLikeErrorPage({ status: 200, text: 'Welcome to the dashboard', title: 'Dashboard' }), false)
+})
+
+test('looksLikeLoadingScreen: Nuxt dev loading template is rejected', () => {
+  const html = '<!DOCTYPE html><html><head><title>Nuxt</title></head><body><div id="nuxt-loading"><p>generating types</p><span>step 4/7</span></div></body></html>'
+  assert.equal(looksLikeLoadingScreen({ html }), true)
+  assert.equal(looksLikeLoadingScreen({ text: 'Generating types · step 4/7' }), true)
+})
+
+test('looksLikeLoadingScreen: a real app page is not a loading screen', () => {
+  assert.equal(looksLikeLoadingScreen({ html: '<div id="__nuxt"><main>Calendar</main></div>', text: 'Calendar', title: 'Velo' }), false)
 })

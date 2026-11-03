@@ -5,7 +5,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devServer: { port: 3001 },
@@ -18,8 +17,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-pages',
     '@fyit/crouton-devtools/eruda',
     './layers/content',
-    './layers/pages',
-    './layers/crouton',
     './layers/site',
     '@fyit/crouton-editor'
   ],

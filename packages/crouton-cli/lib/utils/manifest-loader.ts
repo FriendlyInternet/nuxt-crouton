@@ -17,6 +17,7 @@ import type {
   DetectionResult,
   DetectedField,
   GeneratorContribution,
+  FieldTypeMapping,
 } from '@fyit/crouton-core/shared/manifest'
 import { existsSync, readdirSync } from 'node:fs'
 
@@ -132,10 +133,32 @@ export async function discoverManifests(rootDir?: string): Promise<CroutonManife
     }
   }
 
+  assertUniqueLayerNames(manifests)
+
   _manifestCache = manifests
   _cacheRootDir = cwd
   _contributionCache = contributionCache
   return manifests
+}
+
+/**
+ * Fail when two packages declare the same layer name. Form/component names are
+ * derived from the layer, so a shared name would let one package silently
+ * override the other (package-over-package override is unsupported, #2280).
+ */
+export function assertUniqueLayerNames(manifests: CroutonManifest[]): void {
+  const owners = new Map<string, string>()
+  for (const m of manifests) {
+    const name = m.layer?.name
+    if (!name) continue
+    const first = owners.get(name)
+    if (first && first !== m.id) {
+      throw new Error(
+        `[manifest-loader] Layer name "${name}" is claimed by both "${first}" and "${m.id}". Layer names must be unique across packages.`,
+      )
+    }
+    owners.set(name, m.id)
+  }
 }
 
 /**
@@ -294,8 +317,8 @@ export function getModuleRegistryMap(
  */
 export function getTypeMapping(
   manifests: CroutonManifest[],
-): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> {
-  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> = {}
+): Record<string, FieldTypeMapping> {
+  const mapping: Record<string, FieldTypeMapping> = {}
 
   for (const manifest of manifests) {
     if (!manifest.fieldTypes) continue
@@ -306,11 +329,19 @@ export function getTypeMapping(
       // UInput + text column instead of CroutonCalendar + a timestamp column (#285).
       const entry = {
         db: def.db,
-        drizzle: def.drizzle,
+        sqlite: def.sqlite,
         zod: def.zod,
         default: def.defaultValue,
         tsType: def.tsType,
+        // Sample values for the seed + test generators — carried onto every
+        // field by loadFields instead of private type switches (#2910).
+        seed: def.seed,
+        testSample: def.testSample,
         canonical: name,
+        // The form control the manifest declares for this type. Carried onto
+        // every field by loadFields so generators render it instead of keeping
+        // a private type→component switch (#2286).
+        component: def.component,
       }
       mapping[name] = entry
       if (def.aliases) {
@@ -445,4 +476,20 @@ export async function findPackagesDir(startDir: string): Promise<string | null> 
   }
 
   return null
+}
+
+// ── Convenience helpers (discover + compute in one call) ──────────
+// Moved here from the deleted manifest-bridge.ts (#2290): every caller is .ts,
+// so the jiti hop (and its second manifest cache) bought nothing.
+
+export async function loadTypeMapping(rootDir?: string) {
+  return getTypeMapping(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistryMap(rootDir?: string) {
+  return getModuleRegistryMap(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistry(rootDir?: string) {
+  return getModuleRegistry(await discoverManifests(rootDir))
 }

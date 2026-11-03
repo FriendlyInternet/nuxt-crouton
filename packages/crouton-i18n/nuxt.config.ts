@@ -53,6 +53,12 @@ export default defineNuxtConfig({
         prefix: 'CroutonI18n',
         global: true
       },
+      // Collection form/list for the translationsUi collection: registered as
+      // TranslationsUiForm / TranslationsUiList (the canonical <Layer><Plural> names).
+      {
+        path: join(currentDir, 'app/collection-components'),
+        prefix: 'Translations'
+      },
       // Stubs dir: registers AITranslateButton without prefix so crouton-ai can override it.
       // priority: -1 matches the pattern used by crouton-core stubs — overridden by real packages.
       // Uses a separate directory to avoid Nuxt deduplicating same-path entries.
@@ -72,9 +78,6 @@ export default defineNuxtConfig({
 
   // i18n configuration — locales driven by crouton.config.js
   i18n: {
-    bundle: {
-      optimizeTranslationDirective: false
-    },
     locales: croutonLocales.map(l => ({ code: l.code, name: l.name, file: l.file })) as LocaleObject[],
     langDir: '../locales', // Relative to srcDir (app/)
     defaultLocale: croutonDefaultLocale as any,

@@ -28,10 +28,11 @@
  * `__dirname`, never `import.meta.url`. Very generous first-hit timeouts mirror
  * the other specs (cold `nuxt dev` compile on CI).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import net from 'node:net'
 import type { AddressInfo } from 'node:net'
 import {
+  test,
   FIXTURE,
   ensureAuthed,
   activeTeamId

@@ -12,12 +12,6 @@ vi.stubGlobal('useRoute', () => ({
   path: '/teams/test-team/products'
 }))
 
-const mockApplyProxyTransform = vi.fn((item: any) => item)
-const mockGetProxiedEndpoint = vi.fn((config: any, apiPath: string) => apiPath)
-
-vi.stubGlobal('applyProxyTransform', mockApplyProxyTransform)
-vi.stubGlobal('getProxiedEndpoint', mockGetProxiedEndpoint)
-
 let mockCollectionConfig = {
   apiPath: 'products',
   fetchStrategy: 'query'
@@ -91,8 +85,6 @@ describe('useCollectionItem', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetch.mockResolvedValue([{ id: 'item-1', name: 'Test Item' }])
-    mockApplyProxyTransform.mockImplementation((item: any) => item)
-    mockGetProxiedEndpoint.mockImplementation((config: any, apiPath: string) => apiPath)
     mockCollectionConfig = {
       apiPath: 'products',
       fetchStrategy: 'query'
@@ -265,24 +257,6 @@ describe('useCollectionItem', () => {
     })
   })
 
-  describe('proxy transform', () => {
-    it('applies transform to fetched item', async () => {
-      mockFetch.mockResolvedValue([{ id: 'item-1', name: 'Raw' }])
-      mockApplyProxyTransform.mockImplementation((item: any) => ({
-        ...item,
-        transformed: true
-      }))
-
-      const { item } = await useCollectionItem('products', 'item-1')
-
-      // Access item.value to trigger the computed and call applyTransform
-      const itemValue = item.value
-
-      expect(mockApplyProxyTransform).toHaveBeenCalled()
-      expect(itemValue).toEqual({ id: 'item-1', name: 'Raw', transformed: true })
-    })
-  })
-
   describe('refresh function', () => {
     it('returns refresh function that refetches', async () => {
       const { refresh } = await useCollectionItem('products', 'item-1')
@@ -307,17 +281,6 @@ describe('useCollectionItem', () => {
       await useCollectionItem('products', 'item-1')
 
       expect(mockFetch).toHaveBeenCalledWith('/api/teams/team-123/custom-products?ids=item-1', { headers: undefined })
-    })
-  })
-
-  describe('proxied endpoint', () => {
-    it('uses getProxiedEndpoint for path resolution', async () => {
-      mockGetProxiedEndpoint.mockReturnValue('proxied-products')
-
-      await useCollectionItem('products', 'item-1')
-
-      expect(mockGetProxiedEndpoint).toHaveBeenCalled()
-      expect(mockFetch).toHaveBeenCalledWith('/api/teams/team-123/proxied-products?ids=item-1', { headers: undefined })
     })
   })
 

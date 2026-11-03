@@ -34,6 +34,8 @@ if (!token) {
   process.exit(1)
 }
 
+import { shouldKeepEpicBranch } from '../../../scripts/epic-branch-keep.mjs'
+
 const PROTECTED = new Set(['main', 'HEAD', 'gh-pages'])
 const minAgeMs = Date.now() - minAgeDays * 86400 * 1000
 
@@ -84,6 +86,13 @@ const deletable = []
 const skipped = []
 for (const b of [...new Set(merged)]) {
   if (openHeads.has(b)) { skipped.push(`${b} (open PR)`); continue }
+  // #2788: an epic branch lives while its epic issue is open, even when already merged to main.
+  const epicNo = /^epic\/(\d+)-/.exec(b)?.[1]
+  if (epicNo) {
+    const r = await gh(`/repos/${OWNER}/${NAME}/issues/${epicNo}`)
+    const state = r.ok ? (await r.json()).state : null
+    if (shouldKeepEpicBranch(b, state)) { skipped.push(`${b} (epic #${epicNo} still open)`); continue }
+  }
   if (tipMs[b] && tipMs[b] > minAgeMs) { skipped.push(`${b} (newer than ${minAgeDays}d)`); continue }
   deletable.push(b)
 }

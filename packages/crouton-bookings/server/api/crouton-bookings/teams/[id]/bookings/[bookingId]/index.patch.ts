@@ -5,7 +5,7 @@
 import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
+import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
 
 const updateSchema = z.object({
   location: z.string().optional(),

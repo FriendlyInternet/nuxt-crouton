@@ -96,3 +96,77 @@ export function exportText(walk: WalkEntry[], verdicts: VerdictMap, env = ''): s
   // The environment stamp (#1181) rides along so a sign-off says WHERE it was checked.
   return env ? `${env}\n\n${body}` : body
 }
+
+/** An ad-hoc walk carried in the link (`?walk=<base64url JSON>`) instead of the build-time plan. */
+export interface AdhocWalk {
+  title: string
+  app: string
+  ref: string
+  entries: WalkEntry[]
+}
+
+/** Max encoded size of the `walk` param — the link rides in a URL, keep it small. */
+export const MAX_WALK_PARAM = 2048
+const MAX_STEPS = 30
+
+function djb2(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+
+const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
+
+/**
+ * Parse + validate the `walk` URL param: base64url JSON `{ title, app, ref,
+ * steps: [{ text, expect? }] }`. Returns null for anything missing, oversized,
+ * malformed or empty — the link is untrusted input, a bad one is just ignored.
+ * Each step becomes one WalkEntry (id is scoped by a hash of the payload so
+ * verdicts from one link never leak into another). No secrets belong here.
+ */
+export function parseWalkParam(raw: unknown): AdhocWalk | null {
+  if (typeof raw !== 'string' || !raw || raw.length > MAX_WALK_PARAM) return null
+  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(raw)) return null
+  let data: any
+  try {
+    const b64 = raw.replace(/=+$/, '').replace(/-/g, '+').replace(/_/g, '/')
+    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4))
+    data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))))
+  } catch { return null }
+  if (!data || typeof data !== 'object' || !Array.isArray(data.steps)) return null
+  const scope = djb2(raw)
+  const entries: WalkEntry[] = []
+  for (const s of data.steps.slice(0, MAX_STEPS)) {
+    const text = clip(s?.text, 300)
+    if (!text) continue
+    entries.push({
+      id: `walk-${scope}-${entries.length + 1}`,
+      behaviour: text,
+      expect: clip(s?.expect, 300),
+      hook: '',
+      howToTest: '',
+      status: '',
+      bucket: ''
+    })
+  }
+  if (!entries.length) return null
+  return { title: clip(data.title, 80) || 'Walk', app: clip(data.app, 60), ref: clip(data.ref, 60), entries }
+}
+
+/**
+ * Handle a route query that may carry `walk` — used for both the first page load
+ * and every later client-side navigation (e.g. the post-sign-in redirect lands
+ * on `/?walk=…` without a page load). Opens the walk if valid, then always calls
+ * `drop` so a reload doesn't restart it. Returns true when a `walk` param was present.
+ */
+export function consumeWalkQuery(
+  query: Record<string, unknown> | null | undefined,
+  deps: { start: (raw: string) => boolean, drop: () => void }
+): boolean {
+  const v = query?.walk
+  const raw = Array.isArray(v) ? v[0] : v
+  if (raw === undefined || raw === null) return false
+  if (typeof raw === 'string') deps.start(raw)
+  deps.drop()
+  return true
+}

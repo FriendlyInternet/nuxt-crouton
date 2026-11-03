@@ -19,12 +19,28 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-sales')
 
 export default defineNuxtConfig({
   // Usage:
-  // extends: ['@fyit/crouton-core', '@fyit/crouton-sales', './layers/sales']
+  // extends: ['@fyit/crouton-core', '@fyit/crouton-sales']
 
   // Sales prints through the generic crouton-printing queue (epic #325): it
   // provides the print_jobs/printers tables, the enqueue/lifecycle API, and the
   // ESC/POS engine + transport that sales used to ship itself.
-  extends: ['@fyit/crouton-printing'],
+  // The 11 sales collections (schema, queries, routes, list, composable) ship
+  // with the package (#2278). Table names, API paths and registry keys stay
+  // byte-identical to what apps used to generate: deployed D1s depend on them.
+  extends: [
+    '@fyit/crouton-printing',
+    join(currentDir, 'collections/events'),
+    join(currentDir, 'collections/products'),
+    join(currentDir, 'collections/categories'),
+    join(currentDir, 'collections/orders'),
+    join(currentDir, 'collections/orderitems'),
+    join(currentDir, 'collections/locations'),
+    join(currentDir, 'collections/clients'),
+    join(currentDir, 'collections/eventsettings'),
+    join(currentDir, 'collections/printers'),
+    join(currentDir, 'collections/printqueues'),
+    join(currentDir, 'collections/kdsbumps')
+  ],
 
   modules: ['@nuxtjs/i18n'],
 

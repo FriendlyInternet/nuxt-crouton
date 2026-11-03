@@ -16,19 +16,19 @@
  * Setup:
  *   1. Copy this directory to workers/{{APP_NAME}}-collab/
  *   2. Replace all {{PLACEHOLDER}} values in wrangler.toml
- *   3. Set BETTER_AUTH_SECRET: npx wrangler secret put BETTER_AUTH_SECRET
+ *   3. Set BETTER_AUTH_SECRET: npx wrangler secret put COLLAB_TOKEN_SECRET
  *   4. Deploy: npx wrangler deploy
  */
 
 // Re-export the Durable Object class so Cloudflare registers it.
-// After copying to workers/my-app-collab/, this path should resolve to
-// the crouton-collab package in your monorepo.
-export { CollabRoom } from '../../packages/crouton-collab/server/durable-objects/CollabRoom'
+// Resolves in place (packages/crouton-collab/worker-template/src). The deploy workflow
+// deploys this template directly via `"collab": true`; a manual copy must adjust the path.
+export { CollabRoom } from '../../server/durable-objects/CollabRoom'
 
 interface Env {
   COLLAB_ROOMS: DurableObjectNamespace
   DB: D1Database
-  BETTER_AUTH_SECRET?: string
+  COLLAB_TOKEN_SECRET?: string
 }
 
 /** Origins allowed to connect via WebSocket. Add your app's domains here. */
@@ -85,6 +85,8 @@ export default {
     // Build a new URL that the DO expects: /{action}?{original query params}
     const doUrl = new URL(request.url)
     doUrl.pathname = `/${action}`
+    // The DO trusts only the path-derived key (overwrites anything the client sent)
+    doUrl.searchParams.set('roomKey', roomKey)
 
     // Forward the request to the Durable Object
     const doRequest = new Request(doUrl.toString(), request)

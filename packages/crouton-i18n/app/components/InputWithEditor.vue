@@ -12,6 +12,7 @@ const emit = defineEmits<{
 }>()
 
 const { locale, locales, defaultLocale } = useI18n()
+const { t } = useT()
 
 // The base/required locale — its tab is marked `*` and is the fallback source.
 // Driven by the configured i18n defaultLocale (was hardcoded 'en') so
@@ -92,7 +93,7 @@ const translationStatus = computed(() => {
       class="space-y-3"
     >
       <UFormField
-        :label="`Translation (${editingLocale.toUpperCase()})${editingLocale === requiredLocale ? ' *' : ''}`"
+        :label="`${t('i18n.input.translationLabel', { locale: editingLocale.toUpperCase() })}${editingLocale === requiredLocale ? ' *' : ''}`"
         :name="`values.${editingLocale}`"
         :required="editingLocale === requiredLocale"
       >
@@ -116,7 +117,7 @@ const translationStatus = computed(() => {
         <UInput
           v-else
           :model-value="currentValue"
-          :placeholder="editingLocale !== requiredLocale && modelValue?.[requiredLocale] ? `Fallback: ${modelValue[requiredLocale]}` : ''"
+          :placeholder="editingLocale !== requiredLocale && modelValue?.[requiredLocale] ? t('i18n.input.fallback', { value: modelValue[requiredLocale] }) : ''"
           :color="error && editingLocale === requiredLocale && !currentValue ? 'error' : 'primary'"
           :highlight="!!(error && editingLocale === requiredLocale && !currentValue)"
           class="w-full"
@@ -153,7 +154,7 @@ const translationStatus = computed(() => {
       class="space-y-4"
     >
       <p class="text-sm text-amber-600 dark:text-amber-400">
-        <UIcon name="i-lucide-info" /> Grid mode is not available for rich text editing. Please edit one language at a time.
+        <UIcon name="i-lucide-info" /> {{ t('i18n.input.gridModeUnavailable') }}
       </p>
     </div>
   </div>

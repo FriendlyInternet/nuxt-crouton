@@ -18,13 +18,13 @@ export default defineEventHandler(async (event) => {
 
   // Resolve team by ID or slug
   const team = await db
-    .select({ id: organization.id })
+    .select({ id: organization.id, logo: organization.logo })
     .from(organization)
     .where(eq(organization.slug, teamParam))
     .limit(1)
     .then((rows: any[]) => rows[0])
     || await db
-      .select({ id: organization.id })
+      .select({ id: organization.id, logo: organization.logo })
       .from(organization)
       .where(eq(organization.id, teamParam))
       .limit(1)
@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(teamSettings.teamId, team.id))
     .limit(1)
 
-  // Return site settings or empty object if not set
-  return settings[0]?.siteSettings ?? {}
+  // Site settings (or {}) plus the team logo, so public pages can show it
+  // without a separate request (#2259). Read-only here — not part of siteSettings.
+  return { ...(settings[0]?.siteSettings ?? {}), teamLogo: team.logo ?? null }
 })

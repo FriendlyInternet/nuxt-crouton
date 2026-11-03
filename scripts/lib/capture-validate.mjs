@@ -53,6 +53,22 @@ export function looksLikeErrorPage({ status, text = '', title = '' } = {}) {
   return ERROR_MARKERS.some(marker => haystack.includes(marker))
 }
 
+// Nuxt's dev "loading" template (served while the first build runs) is neither blank nor an
+// error page, so it slipped through as evidence (#2526). Matched on the HTML or visible text.
+const LOADING_MARKERS = [
+  'nuxt-loading',
+  '__nuxt_loading__',
+  'generating types',
+  'nuxt is loading',
+  'nuxt dev server is starting',
+]
+
+/** True when the HTML/text/title is Nuxt's dev loading screen rather than the app. */
+export function looksLikeLoadingScreen({ html = '', text = '', title = '' } = {}) {
+  const haystack = `${title}\n${text}\n${html}`.toLowerCase()
+  return LOADING_MARKERS.some(marker => haystack.includes(marker))
+}
+
 /**
  * Sample a grid of pixels from a PNG buffer using a scratch Playwright page
  * (draws the image to a canvas and reads pixel data) — no image-decoding

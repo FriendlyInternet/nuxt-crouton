@@ -14,9 +14,11 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   auth.smoke.spec.ts         # auth feature itself: logout/re-login, logged-out guard, team switch
   collection.smoke.spec.ts   # generic, manifest-driven list + CRUD checks
   surface.smoke.spec.ts      # generic, manifest-driven package-surface checks (optional)
+  card.smoke.spec.ts         # generic, manifest-driven: a name-resolved collection card renders in the List layout (with-bookings, #2824)
   i18n.smoke.spec.ts         # generic, manifest-driven locale-switch check (optional)
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
+  assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 
@@ -24,7 +26,7 @@ fixtures/                    # the apps under test — real crouton apps, one pe
   minimal/                   # core + auth + i18n, one 'items' collection
   with-pages/                # + @fyit/crouton-pages   (surface: pages workspace)
   with-bookings/             # + @fyit/crouton-bookings (surface: bookings admin)
-  with-assets/               # + @fyit/crouton-assets  (surface: CroutonAssetsPicker mounts, not the stub)
+  with-assets/               # + @fyit/crouton-assets  (surface: CroutonAssetsPicker mounts, not the stub; upload → list refresh)
   with-collab/               # + @fyit/crouton-collab  (spike surface: realtime collab UI mounts single-client)
   with-maps/                 # + @fyit/crouton-maps    (maps: map mounts in form + live Nominatim geocode)
   with-sales/                # + @fyit/crouton-printing + @fyit/crouton-sales (four-tier print + pairing smoke vs an in-test fake :9100 printer)
@@ -58,7 +60,7 @@ The config's `webServer` boots `pnpm --filter e2e-fixture-$E2E_FIXTURE dev` on
 all use port 3000. Each fixture has its own local sqlite DB under `.data/`.
 
 > A fresh checkout/worktree must **build the fixture's workspace deps first** (the
-> dist-consumed `@fyit/*` packages), or the dev server can't load `@fyit/crouton`:
+> dist-consumed `@fyit/*` packages), or the dev server can't load `@fyit/crouton-core`:
 > `pnpm --filter "e2e-fixture-<name>^..." build` (this is what CI does).
 
 ### Type-safety gate (#197)
@@ -195,13 +197,13 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
   "a11y": false,
   // Optional: a locale-switch check (crouton-i18n). A `surface` can only assert a
   // static element renders; this one *interacts* — flips locale via the
-  // package-owned LanguageSwitcher and asserts a known UI string changes
+  // user pill's Language submenu and asserts a known UI string changes
   // language, so an i18n regression goes red. Needs ≥2 configured locales
   // (set `locales`/`defaultLocale` in the fixture's crouton.config.js). Omit for
   // single-locale fixtures (i18n.smoke.spec.ts then registers no test).
   "i18n": {
     "path": "/",            // page rendering the switcher + a translated string; {team} substituted
-    "switchTo": "NL",        // switcher option to pick (uppercase locale-code label)
+    "switchTo": "NL",        // locale to pick (code; matched against the menu item's native name or code)
     "before": "Your teams",  // a known translated string in the default locale
     "after": "Jouw teams"    // the same string in the target locale
   },
@@ -230,7 +232,7 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
 > Nuxt UI renders the panel DOM id as `<storageKey>-panel-pages-sidebar`, hence
 > the ends-with match), so the assertion fails if that package's UI regresses.
 > The `i18n` check works the same way: the switcher is crouton-i18n's
-> `LanguageSwitcher` (a Nuxt UI `USelect` → the page's locale combobox) and the
+> user pill's Language submenu (bottom-left `CroutonUserPill` → "Language" → the locale item) and the
 > asserted string is crouton's own `home.*` label, so a broken switcher or stuck
 > locale fails it.
 
@@ -293,6 +295,18 @@ runs axe on the **live DOM** and **fails on any critical/serious violation**.
   the existing `chromium` project (any `*.smoke.spec.ts`), so it covers every fixture
   the matrix already selects; `@axe-core/playwright` is a root devDependency picked up
   by CI's `pnpm install`. Findings show up in the same Playwright HTML report / trace.
+
+## Console guard (#2916)
+Every spec imports `test` from `./helpers` (not `@playwright/test`); it adds an auto
+fixture that collects console warnings/errors and uncaught page errors, and fails the
+test at the end if any match the list in `console-guard.cjs` — today
+`[Vue warn]: Failed to resolve component` (a component looked up by name is missing, so
+a blank spot renders). The failure names the message and the page URL. Other console
+noise never fails. To add a pattern: one line in `CONSOLE_FAIL_PATTERNS` with a reason.
+To accept a known warning on one fixture, add `allowConsole: [{ "pattern": "…", "reason": "…" }]`
+to its `e2e.manifest.json` (none today). This relies on `nuxt dev` (Vue's warnings are
+dev-only) — don't switch the fixtures to a production build. Matcher unit test:
+`node --test scripts/lib/console-guard.test.mjs`.
 
 ## Gotchas
 - **Module format:** repo root is CommonJS, and Playwright 1.57 transpiles

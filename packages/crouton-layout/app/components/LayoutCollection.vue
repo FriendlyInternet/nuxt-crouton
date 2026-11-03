@@ -17,6 +17,10 @@
  * palette, before it's configured) — it shows a hint instead of fetching, so the
  * editor never trips on an undefined collection. The fetch itself is isolated in
  * `CroutonLayoutCollectionData` behind `<Suspense>`.
+ *
+ * Tapping a row goes to the page's shared selection for this collection (#2598):
+ * with a Form block for the same collection on screen it opens there, otherwise in
+ * the collection's overlay, as before.
  */
 import { computed, inject, ref, type Ref } from 'vue'
 import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
@@ -38,6 +42,8 @@ const renderContext = inject<Ref<LayoutRenderContext>>(
   ref<LayoutRenderContext>('admin'),
 )
 const isPage = computed(() => renderContext.value === 'page')
+
+provideSelectionItemActions(() => props.collection)
 </script>
 
 <template>

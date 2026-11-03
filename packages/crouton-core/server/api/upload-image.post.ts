@@ -1,23 +1,27 @@
 import { useNitroApp } from 'nitropack/runtime'
+import { requireServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
+import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { DEFAULT_ALLOWED_TYPES } from '../utils/upload-types'
 
 export default defineEventHandler(async (event) => {
   // Auth check - require authenticated user
-  const session = await requireAuth(event)
+  const session = await requireServerSession(event)
+  const userId = session.user.id
+  const activeTeamId = (session.session as { activeOrganizationId?: string | null }).activeOrganizationId
+
+  // Files live under their owner's prefix so DELETE can verify ownership
+  let prefix = `users/${userId}`
+  if (activeTeamId) {
+    const { team } = await resolveTeamAndCheckMembership(event)
+    prefix = `teams/${team.id}`
+  }
 
   // Get upload constraints from runtime config
   const config = useRuntimeConfig(event)
   const uploadConfig = (config.public as any)?.croutonUpload || {} as Record<string, any>
   const maxSize = uploadConfig.maxSize || '10MB'
-  const allowedTypes = uploadConfig.allowedTypes || [
-    // Images
-    'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'image/avif',
-    // Documents
-    'application/pdf',
-    // Video
-    'video/mp4', 'video/webm',
-    // Audio
-    'audio/mpeg', 'audio/wav', 'audio/ogg'
-  ]
+  // `[]` must mean "use defaults" — ensureBlob skips the check on an empty list
+  const allowedTypes: string[] = uploadConfig.allowedTypes?.length ? uploadConfig.allowedTypes : DEFAULT_ALLOWED_TYPES
 
   const form = await readFormData(event)
   const file = form.get('image') || form.get('file')
@@ -32,7 +36,7 @@ export default defineEventHandler(async (event) => {
   try {
     ensureBlob(file, {
       maxSize,
-      types: allowedTypes
+      types: allowedTypes as NonNullable<Parameters<typeof ensureBlob>[1]['types']>
     })
   } catch (error: unknown) {
     throw createError({
@@ -45,7 +49,8 @@ export default defineEventHandler(async (event) => {
   const fileName = (file as File).name || `upload-${Date.now()}.${file.type.split('/')[1] || 'bin'}`
   const startTime = Date.now()
   const blobObject = await blob.put(fileName, file, {
-    addRandomSuffix: true
+    addRandomSuffix: true,
+    prefix
   }).catch((err: unknown) => {
     throw createError({
       status: 500,
@@ -58,7 +63,7 @@ export default defineEventHandler(async (event) => {
   nitroApp.hooks.callHook('crouton:operation', {
     type: 'asset:uploaded',
     source: 'crouton-assets',
-    userId: session.id,
+    userId,
     metadata: {
       filename: fileName,
       mimeType: file.type,

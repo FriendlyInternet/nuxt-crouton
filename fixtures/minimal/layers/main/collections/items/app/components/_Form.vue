@@ -2,7 +2,6 @@
   @crouton-generated
   @collection items
   @layer main
-  @generated 2026-06-16
 
   ## AI Context
   - Form component for items collection
@@ -72,7 +71,7 @@ const { defaultValue, schema, collection } = useMainItems()
 const { t } = useT()
 
 // Form layout configuration
-const tabs = ref(false)
+
 
 
 
@@ -86,6 +85,17 @@ const { close, loading } = useCrouton()
 const initialValues = props.action === 'update' && props.activeItem?.id
   ? { ...defaultValue, ...props.activeItem }
   : { ...defaultValue }
+
+// DB nulls are wire/storage values, not form values (#1415): fall back to the
+// field default so the strict form schema never sees null on an untouched
+// field. No-op when the default itself is null (dates, dependent fields).
+const initialRecord = initialValues as Record<string, unknown>
+const defaultRecord = defaultValue as Record<string, unknown>
+for (const key of Object.keys(defaultRecord)) {
+  if (initialRecord[key] === null && defaultRecord[key] !== null) {
+    initialRecord[key] = defaultRecord[key]
+  }
+}
 
 // Draft state: seeded from defaults (required fields may start null/empty until
 // the user fills them; the zod schema validates on submit), so cast the initial
@@ -106,8 +116,6 @@ const handleSubmit = async () => {
 
   } catch (error) {
     console.error('Form submission failed:', error)
-    // You can add toast notification here if available
-    // toast.add({ title: 'Error', description: 'Failed to submit form', color: 'red' })
   }
 }
 </script>

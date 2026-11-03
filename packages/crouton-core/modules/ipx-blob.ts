@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { existsSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { defineNuxtModule } from '@nuxt/kit'
 
 /**
@@ -32,7 +32,9 @@ export default defineNuxtModule({
       const dataDir = hub.dir || '.data'
       const blobDir = resolve(nuxt.options.rootDir, dataDir, 'blob')
 
-      if (!existsSync(blobDir)) return
+      // Create it if absent: a fresh checkout has no uploads yet, and skipping
+      // here left IPX blind to every image uploaded later in the session
+      mkdirSync(blobDir, { recursive: true })
 
       // Append blob dir to IPX filesystem directories (alongside public/ dirs)
       const currentDirs = Array.isArray(ipxConfig.fs?.dir)

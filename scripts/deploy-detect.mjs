@@ -10,9 +10,10 @@
  * run reported success ("green but it didn't happen").
  *
  * Two guarantees here:
- *   1. `resolveChangedFiles` NEVER swallows a diff failure. On push-to-main it prefers the
- *      merge's first-parent diff (`HEAD~1..HEAD` — the net change, robust to concurrent
- *      pushes, unlike before..after), and if it cannot resolve ANY base it throws.
+ *   1. `resolveChangedFiles` NEVER swallows a diff failure. On push-to-main it diffs the whole
+ *      push (`before..after`, so every commit of a rebase merge counts — #2396), falls back to
+ *      the first-parent diff (`HEAD~1..HEAD`) only when `before` can't be trusted, and if it
+ *      cannot resolve ANY base it throws.
  *   2. An EMPTY changed-file set on a triggered push/PR is treated as a compute failure,
  *      not "deploy nothing": the workflow's own `paths:` filter guarantees ≥1 watched file
  *      changed, so empty ⇒ the diff broke ⇒ fail loud (red run → report-failed-deploy
@@ -136,15 +137,18 @@ export function resolveChangedFiles({ event, baseSha, headSha, git }) {
     }
     return { files: git.diffFrom(baseSha, headSha), source: 'pr:base...head' }
   }
-  // push-to-main: prefer the tip's first-parent diff — for a merge commit that IS the net PR
-  // change, and it doesn't depend on github.event.before (which is wrong under concurrent
-  // pushes — the #1477 cause). Fall back to before..after only if HEAD~1 is unavailable
-  // (e.g. an unexpectedly shallow checkout); if neither resolves, fail loud.
-  if (git.isResolvable('HEAD~1')) return { files: git.diff('HEAD~1', 'HEAD'), source: 'push:first-parent' }
-  if (baseSha && baseSha !== ZERO_SHA && git.isResolvable(baseSha)) {
+  // push-to-main: diff the WHOLE push, before..after (#2396). A rebase or fast-forward merge
+  // (this repo's no-squash policy) pushes N commits at once; the old `HEAD~1..HEAD` saw only
+  // the last one, so an app touched only by an earlier commit was silently not deployed. The
+  // checkout is at `after` (github.sha), so before..after is exactly what this push added —
+  // a concurrent push gets its own run with its own range. Only when `before` can't be
+  // trusted (all-zero on a new branch, not fetched, or not an ancestor after a force-push)
+  // fall back to the tip's first-parent diff; if neither resolves, fail loud (#1499).
+  if (baseSha && baseSha !== ZERO_SHA && git.isResolvable(baseSha) && git.isAncestor(baseSha, headSha)) {
     return { files: git.diff(baseSha, headSha), source: 'push:before..after' }
   }
-  throw new DetectError('cannot resolve a diff base on push (no HEAD~1, no usable before-sha)')
+  if (git.isResolvable('HEAD~1')) return { files: git.diff('HEAD~1', 'HEAD'), source: 'push:first-parent' }
+  throw new DetectError('cannot resolve a diff base on push (no usable before-sha, no HEAD~1)')
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -174,6 +178,15 @@ function realGit() {
     // the guard threw on every PR. The unit fake happily declared the range resolvable, so
     // the tests agreed with the code and both were wrong; only running it against the real
     // repo showed it. Twice in one change, the same lesson.
+    // `--is-ancestor` exits 0 when a is an ancestor of b, 1 when not (force-push).
+    isAncestor(a, b) {
+      try {
+        run(['merge-base', '--is-ancestor', a, b])
+        return true
+      } catch {
+        return false
+      }
+    },
     hasMergeBase(a, b) {
       try {
         run(['merge-base', a, b])
@@ -185,25 +198,62 @@ function realGit() {
   }
 }
 
-function loadApps(root = 'apps') {
+/**
+ * Derive an app's watchPaths from what it actually depends on (#2397). The hand-written
+ * `watchPaths` in deploy.config.json was authored once at setup and never re-derived, so a
+ * package added to the app later (velo → crouton-maps, crouton-devtools) silently never
+ * triggered a staging redeploy. The app's package.json already names every `@fyit/<pkg>` it
+ * consumes, so the watch list is: the app itself, the lockfile, one `packages/<pkg>/**` per
+ * `@fyit/*` dependency (deps + devDeps), plus anything still listed explicitly. PURE.
+ */
+export function deriveWatchPaths({ app, pkg = {}, explicit = [], readPkg = () => null }) {
+  // Walk @fyit/* deps transitively: velo never lists crouton-auth itself, it comes in through
+  // crouton-core, yet an auth change must still redeploy velo. `readPkg(name)` returns the
+  // package.json of a workspace package (null if unknown); injected so the walk stays pure.
+  const seen = new Set()
+  const visit = (p) => {
+    const deps = { ...(p?.dependencies || {}), ...(p?.devDependencies || {}) }
+    for (const n of Object.keys(deps)) {
+      if (!n.startsWith('@fyit/') || seen.has(n)) continue
+      seen.add(n)
+      visit(readPkg(n))
+    }
+  }
+  visit(pkg)
+  const fromDeps = [...seen].map(n => `packages/${n.slice('@fyit/'.length)}/**`)
+  const all = [`apps/${app}/**`, 'pnpm-lock.yaml', ...fromDeps, ...explicit.filter(Boolean)]
+  return [...new Set(all)]
+}
+
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+export function loadApps(root = 'apps') {
   if (!existsSync(root)) return []
   const out = []
   for (const name of readdirSync(root)) {
     const cfgPath = `${root}/${name}/deploy.config.json`
     if (!existsSync(cfgPath)) continue // not opted in
-    let cfg = {}
-    try {
-      cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
-    } catch {
-      continue
-    }
+    const cfg = readJson(cfgPath)
+    if (!cfg) continue
+    const pkg = readJson(`${root}/${name}/package.json`) || {}
     out.push({
       app: name,
       stagingUrl: cfg.stagingUrl || '',
       productionUrl: cfg.productionUrl || '',
       layerPackages: cfg.layerPackages || '',
       requireWorkerSecrets: cfg.secrets?.required ?? false,
-      watchPaths: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : []
+      watchPaths: deriveWatchPaths({
+        app: name,
+        pkg,
+        explicit: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : [],
+        readPkg: n => readJson(`packages/${n.slice('@fyit/'.length)}/package.json`)
+      })
     })
   }
   return out

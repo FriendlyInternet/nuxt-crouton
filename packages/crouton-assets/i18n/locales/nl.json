@@ -31,7 +31,16 @@
       "noResults": "Geen assets gevonden met dit filter",
       "empty": "Nog geen assets",
       "select": "Selecteren",
-      "cancel": "Annuleren"
+      "cancel": "Annuleren",
+      "clearSelection": "Selectie wissen",
+      "assetCount": "{count} asset | {count} assets"
+    }
+  },
+  "crouton": {
+    "collections": {
+      "assets": {
+        "title": "Media"
+      }
     }
   }
 }

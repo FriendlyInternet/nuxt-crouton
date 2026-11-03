@@ -18,6 +18,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 // Get collection config to verify it exists
 const { getConfig } = useCollections()
@@ -114,7 +115,7 @@ const autoColumns = computed(() => {
       class="p-8 text-center text-muted bg-gray-50 dark:bg-gray-800/50 rounded-lg"
     >
       <UIcon name="i-lucide-alert-circle" class="size-8 mb-2 mx-auto" />
-      <p>No collection selected</p>
+      <p>{{ t('pages.blocks.collection.noCollectionSelected') }}</p>
     </div>
 
     <!-- Error: Collection not found -->
@@ -123,7 +124,7 @@ const autoColumns = computed(() => {
       class="p-8 text-center text-warning bg-warning/10 rounded-lg"
     >
       <UIcon name="i-lucide-alert-triangle" class="size-8 mb-2 mx-auto" />
-      <p>Collection "{{ attrs.collection }}" not found</p>
+      <p>{{ t('pages.blockRender.collectionNotFound', { name: attrs.collection }) }}</p>
     </div>
 
     <!-- Loading state -->
@@ -132,7 +133,7 @@ const autoColumns = computed(() => {
       class="p-8 text-center text-muted"
     >
       <UIcon name="i-lucide-loader-2" class="size-8 mb-2 mx-auto animate-spin" />
-      <p>Loading...</p>
+      <p>{{ t('pages.blockRender.loading') }}</p>
     </div>
 
     <!-- Render collection in stateless/read-only mode -->

@@ -10,7 +10,7 @@
  *     --email review+app-pr12@example.com --password <pw> \
  *     [--app app] [--manifest path/to/deploy.config.json] [--out screenshots]
  *
- * Three checks, each degrading gracefully:
+ * Four checks, each degrading gracefully:
  *   1. LOGIN PROOF (always, when creds given) — sign in over the app's own HTTP auth
  *      and confirm /api/auth/get-session returns an authenticated user. This alone is
  *      already more than "it booted": it proves auth works end-to-end on the real Worker
@@ -18,7 +18,10 @@
  *   2. CRUD + PUBLIC READ (only when the app declares a `smoke.crud` block) — create a
  *      record via its API (authenticated), then read it back (publicly when asked) and
  *      assert the content is there. No declaration → skipped, not failed.
- *   3. SCREENSHOT (always) — drive the CI-preinstalled chromium to the app with the
+ *   3. READS (only when the app declares `smoke.reads`) — GET every listed package endpoint
+ *      or page as the review login and assert status / text, so an endpoint the app consumes
+ *      but CRUD never touches (a 500 from a missing migration) turns the smoke red (#3077).
+ *   4. SCREENSHOT (always) — drive the CI-preinstalled chromium to the app with the
  *      session cookie injected and capture screenshots/<app>-smoke.png, so the run
  *      leaves visual proof (reuses app-shots.mjs' browser discovery).
  *
@@ -32,17 +35,26 @@
  *     "required": true,                 // caller gates the deploy on this smoke
  *     "screenshotPath": "/",            // authenticated page to screenshot (default "/")
  *     "crud": {
- *       "create":     { "path": "/api/teams/.../posts", "method": "POST", "body": { ... } },
+ *       "create":     { "path": "/api/teams/{teamId}/posts", "method": "POST", "body": { ... } },
  *       "idFrom":     "id",             // dot-path to the new record's id in the create response
- *       "readPublic": { "path": "/api/.../posts/{id}", "expectIncludes": "<text from body>" },
- *       "delete":     { "path": "/api/.../posts/{id}", "method": "DELETE" }   // optional cleanup
- *     }
+ *       "update":     { "path": "/api/teams/{teamId}/posts/{id}", "method": "PATCH", "body": { ... } },  // optional
+ *       "read":       { "path": "/api/teams/{teamId}/posts?ids={id}", "expectIncludes": "<new value>" }, // optional, authenticated
+ *       "readPublic": { "path": "/api/.../posts/{id}", "expectIncludes": "<text from body>" },          // optional, anonymous
+ *       "delete":     { "path": "/api/teams/{teamId}/posts/{id}", "method": "DELETE" }                   // always attempted after create
+ *     },
+ *     "reads": [                        // authenticated GETs; {teamId} as for crud
+ *       { "path": "/api/pkg/teams/{teamId}/status", "expectStatus": 200, "expectIncludes": "<text>" }
+ *     ]
+ *     // crud placeholders: {id}, {teamId} (session's active team), {rand} (per-run token) — see scripts/lib/smoke-crud.mjs
  *   }
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { runCrud } from './lib/smoke-crud.mjs'
+import { runReads } from './lib/smoke-reads.mjs'
+import { mergeCookies, cookieHeader } from './lib/review-login.mjs'
 
 // ── args ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -75,21 +87,7 @@ try { origin = new URL(args.url).origin } catch {
   fail(`invalid --url "${args.url}"`); process.exit(2)
 }
 
-// ── cookie jar (same approach as seed-review-login.mjs) ──────────────────────
-function mergeCookies(jar, res) {
-  const setCookies = typeof res.headers.getSetCookie === 'function'
-    ? res.headers.getSetCookie()
-    : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : [])
-  for (const sc of setCookies) {
-    const pair = sc.split(';')[0]
-    const eq = pair.indexOf('=')
-    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim())
-  }
-  return jar
-}
-function cookieHeader(jar) {
-  return Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
-}
+// ── cookie jar (shared with seed-review-login.mjs) ───────────────────────────
 let jar = new Map()
 const baseHeaders = { 'content-type': 'application/json', origin }
 
@@ -105,12 +103,10 @@ async function http(method, path, body, { auth = true } = {}) {
   })
   if (auth) mergeCookies(jar, res)
   let json = null
-  try { json = await res.clone().json() } catch { /* non-JSON */ }
-  return { res, json }
-}
-
-function dotGet(obj, dotPath) {
-  return dotPath.split('.').reduce((o, k) => (o == null ? o : o[k]), obj)
+  let text = ''
+  try { text = await res.clone().text() } catch { /* unreadable body */ }
+  try { json = JSON.parse(text) } catch { /* non-JSON */ }
+  return { res, json, text }
 }
 
 // ── load optional manifest ───────────────────────────────────────────────────
@@ -160,36 +156,31 @@ async function crudProof(smoke, loggedIn) {
   if (!crud?.create) { info('no smoke.crud declared — skipping CRUD check.'); return }
   if (!loggedIn) { failures.push('crud: declared but not logged in'); fail('crud declared but login failed — cannot CRUD.'); return }
 
-  // create
-  const c = crud.create
-  const { res: cr, json: cj } = await http(c.method || 'POST', c.path, c.body ?? {})
-  if (!cr.ok) { failures.push(`crud.create: HTTP ${cr.status}`); fail(`crud.create returned HTTP ${cr.status}`); return }
-  const id = crud.idFrom ? dotGet(cj, crud.idFrom) : (cj?.id ?? cj?.data?.id)
-  info(`✓ crud.create ok${id != null ? ` (id=${id})` : ''}`)
+  const failed = await runCrud(crud, {
+    http,
+    getTeamId: resolveTeamId,
+    log: m => info(m),
+  })
+  for (const f of failed) { failures.push(f); fail(f) }
+}
 
-  // read (public = no cookie when asked)
-  if (crud.readPublic) {
-    const rp = crud.readPublic
-    const path = String(rp.path).replace('{id}', String(id ?? ''))
-    const { res: rr, json: rj } = await http('GET', path, undefined, { auth: false })
-    const bodyText = JSON.stringify(rj ?? '')
-    const ok = rr.ok && (!rp.expectIncludes || bodyText.includes(rp.expectIncludes))
-    if (!ok) {
-      failures.push(`crud.readPublic: HTTP ${rr.status}${rp.expectIncludes ? ` / missing "${rp.expectIncludes}"` : ''}`)
-      fail(`crud.readPublic failed (HTTP ${rr.status})`)
-    } else {
-      info('✓ crud.readPublic ok — created record is publicly readable')
-    }
-  }
+async function readsProof(smoke, loggedIn) {
+  const reads = smoke?.reads
+  if (!reads?.length) { info('no smoke.reads declared — skipping reads check.'); return }
+  if (!loggedIn) { failures.push('reads: declared but not logged in'); fail('reads declared but login failed — cannot read.'); return }
+  const failed = await runReads(reads, { http, getTeamId: resolveTeamId, log: m => info(m) })
+  for (const f of failed) { failures.push(f); fail(f) }
+}
 
-  // cleanup (best-effort, never fails the smoke)
-  if (crud.delete && id != null) {
-    const d = crud.delete
-    try {
-      await http(d.method || 'DELETE', String(d.path).replace('{id}', String(id)))
-      info('✓ crud.delete cleanup ok')
-    } catch (e) { warn(`crud.delete cleanup failed (non-fatal): ${e.message}`) }
-  }
+/** Active team of the logged-in session; activates the account's first team when none is set. */
+async function resolveTeamId() {
+  const { json } = await http('GET', '/api/auth/get-session')
+  const active = json?.session?.activeOrganizationId
+  if (active) return active
+  const { json: orgs } = await http('GET', '/api/auth/organization/list')
+  const teamId = Array.isArray(orgs) ? orgs[0]?.id : undefined
+  if (teamId) await http('POST', '/api/auth/organization/set-active', { organizationId: teamId })
+  return teamId
 }
 
 async function screenshot(smoke, loggedIn) {
@@ -245,6 +236,7 @@ const smoke = await loadSmokeManifest()
 let loggedIn = false
 try { loggedIn = await loginProof() } catch (e) { failures.push(`login: ${e.message}`); fail(`login error: ${e.message}`) }
 try { await crudProof(smoke, loggedIn) } catch (e) { failures.push(`crud: ${e.message}`); fail(`crud error: ${e.message}`) }
+try { await readsProof(smoke, loggedIn) } catch (e) { failures.push(`reads: ${e.message}`); fail(`reads error: ${e.message}`) }
 await screenshot(smoke, loggedIn)
 
 if (failures.length) {

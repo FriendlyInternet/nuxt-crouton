@@ -16,9 +16,9 @@
  * the pure, unit-tested `shapeMyOrders` — this handler is just the queries.
  */
 import { eq, and, inArray, desc } from 'drizzle-orm'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
+import { salesOrders } from '../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../../../../collections/products/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireScopedEvent } from '../../../../utils/require-scoped-event'
 import {

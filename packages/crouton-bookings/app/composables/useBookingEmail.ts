@@ -7,6 +7,7 @@
  */
 export function useBookingEmail() {
   const config = useRuntimeConfig()
+  const { t } = useT()
 
   /**
    * Check if email module is enabled
@@ -30,7 +31,7 @@ export function useBookingEmail() {
     if (!isEmailEnabled.value) {
       return {
         success: false,
-        error: 'Email module is not enabled'
+        error: t('bookings.notifications.emailNotEnabled')
       }
     }
 
@@ -44,7 +45,7 @@ export function useBookingEmail() {
     } catch (error: any) {
       return {
         success: false,
-        error: error.data?.statusMessage || error.message || 'Failed to resend email'
+        error: error.data?.statusMessage || error.message || t('bookings.notifications.resendFailed')
       }
     }
   }

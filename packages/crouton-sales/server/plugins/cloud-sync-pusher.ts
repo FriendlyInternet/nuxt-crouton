@@ -19,6 +19,10 @@
  * immediately so a burst empties within seconds. Self-chained setTimeout (not
  * setInterval) means ticks never overlap.
  *
+ * Pull (#815): after each push cycle the till asks the cloud for config changes
+ *   since its saved cursor and applies them with the conflict rule
+ *   (CROUTON_SALES_CLOUD_SYNC_PULL_URL overrides the derived `/pull` URL).
+ *
  * Idle heartbeat (#179): when nothing is pending we still ping the ingest with
  * an empty batch every HEARTBEAT_MS so the cloud's freshness clock keeps
  * advancing — letting the online dashboard tell "online but quiet" from
@@ -26,6 +30,7 @@
  * after a stretch with no data to send.
  */
 import { pingHeartbeat, pushPendingOutbox } from '../utils/cloud-sync-pusher'
+import { pullConfigChanges } from '../utils/sync-pull'
 
 const MAX_BACKOFF_MS = 60000
 
@@ -56,6 +61,8 @@ export default defineNitroPlugin(() => {
       if (res.claimed === 0 && Date.now() - lastContactAt >= heartbeatMs) {
         await pingHeartbeat({ url })
       }
+      // Then pull what changed online (#815). A pull failure backs off like a push failure.
+      await pullConfigChanges(useDB(), { url })
       lastContactAt = Date.now()
       backoff = 0 // success clears any backoff
       // Drain bursts fast: a full batch likely means more is pending.

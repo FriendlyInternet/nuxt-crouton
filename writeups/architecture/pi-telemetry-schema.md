@@ -383,6 +383,33 @@ pi.interaction (root)
 
 ---
 
+## 1b. Skill loads — from the session JSONL (#2403)
+
+pi has **no skill tool**. `--skill <dir>` lists each skill in the system prompt with its file
+path and tells the model to *"use the read tool to load a skill's file"*
+(`core/skills.js` → `formatSkillsForPrompt`, pi-coding-agent 0.73). So a skill load is, in the
+session JSONL, an assistant message with a `toolCall` named `read`:
+
+```json
+{"type":"message","timestamp":"2026-10-24T09:32:00.000Z","message":{"role":"assistant","content":[
+  {"type":"toolCall","name":"read","arguments":{"path":"/w/repo/.claude/skills/commit/SKILL.md"}}]}}
+```
+
+Mapping (`.claude/skills/loop-station/lib/skill-loads.mjs`):
+
+| session fact | trace event |
+|---|---|
+| `read` of `.claude/skills/<name>/SKILL.md` or `.claude/skills/<name>.md` | `{ ts, kind: 'skill', name: '<name>', parent: 'root', depth: 0 }` |
+| same read with `offset > 0` (continuation) | **not** a second event |
+| `read` of a sub-doc inside a skill dir | not a skill load |
+| user message containing `<skill name="X"` (a `/skill:X` expansion) | `kind: 'skill', name: 'X'` |
+
+`name` is the inventory's skill name (dir name / filename stem, `gather.mjs`), so the usage
+rollup joins to `history.jsonl` by name. Emitted: name + timestamp only — never the path's
+prefix, the prompt, or any tool output. `buildPiTrace(dir, { sessionDir })` merges these with
+the subagent `agent` events; a single-use worker (no subagents) now yields a trace from the
+skill loads alone, where before #2403 it yielded nothing.
+
 ## Recommendation for #944 adapter
 
 **Primary feed:** Native session JSONL (section 1) + subagent meta (section 2). These are built-in, always available, and contain everything #883's run-outcome ledger needs: `{model, provider, tokens, cost, duration, exitCode, turns}`.

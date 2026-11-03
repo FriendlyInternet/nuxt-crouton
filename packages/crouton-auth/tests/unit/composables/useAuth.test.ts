@@ -278,7 +278,7 @@ describe('useAuth', () => {
 
       expect(mockAuthClient.signIn.social).toHaveBeenCalledWith({
         provider: 'github',
-        callbackURL: 'http://localhost:3000/auth/callback'
+        callbackURL: 'http://localhost:3000/'
       })
     })
 
@@ -306,7 +306,7 @@ describe('useAuth', () => {
 
       expect(mockAuthClient.signIn.magicLink).toHaveBeenCalledWith({
         email: 'test@example.com',
-        callbackURL: 'http://localhost:3000/auth/callback'
+        callbackURL: 'http://localhost:3000/'
       })
     })
 
@@ -551,6 +551,7 @@ describe('useTwoFactor', () => {
     it('should return TOTP setup data', async () => {
       mockAuthClient.twoFactor.enable.mockResolvedValue({
         data: {
+          method: 'totp',
           totpURI: 'otpauth://totp/App:user@example.com?secret=ABC123',
           secret: 'ABC123',
           backupCodes: ['BACKUP1', 'BACKUP2']

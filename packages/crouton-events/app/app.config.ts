@@ -5,7 +5,13 @@ export default defineAppConfig({
       id: 'events',
       name: 'events.title',
       icon: 'i-lucide-activity',
-      adminRoutes: [],
+      adminRoutes: [
+        {
+          path: '/activity',
+          label: 'events.admin.activity',
+          icon: 'i-lucide-activity'
+        }
+      ],
       dashboardRoutes: [],
       settingsRoutes: []
     }

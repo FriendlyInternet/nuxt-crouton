@@ -2,7 +2,6 @@
   @crouton-generated
   @collection venues
   @layer main
-  @generated 2026-06-21
 
   ## AI Context
   - List component for venues collection
@@ -45,7 +44,7 @@
 <script setup lang="ts">
 import useMainVenues from '../composables/useMainVenues'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   layout?: any
 }>(), {
   layout: 'table'

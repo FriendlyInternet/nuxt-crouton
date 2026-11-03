@@ -1,9 +1,0 @@
-{
-  "id": { "type": "uuid", "meta": { "primaryKey": true } },
-  "collectionId": { "type": "uuid", "refTarget": "collections", "meta": { "required": true, "label": "Collection" } },
-  "name": { "type": "string", "meta": { "required": true, "maxLength": 100, "label": "Field Name" } },
-  "type": { "type": "string", "meta": { "required": true, "maxLength": 50, "label": "Field Type" } },
-  "meta": { "type": "json", "meta": { "label": "Field Metadata" } },
-  "refTarget": { "type": "string", "meta": { "maxLength": 100, "label": "Reference Target" } },
-  "sortOrder": { "type": "integer", "meta": { "default": 0, "label": "Sort Order" } }
-}

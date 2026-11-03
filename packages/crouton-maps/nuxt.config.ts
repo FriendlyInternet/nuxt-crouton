@@ -42,21 +42,16 @@ export default defineNuxtConfig({
   },
 
   // @geoql/v-maplibre renders the map client-only (maplibre-gl touches the DOM),
-  // so transpile it for the SSR build. NOTE: maplibre-gl is deliberately NOT in
-  // `transpile` — it's a CJS-only package (`main: dist/maplibre-gl.js`, no `module`/
-  // `exports`), and @geoql/v-maplibre imports NAMED exports from it
-  // (`import { Map, AttributionControl } from 'maplibre-gl'`). If maplibre-gl is
-  // transpiled inline, Vite resolves those named imports against the raw CJS file and
-  // throws at runtime ("does not provide an export named 'Map'"), so the map components
-  // (and any collection viewer that loads them) never mount. Pre-bundling it via
-  // optimizeDeps instead lets esbuild synthesize the named exports. (#624)
+  // so transpile it for the SSR build. maplibre-gl stays out of `transpile`: up to
+  // v5 it was CJS-only and inlining it broke @geoql/v-maplibre's named imports
+  // ("does not provide an export named 'Map'", #624). v6 is native ESM, so that
+  // trap is gone, but pre-bundling via optimizeDeps still keeps dev cold-start fast.
   build: {
     transpile: ['@geoql/v-maplibre']
   },
 
   vite: {
-    // Force Vite to pre-bundle the map deps so esbuild's CJS→ESM interop exposes
-    // maplibre-gl's named exports to @geoql/v-maplibre's `import { Map } from 'maplibre-gl'`.
+    // Pre-bundle the map deps (large; see note above).
     optimizeDeps: {
       include: ['maplibre-gl', '@geoql/v-maplibre']
     }

@@ -32,13 +32,15 @@ const emit = defineEmits<{
 }>()
 
 // Available radius options with labels
-const radiusOptions: { value: ThemeRadius; label: string }[] = [
-  { value: 0, label: 'Sharp' },
+const { t } = useT()
+
+const radiusOptions = computed<{ value: ThemeRadius; label: string }[]>(() => [
+  { value: 0, label: t('themeSettings.radiusSharp') },
   { value: 0.125, label: 'XS' },
   { value: 0.25, label: 'SM' },
   { value: 0.375, label: 'MD' },
   { value: 0.5, label: 'LG' }
-]
+])
 
 function selectRadius(radius: ThemeRadius) {
   if (!props.disabled) {
@@ -50,7 +52,7 @@ function selectRadius(radius: ThemeRadius) {
 <template>
   <div class="space-y-2">
     <label class="text-sm font-medium text-default">
-      Border Radius
+      {{ t('themeSettings.borderRadius') }}
     </label>
     <div class="flex flex-wrap gap-2">
       <button

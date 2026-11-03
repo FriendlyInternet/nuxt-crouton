@@ -1,10 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import * as Y from 'yjs'
+import { verifyCollabToken, authorizeRoomRequest, parseRoomKey } from '../utils/collabToken'
+import { signInternalRequest } from '../utils/internalSignature'
 
 interface Env {
   DB: D1Database
-  BETTER_AUTH_SECRET?: string
+  COLLAB_TOKEN_SECRET?: string
 }
 
 interface Session {
@@ -81,16 +83,26 @@ export class CollabRoom implements DurableObject {
     const origin = this._appOrigin
     if (!origin) return
 
-    fetch(`${origin}/api/_crouton/operation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type,
-        source: 'crouton-collab',
-        teamId: this.teamId ?? undefined,
-        metadata,
-      }),
-    }).catch(() => { /* non-blocking */ })
+    const secret = this.env.COLLAB_TOKEN_SECRET
+    if (!secret) return
+    const body = JSON.stringify({
+      type,
+      source: 'crouton-collab',
+      teamId: this.teamId ?? undefined,
+      metadata,
+    })
+    const timestamp = String(Date.now())
+    signInternalRequest(secret, timestamp, body)
+      .then(signature => fetch(`${origin}/api/_crouton/operation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-crouton-timestamp': timestamp,
+          'x-crouton-signature': signature,
+        },
+        body,
+      }))
+      .catch(() => { /* non-blocking */ })
   }
 
   /** App origin derived on first fetch request, used for emitOperation calls */
@@ -146,7 +158,7 @@ export class CollabRoom implements DurableObject {
           state = excluded.state,
           version = yjs_collab_states.version + 1,
           updated_at = excluded.updated_at
-      `).bind(this.roomType, this.roomId, state).run()
+      `).bind(this.roomType, `${this.teamId}:${this.roomId}`, state).run()
     } catch (error) {
       console.error('[CollabRoom] D1 persistence error:', error)
     }
@@ -173,95 +185,42 @@ export class CollabRoom implements DurableObject {
   }
 
   /**
-   * Validate that the request carries a valid Better Auth session cookie.
-   *
-   * In the Cloudflare DO environment Better Auth is not available, so we
-   * forward the session cookie to the app's own auth API for verification.
-   * This keeps the DO auth check thin — the heavy lifting stays in the worker.
-   *
-   * Returns the user ID string on success, or null if the session is absent/invalid.
-   */
-  /**
-   * Verify an HMAC-signed collab token.
-   * Token format: base64(JSON payload).base64(HMAC signature)
-   */
-  private async verifyToken(token: string): Promise<string | null> {
-    const secret = this.env.BETTER_AUTH_SECRET
-    if (!secret) return null
-
-    const [payloadB64, signatureB64] = token.split('.')
-    if (!payloadB64 || !signatureB64) return null
-
-    try {
-      const payload = atob(payloadB64)
-      const enc = new TextEncoder()
-      const key = await crypto.subtle.importKey(
-        'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
-      )
-      const sigBytes = Uint8Array.from(atob(signatureB64), c => c.charCodeAt(0))
-      const valid = await crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(payload))
-      if (!valid) return null
-
-      const data = JSON.parse(payload) as { userId: string; exp: number }
-      if (Date.now() > data.exp) return null
-
-      return data.userId
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Validate request auth — supports two modes:
-   * 1. Token-based (cross-origin direct WS): ?token=... query param, verified via HMAC
-   * 2. Cookie-based (same-origin proxy): forwards session cookie to app's auth endpoint
+   * Authorize a request: a valid HMAC token that names exactly this room (and the room
+   * is in the token's team). Cookie mode was removed (#3134) — it trusted a
+   * request-supplied address. Returns the userId, or null.
    */
   private async validateSession(request: Request): Promise<string | null> {
     const url = new URL(request.url)
-
-    // Mode 1: Token-based auth (cross-origin direct connection)
     const token = url.searchParams.get('token')
-    if (token) {
-      return this.verifyToken(token)
-    }
-
-    // Mode 2: Cookie-based auth (same-origin proxy)
-    const cookieHeader = request.headers.get('cookie')
-    if (!cookieHeader) return null
-
-    const appOrigin = url.searchParams.get('appOrigin') || `https://${url.hostname}`
-
-    try {
-      const sessionResponse = await fetch(`${appOrigin}/api/auth/get-session`, {
-        headers: { cookie: cookieHeader }
-      })
-      if (!sessionResponse.ok) return null
-
-      const data = await sessionResponse.json() as { user?: { id: string } } | null
-      return data?.user?.id ?? null
-    } catch {
-      return null
-    }
+    if (!token) return null
+    const claims = await verifyCollabToken(token, this.env.COLLAB_TOKEN_SECRET)
+    return authorizeRoomRequest(claims, url.searchParams.get('roomKey'))
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
+
+    // Authorize first: nothing below runs for an unauthorized request
+    const userId = await this.validateSession(request)
+    if (!userId) {
+      return new Response('Unauthorized', { status: 401 })
+    }
 
     // Capture app origin once — used for emitOperation calls
     if (!this._appOrigin) {
       this._appOrigin = `${url.protocol}//${url.host}`
     }
 
-    // Extract room metadata from query params (set on first connect)
-    const roomType = url.searchParams.get('type') || 'generic'
-    const roomId = url.searchParams.get('roomId')
-    const teamId = url.searchParams.get('teamId')
+    // Room identity comes from the worker-set roomKey (already matched to the token)
+    const parsed = parseRoomKey(url.searchParams.get('roomKey') as string)
+    if (!parsed) return new Response('Bad request', { status: 400 })
+    const { teamId, roomType, roomId } = parsed
 
-    if (roomType && roomId && !this.roomId) {
+    if (!this.roomId) {
       this.roomType = roomType
       this.roomId = roomId
-      this.teamId = teamId ?? null
-      await this.storage.put('meta', { roomType, roomId, teamId: teamId ?? null })
+      this.teamId = teamId
+      await this.storage.put('meta', { roomType, roomId, teamId })
 
       // collab:room:created — emitted exactly once when the DO first initialises for this room
       this.emitOperation('collab:room:created', {
@@ -271,12 +230,6 @@ export class CollabRoom implements DurableObject {
     }
 
     if (url.pathname === '/ws') {
-      // --- Auth check: require a valid session before upgrading to WebSocket ---
-      const userId = await this.validateSession(request)
-      if (!userId) {
-        return new Response('Unauthorized', { status: 4401 })
-      }
-
       // WebSocket upgrade
       const pair = new WebSocketPair()
       const [client, server] = Object.values(pair)
@@ -299,12 +252,6 @@ export class CollabRoom implements DurableObject {
 
     if (url.pathname === '/users') {
       // HTTP endpoint to get current users (for Phase 6 global presence)
-      // Require a valid session before returning presence data
-      const userId = await this.validateSession(request)
-      if (!userId) {
-        return new Response('Unauthorized', { status: 401 })
-      }
-
       const users = Array.from(this.sessions.values())
         .filter(s => s.awarenessState)
         .map(s => s.awarenessState)

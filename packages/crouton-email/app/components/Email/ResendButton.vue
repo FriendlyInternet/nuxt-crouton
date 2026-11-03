@@ -17,6 +17,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 
+const { t } = useT()
+
 interface Props {
   /** Cooldown duration in seconds (default: 60) */
   cooldown?: number
@@ -93,9 +95,9 @@ const formattedTime = computed(() => {
 
 // Button text
 const buttonText = computed(() => {
-  if (props.loading) return 'Sending...'
-  if (isOnCooldown.value) return `Resend in ${formattedTime.value}`
-  return 'Resend'
+  if (props.loading) return t('email.sending')
+  if (isOnCooldown.value) return t('email.resendIn', { time: formattedTime.value })
+  return t('email.resend')
 })
 
 // Expose reset method for parent components

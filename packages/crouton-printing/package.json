@@ -79,6 +79,6 @@
   },
   "devDependencies": {
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "catalog:"
   }
 }

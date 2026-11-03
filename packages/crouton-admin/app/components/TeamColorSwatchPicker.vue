@@ -44,8 +44,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-// Tailwind color shades for display
-// Primary colors use 500, neutral colors use 900 (more representative of dark UI)
+// Tailwind color shades for display (primary colors use 500)
 const COLOR_HEX_MAP: Record<string, string> = {
   // Primary colors (500 shade)
   red: '#ef4444',
@@ -65,12 +64,22 @@ const COLOR_HEX_MAP: Record<string, string> = {
   fuchsia: '#d946ef',
   pink: '#ec4899',
   rose: '#f43f5e',
-  // Neutral colors (500 shade - visible in both light/dark modes)
+  // Neutral colors (500 shade — fallback only, see NEUTRAL_SPLIT)
   slate: '#64748b',
   gray: '#6b7280',
   zinc: '#71717a',
   neutral: '#737373',
   stone: '#78716c'
+}
+
+// Neutrals barely differ at 500; the UI uses their light (200) and dark (800)
+// ends, so show those two halves — what the setting actually changes (#2258)
+const NEUTRAL_SPLIT: Record<string, [light: string, dark: string]> = {
+  slate: ['#e2e8f0', '#1e293b'],
+  gray: ['#e5e7eb', '#1f2937'],
+  zinc: ['#e4e4e7', '#27272a'],
+  neutral: ['#e5e5e5', '#262626'],
+  stone: ['#e7e5e4', '#292524']
 }
 
 // Size classes for swatches
@@ -90,6 +99,12 @@ function selectColor(color: string) {
 
 function getColorHex(color: string): string {
   return COLOR_HEX_MAP[color] ?? '#888888'
+}
+
+function getSwatchStyle(color: string): Record<string, string> {
+  const split = NEUTRAL_SPLIT[color]
+  if (split) return { background: `linear-gradient(135deg, ${split[0]} 50%, ${split[1]} 50%)` }
+  return { backgroundColor: getColorHex(color) }
 }
 </script>
 
@@ -113,14 +128,14 @@ function getColorHex(color: string): string {
             : 'hover:scale-105',
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
         ]"
-        :style="{ backgroundColor: getColorHex(color) }"
+        :style="getSwatchStyle(color)"
         @click="selectColor(color)"
       >
         <span class="sr-only">{{ color }}</span>
         <UIcon
           v-if="modelValue === color"
           name="i-lucide-check"
-          class="size-4 text-white drop-shadow-sm mx-auto"
+          class="size-4 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.9)] mx-auto"
         />
       </button>
     </div>

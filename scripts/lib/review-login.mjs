@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 // review-login.mjs — sign in to a deployed preview and return the session cookie jar. Extracted
 // from smoke-deployed.mjs / seed-review-login.mjs / capture-review-surfaces.mjs (the same sign-in
 // + Set-Cookie merge). Best-effort: absent or rejected creds → { loggedIn: false }.
@@ -50,6 +52,33 @@ export async function signIn(origin, email, password, log = () => {}) {
     return { loggedIn: true, jar }
   } catch (e) {
     log(`login failed (${e.message}) — anonymous`)
+    return { loggedIn: false, jar }
+  }
+}
+
+/**
+ * Preview-only sign-in token for link-only apps (no password to sign in with, e.g. pocs/status;
+ * #2700). Derived from the review seed secret + app + PR key, so it needs no stored state.
+ * Mirrored by pocs/status/server/utils/review-login.ts (previewSessionToken) — keep in sync.
+ */
+export function previewSessionToken(secret, app, key) {
+  return createHash('sha256').update(`${secret}:${app}:preview-session:${key}`).digest('hex').slice(0, 32)
+}
+
+/** Exchange a preview token for a session at the app's /api/review/preview-session. Never throws. */
+export async function previewSignIn(origin, token, log = () => {}) {
+  const jar = new Map()
+  if (!token) return { loggedIn: false, jar }
+  try {
+    const res = await fetch(`${origin}/api/review/preview-session?token=${encodeURIComponent(token)}`, { redirect: 'manual' })
+    mergeCookies(jar, res)
+    if (!res.ok) {
+      log(`login: preview-session HTTP ${res.status} — anonymous`)
+      return { loggedIn: false, jar }
+    }
+    return { loggedIn: jar.size > 0, jar }
+  } catch (e) {
+    log(`preview login failed (${e.message}) — anonymous`)
     return { loggedIn: false, jar }
   }
 }

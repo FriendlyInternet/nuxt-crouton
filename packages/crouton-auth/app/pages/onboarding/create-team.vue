@@ -56,10 +56,10 @@ function onTeamCreated(team: Team) {
           </div>
           <div>
             <p class="text-lg font-semibold text-highlighted">
-              {{ t('onboarding.settingUpWorkspace', { fallback: 'Setting up your workspace' }) }}
+              {{ t('onboarding.settingUpWorkspace') }}
             </p>
             <p class="mt-1 text-sm text-muted">
-              {{ t('onboarding.justAMoment', { fallback: 'Just a moment…' }) }}
+              {{ t('onboarding.justAMoment') }}
             </p>
           </div>
           <UIcon
@@ -81,10 +81,10 @@ function onTeamCreated(team: Team) {
           </div>
           <div>
             <h1 class="text-lg font-semibold">
-              {{ t('onboarding.createTeamTitle', { fallback: 'Create Your First Team' }) }}
+              {{ t('onboarding.createTeamTitle') }}
             </h1>
             <p class="text-sm text-muted">
-              {{ t('onboarding.createTeamDescription', { fallback: 'Get started by creating a workspace for your projects.' }) }}
+              {{ t('onboarding.createTeamDescription') }}
             </p>
           </div>
         </div>

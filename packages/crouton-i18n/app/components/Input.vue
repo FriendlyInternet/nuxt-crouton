@@ -262,7 +262,7 @@ function previewText(field: string, locale: string): string {
                         :collab-provider="(collab?.connection as any)"
                         :collab-user="collab?.user"
                         :editable="!isFieldTranslating(field, narrowLocaleTab)"
-                        placeholder="Type / to insert a block..."
+                        :placeholder="t('i18n.input.blockEditorPlaceholder')"
                         @update:model-value="!collab && updateFieldValue(field, $event as string, narrowLocaleTab)"
                       />
                     </div>
@@ -273,7 +273,7 @@ function previewText(field: string, locale: string): string {
                         :collab-provider="(collab?.connection as any)"
                         :collab-user="collab?.user"
                         :editable="!isFieldTranslating(field, narrowLocaleTab)"
-                        placeholder="Type / to insert a block..."
+                        :placeholder="t('i18n.input.blockEditorPlaceholder')"
                         @update:model-value="!collab && updateFieldValue(field, $event as string, narrowLocaleTab)"
                       />
                     </div>
@@ -405,7 +405,7 @@ function previewText(field: string, locale: string): string {
                   :collab-provider="(collab?.connection as any)"
                   :collab-user="collab?.user"
                   :editable="!isFieldTranslating(field, narrowLocaleTab)"
-                  placeholder="Type / to insert a block..."
+                  :placeholder="t('i18n.input.blockEditorPlaceholder')"
                   @update:model-value="!collab && updateFieldValue(field, $event as string, narrowLocaleTab)"
                 />
               </div>
@@ -422,7 +422,7 @@ function previewText(field: string, locale: string): string {
                 :collab-provider="(collab?.connection as any)"
                 :collab-user="collab?.user"
                 :editable="!isFieldTranslating(field, narrowLocaleTab)"
-                placeholder="Type / to insert a block..."
+                :placeholder="t('i18n.input.blockEditorPlaceholder')"
                 @update:model-value="!collab && updateFieldValue(field, $event as string, narrowLocaleTab)"
               />
             </div>
@@ -548,7 +548,7 @@ function previewText(field: string, locale: string): string {
                           :collab-provider="(collab?.connection as any)"
                           :collab-user="collab?.user"
                           :editable="!isFieldTranslating(field, primaryEditingLocale)"
-                          placeholder="Type / to insert a block..."
+                          :placeholder="t('i18n.input.blockEditorPlaceholder')"
                           @update:model-value="!collab && updateFieldValue(field, $event as string, primaryEditingLocale)"
                         />
                       </div>
@@ -559,7 +559,7 @@ function previewText(field: string, locale: string): string {
                           :collab-provider="(collab?.connection as any)"
                           :collab-user="collab?.user"
                           :editable="!isFieldTranslating(field, primaryEditingLocale)"
-                          placeholder="Type / to insert a block..."
+                          :placeholder="t('i18n.input.blockEditorPlaceholder')"
                           @update:model-value="!collab && updateFieldValue(field, $event as string, primaryEditingLocale)"
                         />
                       </div>
@@ -692,7 +692,7 @@ function previewText(field: string, locale: string): string {
                     :collab-provider="(collab?.connection as any)"
                     :collab-user="collab?.user"
                     :editable="!isFieldTranslating(field, primaryEditingLocale)"
-                    placeholder="Type / to insert a block..."
+                    :placeholder="t('i18n.input.blockEditorPlaceholder')"
                     @update:model-value="!collab && updateFieldValue(field, $event as string, primaryEditingLocale)"
                   />
                 </div>
@@ -709,7 +709,7 @@ function previewText(field: string, locale: string): string {
                   :collab-provider="(collab?.connection as any)"
                   :collab-user="collab?.user"
                   :editable="!isFieldTranslating(field, primaryEditingLocale)"
-                  placeholder="Type / to insert a block..."
+                  :placeholder="t('i18n.input.blockEditorPlaceholder')"
                   @update:model-value="!collab && updateFieldValue(field, $event as string, primaryEditingLocale)"
                 />
               </div>
@@ -810,7 +810,7 @@ function previewText(field: string, locale: string): string {
                           :collab-user="collab?.user"
                           :editable="!isFieldTranslating(field, secondaryEditingLocale)"
                           :default-tab="isSameLocale ? 'preview' : 'editor'"
-                          placeholder="Type / to insert a block..."
+                          :placeholder="t('i18n.input.blockEditorPlaceholder')"
                           @update:model-value="!collab && updateFieldValue(field, $event as string, secondaryEditingLocale)"
                         />
                       </div>
@@ -821,7 +821,7 @@ function previewText(field: string, locale: string): string {
                           :collab-provider="(collab?.connection as any)"
                           :collab-user="collab?.user"
                           :editable="!isFieldTranslating(field, secondaryEditingLocale)"
-                          placeholder="Type / to insert a block..."
+                          :placeholder="t('i18n.input.blockEditorPlaceholder')"
                           @update:model-value="!collab && updateFieldValue(field, $event as string, secondaryEditingLocale)"
                         />
                       </div>
@@ -950,7 +950,7 @@ function previewText(field: string, locale: string): string {
                     :collab-provider="(collab?.connection as any)"
                     :collab-user="collab?.user"
                     :editable="!isFieldTranslating(field, secondaryEditingLocale)"
-                    placeholder="Type / to insert a block..."
+                    :placeholder="t('i18n.input.blockEditorPlaceholder')"
                     @update:model-value="!collab && updateFieldValue(field, $event as string, secondaryEditingLocale)"
                   />
                 </div>
@@ -970,7 +970,7 @@ function previewText(field: string, locale: string): string {
                   :collab-user="collab?.user"
                   :editable="!isFieldTranslating(field, secondaryEditingLocale)"
                   :default-tab="isSameLocale ? 'preview' : 'editor'"
-                  placeholder="Type / to insert a block..."
+                  :placeholder="t('i18n.input.blockEditorPlaceholder')"
                   @update:model-value="!collab && updateFieldValue(field, $event as string, secondaryEditingLocale)"
                 />
               </div>
@@ -1072,7 +1072,7 @@ function previewText(field: string, locale: string): string {
                 :collab-provider="(collab?.connection as any)"
                 :collab-user="collab?.user"
                 :editable="!isFieldTranslating(field, editingLocale)"
-                placeholder="Type / to insert a block..."
+                :placeholder="t('i18n.input.blockEditorPlaceholder')"
                 @update:model-value="!collab && updateFieldValue(field, $event as string)"
               />
             </div>
@@ -1089,7 +1089,7 @@ function previewText(field: string, locale: string): string {
               :collab-provider="(collab?.connection as any)"
               :collab-user="collab?.user"
               :editable="!isFieldTranslating(field, editingLocale)"
-              placeholder="Type / to insert a block..."
+              :placeholder="t('i18n.input.blockEditorPlaceholder')"
               @update:model-value="!collab && updateFieldValue(field, $event as string)"
             />
           </div>
@@ -1098,7 +1098,7 @@ function previewText(field: string, locale: string): string {
           <UTextarea
             v-else-if="getFieldComponent(field) === 'UTextarea'"
             :model-value="getFieldValue(field, editingLocale)"
-            :placeholder="editingLocale !== requiredLocale && getFieldValue(field, requiredLocale) ? `Fallback: ${getFieldValue(field, requiredLocale)}` : (defaultValues?.[field] || '')"
+            :placeholder="editingLocale !== requiredLocale && getFieldValue(field, requiredLocale) ? t('i18n.input.fallback', { value: getFieldValue(field, requiredLocale) }) : (defaultValues?.[field] || '')"
             :color="error && editingLocale === requiredLocale && !getFieldValue(field, editingLocale) ? 'error' : 'primary'"
             :highlight="!!(error && editingLocale === requiredLocale && !getFieldValue(field, editingLocale))"
             class="w-full"
@@ -1110,7 +1110,7 @@ function previewText(field: string, locale: string): string {
           <UInput
             v-else
             :model-value="getFieldValue(field, editingLocale)"
-            :placeholder="editingLocale !== requiredLocale && getFieldValue(field, requiredLocale) ? `Fallback: ${getFieldValue(field, requiredLocale)}` : (defaultValues?.[field] || '')"
+            :placeholder="editingLocale !== requiredLocale && getFieldValue(field, requiredLocale) ? t('i18n.input.fallback', { value: getFieldValue(field, requiredLocale) }) : (defaultValues?.[field] || '')"
             :color="error && editingLocale === requiredLocale && !getFieldValue(field, editingLocale) ? 'error' : 'primary'"
             :highlight="!!(error && editingLocale === requiredLocale && !getFieldValue(field, editingLocale))"
             class="w-full"
@@ -1128,7 +1128,7 @@ function previewText(field: string, locale: string): string {
             <template v-if="isBlockEditorField(field)">
               <p class="text-xs text-gray-500">
                 <UIcon name="i-lucide-file-text" class="inline w-3 h-3 mr-1" />
-                {{ findBestSourceLocale(field, editingLocale)?.toUpperCase() }} version available
+                {{ t('i18n.input.versionAvailable', { locale: findBestSourceLocale(field, editingLocale)?.toUpperCase() ?? '' }) }}
               </p>
             </template>
             <!-- For text fields, show the actual text (strip HTML for rich text fields) -->
@@ -1167,13 +1167,13 @@ function previewText(field: string, locale: string): string {
         class="space-y-3"
       >
         <UFormField
-          :label="`Translation (${editingLocale.toUpperCase()})${editingLocale === requiredLocale ? ' *' : ''}`"
+          :label="`${t('i18n.input.translationLabel', { locale: editingLocale.toUpperCase() })}${editingLocale === requiredLocale ? ' *' : ''}`"
           :name="`values.${editingLocale}`"
           :required="editingLocale === requiredLocale"
         >
           <UInput
             :model-value="getFieldValue('', editingLocale)"
-            :placeholder="editingLocale !== requiredLocale && getFieldValue('', requiredLocale) ? `Fallback: ${getFieldValue('', requiredLocale)}` : ''"
+            :placeholder="editingLocale !== requiredLocale && getFieldValue('', requiredLocale) ? t('i18n.input.fallback', { value: getFieldValue('', requiredLocale) }) : ''"
             :color="error && editingLocale === requiredLocale && !getFieldValue('', editingLocale) ? 'error' : 'primary'"
             :highlight="!!(error && editingLocale === requiredLocale && !getFieldValue('', editingLocale))"
             class="w-full"
@@ -1218,7 +1218,7 @@ function previewText(field: string, locale: string): string {
             <div class="flex-1">
               <h3 class="text-lg font-semibold">{{ t('admin.translations.replaceConfirmTitle') }}</h3>
               <p class="text-sm text-muted mt-1">
-                The target field already has content. Translating will replace it with a new AI-generated translation.
+                {{ t('i18n.input.replaceWarning') }}
               </p>
             </div>
           </div>

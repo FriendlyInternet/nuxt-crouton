@@ -138,7 +138,7 @@ Components auto-import with `CroutonAudio` prefix:
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton', '@fyit/crouton-audio']
+  extends: ['@fyit/crouton-core', '@fyit/crouton-audio']
 })
 ```
 

@@ -27,7 +27,7 @@ Trust order when sources conflict: see sibling `crouton-docs-trust-map` §1 (it 
 
 | Term | Meaning here |
 |---|---|
-| **crouton** | Three referents: (1) the whole framework; (2) the CLI (`packages/crouton-cli`, bin `crouton`) that generates collections; (3) `@fyit/crouton`, the umbrella Nuxt *module* |
+| **crouton** | Two referents: (1) the whole framework; (2) the CLI (`packages/crouton-cli`, bin `crouton`) that generates collections. (The umbrella Nuxt module that used to live in `packages/crouton` was removed in #2290 — apps extend `@fyit/crouton-core` + addons instead) |
 | **collection** | The unit crouton generates: one entity/table, defined by a schema JSON, generated into a self-contained layer dir. Always team-scoped |
 | **layer** | A Nuxt Layer (a Nuxt app consumed via `extends`). Two meanings in this repo — see §1 |
 | **fieldsFile** | The per-collection field-definition JSON (`schemas/<name>.json`) referenced by `crouton.config.js` |
@@ -43,7 +43,7 @@ Trust order when sources conflict: see sibling `crouton-docs-trust-map` §1 (it 
 
 **Newcomer trap #1.** Both are Nuxt Layers technically, but they play different roles:
 
-1. **Package layer** — `packages/` holds the `crouton-*` packages plus the `crouton` meta package (count: re-verify block). **Most** are publishable Nuxt Layers consumed **as source**: `packages/crouton-core/package.json` has `"main": "./nuxt.config.ts"` (no build step for the layer itself; `dist/` exists only for specific subpath exports — install traps: sibling `crouton-build-and-env`). Exceptions (check each `package.json`): `crouton` **and `crouton-devtools`** are Nuxt *modules* (`"main": "./dist/module.mjs"`), `crouton-cli` is the bin CLI, `crouton-mcp` is the MCP server, `crouton-themes` has no `main` at all (subpath-export theme layers only).
+1. **Package layer** — `packages/` holds the `crouton-*` packages (count: re-verify block). **Most** are publishable Nuxt Layers consumed **as source**: `packages/crouton-core/package.json` has `"main": "./nuxt.config.ts"` (no build step for the layer itself; `dist/` exists only for specific subpath exports — install traps: sibling `crouton-build-and-env`). Exceptions (check each `package.json`): `crouton-devtools` is a Nuxt *module* (`"main": "./dist/module.mjs"`), `crouton-cli` is the bin CLI, `crouton-mcp` is the MCP server, `crouton-themes` has no `main` at all (subpath-export theme layers only).
 2. **Generated per-collection layer** — inside a consuming app, `layers/<layer>/collections/<collection>/` is itself a nested Nuxt layer with its own `nuxt.config.ts`. Real tree (`fixtures/minimal/layers/main/collections/items/`):
 
 ```
@@ -59,9 +59,9 @@ layers/main/collections/items/
 **The extends chain, in a real launched app** (`apps/velo/nuxt.config.ts`):
 
 ```ts
-modules: ['@fyit/crouton'],
+modules: ['@fyit/crouton-devtools'],          // the only crouton entry in `modules` (optional)
 extends: [
-  '@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-i18n',
+  '@fyit/crouton-core', '@fyit/crouton-i18n',
   '@fyit/crouton-assets', '@fyit/crouton-pages', '@fyit/crouton-bookings',
   '@fyit/crouton-email',
   './layers/bookings', './layers/pages',       // ← generated layers
@@ -71,11 +71,11 @@ extends: [
 
 And `@fyit/crouton-core` itself extends `['@fyit/crouton-i18n', '@fyit/crouton-auth', '@fyit/crouton-admin']` (its `nuxt.config.ts`; "Order matters: i18n provides translation system that auth/admin consume") — so auth/admin/i18n arrive **through core** ("bundled"). Velo lists `crouton-i18n` explicitly anyway; see invariant 5 for why that pattern is dangerous with auth/admin.
 
-**The `@fyit/crouton` meta-package is a Nuxt MODULE, not a layer** (`"main": "./dist/module.mjs"`), consumed via `modules: ['@fyit/crouton']` across apps/fixtures/pocs (count: re-verify block). At runtime it **cannot add layers** (comment in `packages/crouton/src/module.ts`: layers must be in `extends` before modules load) — it only wires runtimeConfig and *warns*. Its exported `getCroutonLayers()` extends-builder has **zero in-repo callers**; apps hand-list `extends`, kept in sync by the CLI's `syncFrameworkPackages`. Treat `getCroutonLayers()` as aspirational (§7).
+**`extends` is the only package switch.** An app turns a crouton package on by listing it in `extends` (hand-listed, kept in sync by the CLI's `syncFrameworkPackages`); `crouton.config.js` `features` is generation input, not a switch (#2286). The former umbrella Nuxt module (`packages/crouton`, listed under `modules`, with an extends-builder helper) was removed in #2290 — a Nuxt module can't add layers at runtime, so it never did more than wire runtimeConfig and warn.
 
 ## 2. The two-halves rule (pointer)
 
-Canonical: `packages/crouton/CLAUDE.md` § "Packages vs Generated Layers (IMPORTANT)". In one line: a crouton feature = a **package** (UI, admin pages, nav, composables, i18n — via `extends`) + a **generated layer** (Drizzle schema, API endpoints, configs, types — via the CLI), and they need each other: package without layer → no tables/endpoints (404/500); layer without package → a generic "Collections" sidebar with no dedicated UI. When something "is installed but doesn't work", check which half is missing first.
+Canonical: this section (it lived in the meta package's `CLAUDE.md` until #2290 removed it). In one line: a crouton feature = a **package** (UI, admin pages, nav, composables, i18n — via `extends`) + a **generated layer** (Drizzle schema, API endpoints, configs, types — via the CLI), and they need each other: package without layer → no tables/endpoints (404/500); layer without package → a generic "Collections" sidebar with no dedicated UI. When something "is installed but doesn't work", check which half is missing first. **Changing (#2278):** a package with `ownsCollections: true` in its manifest ships *both* halves itself (sales first — `packages/crouton-sales/collections/*`); the CLI refuses to generate those collections into an app. Bookings, pages and assets still follow the two-halves rule until their slices land.
 
 ## 3. The three registries (all `app.config`, defu-merged across layers)
 
@@ -101,7 +101,7 @@ Client side: `useTeamContext()` (`packages/crouton-core/app/composables/useTeamC
 
 ## 5. Manifest-driven field types
 
-Field types are **not hardcoded in the CLI**. Each package declares a `crouton.manifest.ts` (`defineCroutonManifest` from `@fyit/crouton-core/shared/manifest`); the CLI's manifest loader merges them into the type mapping. Core's manifest declares the base types (`string`, `text`, `number`, … — exact list in the file) with `db`/`drizzle`/`zod`/`tsType`/`defaultValue`/`component`, plus **aliases** (`integer`→`number`, `datetime`→`date`) that resolve to canonical *before* generators run — the #285 incident is why (`datetime` once leaked through: raw `<UInput>` + a `text` column). The manifest also owns `autoGeneratedFields` (`id, teamId, owner, createdAt, …` — never declare these), reserved field/collection names, `bundled` (read by the meta module), and `detects` patterns for addon generator contributions. Full tables: sibling `crouton-generation-reference`. **Adding a field type = a manifest change, not a CLI patch.**
+Field types are **not hardcoded in the CLI**. Each package declares a `crouton.manifest.ts` (`defineCroutonManifest` from `@fyit/crouton-core/shared/manifest`); the CLI's manifest loader merges them into the type mapping. Core's manifest declares the base types (`string`, `text`, `number`, … — exact list in the file) with `db`/`drizzle`/`zod`/`tsType`/`defaultValue`/`component`, plus **aliases** (`integer`→`number`, `datetime`→`date`) that resolve to canonical *before* generators run — the #285 incident is why (`datetime` once leaked through: raw `<UInput>` + a `text` column). The manifest also owns `autoGeneratedFields` (`id, teamId, owner, createdAt, …` — never declare these), reserved field/collection names, `bundled` (read by the CLI's scaffold/doctor as "core already provides it"), and `detects` patterns for addon generator contributions. Full tables: sibling `crouton-generation-reference`. **Adding a field type = a manifest change, not a CLI patch.**
 
 ## 6. Invariants (compressed to pointers — read the canonical source, don't re-derive)
 
@@ -115,7 +115,7 @@ Field types are **not hardcoded in the CLI**. Each package declares a `crouton.m
 | 6 | `hub: { db: 'sqlite' }`, never `hub: { database: true }`; NuxtHub = storage only, never deploy | root `CLAUDE.md` § Critical Gotchas | breaks schema.entry resolution + local migrations |
 | 7 | Translatable fields `required: false` at the root column (real value in `translations.{locale}.field`; root is cache/fallback) | `packages/crouton-cli/CLAUDE.md` ("Why this matters") | `NOT NULL` root fails translation-only inserts |
 | 8 | Layout is data (a `LayoutTree` in team-scoped `layout_configs`), not generated `.vue` | `crouton-layout/server/database/schema/layoutConfigs.ts` (code) | runtime-editable + diffable for the agent⇄human loop |
-| 9 | Field types / capabilities are manifest-declared (§5) — one source, three consumers (CLI, MCP, meta module) | `crouton.manifest.ts` per package | hardcoded tables drift per consumer (#285) |
+| 9 | Field types / capabilities are manifest-declared (§5) — one source, two consumers (CLI, MCP) | `crouton.manifest.ts` per package | hardcoded tables drift per consumer (#285) |
 | 10 | Core's `ensure-hub-blob` module loads before `@nuxthub/core`; don't reorder core's `modules` | comment in `packages/crouton-core/nuxt.config.ts` | `db: 'sqlite'`-only apps still get blob |
 
 (Install/postinstall/typecheck invariants → sibling `crouton-build-and-env`; deploy invariants → `crouton-ci-and-deploy-map`.)
@@ -125,8 +125,7 @@ Field types are **not hardcoded in the CLI**. Each package declares a `crouton.m
 | Weak point | Evidence | Status |
 |---|---|---|
 | **Production-SSR 500 on collection pages** — an internal data-fetch loses the auth cookie under `nuxt preview`, so the entire e2e harness runs against `nuxt dev` (source of its huge timeouts) | `e2e/CLAUDE.md`; tracked as **#246** (per the `e2e-smoke` skill) | **unresolved**, load-bearing |
-| **`getCroutonLayers()` has zero in-repo callers** — the meta module IS consumed, but its headline extends-assembly API is unexercised; apps hand-list `extends` (CLI-synced) | grep in re-verify block | open question — aspirational or deprecation candidate (owner call) |
-| **`packages/crouton-core/CLAUDE.md` is stale** — title claims `@fyit/crouton` (the meta package), references dead names (`nuxt-crouton-i18n`, `@crouton/auth`) | the file itself | don't trust its import examples; full stale list → `crouton-docs-trust-map` |
+| **`packages/crouton-core/CLAUDE.md` is partly stale** — references dead names (`nuxt-crouton-i18n`, `@crouton/auth`) | the file itself | don't trust its import examples; full stale list → `crouton-docs-trust-map` |
 | **ISR routeRules contradiction** — root `CLAUDE.md` recommends a wildcard `/api/teams/*/...` ISR rule that live code comments mark BROKEN | owner: `crouton-diagnostics-index` § "The ISR routeRules contradiction" | don't add such wildcard rules |
 | **CLI mirrors block sizing contracts by hand** — `crouton-cli/lib/compose-layout.ts` "keep in sync" comment (whose own target list has drifted; live default registry is in `crouton-layout/app/app.config.ts`) | the file's comment | silent-drift hazard on `minWidth`/`defaultSize` changes |
 | **`packages/crouton-layout/CLAUDE.md` self-contradicts** — marks server-side extraction pending while `layout_configs` schema + API exist on disk | files exist | trust the code |
@@ -139,9 +138,8 @@ Facts checked against the working tree (velo/core/crouton/auth/layout/cli config
 
 ```bash
 ls packages | wc -l                                                             # package count (31 at verification)
-grep -rln "modules: \['@fyit/crouton'\]" apps fixtures pocs 2>/dev/null | wc -l # meta-module consumers (15 at verification)
+grep -rn "modules: \[" apps/*/nuxt.config.ts fixtures/*/nuxt.config.ts pocs/*/nuxt.config.ts  # only '@fyit/crouton-devtools' may appear as a crouton entry (umbrella module gone, #2290)
 grep -n "extends" apps/velo/nuxt.config.ts                                      # extends chain still hand-listed?
-grep -rn "getCroutonLayers" apps/*/nuxt.config.ts fixtures/*/nuxt.config.ts pocs/*/nuxt.config.ts  # still 0 callers?
 ls packages/crouton-core/app/components/stubs/                                  # stub list (7 at verification)
 grep -n "priority" packages/crouton-core/nuxt.config.ts                         # stubs still -1?
 grep -n "500 under production SSR" e2e/CLAUDE.md                                # #246 still unresolved?

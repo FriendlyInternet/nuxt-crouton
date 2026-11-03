@@ -12,6 +12,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const heightClass = computed(() => {
   const h = props.attrs.height || 'md'
@@ -77,7 +78,7 @@ const heightClass = computed(() => {
     >
       <div class="text-center text-muted">
         <UIcon name="i-lucide-images" class="size-10 mb-2 mx-auto" />
-        <p class="text-sm">No images added yet</p>
+        <p class="text-sm">{{ t('pages.blockRender.noImages') }}</p>
       </div>
     </div>
   </div>

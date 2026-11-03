@@ -23,3 +23,6 @@ logs
 .env.*
 !.env.example
 .wrangler/
+
+# Real customer exports — never commit (public repo, #2255). Backup: ~/Projects/velo-seedData-private
+seedData/

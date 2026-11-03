@@ -58,7 +58,7 @@ pnpm --filter "e2e-fixture-<name>^..." build
 ```
 
 Skip this if you've been building/typechecking these packages this session and
-they're already current. If the dev server errors with `Could not load '@fyit/crouton'`, this build is the fix.
+they're already current. If the dev server errors with `Could not load '@fyit/crouton-*'`, this build is the fix.
 
 ## Step 2.5 — Browser binary in a sandbox (remote/CI env without the matching Chromium)
 

@@ -91,11 +91,13 @@ inside**:
 **confirmed**. (A bare `export default {}` with only `name`/`inheritProps` is a 🔵
 nit, not a 🔴 — distinguish.)
 
-### 4. Build on the component library — raw HTML re-implementations are a warning
+### 4. Build on the component library — hand-rolled UI is 🔴
 
-Where Nuxt UI 4 (or a crouton component) clearly provides the primitive, a raw HTML
-control is a 🟡 **suspected** smell (not an auto-fail — there are legitimate
-exceptions, so these advise rather than block):
+Owner's rule: mainly Nuxt UI components; the less hand-rolled the better. Where Nuxt UI 4
+(or a crouton component) clearly provides the primitive, a raw HTML control, a home-made
+menu/modal/toggle/badge, an arbitrary `[...]` Tailwind value on a surface a `U*` prop
+covers, or a wrapper `<div>` that only carries a class is 🔴 (there are legitimate
+exceptions, listed below — those are not findings):
 
 | Raw element | Should usually be | Notes / legit exceptions |
 |-------------|-------------------|--------------------------|
@@ -106,7 +108,7 @@ exceptions, so these advise rather than block):
 | `<a href>` to an **internal** route | `NuxtLink` / `UButton :to` / `ULink` | external `http(s)://`/`mailto:` `<a>` is fine |
 | hand-rolled modal/dropdown markup | `UModal` / `UDropdownMenu` | — |
 
-Use judgment: a raw `<div>` is not a finding; a raw `<button class="…">` that
+Use judgment: a raw `<div>` that does layout work is not a finding (one that only carries a class a `U*` prop would set is); a raw `<button class="…">` that
 re-implements what `UButton` gives is. When the repo has a crouton component for the
 job (e.g. a `Crouton…` picker/list/form surface), prefer flagging toward that.
 
@@ -140,9 +142,11 @@ Not in scope: legitimate `nextTick` for **DOM measurement after render** (focus,
 
 | Finding | Level |
 |---------|-------|
-| v3 component name; `UCard` inside an overlay; Options API in a `.vue`; an overlay clearly missing the `#content` pattern | 🔴 **Critical** — a hard, documented convention break; **blocks** the CI gate |
-| raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>` where a component applies; hand-rolled overlay markup; hardcoded brand/semantic color; a load-bearing `nextTick`/timer papering over an async-state race (a cleaner event/data-derived form exists) | 🟡 **Warning** — likely off-convention, advisory |
+| v3 component name; `UCard` inside an overlay; Options API in a `.vue`; an overlay clearly missing the `#content` pattern; **hand-rolled where a Nuxt UI 4 component exists** (raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>`, home-made menu/modal/toggle/badge, arbitrary `[...]` Tailwind on a surface a `U*` prop covers, class-only wrapper `<div>`) | 🔴 **Critical** — a hard, documented convention break; **blocks** the CI gate |
+| hardcoded brand/semantic color; a load-bearing `nextTick`/timer papering over an async-state race (a cleaner event/data-derived form exists) | 🟡 **Warning** — likely off-convention, advisory |
 | bare `export default {}` nit; one-off hardcoded color; benign `nextTick` smell; minor stylistic drift | 🔵 **Note** — polish |
+
+The sticky comment leads with one line, above the severity table: `Hand-rolled: N (list)` (N = count of hand-rolled 🔴 findings; list = element/pattern names, or `Hand-rolled: 0`).
 
 Rank by **how clearly it breaks a documented rule**, not by taste. A `UDropdown` is
 🔴 (the rule is explicit); "I'd have used a `UCard` here" is not a finding at all —

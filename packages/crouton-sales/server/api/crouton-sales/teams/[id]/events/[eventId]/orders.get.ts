@@ -7,7 +7,7 @@
  * queue via a correlated EXISTS), so the query lives in the package rather than
  * in per-app generated code where it silently went missing (the "filters do
  * nothing" bug). Mirrors the bookings `admin-bookings` pattern: the package
- * owns the query, the app owns the tables (imported via `~~/layers/...`).
+ * owns the query and, since #2278, the tables too (`collections/*`).
  *
  * Request-shaping is the pure, unit-tested `order-filters` util; this handler
  * stays a thin fetch → build-where → delegate, matching `my-orders`. Returns
@@ -57,10 +57,10 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
 // a package unit test reach it (`test/outstanding-list-filter.test.ts`). This
 // wrapper only resolves the app-layer tables the alias can't give a test.
 async function outstandingCondition(db: any, salesOrders: any) {
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
-  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
-  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
-  const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
+  const { salesOrderitems } = await import('../../../../../../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../../../../../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../../../../../../collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('../../../../../../../collections/kdsbumps/server/database/schema')
 
   return outstandingOrdersCondition(db, {
     orders: salesOrders,
@@ -99,10 +99,10 @@ async function buildWhere(db: any, salesOrders: any, teamId: string, eventId: st
  */
 async function countOutstanding(db: any, salesOrders: any, teamId: string, eventId: string) {
   const plan = planOutstandingCount({ teamId, eventId })
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
-  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
-  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
-  const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
+  const { salesOrderitems } = await import('../../../../../../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../../../../../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../../../../../../collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('../../../../../../../collections/kdsbumps/server/database/schema')
 
   // Still to deliver = at least one location that REQUIRES confirmation has no
   // bump (#1851). The rule is NOT spelled out here: it is the shared
@@ -134,7 +134,7 @@ async function countOutstanding(db: any, salesOrders: any, teamId: string, event
 
 export default defineEventHandler(async (event) => {
   const { team, db, eventId } = await requireTeamEvent(event)
-  const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
+  const { salesOrders } = await import('../../../../../../../collections/orders/server/database/schema')
 
   const query = getQuery(event)
   const filters = parseOrderFilters(query)

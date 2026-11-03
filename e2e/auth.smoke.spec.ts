@@ -18,9 +18,10 @@
  * Fixture-agnostic — the auth flow is the same across fixtures; it reads the
  * active fixture's first collection only to have a real protected route to hit.
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import {
+  test,
   loginOrRegister, ensureTeam, isAuthenticated, signOut,
   activeTeamId, createTeam, setActiveTeam, collectionUrl,
   fixtureManifest, TEAM_FILE, FIXTURE

@@ -137,3 +137,41 @@ test('status:in-progress contributes its timestamp only when the label is presen
   })
   assert.equal(withLabel.inProgressSince, '2026-08-06T00:00:00Z')
 })
+
+test('two PRs on our own branch (one closed, one open) are both self — must not refuse', async () => {
+  const github = fakeGithub({ prs: [
+    { number: 1500, state: 'closed', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
+    { number: 1501, state: 'open', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
+  ] })
+  const facts = await gatherClaimFacts({ github, context, issueNumber: 1491 })
+  assert.deepEqual(facts.self.prs, [1500, 1501])
+  assert.equal(decideClaim(facts).action, 'proceed')
+})
+
+// ── #3061: revision facts ───────────────────────────────────────────────────────────
+function withPulls(base, impl) {
+  const calls = []
+  base.rest.pulls.list = async (a) => { calls.push(a); return impl(a) }
+  return { github: base, calls }
+}
+
+test('reviseBranch looks the PR up by head and reports it', async () => {
+  const { github, calls } = withPulls(fakeGithub({ issue: { state: 'closed', labels: [] } }),
+    async () => ({ data: [{ number: 3027, state: 'open', merged_at: null }] }))
+  const f = await gatherClaimFacts({ github, context, issueNumber: 1, reviseBranch: 'epic/1-x' })
+  assert.equal(calls[0].head, 'FriendlyInternet:epic/1-x')
+  assert.deepEqual(f.revision, { branch: 'epic/1-x', pr: 3027, state: 'open', merged: false })
+})
+
+test('a throwing pulls.list becomes lookupFailed', async () => {
+  const { github } = withPulls(fakeGithub(), async () => { throw new Error('boom') })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 1, reviseBranch: 'b' })
+  assert.deepEqual(f.revision, { branch: 'b', lookupFailed: true })
+})
+
+test('no reviseBranch → no revision key and no pulls.list call', async () => {
+  const { github, calls } = withPulls(fakeGithub(), async () => ({ data: [] }))
+  const f = await gatherClaimFacts({ github, context, issueNumber: 1 })
+  assert.equal('revision' in f, false)
+  assert.equal(calls.length, 0)
+})

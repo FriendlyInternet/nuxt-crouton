@@ -1,10 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import { requireScopedEvent } from '../../../../utils/require-scoped-event'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
-import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
-import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
-import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
+import { salesEvents } from '../../../../../collections/events/server/database/schema'
+import { salesProducts } from '../../../../../collections/products/server/database/schema'
+import { salesCategories } from '../../../../../collections/categories/server/database/schema'
+import { salesClients } from '../../../../../collections/clients/server/database/schema'
+import { salesLocations } from '../../../../../collections/locations/server/database/schema'
 
 // Helper-authenticated endpoint: all data needed for POS order interface
 export default defineEventHandler(async (event) => {

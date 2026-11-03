@@ -25,7 +25,9 @@ import { fileURLToPath } from 'node:url';
 import { DENY, ledgerFromSession } from './pi-edited-files.mjs';
 
 // Pure core: given the ledger set + the changed-file list, produce the two ordered buckets.
-export function planCommits({ ledger, changed }) {
+// `generatorRan` (default true = today's split): when no generator ran, nothing is "derived
+// output" — every changed file is a hand-written input (#2434).
+export function planCommits({ ledger, changed, generatorRan = true }) {
   const led = ledger instanceof Set ? ledger : new Set(ledger);
   const seen = new Set();
   const changedClean = [];
@@ -36,6 +38,7 @@ export function planCommits({ ledger, changed }) {
     changedClean.push(p);
   }
   // inputs = ledger files that actually changed (hand-authored, non-junk, existing).
+  if (!generatorRan) return { inputs: [...changedClean].sort(), generated: [] };
   const inputs = changedClean.filter(p => led.has(p)).sort();
   // generated = everything else that changed and isn't junk (CLI/MCP output, new app dirs, etc.).
   const generated = changedClean.filter(p => !led.has(p)).sort();
@@ -63,13 +66,32 @@ export function writeBuckets(plan, dir) {
   return plan;
 }
 
+// Did a known generator run in this session? bash `crouton config|generate|init`,
+// `generate_collection` (bash or MCP tool name), or `node scripts/gen-*.mjs`.
+const GENERATOR_CMD = /crouton\s+(config|generate|init)\b|generate_collection|node\s+scripts\/gen-[\w-]+\.mjs/;
+function toolCallsOf(line) {
+  let rec;
+  try { rec = JSON.parse(line); } catch { return []; }
+  const content = rec?.message?.content;
+  return Array.isArray(content) ? content.filter(c => c?.type === 'toolCall') : [];
+}
+
+const isGeneratorCall = c =>
+  /generate_collection/.test(String(c.name)) || GENERATOR_CMD.test(String(c.arguments?.command ?? ''));
+
+export function generatorRanInSession(sessionPath) {
+  return fs.readFileSync(sessionPath, 'utf8').split('\n').some(line => toolCallsOf(line).some(isGeneratorCall));
+}
+
 // I/O wrapper: read the ledger from the session and the changed list from a file.
 export function planFromFiles(sessionPath, repoRoot, changedPath) {
   const ledger = fs.existsSync(sessionPath) ? ledgerFromSession(sessionPath, repoRoot) : new Set();
   const changed = fs.existsSync(changedPath)
     ? fs.readFileSync(changedPath, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
     : [];
-  return planCommits({ ledger, changed });
+  // No session log → we can't tell, so keep the split rather than guess.
+  const generatorRan = fs.existsSync(sessionPath) ? generatorRanInSession(sessionPath) : true;
+  return planCommits({ ledger, changed, generatorRan });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -10,7 +10,7 @@
  * slotted panels — OrdersTab / ClientsPanel — are async-setup too, so the same
  * boundary waits for both).
  */
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{
   eventSlug: string

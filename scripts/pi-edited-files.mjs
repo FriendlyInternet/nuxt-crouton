@@ -34,7 +34,7 @@ export function ledgerFromSession(sessionPath, repoRootArg) {
     const content = rec?.message?.content;
     if (!Array.isArray(content)) continue;
     for (const c of content) {
-      if (c?.type !== 'toolCall' || !WRITE_TOOLS.has(c.name)) continue;
+      if (c?.type !== 'toolCall' || !WRITE_TOOLS.has(String(c.name).toLowerCase())) continue;
       const a = c.arguments || {};
       for (const p of [a.path, a.file_path, a.filename, a.file, a.newPath, a.new_path]) {
         if (typeof p !== 'string' || !p) continue;

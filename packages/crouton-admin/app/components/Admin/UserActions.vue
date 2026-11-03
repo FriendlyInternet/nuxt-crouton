@@ -8,6 +8,8 @@
 import { computed } from 'vue'
 import type { AdminUserListItem } from '../../../types/admin'
 
+const { t } = useT()
+
 interface Props {
   /** The user to show actions for */
   user: AdminUserListItem
@@ -37,7 +39,7 @@ const items = computed(() => {
   // View/Edit actions
   const viewActions = [
     {
-      label: 'Impersonate',
+      label: t('superAdmin.users.impersonate'),
       icon: 'i-lucide-eye',
       click: () => emit('impersonate', props.user),
       disabled: props.user.banned || props.user.superAdmin
@@ -48,14 +50,14 @@ const items = computed(() => {
   const moderationActions = props.user.banned
     ? [
         {
-          label: 'Unban User',
+          label: t('superAdmin.users.unbanUser'),
           icon: 'i-lucide-check-circle',
           click: () => emit('unban', props.user)
         }
       ]
     : [
         {
-          label: 'Ban User',
+          label: t('superAdmin.users.banUser'),
           icon: 'i-lucide-ban',
           click: () => emit('ban', props.user),
           disabled: props.user.superAdmin
@@ -65,7 +67,7 @@ const items = computed(() => {
   // Destructive actions
   const destructiveActions = [
     {
-      label: 'Delete User',
+      label: t('superAdmin.users.deleteUser'),
       icon: 'i-lucide-trash-2',
       click: () => emit('delete', props.user),
       disabled: props.user.superAdmin
@@ -90,7 +92,7 @@ const items = computed(() => {
       variant="ghost"
       icon="i-lucide-ellipsis-vertical"
       :loading="loading"
-      aria-label="User actions"
+      :aria-label="t('superAdmin.users.userActions')"
     />
   </UDropdownMenu>
 </template>

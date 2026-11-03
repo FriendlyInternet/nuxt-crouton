@@ -42,7 +42,6 @@ export interface CollectSeedSqlOptions {
   teamSlug: string
   teamId: string
   locale: string
-  withStaff?: boolean
   /**
    * Bound to `ctx.createPageWithBlocks` when crouton-pages is present. Receives
    * the live `ctx` so it can push its own upserts onto the same statement list.
@@ -62,7 +61,6 @@ export async function collectSeedSql(options: CollectSeedSqlOptions): Promise<st
     teamId: options.teamId,
     teamSlug: options.teamSlug,
     locale: options.locale,
-    withStaff: Boolean(options.withStaff),
     now: raw('unixepoch()'),
     upsert(table, byId, values, opts) {
       statements.push(buildUpsert(table, byId, values ?? {}, {

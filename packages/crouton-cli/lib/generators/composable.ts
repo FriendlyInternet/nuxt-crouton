@@ -10,7 +10,7 @@ export function generateRepeaterItemSchema(field: Record<string, any>, layerCame
   const schemaName = `${layerCamelCase}${pascalCasePlural}${fieldPascalCase}ItemSchema`
 
   const translatableProps = field.meta?.translatableProperties || []
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
 
   // Generate schema fields
   const schemaFields = []
@@ -20,7 +20,7 @@ export function generateRepeaterItemSchema(field: Record<string, any>, layerCame
 
   // Add all properties from meta.properties
   for (const [propName, propDef] of Object.entries(properties)) {
-    const zodType = mapPropertyToZod(propDef)
+    const zodType = propDef.zod || 'z.string()'
     if (propDef.required === true) {
       schemaFields.push(`${propName}: ${zodType}`)
     } else {
@@ -43,24 +43,6 @@ export function generateRepeaterItemSchema(field: Record<string, any>, layerCame
 }
 
 /**
- * Map property type to Zod schema
- */
-function mapPropertyToZod(propDef: Record<string, any>): string {
-  const type = propDef.type || 'string'
-  const zodMap = {
-    string: 'z.string()',
-    text: 'z.string()',
-    number: 'z.number()',
-    decimal: 'z.number()',
-    boolean: 'z.boolean()',
-    date: 'z.date()',
-    json: 'z.record(z.string(), z.any())',
-    array: 'z.array(z.string())'
-  }
-  return zodMap[type] || 'z.string()'
-}
-
-/**
  * Generate AI context header for composable files
  */
 function generateAIHeader(data: Record<string, any>, apiPath: string): string {
@@ -73,7 +55,6 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
  * @crouton-generated
  * @collection ${plural}
  * @layer ${layer}
- * @generated ${new Date().toISOString().split('T')[0]}
  *
  * ## AI Context
  * - Composable: use${layerPascalCase}${pascalCasePlural}
@@ -166,7 +147,7 @@ export function generateComposable(data: Record<string, any>, config: Record<str
   const runtimeFields = fields
     .filter(f => f.name !== 'id')
     .map((f) => {
-      const entry = {
+      const entry: Record<string, any> = {
         name: f.name,
         type: f.type,
         label: f.meta?.label || f.name.charAt(0).toUpperCase() + f.name.slice(1)
@@ -179,9 +160,6 @@ export function generateComposable(data: Record<string, any>, config: Record<str
 
   // Generate AI context header
   const aiHeader = generateAIHeader(data, apiPath)
-
-  // Compute form component name - use custom formComponent from config or generate default
-  const formComponentName = data.collectionConfig?.formComponent || `${layerPascalCase}${pascalCasePlural}Form`
 
   // Generate item schemas for repeater fields with translatableProperties or properties
   const repeaterItemSchemas = fields
@@ -209,7 +187,6 @@ const _${prefixedPlural}Config = {
   name: '${prefixedPlural}',
   layer: '${layer}',
   apiPath: '${apiPath}',
-  componentName: '${formComponentName}',
   defaultValues: {
     ${data.fieldsDefault}
   },

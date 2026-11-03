@@ -22,6 +22,8 @@
  */
 import type { User } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
+import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
+import { magicLinkCallbackURL } from '../utils/magicLinkCallback'
 
 export interface LoginCredentials {
   email: string
@@ -181,7 +183,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Login failed')
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_LOGIN_FAILED, result.error.message)
       }
 
       if (debug) {
@@ -212,17 +214,17 @@ export function useAuth() {
   /**
    * Sign in with OAuth provider
    */
-  async function loginWithOAuth(provider: string): Promise<void> {
+  async function loginWithOAuth(provider: string, redirectTo?: string): Promise<void> {
     loading.value = true
     error.value = null
     try {
       const result = await requireAuthClient().signIn.social({
         provider: provider as 'github' | 'google' | 'discord',
-        callbackURL: window.location.origin + '/auth/callback'
+        callbackURL: magicLinkCallbackURL(window.location.origin, redirectTo)
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'OAuth login failed')
+        throw new AuthError(AUTH_ERROR_CODES.OAUTH_FAILED, result.error.message)
       }
 
       // OAuth redirects, so we don't need to refresh session here
@@ -237,7 +239,7 @@ export function useAuth() {
   /**
    * Login with magic link
    */
-  async function loginWithMagicLink(email: string): Promise<void> {
+  async function loginWithMagicLink(email: string, redirectTo?: string): Promise<void> {
     loading.value = true
     error.value = null
     try {
@@ -247,11 +249,11 @@ export function useAuth() {
 
       const result = await requireAuthClient().signIn.magicLink({
         email,
-        callbackURL: window.location.origin + '/auth/callback'
+        callbackURL: magicLinkCallbackURL(window.location.origin, redirectTo)
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Magic link failed')
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_MAGIC_LINK_FAILED, result.error.message)
       }
 
       // Magic link sends email, user clicks link to complete login
@@ -293,7 +295,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Registration failed')
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_REGISTRATION_FAILED, result.error.message)
       }
 
       if (debug) {

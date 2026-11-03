@@ -3,6 +3,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { mapType } from './helpers.ts'
+import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from './system-fields.ts'
 
 export interface Field {
   name: string
@@ -13,6 +14,56 @@ export interface Field {
   zod: string
   default: string
   tsType: string
+  /** Sample-value generators declared by the manifest (drizzle-seed expr + seed.json expr) */
+  seed?: { drizzleSeed: string, fixture: string }
+  /** Source literal of a schema-valid value for generated tests, from the manifest */
+  testSample?: string
+  /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
+  component?: string
+  /** SQLite column the manifest declares for this type; database-schema emits from it */
+  sqlite?: { column: 'integer' | 'real' | 'text' | 'json', mode?: 'boolean' | 'timestamp' }
+}
+
+const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+
+/** Names a user field may not take: system columns (incl. hierarchy defaults) and the translations relation. */
+const RESERVED_FIELD_NAMES = new Set<string>([
+  ...AUTO_GENERATED_FIELDS,
+  ...Object.values(SYSTEM_FIELD_GROUPS).flat(),
+  'translations'
+])
+
+/** Every `meta` key a generator reads. Anything else is a typo that would be silently ignored. */
+export const ALLOWED_META_KEYS: ReadonlySet<string> = new Set([
+  'required', 'nullable', 'unique', 'default', 'maxLength', 'precision', 'scale', 'min', 'max',
+  'area', 'group', 'label', 'description', 'help', 'readOnly', 'sortable',
+  'component', 'displayAs', 'picker', 'url',
+  'options', 'optionsCollection', 'optionsField', 'optionsValueField', 'optionsLabelField', 'labelField', 'creatable',
+  'dependsOn', 'dependsOnCollection', 'dependsOnField',
+  'translatable', 'translatableProperties',
+  'properties', 'addLabel', 'repeaterComponent'
+])
+
+/**
+ * Throw one line naming the field when a name / type / meta key can't be generated safely (#2732).
+ * Strict by design: an invalid name emits syntax errors in schema.ts / types.ts / _Form.vue.
+ */
+export function validateField(name: unknown, def: Record<string, any> | undefined, validTypes: Set<string>): void {
+  if (typeof name !== 'string' || !FIELD_NAME_RE.test(name)) {
+    throw new Error(`Invalid field name ${JSON.stringify(name)}: must match ${FIELD_NAME_RE} (letters, digits, underscore; not starting with a digit)`)
+  }
+  if (RESERVED_FIELD_NAMES.has(name)) {
+    throw new Error(`Field "${name}" collides with a system field: ${[...RESERVED_FIELD_NAMES].join(', ')}`)
+  }
+  // No manifest discovered (crouton-core not installed) → no type list to check against; loadFields warns once.
+  if (validTypes.size > 0 && (typeof def?.type !== 'string' || !validTypes.has(def.type))) {
+    throw new Error(`Field "${name}" has unknown type ${JSON.stringify(def?.type)}: allowed ${[...validTypes].sort().join(', ')}`)
+  }
+  for (const key of Object.keys(def.meta || {})) {
+    if (!ALLOWED_META_KEYS.has(key)) {
+      throw new Error(`Field "${name}" has unknown meta key "${key}": allowed ${[...ALLOWED_META_KEYS].join(', ')}`)
+    }
+  }
 }
 
 export async function loadFields(p: string, typeMapping: Record<string, any>): Promise<Field[]> {
@@ -45,6 +96,9 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
     entries = Object.entries(obj) as Array<[string, Record<string, any>]>
   }
 
+  if (validTypes.size === 0) console.warn('⚠ No field types discovered from crouton manifests — skipping field type validation')
+  for (const [name, def] of entries) validateField(name, def, validTypes)
+
   return entries.map(([name, meta]) => {
     const fieldMeta = meta?.meta || {} as Record<string, any>
     // Set default area if not specified
@@ -57,6 +111,8 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
     // sees the canonical name. typeMapping carries `canonical` for both canonical
     // and alias keys; fall back to mapType for unknown types (#285).
     const resolvedType = typeMapping[meta?.type]?.canonical ?? mapType(meta?.type, validTypes)
+
+    attachPropertyManifest(fieldMeta, typeMapping)
     return {
       name,
       type: resolvedType,
@@ -65,7 +121,30 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       refScope: meta?.refScope,
       zod: typeMapping[resolvedType]?.zod || 'z.string()',
       default: typeMapping[resolvedType]?.default || '\'\'',
-      tsType: typeMapping[resolvedType]?.tsType || 'string'
+      tsType: typeMapping[resolvedType]?.tsType || 'string',
+      seed: typeMapping[resolvedType]?.seed,
+      testSample: typeMapping[resolvedType]?.testSample,
+      component: typeMapping[resolvedType]?.component,
+      sqlite: typeMapping[resolvedType]?.sqlite
     }
   })
+}
+
+// Repeater item properties get the same treatment as fields: the manifest's
+// `component` for their (canonical) type, so the item Input.vue renders what the
+// manifest says instead of a private per-type map (#2286). The manifest's
+// `tsType` / `zod` are stamped too, so the types / composable / field-component
+// generators read them instead of three private 8-entry maps. Types are left as
+// written; an explicit `component` on the property wins.
+function attachPropertyManifest(fieldMeta: Record<string, any>, typeMapping: Record<string, any>): void {
+  const properties = fieldMeta.properties
+  if (!properties || typeof properties !== 'object') return
+  for (const def of Object.values(properties as Record<string, any>)) {
+    if (!def || typeof def !== 'object') continue
+    const canonical = typeMapping[def.type]?.canonical ?? def.type
+    const entry = typeMapping[canonical]
+    if (entry?.component && !def.component) def.component = entry.component
+    if (entry?.tsType) def.tsType = entry.tsType
+    if (entry?.zod) def.zod = entry.zod
+  }
 }
