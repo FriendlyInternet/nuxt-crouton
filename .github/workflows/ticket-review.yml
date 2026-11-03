@@ -71,11 +71,14 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -uo pipefail
-          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
             echo "::error::review model $MODEL did not answer on provider claude-bridge — ticket review NOT run, no fallback to another model (#2776)"
-            gh issue comment "$EPIC" --body "$(printf '<!-- ticket-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review (#2776)_\n\n🔴 **Ticket review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). Nothing was approved and no ticket started.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            gh issue comment "$EPIC" --body "$(printf '<!-- ticket-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review (#2776)_\n\n🔴 **Ticket review could not run** — the preflight probe to review model `%s` failed (see the [run log](%s/%s/actions/runs/%s)). Nothing was approved and no ticket started.\n**Needs:** action — check the run log for the cause, then re-run this workflow.' "$MODEL" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" || true
             exit 1
           fi
 

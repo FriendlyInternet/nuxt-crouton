@@ -194,6 +194,8 @@ node scripts/epic-scaffold.mjs --dry-run plan.json   # print the tree, create no
 node scripts/epic-scaffold.mjs plan.json             # epic + branch + children + sub-issue links
 ```
 
+A ticket that must run while a same-package ticket is open — because that one is waiting on it (e.g. a fix for its failing PR) — carries a line `Unblocks: #NN` in its body. Traffic control then lets it proceed past #NN (it comments "proceeding before #NN"); adding the line to an already-parked ticket releases it at once (the `edited` trigger in `on-issue-close.yml`). Only declare it when it is true.
+
 The epic body must carry a `Dedup-checked:` line (the script refuses otherwise). Running the script already starts the work: every child with no `Blocked-by` gets `work-this` immediately, and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi` afterwards — that runs the decomposer on an epic that already has children and dispatches the unblocked ones a second time. Use `--dry-run` to look before anything starts. It reuses `apply-decompose-plan.mjs`; tests: `scripts/epic-scaffold.test.mjs`.
 
 ## Labels-as-code

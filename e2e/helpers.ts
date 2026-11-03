@@ -174,7 +174,20 @@ export interface CollabSpec {
   field: string
 }
 
+/**
+ * Generated-endpoint access check (#3148): the fixture declares `access` on two
+ * collections and e2e/access.smoke.spec.ts asserts the generated handlers enforce it.
+ */
+export interface AccessSpec {
+  /** Collection with `access: { create: 'admin', reorder: 'admin' }` + hierarchy. */
+  admindocs: { apiPath: string }
+  /** Collection with `access: { create: 'member', list: 'own' }`. */
+  membernotes: { apiPath: string }
+}
+
 export interface FixtureManifest {
+  /** Optional role-enforcement check; omit for fixtures without access declarations. */
+  access?: AccessSpec
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
   surfaces?: SurfaceSpec[]

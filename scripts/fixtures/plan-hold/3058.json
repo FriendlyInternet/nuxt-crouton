@@ -1,0 +1,104 @@
+{
+ "issue": 3058,
+ "labels": [
+  "status:blocked"
+ ],
+ "comments": [
+  {
+   "body": "> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _via the `delegate-pi` label_\n\nclassified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- work-run:3058 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40891134786\n\nIts PR + preview land here when it finishes.",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes. Read-only reproduction against live state. #3043 (base `epic/3039-…`, label `build:approved`, `mergeStateStatus: CLEAN`, open) is the exact shape the issue describes. `gh run list --workflow automerge-epic-subpr.yml` shows only `pull_request`/`workflow_run` runs, none triggered by the label. The last `schedule` runs were 08:34Z and 01:50Z, so the \"hourly\" sweep is not hourly and ran before t",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40860641563).",
+   "userType": "Bot"
+  },
+  {
+   "body": "Correction to the hypothesis, from the 11:01Z `ok` round:\n\n- epic → main PRs: `ok` → `approve-epic-pr` merges when green. Works (#3016 merged by the bot at 11:01Z, 20 s after the `ok`).\n- draft work-NNNN → main PRs: `ok` → `approve-draft-pr` marks ready and promises \"the green-gated auto-merge takes over\". It does not: `automerge-epic-subpr.yml` only covers PRs into `epic/*` branches. #3005 has sat ready+green since 2026-10-28 16:32Z.\n- non-draft work-NNNN → main PRs: `ok` has no handler at all.",
+   "userType": "User"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40860641563).",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nRevised for the owner's 11:xx correction (one merge path for every `work-NNNN → main` PR, on `ok`, draft or not) — this replaces the earlier plan.\n\n### Reproduced\nyes. Read-only, against live state. The merge evaluator already routes an `ok` on a ready `work-*` → `main` PR to it (`automerge-go`, https://github.com/FriendlyInternet/nuxt-crouton/blob/16a817c05300766c1501a6624811e1367a2427f4/scripts/comment-route.",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan sent back** (round 1 of 2) — 7 check(s) failed. The planner is re-run with these reasons.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The plan looked at real runs, not just code: the log of run 40858151094 shows \"#3056 — no 'build:approved' yet … not merging\", and that exact message exists at ",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nThird revision. It answers the reviewer's round-1 points: every link re-checked at `16a817c`, the #3043 stall explained, the helper is now called by the workflow, the change is limited to leaf → main PRs, and the CI-fix dispatch reuses a call that already exists.\n\n### Reproduced\nyes. Read-only, against live state at 11:43Z on 2026-10-29.\n- **#3056** (`work-3054` → `main`, label only `ci-fix-attempts:1`, owner `",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 2 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The problem was seen live, not just read from code. Checked today: #3043 is open, base `epic/3039-…`, label ",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _orchestrator guidance on the held plan; derivable, no owner decision_\n\nGuidance for the plan:\n- Accept the reviewer's finding: any later owner comment that is not `ok` revokes the go, including a `**Worker:**` instruction, because the PR changes after it. Keep that rule and state it. So #3056 and any PR revised after its `ok` needs a fresh `ok`; the issue's test step 1 is about PRs whose last owner comment ",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40868273116)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nRevised for the owner's guidance: a later non-`ok` owner comment revokes the go (kept, stated below), a comment whose FIRST line is the 🤖 header never revokes it, and the 11:01Z run log is now read (it settles where #3056 stopped).\n\n### Reproduced\nyes. Read from live run logs and PR state, 2026-10-29.\n- **#3056** (`work-3054` → `main`, now MERGED). The owner's `ok` was posted 11:01:38Z. The re-run of the evalu",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The plan quotes real run output, not a guess: run 40858151094 logged that #3056 stopped on the \"no 'build:ap",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nFourth revision, answering the last review's three failed checks: (1b/3) the App-token `labeled` assumption now has real evidence and is verified; (4) the `isApproved` helper is dropped — the change is a plain reorder of two existing checks, no new function. Everything else from the previous plan (owner guidance on revocation, one path for `work-*` → `main`) is kept.\n\n### Reproduced\nyes. Read-only, against live",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — Checked against the live record. PR #3043 is still open, `clean`, labelled `build:approved`, and not merged ",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision recorded; guidance for the plan_\n\n**Decision (owner, 2026-10-29 14:53):** a CI-fix commit pushed by the pipeline bot after the owner's `ok` does NOT void the `ok`; the PR merges when green. Only a revision commit (a `**Worker:**` change request, or any commit not authored by the pipeline's fix path) voids it and needs a fresh `ok`. Chosen over \"any commit after `ok` needs a new `ok`\" because ",
+   "userType": "User"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nFifth revision, for the owner's 13:53Z decision: a CI-fix commit by the pipeline does NOT void the `ok`; a revision commit does. The reviewer's failed checks 2/3/8 were exactly this contradiction. The rest (one `ok` path for `work-*` → `main`, label edge, revocation rules) is kept.\n\n### Reproduced\nyes. Read-only, against the code at 851302580d and live run logs.\n- **#3056** (`work-3054` → `main`): the owner's `",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 6 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I checked the live state myself through the public API. #3043 is still open, `clean`, labelled `build:approv",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _guidance on the held plan; the reviewer is right about the commit identity_\n\nGuidance: do not identify CI-fix commits by the `nuxt-harness[bot]` login. The reviewer checked the log: fix-bot commits are `claude[bot]` (set in `fix-ci-on-failure.yml:199-212`), worker commits are `nuxt-harness[bot]`. Identify a CI-fix commit by BOTH the committer identity `fix-ci-on-failure.yml` actually uses AND a marker that ",
+   "userType": "User"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nSixth revision, answering the last review and the 14:24Z guidance. Changes: CI-fix commits are identified by the git **email** `41898282+claude[bot]@users.noreply.github.com` plus a `CI-Fix:` trailer (the API login is `github-actions[bot]`, so logins are not used); the test fixture is shaped like real fix-bot commit e2b04d2b8; and the fix-bot is widened to `epic/*` heads so issue test step 3 (epic PR, `ok`, red",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 5 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The problem was seen in real records, not guessed from code. In the PR #3043 timeline, `build:approved` was ",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _evidence from today's leaf PRs into main_\n\n🔴 **issue** — a third cause: leaf PRs into `main` are never build-reviewed, so `build:approved` never arrives and auto-merge has nothing to act on.\n**You:** nothing — for the worker on this ticket.\n**Depth:** below.\n\n<details><summary>Evidence</summary>\n\n- `scripts/build-review-pick.mjs:16` requires `baseRefName` to match `^epic/`. A `work-N` → `main` PR is skippe",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _reshaped after five plan rounds_\n\n💡 This ticket is now the epic; the plan kept failing because it carried three fixes at once. Split into #3103 (work → main merge decision), #3104 (CI-fix commit keeps the `ok` — owner decision 14:53 recorded above), #3105 (epic PR red after `ok` → CI-fix, no lgtm, no build:approved). The reviewer's five rounds of findings are all folded into those three bodies. The 11:04Z ",
+   "userType": "User"
+  }
+ ]
+}

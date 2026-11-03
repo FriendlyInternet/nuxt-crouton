@@ -104,27 +104,11 @@ async function refresh() {
   }
 }
 
+// Scroll container for map + list (also the list's observer root)
+const scrollAreaRef = ref<HTMLElement | null>(null)
+
 // Ref for PanelMap control (to fly to specific locations)
 const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(null)
-
-// Scroll direction detection — reveals filters on scroll-up, hides on scroll-down
-const scrollingUp = ref(false)
-let lastScrollY = 0
-
-function onScroll() {
-  const y = window.scrollY
-  scrollingUp.value = y < lastScrollY
-  lastScrollY = y
-}
-
-onMounted(() => {
-  lastScrollY = window.scrollY
-  window.addEventListener('scroll', onScroll, { passive: true })
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
-})
 
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
@@ -331,11 +315,10 @@ defineExpose({
 </script>
 
 <template>
-  <div class="booking-panel rounded-[calc(var(--ui-radius)*2)] border border-default bg-default">
-      <!-- Sticky: filters + calendar. Negative top hides filters above viewport;
-           scrolling up reveals them. Calendar stays pinned. -->
-      <div class="sticky z-20 bg-default rounded-t-[calc(var(--ui-radius)*2)] transition-[top] duration-300 flex flex-col gap-2" :class="scrollingUp ? 'top-0' : '-top-12'">
-        <!-- Filter controls (hidden above viewport when stuck) -->
+  <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
+      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <div class="shrink-0 flex flex-col gap-2 border-b border-default">
+        <!-- Filter controls -->
         <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
@@ -362,7 +345,7 @@ defineExpose({
         </div>
 
         <!-- Calendar -->
-        <div v-if="showCalendar" class="border-b border-default px-2 pb-2">
+        <div v-if="showCalendar" class="px-2 pb-2">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
             v-model:date="shownDate"
@@ -379,52 +362,55 @@ defineExpose({
             @hover-booking="(id) => hoveredBookingId = id"
           />
         </div>
-        <div v-else class="border-b border-default" />
       </div>
 
-      <!-- Map section (scrolls with content) -->
-      <Transition
-        enter-active-class="transition-all duration-300 ease-out"
-        enter-from-class="opacity-0 max-h-0"
-        enter-to-class="opacity-100 max-h-[300px]"
-        leave-active-class="transition-all duration-200 ease-in"
-        leave-from-class="opacity-100 max-h-[300px]"
-        leave-to-class="opacity-0 max-h-0"
-      >
-        <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
-          <CroutonBookingsPanelMap
-            ref="panelMapRef"
-            :locations="resolvedLocations"
-            :selected-locations="filterState.locations"
-            @toggle-location="toggleLocation"
-            @ready="onMapReady"
+      <!-- Scroll area: map + list -->
+      <div ref="scrollAreaRef" class="flex-1 min-h-0 overflow-y-auto">
+        <!-- Map section (scrolls with content) -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[300px]"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 max-h-[300px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
+            <CroutonBookingsPanelMap
+              ref="panelMapRef"
+              :locations="resolvedLocations"
+              :selected-locations="filterState.locations"
+              @toggle-location="toggleLocation"
+              @ready="onMapReady"
+            />
+          </div>
+        </Transition>
+
+        <!-- List section -->
+        <div class="px-2 py-3 md:px-4 md:py-4">
+          <CroutonBookingsList
+            :scroll-root="scrollAreaRef"
+            :bookings="filteredBookings"
+            :loading="resolvedLoading"
+            :error="resolvedError"
+            :has-active-filters="hasActiveFilters"
+            :selected-date="selectedDate"
+            :highlighted-booking-id="hoveredBookingId"
+            :creating-at-date="creatingAtDate"
+            :scroll-target="scrollTarget"
+            :active-location-filter="filterState.locations"
+            :empty-message="resolvedEmptyMessage"
+            @created="onBookingCreated"
+            :is-day-fully-booked="isDayFullyBookedAllLocations"
+            @cancel-create="onCancelCreate"
+            @new-booking="onCalendarDayClick"
+            @top-visible-date-change="onTopVisibleDateChange"
+            @date-click="selectDate"
+            @updated="onBookingUpdated"
+            @email-sent="onEmailSent"
           />
         </div>
-      </Transition>
-
-      <!-- List section -->
-      <div class="px-2 py-3 md:px-4 md:py-4">
-        <CroutonBookingsList
-          :bookings="filteredBookings"
-          :loading="resolvedLoading"
-          :error="resolvedError"
-          :has-active-filters="hasActiveFilters"
-          :selected-date="selectedDate"
-          :highlighted-booking-id="hoveredBookingId"
-          :creating-at-date="creatingAtDate"
-          :scroll-target="scrollTarget"
-          :active-location-filter="filterState.locations"
-          :empty-message="resolvedEmptyMessage"
-          @created="onBookingCreated"
-          :is-day-fully-booked="isDayFullyBookedAllLocations"
-          @cancel-create="onCancelCreate"
-          @new-booking="onCalendarDayClick"
-          @top-visible-date-change="onTopVisibleDateChange"
-          @date-click="selectDate"
-          @updated="onBookingUpdated"
-          @email-sent="onEmailSent"
-        />
-      </div>
+        </div>
   </div>
 </template>
 

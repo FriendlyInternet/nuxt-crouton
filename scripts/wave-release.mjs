@@ -114,6 +114,18 @@ export async function retryOnCiFinished(ctx) {
   await releaseReady(ctx, { branch: wr.head_branch })
 }
 
+const hasLabel = (labels, name) => (labels || []).some(l => (typeof l === 'string' ? l : l.name) === name)
+
+/**
+ * #1035: never auto-close a HELD issue (`status:blocked` = a human step is pending), unless
+ * #3039 the PR carries `build:approved` (the held label is a stale no-go) or
+ * #3202 the owner merged it by hand (that merge is the human step).
+ */
+export function mayCloseHeldIssue({ labels, prLabels, mergedBy, owner }) {
+  if (!hasLabel(labels, 'status:blocked')) return true
+  return hasLabel(prLabels, 'build:approved') || (!!mergedBy && mergedBy === owner)
+}
+
 /**
  * A merged PR closes its `Closes #NN` issues. Sub-PRs merge into the EPIC branch, so GitHub does
  * NOT auto-close them (auto-close is default-branch only) — close them here; the resulting
@@ -141,9 +153,9 @@ export async function closeLinkedIssues(ctx) {
     try {
       const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
       if (gi.data.state === 'closed') continue
-      // #1035: never auto-close a HELD issue — `status:blocked` means a human step is pending.
-      const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-      if (held) { core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue }
+      if (!mayCloseHeldIssue({ labels: gi.data.labels, prLabels: pr.labels, mergedBy: pr.merged_by?.login, owner: process.env.OWNER_LOGIN || 'pmcp' })) {
+        core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
+      }
       await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
       core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
     } catch (e) { core.warning(`Could not close #${n}: ${e.message}`) }
