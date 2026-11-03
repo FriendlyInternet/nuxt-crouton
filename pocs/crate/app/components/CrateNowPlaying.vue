@@ -2,7 +2,7 @@
 import type { CrateTrack } from '~/composables/useCrate'
 
 defineProps<{ track: CrateTrack, meta: string, playing: boolean, hasAudio: boolean, canNext: boolean, checked: boolean }>()
-const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: [], edit: [] }>()
+const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: [], edit: [], press: [e: PointerEvent] }>()
 </script>
 
 <template>
@@ -17,8 +17,20 @@ const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: 
         :aria-label="playing ? 'Pause' : 'Play'"
         @click="emit('toggle')"
       />
-      <div class="min-w-0 flex-1 leading-tight">
+      <!-- The title is the drag handle (#2210): drag it onto a pile. It is kept out of the card's
+           swipes (data-no-swipe for the carousel, touch events stopped for swipe up/down), and
+           touch-none stops iOS scrolling instead. -->
+      <div
+        class="min-w-0 flex-1 cursor-grab touch-none select-none leading-tight active:cursor-grabbing"
+        title="Drag onto a pile"
+        data-no-swipe
+        @pointerdown="(e) => emit('press', e)"
+        @touchstart.stop
+        @touchmove.stop
+        @touchend.stop
+      >
         <p class="flex min-w-0 items-center gap-1 font-semibold">
+          <UIcon name="i-lucide-grip-vertical" class="size-3.5 shrink-0 text-dimmed" />
           <span class="line-clamp-2">{{ track.name }} <span class="font-normal text-muted">· {{ track.artist || 'Unknown artist' }}</span></span>
           <UButton v-if="track.uploaded" icon="i-lucide-pencil" size="xs" variant="ghost" color="neutral" class="shrink-0" aria-label="Rename or delete this upload" @click="emit('edit')" />
         </p>

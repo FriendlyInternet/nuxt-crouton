@@ -13,8 +13,10 @@ const props = defineProps<{
   pathLabel: (p: CratePile) => string
   canNext: boolean
   checked: boolean
+  /** The level we're inside, when the track is in it: offers "↑ Not <pile>" (#2210). */
+  notIn?: CratePile | null
 }>()
-const emit = defineEmits<{ next: [], previous: [], done: [], edit: [], remove: [pile: CratePile] }>()
+const emit = defineEmits<{ next: [], previous: [], done: [], edit: [], remove: [pile: CratePile], press: [e: PointerEvent], not: [pile: CratePile] }>()
 
 const audio = ref<HTMLAudioElement>()
 const playing = ref(false)
@@ -114,7 +116,7 @@ function onTimeUpdate() {
   position.value = audio.value?.currentTime ?? 0
 }
 
-defineExpose({ playSrc, pause: () => audio.value?.pause() })
+defineExpose({ playSrc, toggle, skip, pause: () => audio.value?.pause() })
 </script>
 
 <template>
@@ -163,13 +165,17 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
             @next="emit('next')"
             @done="emit('done')"
             @edit="emit('edit')"
+            @press="(e) => emit('press', e)"
           />
 
           <USlider v-if="src" data-no-swipe :model-value="position" :max="seekMax" :step="1" size="sm" aria-label="Seek" @update:model-value="onSeek" />
 
           <slot name="hints" />
 
-          <CrateInRow v-if="hasTags" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
+          <div v-if="hasTags || notIn" class="flex min-w-0 items-start gap-2">
+            <CrateInRow v-if="hasTags" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" class="min-w-0 flex-1" @remove="(p) => emit('remove', p)" />
+            <UButton v-if="notIn" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="soft" class="ms-auto shrink-0" :label="`Not ${notIn.name}`" @click="emit('not', notIn)" />
+          </div>
         </UCard>
         </div>
         <!-- A neighbour, shown while it slides in: its title card, controls inert. -->
