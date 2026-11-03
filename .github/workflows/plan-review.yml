@@ -186,7 +186,8 @@ jobs:
               gh issue edit "$ISSUE" --add-label "status:blocked"
               ;;
             no-go)
-              if [ "$ROUND" -ge 2 ]; then
+              ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold
+              if [ "$ROUTE" = hold ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
                 REVIEW_ID="$(gh api "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | last | .id')"
