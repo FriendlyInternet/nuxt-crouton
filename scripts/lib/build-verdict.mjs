@@ -10,12 +10,12 @@
  *   ### Verdict
  *   go | no-go | needs-owner
  *   ### Rubric
- *   - 1: PASS|FAIL — one line of evidence        (ids 1..5)
+ *   - 1: PASS|FAIL — one line of evidence        (ids 1..7)
  *   ### Question          (only for needs-owner: ONE yes/no question)
  *
  * Two layers, so a lenient model cannot wave a bad PR through:
  *  - `precheck(diff, ticket)` is DETERMINISTIC, read from `git diff -C --find-copies-harder`:
- *    item 2 fails on a file that is a copy of another (the original left behind), item 3 fails on
+ *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits), item 3 fails on
  *    an edit to a quality gate (`.fallow*`, lint/test config, the CI workflow) or a newly skipped
  *    test — unless the ticket names that file.
  *  - `decide(diff, ticket, verdict)` merges both: a precheck FAIL overrides the model's PASS.
@@ -35,6 +35,8 @@ export const RUBRIC = [
   { id: '3', name: 'Gates untouched (no edit to a quality gate\'s config or baseline, no skipped test)' },
   { id: '4', name: 'Scope (matches the ticket and plan; nothing extra)' },
   { id: '5', name: 'Plan followed (where a plan was approved, the diff does what it said)' },
+  { id: '6', name: 'Every ticket step done (each numbered step and acceptance line is done, or dropped with the reason stated in the PR)' },
+  { id: '7', name: 'Docs table (the CLAUDE.md "Maintaining AI Documentation" row for this change type is updated)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 
@@ -61,7 +63,7 @@ export function parseVerdict(body) {
   if (!['go', 'no-go', 'needs-owner'].includes(stated)) errors.push('Verdict must be go, no-go or needs-owner')
   const items = {}
   for (const line of section(body, 'Rubric').split('\n')) {
-    const m = line.match(/^\s*(?:[-*]\s+)?\**([1-5])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
+    const m = line.match(/^\s*(?:[-*]\s+)?\**([1-7])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
     if (m) items[m[1]] = { pass: m[2].toUpperCase() === 'PASS', evidence: m[3].replace(/\*\*/g, '').trim() }
   }
   for (const id of IDS) {
@@ -92,7 +94,16 @@ export function parseDiff(diff) {
 export function precheck(diff, ticket = '') {
   const files = parseDiff(diff)
   const fails = {}
-  const copies = files.filter((f) => f.status === 'copied')
+  // --find-copies-harder reports a copy of ANY tracked file, so a copy only means "original left
+  // behind" when its source is named in the ticket or sits in a package the diff also edits (#3160).
+  const scopeOf = (p) => {
+    const seg = p.split('/')
+    if (['packages', 'apps', 'pocs'].includes(seg[0]) && seg.length > 2) return `${seg[0]}/${seg[1]}`
+    if (['scripts', '.github'].includes(seg[0])) return seg[0]
+    return null
+  }
+  const touched = new Set(files.filter((f) => f.status !== 'copied' && f.status !== 'added').map((f) => scopeOf(f.from)).filter(Boolean))
+  const copies = files.filter((f) => f.status === 'copied' && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
   if (copies.length) {
     fails['2'] = { pass: false, evidence: `copied, original left behind: ${copies.map((f) => `${f.from} → ${f.path}`).join('; ')}` }
   }

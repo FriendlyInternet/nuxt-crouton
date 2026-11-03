@@ -87,3 +87,57 @@ test('releaseWaiting releases only the lowest number per scope', async () => {
   const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
   assert.deepEqual(released, [5, 7])
 })
+
+test('a plan-mode ticket never blocks others, but once it has a PR it does (#3214)', () => {
+  const w = (o) => decideTraffic({ issue: 9, labels: ['pkg:b'], others: [o] }).action
+  const base = { number: 1, labels: ['pkg:b', 'status:in-progress', 'work-this'] }
+  assert.equal(w({ ...base, planning: true }), 'proceed')
+  assert.equal(w({ ...base, planning: false }), 'wait')
+  assert.equal(w({ ...base, planning: true, openPr: true }), 'wait')
+})
+
+// ── Unblocks: (#3280) ───────────────────────────────────────────────────────────
+import { parseUnblocks } from './traffic-control.mjs'
+
+const velo = (number, extra = {}) => ({ number, labels: ['app:velo'], openPr: true, ...extra })
+
+test('Unblocks: #3130 lets #3217 proceed past the open PR on #3130 (replay)', () => {
+  const v = decideTraffic({ issue: 3217, labels: ['app:velo'], body: 'Fix.\n\nUnblocks: #3130\n', others: [velo(3130)] })
+  assert.equal(v.action, 'proceed')
+  assert.deepEqual(v.unblocking, [3130])
+  assert.match(v.reason, /proceeding before #3130/)
+})
+
+test('same ticket without the line still waits', () => {
+  const v = decideTraffic({ issue: 3217, labels: ['app:velo'], body: 'Fix.', others: [velo(3130)] })
+  assert.equal(v.action, 'wait')
+  assert.deepEqual(v.waitingFor, [3130])
+})
+
+test('Unblocks: names #1 only — an unrelated same-scope ticket still blocks', () => {
+  const v = decideTraffic({ issue: 9, labels: ['app:velo'], body: 'Unblocks: #1', others: [velo(1), velo(2)] })
+  assert.equal(v.action, 'wait')
+  assert.deepEqual(v.waitingFor, [2])
+  assert.deepEqual(v.unblocking, [1])
+  assert.equal(decideTraffic({ issue: 9, labels: ['app:velo'], body: 'Unblocks: #77', others: [velo(2)] }).action, 'wait')
+})
+
+test('parseUnblocks: several numbers, case-insensitive, none, mid-sentence', () => {
+  assert.deepEqual(parseUnblocks('unblocks: #1, #2 #3'), [1, 2, 3])
+  assert.deepEqual(parseUnblocks('nothing here'), [])
+  assert.deepEqual(parseUnblocks(undefined), [])
+  assert.deepEqual(parseUnblocks('This one Unblocks: #5 later'), [])
+})
+
+test('releaseWaiting releases a parked ticket whose body has Unblocks:', async () => {
+  const parked = { number: 20, body: 'Unblocks: #10', labels: [{ name: 'status:blocked' }, { name: 'app:velo' }] }
+  const blocker = { number: 10, labels: [{ name: 'app:velo' }] }
+  const added = []
+  const github = {
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [blocker]) : [{ body: '<!-- traffic-wait -->' }]),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments',
+      removeLabel: async () => {}, addLabels: async (o) => added.push(o.issue_number) },
+      pulls: { list: async () => ({ data: [{ number: 99 }] }) } } }
+  const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
+  assert.deepEqual(released, [20])
+})

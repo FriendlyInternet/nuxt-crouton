@@ -24,14 +24,15 @@ export default defineEventHandler(async (event) => {
   // Mint a one-shot magic-link record for the owner and redeem it through the auth plugin itself,
   // so the session + cookie are created exactly as for a real emailed link.
   const auth = useServerAuth(event)
-  const ctx = await (auth as any).$context
+  const ctx = await auth.$context
   const link = randomUUID().replace(/-/g, '')
   await ctx.internalAdapter.createVerificationValue({
     identifier: `magic-link:${link}`,
     value: JSON.stringify({ type: 'magic-link', email: owner }),
     expiresAt: new Date(Date.now() + 60_000)
   })
-  const res: Response = await (auth.api as any).magicLinkVerify({
+  if (!auth.api.magicLinkVerify) throw createError({ statusCode: 501, statusMessage: 'Magic-link sign-in is not enabled on this build.' })
+  const res: Response = await auth.api.magicLinkVerify({
     query: { token: link },
     headers: event.headers,
     asResponse: true

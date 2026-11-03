@@ -108,4 +108,81 @@ test('runOutcomeToLedgerRecord produces a record the #883 schema accepts', () =>
   assert.equal(res.record.wall_s, 192) // 192340ms → 192s
 })
 
+// ── #3158: cost + always-trace + per-run isolation ─────────────────────────────────────
+import os from 'node:os'
+import { execFileSync } from 'node:child_process'
+import { costForPiUsage } from '../../../scripts/lib/session-cost.mjs'
+
+const mainLine = (u, cost = 0, model = 'claude-sonnet-5') =>
+  JSON.stringify({ type: 'message', message: { role: 'assistant', model, usage: { ...u, cost: { total: cost } } } })
+const U = { input: 1000, output: 2000, cacheRead: 5000, cacheWrite: 300 }
+const r6 = (n) => Math.round(n * 1e6) / 1e6
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pitel-'))
+const metaFile = (dir, name, ts, usage = U, model = 'claude-sonnet-5') => {
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, name + '_meta.json'), JSON.stringify({ runId: name, agent: 'worker', exitCode: 0, timestamp: ts, model, usage: { ...usage, cost: 0, turns: 1 } }))
+}
+
+test('(a,b) session with tokens, no subagents/skills → meta-only trace with workflow, run, cost', () => {
+  const d = tmp()
+  fs.writeFileSync(path.join(d, 's.jsonl'), mainLine(U) + '\n')
+  process.env.GITHUB_WORKFLOW = 'Work issue (pi.dev · single-use worker)'
+  process.env.GITHUB_RUN_ID = '77'
+  const t = buildPiTrace(d, { sessionDir: d })
+  assert.equal(t.events.length, 0)
+  assert.equal(t.meta.workflow, 'Work issue (pi.dev · single-use worker)')
+  assert.equal(t.meta.run, '77')
+  assert.equal(t.meta.cost.usd, r6(costForPiUsage(U, 'claude-sonnet-5')))
+  assert.equal(t.meta.cost.estimatedUsd, t.meta.cost.usd)
+})
+
+test('(h) no session and no events → null', () => {
+  assert.equal(buildPiTrace('/nonexistent-x', { sessionDir: '/nonexistent-x' }), null)
+})
+
+test('(j,k) top-level main + one helper meta → cost = main + helper exactly; event stream/transcript never priced', () => {
+  const d = tmp()
+  fs.writeFileSync(path.join(d, 's.jsonl'), mainLine(U) + '\n')
+  const sub = path.join(d, 'subagent-artifacts')
+  metaFile(sub, 'h1', 1000)
+  fs.writeFileSync(path.join(sub, 'h1.jsonl'), mainLine(U) + '\n')
+  fs.writeFileSync(path.join(sub, 'h1_transcript.jsonl'), mainLine(U) + '\n')
+  const t = buildPiTrace(d, { sessionDir: d })
+  assert.equal(t.meta.cost.usd, r6(2 * costForPiUsage(U, 'claude-sonnet-5')))
+  // a nested .jsonl alone prices 0 main turns
+  const d2 = tmp()
+  fs.mkdirSync(path.join(d2, 'x'))
+  fs.writeFileSync(path.join(d2, 'x', 'n.jsonl'), mainLine(U) + '\n')
+  assert.equal(buildPiTrace(d2, { sessionDir: d2 }), null)
+})
+
+test('(m) nested helper folders: both helpers counted once each', () => {
+  const d = tmp()
+  fs.writeFileSync(path.join(d, 's.jsonl'), mainLine(U) + '\n')
+  metaFile(path.join(d, 'subagent-artifacts'), 'a', 1000)
+  metaFile(path.join(d, 'sub', 'subagent-artifacts'), 'b', 2000)
+  const t = buildPiTrace(d, { sessionDir: d })
+  assert.equal(t.events.length, 2)
+  assert.equal(t.meta.cost.usd, r6(3 * costForPiUsage(U, 'claude-sonnet-5')))
+})
+
+test('(i,l) CLI from a mirrored layout resolves its import; shared-folder runs are isolated', () => {
+  const root = tmp()
+  const skillsDst = path.join(root, '.claude', 'skills')
+  fs.mkdirSync(skillsDst, { recursive: true })
+  fs.cpSync(HERE, path.join(skillsDst, 'loop-station'), { recursive: true })
+  fs.cpSync(path.join(HERE, '..', '..', '..', 'scripts', 'lib'), path.join(root, 'scripts', 'lib'), { recursive: true })
+  const shared = path.join(root, 'shared')
+  metaFile(path.join(shared, 'other', 'subagent-artifacts'), 'other', 1)
+  const run = path.join(root, 'run')
+  fs.mkdirSync(run)
+  fs.writeFileSync(path.join(run, 's.jsonl'), mainLine(U) + '\n')
+  metaFile(path.join(run, 'subagent-artifacts'), 'mine', 2)
+  const out = execFileSync('node', [path.join(skillsDst, 'loop-station', 'pi-telemetry.mjs'), run, '--session', run], { encoding: 'utf8' })
+  const lines = out.trim().split('\n').map((l) => JSON.parse(l))
+  assert.equal(lines.length, 2) // meta + exactly my helper
+  assert.equal(lines[1].agentId, 'mine')
+  assert.equal(lines[0].cost.usd, r6(2 * costForPiUsage(U, 'claude-sonnet-5')))
+})
+
 console.log(`\npi-telemetry adapter: ${passed} tests passed`)

@@ -50,6 +50,13 @@ on:
         options:
           - deploy
           - version
+      refresh:
+        description: >-
+          Data-refresh redeploy (e.g. loop-station after its jsonl is committed). Gets its
+          own concurrency slot so it never bumps another POC's queued deploy (#3157).
+        required: false
+        default: false
+        type: boolean
       review_pr:
         description: >-
           Optional PR number to wire the preview-review bridge to (#607). Set it
@@ -67,7 +74,7 @@ concurrency:
   # Keyed on the PR when there is one (#2608): a manual dispatch with review_pr deploys the SAME
   # preview as the PR's own run, but has no head_ref, so keying on head_ref || ref put the two in
   # different groups and they raced (#2571).
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || (github.event.inputs.refresh == 'true' && format('refresh-{0}', github.event.inputs.app)) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
