@@ -32,14 +32,16 @@ function collectTitles(snapshots) {
   return seen
 }
 
+/** Titles of one file that no longer exist at head. */
+function missingFromHead(file, titles, head) {
+  const kept = new Set(head[file] === undefined ? [] : listTestTitles(head[file]))
+  return [...titles].filter((title) => !kept.has(title)).map((title) => ({ file, title }))
+}
+
 /** snapshots: [{path: source}, ...]; head: {path: source}. Returns [{file, title}]. */
 export function removedTests(snapshots, head) {
-  const seen = collectTitles(snapshots)
   const out = []
-  for (const [file, titles] of seen) {
-    const kept = new Set(head[file] === undefined ? [] : listTestTitles(head[file]))
-    for (const title of titles) if (!kept.has(title)) out.push({ file, title })
-  }
+  for (const [file, titles] of collectTitles(snapshots)) out.push(...missingFromHead(file, titles, head))
   return out
 }
 
