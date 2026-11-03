@@ -24,10 +24,11 @@
 import { pathToFileURL } from 'node:url'
 import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
+import { parseOverride } from './lib/decision-line.mjs'
 import { routePrComment } from './revise-route.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
+  'approve-draft', 'approve-epic', 'approve-plan', 'plan-needs-reason', 'automerge-go', 'close-epic',
   'dispatch', 'interpret', 'resume', 'revise', 'test-card', 'none',
 ]
 
@@ -46,12 +47,18 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
 }
 
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, collab, issue, out }) {
+function routeIssue({ body, collab, assoc, comment, issue, out }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
+  }
+  // Owner override on a plan held by two no-go verdicts (#3272): `ok: <reason>` approves the plan;
+  // a bare approval asks for the reason. Feedback still falls through to resume (re-plan, #3116).
+  if (out.blocked && issue.planHeld && OWNERS.has(assoc)) {
+    if (parseOverride({ body, authorAssociation: assoc, userType: comment.userType })) return out('approve-plan', 'owner ok: <reason> on a held plan')
+    if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan')
   }
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
   // resume job (it explains), any other owner comment falls through to `interpret`.
@@ -113,7 +120,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, collab, assoc, comment, issue, out })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })

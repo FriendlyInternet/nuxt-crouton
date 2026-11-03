@@ -52,6 +52,7 @@ jobs:
       kind: ${{ steps.route.outputs.kind }}
       number: ${{ steps.route.outputs.number }}
       blocked: ${{ steps.route.outputs.blocked }}
+      reason: ${{ steps.route.outputs.reason }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,15 +70,87 @@ jobs:
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
               pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
             }
+            // #3272: is this issue held on a plan two reviewers rejected? (same rule as the re-plan reply)
+            let planHeld = false
+            const labelNames = (i.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            if (!isPr && labelNames.includes('status:blocked')) {
+              const { isPlanHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`)
+              const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: i.number, per_page: 100 })
+              planHeld = isPlanHold({ comments: comments.map(x => ({ body: x.body, userType: x.user?.type })), labels: labelNames })
+            }
             const d = routeComment({
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
-              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              issue: { number: i.number, isPr, planHeld, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
             core.setOutput('kind', d.kind)
             core.setOutput('number', String(d.number))
             core.setOutput('blocked', String(d.blocked))
+            core.setOutput('reason', d.reason)
+
+  # #3272: the owner's `ok: <reason>` on a plan held by two no-go verdicts approves it. The Harness
+  # App re-posts the reason as `**Decision (owner override, DATE):**` (the only record the build
+  # trusts), logs a dated line on the parent epic, and adds `plan:approved` (remove-then-add so the
+  # label event fires and plan-approved.yml builds from the newest plan). Checkout = default branch.
+  approve-plan:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { parseOverride, decisionLine, appendDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`)
+            const c = context.payload.comment
+            const number = context.payload.issue.number
+            const reason = parseOverride({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            if (!reason) return core.info('no override reason — nothing to do')
+            const date = c.created_at.slice(0, 10)
+            // 1. the record the build trusts — posted by the App, before the label can start a build
+            await github.rest.issues.createComment({ ...context.repo, issue_number: number,
+              body: `**Decision (owner override, ${date}):** ${reason}\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _owner's [\`ok: <reason>\`](${c.html_url}) on a held plan; building from the newest plan_` })
+            // 2. dated line on the parent epic (#3024 audit trail)
+            const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number: number })
+            const epic = /epic=(\d+)/.exec(issue.body || '')?.[1]
+            if (epic) {
+              const { data: ep } = await github.rest.issues.get({ ...context.repo, issue_number: Number(epic) })
+              const next = appendDecision(ep.body, decisionLine({ text: `#${number}: plan override — ${reason}`, date, url: c.html_url }), c.html_url)
+              if (next !== ep.body) await github.rest.issues.update({ ...context.repo, issue_number: Number(epic), body: next })
+            } else core.warning('no epic=N marker — epic Decisions line skipped')
+            // 3. release the hold; remove-then-add so the label event fires
+            for (const name of ['status:blocked', 'plan:approved']) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: number, name }) } catch (e) {}
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: ['plan:approved'] })
+
+  plan-needs-reason:
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
+              body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _bare approval on a held plan_\n\n'
+                + 'A plain `ok` does not release a plan the reviewers rejected twice. Reply `ok: <why it is fine>` to approve it with your reason, or reply with what to change to re-plan. The hold stays until then.' })
 
   automerge-go:
     needs: route

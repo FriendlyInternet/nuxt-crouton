@@ -9,7 +9,7 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 10)
+  assert.equal(KINDS.length, 12)
 })
 
 test('close-epic: /close-epic on an issue', () => {
@@ -118,4 +118,13 @@ test('interpret: never for an app-posted comment, only revise via **Worker:**', 
   assert.equal(kind({ comment: viaClaude, issue: issue() }), 'none')
   const viaOther = { ...viaClaude, performedViaGithubApp: 'Some App' }
   assert.equal(kind({ comment: viaOther, issue: issue() }), 'none')
+})
+
+test('held plan: owner ok: reason approves; bare ok asks for a reason; others resume', () => {
+  const held = { number: 7, isPr: false, labels: ['status:blocked'], planHeld: true, body: '<!-- pipeline:' }
+  assert.equal(kind({ comment: c('ok: cosmetic only'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('ok: why', 'CONTRIBUTOR'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('please narrow the scope'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('ok: why'), issue: { ...held, planHeld: false } }), 'resume')
 })

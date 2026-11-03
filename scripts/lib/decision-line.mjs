@@ -28,6 +28,16 @@ export function parseDecision({ body, authorAssociation, userType, held = false 
   return text || null
 }
 
+/**
+ * An owner's `ok: <reason>` on a held plan (#3272): the reason, or null. Only the `ok:` form —
+ * not `Decision:`, `lgtm:` or `approve:`. Same parser as parseDecision, no second syntax.
+ */
+export function parseOverride(args = {}) {
+  const first = stripGeneratedTrailer(String(args.body || '')).split('\n').filter(l => !/^\s*>/.test(l)).find(l => l.trim())
+  if (!first || !OK_REASON.test(first)) return null
+  return parseDecision({ ...args, held: true })
+}
+
 /** `- 2026-10-29 · <text> · [comment](<url>)` */
 export function decisionLine({ text, date, url }) {
   return `- ${String(date).slice(0, 10)} · ${text} · [comment](${url})`
