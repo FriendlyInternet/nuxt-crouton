@@ -9,7 +9,7 @@
  * - Form data type: CrateChangeFormData
  * - New item type: NewCrateChange
  * - Form props: CrateChangeFormProps
- * - Fields: groupId, trackId, before, after, summary, undoOf
+ * - Fields: groupId, trackId, pileId, before, after, summary, undoOf
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -28,9 +28,10 @@ export interface CrateChange {
   teamId: string
   owner: string
   groupId: string
-  trackId: string
-  before?: string[]
-  after?: string[]
+  trackId?: string
+  pileId?: string
+  before?: unknown
+  after?: unknown
   summary?: string
   undoOf?: string
   createdAt: Date
