@@ -1574,16 +1574,12 @@ async function persistPromptedConfigs(
 
   try {
     const { readFile, writeFile } = await import('node:fs/promises')
+    const { replaceFeatureFlag } = await import('./utils/manifest-configuration.ts')
     const configContent = await readFile(configFilePath, 'utf-8')
     let updated = configContent
 
     for (const pc of promptedConfigs) {
-      // Replace `featureKey: true` with the config object
-      // Match patterns like `bookings: true` (with optional trailing comma)
-      const boolPattern = new RegExp(`(${pc.featureKey}\\s*:\\s*)true`, 'g')
-      const configStr = JSON.stringify(pc.configObject, null, 2)
-        .replace(/\n/g, '\n    ') // indent to match config file nesting
-      updated = updated.replace(boolPattern, `$1${configStr}`)
+      updated = replaceFeatureFlag(updated, pc.featureKey, pc.configObject)
     }
 
     if (updated !== configContent) {
