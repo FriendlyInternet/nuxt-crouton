@@ -167,6 +167,13 @@ export function decideClaim({
     return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
   }
 
+  // A fresh run on an issue whose OWN branch already has an open PR would rebuild `work-<n>`
+  // from main and force-push it, wiping the revisions made on that PR (#2990: #2972 → PR #2976).
+  // Revisions take the `revision` path above, so a fresh run has no legitimate reason to be here.
+  const ownOpen = (linkedPRs || []).find((pr) => pr && mine.has(pr.number) && pr.state === 'open' && !pr.merged)
+  if (ownOpen) {
+    return { action: 'refuse', claimedBy: ownOpen.number, reason: `PR #${ownOpen.number} is already open for this issue — re-running would overwrite its branch and any revisions on it` }
+  }
   const since = inProgressSince ? Date.parse(inProgressSince) : NaN
   const at = now ? Date.parse(now) : NaN
   if (Number.isFinite(since) && Number.isFinite(at)) {

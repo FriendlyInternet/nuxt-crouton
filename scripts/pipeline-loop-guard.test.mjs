@@ -140,11 +140,33 @@ test('a CLOSED-unmerged PR does not refuse — a rejected attempt frees the issu
   assert.equal(v.action, 'proceed')
 })
 
-test('this run\'s OWN pr is ignored — a re-dispatch must not refuse itself', () => {
+test('a fresh run on an issue whose OWN PR is open is refused — it would force-push over the PR (#2990)', () => {
   const v = decideClaim({
     issueState: 'open',
     linkedPRs: [{ number: 1808, state: 'open' }],
-    self: { pr: 1808 },
+    self: { pr: 1808, prs: [1808] },
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 1808)
+})
+
+test('a CLOSED own PR is not a claim — a re-dispatch may rebuild the branch', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1808, state: 'closed', merged: false }],
+    self: { pr: 1808, prs: [1808] },
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a revision of an open own PR still proceeds (#2990 must not block revisions)', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1808, state: 'open' }],
+    self: { pr: 1808, prs: [1808] },
+    revision: { branch: 'work-1', pr: 1808, state: 'open', merged: false },
     now: T0,
   })
   assert.equal(v.action, 'proceed')
