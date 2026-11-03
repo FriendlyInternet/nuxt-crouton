@@ -73,7 +73,7 @@
         "expectStatus": [200, 404]
       },
       {
-        "path": "/api/collab/token",
+        "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
         "expectIncludes": "token"
       }
     ]
