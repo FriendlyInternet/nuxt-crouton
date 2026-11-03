@@ -105,6 +105,8 @@ function isLive(item: CrateTrack | null, index: number) {
   return !!item && index === 1
 }
 const hasTags = computed(() => props.inPiles.length > 0 || props.otherTags.length > 0)
+const notInPile = computed(() => props.notIn ?? null)
+const showInRow = computed(() => hasTags.value || !!notInPile.value)
 /** Drags that start on the seek bar or a sideways-scrolling chip row stay theirs. */
 function canSwipe(_api: unknown, evt: Event) {
   return !(evt.target as HTMLElement | null)?.closest('[data-no-swipe]')
@@ -172,7 +174,7 @@ defineExpose({ playSrc, toggle, skip, pause: () => audio.value?.pause() })
 
           <slot name="hints" />
 
-          <CrateInRow v-if="hasTags || notIn" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" :not-in="notIn ?? null" @remove="(p) => emit('remove', p)" @not="(p) => emit('not', p)" />
+          <CrateInRow v-if="showInRow" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" :not-in="notInPile" @remove="(p) => emit('remove', p)" @not="(p) => emit('not', p)" />
         </UCard>
         </div>
         <!-- A neighbour, shown while it slides in: its title card, controls inert. -->

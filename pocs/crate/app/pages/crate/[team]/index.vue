@@ -161,6 +161,9 @@ function pressCard(e: PointerEvent) {
   drag.press(e)
 }
 const dropPileId = computed(() => drag.over.value?.kind === 'pile' ? drag.over.value.id : null)
+const springOf = (pile: CratePile) => dropPileId.value === pile.id ? drag.progress.value : 0
+const hasSubPiles = (pile: CratePile) => children(pile.id).length > 0
+const ghost = computed(() => drag.dragging.value ? current.value : null)
 
 // "↑ Not <pile>": inside a pile, take the track out of it.
 const notIn = computed(() => level.value && current.value && isIn(current.value, level.value) ? level.value : null)
@@ -307,9 +310,9 @@ function startNewPile() {
             :disabled="!current && !deckCollapsed"
             :glow="pileGlow(pile)"
             :editing="editing"
-            :springs="children(pile.id).length > 0"
+            :springs="hasSubPiles(pile)"
             :drop-over="dropPileId === pile.id"
-            :spring="dropPileId === pile.id ? drag.progress.value : 0"
+            :spring="springOf(pile)"
             @toggle="onRow(pile)"
             @open="openLevel(pile)"
           />
@@ -364,11 +367,11 @@ function startNewPile() {
 
     <!-- The dragged track follows the finger; pointer-events-none so elementFromPoint sees what's under it. -->
     <div
-      v-if="drag.dragging.value && current"
+      v-if="ghost"
       class="pointer-events-none fixed z-50 max-w-60 -translate-x-1/2 -translate-y-[130%] truncate rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-inverted shadow-lg"
       :style="{ left: `${drag.x.value}px`, top: `${drag.y.value}px` }"
     >
-      {{ current.name }}
+      {{ ghost.name }}
     </div>
 
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />

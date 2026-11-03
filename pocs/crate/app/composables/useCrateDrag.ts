@@ -40,7 +40,7 @@ export function useCrateDrag(handlers: {
   /** 0..1 — how far the spring on the hovered target has filled. */
   const progress = ref(0)
 
-  let pressed: { x: number, y: number, id: number } | null = null
+  let pressed: { x: number, y: number, id: number, el: HTMLElement } | null = null
   let hoverSince = 0
   let firedKey: string | null = null
   let frame = 0
@@ -79,8 +79,9 @@ export function useCrateDrag(handlers: {
   /** Bind to pointerdown on the drag handle. */
   function press(e: PointerEvent) {
     if (e.button !== 0) return
-    pressed = { x: e.clientX, y: e.clientY, id: e.pointerId }
-    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+    // Capture only once it's really a drag: capturing on press would retarget the click of a
+    // button inside the handle (the upload's pencil) to the handle itself.
+    pressed = { x: e.clientX, y: e.clientY, id: e.pointerId, el: e.currentTarget as HTMLElement }
   }
 
   function finish(dropped: boolean) {
@@ -105,6 +106,7 @@ export function useCrateDrag(handlers: {
       if (!dragging.value) {
         if (Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < START_PX) return
         dragging.value = true
+        pressed.el.setPointerCapture?.(pressed.id)
         frame = requestAnimationFrame(tick)
       }
       e.preventDefault()
