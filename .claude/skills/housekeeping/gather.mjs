@@ -21,10 +21,15 @@
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
+import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
 const staleDays = Number(process.env.HOUSEKEEPING_STALE_DAYS || 14)
+const epicNoCiDays = Number(process.env.HOUSEKEEPING_EPIC_NO_CI_DAYS || 3)
+const okConflictDays = Number(process.env.HOUSEKEEPING_OK_CONFLICT_DAYS || 1)
+// The human owner (NOT OWNER above, which is the repo org) — same source as automerge-epic-subpr.yml.
+const OWNER_LOGIN = process.env.OWNER_LOGIN || 'pmcp'
 const token = process.env.GITHUB_TOKEN
 if (!token) {
   console.error('gather.mjs: GITHUB_TOKEN is required')
@@ -274,6 +279,76 @@ function epicBranchAheadOfMain(epicNumber) {
   }
 }
 
+// ── Stuck PRs (#3317) ────────────────────────────────────────────────────────
+// Epic→main PRs with no `CI Gate` run, and owner-approved PRs that went conflicting.
+// Read-only GETs; any per-PR fetch failure skips that PR rather than failing the digest.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function stuckPRs(openPRs) {
+  const repo = `/repos/${OWNER}/${NAME}`
+  const epicPrs = []
+  const oked = []
+  for (const s of openPRs) {
+    try {
+      let pr = await gh(`${repo}/pulls/${s.number}`)
+      const isEpic = pr.base?.ref === 'main' && String(pr.head?.ref).startsWith('epic/')
+      const comments = await gh(`${repo}/issues/${s.number}/comments?per_page=100`)
+      const hasOwner = comments.some((c) => c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase())
+
+      if (isEpic) {
+        const runs = await gh(`${repo}/commits/${pr.head.sha}/check-runs?per_page=100`)
+        const head = await gh(`${repo}/commits/${pr.head.sha}`)
+        epicPrs.push({
+          number: pr.number,
+          title: pr.title,
+          html_url: pr.html_url,
+          created_at: pr.created_at,
+          headCommitDate: head.commit?.committer?.date,
+          base: pr.base.ref,
+          head: pr.head.ref,
+          checkRunNames: (runs.check_runs || []).map((r) => r.name)
+        })
+      }
+
+      if (hasOwner) {
+        if (pr.mergeable_state === 'unknown') {
+          await sleep(2000)
+          pr = await gh(`${repo}/pulls/${s.number}`)
+        }
+        if (pr.mergeable_state !== 'dirty') continue
+        const commits = await gh(`${repo}/pulls/${s.number}/commits?per_page=100`)
+        // File lists only matter for commits newer than the latest comment-able ok; fetch them
+        // for the tail so ui-proposals-only capture commits are not mistaken for revisions.
+        const lastOwner = comments
+          .filter((c) => c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase())
+          .map((c) => Date.parse(c.created_at))
+          .sort((a, b) => b - a)[0]
+        for (const k of commits) {
+          const d = Date.parse(k.commit?.committer?.date)
+          if (d > lastOwner && (k.parents || []).length <= 1) {
+            const full = await gh(`${repo}/commits/${k.sha}`)
+            k.files = (full.files || []).map((f) => f.filename)
+          }
+        }
+        const hit = okButConflicting({
+          pr,
+          comments,
+          commits,
+          owner: OWNER_LOGIN,
+          days: okConflictDays
+        })
+        if (hit) oked.push(hit)
+      }
+    } catch (e) {
+      console.error(`stuckPRs: skipping #${s.number}: ${e.message}`)
+    }
+  }
+  return {
+    epicPrsNoCi: epicNoCi({ prs: epicPrs, days: epicNoCiDays }),
+    okedPrsConflicting: oked.sort((a, b) => b.okAgeDays - a.okAgeDays)
+  }
+}
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -373,7 +448,18 @@ async function gather() {
     }))
     .sort((a, b) => b.ageDays - a.ageDays)
 
-  return { unlabeled, stuck, staleEpics, epicsMissingInProgress, orphanedInProgress, idlePRs }
+  const { epicPrsNoCi, okedPrsConflicting } = await stuckPRs(openPRs)
+
+  return {
+    unlabeled,
+    stuck,
+    staleEpics,
+    epicsMissingInProgress,
+    orphanedInProgress,
+    idlePRs,
+    epicPrsNoCi,
+    okedPrsConflicting
+  }
 }
 
 const drift = await gather()
