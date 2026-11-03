@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { uiTouched, uiTouchedFromFiles, commentLines, underUiKey } from './ui-touched.mjs'
+import { uiTouched, uiTouchedFromFiles, commentLines, underUiKey, isCandidatePath, githubFileDiff } from './ui-touched.mjs'
 
 const none = () => null
 
@@ -181,4 +181,19 @@ test('#3228 removed lines are read from the merge-base text', async () => {
   const p = '@@ -4 +3 @@\n-<div class="old"/>'
   assert.equal(await uiTouchedFromFiles([file('x.vue', p)], readText), 1)
   assert.ok(seen.includes('merge-base'))
+})
+
+test('isCandidatePath: visual and app.config paths yes, fixtures and docs no', () => {
+  assert.equal(isCandidatePath('packages/x/app/components/A.vue'), true)
+  assert.equal(isCandidatePath('apps/a/app/app.config.ts'), true)
+  assert.equal(isCandidatePath('packages/x/CLAUDE.md'), false)
+})
+
+test('githubFileDiff: added, removed and renamed entries', () => {
+  const added = githubFileDiff({ filename: 'a.vue', status: 'added', patch: '@@ -0,0 +1 @@\n+x' })
+  assert.match(added, /--- \/dev\/null\n\+\+\+ b\/a\.vue/)
+  const removed = githubFileDiff({ filename: 'a.vue', status: 'removed', patch: '@@ -1 +0,0 @@\n-x' })
+  assert.match(removed, /--- a\/a\.vue\n\+\+\+ \/dev\/null/)
+  const renamed = githubFileDiff({ filename: 'b.vue', previous_filename: 'a.vue', status: 'renamed', patch: 'P' })
+  assert.match(renamed, /^diff --git a\/a\.vue b\/b\.vue\n--- a\/a\.vue\n\+\+\+ b\/b\.vue\nP\n$/)
 })

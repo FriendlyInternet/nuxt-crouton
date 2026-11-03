@@ -200,22 +200,39 @@ export async function uiTouchedFromFiles(files, readText) {
     const cache = {}
     for (const f of files) {
       const path = f.filename || ''
-      if (FIXTURE_PATH.test(path)) continue
-      if (!VISUAL_PATH.test(path) && !APP_CONFIG.test(path)) continue
+      if (!isCandidatePath(path)) continue
       if (!f.patch) return 1 // too large / binary: can't prove it's invisible
-      const oldPath = f.previous_filename || path
-      const from = f.status === 'added' ? '/dev/null' : `a/${oldPath}`
-      const to = f.status === 'removed' ? '/dev/null' : `b/${path}`
-      diff += `diff --git a/${oldPath} b/${path}\n--- ${from}\n+++ ${to}\n${f.patch}\n`
-      for (const side of ['old', 'new']) {
-        let text = null
-        try { text = await readText(side === 'old' ? 'merge-base' : 'head', side === 'old' ? oldPath : path) } catch { text = null }
-        cache[`${side}:${path}`] = typeof text === 'string' ? text.split('\n') : null
-      }
+      diff += githubFileDiff(f)
+      await cacheSides(cache, f, readText)
     }
     return uiTouched(diff, (side, path) => cache[`${side}:${path}`] ?? null)
   } catch {
     return 1
+  }
+}
+
+/** A file worth diffing: visual path or app config, and not a fixture. */
+export function isCandidatePath(path) {
+  if (FIXTURE_PATH.test(path)) return false
+  return VISUAL_PATH.test(path) || APP_CONFIG.test(path)
+}
+
+/** Rebuild a `git diff` section from a GitHub listFiles entry. */
+export function githubFileDiff(f) {
+  const path = f.filename || ''
+  const oldPath = f.previous_filename || path
+  const from = f.status === 'added' ? '/dev/null' : `a/${oldPath}`
+  const to = f.status === 'removed' ? '/dev/null' : `b/${path}`
+  return `diff --git a/${oldPath} b/${path}\n--- ${from}\n+++ ${to}\n${f.patch}\n`
+}
+
+async function cacheSides(cache, f, readText) {
+  const path = f.filename || ''
+  const oldPath = f.previous_filename || path
+  for (const side of ['old', 'new']) {
+    let text = null
+    try { text = await readText(side === 'old' ? 'merge-base' : 'head', side === 'old' ? oldPath : path) } catch { text = null }
+    cache[`${side}:${path}`] = typeof text === 'string' ? text.split('\n') : null
   }
 }
 
