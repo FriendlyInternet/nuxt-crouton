@@ -18,6 +18,8 @@ The send destination is a **pluggable sink** you pick in config:
 | `slack` / `discord` | A formatted message in a channel via an incoming webhook |
 | `github` | A comment on a GitHub issue / PR |
 
+**PR-preview guard.** When the `github` sink is bound to a PR (`pr` set), `POST /api/_feedback` needs a signed-in user whose **verified** email is in `NUXT_CROUTON_FEEDBACK_REVIEWER_EMAILS` (comma list; needs `@fyit/crouton-auth`). Anything else — no session, unverified, not listed, empty list, auth missing — returns 401 `Not authorised` (fails closed). Other sinks are unchanged. The deploy workflow sets the list from the review login and skips the bridge when no login exists.
+
 No `@fyit/crouton-core` required — the only peers are `nuxt` and `@nuxt/ui`.
 
 ## Install
