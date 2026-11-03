@@ -36,6 +36,7 @@ const inWindow = (iso, start, end) => {
  * @param {{ start: string, end: string }} win
  * @returns {{ produced: string[], produced_ids: Array<string|number> }}
  */
+// fallow-ignore-next-line complexity -- one pass classifying each comment inside the run window; covered by run-outcome.test.mjs (#3251)
 export function classify(items, win, classifyOne = classifyComment) {
   const produced = new Set()
   const ids = []

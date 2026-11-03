@@ -33,6 +33,7 @@ export function conclusionOf(needsJson) {
  * Build the record. `api(path)` → parsed JSON (GET); `listRecords(date)` → sibling records.
  * Everything is injectable so the tests never touch the network.
  */
+// fallow-ignore-next-line complexity -- one flat field-by-field assembly of the outcome record from run/PR/comment facts; each branch is a distinct fallback, covered by run-outcome.test.mjs (#3251)
 export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date() }) {
   const repo = env.REPO
   const run = await api(`/repos/${repo}/actions/runs/${env.RUN_ID}`)
@@ -117,6 +118,7 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
 const safeJson = (s) => { try { return JSON.parse(s) } catch { return null } }
 
 /** Write one file via the contents API. Creates the orphan branch on first use. Retries 409/422. */
+// fallow-ignore-next-line complexity -- contents-API write with bounded 409/422 retry and first-use branch creation; the branches are the retry policy (#3251)
 export async function writeRecord({ repo, token, record, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const base = process.env.GITHUB_API_URL || 'https://api.github.com'
   const call = async (method, path, body) => {

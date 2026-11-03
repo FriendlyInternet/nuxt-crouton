@@ -36,6 +36,7 @@ export function deferOrThrow(e, warn) {
  * @param {{ fetchImpl?: typeof fetch, apiUrl?: string }} [opts]
  * @returns {Promise<{remaining:number,reset:number,limit:number}|{error:string}>}
  */
+// fallow-ignore-next-line complexity -- one guard per rate-limit header/payload shape; covered by rate-limit.test.mjs (#3251)
 export async function readRateLimit(token, opts = {}) {
   const f = opts.fetchImpl || globalThis.fetch
   const base = opts.apiUrl || process.env.GITHUB_API_URL || 'https://api.github.com'

@@ -24,6 +24,7 @@ export function subjectFromLog(text, headBranch = '') {
   return { issue: issue ?? (b ? Number(b[1]) : null), pr }
 }
 
+// fallow-ignore-next-line complexity -- one-shot backfill CLI loop; CRAP is a zero-coverage artifact on a run-once script (#3251)
 async function main() {
   const args = parseArgs(process.argv.slice(2), { boolean: ['dry-run'] })
   const from = String(args.from || ''), to = String(args.to || '')

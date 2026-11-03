@@ -48,6 +48,7 @@ const REQUIRED_STR = ['ts', 'flow', 'harness', 'model']
  * { ok: false, errors: string[] }. Never throws on bad input.
  * @param {any} rec
  */
+// fallow-ignore-next-line complexity -- flat per-field validator, one guard per record field (#3251)
 export function validate(rec) {
   const errors = []
   if (rec == null || typeof rec !== 'object') {
