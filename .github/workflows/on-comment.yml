@@ -226,15 +226,11 @@ jobs:
             }
             // #3227: a conflicting PR must never reach the wait/merge branches (false "will merge"
             // promise, or a 405 crash). Check mergeability first and start the conflict resolver.
-            const enableAutoMerge = () => github.graphql(
-              `mutation($id:ID!){ enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:MERGE}){ pullRequest { id } } }`,
-              { id: pr.node_id }).catch(() => {})
             if (d.action === 'wait' || d.action === 'merge') {
               const { waitForMergeableState, startConflictResolver, approveEpicPlan } = await import(
                 `${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
               const fresh = await waitForMergeableState({ github, owner, repo, pull_number })
               if (approveEpicPlan({ decision: d, pr: fresh }) === 'resolve-conflict') {
-                await enableAutoMerge()
                 const res = await startConflictResolver({ github, owner, repo, pr: fresh })
                 if (res.reason === 'started') {
                   await say('🔧 **Approved — this PR conflicts with `main`, so the pipeline is merging `main` in first.** It merges itself once the checks pass after that.')
