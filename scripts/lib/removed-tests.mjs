@@ -10,9 +10,14 @@
  */
 const CALL = /\b(?:test|it|describe)(?:\.(?:skip|only|todo|concurrent|fails))*\s*\(\s*(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g
 
+/** Commented-out calls are not tests: drop block comments and `//` comments (preceded by whitespace or line start). */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
+}
+
 export function listTestTitles(source) {
   const out = new Set()
-  for (const m of String(source || '').matchAll(CALL)) {
+  for (const m of stripComments(String(source || '')).matchAll(CALL)) {
     const t = m[1] ?? m[2] ?? m[3]
     if (t === undefined || t.includes('${')) continue
     out.add(t)

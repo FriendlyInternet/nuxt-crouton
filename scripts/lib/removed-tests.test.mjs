@@ -81,3 +81,13 @@ test('only additions → exit 0; non-pipeline head reports but exits 0', () => {
     assert.equal(p.status, 0); assert.match(p.stdout, /one/)
   } finally { rmSync(r.dir, { recursive: true }) }
 })
+
+test('commenting a case out counts as removing it → exit 1', () => {
+  const r = repo()
+  try {
+    r.put('a.test.mjs', T('one', 'two')); r.commit('add')
+    r.put('a.test.mjs', "test('one', () => {})\n// test('two', () => {})\n/* test('three', () => {}) */\n"); r.commit('comment out')
+    const p = run(r)
+    assert.equal(p.status, 1); assert.match(p.stdout, /two/)
+  } finally { rmSync(r.dir, { recursive: true }) }
+})
