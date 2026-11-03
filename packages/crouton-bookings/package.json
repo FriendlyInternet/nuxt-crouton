@@ -82,6 +82,7 @@
     }
   },
   "devDependencies": {
+    "better-sqlite3": "^12.4.1",
     "unbuild": "^3.6.1"
   }
 }
