@@ -9,7 +9,8 @@
     "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "lint": "eslint .",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "check:worker-bundle": "node scripts/check-worker-bundle.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.68",
