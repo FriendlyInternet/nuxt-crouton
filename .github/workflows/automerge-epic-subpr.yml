@@ -301,7 +301,24 @@ jobs:
                 core.warning(`#${pull_number} not merging — scripts/lib/pr-merge-gate.mjs is not on ${context.payload.repository?.default_branch || 'the default branch'} yet (${e.code || e.message}); held until it lands.`)
                 continue
               }
-              const gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red, ciGate: checkState, mergeableState: state })
+              let gate
+              if (epicToMain) {
+                // epic → main (#3105): the SAME decision the owner's `ok` runs (decideEpicMerge) — both
+                // aggregate gates green AND a standing ok. A green that lands after the ok merges here,
+                // with no GitHub auto-merge (which would never consult the ok).
+                let decideEpicMerge
+                try {
+                  ({ decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`))
+                } catch (e) {
+                  core.warning(`#${pull_number} not merging — scripts/epic-merge-decision.mjs is not on the default branch (${e.code || e.message}).`)
+                  continue
+                }
+                const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+                const d = decideEpicMerge({ pr, checkRuns, go })
+                gate = { merge: d.action === 'merge', reason: d.reason }
+              } else {
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red, ciGate: checkState, mergeableState: state })
+              }
               if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
