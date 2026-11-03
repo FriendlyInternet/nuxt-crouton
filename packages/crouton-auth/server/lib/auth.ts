@@ -1509,7 +1509,13 @@ export function isWebAuthnSupported(): boolean {
 /**
  * Type for the created auth instance
  */
-export type AuthInstance = ReturnType<typeof createAuth>
+type CreatedAuth = ReturnType<typeof createAuth>
+// buildPlugins() returns any[] (plugins are added conditionally), which erases plugin endpoints
+// from the inferred api type. Re-add the magic-link ones as Partial: they exist only when
+// `methods.magicLink` is on, so callers must check before calling.
+export type AuthInstance = Omit<CreatedAuth, 'api'> & {
+  api: CreatedAuth['api'] & Partial<ReturnType<typeof magicLink>['endpoints']>
+}
 
 /**
  * Server-side auth instance holder
