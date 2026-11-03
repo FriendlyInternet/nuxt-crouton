@@ -8,7 +8,7 @@ useHead({ title: 'Crate', meta: [{ name: 'viewport', content: 'width=device-widt
 
 const crate = useCrate()
 const toast = useToast()
-const { status, children, ancestors, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
+const { status, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
 
 // ── Level (which pile we're inside) ───────────────────────────────────────
 const levelId = ref<string | null>(null)
@@ -126,6 +126,18 @@ async function onCreate(name: string, parentId: string | null, fileTrack: boolea
   await crate.createPile(name, parentId, fileTrack ? current.value : null)
 }
 
+// ── Edit mode (#2211) ─────────────────────────────────────────────────────
+const editing = ref(false)
+const editor = ref<{ start: (p: CratePile) => void }>()
+function onRow(pile: CratePile) {
+  if (editing.value) editor.value?.start(pile)
+  else onPileToggle(pile)
+}
+watch(() => crate.piles.value.some(p => p.id === levelId.value), (exists) => {
+  // The level we're inside was removed (or undone away): go back to the top.
+  if (levelId.value && !exists) levelId.value = null
+})
+
 const inPiles = computed(() => current.value ? leafPiles(current.value) : [])
 const deckOther = computed(() => current.value ? otherTags(current.value) : [])
 
@@ -203,6 +215,8 @@ function startNewPile() {
       @list="listOpen = true"
       @listen="listen"
       @upload="fileInput?.click()"
+      :editing="editing"
+      @edit="editing = !editing"
     />
     <input ref="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.aif,.aiff,.wav,.flac,.ogg" multiple class="hidden" @change="onFiles">
     <UProgress
@@ -228,7 +242,8 @@ function startNewPile() {
             :ticked="pileTicked(pile)"
             :disabled="!current && !deckCollapsed"
             :glow="pileGlow(pile)"
-            @toggle="onPileToggle(pile)"
+            :editing="editing"
+            @toggle="onRow(pile)"
             @open="openLevel(pile)"
           />
           <UButton
@@ -281,7 +296,21 @@ function startNewPile() {
 
     <CrateUploadEdit v-model:open="editOpen" :track="current" @save="saveUpload" @delete="removeUpload" />
 
-    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
+    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" :tags="crate.loneTags.value" @create="onCreate" />
+
+    <CrateEditPile
+      ref="editor"
+      :piles="crate.piles.value"
+      :path-label="pathLabel"
+      :descendants="descendants"
+      :children="children"
+      :count="(p) => counts.get(p.id) ?? 0"
+      @rename="(p, name) => crate.editPile(p, { op: 'rename', name })"
+      @move="(p, parentId) => crate.editPile(p, { op: 'move', parentId })"
+      @up="(p) => crate.editPile(p, { op: 'up' })"
+      @shift="(p, dir) => crate.editPile(p, { op: 'shift', dir })"
+      @remove="(p) => crate.editPile(p, { op: 'remove' })"
+    />
 
     <CrateTrackList
       v-model:open="listOpen"

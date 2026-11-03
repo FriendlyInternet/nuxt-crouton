@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { CratePile } from '~/composables/useCrate'
 
-defineProps<{ trail: CratePile[], trayLabel: string, trayCount: number, uploading?: { done: number, total: number } | null }>()
-const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], list: [], listen: [], upload: [] }>()
+defineProps<{ trail: CratePile[], trayLabel: string, trayCount: number, uploading?: { done: number, total: number } | null, editing: boolean }>()
+const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], list: [], listen: [], upload: [], edit: [] }>()
 </script>
 
 <template>
@@ -28,6 +28,16 @@ const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], lis
       aria-label="Add new tracks"
       class="shrink-0 tabular-nums"
       @click="emit('upload')"
+    />
+    <UButton
+      :icon="editing ? 'i-lucide-check' : 'i-lucide-pencil'"
+      size="sm"
+      :variant="editing ? 'solid' : 'ghost'"
+      :color="editing ? 'primary' : 'neutral'"
+      :aria-label="editing ? 'Done editing piles' : 'Edit piles'"
+      :aria-pressed="editing"
+      class="shrink-0 transition-colors"
+      @click="emit('edit')"
     />
     <UButton icon="i-lucide-undo-2" size="sm" variant="ghost" color="neutral" aria-label="Undo last change" class="shrink-0" @click="emit('undo')" />
     <UColorModeButton size="sm" class="shrink-0" />
