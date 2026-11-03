@@ -25,10 +25,16 @@
  * @property {number|null} fix_rounds  rounds of fix-CI/feedback before terminal (null = n/a)
  * @property {string|null} ref         PR / issue / run URL for traceability
  * @property {string|null} notes       free text
+ *
+ * Per-workflow-RUN fields (#3251, all optional — legacy rows validate unchanged):
+ * issue, pr, stage ("plan"|"work"|"revise"|"conflict"|…), run_id, attempt, workflow, started_at,
+ * ended_at, conclusion, produced[] ("comment"|"verdict"|"commit"|"nothing"), produced_ids[],
+ * overlap[] (same-workflow run ids), attribution ("exact"|"shared"), source ("live"|"backfill"),
+ * rule ("marker"|"legacy"), api_calls (int|null), api_calls_reason, token ("app"|"github_token").
  */
 
 export const ENUMS = {
-  harness: ['claude', 'pi'],
+  harness: ['claude', 'pi', 'unknown'],
   artifact_gate: ['pass', 'fail', 'na'],
   ci: ['pass', 'fail', 'na'],
   outcome: ['merged', 'reverted', 'abandoned', 'report', 'pending'],
@@ -74,6 +80,7 @@ export function validate(rec) {
     fix_rounds: num(rec.fix_rounds),
     ref: rec.ref ?? null,
     notes: rec.notes ?? null,
+    ...runFields(rec),
   }
 
   for (const k of ['harness', 'artifact_gate', 'ci', 'outcome', 'human']) {
@@ -84,6 +91,19 @@ export function validate(rec) {
 
   if (errors.length) return { ok: false, errors }
   return { ok: true, record: withDefaults }
+}
+
+const RUN_STR = ['stage', 'run_id', 'attempt', 'workflow', 'started_at', 'ended_at', 'conclusion', 'attribution', 'source', 'rule', 'api_calls_reason', 'token']
+const RUN_ARR = ['produced', 'produced_ids', 'overlap']
+
+// Optional per-run fields: copied only when present, so legacy rows keep their exact shape.
+function runFields(rec) {
+  const out = {}
+  for (const k of ['issue', 'pr']) if (rec[k] != null) out[k] = num(rec[k])
+  for (const k of RUN_STR) if (rec[k] != null) out[k] = String(rec[k])
+  for (const k of RUN_ARR) if (Array.isArray(rec[k])) out[k] = rec[k]
+  if ('api_calls' in rec) out.api_calls = num(rec.api_calls)
+  return out
 }
 
 function num(v) {
