@@ -33,6 +33,10 @@ on:
     # fires, which is the exact bug #2089 is about.
     workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
+    # #3305: start only for pipeline head branches (the job `if` below stays as the guard —
+    # workflow_dispatch has no branch). `**` so `work-12/x` isn't dropped; `*` doesn't cross `/`.
+    # Must cover every PIPELINE_BRANCH_PREFIXES entry (scripts/lib/pipeline-branch.test.mjs).
+    branches: ['work-**']
   # #3105: started by the owner's `ok` on a RED epic → main PR (on-comment.yml approve-epic). The
   # workflow_run path above never sees an `epic/*` head, so this is the only way in for one. The
   # gate step requires the PR open and the owner's ok still standing.
