@@ -819,7 +819,10 @@ export default {
     { name: 'posts', fieldsFile: './schemas/posts.json', kind: 'content', seed: { count: 50 } },  // content kind
     { name: 'bookings', fieldsFile: './schemas/bookings.json', collab: true },      // enable collab presence
     { name: 'articles', fieldsFile: './schemas/articles.json', kind: 'content' },
-    { name: 'gallery', fieldsFile: './schemas/gallery.json', kind: 'media' }        // media kind
+    { name: 'gallery', fieldsFile: './schemas/gallery.json', kind: 'media' },       // media kind
+    // Access (optional; absent = output unchanged). create/reorder: 'member'|'admin'
+    // (reorder also guards [id]/move); list: 'team'|'own' ('own' filters list AND ?ids= for non-admins)
+    { name: 'notes', fieldsFile: './schemas/notes.json', access: { create: 'admin', list: 'own' } }
   ],
   dialect: 'sqlite',
   seed: {
