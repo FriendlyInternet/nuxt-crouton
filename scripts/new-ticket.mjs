@@ -122,29 +122,36 @@ export function newTicket(opts, { exec, repo, knownLabels = [], log = console.er
   const number = ghCreateIssue(exec, repo, { title, file: writeBody(body), labels: kept })
   out.number = number
   if (parent) {
-    // Inherit the parent's epic context (the number only exists now, so edit the body after creating).
-    const parentBody = exec('gh', ['api', `repos/${repo}/issues/${parent}`, '-q', '.body'])
-    const ctx = resolveContext({ issue: { body }, parent: { body: parentBody }, parentNumber: parent })
-    if (ctx) {
-      try {
-        exec('gh', ['api', '--method', 'PATCH', `repos/${repo}/issues/${number}`, '-F', `body=@${writeBody(writePipelineBlock(body, ctx))}`])
-      } catch (e) {
-        out.errors.push(`could not add the pipeline: line to #${number} (${e.message}) — trigger label NOT added`)
-        return out
-      }
-    } else {
-      log(`parent #${parent} is an umbrella (no epic branch) — #${number} is its own epic`)
-    }
-  }
-  if (parent) {
-    const restId = exec('gh', ['api', `repos/${repo}/issues/${number}`, '-q', '.id'])
-    exec('gh', ['api', '--method', 'POST', `repos/${repo}/issues/${parent}/sub_issues`, '-F', `sub_issue_id=${restId}`])
+    const err = inheritParentContext({ exec, repo, parent, number, body, log, writeBody })
+    if (err) { out.errors.push(err); return out }
+    linkToParent({ exec, repo, parent, number })
   }
   ghAddLabel(exec, repo, number, trigger) // LAST: only now may the pipeline pick it up
   log(`filed #${number}`)
   out.ok = true
   out.exitCode = 0
   return out
+}
+
+/** Inherit the parent's epic context (the number only exists now, so edit the body after creating). Returns an error string or null. */
+function inheritParentContext({ exec, repo, parent, number, body, log, writeBody }) {
+  const parentBody = exec('gh', ['api', `repos/${repo}/issues/${parent}`, '-q', '.body'])
+  const ctx = resolveContext({ issue: { body }, parent: { body: parentBody }, parentNumber: parent })
+  if (!ctx) {
+    log(`parent #${parent} is an umbrella (no epic branch) — #${number} is its own epic`)
+    return null
+  }
+  try {
+    exec('gh', ['api', '--method', 'PATCH', `repos/${repo}/issues/${number}`, '-F', `body=@${writeBody(writePipelineBlock(body, ctx))}`])
+  } catch (e) {
+    return `could not add the pipeline: line to #${number} (${e.message}) — trigger label NOT added`
+  }
+  return null
+}
+
+function linkToParent({ exec, repo, parent, number }) {
+  const restId = exec('gh', ['api', `repos/${repo}/issues/${number}`, '-q', '.id'])
+  exec('gh', ['api', '--method', 'POST', `repos/${repo}/issues/${parent}/sub_issues`, '-F', `sub_issue_id=${restId}`])
 }
 
 function defaultWriteBody(body) {
