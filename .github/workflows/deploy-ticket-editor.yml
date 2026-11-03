@@ -1,0 +1,60 @@
+name: Deploy ticket-editor Worker
+
+# Deploys workers/ticket-editor (https://diagram.pmcp.dev) and sets its OWNER_TOKEN_SECRET (#3261).
+# The secret is derived from REVIEW_SEED_SECRET (same scheme as COLLAB_TOKEN_SECRET in
+# deploy-app.yml) so nobody sets it by hand; the status app derives the same key in code
+# (pocs/status/server/utils/editor-token-core.ts) — keep the two in sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/ticket-editor/**'
+      - '.github/workflows/deploy-ticket-editor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ticket-editor
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Derive OWNER_TOKEN_SECRET
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+        run: |
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so the editor owner-token secret cannot be derived."
+            exit 1
+          fi
+          OWNER_TOKEN_SECRET="$(printf '%s' "$REVIEW_SEED_SECRET:ticket-editor:owner-token" | sha256sum | cut -d' ' -f1)"
+          echo "::add-mask::$OWNER_TOKEN_SECRET"
+          printf '%s' "$OWNER_TOKEN_SECRET" > "$RUNNER_TEMP/owner-token-secret"
+
+      - name: Deploy Worker
+        working-directory: workers/ticket-editor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy --keep-vars
+
+      - name: Set OWNER_TOKEN_SECRET
+        working-directory: workers/ticket-editor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 secret put OWNER_TOKEN_SECRET < "$RUNNER_TEMP/owner-token-secret"

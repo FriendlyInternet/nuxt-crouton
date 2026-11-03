@@ -18,7 +18,10 @@
  *   wrangler secret put GITHUB_APP_PRIVATE_KEY   (the App's PEM private key — the only secret)
  *   GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID    (not sensitive — set as vars or secrets)
  */
+import { branchAllowed, issueAllowed, verifyOwnerToken } from './guard.ts'
+
 interface Env {
+  OWNER_TOKEN_SECRET: string // derived in CI from REVIEW_SEED_SECRET; empty → every save is refused
   GITHUB_APP_ID: string
   GITHUB_APP_PRIVATE_KEY: string // PEM; the one durable secret
   GITHUB_APP_INSTALLATION_ID: string
@@ -162,6 +165,12 @@ async function postSaveComment(token: string, env: Env, issue: number, slug: str
 
 async function save(req: Request, env: Env): Promise<Response> {
   try {
+    // Owner only (#3261): no valid token → 401 before any GitHub call is made.
+    const auth = req.headers.get('authorization') || ''
+    const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!(await verifyOwnerToken(bearer, env.OWNER_TOKEN_SECRET || '', Date.now()))) {
+      return json({ error: 'owner sign-in required' }, 401)
+    }
     const { slug, branch, scene, png, issue } = (await req.json()) as {
       slug?: string
       branch?: string
@@ -174,6 +183,13 @@ async function save(req: Request, env: Env): Promise<Response> {
     const dir = env.DIAGRAMS_DIR || 'writeups/diagrams'
     const msg = 'chore(diagrams): edit ' + slug + ' via ticket-editor'
     const token = await installationToken(env) // one fresh ~1h token for the commits + comment
+    if (!(await branchAllowed(fetch, token, env.REPO, branch))) {
+      return json({ error: 'branch refused: the default and protected branches cannot be saved to' }, 403)
+    }
+    if (issue != null && issue !== '') {
+      const n = /^[0-9]+$/.test(String(issue)) ? Number(issue) : NaN
+      if (!(await issueAllowed(fetch, token, env.REPO, n))) return json({ error: 'issue refused: not an issue in this repo' }, 403)
+    }
     await putFile(token, env, branch, dir + '/' + slug + '.excalidraw', toB64(JSON.stringify(scene, null, 2) + '\n'), msg)
     let pngCommit: { commitSha: string; parentSha?: string } | undefined
     if (png) {
@@ -292,6 +308,16 @@ const PAGE = `<!DOCTYPE html>
   var slug = params.get('slug') || '';
   var branch = params.get('branch') || 'main';
   var issue = params.get('issue') || '';
+  // Owner token arrives in the URL fragment after the status sign-in round trip (#3261).
+  var fragTok = (location.hash.match(/owner=([A-Za-z0-9_.-]+)/) || [])[1];
+  if (fragTok) {
+    try { sessionStorage.setItem('ownerToken', fragTok); } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  function ownerToken(){ try { return sessionStorage.getItem('ownerToken') || ''; } catch (e) { return ''; } }
+  function goSignIn(){
+    location.href = 'https://status.pmcp.dev/api/editor/token?return=' + encodeURIComponent(location.origin + location.pathname + location.search);
+  }
   var RAW = 'https://raw.githubusercontent.com/__REPO__/' + branch + '/writeups/diagrams/' + slug + '.excalidraw';
   var statusEl = document.getElementById('status');
   var saveEl = document.getElementById('save');
@@ -354,9 +380,17 @@ const PAGE = `<!DOCTYPE html>
             for (var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
             var pngB64 = btoa(bin);
             var scene = { type:'excalidraw', version:2, source:location.origin, elements: elements, appState:{ viewBackgroundColor:'#ffffff' }, files: files };
-            return fetch('/api/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ slug: slug, branch: branch, scene: scene, png: pngB64, issue: issue }) });
+            return fetch('/api/save', { method:'POST', headers:{'content-type':'application/json','authorization':'Bearer ' + ownerToken()}, body: JSON.stringify({ slug: slug, branch: branch, scene: scene, png: pngB64, issue: issue }) });
           })
-          .then(function(r){ return r.json(); })
+          .then(function(r){
+            if (r.status === 401) {
+              try { sessionStorage.removeItem('ownerToken'); } catch (e) {}
+              setStatus('owner sign-in required — redirecting…');
+              goSignIn();
+              return { error: 'owner sign-in required' };
+            }
+            return r.json();
+          })
           .then(function(res){ setStatus(res.ok ? ('saved ✓ committed to ' + branch + (res.comment ? ' · ' + res.comment : '')) : 'error: ' + (res.error||'?')); saveEl.disabled = false; })
           .catch(function(e){ setStatus('error: ' + e); saveEl.disabled = false; });
       };
