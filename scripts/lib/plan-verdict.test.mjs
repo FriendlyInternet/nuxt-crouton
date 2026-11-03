@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
+import { holdOrRetry, parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
 
 const fx = (n) => readFileSync(new URL(`../fixtures/plan-review/${n}`, import.meta.url), 'utf8')
 
@@ -99,4 +99,22 @@ test('the comment carries the marker, the type and a collapsed checklist', () =>
   assert.match(c, /<!-- plan-review:v1 -->/)
   assert.match(c, /Plan approved/)
   assert.match(c, /<details>/)
+})
+
+test('holdOrRetry: judgement failures hold from round 2, mechanical retry until round 3', () => {
+  assert.equal(holdOrRetry({ round: 1, failedChecks: ['7'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 1, failedChecks: ['9'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['1b', '8'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['7'] }), 'hold')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['6', '9'] }), 'hold')
+  assert.equal(holdOrRetry({ round: 3, failedChecks: ['1b'] }), 'hold')
+})
+
+test('rule: a real verdict failing only a mechanical check retries at round 2; a failed 9 holds', () => {
+  const mech = decide(fx('untested-rule.plan.md'), fx('untested-rule.verdict.md'))
+  assert.equal(holdOrRetry({ round: 2, failedChecks: mech.failed }), 'retry')
+  assert.match(renderComment(mech, { round: 2 }), /Plan sent back/)
+  const judge = decide(fx('contradicts-record.plan.md'), fx('contradicts-record.verdict.md'))
+  assert.equal(holdOrRetry({ round: 2, failedChecks: judge.failed }), 'hold')
+  assert.match(renderComment(judge, { round: 2 }), /Held for you/)
 })
