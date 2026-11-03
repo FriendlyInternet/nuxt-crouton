@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { decideEpicMerge } from './epic-merge-decision.mjs'
+import { ownerMergeGo } from './lib/owner-merge-go.mjs'
 
 const run = (name, status = 'completed', conclusion = 'success', started_at = '2026-01-01T00:00:00Z') =>
   ({ name, status, conclusion, started_at })
@@ -46,4 +47,34 @@ test('non-epic head, non-main base, draft, closed are ignored', () => {
   assert.equal(decide({ pr: pr({ base: { ref: 'epic/1-x' } }) }).action, 'ignore')
   assert.equal(decide({ pr: pr({ draft: true }) }).action, 'ignore')
   assert.equal(decide({ pr: pr({ state: 'closed' }) }).action, 'ignore')
+})
+
+// #3105 — the decision driven by ownerMergeGo (the owner's standing `ok`), not by one comment.
+const ME = 'pmcp'
+const cm = (body, created_at) => ({ user: { login: ME, type: 'User' }, body, created_at })
+const commit = (date, o = {}) => ({ parents: [{}], files: ['a.ts'], commit: { committer: { date, name: 'someone' } }, ...o })
+const goOf = (comments, commits = []) => ownerMergeGo({ comments, commits, owner: ME })
+const withGo = (go, checkRuns = green) => decideEpicMerge({ pr: pr(), checkRuns, go })
+const OK = cm('ok', '2026-01-02T00:00:00Z')
+
+test('go: green + standing ok merges', () => assert.equal(withGo(goOf([OK])).action, 'merge'))
+test('go: ok then a worker-revision commit does not merge', () =>
+  assert.notEqual(withGo(goOf([OK], [commit('2026-01-03T00:00:00Z')])).action, 'merge'))
+test('go: ok then a CI-Fix commit by claude[bot] still merges', () => {
+  const fix = commit('2026-01-03T00:00:00Z', { commit: { message: 'fix\n\nCI-Fix: true', committer: { date: '2026-01-03T00:00:00Z', name: 'claude[bot]' } } })
+  assert.equal(withGo(goOf([OK], [fix])).action, 'merge')
+})
+test('go: red gate with ok reports red', () =>
+  assert.equal(withGo(goOf([OK]), [run('CI Gate', 'completed', 'failure'), run('E2E Gate')]).action, 'red'))
+test('go: pending or missing gate waits', () =>
+  assert.equal(withGo(goOf([OK]), [run('CI Gate')]).action, 'wait'))
+test('go: a later not ok does not merge', () =>
+  assert.notEqual(withGo(goOf([OK, cm('not ok: rename it', '2026-01-03T00:00:00Z')])).action, 'merge'))
+test('go: no approval ignores with the reason', () => {
+  const d = withGo(goOf([]))
+  assert.equal(d.action, 'ignore'); assert.match(d.reason, /no owner approval/)
+})
+test('go: still ignores a draft / non-epic head', () => {
+  assert.equal(decideEpicMerge({ pr: pr({ draft: true }), checkRuns: green, go: { go: true, reason: '' } }).action, 'ignore')
+  assert.equal(decideEpicMerge({ pr: pr({ head: { ref: 'work-1' } }), checkRuns: green, go: { go: true, reason: '' } }).action, 'ignore')
 })

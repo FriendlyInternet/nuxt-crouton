@@ -40,12 +40,13 @@ test('6. epic-based PR needs build:approved, even with go', () => {
   assert.equal(e([]).merge, false)
   assert.equal(e(['build:approved']).merge, true)
 })
-test('7. non-work-* head into main is declined; epic → main needs build:approved AND ok', () => {
+test('7. non-work-* head into main is declined; epic → main is decided elsewhere (#3105)', () => {
   assert.equal(leaf({ headRef: 'feature/x' }).merge, false)
-  const e = (labels, go) => decideLeafMerge({ baseRef: 'main', headRef: 'epic/1-x', labels, go: { go }, ciGate: 'success', mergeableState: 'clean' }).merge
-  assert.equal(e([], true), false)
-  assert.equal(e(['build:approved'], false), false)
-  assert.equal(e(['build:approved'], true), true)
+  for (const labels of [[], ['build:approved']]) for (const go of [true, false]) {
+    const d = decideLeafMerge({ baseRef: 'main', headRef: 'epic/1-x', labels, go: { go }, ciGate: 'success', mergeableState: 'clean' })
+    assert.equal(d.merge, false)
+    assert.equal(d.code, 'ineligible')
+  }
 })
 
 // Ordering lives in ownerMergeGo, fed real comment/commit fixtures.
