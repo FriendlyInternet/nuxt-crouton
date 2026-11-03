@@ -11,10 +11,13 @@
 {"issue":3070,"planRounds":6,"verdict":"go","fixRounds":0}
 {"issue":3115,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3110,"planRounds":1,"verdict":"go","fixRounds":0}
+{"issue":3139,"planRounds":6,"verdict":"go","fixRounds":0}
 {"issue":3132,"planRounds":3,"verdict":"go","fixRounds":0}
 {"issue":3149,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3140,"planRounds":5,"verdict":"go","fixRounds":0}
 {"issue":3157,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3111,"planRounds":5,"verdict":"go","fixRounds":0}
 {"issue":3158,"planRounds":7,"verdict":"go","fixRounds":0}
+{"issue":3160,"planRounds":3,"verdict":"go","fixRounds":0}
 {"issue":3134,"planRounds":4,"verdict":"go","fixRounds":0}
+{"issue":3205,"planRounds":5,"verdict":"go","fixRounds":0}
