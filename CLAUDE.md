@@ -64,7 +64,7 @@ Each todo requires:
 
 See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
 
-- **Hand off** by labelling the ticket `delegate` (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Hand off** by labelling the ticket `work-this` — the one label a human applies; `delegate*` are bot-only hand-offs (#3208) (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
 - **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
 - **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
 

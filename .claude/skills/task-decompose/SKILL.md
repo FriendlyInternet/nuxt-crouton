@@ -103,8 +103,8 @@ If a leaf's work needs a workflow-file change (new trigger, path filter, job):
 
 - **Manual:** run `/task-decompose "<task>"` or `/task-decompose #NN` in any Claude Code
   session (CLI, web, desktop, mobile app).
-- **Automatic — issue opt-in:** add the **`delegate`** label to any issue and
-  `.github/workflows/decompose-on-issue.yml` runs `/task-decompose #NN` for you (no
+- **Automatic — issue opt-in:** add the **`work-this`** label to any issue (`delegate*` labels are bot-only, #3208) and
+  the pipeline (router in `work-issue-pidev.yml`) runs `/task-decompose #NN` for you (no
   command needed). Gate is the label, so only opted-in issues fire.
 - **By comment (mobile-friendly):** comment **`/delegate`** (or **`/deploy`**) on an issue —
   `.github/workflows/comment-dispatch.yml` applies the `delegate` label for you (via a PAT, so

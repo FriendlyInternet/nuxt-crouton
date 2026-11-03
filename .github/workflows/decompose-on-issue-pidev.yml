@@ -5,18 +5,12 @@ name: Decompose on issue (pi.dev variant)
 # (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
 # (the current setting) THIS flow — not the claude one — works our `delegate` issues.
 #
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
+# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative):
+#   • `workflow_dispatch` — the router in work-issue-pidev.yml sends an `epic` issue here when a
+#     human applies `work-this` (#3208). You can also dispatch any issue number by hand.
+#   • `delegate-hard` label — the ONE human-applied exception: opts into the METERED Claude lane (#1496).
+#   • `delegate` / `delegate-pi` label — INTERNAL hand-offs only: they start a run only when applied
+#     by nuxt-harness[bot]; a human adding one starts nothing.
 #
 # HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
 # every one of those locks has since been removed. Do NOT reintroduce that framing:
@@ -82,11 +76,8 @@ on:
         default: "claude-bridge"
         type: choice
         options: ["claude-bridge", "zai", "anthropic"]
-  # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
-  # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
-  # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
-  # `opened` added for the WS7 flip (#1077): when AGENT_HARNESS=pi, an issue *created with* the
-  # plain `delegate` label must land here (the claude flow handles that shape and now yields).
+  # We fire on EVERY labeled event but the job `if` gates to the exact delegate* labels applied by
+  # the bot, so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
   issues:
     types: [labeled]
 
@@ -103,8 +94,9 @@ jobs:
     # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
       (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
-        contains(fromJSON('["delegate-pi","delegate-hard","delegate"]'), github.event.label.name))
+        contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both

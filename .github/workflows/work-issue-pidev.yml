@@ -3,41 +3,16 @@ name: Work issue (pi.dev · single-use worker)
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
 # artifact-gate (#461) and the telemetry capture are preserved VERBATIM. What differs:
-#   • Trigger — the `work-this` label on a LEAF issue (not `delegate*`), applied by a human or,
-#     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
+#   • Trigger — the `work-this` label on an issue (the Route job picks leaf vs epic), applied by a human or
+#     by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
 #   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
 #     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
 # DISPATCH RULE (#3208): `work-this` is the ONE label a human applies. The Route job reads the
 #   issue: an `epic`-labelled (big) issue is handed to decompose-on-issue-pidev.yml (the splitter);
 #   anything else is built here as a single leaf. `delegate` / `delegate-pi` / `delegate-hard` are
-#   internal hand-offs only (bot-applied) — a human adding one starts nothing. `delegate-hard` still
-#   picks the metered model lane.
-# NOTE: inherited comments below still say "decompose" — they describe the shared machinery, not the trigger.
-# ── original decompose-flow header follows (context for the shared machinery) ──
-
-# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
-# `decompose-on-issue.yml` with ONE thing swapped: the agent step
-# (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
-# (the current setting) THIS flow — not the claude one — works our `delegate` issues.
-#
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
-#
-# HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
-# every one of those locks has since been removed. Do NOT reintroduce that framing:
-# superseded by #1017 (`delegate-pi` trigger), #1077 (the AGENT_HARNESS=pi flip), and
-# #1421/#1423 (the funded zai/GLM-5.2 lane). Stale dormancy prose here cost a session
-# once — it reads as authoritative while sitting directly above code that refutes it.
+#   internal hand-offs only (bot-applied) — a human adding one starts nothing. `delegate-hard` is the exception: a human may still apply it
+#   (decompose-on-issue-pidev.yml) to opt into the metered model lane.
+# Shared machinery below (push path, artifact-gate, telemetry) is inherited from decompose-on-issue-pidev.yml.
 #
 # WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
 #   • PUSH PATH (#1004 piece 1, the load-bearing change): unlike the reports-only
