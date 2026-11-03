@@ -46,9 +46,9 @@ name: Decompose on issue (pi.dev variant)
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
+# (or `delegate`) label to an issue (mirrors the claude `delegate` flow). People apply only
+# `work-this` (#3208); a human adding `delegate*` starts nothing. On success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
@@ -75,17 +75,15 @@ on:
         default: "claude-bridge"
         type: choice
         options: ["claude-bridge", "zai", "anthropic"]
-  # We fire on EVERY labeled event but the job `if` gates to the exact delegate* labels applied by
-  # the bot, so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
+  # We fire on EVERY labeled event but the job `if` gates to the exact delegate / delegate-pi labels
+  # applied by the pipeline app (nuxt-harness[bot]), so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
   issues:
     types: [labeled]
 
 jobs:
   decompose-pi:
-    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` label freshly applied
-    # to an issue (#1017), OR — when the WS7 flip is ON (vars.AGENT_HARNESS == 'pi', #1077) —
-    # the same plain-`delegate` shapes the claude flow handles (which then yields via its own
-    # guard). The specific-label checks are what stop a re-fire loop when the worker adds its
+    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` / `delegate` label freshly
+    # applied BY THE PIPELINE APP (#1017; never by a person). The specific-label checks are what stop a re-fire loop when the worker adds its
     # own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
     # #3208: `work-this` is the ONE label a human applies. Its router (work-issue-pidev.yml) sends a
     # big issue here by `workflow_dispatch`. The `delegate*` labels are INTERNAL hand-offs only
@@ -97,8 +95,9 @@ jobs:
         contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
-    # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both
-    # `opened` and `labeled`, so two runs start in the same second and both applied a plan
+    # One decompose at a time per issue (#2645). An issue created WITH a label fires only
+    # `labeled` (`opened` is no longer a trigger), yet two labeled events can still start two runs
+    # in the same second and both applied a plan
     # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
     # "Resume an already-decomposed tree" (#2048), sees the first run's children and
     # dispatches them instead of planning again.
