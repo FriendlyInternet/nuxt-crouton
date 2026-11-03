@@ -24,3 +24,14 @@ export function safeRedirect(raw: unknown): string {
 export function rateLimitOk(last: number | null, now: number, interval = SIGNIN_LINK_INTERVAL_MS): boolean {
   return last === null || now - last >= interval
 }
+
+/** Send the magic link via the auth api; a clear 501 when the magic-link plugin is not enabled. */
+export async function sendSignInLink(
+  api: { signInMagicLink?: (opts: { body: { email: string, callbackURL: string }, headers: Headers }) => Promise<unknown> },
+  opts: { email: string, callbackURL: string, headers: Headers }
+): Promise<void> {
+  if (typeof api.signInMagicLink !== 'function') {
+    throw Object.assign(new Error('Magic-link sign-in is not enabled on this build.'), { statusCode: 501 })
+  }
+  await api.signInMagicLink({ body: { email: opts.email, callbackURL: opts.callbackURL }, headers: opts.headers })
+}

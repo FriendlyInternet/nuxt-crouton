@@ -131,17 +131,56 @@ export function useCrate() {
     return saveTags(track, [...track.tags.filter(t => t !== NEW_TAG), CHECKED_TAG], `${track.name}: ✓ checked`)
   }
 
+  /** What a write or an undo hands back: tags + piles to put in place, piles that are gone. */
+  interface ChangeResult { groupId: string | null, tracks: { trackId: string, tags: string[] }[], piles?: CratePile[], removedPileIds?: string[] }
+  function apply(res: ChangeResult) {
+    res.tracks.forEach(w => setLocalTags(w.trackId, w.tags))
+    const list = data.value.piles
+    for (const p of res.piles ?? []) {
+      const at = list.findIndex(x => x.id === p.id)
+      const pile = { id: p.id, name: p.name, parentId: p.parentId ?? null, order: p.order }
+      if (at >= 0) list.splice(at, 1, pile)
+      else list.push(pile)
+    }
+    const gone = new Set(res.removedPileIds ?? [])
+    if (gone.size) data.value.piles = list.filter(p => !gone.has(p.id))
+  }
+
   async function undo() {
     try {
-      const res = await $fetch<{ groupId: string | null, tracks: { trackId: string, tags: string[] }[] }>(api('/undo'), { method: 'POST' })
+      const res = await $fetch<ChangeResult>(api('/undo'), { method: 'POST' })
       if (!res.groupId) return toast.add({ title: 'Nothing to undo' })
-      res.tracks.forEach(w => setLocalTags(w.trackId, w.tags))
+      apply(res)
       toast.add({ title: 'Undone', duration: 2500 })
     }
     catch (error) {
       toast.add({ title: 'Undo failed', description: String((error as Error).message ?? error), color: 'error' })
     }
   }
+
+  /** Manage a pile (#2211). One undoable step, including any track tags it rewrites. */
+  type PileEdit = { op: 'rename', name: string } | { op: 'move', parentId: string | null } | { op: 'up' } | { op: 'shift', dir: -1 | 1 } | { op: 'remove' }
+  async function editPile(pile: CratePile, edit: PileEdit) {
+    try {
+      const res = await $fetch<ChangeResult & { summary: string }>(api(`/piles/${pile.id}/edit`), { method: 'POST', body: edit })
+      apply(res)
+      const retagged = res.tracks.length ? ` · ${res.tracks.length} track${res.tracks.length === 1 ? '' : 's'} retagged` : ''
+      toast.add({ title: `${res.summary}${retagged}`, duration: 4000, actions: [{ label: 'Undo', onClick: () => { undo() } }] })
+      return true
+    }
+    catch (error) {
+      const e = error as { data?: { statusText?: string, message?: string }, message?: string }
+      toast.add({ title: 'Couldn’t change the pile', description: e.data?.statusText ?? e.data?.message ?? e.message, color: 'error' })
+      return false
+    }
+  }
+
+  /** Every tag in the library that isn't a pile yet — names to offer when making a pile. */
+  const loneTags = computed(() => {
+    const seen = new Map<string, string>()
+    for (const t of tracks.value) for (const tag of t.tags) if (tag !== NEW_TAG && tag !== CHECKED_TAG && !pileOfTag(tag) && !seen.has(tag.toLowerCase())) seen.set(tag.toLowerCase(), tag)
+    return [...seen.values()].sort((a, b) => a.localeCompare(b))
+  })
 
   const audioUrl = (t: CrateTrack) => api(`/tracks/${t.id}/audio`)
 
@@ -190,5 +229,5 @@ export function useCrate() {
     }
   }
 
-  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, addTrack, renameUpload, deleteUpload, markChecked, createPile }
+  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, loneTags, tray, toggle, fileInto, takeOutOf, undo, editPile, audioUrl, addTrack, renameUpload, deleteUpload, markChecked, createPile }
 }
