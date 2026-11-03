@@ -1,0 +1,9 @@
+@@ -8,7 +8,7 @@ interface KvrSettingsRecipientItem {
+   isDefault?: boolean
+ }
+ 
+-const model = defineModel<KvrSettingsRecipientItem>()
++const model = defineModel<KvrSettingsRecipientItem>({ required: true })
+ 
+ // Ensure stable ID on first creation
+ if (model.value && !model.value.id) {
