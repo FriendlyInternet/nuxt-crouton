@@ -21,6 +21,7 @@
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
+import { isAgentComment } from '../../../scripts/approval.mjs'
 import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
@@ -320,12 +321,17 @@ async function stuckPRs(openPRs) {
         // File lists only matter for commits newer than the latest comment-able ok; fetch them
         // for the tail so ui-proposals-only capture commits are not mistaken for revisions.
         const lastOwner = comments
-          .filter((c) => c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase())
+          .filter(
+            (c) =>
+              c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase() &&
+              c.user?.type !== 'Bot' &&
+              !isAgentComment(c.body)
+          )
           .map((c) => Date.parse(c.created_at))
           .sort((a, b) => b - a)[0]
         for (const k of commits) {
           const d = Date.parse(k.commit?.committer?.date)
-          if (d > lastOwner && (k.parents || []).length <= 1) {
+          if (!(d <= lastOwner) && (k.parents || []).length <= 1) {
             const full = await gh(`${repo}/commits/${k.sha}`)
             k.files = (full.files || []).map((f) => f.filename)
           }
