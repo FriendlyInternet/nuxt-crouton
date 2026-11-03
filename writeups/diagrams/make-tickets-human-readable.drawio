@@ -23,7 +23,7 @@
           <mxGeometry height="96" width="230" x="318" y="504" as="geometry" />
         </mxCell>
         <mxCell id="ngoal" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;fontColor=#1e1e1e;fontSize=13;align=center;verticalAlign=middle;" value="🎯 Epic reads at a glance on mobile · no Loading" vertex="1">
-          <mxGeometry height="96" width="230" x="318" y="693" as="geometry" />
+          <mxGeometry height="96" width="230" x="554" y="673" as="geometry" />
         </mxCell>
         <mxCell id="e_2_3" edge="1" parent="1" source="n2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#868e96;strokeWidth=2;" target="n3">
           <mxGeometry relative="1" as="geometry" />
