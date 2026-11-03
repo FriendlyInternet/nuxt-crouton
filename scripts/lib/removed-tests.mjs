@@ -20,8 +20,8 @@ export function listTestTitles(source) {
   return [...out]
 }
 
-/** snapshots: [{path: source}, ...]; head: {path: source}. Returns [{file, title}]. */
-export function removedTests(snapshots, head) {
+/** Union of test titles per file across every snapshot. */
+function collectTitles(snapshots) {
   const seen = new Map()
   for (const snap of snapshots) {
     for (const [file, src] of Object.entries(snap)) {
@@ -29,6 +29,12 @@ export function removedTests(snapshots, head) {
       for (const t of listTestTitles(src)) seen.get(file).add(t)
     }
   }
+  return seen
+}
+
+/** snapshots: [{path: source}, ...]; head: {path: source}. Returns [{file, title}]. */
+export function removedTests(snapshots, head) {
+  const seen = collectTitles(snapshots)
   const out = []
   for (const [file, titles] of seen) {
     const kept = new Set(head[file] === undefined ? [] : listTestTitles(head[file]))
