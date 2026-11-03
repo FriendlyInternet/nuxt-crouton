@@ -8,7 +8,6 @@ name: Decompose on issue (pi.dev variant)
 # HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative):
 #   • `workflow_dispatch` — the router in work-issue-pidev.yml sends an `epic` issue here when a
 #     human applies `work-this` (#3208). You can also dispatch any issue number by hand.
-#   • `delegate-hard` label — the ONE human-applied exception: opts into the METERED Claude lane (#1496).
 #   • `delegate` / `delegate-pi` label — INTERNAL hand-offs only: they start a run only when applied
 #     by nuxt-harness[bot]; a human adding one starts nothing.
 #
@@ -94,7 +93,6 @@ jobs:
     # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
       (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
         contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
@@ -306,10 +304,8 @@ jobs:
       - id: model
         run: |
           DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          echo "pipeline models — default=$DEFAULT (from .claude/pipeline-models.json)"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -319,14 +315,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
-          # still escalates, but by MODEL (default → hard) on the same provider — no metered
-          # lane. Headless subscription auth on a GitHub-hosted runner (#2275):
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275):
           # CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y) authenticates the Claude Code child that
           # claude-bridge spawns; the CLI is installed + preflighted by setup-pi (#2119).
           # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
-          # hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          # hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}

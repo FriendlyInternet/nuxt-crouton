@@ -9,9 +9,8 @@ name: Work issue (pi.dev · single-use worker)
 #     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
 # DISPATCH RULE (#3208): `work-this` is the ONE label a human applies. The Route job reads the
 #   issue: an `epic`-labelled (big) issue is handed to decompose-on-issue-pidev.yml (the splitter);
-#   anything else is built here as a single leaf. `delegate` / `delegate-pi` / `delegate-hard` are
-#   internal hand-offs only (bot-applied) — a human adding one starts nothing. `delegate-hard` is the exception: a human may still apply it
-#   (decompose-on-issue-pidev.yml) to opt into the metered model lane.
+#   anything else is built here as a single leaf. People apply only `work-this`. `delegate` / `delegate-pi` are
+#   internal hand-offs applied only by the pipeline — a human adding one starts nothing.
 # Shared machinery below (push path, artifact-gate, telemetry) is inherited from decompose-on-issue-pidev.yml.
 #
 # WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
@@ -449,10 +448,8 @@ jobs:
       - id: model
         run: |
           DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          echo "pipeline models — default=$DEFAULT (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -528,14 +525,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
-          # still escalates, but by MODEL (default → hard) on the same provider — no metered lane.
-          # Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
           # (claude setup-token, 1y) authenticates the Claude Code child that claude-bridge spawns;
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
-          # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          # a hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -798,7 +793,7 @@ jobs:
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail

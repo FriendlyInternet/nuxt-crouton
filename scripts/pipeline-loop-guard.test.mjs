@@ -50,10 +50,9 @@ test('the worker job fires on an exact work-this label, not on status:in-progres
   assert.equal(fire('delegate-pi'), false)
 })
 
-test('the decompose job fires on delegate-pi / delegate-hard only', () => {
-  const fire = (labelName) => jobShouldFire({ eventName: 'issues', action: 'labeled', labelName, trigger: ['delegate-pi', 'delegate-hard'] })
+test('the decompose job fires on delegate-pi only', () => {
+  const fire = (labelName) => jobShouldFire({ eventName: 'issues', action: 'labeled', labelName, trigger: ['delegate-pi'] })
   assert.equal(fire('delegate-pi'), true)
-  assert.equal(fire('delegate-hard'), true)
   assert.equal(fire('work-this'), false)
   assert.equal(fire('status:in-progress'), false)
 })
