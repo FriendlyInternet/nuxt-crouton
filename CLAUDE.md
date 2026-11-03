@@ -65,7 +65,7 @@ Each todo requires:
 See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
 
 - **Hand off** by labelling the ticket `delegate` (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
-- **File the ticket** with `node scripts/new-ticket.mjs --title … --body-file … [--parent N] [--dry-run]` (#3209): it refuses a body without `Dedup-checked:`, How-to-test steps, or (for `packages/`) `Packages-approved:`, derives `pkg:`/`app:` labels, searches for duplicates, links the parent and adds the trigger label (`work-this`, `--trigger` to override) last.
+- **File the ticket** with `node scripts/new-ticket.mjs --title … --body-file … [--parent N] [--dry-run]` (#3209): it refuses only a body without How-to-test steps (a missing `Dedup-checked:`/`Packages-approved:` is a warning), derives `pkg:`/`app:` labels from the `For agents` section only, copies the parent's epic branch onto the child (`resolveContext` in `scripts/pipeline-context.mjs`; an umbrella parent changes nothing), searches for duplicates, links the parent and adds the trigger label (`work-this`, `--trigger` to override) last.
 - **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
 - **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
 

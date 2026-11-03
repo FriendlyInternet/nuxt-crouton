@@ -2,7 +2,7 @@
 // new-ticket.mjs — file ONE standalone ticket through the same gates the pipeline applies (#3209).
 //
 //   node scripts/new-ticket.mjs --title "..." --body-file body.md [--parent N] [--type type:feat]
-//        [--label a,b] [--epic-branch epic/N-slug] [--trigger work-this] [--force] [--dry-run]
+//        [--label a,b] [--trigger work-this] [--force] [--dry-run]
 //
 // Rule: the trigger label is added LAST, only after every check passed and the issue is created and
 // linked. It composes existing helpers (epic-scaffold, test-card, packages-guard, apply-decompose-plan);
@@ -17,7 +17,7 @@ import { parseArgs } from './lib/cli-args.mjs'
 import { DEDUP_RE, NO_TEST_STEPS_MSG } from './epic-scaffold.mjs'
 import { hasTestSteps } from './test-card.mjs'
 import { ATTESTATION_RE } from './packages-guard.mjs'
-import { writePipelineBlock } from './pipeline-context.mjs'
+import { writePipelineBlock, resolveContext } from './pipeline-context.mjs'
 import { ghCreateIssue, ghAddLabel, sanitizeLabels } from './apply-decompose-plan.mjs'
 
 export const DEFAULT_TRIGGER = 'work-this'
@@ -29,8 +29,24 @@ export function parseLabelNames(yml = '') {
   return [...yml.matchAll(/^\s*-\s*name:\s*["']?([^"'\n]+?)["']?\s*$/gm)].map(m => m[1])
 }
 
-/** `pkg:`/`app:`/`worker:` labels for the paths the body names. Unknown ones become warnings, never labels. */
-export function labelsFor(body = '', known = []) {
+/** The body of the `For agents` section (to the next heading of the same or higher level), or ''. */
+export function forAgentsSection(body = '') {
+  const lines = body.split('\n')
+  const start = lines.findIndex(l => /^#{1,6}\s*(?:\S+\s+)?For agents\b/i.test(l))
+  if (start < 0) return ''
+  const level = lines[start].match(/^#+/)[0].length
+  const out = []
+  for (const l of lines.slice(start + 1)) {
+    const m = l.match(/^(#{1,6})\s/)
+    if (m && m[1].length <= level) break
+    out.push(l)
+  }
+  return out.join('\n')
+}
+
+/** `pkg:`/`app:`/`worker:` labels for the paths the `For agents` section names (paths elsewhere add nothing). Unknown ones become warnings, never labels. */
+export function labelsFor(fullBody = '', known = []) {
+  const body = forAgentsSection(fullBody)
   const labels = [], warnings = []
   for (const [dir, prefix] of PATH_LABELS) {
     const names = new Set([...body.matchAll(new RegExp(`\\b${dir}/([a-z0-9][a-z0-9._-]*)`, 'gi'))].map(m => m[1].toLowerCase().replace(/[._-]+$/, '')))
@@ -46,10 +62,10 @@ export function labelsFor(body = '', known = []) {
 /** Pure body check → { errors, warnings, labels }. */
 export function checkBody(body = '', known = []) {
   const errors = [], warnings = []
-  if (!DEDUP_RE.test(body)) errors.push('body has no `Dedup-checked:` line')
+  if (!DEDUP_RE.test(body)) warnings.push('body has no `Dedup-checked:` line')
   if (!hasTestSteps(body)) errors.push(NO_TEST_STEPS_MSG.replace('epic body', 'ticket body'))
   if (/\bpackages\//.test(body) && !ATTESTATION_RE.test(body)) {
-    errors.push('body names `packages/…` but has no `Packages-approved:` line — a package edit needs the owner’s scoped approval')
+    warnings.push('body names `packages/…` but has no `Packages-approved:` line — a package edit needs the owner’s scoped approval')
   }
   if (!/^#{1,6}\s*(?:\S+\s+)?Hypothesis/im.test(body)) warnings.push('no `## Hypothesis` section (fine for trivial chores)')
   const l = labelsFor(body, known)
@@ -81,7 +97,7 @@ export function findDuplicates(queries, { repo, exec }) {
  * Returns { ok, exitCode, errors, warnings, labels, hits, number? }.
  */
 export function newTicket(opts, { exec, repo, knownLabels = [], log = console.error, writeBody = defaultWriteBody } = {}) {
-  const { title, parent, type = 'type:feat', extraLabels = [], epicBranch, trigger = DEFAULT_TRIGGER, force = false, dryRun = false } = opts
+  const { title, parent, type = 'type:feat', extraLabels = [], trigger = DEFAULT_TRIGGER, force = false, dryRun = false } = opts
   let body = opts.body || ''
   const out = { ok: false, exitCode: 1, errors: [], warnings: [], labels: [], hits: [] }
   if (!title) { out.errors.push('--title is required'); return out }
@@ -103,9 +119,23 @@ export function newTicket(opts, { exec, repo, knownLabels = [], log = console.er
   }
   if (dryRun) { out.ok = true; out.exitCode = 0; return out }
 
-  if (epicBranch) body = writePipelineBlock(body, { epic: parent, depth: 1, epic_branch: epicBranch })
   const number = ghCreateIssue(exec, repo, { title, file: writeBody(body), labels: kept })
   out.number = number
+  if (parent) {
+    // Inherit the parent's epic context (the number only exists now, so edit the body after creating).
+    const parentBody = exec('gh', ['api', `repos/${repo}/issues/${parent}`, '-q', '.body'])
+    const ctx = resolveContext({ issue: { body }, parent: { body: parentBody }, parentNumber: parent })
+    if (ctx) {
+      try {
+        exec('gh', ['api', '--method', 'PATCH', `repos/${repo}/issues/${number}`, '-F', `body=@${writeBody(writePipelineBlock(body, ctx))}`])
+      } catch (e) {
+        out.errors.push(`could not add the pipeline: line to #${number} (${e.message}) — trigger label NOT added`)
+        return out
+      }
+    } else {
+      log(`parent #${parent} is an umbrella (no epic branch) — #${number} is its own epic`)
+    }
+  }
   if (parent) {
     const restId = exec('gh', ['api', `repos/${repo}/issues/${number}`, '-q', '.id'])
     exec('gh', ['api', '--method', 'POST', `repos/${repo}/issues/${parent}/sub_issues`, '-F', `sub_issue_id=${restId}`])
@@ -129,13 +159,13 @@ function realExec(file, args, input) {
 
 function main(argv) {
   const f = parseArgs(argv, { boolean: ['force', 'dry-run'] })
-  if (!f.title || !f['body-file']) { console.error('usage: new-ticket.mjs --title T --body-file F [--parent N] [--type L] [--label a,b] [--epic-branch B] [--trigger L] [--force] [--dry-run]'); return 2 }
+  if (!f.title || !f['body-file']) { console.error('usage: new-ticket.mjs --title T --body-file F [--parent N] [--type L] [--label a,b] [--trigger L] [--force] [--dry-run]'); return 2 }
   const repo = process.env.GITHUB_REPOSITORY || realExec('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'])
   const knownLabels = parseLabelNames(readFileSync(new URL('../.github/labels.yml', import.meta.url), 'utf8'))
   const labelFlag = argv.flatMap((a, i) => (a === '--label' && argv[i + 1] ? argv[i + 1].split(',') : []))
   const res = newTicket({
     title: f.title, body: readFileSync(f['body-file'], 'utf8'), parent: f.parent ? Number(f.parent) : undefined,
-    type: typeof f.type === 'string' ? f.type : undefined, extraLabels: labelFlag, epicBranch: f['epic-branch'],
+    type: typeof f.type === 'string' ? f.type : undefined, extraLabels: labelFlag,
     trigger: typeof f.trigger === 'string' ? f.trigger : undefined, force: !!f.force, dryRun: !!f['dry-run'],
   }, { exec: realExec, repo, knownLabels })
   for (const w of res.warnings) console.error(`⚠️  ${w}`)

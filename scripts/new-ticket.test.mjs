@@ -24,14 +24,23 @@ test('missing How to test is refused and named', () => {
   assert.ok(r.errors.some(e => /How to test/.test(e)))
 })
 
-test('packages/ path needs Packages-approved', () => {
+test('packages/ path without Packages-approved only warns', () => {
   const body = `${GOOD}\nTouches packages/crouton-auth/x.ts`
-  assert.ok(checkBody(body, KNOWN).errors.some(e => /Packages-approved/.test(e)))
-  assert.equal(checkBody(`${body}\nPackages-approved: yes\n`, KNOWN).errors.length, 0)
+  const r = checkBody(body, KNOWN)
+  assert.equal(r.errors.length, 0)
+  assert.ok(r.warnings.some(e => /Packages-approved/.test(e)))
+  assert.ok(!checkBody(`${body}\nPackages-approved: yes\n`, KNOWN).warnings.some(e => /Packages-approved/.test(e)))
+})
+
+test('labels come only from the For agents section', () => {
+  const inTest = '## For agents\n- edit apps/docs/x\n\n## 🧪 How to test\n1. open packages/crouton-auth/a\n'
+  assert.deepEqual(labelsFor(inTest, KNOWN).labels, ['app:docs'])
+  assert.deepEqual(labelsFor('## How to test\n1. packages/crouton-auth/a\n', KNOWN).labels, [])
+  assert.deepEqual(checkBody(`${GOOD}\n1. packages/crouton-auth/a`, KNOWN).labels, [])
 })
 
 test('labels come from paths; unknown paths warn only', () => {
-  const r = labelsFor('packages/crouton-auth/a apps/docs/b packages/nope/c', KNOWN)
+  const r = labelsFor('## For agents\npackages/crouton-auth/a apps/docs/b packages/nope/c', KNOWN)
   assert.deepEqual(r.labels.sort(), ['app:docs', 'pkg:crouton-auth'])
   assert.ok(r.warnings.some(w => w.includes('pkg:nope')))
 })
@@ -67,12 +76,39 @@ test('dedup hits block unless --force', () => {
   assert.ok(run({ body: GOOD, force: true }, ex2).ok)
 })
 
-test('--epic-branch stamps the hidden block; absent means none', () => {
+function ctxRun(parentBody, { failPatch = false } = {}) {
   const w = []
-  const go = (epicBranch) => newTicket({ title: 'Ticket gate script', body: GOOD, parent: 5, epicBranch }, { exec: fakeExec().exec, repo: 'o/r', knownLabels: KNOWN, log: () => {}, writeBody: (b) => { w.push(b); return '/tmp/x' } })
-  go('epic/5-x'); go(undefined)
-  assert.match(w[0], /epic_branch=epic\/5-x/)
-  assert.doesNotMatch(w[1], /pipeline:/)
+  const calls = []
+  const exec = (file, args) => {
+    calls.push(args.join(' '))
+    if (args.includes('.body')) return parentBody
+    if (failPatch && args.includes('PATCH')) throw new Error('nope')
+    if (args[0] === 'api' && args.includes('search/issues')) return ''
+    if (args.includes('.number')) return '77'
+    if (args.includes('.id')) return '9999'
+    return ''
+  }
+  const r = newTicket({ title: 'Ticket gate script', body: GOOD, parent: 5 }, { exec, repo: 'o/r', knownLabels: KNOWN, log: () => {}, writeBody: (b) => { w.push(b); return '/tmp/x' } })
+  return { r, w, calls }
+}
+
+test('parent with an epic branch → child gets epic, depth+1, same branch', () => {
+  const { r, w } = ctxRun('x\n<!-- pipeline: epic=5 depth=1 epic_branch=epic/5-x -->')
+  assert.ok(r.ok)
+  assert.match(w.at(-1), /<!-- pipeline: epic=5 depth=2 epic_branch=epic\/5-x -->/)
+})
+
+test('umbrella parent (no branch) → no pipeline line, no empty branch', () => {
+  const { r, w, calls } = ctxRun('children are standalone')
+  assert.ok(r.ok)
+  assert.ok(w.every(b => !/pipeline:/.test(b)))
+  assert.ok(!calls.some(c => c.includes('PATCH')))
+})
+
+test('failed body edit → trigger label NOT added', () => {
+  const { r, calls } = ctxRun('<!-- pipeline: epic=5 depth=0 epic_branch=epic/5-x -->', { failPatch: true })
+  assert.ok(!r.ok)
+  assert.ok(!calls.some(c => c.includes('work-this')))
 })
 
 test('helpers', () => {

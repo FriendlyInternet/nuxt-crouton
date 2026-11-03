@@ -145,6 +145,21 @@ export function writePipelineBlock(body, context = {}) {
   return `${sep}${block}`
 }
 
+/**
+ * The one rule for a child's epic context (#3209). Own `pipeline:` line with an epic_branch wins.
+ * Otherwise inherit from a parent that carries an epic_branch:
+ *   { epic: parent.epic, depth: parent.depth + 1, epic_branch: parent.epic_branch }.
+ * A parent without a branch (an umbrella) changes nothing → null (the child is its own depth-0 epic).
+ * Never returns an empty epic_branch. `parentNumber` is the fallback epic when the parent's block has none.
+ */
+export function resolveContext({ issue, parent, parentNumber } = {}) {
+  const own = parsePipelineBlock(issue?.body)
+  if (own.epic_branch) return { epic: own.epic, depth: own.depth, epic_branch: own.epic_branch }
+  const p = parsePipelineBlock(parent?.body)
+  if (!p.epic_branch) return null
+  return { epic: p.epic ?? parentNumber ?? null, depth: (p.depth ?? 0) + 1, epic_branch: p.epic_branch }
+}
+
 function stripEmpty(obj) {
   const out = {}
   for (const [k, v] of Object.entries(obj)) if (v !== undefined && v !== null) out[k] = v
@@ -178,6 +193,12 @@ function main(argv) {
   if (cmd === 'write') {
     const ctx = parseTokens(rest.join(' '))
     process.stdout.write(writePipelineBlock(readStdin(), ctx))
+    return
+  }
+  if (cmd === 'resolve') {
+    // resolve <parent-body-file>   (child body on stdin) → JSON context, or `null`
+    const parent = rest[0] ? { body: readFileSync(rest[0], 'utf8') } : null
+    process.stdout.write(JSON.stringify(resolveContext({ issue: { body: readStdin() }, parent })))
     return
   }
   console.error('usage: node scripts/pipeline-context.mjs read [<field>] | write <k=v ...>   (body on stdin)')

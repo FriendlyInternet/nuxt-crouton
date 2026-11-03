@@ -143,3 +143,14 @@ test('a placeholder branch value reads as absent', () => {
   }
   assert.equal(parsePipelineBlock('<!-- pipeline: epic_branch=epic/12-a.b_c -->').epic_branch, 'epic/12-a.b_c')
 })
+
+import { resolveContext } from './pipeline-context.mjs'
+import { test as t2 } from 'node:test'
+import assert2 from 'node:assert/strict'
+t2('resolveContext: inherits branch with depth+1; own line wins; umbrella → null', () => {
+  const parent = { body: '<!-- pipeline: epic=9 depth=1 epic_branch=epic/9-a -->' }
+  assert2.deepEqual(resolveContext({ issue: { body: '' }, parent }), { epic: 9, depth: 2, epic_branch: 'epic/9-a' })
+  assert2.equal(resolveContext({ issue: { body: '<!-- pipeline: epic=3 depth=0 epic_branch=epic/3-b -->' }, parent }).epic_branch, 'epic/3-b')
+  assert2.equal(resolveContext({ issue: { body: '' }, parent: { body: 'umbrella' } }), null)
+  assert2.equal(resolveContext({ issue: { body: '' }, parent: { body: '<!-- pipeline: epic=9 depth=1 -->' } }), null)
+})
