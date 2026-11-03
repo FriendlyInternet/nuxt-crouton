@@ -803,7 +803,7 @@ export function generateQueries(
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
-  const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
+  const ascImport = hasSortable ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
     ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
