@@ -8,9 +8,10 @@ export default defineMcpTool({
   },
   async handler({ query }) {
     const { queryCollection } = await import('@nuxt/content/server')
+    const { useEvent } = await import('nitropack/runtime')
 
-    const results = await queryCollection('docs')
-      .where('_path', 'NOT LIKE', '/landing%')
+    const results = await queryCollection(useEvent(), 'docs')
+      .where('path', 'NOT LIKE', '/landing%')
       .where('body', 'LIKE', `%${query}%`)
       .limit(10)
       .all()
@@ -25,7 +26,7 @@ export default defineMcpTool({
     }
 
     const formattedResults = results.map((doc) => {
-      return `## ${doc.title || 'Untitled'}\n**Path:** ${doc._path}\n${doc.description || ''}`
+      return `## ${doc.title || 'Untitled'}\n**Path:** ${doc.path}\n${doc.description || ''}`
     }).join('\n\n---\n\n')
 
     return {
