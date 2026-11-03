@@ -62,7 +62,7 @@
     "changelogithub": "^14.0.0",
     "eslint": "^9.17.0",
     "eslint-plugin-vuejs-accessibility": "2.5.0",
-    "fallow": "^2.104.0",
+    "fallow": "3.34.1",
     "happy-dom": "catalog:",
     "nuxt": "catalog:",
     "publint": "^0.3.16",
