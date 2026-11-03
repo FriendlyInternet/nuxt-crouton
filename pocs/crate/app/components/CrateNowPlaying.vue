@@ -17,25 +17,31 @@ const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: 
         :aria-label="playing ? 'Pause' : 'Play'"
         @click="emit('toggle')"
       />
-      <!-- The title is the drag handle (#2210): drag it onto a pile. It is kept out of the card's
-           swipes (data-no-swipe for the carousel, touch events stopped for swipe up/down), and
-           touch-none stops iOS scrolling instead. -->
-      <div
-        class="min-w-0 flex-1 cursor-grab touch-none select-none leading-tight active:cursor-grabbing"
-        title="Drag onto a pile"
-        data-no-swipe
-        @pointerdown="(e) => emit('press', e)"
-        @touchstart.stop
-        @touchmove.stop
-        @touchend.stop
-      >
+      <div class="min-w-0 flex-1 leading-tight">
         <p class="flex min-w-0 items-center gap-1 font-semibold">
-          <UIcon name="i-lucide-grip-vertical" class="size-3.5 shrink-0 text-dimmed" />
           <span class="line-clamp-2">{{ track.name }} <span class="font-normal text-muted">· {{ track.artist || 'Unknown artist' }}</span></span>
           <UButton v-if="track.uploaded" icon="i-lucide-pencil" size="xs" variant="ghost" color="neutral" class="shrink-0" aria-label="Rename or delete this upload" @click="emit('edit')" />
         </p>
         <p class="mt-0.5 truncate text-xs tabular-nums text-dimmed">{{ meta }}</p>
       </div>
+      <!-- Drag handle (#2210): only this grip drags the track onto a pile, so the rest of the card
+           keeps swiping (left/right = track, up = Done, down = tuck away). It is kept out of those
+           swipes (data-no-swipe for the carousel, touch events stopped for up/down), and
+           touch-none stops iOS scrolling instead. -->
+      <UButton
+        icon="i-lucide-grip-vertical"
+        size="lg"
+        color="neutral"
+        variant="soft"
+        class="shrink-0 cursor-grab touch-none select-none active:cursor-grabbing"
+        title="Drag onto a pile"
+        aria-label="Drag onto a pile"
+        data-no-swipe
+        @pointerdown="(e: PointerEvent) => emit('press', e)"
+        @touchstart.stop
+        @touchmove.stop
+        @touchend.stop
+      />
     </div>
     <CrateTransport class="justify-end" :has-audio="hasAudio" :can-next="canNext" :checked="checked" @skip="(s) => emit('skip', s)" @next="emit('next')" @done="emit('done')" />
   </div>
