@@ -21,8 +21,12 @@ const ALIASES: Record<string, string> = {
   afrobeat: 'afro', afrohouse: 'afro', african: 'afro'
 }
 
-/** How much a source's words count: Discogs track-level 1, Bandcamp verified by track 0.8, else 0.5. */
-const trustOf = (r: LookupResult) => r.source === 'Discogs' && r.level === 'track' ? 1 : r.source === 'Bandcamp' && r.verified ? 0.8 : 0.5
+/** How much a source's words count: Discogs track-level and the audio votes 1 (their weights
+ *  already carry the doubt), Bandcamp verified by track 0.8, else 0.5. The research agent by
+ *  what it found: the track's own page 1, its release 0.8, only the artist 0.5. */
+const AGENT_TRUST: Record<string, number> = { track: 1, release: 0.8 }
+const trustOf = (r: LookupResult) => r.source === 'Agent' ? AGENT_TRUST[r.level ?? ''] ?? 0.5
+  : r.source === 'Audio' || (r.source === 'Discogs' && r.level === 'track') ? 1 : r.source === 'Bandcamp' && r.verified ? 0.8 : 0.5
 
 /** Every genre word of a lookup, with its trust (broad Discogs genres count half). */
 export function wordsOf(results: LookupResult[]): Word[] {
@@ -138,6 +142,8 @@ export async function hintModel(teamId: string) {
 
 /** "Discogs (Ends Meet)" = the release's styles; "Bandcamp (artist)" = the artist's tags. */
 export function sourceLabel(r: LookupResult) {
+  if (r.source === 'Audio') return 'Sounds like'
+  if (r.source === 'Agent') return `Researched (${r.level === 'track' ? 'this track' : r.level === 'release' ? 'its release' : 'the artist'})`
   if (r.source === 'Discogs') return r.level === 'track' && r.match?.includes(' - ') ? `Discogs (${r.match.split(' - ').slice(1).join(' - ')})` : 'Discogs (artist)'
   return r.verified ? 'Bandcamp (artist, via track)' : 'Bandcamp (artist)'
 }
