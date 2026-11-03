@@ -4,3 +4,4 @@
 // Export auth schema from crouton-auth package (includes teamSettings)
 export * from '@fyit/crouton-auth/server/database/schema/auth'
 export * from './translations-ui'
+export { spikeTasks } from '../../layers/spike/collections/tasks/server/database/schema'

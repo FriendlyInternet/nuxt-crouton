@@ -12,7 +12,8 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   extends: [
     '@fyit/crouton-core',
-    '@fyit/crouton-i18n'
+    '@fyit/crouton-i18n',
+    './layers/spike'
   ],
   hub: {
     db: 'sqlite',

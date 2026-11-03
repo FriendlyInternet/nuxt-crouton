@@ -1,7 +1,7 @@
 import { connectDevframe } from 'devframe/client'
 
 function table(rows: unknown): string {
-  const list = Array.isArray(rows) ? rows : (rows as any)?.operations ?? (rows as any)?.collections ?? []
+  const list = Array.isArray(rows) ? rows : (rows as any)?.data ?? (rows as any)?.operations ?? (rows as any)?.collections ?? []
   if (!list.length) return '<em>none</em>'
   const cols = [...new Set(list.flatMap((r: any) => Object.keys(r ?? {})))] as string[]
   const esc = (s: unknown) => String(typeof s === 'object' ? JSON.stringify(s) : s ?? '').replace(/</g, '&lt;')
