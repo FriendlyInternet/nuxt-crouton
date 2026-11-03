@@ -45,28 +45,54 @@ function isBlocker(o) {
 }
 
 /**
+ * Issue numbers named on `Unblocks: #n[, #m]` lines (line start, case-insensitive). A ticket that
+ * declares it unblocks #n may run while #n is open — #n is waiting on it (#3280).
+ */
+export function parseUnblocks(body) {
+  const out = new Set()
+  const re = /^\s*Unblocks:\s*(#\d+(?:[\s,]+#\d+)*)/gim
+  for (const m of String(body || '').matchAll(re)) {
+    for (const n of m[1].matchAll(/#(\d+)/g)) out.add(Number(n[1]))
+  }
+  return [...out]
+}
+
+/**
  * Decide whether a ticket must wait.
  *
  * @param {object}   o
  * @param {number}   o.issue           the ticket about to start
  * @param {string[]|object[]} o.labels the ticket's labels
+ * @param {string}   [o.body]          the ticket body (`Unblocks: #n` lines let it pass #n)
  * @param {Array<{number:number,labels:any[],openPr?:boolean,planning?:boolean}>} o.others
  *        open pipeline tickets (issues, not PRs). `openPr` = an open `work-<number>` PR exists.
  * @returns {{action:'proceed'|'wait', waitingFor:number[], reason:string}}
  */
-export function decideTraffic({ issue, labels, others }) {
+export function decideTraffic({ issue, labels, body, others }) {
   const mine = scopeLabels(labels)
   if (!mine.length) return { action: 'proceed', waitingFor: [], reason: 'ticket has no pkg:/app:/poc: label' }
-  const blockers = (others || [])
+  const unblocks = parseUnblocks(body)
+  const all = (others || [])
     .filter((o) => o.number !== issue)
     .filter((o) => isBlocker(o))
     .filter((o) => scopeLabels(o.labels).some((l) => mine.includes(l)))
     .map((o) => o.number)
     .sort((a, b) => a - b)
-  if (!blockers.length) return { action: 'proceed', waitingFor: [], reason: 'no open pipeline work on the same scope' }
+  const blockers = all.filter((n) => !unblocks.includes(n))
+  const unblocking = all.filter((n) => unblocks.includes(n))
+  const extra = unblocking.length ? { unblocking } : {}
+  if (!blockers.length) {
+    return {
+      action: 'proceed', waitingFor: [], ...extra,
+      reason: unblocking.length
+        ? `proceeding before ${unblocking.map((n) => `#${n}`).join(', ')} — this ticket unblocks it`
+        : 'no open pipeline work on the same scope',
+    }
+  }
   return {
     action: 'wait',
     waitingFor: blockers,
+    ...extra,
     reason: `waiting for ${blockers.map((n) => `#${n}`).join(', ')} (same ${mine.join(', ')})`,
   }
 }
@@ -124,7 +150,7 @@ export async function releaseWaiting({ github, context }) {
     if (!comments.some((c) => String(c.body || '').includes(WAIT_MARKER))) continue
     const labels = names(it.labels)
     const others = await gatherTrafficFacts({ github, context, issueNumber: it.number, labels })
-    if (decideTraffic({ issue: it.number, labels, others }).action !== 'proceed') continue
+    if (decideTraffic({ issue: it.number, labels, body: it.body, others }).action !== 'proceed') continue
     await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'status:blocked' })
     try {
       await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'work-this' })
