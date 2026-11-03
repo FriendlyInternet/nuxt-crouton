@@ -163,6 +163,29 @@ async function postSaveComment(token: string, env: Env, issue: number, slug: str
   if (!post.ok) throw new Error('POST comment → ' + post.status + ' ' + (await post.text()))
 }
 
+// Branch + issue guards (#3261): returns the 403 to send, or null when the target is allowed.
+async function refuseTarget(token: string, repo: string, branch: string, issue: number | string | undefined): Promise<Response | null> {
+  if (!(await branchAllowed(fetch, token, repo, branch))) {
+    return json({ error: 'branch refused: the default and protected branches cannot be saved to' }, 403)
+  }
+  if (issue != null && issue !== '') {
+    const n = /^[0-9]+$/.test(String(issue)) ? Number(issue) : NaN
+    if (!(await issueAllowed(fetch, token, repo, n))) return json({ error: 'issue refused: not an issue in this repo' }, 403)
+  }
+  return null
+}
+
+async function maybeComment(token: string, env: Env, issue: number | string | undefined, slug: string, branch: string, origin: string, commitSha?: string): Promise<string | undefined> {
+  const issueNum = issue != null && /^[0-9]+$/.test(String(issue)) ? Number(issue) : undefined
+  if (!issueNum) return undefined
+  try {
+    await postSaveComment(token, env, issueNum, slug, branch, origin, commitSha)
+    return 'commented on #' + issueNum
+  } catch (e) {
+    return 'comment failed: ' + String((e as Error)?.message || e)
+  }
+}
+
 async function save(req: Request, env: Env): Promise<Response> {
   try {
     // Owner only (#3261): no valid token → 401 before any GitHub call is made.
@@ -183,13 +206,8 @@ async function save(req: Request, env: Env): Promise<Response> {
     const dir = env.DIAGRAMS_DIR || 'writeups/diagrams'
     const msg = 'chore(diagrams): edit ' + slug + ' via ticket-editor'
     const token = await installationToken(env) // one fresh ~1h token for the commits + comment
-    if (!(await branchAllowed(fetch, token, env.REPO, branch))) {
-      return json({ error: 'branch refused: the default and protected branches cannot be saved to' }, 403)
-    }
-    if (issue != null && issue !== '') {
-      const n = /^[0-9]+$/.test(String(issue)) ? Number(issue) : NaN
-      if (!(await issueAllowed(fetch, token, env.REPO, n))) return json({ error: 'issue refused: not an issue in this repo' }, 403)
-    }
+    const refused = await refuseTarget(token, env.REPO, branch, issue)
+    if (refused) return refused
     await putFile(token, env, branch, dir + '/' + slug + '.excalidraw', toB64(JSON.stringify(scene, null, 2) + '\n'), msg)
     let pngCommit: { commitSha: string; parentSha?: string } | undefined
     if (png) {
@@ -198,16 +216,7 @@ async function save(req: Request, env: Env): Promise<Response> {
     }
     // Optional handoff comment: the commit is the source of truth, so a comment failure is non-fatal.
     // Each save posts its OWN comment, with the diagram pinned to this commit (immutable → frozen).
-    let comment: string | undefined
-    const issueNum = issue != null && /^[0-9]+$/.test(String(issue)) ? Number(issue) : undefined
-    if (issueNum) {
-      try {
-        await postSaveComment(token, env, issueNum, slug, branch, new URL(req.url).origin, pngCommit?.commitSha)
-        comment = 'commented on #' + issueNum
-      } catch (e) {
-        comment = 'comment failed: ' + String((e as Error)?.message || e)
-      }
-    }
+    const comment = await maybeComment(token, env, issue, slug, branch, new URL(req.url).origin, pngCommit?.commitSha)
     return json({ ok: true, comment })
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500)

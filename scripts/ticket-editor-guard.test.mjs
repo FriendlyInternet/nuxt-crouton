@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import worker from '../workers/ticket-editor/src/index.ts'
-import { branchAllowed, issueAllowed, verifyOwnerToken } from '../workers/ticket-editor/src/guard.ts'
+import { MAX_TOKEN_LIFETIME_S, TOKEN_AUD, branchAllowed, issueAllowed, verifyOwnerToken } from '../workers/ticket-editor/src/guard.ts'
 import { deriveEditorSecret, safeEditorReturn, signEditorToken } from '../pocs/status/server/utils/editor-token-core.ts'
 
 const REPO = 'o/r'
@@ -85,4 +85,12 @@ test('safeEditorReturn: only the exact editor origin', () => {
   assert.equal(safeEditorReturn('https://diagram.pmcp.dev.evil.example/'), null)
   assert.equal(safeEditorReturn('//x'), null)
   assert.equal(safeEditorReturn(undefined), null)
+})
+
+test('token constants match what the status app signs', async () => {
+  assert.equal(TOKEN_AUD, 'ticket-editor')
+  const tok = await signEditorToken(SECRET, Date.now())
+  const payload = JSON.parse(Buffer.from(tok.split('.')[0], 'base64url').toString())
+  assert.equal(payload.aud, TOKEN_AUD)
+  assert.ok(payload.exp - Math.floor(Date.now() / 1000) <= MAX_TOKEN_LIFETIME_S)
 })
