@@ -525,11 +525,14 @@ jobs:
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number, since,
