@@ -326,3 +326,6 @@
 - name: "no-plan"
   color: "c5def5"
   description: "Skip the plan step — build directly, even for a bug or a packages/ change (#2757)"
+- name: "poc:devframe-spike"
+  color: "fef2c0"
+  description: "POC: pocs/devframe-spike (Devframe + DevTools 4 spike)"

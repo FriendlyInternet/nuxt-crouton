@@ -1,0 +1,18 @@
+{
+  "table": "spike_tasks",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "done": true
+    },
+    {
+      "title": "Sample title 2",
+      "done": false
+    },
+    {
+      "title": "Sample title 3",
+      "done": true
+    }
+  ]
+}

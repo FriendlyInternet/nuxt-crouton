@@ -1,0 +1,10 @@
+{
+  "name": "tasks",
+  "label": "Tasks",
+  "icon": "i-lucide-check-square",
+  "description": "Spike tasks",
+  "fields": [
+    { "name": "title", "type": "string", "label": "Title", "required": true },
+    { "name": "done", "type": "boolean", "label": "Done" }
+  ]
+}
