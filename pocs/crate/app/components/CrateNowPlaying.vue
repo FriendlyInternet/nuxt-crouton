@@ -2,7 +2,7 @@
 import type { CrateTrack } from '~/composables/useCrate'
 
 defineProps<{ track: CrateTrack, meta: string, playing: boolean, hasAudio: boolean, canNext: boolean, checked: boolean }>()
-const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: [], edit: [] }>()
+const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: [], edit: [], press: [e: PointerEvent] }>()
 </script>
 
 <template>
@@ -24,6 +24,24 @@ const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: 
         </p>
         <p class="mt-0.5 truncate text-xs tabular-nums text-dimmed">{{ meta }}</p>
       </div>
+      <!-- Drag handle (#2210): only this grip drags the track onto a pile, so the rest of the card
+           keeps swiping (left/right = track, up = Done, down = tuck away). It is kept out of those
+           swipes (data-no-swipe for the carousel, touch events stopped for up/down), and
+           touch-none stops iOS scrolling instead. -->
+      <UButton
+        icon="i-lucide-grip-vertical"
+        size="lg"
+        color="neutral"
+        variant="soft"
+        class="shrink-0 cursor-grab touch-none select-none active:cursor-grabbing"
+        title="Drag onto a pile"
+        aria-label="Drag onto a pile"
+        data-no-swipe
+        @pointerdown="(e: PointerEvent) => emit('press', e)"
+        @touchstart.stop
+        @touchmove.stop
+        @touchend.stop
+      />
     </div>
     <CrateTransport class="justify-end" :has-audio="hasAudio" :can-next="canNext" :checked="checked" @skip="(s) => emit('skip', s)" @next="emit('next')" @done="emit('done')" />
   </div>
