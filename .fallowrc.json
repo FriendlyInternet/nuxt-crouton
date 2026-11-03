@@ -41,7 +41,7 @@
     "**/crouton.manifest.ts",
     // Tool-convention entries: unbuild config, Nuxt module source (dist is what's imported)
     "**/build.config.ts",
-    "packages/*/module.ts",
+    "packages/**/module.ts",
     // Executables + the lib files bin/crouton-generate.js spawns via path, not import
     "packages/*/bin/**",
     "packages/crouton-cli/lib/**",
@@ -61,7 +61,7 @@
     "packages/crouton-collab/worker-template/**",
     "packages/crouton-devtools/eruda/**",
     // Root-level tool configs (changelogithub, harness stage model) + docs scripts
-    "*.config.{js,mjs,ts}",
+    "**/*.config.{js,mjs,ts}",
     "docs/scripts/**",
     // Package test harnesses incl. mocks wired via vitest config aliases
     "packages/*/tests/**",
@@ -71,7 +71,24 @@
     // useCollectionQuery/Mutation + every generated crouton-collections.d.ts;
     // '#crouton-audio/types/player' → player.ts, consumed by useAudioPlayer + Player.vue
     "packages/crouton-core/app/types/collections.ts",
-    "packages/crouton-audio/app/types/player.ts"
+    "packages/crouton-audio/app/types/player.ts",
+    // fallow 3.x seeds far fewer entry points from plugins (package.json exports, vitest,
+    // playwright, nuxt), so Nuxt-convention + test files of packages consumed by name read as
+    // unreachable. CI skips `nuxt prepare` (--ignore-scripts), so list them explicitly (#3289).
+    "**/app.vue",
+    "**/app/app.vue",
+    "**/app/error.vue",
+    "**/app/components/**/*.vue",
+    "**/app/composables/**/*.ts",
+    "**/app/utils/**/*.ts",
+    "**/app/plugins/**/*.ts",
+    "packages/*/app/middleware/**/*.ts",
+    "packages/*/modules/*.ts",
+    "packages/*/shared/**",
+    "packages/*/test/**",
+    "e2e/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ],
   "workspaces": {
     "packages": [
