@@ -175,7 +175,10 @@ export function createAuth(options: CreateAuthOptions) {
   }
 
   // Create and return the Better Auth instance
-  return betterAuth(authConfig)
+  // buildPlugins() returns any[] (plugins are added conditionally), which erases plugin
+  // endpoints from the inferred api type — re-add the magic-link ones explicitly.
+  const auth = betterAuth(authConfig)
+  return auth as typeof auth & { api: ReturnType<typeof magicLink>['endpoints'] }
 }
 
 /**
