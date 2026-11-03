@@ -5,10 +5,10 @@ export type FetchJson = (path: string, opts?: { query?: Record<string, unknown> 
 
 const BASE = '/__nuxt_crouton_devtools/api'
 
-const OperationsArgs = v.object({
+export const OperationsArgs = v.object({
   collection: v.optional(v.string()),
   operation: v.optional(v.string()),
-  status: v.optional(v.string()),
+  status: v.optional(v.picklist(['success', 'error'])),
   since: v.optional(v.union([v.string(), v.number()]))
 })
 

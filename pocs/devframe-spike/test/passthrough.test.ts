@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { initDevframe } from 'devframe/initiate'
-import { createCroutonDevframe } from '../server/devframe/definition'
+import * as v from 'valibot'
+import { createCroutonDevframe, OperationsArgs } from '../server/devframe/definition'
 
 async function boot(fetchJson: any) {
   const instance = initDevframe(createCroutonDevframe({ fetchJson }), { base: '/__crouton_df/', auth: false, mcp: { path: 'mcp' } })
@@ -33,14 +34,20 @@ describe('passthrough', () => {
     const registered: any[] = []
     await def.setup({ rpc: { register: (f: any) => registered.push(f) } } as any)
     const ops = registered.find(f => f.name === 'crouton-df:list-operations')
-    const out = await ops.handler({ collection: 'x', status: 'ok' })
+    const out = await ops.handler({ collection: 'x', status: 'success' })
     expect(out).toEqual([{ id: 1 }])
-    expect(fetchJson).toHaveBeenCalledWith('/__nuxt_crouton_devtools/api/operations', { query: { collection: 'x', status: 'ok' } })
+    expect(fetchJson).toHaveBeenCalledWith('/__nuxt_crouton_devtools/api/operations', { query: { collection: 'x', status: 'success' } })
     await ops.handler({})
     expect(fetchJson).toHaveBeenLastCalledWith('/__nuxt_crouton_devtools/api/operations', { query: {} })
     const cols = registered.find(f => f.name === 'crouton-df:list-collections')
     expect(cols.type).toBe('query')
     expect(cols.agent).toBeTruthy()
     expect(ops.agent).toBeUndefined()
+  })
+
+  it('list-operations args validate status as success|error only', () => {
+    expect(v.safeParse(OperationsArgs, { status: 'success' }).success).toBe(true)
+    expect(v.safeParse(OperationsArgs, { status: 'error' }).success).toBe(true)
+    expect(v.safeParse(OperationsArgs, { status: 'ok' }).success).toBe(false)
   })
 })
