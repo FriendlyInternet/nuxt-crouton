@@ -33,9 +33,19 @@ export function decidePreview(openPreviews: Preview[], app: string, key: string)
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
+/** "Open staging" link, or nothing when the app has no staging address (never `href=""`). */
+function stagingLink(app: string, stagingUrl: string, before: string, after: string): string {
+  return stagingUrl ? `${before}<a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a>${after}` : ''
+}
+
+/** 404 page for the `main` sign-in of an app that only has PR test builds. */
+export function noStagingHtml(app: string): string {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>No staging address</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>No staging address</h1><p><strong>${esc(app)}</strong> has no staging address — it only has PR test builds. Open it from the PR's preview link.</p></body>`
+}
+
 /** Readable replacement for a 404 when the PR was merged/closed and its test build is torn down. */
 export function previewGoneHtml(pr: number, app: string, stagingUrl: string): string {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} is gone</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} was merged or closed</h1><p>Its test build for <strong>${esc(app)}</strong> is gone.</p><p><a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a></p></body>`
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} is gone</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} was merged or closed</h1><p>Its test build for <strong>${esc(app)}</strong> is gone.</p>${stagingLink(app, stagingUrl, '<p>', '</p>')}</body>`
 }
 
 export type GhGet = <T>(path: string, opts?: { fresh?: boolean }) => Promise<{ data: T | null, error: string | null }>
@@ -110,5 +120,5 @@ export async function decidePrLogin(get: GhGet, app: string, key: string): Promi
 /** Page for an open PR that has no test build for the app yet. */
 export function previewNoneHtml(pr: number, app: string, stagingUrl: string): string {
   const prUrl = `https://github.com/${REPO}/pull/${pr}`
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} has no test build</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} has no test build yet</h1><p>No <strong>${esc(app)}</strong> test build has been posted on this PR.</p><p><a href="${esc(prUrl)}">Open PR #${pr}</a> · <a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a></p></body>`
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} has no test build</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} has no test build yet</h1><p>No <strong>${esc(app)}</strong> test build has been posted on this PR.</p><p><a href="${esc(prUrl)}">Open PR #${pr}</a>${stagingLink(app, stagingUrl, ' · ', '')}</p></body>`
 }

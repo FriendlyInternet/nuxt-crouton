@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -111,5 +111,19 @@ describe('decidePrLogin', () => {
     expect(r.data).toEqual([{ app: 'velo', pr: 5, title: 'open', updatedAt: 'u', url: 'https://velo-pr7.example.dev' }])
     expect(paths).toHaveLength(2)
     expect(paths.some(p => p.includes('issues/comments'))).toBe(false)
+  })
+})
+
+describe('apps without a staging address', () => {
+  it('none/gone pages omit the staging link when stagingUrl is empty', () => {
+    expect(previewNoneHtml(7, 'spike', '')).not.toContain('href=""')
+    expect(previewNoneHtml(7, 'spike', '')).not.toContain('staging</a>')
+    expect(previewGoneHtml(7, 'spike', '')).not.toContain('href=""')
+    expect(previewNoneHtml(7, 'spike', 'https://s')).toContain('Open spike staging')
+  })
+  it('main 404 says the app only has PR test builds', () => {
+    const html = noStagingHtml('spike')
+    expect(html).toContain('only has PR test builds')
+    expect(html).not.toContain('deploy.config.json')
   })
 })

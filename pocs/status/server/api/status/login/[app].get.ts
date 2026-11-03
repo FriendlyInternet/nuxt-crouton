@@ -2,7 +2,7 @@ import { appTargetFor } from '../../../utils/app-urls'
 import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
-import { previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
+import { noStagingHtml, previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -39,23 +39,26 @@ export default defineEventHandler(async (event) => {
   const target = liveApp
     ? { stagingUrl: liveApp.stagingUrl, hasSignIn: liveApp.hasSignIn }
     : appTargetFor(app)
-  if (!target?.stagingUrl) {
-    setResponseStatus(event, 404)
-    setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-    return `<!doctype html><meta charset="utf-8"><title>No staging URL</title><p>No staging URL is configured for <strong>${app}</strong>. Add <code>stagingUrl</code> to its deploy.config.json.</p>`
-  }
-  let base = target.stagingUrl
-  if (key !== 'main') {
+  const stagingUrl = target?.stagingUrl ?? ''
+  let base = stagingUrl
+  if (key === 'main') {
+    // Only `main` needs a staging address; a POC without one only has PR test builds.
+    if (!stagingUrl) {
+      setResponseStatus(event, 404)
+      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+      return noStagingHtml(app)
+    }
+  } else {
     const decision = await resolvePrLogin(event, app, key)
     if (decision.gone === 'none') {
       setResponseStatus(event, 404)
       setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-      return previewNoneHtml(decision.pr, app, target.stagingUrl)
+      return previewNoneHtml(decision.pr, app, stagingUrl)
     }
     if (decision.gone) {
       setResponseStatus(event, 410)
       setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-      return previewGoneHtml(decision.pr, app, target.stagingUrl)
+      return previewGoneHtml(decision.pr, app, stagingUrl)
     }
     base = decision.url
   }
@@ -64,7 +67,7 @@ export default defineEventHandler(async (event) => {
 
   // No sign-in for this app (opted out, or no seed secret here): just open its staging site.
   const secret = String(cfg.reviewSeedSecret || '')
-  if (!target.hasSignIn || !secret) {
+  if (!target?.hasSignIn || !secret) {
     return sendRedirect(event, to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base, 302)
   }
 
