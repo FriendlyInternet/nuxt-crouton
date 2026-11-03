@@ -104,7 +104,8 @@ export function parseDiff(diff) {
     } else if (line.startsWith('@@')) {
       const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/)
       if (m) { oldN = Number(m[1]); newN = Number(m[2]) }
-    } else if (line.startsWith('+')) cur.changes.push({ side: 'new', n: newN++, text: line.slice(1) })
+    } else if (line.startsWith(' ')) { oldN++; newN++ } // context line: advances both sides (#3228)
+    else if (line.startsWith('+')) cur.changes.push({ side: 'new', n: newN++, text: line.slice(1) })
     else if (line.startsWith('-')) cur.changes.push({ side: 'old', n: oldN++, text: line.slice(1) })
   }
   return files
@@ -116,7 +117,8 @@ export function vueRegions(lines) {
   return lines.map(raw => {
     const t = raw.trim()
     region = openRegion(t, region)
-    const r = region
+    // the <script>/</script> tag lines themselves stay visual (#3228)
+    const r = /^<\/?script\b/.test(t) || /<\/script>/.test(t) ? 'tag' : region
     if (/<\/(script|style)>/.test(t)) region = 'template'
     return r
   })

@@ -62,7 +62,7 @@ test('a script-only .vue change (mapped to <script>) is not visual (#3228)', () 
   const d = `diff --git a/x.vue b/x.vue
 --- a/x.vue
 +++ b/x.vue
-@@ -1 +1 @@
+@@ -2 +2 @@
 -const a = 1
 +const a = 2
 `
@@ -196,4 +196,11 @@ test('githubFileDiff: added, removed and renamed entries', () => {
   assert.match(removed, /--- a\/a\.vue\n\+\+\+ \/dev\/null/)
   const renamed = githubFileDiff({ filename: 'b.vue', previous_filename: 'a.vue', status: 'renamed', patch: 'P' })
   assert.match(renamed, /^diff --git a\/a\.vue b\/b\.vue\n--- a\/a\.vue\n\+\+\+ b\/b\.vue\nP\n$/)
+})
+
+test('#3228 -U3 template change right after </script> is visual; script tag line is visual', async () => {
+  const tpl = '@@ -3,5 +3,5 @@\n const b = 2\n </script>\n <template>\n-  <div class="p-2" />\n+  <div class="p-4" />\n </template>\n <style>'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', tpl)], reader(SFC)), 1)
+  const tag = '@@ -1 +1 @@\n-<script setup>\n+<script setup lang="ts">'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', tag)], reader(SFC)), 1)
 })
