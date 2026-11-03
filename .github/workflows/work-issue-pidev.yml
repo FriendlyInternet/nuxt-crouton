@@ -1047,8 +1047,8 @@ jobs:
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
           # the same reason the acceptance verdict is (#1849). A change the owner has to LOOK at
           # cannot be reviewed from a diff on a phone, so it opens as a draft and waits.
-          # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
-          # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
+          # #3228: a .vue change that sits wholly inside <script> is NOT visual; template/style are.
+          # server/**, config, tests and docs do not count either (#307's scope).
           UI_TOUCHED=0
           # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
           # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
