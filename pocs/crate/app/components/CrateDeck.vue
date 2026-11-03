@@ -172,10 +172,7 @@ defineExpose({ playSrc, toggle, skip, pause: () => audio.value?.pause() })
 
           <slot name="hints" />
 
-          <div v-if="hasTags || notIn" class="flex min-w-0 items-start gap-2">
-            <CrateInRow v-if="hasTags" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" class="min-w-0 flex-1" @remove="(p) => emit('remove', p)" />
-            <UButton v-if="notIn" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="soft" class="ms-auto shrink-0" :label="`Not ${notIn.name}`" @click="emit('not', notIn)" />
-          </div>
+          <CrateInRow v-if="hasTags || notIn" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" :not-in="notIn ?? null" @remove="(p) => emit('remove', p)" @not="(p) => emit('not', p)" />
         </UCard>
         </div>
         <!-- A neighbour, shown while it slides in: its title card, controls inert. -->

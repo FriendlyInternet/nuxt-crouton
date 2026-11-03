@@ -17,6 +17,11 @@ const props = defineProps<{
 }>()
 const strong = computed(() => (props.glow?.score ?? 0) >= STRONG)
 const emit = defineEmits<{ toggle: [], open: [] }>()
+const rowClass = computed(() => props.dropOver ? 'bg-primary/20 ring-2 ring-inset ring-primary' : props.ticked && !props.editing ? 'bg-primary/10' : '')
+const color = computed(() => !props.editing && (props.ticked || strong.value) ? 'primary' : 'neutral')
+const icon = computed(() => props.editing ? 'i-lucide-pencil' : props.ticked ? 'i-lucide-check-circle-2' : 'i-lucide-circle')
+const showGlow = computed(() => !!props.glow && !props.ticked && !props.editing)
+const showSpring = computed(() => props.dropOver && props.springs)
 </script>
 
 <template>
@@ -24,21 +29,21 @@ const emit = defineEmits<{ toggle: [], open: [] }>()
        › to open the pile (any pile, so its tracks can be heard — #2221). -->
   <div
     class="relative flex min-w-0 items-center transition-colors"
-    :class="dropOver ? 'bg-primary/20 ring-2 ring-inset ring-primary' : ticked && !editing ? 'bg-primary/10' : ''"
+    :class="rowClass"
     :data-drop-pile="pile.id"
     :data-springs="springs ? '' : undefined"
   >
     <UButton
-      :color="!editing && (ticked || strong) ? 'primary' : 'neutral'"
+      :color="color"
       variant="ghost"
       class="min-w-0 flex-1 justify-between rounded-none px-3 py-2"
       :disabled="disabled && !editing"
       @click="emit('toggle')"
     >
       <span class="flex min-w-0 items-center gap-2">
-        <UIcon :name="editing ? 'i-lucide-pencil' : ticked ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="size-4 shrink-0" />
+        <UIcon :name="icon" class="size-4 shrink-0" />
         <span class="truncate">{{ pile.name }}</span>
-        <span v-if="glow && !ticked && !editing" class="shrink-0 truncate text-xs" :class="strong ? 'text-primary' : 'text-dimmed'">✦ {{ glow.via }}</span>
+        <span v-if="showGlow" class="shrink-0 truncate text-xs" :class="strong ? 'text-primary' : 'text-dimmed'">✦ {{ glow?.via }}</span>
       </span>
       <span class="shrink-0 text-xs tabular-nums text-muted">{{ count }}</span>
     </UButton>
@@ -51,7 +56,7 @@ const emit = defineEmits<{ toggle: [], open: [] }>()
       :aria-label="`Open ${pile.name}`"
       @click="emit('open')"
     />
-    <div v-if="dropOver && springs" class="absolute inset-x-0 bottom-0 h-1 bg-primary/20" aria-hidden="true">
+    <div v-if="showSpring" class="absolute inset-x-0 bottom-0 h-1 bg-primary/20" aria-hidden="true">
       <div class="h-full bg-primary" :style="{ width: `${Math.round((spring ?? 0) * 100)}%` }" />
     </div>
   </div>
