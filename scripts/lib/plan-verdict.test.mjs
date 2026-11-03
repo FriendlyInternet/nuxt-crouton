@@ -2,6 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { holdOrRetry, parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
 
 const fx = (n) => readFileSync(new URL(`../fixtures/plan-review/${n}`, import.meta.url), 'utf8')
@@ -117,4 +119,18 @@ test('rule: a real verdict failing only a mechanical check retries at round 2; a
   const judge = decide(fx('contradicts-record.plan.md'), fx('contradicts-record.verdict.md'))
   assert.equal(holdOrRetry({ round: 2, failedChecks: judge.failed }), 'hold')
   assert.match(renderComment(judge, { round: 2 }), /Held for you/)
+})
+
+test('route command: exit/stdout the workflow relies on', () => {
+  const f = (n) => fileURLToPath(new URL(`../fixtures/plan-review/${n}`, import.meta.url))
+  const script = fileURLToPath(new URL('./plan-verdict.mjs', import.meta.url))
+  const route = (plan, verdict, round) => spawnSync('node', [script, 'route', f(plan), f(verdict), ...(round === undefined ? [] : [String(round)])], { encoding: 'utf8' })
+  const out = (r) => r.stdout.trim()
+  assert.deepEqual(['1', '2', '3'].map((r) => out(route('untested-rule.plan.md', 'untested-rule.verdict.md', r))), ['retry', 'retry', 'hold'])
+  assert.deepEqual(['1', '2', '3'].map((r) => out(route('contradicts-record.plan.md', 'contradicts-record.verdict.md', r))), ['retry', 'hold', 'hold'])
+  assert.equal(out(route('untested-rule.plan.md', 'untested-rule.verdict.md')), 'retry')
+  assert.equal(out(route('untested-rule.plan.md', 'untested-rule.verdict.md', 'abc')), 'retry')
+  const notNoGo = route('clean.plan.md', 'pass.verdict.md', 1)
+  assert.equal(notNoGo.status, 1)
+  assert.match(notNoGo.stderr, /route needs a no-go/)
 })
