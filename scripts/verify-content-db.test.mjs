@@ -25,7 +25,14 @@ const ok = { status: 200 }
 const abort = () => { throw new DOMException('aborted', 'TimeoutError') }
 const deletes = sqls => sqls.filter(s => s.startsWith('DELETE'))
 
-test('(a) slow 200 (fetch aborts) with ready=1 is unhealthy', async () => {
+test('(a) slow 200 (arrives after 20 s) with ready=1 is unhealthy', async () => {
+  const { deps } = harness({ fetchImpl: (_a, _t, adv) => { adv(20000); return ok } })
+  const r = await checkCollection('docs', deps)
+  assert.equal(r.status, 200)
+  assert.equal(r.healthy, false)
+})
+
+test('(a2) aborted query with ready=1 is unhealthy', async () => {
   const { deps } = harness({ fetchImpl: (_a, _t, adv) => { adv(15000); return abort() } })
   assert.equal((await checkCollection('docs', deps)).healthy, false)
 })
@@ -36,12 +43,10 @@ test('(b) ready=0 with fast 200 is unhealthy', async () => {
 })
 
 test('(c) unhealthy -> one scoped DELETE -> later healthy', async () => {
-  let deleted = false
   const { deps, sqls } = harness({
     ready: s => (s.some(x => x.startsWith('DELETE')) ? 1 : 0),
     fetchImpl: () => ok,
   })
-  void deleted
   assert.equal(await verifyCollection('docs', deps), true)
   const d = deletes(sqls)
   assert.equal(d.length, 1)
