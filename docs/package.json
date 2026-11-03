@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "check:worker-bundle": "node scripts/check-worker-bundle.mjs"
+    "check:worker-bundle": "node scripts/check-worker-bundle.mjs",
+    "test:mcp": "node scripts/mcp-smoke.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.68",
