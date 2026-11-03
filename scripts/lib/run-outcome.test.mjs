@@ -154,3 +154,49 @@ test('7. backfill: legacy rule + subject from log; nothing rows keep the run URL
   assert.deepEqual(rec.produced, ['nothing'])
   assert.equal(rec.ref, 'https://github.com/o/r/actions/runs/5')
 })
+
+// ── through the real record builder (bot filter, PR-by-branch lookup, overlap exclusion) ──
+const mkApi = (comments) => async (p) => {
+  if (p.includes('/actions/runs/')) return { run_started_at: '2026-11-03T10:00:00Z' }
+  if (p.includes('/pulls?')) return [{ number: 99 }]
+  if (p.includes('/issues/42/')) return comments
+  return []
+}
+const base = { REPO: 'o/r', RUN_ID: '9', RUN_ATTEMPT: '1', WORKFLOW_FILE: 'plan-review.yml', STAGE: 'plan-review', ISSUE: '42', NEEDS_JSON: '{}' }
+const build = (env, comments, listRecords = async () => []) =>
+  buildRecord({ env: { ...base, ...env }, api: mkApi(comments), listRecords, rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+
+test('buildRecord: marked notes only → nothing; a human’s comment is not agent output', async () => {
+  const human = { id: 3, created_at: at, user: { login: 'someone' }, body: 'hi' }
+  assert.deepEqual((await build({}, [note(1), note(2), human])).produced, ['nothing'])
+})
+
+test('buildRecord: the agent’s own unmarked comment is never lost (with the PR looked up by branch)', async () => {
+  const rec = await build({}, [note(1), agent(7, 'the plan')])
+  assert.deepEqual(rec.produced, ['comment'])
+  assert.deepEqual(rec.produced_ids, [7])
+  assert.equal(rec.pr, 99)
+  assert.match(rec.model, /^claude-/) // default tier from the models file
+})
+
+test('buildRecord: an overlapping sibling run’s comment is excluded from this run', async () => {
+  const sibling = async () => [{ workflow: 'plan-review.yml', issue: 42, run_id: '8', started_at: '2026-11-03T09:50:00Z', ended_at: '2026-11-03T10:20:00Z' }]
+  const rec = await build({}, [agent(7, 'sibling plan')], sibling)
+  assert.deepEqual(rec.overlap, ['8'])
+})
+
+test('tierModel reads the tier from the models file, unknown when unreadable', async () => {
+  const { tierModel } = await import('../eval-ledger/record-run.mjs')
+  assert.match(tierModel('review'), /^claude-/)
+  assert.equal(tierModel('review', '/nonexistent.json'), 'unknown')
+})
+
+test('backfill: skipped runs are not recorded; listing pages past 100', async () => {
+  const { isRecordable, listAllRuns } = await import('../eval-ledger/backfill.mjs')
+  assert.equal(isRecordable({ conclusion: 'skipped' }), false)
+  assert.equal(isRecordable({ conclusion: 'success' }), true)
+  const pages = []
+  const get = async (p) => { pages.push(p); const n = Number(/&page=(\d+)/.exec(p)[1]); return { workflow_runs: Array.from({ length: n < 3 ? 100 : 5 }, (_, i) => ({ id: n * 1000 + i })) } }
+  assert.equal((await listAllRuns(get, 'o/r', 'w.yml', 'a', 'b')).length, 205)
+  assert.equal(pages.length, 3)
+})

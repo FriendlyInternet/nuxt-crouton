@@ -1780,7 +1780,9 @@ jobs:
           owner: FriendlyInternet
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
           persist-credentials: false
       - name: Write the run record (never fails the run)
         continue-on-error: true
@@ -1792,6 +1794,7 @@ jobs:
           ISSUE: "${{ inputs.issue || github.event.issue.number }}"
           BRANCH: "${{ inputs.branch }}"
           STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && 'revise' || 'work') }}"
+          MODEL_TIER: default
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.work-pi.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}

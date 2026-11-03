@@ -11,6 +11,7 @@
 //
 // Env: REPO, RUN_ID, RUN_ATTEMPT, WORKFLOW_FILE, STAGE, ISSUE | PR | BRANCH, NEEDS_JSON, RL_START,
 //      TOKEN_KIND, GH_TOKEN (read), DATA_TOKEN (contents:write on the data branch).
+import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { validate } from './schema.mjs'
 import { classify, joinRuns, legacyClassifyComment } from '../lib/run-outcome.mjs'
@@ -18,6 +19,11 @@ import { readRateLimit, diffRateLimit } from '../lib/rate-limit.mjs'
 
 const BOT = 'nuxt-harness[bot]'
 export const DATA_BRANCH = 'pipeline-data'
+
+/** Model for a tier from `.claude/pipeline-models.json` (the file every workflow resolves from); 'unknown' if unreadable. */
+export function tierModel(tier, path = '.claude/pipeline-models.json') {
+  try { return JSON.parse(readFileSync(path, 'utf8'))[tier || 'default'] || 'unknown' } catch { return 'unknown' }
+}
 
 export function conclusionOf(needsJson) {
   let needs = {}
@@ -89,8 +95,8 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
   const record = {
     ts: end,
     flow: env.WORKFLOW_FILE,
-    harness: env.HARNESS || 'unknown',
-    model: env.MODEL || 'unknown',
+    harness: env.HARNESS || 'pi',
+    model: env.MODEL || tierModel(env.MODEL_TIER),
     issue, pr,
     stage: env.STAGE || 'unknown',
     run_id: env.RUN_ID,

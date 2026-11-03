@@ -3,6 +3,9 @@
 // record existed (#3251). Idempotent: a run that already has a record is skipped.
 //
 //   node scripts/eval-ledger/backfill.mjs --from 2026-10-22 --to 2026-11-02 [--dry-run]
+//   (the owner runs this once, after the first live record lands and the `pipeline-data` branch exists;
+//    needs GH_TOKEN with read access and DATA_TOKEN with contents:write. Large ranges: split by week —
+//    the Actions API serves at most 1000 runs per query.)
 //
 // Old comments lack the pipeline-note marker, so this uses the FROZEN legacy rule
 // (`rule: "legacy"`, see legacyIsNote). The subject (issue/PR) is read from the run's first job
@@ -12,7 +15,7 @@ import { pathToFileURL } from 'node:url'
 import { buildRecord, writeRecord, DATA_BRANCH } from './record-run.mjs'
 import { parseArgs } from '../lib/cli-args.mjs'
 
-const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'plan-review.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml']
+const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'plan-review.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml', 'on-comment.yml']
 
 /** Subject from a job log or the head branch: `ISSUE: 123`, `EPIC: 123`, `PR: 123`, or branch `work-123`. */
 export function subjectFromLog(text, headBranch = '') {
@@ -22,6 +25,20 @@ export function subjectFromLog(text, headBranch = '') {
   const pr = pick(/\bPR:\s*(\d+)/)
   const b = /^work-(\d+)/.exec(headBranch)
   return { issue: issue ?? (b ? Number(b[1]) : null), pr }
+}
+
+/** A skipped run never ran an agent — it is not a "nothing" row. Cancelled/failed runs are recorded. */
+export const isRecordable = (run) => run.conclusion !== 'skipped' && run.status !== 'queued'
+
+/** Every run of `wf` created in `from..to`, paged (GitHub caps a page at 100; the API serves at most 1000 per query). */
+export async function listAllRuns(get, repo, wf, from, to) {
+  const out = []
+  for (let page = 1; page <= 10; page++) {
+    const { workflow_runs } = await get(`/repos/${repo}/actions/workflows/${wf}/runs?created=${from}..${to}&per_page=100&page=${page}`)
+    out.push(...workflow_runs)
+    if (workflow_runs.length < 100) break
+  }
+  return out
 }
 
 // fallow-ignore-next-line complexity -- one-shot backfill CLI loop; CRAP is a zero-coverage artifact on a run-once script (#3251)
@@ -40,8 +57,7 @@ async function main() {
   }
   let written = 0, skipped = 0
   for (const wf of WORKFLOWS) {
-    const { workflow_runs } = await get(`/repos/${repo}/actions/workflows/${wf}/runs?created=${from}..${to}&per_page=100`)
-    for (const run of workflow_runs) {
+    for (const run of (await listAllRuns(get, repo, wf, from, to)).filter(isRecordable)) {
       const path = `records/${(run.run_started_at || run.created_at).slice(0, 10)}/${run.id}-${run.run_attempt}.json`
       try { await get(`/repos/${repo}/contents/${path}?ref=${DATA_BRANCH}`); skipped++; continue } catch { /* absent → write */ }
       let subject = { issue: null, pr: null }

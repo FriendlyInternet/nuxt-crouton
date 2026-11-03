@@ -31,8 +31,9 @@ function main() {
   const repo = process.env.GITHUB_REPOSITORY || 'FriendlyInternet/nuxt-crouton'
   const runs = []
   for (const wf of WORKFLOWS) {
-    const list = JSON.parse(gh('run', 'list', '--workflow', wf, '--created', `>=${since}`, '--limit', '500', '--json', 'databaseId'))
-    for (const r of list) runs.push({ id: r.databaseId, workflow: wf })
+    const list = JSON.parse(gh('run', 'list', '--workflow', wf, '--created', `>=${since}`, '--limit', '500', '--json', 'databaseId,conclusion'))
+    // skipped runs never started an agent (on-comment fires on every comment) — not "missing"
+    for (const r of list.filter((x) => x.conclusion !== 'skipped')) runs.push({ id: r.databaseId, workflow: wf })
   }
   const records = []
   let dates = []
