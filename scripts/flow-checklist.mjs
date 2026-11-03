@@ -4,8 +4,9 @@
 //
 //   node scripts/flow-checklist.mjs <issue> <step> [--link URL] [--note TEXT]
 //
-// State lives in the comment itself (a ticked line carries its note/link), so concurrent
-// events only need the per-issue concurrency group in the workflow. Never touches the issue body.
+// State lives in the comment itself (a ticked line carries its note/link). Never touches the issue body.
+// Known limit: no per-issue concurrency group (the callers are 5 workflows with their own groups),
+// so two ticks landing in the same second could lose one; steps are minutes apart in practice.
 import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
 
@@ -53,16 +54,22 @@ function gh(args, input) {
   return execFileSync('gh', args, { encoding: 'utf8', input })
 }
 
+/** Find-or-create then edit the ticket's single comment. `run` is injectable for tests. */
+export function apply({ repo, issue, step, link, note, run = gh }) {
+  const comments = JSON.parse(run(['api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp'])).flat()
+  // Only our own bot comments count: the marker must open the body.
+  const existing = comments.find(c => (c.body || '').startsWith(marker(issue)) && (!c.user || c.user.type === 'Bot'))
+  const body = tick(existing?.body || '', issue, step, { link, note })
+  if (existing) run(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing.id}`, '-F', 'body=@-'], body)
+  else run(['api', `repos/${repo}/issues/${issue}/comments`, '-F', 'body=@-'], body)
+  return existing ? 'edited' : 'created'
+}
+
 function main() {
   const [issue, step, ...rest] = process.argv.slice(2)
   const opt = n => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined }
   if (!issue || !step) { console.error('usage: flow-checklist.mjs <issue> <step> [--link U] [--note T]'); process.exit(2) }
-  const repo = process.env.GITHUB_REPOSITORY
-  const comments = JSON.parse(gh(['api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp'])).flat()
-  const existing = comments.find(c => (c.body || '').includes(marker(issue)))
-  const body = tick(existing?.body || '', issue, step, { link: opt('link'), note: opt('note') })
-  if (existing) gh(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing.id}`, '-F', 'body=@-'], body)
-  else gh(['api', `repos/${repo}/issues/${issue}/comments`, '-F', 'body=@-'], body)
+  apply({ repo: process.env.GITHUB_REPOSITORY, issue, step, link: opt('link'), note: opt('note') })
   console.log(`flow-checklist: ticked "${step}" on #${issue}`)
 }
 

@@ -344,8 +344,16 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          node scripts/flow-checklist.mjs "${{ inputs.issue || github.event.issue.number }}" routed \
-            --note "${{ inputs.mode || 'build' }}" \
+          ISSUE="${{ inputs.issue || github.event.issue.number }}"
+          # Same router the dispatcher used → "mode: reason" (falls back to mode alone).
+          REASON="$( (gh issue view "$ISSUE" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/flow-issue.txt" \
+            && LABELS="$(gh issue view "$ISSUE" --json labels --jq '[.labels[].name] | join(",")')" \
+            && node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/flow-issue.txt" \
+            | node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(r.reason)') 2>/dev/null || true)"
+          NOTE="${{ inputs.mode || 'build' }}"
+          [ -n "$REASON" ] && NOTE="$NOTE ($REASON)"
+          node scripts/flow-checklist.mjs "$ISSUE" routed \
+            --note "$NOTE" \
             --link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
