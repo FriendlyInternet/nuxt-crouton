@@ -102,7 +102,8 @@ jobs:
     # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+        (github.event.action != 'labeled' || github.event.label.name == 'build:approved')) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type != 'Bot' &&
         (github.event.comment.author_association == 'OWNER' ||
@@ -132,7 +133,13 @@ jobs:
           script: |
             const { owner, repo } = context.repo
             // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
-            const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
+            // Bootstrap-safe: if the helper is not on the default branch yet, fall back to the job-level `if:` alone.
+            let shouldRunOnEvent = () => true
+            try {
+              ({ shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`))
+            } catch (e) {
+              core.warning(`scripts/lib/automerge-trigger.mjs not loadable (${e.code || e.message}); relying on the job-level label filter.`)
+            }
             if (!shouldRunOnEvent(context.eventName, context.payload)) {
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
               return
