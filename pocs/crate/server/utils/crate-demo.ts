@@ -5,13 +5,13 @@
 // rekordboxId, and a team that already has tracks is left alone — owner-made piles are never touched.
 import { eq } from 'drizzle-orm'
 import { blob } from 'hub:blob'
-import { crateTracks } from '~~/server/db/schema'
+import { crateTracks, cratePiles } from '~~/server/db/schema'
 import { seedPiles, mergeLookupSource, type ImportAudit, type PileIn } from '~~/server/utils/crate-import'
 import { BLOB_PREFIX, UPLOAD_ID_PREFIX } from '~~/server/utils/crate-uploads'
 
 export const demoSeedEnabled = () => {
   const v = (useRuntimeConfig() as { crateDemoSeed?: unknown }).crateDemoSeed
-  return v === true || v === 'true' || import.meta.dev
+  return v === true || v === 'true' || !!import.meta.dev
 }
 
 const PILES: PileIn[] = [
@@ -52,6 +52,9 @@ export async function seedDemoLibrary(audit: ImportAudit) {
     const db = useDB()
     const [anyTrack] = await db.select({ id: crateTracks.id }).from(crateTracks).where(eq(crateTracks.teamId, audit.teamId)).limit(1)
     if (anyTrack) return
+    // An owner who cleared every track but kept/made piles has been here: don't bring the demo back.
+    const [anyPile] = await db.select({ id: cratePiles.id }).from(cratePiles).where(eq(cratePiles.teamId, audit.teamId)).limit(1)
+    if (anyPile) return
 
     await seedPiles(audit, PILES)
     const now = new Date()
