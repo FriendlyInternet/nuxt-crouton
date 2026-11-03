@@ -28,6 +28,8 @@ import { fileURLToPath } from 'node:url'
 import { parsePlan } from './plan-shape.mjs'
 
 export const REVIEW_MARKER = '<!-- plan-review:v1 -->'
+/** Added to the second no-go of a round ("held for you"); plan-held.mjs reads it. */
+export const HELD_MARKER = '<!-- plan-review-held -->'
 export const RUBRIC = [
   { id: '1', name: 'Reproduced? (observed, not reasoned)' },
   { id: '1b', name: 'Every assumption has a reason and a working evidence link' },
@@ -120,7 +122,7 @@ export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) 
       : `🔴 **Plan sent back** (round ${round} of ${maxRounds}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
-  return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
+  return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n${final ? `${HELD_MARKER}\n` : ''}> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
