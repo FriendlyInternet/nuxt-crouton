@@ -79,7 +79,7 @@ on:
     - cron: '17 * * * *'   # hourly, off-the-hour so it doesn't pile onto :00 with everything else
   pull_request:
     # #3229: `build:approved` IS the reviewer's approval and arrives as a label event — a PR green
-    # before approval otherwise waits for an unrelated event. Other labels are filtered out below.
+    # before approval otherwise waits for an unrelated event. Other labels are filtered out in the script (scripts/lib/automerge-trigger.mjs).
     types: [opened, ready_for_review, synchronize, labeled]
   check_suite:
     types: [completed]
@@ -102,8 +102,7 @@ jobs:
     # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
-      (github.event_name == 'pull_request' &&
-        (github.event.action != 'labeled' || github.event.label.name == 'build:approved')) ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type != 'Bot' &&
         (github.event.comment.author_association == 'OWNER' ||
@@ -132,6 +131,12 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo
+            // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
+            const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
+            if (!shouldRunOnEvent(context.eventName, context.payload)) {
+              core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
+              return
+            }
             const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
 
