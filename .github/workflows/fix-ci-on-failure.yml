@@ -33,6 +33,15 @@ on:
     # fires, which is the exact bug #2089 is about.
     workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
+  # #3105: started by the owner's `ok` on a RED epic → main PR (on-comment.yml approve-epic). The
+  # workflow_run path above never sees an `epic/*` head, so this is the only way in for one. The
+  # gate step requires the PR open and the owner's ok still standing.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to fix (a work-* PR, or an epic/* PR into main with a standing owner ok)."
+        required: true
+        type: string
 
 permissions: {}
 
@@ -43,8 +52,9 @@ jobs:
     # indistinguishable from "nothing to do" (#2089) — the definition lives once, in
     # scripts/lib/pipeline-branch.mjs.
     if: >
-      github.event.workflow_run.conclusion == 'failure' &&
-      startsWith(github.event.workflow_run.head_branch, 'work-')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       startsWith(github.event.workflow_run.head_branch, 'work-'))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
@@ -58,23 +68,38 @@ jobs:
       # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
       actions: write
     steps:
+      # Default branch first (#3105): the gate imports trusted pure helpers (ownerMergeGo,
+      # decideFixBotDispatch) from here, never from the PR head. The head is checked out later.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
       # ── Gate: resolve the PR, enforce the attempt cap, bump the counter ──────────
       - id: gate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const MAX = 3
             const { owner, repo } = context.repo
-            const run = context.payload.workflow_run
+            const manual = context.eventName === 'workflow_dispatch'
+            let run = context.payload.workflow_run
             // Readable-on-mobile (epic #1336): messages lead with the problem + fix; this
             // provenance/mechanism + run link is the footer.
             const FOOTER = (url) => `\n\n<sub>🤖 Claude Code · fix-bot (#338) · <a href="${url}">failing run</a></sub>`
 
-            // Resolve the open PR for this head branch.
-            let pr = (run.pull_requests || [])[0]
-            if (!pr) {
-              const list = await github.rest.pulls.list({ owner, repo, head: `${owner}:${run.head_branch}`, state: 'open' })
-              pr = list.data[0]
+            // Resolve the open PR for this head branch (or, when started by hand, the PR number given).
+            let pr
+            if (manual) {
+              pr = { number: Number(context.payload.inputs.pr) }
+            } else {
+              pr = (run.pull_requests || [])[0]
+              if (!pr) {
+                const list = await github.rest.pulls.list({ owner, repo, head: `${owner}:${run.head_branch}`, state: 'open' })
+                pr = list.data[0]
+              }
             }
             if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('proceed', 'false'); return }
 
@@ -86,9 +111,38 @@ jobs:
             // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
             // the job `if` (a github-script gate can't import without a checkout, and this runs
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
-            const isPipelineRef = r => /^work-/.test(String(r || ''))
-            if (full.state !== 'open' || !isPipelineRef(full.head.ref)) {
-              core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
+            // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
+            // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
+            const { decideFixBotDispatch, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            let go
+            if (/^epic\//.test(full.head.ref)) {
+              const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
+              const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
+              for (const k of commits) {
+                if ((k.parents || []).length > 1) continue
+                const c = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
+                k.files = (c.data.files || []).map(f => f.filename)
+              }
+              go = ownerMergeGo({ comments, commits, owner: process.env.OWNER_LOGIN || 'pmcp' })
+            }
+            const verdict = decideFixBotDispatch({ head: full.head.ref, base: full.base.ref, state: full.state, go })
+            if (!verdict.run) {
+              core.info(`Not fixing #${pr.number}: ${verdict.reason}.`); core.setOutput('proceed', 'false'); return
+            }
+            // Started by hand: there is no workflow_run payload, so find the failing CI/E2E run for
+            // this head (a WORKFLOW run id — a check-run id would make `gh run view` fail silently).
+            if (manual) {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                { owner, repo, head_sha: full.head.sha, per_page: 100 })
+              const failed = pickFailedRun(runs)
+              if (!failed) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
+                  `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
+                  `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
+                core.setOutput('proceed', 'false'); return
+              }
+              run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref }
             }
             const labels = (full.labels || []).map(l => l.name)
             // Already escalated — don't pile on while a human is in the loop.
@@ -102,7 +156,7 @@ jobs:
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
             // The pi worker's `work-<n>` branch.
-            const m = /^work-(\d+)/.exec(full.head.ref)
+            const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {
@@ -132,7 +186,8 @@ jobs:
             // Resolve the package name(s) from the ISSUE's labels so the prompt can unlock exactly
             // those and no others.
             let packagesAllowed = 'false', pkgNames = ''
-            if (issueNumber) {
+            // An epic head is never a `pkg:*` leaf: packages/ stays off-limits for it.
+            if (issueNumber && !/^epic\//.test(full.head.ref)) {
               try {
                 const iss = (await github.rest.issues.get({ owner, repo, issue_number: issueNumber })).data
                 const pkgs = (iss.labels || [])
@@ -148,6 +203,9 @@ jobs:
             core.setOutput('head_branch', full.head.ref)
             core.setOutput('base_ref', full.base.ref)
             core.setOutput('attempt', String(next))
+            core.setOutput('run_id', String(run.id))
+            core.setOutput('run_name', run.name)
+            core.setOutput('run_url', run.html_url)
             core.setOutput('packages_allowed', packagesAllowed)
             core.setOutput('packages_names', pkgNames)
             core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
@@ -216,8 +274,8 @@ jobs:
             ${{ steps.gate.outputs.attempt }} of 3 for PR #${{ steps.gate.outputs.pr_number }}
             (branch `${{ steps.gate.outputs.head_branch }}`, linked issue #${{ steps.gate.outputs.issue_number }}).
 
-            The failing workflow was "${{ github.event.workflow_run.name }}":
-            ${{ github.event.workflow_run.html_url }}
+            The failing workflow was "${{ steps.gate.outputs.run_name }}":
+            ${{ steps.gate.outputs.run_url }}
 
             Do this, and ONLY this:
             1. Reproduce the failure locally — run the relevant command (e.g. `pnpm -r --filter './apps/*' typecheck`,
@@ -283,9 +341,9 @@ jobs:
           BRANCH: ${{ steps.gate.outputs.head_branch }}
           PR: ${{ steps.gate.outputs.pr_number }}
           ISSUE: ${{ steps.gate.outputs.issue_number }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ steps.gate.outputs.run_url }}
+          RUN_ID: ${{ steps.gate.outputs.run_id }}
+          RUN_NAME: ${{ steps.gate.outputs.run_name }}
         run: |
           set -euo pipefail
           HEAD_NOW="$(git rev-parse HEAD)"
@@ -345,7 +403,7 @@ jobs:
           gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
           if [ -n "$ISSUE" ]; then
             CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
-            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID"
+            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID" -f branch="$BRANCH"
           fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
