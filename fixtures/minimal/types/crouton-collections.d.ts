@@ -10,17 +10,31 @@
  * knows the return type is BlogPost[] without requiring explicit generics.
  *
  * ## Registered Collections
+ * - mainAdmindocs: MainAdmindoc
  * - mainItems: MainItem
+ * - mainMembernotes: MainMembernote
  */
 
+import type { MainAdmindoc, MainAdmindocFormData, NewMainAdmindoc } from './layers/main/collections/admindocs/types'
 import type { MainItem, MainItemFormData, NewMainItem } from './layers/main/collections/items/types'
+import type { MainMembernote, MainMembernoteFormData, NewMainMembernote } from './layers/main/collections/membernotes/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
+    mainAdmindocs: {
+      Item: MainAdmindoc
+      FormData: MainAdmindocFormData
+      NewItem: NewMainAdmindoc
+    }
     mainItems: {
       Item: MainItem
       FormData: MainItemFormData
       NewItem: NewMainItem
+    }
+    mainMembernotes: {
+      Item: MainMembernote
+      FormData: MainMembernoteFormData
+      NewItem: NewMainMembernote
     }
   }
 }

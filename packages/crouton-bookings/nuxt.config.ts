@@ -61,6 +61,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Server-only config
     croutonBookings: {
+      // Timezone that decides which calendar day a booking belongs to (capacity is counted per day)
+      timezone: 'Europe/Brussels',
       email: {
         enabled: false // Set to true to enable email features
       }
