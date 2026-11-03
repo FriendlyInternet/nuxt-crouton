@@ -19,3 +19,10 @@ export function decideDeliverable({
   if (childDeliverable) return { ok: true, via: 'child' }
   return { ok: false, via: null }
 }
+
+// Did a commit land on work-<N> during THIS run, with the finish step not failed? (#3219)
+// `committedAt` is the head commit's time in ms (null = no such branch).
+export function pushedThisRun({ committedAt = null, sinceMs = 0, finishOutcome = '' } = {}) {
+  if (committedAt == null || !Number.isFinite(committedAt)) return false
+  return committedAt >= sinceMs && finishOutcome !== 'failure'
+}

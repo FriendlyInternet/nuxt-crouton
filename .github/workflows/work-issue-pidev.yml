@@ -1467,11 +1467,12 @@ jobs:
               const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
               const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
               const committedAt = new Date(commit.data.committer?.date || 0).getTime()
-              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7) }
+              workBranch = { sha: ref.data.object.sha.slice(0, 7), committedAt }
             } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
 
-            const workBranchPushed = Boolean(workBranch) && process.env.FINISH_OUTCOME !== 'failure'
-            const { decideDeliverable } = await import(require('url').pathToFileURL(require('path').join(process.env.GITHUB_WORKSPACE || process.cwd(), 'scripts/lib/run-deliverable.mjs')).href)
+            // Load from the RUNNER_TEMP copy (baseline step): work-<N> may predate this helper.
+            const { decideDeliverable, pushedThisRun } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/run-deliverable.mjs')).href)
+            const workBranchPushed = pushedThisRun({ committedAt: workBranch ? workBranch.committedAt : null, sinceMs, finishOutcome: process.env.FINISH_OUTCOME })
 
             const deliverable = decideDeliverable({ linkedPR, workBranchPushed, signoffHeld, alreadyClosed, createdSubIssues })
             if (deliverable.ok) {
@@ -1533,7 +1534,7 @@ jobs:
                 }
               }
             } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
-            if (childDeliverable) {
+            if (decideDeliverable({ childDeliverable }).ok) {
               core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
