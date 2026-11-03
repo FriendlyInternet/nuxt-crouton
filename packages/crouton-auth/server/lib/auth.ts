@@ -212,8 +212,14 @@ export function createAuth(options: CreateAuthOptions) {
     databaseHooks: buildDatabaseHooks(config, db)
   }
 
-  // Create and return the Better Auth instance
-  return betterAuth(authConfig)
+  // Create and return the Better Auth instance. The BetterAuthOptions
+  // annotation above erases the concrete plugin types, so re-state the ones
+  // apps call through `auth.api` (magicLink -> signInMagicLink) to keep their
+  // endpoints typed on AuthInstance.
+  return betterAuth({
+    ...authConfig,
+    plugins: authConfig.plugins as [ReturnType<typeof magicLink>]
+  })
 }
 
 /**
