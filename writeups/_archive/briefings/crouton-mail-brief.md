@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** no `packages/crouton-mail` was ever built; the email engine still lives in crouton-bookings. Historical record, not current guidance.
+
 # crouton-mail — Generic Email System for Crouton Collections
 
 ## Summary

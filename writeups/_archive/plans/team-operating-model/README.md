@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** https://github.com/FriendlyInternet/nuxt-crouton/issues/532 was closed not planned. Historical record, not current guidance.
+
 # Team Operating Model — the plan
 
 **What this is:** the target way our team of five (CEO · CTO · PM · 2 devs) + AI agents work together

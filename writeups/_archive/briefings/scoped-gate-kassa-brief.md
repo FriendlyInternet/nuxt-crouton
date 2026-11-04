@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** shipped as ScopedAccessGate in crouton-pages. Historical record, not current guidance.
+
 # Scoped Gate Kassa — One PIN from Page Gate to POS
 
 ## Summary

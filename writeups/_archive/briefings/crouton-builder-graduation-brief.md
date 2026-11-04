@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** epic https://github.com/FriendlyInternet/nuxt-crouton/issues/983 closed completed. Historical record, not current guidance.
+
 # Crouton Builder — graduation brief
 
 > The cold-readable spec for graduating `pocs/crouton-builder-demo` → a test-first `@fyit/crouton-layout`

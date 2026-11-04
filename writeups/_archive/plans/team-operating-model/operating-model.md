@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** https://github.com/FriendlyInternet/nuxt-crouton/issues/532 was closed not planned. Historical record, not current guidance.
+
 # Team Operating Model — how we work together (humans + agents)
 
 **Status:** draft for discussion · **Date:** 2026-06-19

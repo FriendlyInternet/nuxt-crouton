@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — overtaken:** bundle budget shipped (https://github.com/FriendlyInternet/nuxt-crouton/issues/1581); changelog (https://github.com/FriendlyInternet/nuxt-crouton/issues/1600) and Renovate (https://github.com/FriendlyInternet/nuxt-crouton/issues/141, no-bot policy) dropped. Historical record, not current guidance.
+
 # DevOps Infrastructure Brief
 
 ## Summary

@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** never built (no `useCroutonFeatures` in packages/) and no issue tracks it. Historical record, not current guidance.
+
 # Crouton Sub-Package Feature Flags
 
 ## Summary

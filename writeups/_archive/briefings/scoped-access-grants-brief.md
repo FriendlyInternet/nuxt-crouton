@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** shipped as scoped-access/redeem in crouton-auth. Historical record, not current guidance.
+
 # Scoped Access Grants — Generalizing PIN/Token Access Beyond Sales
 
 ## Summary
