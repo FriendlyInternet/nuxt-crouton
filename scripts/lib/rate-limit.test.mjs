@@ -38,3 +38,21 @@ test('deferOrThrow rethrows real failures and never warns', () => {
     assert.equal(calls.length, 0)
   }
 })
+
+import { rateLimitNote } from './rate-limit.mjs'
+import { test as t3306 } from 'node:test'
+import assert3306 from 'node:assert/strict'
+
+const rl = (status, reset) => ({ status, message: 'API rate limit exceeded', response: { headers: reset ? { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) } : {} } })
+
+t3306('rateLimitNote: reset header gives HH:MM and epoch marker', () => {
+  const n = rateLimitNote(rl(403, 1700000000))
+  assert3306.match(n.body, /after 22:13 UTC/)
+  assert3306.equal(n.marker, '<!-- rate-limit-retry:1700000000 -->')
+  assert3306.equal(rateLimitNote(rl(403, 1700000000)).marker, n.marker)
+})
+t3306('rateLimitNote: no header gives generic note', () => {
+  const n = rateLimitNote(rl(429))
+  assert3306.equal(n.marker, '<!-- rate-limit-retry -->')
+  assert3306.doesNotMatch(n.body, /UTC/)
+})

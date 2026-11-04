@@ -132,6 +132,7 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+           let currentPr = null   // PR being evaluated, so a rate-limit note can name it (#3306)
            try {
             const { owner, repo } = context.repo
             // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
@@ -154,8 +155,7 @@ jobs:
             const REQUIRED_CHECK = 'CI Gate'
 
             // Any RED check for this SHA? (failed check-run or failed commit status.)
-            async function isRed(ref) {
-              const runs = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref, per_page: 100 })
+            async function isRed(ref, runs) {
               const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
               if (runs.some(r => r.status === 'completed' && RED.includes(r.conclusion))) return true
               try {
@@ -168,8 +168,7 @@ jobs:
             // Has REQUIRED_CHECK completed successfully for this SHA? Returns one of
             // 'success' | 'pending' | 'missing' so the caller can log why it declined.
             // Missing ≠ passing — that conflation is exactly what #1668 exploited.
-            async function requiredCheckState(ref) {
-              const runs = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref, per_page: 100 })
+            async function requiredCheckState(runs) {
               const mine = runs.filter(r => r.name === REQUIRED_CHECK)
               if (!mine.length) return 'missing'
               // Newest attempt wins — a re-run supersedes an earlier verdict.
@@ -220,6 +219,7 @@ jobs:
             if (!candidates.size) { core.info('No candidate PRs — nothing to do.'); return }
 
             for (const pull_number of candidates) {
+              currentPr = pull_number
               // Poll mergeability — GitHub computes it asynchronously after an event.
               let pr, state
               for (let i = 0; i < 6; i++) {
@@ -257,21 +257,25 @@ jobs:
                     const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
                       body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
                         + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
-                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
-                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
+                    const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                    const rin = { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
+                    await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'work-issue-pidev.yml', inputs: rin },
+                      () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main', inputs: rin }))
                     core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
                   } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
                 }
               }
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
-              const red = await isRed(pr.head.sha)
+              // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+              const red = await isRed(pr.head.sha, checkRuns)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
               // 'missing' → the workflow never started (a dropped event); say so loudly
               // once, so the PR is visibly stalled rather than silently merged unchecked.
-              const checkState = await requiredCheckState(pr.head.sha)
+              const checkState = await requiredCheckState(checkRuns)
               if (checkState !== 'success') {
                 if (checkState === 'missing') {
                   core.warning(`#${pull_number}: '${REQUIRED_CHECK}' never reported for ${pr.head.sha.slice(0, 8)} — CI likely never triggered (#1698).`)
@@ -320,7 +324,6 @@ jobs:
                   core.warning(`#${pull_number} not merging — scripts/epic-merge-decision.mjs is not on the default branch (${e.code || e.message}).`)
                   continue
                 }
-                const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
                 const d = decideEpicMerge({ pr, checkRuns, go })
                 gate = { merge: d.action === 'merge', reason: d.reason }
               } else {
@@ -427,6 +430,20 @@ jobs:
               ({ deferOrThrow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`))
             } catch { throw e }
             deferOrThrow(e, core.warning)
+            // Tell the PR it is waiting (#3306). Best effort: with the allowance fully used this
+            // comment may itself fail, so the run summary is the guaranteed record.
+            try {
+              const { rateLimitNote } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`)
+              const note = rateLimitNote(e)
+              await core.summary.addRaw(note.body, true).write()
+              if (currentPr) {
+                const { owner, repo } = context.repo
+                const existing = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: currentPr, per_page: 100 })
+                if (!existing.some(c => (c.body || '').includes(note.marker))) {
+                  await github.rest.issues.createComment({ owner, repo, issue_number: currentPr, body: `${note.marker}\n${note.body}` })
+                }
+              }
+            } catch (noteErr) { core.warning(`rate-limit note not posted: ${noteErr.message}`) }
            }
 
       # Build-review safety net (#3218): a green pipeline PR with no review gets ONE dispatch per head SHA.
@@ -459,7 +476,9 @@ jobs:
                 // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
                 await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
                   body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
-                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } })
+                const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
+                  () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
                 core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
               } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
             }

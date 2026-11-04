@@ -1,4 +1,5 @@
 name: Build review (independent reviewer — pi.dev)
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}"
 
 # #2777 (epic #2754) — when a pipeline PR (head `work-<N>`) turns green, the same top-model
 # reviewer as the plan review (the `review` tier of .claude/pipeline-models.json) reads the
@@ -209,6 +210,7 @@ jobs:
         if: ${{ !cancelled() && steps.pr.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
           MODEL: ${{ steps.model.outputs.model }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE: ${{ steps.pr.outputs.issue }}
@@ -221,6 +223,11 @@ jobs:
           # The parser is trusted code from the default branch (the checkout is the PR head).
           mkdir -p "$RUNNER_TEMP/trusted"
           git show "origin/${{ github.event.repository.default_branch }}:scripts/lib/build-verdict.mjs" > "$RUNNER_TEMP/trusted/build-verdict.mjs"
+          # Hand-off helper (#3306) — also trusted: the checkout is the PR head, which must not run with the write token.
+          mkdir -p "$RUNNER_TEMP/trusted/scripts/lib"
+          for f in handoff-exec.mjs lib/handoff.mjs lib/rate-limit.mjs; do
+            git show "origin/${{ github.event.repository.default_branch }}:scripts/$f" > "$RUNNER_TEMP/trusted/scripts/$f"
+          done
           PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
           fail() {
             echo "::error::$1"
@@ -258,14 +265,14 @@ jobs:
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
           case "$VERDICT" in
-            go) gh pr edit "$PR" --add-label "build:approved" ;;
+            go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
             needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
             no-go)
               if [ "$ROUND" -ge 2 ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
                 CID="${COMMENT_URL##*issuecomment-}"
-                gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID"
+                node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c}}')"
               fi
               ;;
           esac
