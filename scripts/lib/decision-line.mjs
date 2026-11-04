@@ -15,6 +15,13 @@ const NOT_OK = /^\s*not\s+ok:\s*(?=\S)/i
 // owner's answer relayed from an agent account: "posted from `@x`'s account (not Maarten) · _Maarten's answer…_"
 const RELAYED = /posted from [^_]*account \(not [^)]+\)\s*·\s*_[^_]*\b(?:answer|decisions?)\b/iu
 
+/** The prefix pattern the line starts with (`ok:` / `not ok:` only on a held plan), or null. */
+function matchPrefix(line, held) {
+  if (DECISION.test(line)) return DECISION
+  if (!held) return null
+  return [OK_REASON, NOT_OK].find(r => r.test(line)) || null
+}
+
 /** @returns {string|null} the decision text (single line, verbatim words), or null */
 export function parseDecision({ body, authorAssociation, userType, held = false } = {}) {
   if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
@@ -25,7 +32,7 @@ export function parseDecision({ body, authorAssociation, userType, held = false 
   const rest = lines.filter(l => !/^\s*>/.test(l))
   const first = rest.findIndex(l => l.trim())
   if (first < 0) return null
-  const re = DECISION.test(rest[first]) ? DECISION : (held && OK_REASON.test(rest[first]) ? OK_REASON : (held && NOT_OK.test(rest[first]) ? NOT_OK : null))
+  const re = matchPrefix(rest[first], held)
   if (!re) return null
   const text = [rest[first].replace(re, ''), ...rest.slice(first + 1)].join(' ').replace(/\s+/g, ' ').trim()
   return text || null
