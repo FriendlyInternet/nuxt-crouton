@@ -20,6 +20,7 @@ import { i18n } from '@better-auth/i18n'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
+import { isSuperAdminUser } from '../../shared/utils/auth'
 import { resolveInitialOrgId, getOrgBySlug } from './session-org'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
@@ -1102,7 +1103,7 @@ function buildGenericProviderConfig(config: OAuthProviderConfig): SocialProvider
  * - `autoCreateOnSignup`: Auto-create personal workspace
  * - `defaultTeamSlug`: Everyone joins this team on signup
  */
-function buildOrganizationConfig(
+export function buildOrganizationConfig(
   config: CroutonAuthConfig,
   db?: DrizzleD1Database<Record<string, unknown>>
 ) {
@@ -1115,8 +1116,8 @@ function buildOrganizationConfig(
   const getAllowUserToCreateOrganization = () => {
     if (teamsConfig.allowCreate !== undefined) {
       if (teamsConfig.allowCreate === 'superAdmin') {
-        // Only users with the site-admin role (user.role === 'admin') may create teams
-        return (user: { role?: string | null } | null | undefined) => user?.role === 'admin'
+        // Only site admins / super admins may create teams
+        return isSuperAdminUser
       }
       return teamsConfig.allowCreate
     }

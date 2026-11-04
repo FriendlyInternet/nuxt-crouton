@@ -48,3 +48,14 @@ export function mapOrganizationToTeam(org: RawOrganization): Team {
     updatedAt: new Date(org.createdAt)
   }
 }
+
+/**
+ * The single "may create a team" rule for `teams.allowCreate: 'superAdmin'`:
+ * a site admin (`role === 'admin'`) or a super admin (`superAdmin === true`).
+ * Used by both the server (Better Auth) and the client (useTeam).
+ */
+export function isSuperAdminUser(
+  user: { role?: string | null, superAdmin?: boolean | null } | null | undefined
+): boolean {
+  return user?.role === 'admin' || user?.superAdmin === true
+}

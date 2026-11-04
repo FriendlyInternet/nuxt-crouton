@@ -3,6 +3,7 @@ import type { CroutonAuthConfig } from '../../../types/config'
 
 // Import after mocks
 import {
+  buildOrganizationConfig,
   createAuth,
   isTwoFactorEnabled,
   getTwoFactorInfo,
@@ -390,18 +391,21 @@ describe('Configuration patterns (flag-based)', () => {
 })
 
 describe('allowCreate: superAdmin mapping', () => {
-  const resolve = (allowCreate: boolean | 'superAdmin') => {
-    // mirrors buildOrganizationConfig's allowCreate handling
-    if (allowCreate === 'superAdmin') {
-      return (user: { role?: string | null } | null | undefined) => user?.role === 'admin'
-    }
-    return allowCreate
-  }
-  it('refuses non-admin, allows admin', () => {
-    const fn = resolve('superAdmin') as (u: { role?: string | null } | null) => boolean
+  const resolve = (allowCreate: boolean | 'superAdmin') =>
+    (buildOrganizationConfig({ teams: { allowCreate } } as CroutonAuthConfig) as {
+      allowUserToCreateOrganization: boolean | ((u: unknown) => boolean)
+    }).allowUserToCreateOrganization
+
+  it('refuses a stranger', () => {
+    const fn = resolve('superAdmin') as (u: unknown) => boolean
     expect(fn({ role: 'user' })).toBe(false)
     expect(fn(null)).toBe(false)
-    expect(fn({ role: 'admin' })).toBe(true)
+  })
+  it('allows role admin', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'admin' })).toBe(true)
+  })
+  it('allows superAdmin: true with role user', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'user', superAdmin: true })).toBe(true)
   })
   it('leaves true/false unchanged', () => {
     expect(resolve(true)).toBe(true)

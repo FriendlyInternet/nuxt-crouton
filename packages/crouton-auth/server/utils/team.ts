@@ -11,7 +11,7 @@ import { sql, eq, and } from 'drizzle-orm'
 import { organization, member as memberTable } from '../database/schema/auth'
 import type { Team, Member, User } from '../../types'
 import { mapOrganizationToTeam } from '../../shared/utils/auth'
-import { useServerAuth, requireServerSession, getServerSession } from './useServerAuth'
+import { useServerAuth, requireServerSession } from './useServerAuth'
 import type { CroutonAuthConfig } from '../../types/config'
 
 // Extended session type with organization plugin properties
@@ -396,10 +396,6 @@ export async function canUserCreateTeam(event: H3Event, userId: string, _userId?
   // Check if team creation is allowed
   if (config?.teams?.allowCreate === false) {
     return false
-  }
-  if (config?.teams?.allowCreate === 'superAdmin') {
-    const session = await getServerSession(event)
-    if ((session?.user as { role?: string } | undefined)?.role !== 'admin') return false
   }
 
   // Get user's current teams
