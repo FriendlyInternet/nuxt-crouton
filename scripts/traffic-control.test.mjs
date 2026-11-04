@@ -137,7 +137,53 @@ test('releaseWaiting releases a parked ticket whose body has Unblocks:', async (
     paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [blocker]) : [{ body: '<!-- traffic-wait -->' }]),
     rest: { issues: { listForRepo: 'list', listComments: 'comments',
       removeLabel: async () => {}, addLabels: async (o) => added.push(o.issue_number) },
-      pulls: { list: async () => ({ data: [{ number: 99 }] }) } } }
+      pulls: { list: async (o) => ({ data: o.head.endsWith('work-10') ? [{ number: 99 }] : [] }) } } }
   const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
   assert.deepEqual(released, [20])
+})
+
+// ── (#3311) release only holds traffic control still owns ───────────────────────
+function releaseHarness({ comments, events, ownPr }) {
+  const parked = { number: 31, labels: [{ name: 'status:blocked' }, { name: 'pkg:b' }] }
+  const calls = []
+  const store = { comments: comments.map((c, i) => ({ id: i + 1, ...c })) }
+  const github = {
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [])
+      : fn === 'events' ? events : store.comments),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
+      removeLabel: async (o) => calls.push(`rm ${o.name}`), addLabels: async (o) => calls.push(`add ${o.labels}`),
+      updateComment: async (o) => { store.comments.find((c) => c.id === o.comment_id).body = o.body } },
+      pulls: { list: async () => ({ data: ownPr ? [{ number: 1 }] : [] }) } } }
+  return { github, calls, store, run: () => releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } }) }
+}
+const blocked = (at) => ({ event: 'labeled', label: { name: 'status:blocked' }, created_at: at })
+const wait = (at) => ({ body: '<!-- traffic-wait -->', created_at: at })
+
+test('replay #3131: old wait comment, newer blocks, open PR → not released', async () => {
+  const h = releaseHarness({
+    comments: [wait('2026-11-02T16:18:00Z'), { body: 'CI fix gave up', created_at: '2026-11-03T17:01:00Z' }],
+    events: [blocked('2026-11-02T16:18:00Z'), blocked('2026-11-03T17:01:00Z'), blocked('2026-11-03T18:02:00Z')], ownPr: true })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
+
+test('genuine park releases once and retires the marker', async () => {
+  const h = releaseHarness({ comments: [wait('2026-11-02T16:18:01Z')], events: [blocked('2026-11-02T16:18:00Z')], ownPr: false })
+  assert.deepEqual(await h.run(), [31])
+  assert.ok(!h.store.comments[0].body.includes('<!-- traffic-wait -->'))
+  assert.deepEqual(await h.run(), []) // second pass
+})
+
+test('parked ticket with an open work PR is not re-dispatched', async () => {
+  const h = releaseHarness({ comments: [wait('2026-11-02T16:18:01Z')], events: [blocked('2026-11-02T16:18:00Z')], ownPr: true })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
+
+test('blocked again after the wait comment, no open PR → left alone', async () => {
+  const h = releaseHarness({
+    comments: [wait('2026-11-02T16:18:01Z')],
+    events: [blocked('2026-11-02T16:18:00Z'), blocked('2026-11-03T17:01:00Z')], ownPr: false })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
 })
