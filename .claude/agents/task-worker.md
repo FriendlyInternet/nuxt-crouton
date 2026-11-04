@@ -135,7 +135,7 @@ a feature branch.
    **into the epic branch** when one was passed (else the repo base). The body MUST contain
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
    with the PR link** (e.g. `→ built in #<pr>`) so the ticket shows where its work went —
-   never leave the issue blank while the work lives in a PR (the #442 failure mode). Body
+   never leave the issue blank while the work lives in a PR (the #442 failure mode). Never put the `<!-- pipeline-note -->` marker in your own comments — it is reserved for the workflow's notes and makes a comment not count as your output (#3251). Body
    follows `github-tasks` (👤/🤖 + `## 🧪 How to test`). End the PR body with the
    Generated-with-Claude-Code footer.
    - **`Closes` does NOT auto-close on an epic-branch PR.** GitHub only auto-closes the

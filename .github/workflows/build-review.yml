@@ -36,6 +36,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -43,6 +45,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
       # write token above stays on the trusted steps only.
@@ -137,7 +151,7 @@ jobs:
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
             echo "::error::review model $MODEL did not answer on provider claude-bridge — build review NOT run, no fallback (#2777)"
-            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model, so this PR is not approved.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$SHA" "$MODEL")" || true
+            gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model, so this PR is not approved.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$SHA" "$MODEL")" || true
             exit 1
           fi
 
@@ -231,7 +245,7 @@ jobs:
           PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
           fail() {
             echo "::error::$1"
-            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$SHA" "$1" "$RUN_URL")" || true
+            gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$SHA" "$1" "$RUN_URL")" || true
             exit 1
           }
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
@@ -276,3 +290,48 @@ jobs:
               fi
               ;;
           esac
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [review]
+    if: ${{ always() && needs.review.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: build-review.yml
+          PR: "${{ github.event.inputs.pr }}"
+          BRANCH: "${{ github.event.workflow_run.head_branch }}"
+          STAGE: build-review
+          MODEL_TIER: review
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.review.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

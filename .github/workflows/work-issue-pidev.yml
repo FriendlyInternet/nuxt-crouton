@@ -203,6 +203,9 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+      conflict: ${{ steps.revise.outputs.conflict }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -213,6 +216,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -294,7 +309,7 @@ jobs:
               core.info(`Traffic control OK — ${verdict.reason}.`)
               if (verdict.unblocking?.length) {
                 await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-                  `⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
+                  `<!-- pipeline-note -->\n⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
               }
               return
             }
@@ -323,6 +338,7 @@ jobs:
               const marker = `<!-- work-run:${issue_number} -->`
               const body = [
                 marker,
+                '<!-- pipeline-note -->',
                 '> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _single-use worker_',
                 '',
                 `🏗️ **Working this now** — follow the run live: ${runUrl}`,
@@ -335,7 +351,7 @@ jobs:
                 await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body })
                 core.info(`updated breadcrumb comment ${existing.id}`)
               } else {
-                await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
                 core.info('posted breadcrumb comment')
               }
             } catch (e) {
@@ -384,7 +400,7 @@ jobs:
           echo "resolved base='${BASE}'"
           if [ -n "$BASE_ERR" ]; then
             echo "::error::${BASE_ERR}"
-            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
+            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "<!-- pipeline-note -->"$'\n'"🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
             exit 1
           fi
 
@@ -536,11 +552,11 @@ jobs:
               echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               if VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$REV_BRANCH")"; then
                 echo "base_pushed=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
               else
                 # Behind on GitHub (behind_by/ahead_by are in VERIFY_MSG): fail the run here, with the numbers.
                 echo "::error::${VERIFY_MSG}"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Not up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Not up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
                 exit 1
               fi
             else
@@ -743,7 +759,7 @@ jobs:
             if [ -z "$RPR" ]; then echo "::error::conflict note not posted: no open PR found for ${REV_BRANCH}"; return 0; fi
             gh pr comment "$RPR" --body "$1" >/dev/null 2>&1 || echo "::error::conflict note could not be posted on PR #${RPR}"
           }
-          HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
+          HDR=$'<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
           # Read the per-file state NOW, while the index is still unmerged: verify's `git add -u`
           # and `git merge --abort` both empty this list (#3322).
@@ -830,7 +846,7 @@ jobs:
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
-            gh issue comment "$ISSUE" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
@@ -1013,11 +1029,11 @@ jobs:
                 CPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
                 if [ "$PUSH_WHY" = "moved" ]; then
                   echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
-                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
                 else
                   echo "::error::revise push refused by GitHub — ${PUSH_LINE}"
                   UNSURE=""; [ "$PUSH_WHY" = "unknown" ] && UNSURE=" I could not confirm whether the PR moved."
-                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not pushed — GitHub refused the push** (`%s`). This PR is unchanged at `%s`; nothing was overwritten.%s Comment again to retry.' "$PUSH_LINE" "$(git rev-parse --short "$REV_START")" "$UNSURE")" 2>&1 | tail -1 || true
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not pushed — GitHub refused the push** (`%s`). This PR is unchanged at `%s`; nothing was overwritten.%s Comment again to retry.' "$PUSH_LINE" "$(git rev-parse --short "$REV_START")" "$UNSURE")" 2>&1 | tail -1 || true
                 fi
               fi
             else
@@ -1036,7 +1052,7 @@ jobs:
             if ! VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$BR")"; then
               echo "::error::${VERIFY_MSG}"
               VPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-              [ -n "$VPR" ] && gh pr comment "$VPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Still behind** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+              [ -n "$VPR" ] && gh pr comment "$VPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Still behind** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
               exit 1
             fi
           fi
@@ -1049,10 +1065,10 @@ jobs:
             if [ "$HAVE_COMMITS" = "1" ]; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
               if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
               else
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
-              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
               fi
             elif [ "${BASE_PUSHED:-}" = "1" ]; then
               echo "revise: base merge pushed by the revise step (#2941)"
@@ -1065,7 +1081,7 @@ jobs:
               else
                 echo "::error::revise produced no commit and no reply (#2446)"
                 echo "revise_noop=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
               fi
             fi
           fi
@@ -1364,6 +1380,7 @@ jobs:
             esac
             REC="$RUNNER_TEMP/run-record.md"
             {
+              echo "<!-- pipeline-note -->"
               echo "> 🤖 **pi worker — run record** · model \`${PI_MODEL:-?}\` (${PI_PROVIDER:-?}) · _facts from the commit + git + typecheck, not pi's narration (#1849)_"
               echo
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
@@ -1440,7 +1457,7 @@ jobs:
               runUrl,
               runner: '${{ vars.AGENT_RUNNER || 'github-hosted' }}',
             })
-            await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: '<!-- pipeline-note -->\n' + n.body })
 
       # Run record (#2464): a red finish step explains itself through the check-runs API —
       # the last 40 lines as one ::error:: annotation plus a run-record artifact.
@@ -1587,7 +1604,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -1630,7 +1647,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -1787,7 +1804,7 @@ jobs:
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${said}${det}${foot}`
               : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${said}${foot}`
 
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
@@ -1841,3 +1858,48 @@ jobs:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/
           if-no-files-found: ignore
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [route, work-pi]
+    if: ${{ always() && needs.work-pi.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: work-issue-pidev.yml
+          ISSUE: "${{ inputs.issue || github.event.issue.number }}"
+          BRANCH: "${{ inputs.branch }}"
+          STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && (needs.work-pi.outputs.conflict == '1' && 'conflict' || 'revise') || 'work') }}"
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.work-pi.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs
