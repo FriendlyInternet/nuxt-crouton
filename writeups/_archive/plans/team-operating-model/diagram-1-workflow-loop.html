@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Team Workflow Loop — draft v1</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --ink: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #58a6ff;
+    --warn: #f0a020;
+    --line: #30363d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 32px;
+  }
+  header { max-width: 1100px; margin: 0 auto 8px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    max-width: 1100px; margin: 0 auto 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+  .mermaid { background: transparent; text-align: center; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  ol, ul { margin: 0; padding-left: 20px; }
+  li { margin: 6px 0; }
+  .q { color: var(--warn); font-weight: 600; }
+  .legend { display: flex; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .legend b { color: var(--ink); }
+  code { background: #21262d; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Team Workflow Loop — draft v1</h1>
+  <p class="sub">Team of 5 · CEO · CTO · PM · 2 developers · + AI agents as teammates. Open questions are marked <span class="q">❓ in orange</span> — nothing's locked yet.</p>
+</header>
+
+<div class="card">
+  <div class="mermaid">
+flowchart TB
+
+  subgraph HUMANS["👥 Humans — work where you're comfortable"]
+    direction LR
+    SLK["💬 Slack<br/>ask · get pinged · kick off work"]
+    LIN["📋 Linear<br/>plan together / roadmap"]
+    NOT["📚 Notion<br/>docs + knowledge base"]
+    HUB["📣 HubSpot<br/>marketing-page initiatives"]
+  end
+
+  subgraph ENGINE["⚙️ GitHub — the engine ❓ proposed source of truth"]
+    ISS["Issues + sub-issues<br/>labels = triggers"]
+    AGENTS["🤖 Agents<br/>orchestrator → decomposer → worker"]
+    PR["PRs + sign-off gates<br/>UI / schema approval"]
+    PM["Postmortem<br/>→ improvement tickets"]
+    ISS --> AGENTS --> PR --> PM --> ISS
+  end
+
+  subgraph DS["🎨 Design-system loop — Storybook-led, self-iterating"]
+    SB["Storybook<br/>source of truth for components"]
+    FIG["Figma<br/>kept in sync"]
+    PROP["Detach → fix → propose to team"]
+    SB -- "publish / sync" --> FIG
+    FIG -- "detach + redesign" --> PROP
+    PROP -- "approved → becomes code" --> SB
+  end
+
+  subgraph DOCS["📝 Docs loop — always in sync with code"]
+    CODE2["Code change"]
+    DOCSITE["Docs (site + Notion)"]
+    CODE2 -- "sync-docs" --> DOCSITE
+    DOCSITE -. "feedback / edits" .-> CODE2
+  end
+
+  subgraph RUN["🖥️ Runners — where work executes"]
+    CLOUD["Cloud Linux<br/>web builds · Playwright e2e · screenshots"]
+    MAC["Mac mini<br/>macOS / Apple builds + physical tests"]
+  end
+
+  SLK -- "question → ticket ❓ where?" --> ISS
+  SLK -. "or → knowledge doc" .-> NOT
+  LIN <-- "two-way sync" --> ISS
+  HUB <-- "initiative ↔ ticket" --> ISS
+
+  AGENTS --> CLOUD
+  AGENTS --> MAC
+  AGENTS --> DS
+  AGENTS --> DOCS
+
+  CLOUD -- "preview URL · screenshots · video" --> PR
+  MAC -- "Apple build / test result" --> PR
+  DS -- "component PR" --> PR
+  DOCS -- "docs PR" --> PR
+
+  PR -- "status · preview · screenshots" --> SLK
+  PR -- "state" --> LIN
+  PM -. "what we learned" .-> NOT
+  </div>
+</div>
+
+<div class="card">
+  <h2>How to read it</h2>
+  <ul>
+    <li><b>Humans pick their tool.</b> CEO/PM in Slack &amp; Linear, devs in GitHub &amp; Linear, marketing in HubSpot, knowledge in Notion. Nobody is forced into one place.</li>
+    <li><b>GitHub is the engine.</b> Whatever a person does in their tool, it lands as a GitHub issue so the agents can act on it. Linear mirrors it two-way for planning.</li>
+    <li><b>Agents are teammates.</b> They pick up issues, fan work out to the right runner (cloud for web + screenshots, Mac mini for Apple), and post results back.</li>
+    <li><b>Three self-iterating loops hang off the engine:</b> the agent loop (issue → PR → postmortem → better issue), the <b>design-system loop</b> (Storybook ↔ Figma ↔ code), and the <b>docs loop</b> (code ↔ docs).</li>
+    <li><b>Results come home.</b> Preview links, screenshots, and test outcomes flow back to Slack &amp; Linear so non-devs never have to open GitHub.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Open decisions (marked ❓ on the diagram)</h2>
+  <ol>
+    <li><span class="q">Slack intake:</span> when someone asks a question in Slack, does it become a <b>GitHub issue</b>, a <b>Linear issue</b>, or a <b>Notion doc</b> — and who/what decides which?</li>
+    <li><span class="q">Source of truth:</span> is <b>GitHub</b> authoritative (agents need this) with Linear as a mirror, or do humans treat <b>Linear</b> as the real board?</li>
+    <li><b>Design-system loop:</b> what is the actual Storybook↔Figma sync mechanism (e.g. Code Connect, a tokens pipeline)? Where does "propose to team" happen — a PR, or in Figma?</li>
+    <li><b>HubSpot:</b> do marketing pages get built by agents (as code → deployed) or authored directly in HubSpot, with GitHub just tracking the initiative?</li>
+    <li><b>Mac mini:</b> which Apple things — app builds, signing, physical device tests? This decides what the runner must be wired to.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <div class="legend">
+    <span><b>──▶ solid</b> = work / artifacts flow</span>
+    <span><b>┄┄▶ dashed</b> = knowledge / feedback flow</span>
+    <span><b>◀──▶</b> = two-way sync</span>
+    <span class="q"><b>❓</b> = open decision</span>
+  </div>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "dark",
+    themeVariables: {
+      fontSize: "14px",
+      primaryColor: "#1f6feb22",
+      primaryBorderColor: "#58a6ff",
+      lineColor: "#8b949e",
+      tertiaryColor: "#161b22"
+    },
+    flowchart: { curve: "basis", nodeSpacing: 40, rankSpacing: 55 }
+  });
+</script>
+</body>
+</html>

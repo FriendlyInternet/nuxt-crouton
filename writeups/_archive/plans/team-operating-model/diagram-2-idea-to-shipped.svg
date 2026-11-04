@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 780" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f0a020"/>
+    </marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2ea043"/>
+    </marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b69cff"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="780" fill="#0e1116"/>
+  <text x="32" y="34" fill="#e6edf3" font-size="20" font-weight="700">From idea to shipped — Slack · Notion · GitHub · Linear</text>
+  <text x="32" y="54" fill="#9aa7b4" font-size="13">Layered ownership, not one source of truth. Slack is the front door; an AGENT bridges Notion → GitHub.</text>
+
+  <!-- ============ SLACK FRONT DOOR ============ -->
+  <rect x="40" y="72" width="1200" height="104" rx="12" fill="#10151c" stroke="#2a3038"/>
+  <text x="58" y="94" fill="#9aa7b4" font-size="12" letter-spacing="1">💬 SLACK — CONVERSATIONAL FRONT DOOR  (ask in plain language · get replies in-thread)</text>
+  <g>
+    <rect x="60" y="110" width="360" height="48" rx="8" fill="#1b2230" stroke="#3d4856"/>
+    <text x="240" y="139" text-anchor="middle" fill="#e6edf3" font-size="13">“Add this user story…”</text>
+  </g>
+  <g>
+    <rect x="450" y="110" width="400" height="48" rx="8" fill="#1b2230" stroke="#3d4856"/>
+    <text x="650" y="139" text-anchor="middle" fill="#e6edf3" font-size="13">“What’s outstanding on epic X?”</text>
+  </g>
+  <g>
+    <rect x="880" y="110" width="340" height="48" rx="8" fill="#1b2230" stroke="#3d4856"/>
+    <text x="1050" y="139" text-anchor="middle" fill="#e6edf3" font-size="13">“Kick off / decompose this epic”</text>
+  </g>
+
+  <!-- Slack intent arrows -->
+  <path d="M215,158 L210,250" fill="none" stroke="#b69cff" stroke-width="2" marker-end="url(#ap)"/>
+  <text x="120" y="210" fill="#b69cff" font-size="10.5">create story → Notion</text>
+  <path d="M650,158 L650,250" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text x="660" y="210" fill="#9aa7b4" font-size="10.5">query →</text>
+  <path d="M1050,158 L840,250" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#ab)"/>
+  <text x="980" y="210" fill="#58a6ff" font-size="10.5">trigger pipeline → GitHub</text>
+
+  <!-- ============ NOTION (product) ============ -->
+  <rect x="40" y="252" width="360" height="312" rx="12" fill="#13101c" stroke="#5a3da8"/>
+  <text x="58" y="276" fill="#b69cff" font-size="12.5" letter-spacing=".5" font-weight="600">📚 NOTION — product / discovery</text>
+  <text x="58" y="294" fill="#9aa7b4" font-size="10.5">owns the WHY (already how you work)</text>
+
+  <g>
+    <rect x="65" y="308" width="290" height="44" rx="8" fill="#1d1830" stroke="#5a3da8"/>
+    <text x="210" y="335" text-anchor="middle" fill="#e6edf3" font-size="13">Personas</text>
+  </g>
+  <g>
+    <rect x="65" y="366" width="290" height="44" rx="8" fill="#1d1830" stroke="#5a3da8"/>
+    <text x="210" y="393" text-anchor="middle" fill="#e6edf3" font-size="13">User stories</text>
+  </g>
+  <g>
+    <rect x="65" y="476" width="290" height="68" rx="8" fill="#241a3a" stroke="#8a6ad8"/>
+    <text x="210" y="504" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Epic “work page”</text>
+    <text x="210" y="524" text-anchor="middle" fill="#9aa7b4" font-size="10.5">groups related stories</text>
+  </g>
+  <line x1="210" y1="352" x2="210" y2="366" stroke="#b69cff" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ap)"/>
+  <text x="222" y="363" fill="#9aa7b4" font-size="9.5">inform</text>
+  <line x1="210" y1="410" x2="210" y2="476" stroke="#b69cff" stroke-width="2" marker-end="url(#ap)"/>
+  <text x="222" y="448" fill="#b69cff" font-size="10">group when ready</text>
+
+  <!-- ============ THE BRIDGE ============ -->
+  <path d="M355,510 C420,510 420,344 470,344" fill="none" stroke="#f0a020" stroke-width="2.6" marker-end="url(#ao)"/>
+  <text x="408" y="600" fill="#f0a020" font-size="11" font-weight="600">⚙ AGENT BRIDGE</text>
+  <text x="408" y="618" fill="#9aa7b4" font-size="10">reads the epic page + its</text>
+  <text x="408" y="632" fill="#9aa7b4" font-size="10">stories, creates a GitHub</text>
+  <text x="408" y="646" fill="#9aa7b4" font-size="10">epic + sub-issues</text>
+  <text x="408" y="660" fill="#9aa7b4" font-size="10">(backlinked both ways)</text>
+
+  <!-- ============ GITHUB (engine) ============ -->
+  <rect x="470" y="252" width="770" height="196" rx="12" fill="#0d1a26" stroke="#1f6feb"/>
+  <text x="488" y="276" fill="#58a6ff" font-size="12.5" letter-spacing=".5" font-weight="600">⚙️ GITHUB — engine</text>
+  <text x="660" y="276" fill="#9aa7b4" font-size="10.5">owns execution state (authoritative for work)</text>
+
+  <g>
+    <rect x="495" y="312" width="160" height="64" rx="8" fill="#16202c" stroke="#3d5266"/>
+    <text x="575" y="340" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">Epic + sub-issues</text>
+    <text x="575" y="358" text-anchor="middle" fill="#9aa7b4" font-size="10">labels = triggers</text>
+  </g>
+  <g>
+    <rect x="685" y="312" width="160" height="64" rx="8" fill="#16202c" stroke="#3d5266"/>
+    <text x="765" y="340" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">🤖 Agents</text>
+    <text x="765" y="358" text-anchor="middle" fill="#9aa7b4" font-size="10">decompose → work</text>
+  </g>
+  <g>
+    <rect x="875" y="312" width="160" height="64" rx="8" fill="#16202c" stroke="#3d5266"/>
+    <text x="955" y="340" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">PRs</text>
+    <text x="955" y="358" text-anchor="middle" fill="#9aa7b4" font-size="10">+ sign-off gates</text>
+  </g>
+  <g>
+    <rect x="1065" y="312" width="160" height="64" rx="8" fill="#13241a" stroke="#2ea043"/>
+    <text x="1145" y="340" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">✅ Merged</text>
+    <text x="1145" y="358" text-anchor="middle" fill="#9aa7b4" font-size="10">Closes #NN</text>
+  </g>
+  <line x1="655" y1="344" x2="685" y2="344" stroke="#58a6ff" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="845" y1="344" x2="875" y2="344" stroke="#58a6ff" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="1035" y1="344" x2="1065" y2="344" stroke="#58a6ff" stroke-width="2" marker-end="url(#ab)"/>
+
+  <!-- ============ LINEAR (planning lens) ============ -->
+  <rect x="470" y="468" width="770" height="78" rx="12" fill="#141528" stroke="#5a67d8"/>
+  <text x="488" y="492" fill="#9aacff" font-size="12.5" letter-spacing=".5" font-weight="600">📋 LINEAR — planning lens</text>
+  <text x="690" y="492" fill="#9aa7b4" font-size="10.5">native two-way mirror of GitHub</text>
+  <text x="488" y="524" fill="#cdd3e0" font-size="11.5">Board / states — humans triage &amp; prioritise here; states stay in sync with GitHub automatically.</text>
+
+  <!-- GitHub <-> Linear two-way -->
+  <line x1="575" y1="448" x2="575" y2="468" stroke="#5a67d8" stroke-width="2.2" marker-start="url(#a)" marker-end="url(#a)"/>
+  <line x1="955" y1="448" x2="955" y2="468" stroke="#5a67d8" stroke-width="2.2" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="985" y="462" fill="#9aacff" font-size="10">states sync ↕</text>
+
+  <!-- replies back to Slack -->
+  <path d="M1145,252 L1145,176" fill="none" stroke="#2ea043" stroke-width="2.2" marker-end="url(#ag)"/>
+  <text x="1155" y="214" fill="#7ee787" font-size="10.5">🔔 ping +</text>
+  <text x="1155" y="228" fill="#7ee787" font-size="10.5">💬 reply</text>
+  <text x="1155" y="242" fill="#7ee787" font-size="10.5">→ Slack</text>
+
+  <!-- ============ OWNERSHIP SUMMARY ============ -->
+  <line x1="40" y1="582" x2="1240" y2="582" stroke="#2a3038"/>
+  <text x="40" y="608" fill="#58a6ff" font-size="13" font-weight="700" letter-spacing="1">WHO OWNS WHAT</text>
+  <text x="180" y="608" fill="#cdd3e0" font-size="11.5">📚 Notion = product intent (personas · stories · why)   ·   ⚙️ GitHub = execution truth (issues · code · agents · PRs)</text>
+  <text x="180" y="628" fill="#cdd3e0" font-size="11.5">📋 Linear = human planning view (mirror)   ·   💬 Slack = conversational front door to all three (intent-routed + replies)</text>
+
+  <text x="40" y="668" fill="#f0a020" font-size="11.5" font-weight="600">⚠️ Integration reality</text>
+  <text x="180" y="668" fill="#9aa7b4" font-size="11.5">Linear ↔ GitHub = first-class NATIVE two-way sync (free).</text>
+  <text x="180" y="688" fill="#9aa7b4" font-size="11.5">Notion ↔ GitHub = NO deep native sync → an AGENT bridges it (Notion MCP/API + the github-tasks / task-decompose pipeline).</text>
+  <text x="180" y="708" fill="#9aa7b4" font-size="11.5">That bridge is a feature: the agent enriches each issue from story context and keeps backlinks in both directions.</text>
+</svg>
