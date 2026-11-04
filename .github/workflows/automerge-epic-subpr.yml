@@ -257,8 +257,10 @@ jobs:
                     const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
                       body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
                         + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
-                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
-                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
+                    const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                    const rin = { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
+                    await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'work-issue-pidev.yml', inputs: rin },
+                      () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main', inputs: rin }))
                     core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
                   } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
                 }
@@ -481,7 +483,9 @@ jobs:
                 // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
                 await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
                   body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
-                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } })
+                const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
+                  () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
                 core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
               } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
             }
