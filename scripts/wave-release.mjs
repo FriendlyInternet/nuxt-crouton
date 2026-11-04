@@ -5,6 +5,7 @@
 // Every function takes the github-script globals: `{ github, context, core }`.
 import * as gate from './wave-gate.mjs'
 import { handoffGuard } from './handoff-exec.mjs'
+import { ownerMergeGo } from './lib/owner-merge-go.mjs'
 
 /** Collapse an epic branch's CI into success | failure | pending | unknown. */
 async function branchStatus({ github, context, core }, ref) {
@@ -122,11 +123,12 @@ const hasLabel = (labels, name) => (labels || []).some(l => (typeof l === 'strin
 /**
  * #1035: never auto-close a HELD issue (`status:blocked` = a human step is pending), unless
  * #3039 the PR carries `build:approved` (the held label is a stale no-go) or
- * #3202 the owner merged it by hand (that merge is the human step).
+ * #3202 the owner merged it by hand (that merge is the human step), or
+ * #3368 the owner's standing `ok` on the PR drove a bot merge (`ownerGo`).
  */
-export function mayCloseHeldIssue({ labels, prLabels, mergedBy, owner }) {
+export function mayCloseHeldIssue({ labels, prLabels, mergedBy, owner, ownerGo = false }) {
   if (!hasLabel(labels, 'status:blocked')) return true
-  return hasLabel(prLabels, 'build:approved') || (!!mergedBy && mergedBy === owner)
+  return ownerGo || hasLabel(prLabels, 'build:approved') || (!!mergedBy && mergedBy === owner)
 }
 
 /**
@@ -156,7 +158,19 @@ export async function closeLinkedIssues(ctx) {
     try {
       const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
       if (gi.data.state === 'closed') continue
-      if (!mayCloseHeldIssue({ labels: gi.data.labels, prLabels: pr.labels, mergedBy: pr.merged_by?.login, owner: process.env.OWNER_LOGIN || 'pmcp' })) {
+      const ownerLogin = process.env.OWNER_LOGIN || 'pmcp'
+      const check = (ownerGo = false) => mayCloseHeldIssue({ labels: gi.data.labels, prLabels: pr.labels, mergedBy: pr.merged_by?.login, owner: ownerLogin, ownerGo })
+      let may = check()
+      if (!may) {
+        // #3368: a bot merge driven by the owner's `ok` on the PR is the human step too.
+        try {
+          const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
+          const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
+          const go = ownerMergeGo({ comments, commits, owner: ownerLogin })
+          if (go.go) { may = check(true); core.info(`#${n}: owner ok on the PR drove the merge - releasing the hold.`) }
+        } catch (e) { core.warning(`#${n}: could not check owner ok (${e.message}) - keeping the hold.`) }
+      }
+      if (!may) {
         core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
       }
       await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
