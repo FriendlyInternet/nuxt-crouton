@@ -467,7 +467,9 @@ jobs:
           HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
+          echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — default=$DEFAULT hard=$HARD plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -553,7 +555,7 @@ jobs:
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
