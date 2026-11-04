@@ -1199,7 +1199,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" \
-            "$(cat "$RUNNER_TEMP/interpret-prompt.txt")" > "$RUNNER_TEMP/interpret-model.txt" 2>"$RUNNER_TEMP/interpret-model.err" \
+            < "$RUNNER_TEMP/interpret-prompt.txt" > "$RUNNER_TEMP/interpret-model.txt" 2>"$RUNNER_TEMP/interpret-model.err" \
             || echo "reader model run failed (becomes ask)"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1309,7 +1309,7 @@ jobs:
             fi
           } > "$RUNNER_TEMP/review-prompt.txt"
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$RUNNER_TEMP/review-prompt.txt")" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
+            < "$RUNNER_TEMP/review-prompt.txt" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
