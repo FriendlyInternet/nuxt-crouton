@@ -110,8 +110,9 @@ async function send(text: string): Promise<void> {
     )
     showToast(res?.data?.ok ? 'Sent ✓' : (res?.error ? `Not sent: ${res.error.slice(0, 50)}` : 'Not sent'))
   }
-  catch {
-    showToast('Request failed')
+  catch (e) {
+    const status = (e as { statusCode?: number, status?: number })?.statusCode ?? (e as { status?: number })?.status
+    showToast(status === 401 ? 'Sign in with the review login to send feedback' : 'Request failed')
   }
   finally {
     sending.value = false
