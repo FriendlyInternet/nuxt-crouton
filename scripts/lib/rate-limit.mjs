@@ -26,3 +26,17 @@ export function deferOrThrow(e, warn) {
   const at = rateLimitResetAt(e)
   warn(`GitHub API rate limit hit${at ? ` (resets ${at})` : ''}; PR re-evaluated by next hourly run.`)
 }
+
+// The "waiting" note for a PR held by a rate limit (#3306). Marker dedups per reset window.
+export function rateLimitNote(e) {
+  const at = rateLimitResetAt(e)
+  if (!at) {
+    return { marker: '<!-- rate-limit-retry -->', body: '🔁 rate-limited by GitHub, retrying on the next hourly check' }
+  }
+  const reset = Math.floor(new Date(at).getTime() / 1000)
+  const hhmm = at.slice(11, 16)
+  return {
+    marker: `<!-- rate-limit-retry:${reset} -->`,
+    body: `🔁 rate-limited by GitHub, retrying on the next hourly check after ${hhmm} UTC`,
+  }
+}
