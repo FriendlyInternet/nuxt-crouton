@@ -1,22 +1,24 @@
 # Archive
 
-Plans and briefs that shipped or were dropped. Historical record, never instructions. Live briefs stay in `writeups/briefings/` with a status line naming their tracking issue. Archived 2026-11-04 (#3352).
+Plans and briefs that shipped or were dropped. Historical record, never instructions. Live briefs stay in `writeups/briefings/` with a status line naming their tracking issue. Archived 2026-11-04 ([#3352](https://github.com/FriendlyInternet/nuxt-crouton/issues/3352)).
+
+Verdict table: file → verdict → evidence (code file:line or full issue URL).
 
 | File | Verdict | Evidence |
 |---|---|---|
-| [`plans/plan-crouton-email-refactor.md`](plans/plan-crouton-email-refactor.md) | dropped | Resend still the only transport; #1636 closed not planned |
-| [`plans/plan-crouton-feature-flags.md`](plans/plan-crouton-feature-flags.md) | dropped | `useCroutonFeatures` never built; no issue |
-| [`plans/plan-crouton-provider-agnostic.md`](plans/plan-crouton-provider-agnostic.md) | dropped | #1636 and #1634 closed not planned |
-| [`plans/team-operating-model/`](plans/team-operating-model/) | dropped | #532 closed not planned |
-| [`briefings/builder-outline-editor-brief.md`](briefings/builder-outline-editor-brief.md) | done | epic #983 completed |
-| [`briefings/cli-owned-migrations-brief.md`](briefings/cli-owned-migrations-brief.md) | done | epic #1445 completed |
-| [`briefings/crouton-builder-graduation-brief.md`](briefings/crouton-builder-graduation-brief.md) | done | epic #983 completed |
-| [`briefings/crouton-builder-graduation-campaign-20260702.md`](briefings/crouton-builder-graduation-campaign-20260702.md) | done | epic #983 completed |
-| [`briefings/crouton-mail-brief.md`](briefings/crouton-mail-brief.md) | dropped | no `packages/crouton-mail`; email engine still in bookings |
-| [`briefings/crouton-os-vision-brief.md`](briefings/crouton-os-vision-brief.md) | done (superseded) | folded into `writeups/strategy/crouton-vision.md`; #703 completed |
-| [`briefings/devops-infrastructure-brief.md`](briefings/devops-infrastructure-brief.md) | overtaken | bundle budget shipped (#1581); changelog (#1600) and Renovate (#141) dropped |
-| [`briefings/mobile-collection-viewer-mockup.html`](briefings/mobile-collection-viewer-mockup.html) | done | epic #688 completed |
-| [`briefings/pos-print-watcher-brief.md`](briefings/pos-print-watcher-brief.md) | done | print-status endpoint + Bestel button shipped |
-| [`briefings/scoped-access-grants-brief.md`](briefings/scoped-access-grants-brief.md) | done | scoped-access/redeem shipped |
-| [`briefings/scoped-gate-kassa-brief.md`](briefings/scoped-gate-kassa-brief.md) | done | ScopedAccessGate shipped |
-| [`briefings/user-locale-brief.md`](briefings/user-locale-brief.md) | done | user-profile locale shipped |
+| [`plans/plan-crouton-email-refactor.md`](plans/plan-crouton-email-refactor.md) | dropped | Resend is still the only transport ([packages/crouton-email/server/utils/email.ts:2](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-email/server/utils/email.ts#L2)); https://github.com/FriendlyInternet/nuxt-crouton/issues/1636 closed not planned |
+| [`plans/plan-crouton-feature-flags.md`](plans/plan-crouton-feature-flags.md) | dropped | `useCroutonFeatures` exists nowhere in code (repo-wide grep, hits only this archived plan); no issue was ever opened, searched "feature flags" in all issues. Only issue-link available: this sorting ticket https://github.com/FriendlyInternet/nuxt-crouton/issues/3352 |
+| [`plans/plan-crouton-provider-agnostic.md`](plans/plan-crouton-provider-agnostic.md) | dropped | https://github.com/FriendlyInternet/nuxt-crouton/issues/1636 and https://github.com/FriendlyInternet/nuxt-crouton/issues/1634 closed not planned |
+| [`plans/team-operating-model/`](plans/team-operating-model/) | dropped | https://github.com/FriendlyInternet/nuxt-crouton/issues/532 closed not planned |
+| [`briefings/builder-outline-editor-brief.md`](briefings/builder-outline-editor-brief.md) | done | epic https://github.com/FriendlyInternet/nuxt-crouton/issues/983 completed |
+| [`briefings/cli-owned-migrations-brief.md`](briefings/cli-owned-migrations-brief.md) | done | epic https://github.com/FriendlyInternet/nuxt-crouton/issues/1445 completed |
+| [`briefings/crouton-builder-graduation-brief.md`](briefings/crouton-builder-graduation-brief.md) | done | epic https://github.com/FriendlyInternet/nuxt-crouton/issues/983 completed |
+| [`briefings/crouton-builder-graduation-campaign-20260702.md`](briefings/crouton-builder-graduation-campaign-20260702.md) | done | epic https://github.com/FriendlyInternet/nuxt-crouton/issues/983 completed |
+| [`briefings/crouton-mail-brief.md`](briefings/crouton-mail-brief.md) | dropped | no `packages/crouton-mail`; mail went into [packages/crouton-email/server/utils/email.ts:2](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-email/server/utils/email.ts#L2) and booking emails ([resend-email.post.ts:2](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-bookings/server/api/crouton-bookings/teams/%5Bid%5D/bookings/%5BbookingId%5D/resend-email.post.ts#L2)); no issue found (searched "crouton-mail") |
+| [`briefings/crouton-os-vision-brief.md`](briefings/crouton-os-vision-brief.md) | done (superseded) | folded into `writeups/strategy/crouton-vision.md`; https://github.com/FriendlyInternet/nuxt-crouton/issues/703 completed |
+| [`briefings/devops-infrastructure-brief.md`](briefings/devops-infrastructure-brief.md) | overtaken | bundle budget shipped (https://github.com/FriendlyInternet/nuxt-crouton/issues/1581); changelog (https://github.com/FriendlyInternet/nuxt-crouton/issues/1600) and Renovate (https://github.com/FriendlyInternet/nuxt-crouton/issues/141) dropped |
+| [`briefings/mobile-collection-viewer-mockup.html`](briefings/mobile-collection-viewer-mockup.html) | done | epic https://github.com/FriendlyInternet/nuxt-crouton/issues/688 completed |
+| [`briefings/pos-print-watcher-brief.md`](briefings/pos-print-watcher-brief.md) | done | print-status filter in [orders.get.ts:44-47](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-sales/server/api/crouton-sales/teams/%5Bid%5D/events/%5BeventId%5D/orders.get.ts#L44-L47), test [print-status.test.ts](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-sales/test/print-status.test.ts); per-event print flow https://github.com/FriendlyInternet/nuxt-crouton/issues/1324 completed |
+| [`briefings/scoped-access-grants-brief.md`](briefings/scoped-access-grants-brief.md) | done | [redeem.post.ts:19](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-auth/server/api/auth/scoped-access/redeem.post.ts#L19); https://github.com/FriendlyInternet/nuxt-crouton/issues/1661 completed |
+| [`briefings/scoped-gate-kassa-brief.md`](briefings/scoped-gate-kassa-brief.md) | done | [`ScopedAccessGate` in the catch-all page, line 348](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-pages/app/pages/%5Bteam%5D/%5Blocale%5D/%5B...slug%5D.vue#L348); https://github.com/FriendlyInternet/nuxt-crouton/issues/801 completed |
+| [`briefings/user-locale-brief.md`](briefings/user-locale-brief.md) | done | [profile.patch.ts:11-22](https://github.com/FriendlyInternet/nuxt-crouton/blob/main/packages/crouton-auth/server/api/users/me/profile.patch.ts#L11-L22) validates and saves `locale`; no dedicated issue found (searched "user locale") |
