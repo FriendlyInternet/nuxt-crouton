@@ -130,7 +130,7 @@ export async function applyWait({ github, context, issueNumber, verdict }) {
     await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'work-this' })
   } catch { /* already gone (workflow_dispatch) */ }
   await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-    `⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
+    `<!-- pipeline-note -->\n⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
     + `> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#2786)_\n\n${WAIT_MARKER}` })
 }
 

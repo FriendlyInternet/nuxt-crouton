@@ -200,3 +200,49 @@ test('backfill: skipped runs are not recorded; listing pages past 100', async ()
   assert.equal((await listAllRuns(get, 'o/r', 'w.yml', 'a', 'b')).length, 205)
   assert.equal(pages.length, 3)
 })
+
+// ── commit lookup through buildRecord (cases 3, 8, 9 end to end, not hand-built lists) ──
+const commitAt = (sha, date) => ({ sha, commit: { committer: { date } } })
+const mkApiCommits = ({ comments = [], prCommits = [], branchCommits = [], pr = true }) => async (p) => {
+  if (p.includes('/actions/runs/')) return { run_started_at: '2026-11-03T10:00:00Z' }
+  if (p.includes('/pulls?')) return pr ? [{ number: 99 }] : []
+  if (p.includes('/pulls/99/commits')) return prCommits
+  if (p.includes('/commits?sha=')) return branchCommits
+  if (p.includes('/issues/')) return comments
+  return []
+}
+const buildC = (opts) => buildRecord({ env: { ...base }, api: mkApiCommits(opts), listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+
+test('3 (buildRecord). commit on the PR, no comment → commit', async () => {
+  const rec = await buildC({ prCommits: [commitAt('abcdef123456', at)] })
+  assert.deepEqual(rec.produced, ['commit'])
+  assert.deepEqual(rec.produced_ids, ['abcdef1'])
+})
+
+test('3 (buildRecord). no PR yet: the branch’s commits since the run start count', async () => {
+  const rec = await buildC({ pr: false, branchCommits: [commitAt('1234567abcdef', at)] })
+  assert.deepEqual(rec.produced, ['commit'])
+})
+
+test('3 (buildRecord). a commit from before the run is not this run’s output', async () => {
+  const rec = await buildC({ prCommits: [commitAt('abcdef123456', '2026-11-03T08:00:00Z')] })
+  assert.deepEqual(rec.produced, ['nothing'])
+})
+
+test('8 (buildRecord). revise no-op note only → nothing; note + commit → commit', async () => {
+  assert.deepEqual((await buildC({ comments: [note(1, 'Revise produced no change')] })).produced, ['nothing'])
+  const rec = await buildC({ comments: [note(2, 'Revised')], prCommits: [commitAt('abcdef123456', at)] })
+  assert.deepEqual(rec.produced, ['commit'])
+})
+
+test('9 (buildRecord). resolver "ended without resolving" note only → nothing', async () => {
+  const rec = await buildC({ comments: [note(1, 'the resolver ended without resolving anything (#3002)')] })
+  assert.deepEqual(rec.produced, ['nothing'])
+})
+
+test('buildRecord: the agent’s own reply without the marker is kept; with the marker it would be dropped', async () => {
+  const kept = await buildC({ comments: [agent(5, 'Answer to your question')] })
+  assert.deepEqual(kept.produced, ['comment'])
+  const dropped = await buildC({ comments: [agent(6, `${NOTE_MARKER}\nAnswer to your question`)] })
+  assert.deepEqual(dropped.produced, ['nothing'])
+})

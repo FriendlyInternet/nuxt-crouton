@@ -55,6 +55,25 @@ test('lint over the real workflows: every non-output post carries the marker', (
   assert.ok(sites > 40)
 })
 
+// Scripts the workflows call (via github-script import) that post pipeline notes themselves.
+// wave-release.mjs posts gate-formatted hold/release comments from the epic-wave workflows, which
+// are not agent runs and are not recorded; traffic-control.mjs posts into the agent run's thread.
+const SCRIPTS = ['traffic-control']
+const SCRIPT_DIR = join(DIR, '..', '..', 'scripts')
+
+test('lint over the scripts the workflows call: every post carries the marker', () => {
+  const all = []
+  let sites = 0
+  for (const f of SCRIPTS) {
+    const text = readFileSync(join(SCRIPT_DIR, `${f}.mjs`), 'utf8')
+    sites += text.split('\n').filter((l) => SITE.test(l) && !/^\s*#/.test(l)).length
+    all.push(...findUnmarked(f, text))
+  }
+  console.log(`# pipeline-note lint (scripts): ${sites} post sites, ${all.length} unmarked`)
+  assert.deepEqual(all, [])
+  assert.ok(sites >= 1)
+})
+
 test('record-outcome: runs after every other job, even failed or cancelled ones', () => {
   for (const f of FILES) {
     const text = readFileSync(join(DIR, `${f}.yml`), 'utf8')
