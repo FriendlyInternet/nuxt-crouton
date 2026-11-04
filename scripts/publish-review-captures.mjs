@@ -4,7 +4,7 @@
 //   node scripts/publish-review-captures.mjs --dir <dir> --key pr42|issue7 [--repo owner/name]
 // Prints `sha=<commit>` and `url=<raw url>` lines; exits 1 if anything fails to publish or resolve.
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, copyFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { captureRef, rawImageUrl } from './lib/review-captures.mjs'
@@ -32,18 +32,37 @@ git('config', 'user.email', '295566920+nuxt-harness[bot]@users.noreply.github.co
 git('add', '-f', '--', ...files) // *.png is gitignored — without -f this silently adds nothing
 if (!git('diff', '--cached', '--name-only')) fail('nothing staged (ignored?)')
 git('commit', '-q', '-m', `review captures ${key}`)
-const sha = git('rev-parse', 'HEAD')
+const localSha = git('rev-parse', 'HEAD')
 
-let pushed = false
+const api = async (method, path, body) => {
+  const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, {
+    method,
+    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(`${method} ${path} -> ${r.status} ${j.message || ''}`)
+  return j
+}
+
+let sha = localSha
 try {
   git('push', '--force', `https://x-access-token:${token}@github.com/${repo}.git`, `HEAD:${ref}`)
-  pushed = true
 } catch (e) {
   console.error(`git push refused (${String(e.stderr || e.message).split('\n')[0]}); trying the refs API`)
-}
-if (!pushed) {
-  // The objects must exist remotely for the API path; if push was refused entirely, the ref API cannot help.
-  fail('push of the capture ref failed')
+  try {
+    const tree = []
+    for (const f of files) {
+      const blob = await api('POST', 'git/blobs', { content: readFileSync(join(tmp, f)).toString('base64'), encoding: 'base64' })
+      tree.push({ path: f, mode: '100644', type: 'blob', sha: blob.sha })
+    }
+    const t = await api('POST', 'git/trees', { tree })
+    const c = await api('POST', 'git/commits', { message: `review captures ${key}`, tree: t.sha, parents: [] })
+    sha = c.sha
+    try { await api('PATCH', `git/${ref}`, { sha, force: true }) } catch { await api('POST', 'git/refs', { ref, sha }) }
+  } catch (e2) {
+    fail(`push of the capture ref failed (${e2.message})`)
+  }
 }
 
 const bad = []

@@ -120,12 +120,12 @@ Rules (keep it portable):
 
 ### Step 3 — Render to PNG
 ```bash
-node .claude/skills/ui-proposal/render.mjs writeups/ui-proposals/<slug>.html writeups/ui-proposals/<slug>.png
+node .claude/skills/ui-proposal/render.mjs writeups/ui-proposals/<slug>.html screenshots/<slug>.png
 # optional: --width 1100   (default 1000)   --selector ".stage"   (crop to element)
 ```
 Uses the repo's Playwright (`@playwright/test`) headless Chromium — no network, 2× for crisp
-image. Render **into `writeups/ui-proposals/`** (not `screenshots/`) so the PNG is committed and
-can be embedded inline (step 4).
+image. Render **into `screenshots/`** — the PNG is never committed (#3351); step 4 publishes it to a
+non-branch ref and embeds it inline.
 
 ### Step 4 — Hand off (review happens on the DIFF)
 **Commit a text artifact so feedback can be inline.** Alongside the `.html`, write the
