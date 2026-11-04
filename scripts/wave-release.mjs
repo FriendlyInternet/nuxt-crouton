@@ -131,6 +131,18 @@ export function mayCloseHeldIssue({ labels, prLabels, mergedBy, owner, ownerGo =
   return ownerGo || hasLabel(prLabels, 'build:approved') || (!!mergedBy && mergedBy === owner)
 }
 
+/** #3368: did the owner's standing `ok` on the PR drive this merge? Unreadable => false (keep the hold). */
+async function ownerOkOnPr({ github, context, core }, pr, n, ownerLogin) {
+  const { owner, repo } = context.repo
+  try {
+    const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
+    const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
+    const { go } = ownerMergeGo({ comments, commits, owner: ownerLogin })
+    if (go) core.info(`#${n}: owner ok on the PR drove the merge - releasing the hold.`)
+    return go
+  } catch (e) { core.warning(`#${n}: could not check owner ok (${e.message}) - keeping the hold.`); return false }
+}
+
 /**
  * A merged PR closes its `Closes #NN` issues. Sub-PRs merge into the EPIC branch, so GitHub does
  * NOT auto-close them (auto-close is default-branch only) — close them here; the resulting
@@ -160,16 +172,8 @@ export async function closeLinkedIssues(ctx) {
       if (gi.data.state === 'closed') continue
       const ownerLogin = process.env.OWNER_LOGIN || 'pmcp'
       const check = (ownerGo = false) => mayCloseHeldIssue({ labels: gi.data.labels, prLabels: pr.labels, mergedBy: pr.merged_by?.login, owner: ownerLogin, ownerGo })
-      let may = check()
-      if (!may) {
-        // #3368: a bot merge driven by the owner's `ok` on the PR is the human step too.
-        try {
-          const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
-          const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
-          const go = ownerMergeGo({ comments, commits, owner: ownerLogin })
-          if (go.go) { may = check(true); core.info(`#${n}: owner ok on the PR drove the merge - releasing the hold.`) }
-        } catch (e) { core.warning(`#${n}: could not check owner ok (${e.message}) - keeping the hold.`) }
-      }
+      // #3368: a bot merge driven by the owner's `ok` on the PR is the human step too.
+      const may = check() || check(await ownerOkOnPr(ctx, pr, n, ownerLogin))
       if (!may) {
         core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
       }
