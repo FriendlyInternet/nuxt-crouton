@@ -1114,6 +1114,10 @@ function buildOrganizationConfig(
   const hasAutoTeamSetup = teamsConfig.autoCreateOnSignup || teamsConfig.defaultTeamSlug
   const getAllowUserToCreateOrganization = () => {
     if (teamsConfig.allowCreate !== undefined) {
+      if (teamsConfig.allowCreate === 'superAdmin') {
+        // Only users with the site-admin role (user.role === 'admin') may create teams
+        return (user: { role?: string | null } | null | undefined) => user?.role === 'admin'
+      }
       return teamsConfig.allowCreate
     }
     // Default: false if auto-setup is configured, true otherwise
