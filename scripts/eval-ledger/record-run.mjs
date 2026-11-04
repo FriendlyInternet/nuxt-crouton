@@ -91,7 +91,9 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
   try {
     const wf = await api(`/repos/${repo}/actions/workflows/${env.WORKFLOW_FILE}/runs?created=%3E%3D${encodeURIComponent(start.slice(0, 10))}&per_page=100`)
     for (const r of wf?.workflow_runs || []) {
-      if (String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
+      // Same subject only: the run's head branch is the work branch, or it lists our PR.
+      const sameSubject = (branch && r.head_branch === branch) || (pr && (r.pull_requests || []).some((p) => p.number === pr))
+      if (!sameSubject || String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
       siblings.push({ run_id: r.id, start: r.run_started_at || r.created_at, end: r.updated_at || end })
     }
   } catch { /* ignore */ }

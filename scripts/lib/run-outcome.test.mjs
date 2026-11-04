@@ -188,11 +188,29 @@ test('buildRecord: an overlapping sibling run’s comment is excluded from this 
 })
 
 test('buildRecord: an in-flight same-workflow run (no record yet) is flagged as overlap', async () => {
-  runsList = [{ id: 8, run_started_at: '2026-11-03T10:05:00Z', updated_at: '2026-11-03T10:40:00Z' }, { id: 9, run_started_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-03T10:30:00Z' }, { id: 7, run_started_at: '2026-11-03T08:00:00Z', updated_at: '2026-11-03T08:30:00Z' }]
+  runsList = [{ id: 8, head_branch: 'work-42', run_started_at: '2026-11-03T10:05:00Z', updated_at: '2026-11-03T10:40:00Z' }, { id: 9, head_branch: 'work-42', run_started_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-03T10:30:00Z' }, { id: 7, head_branch: 'work-42', run_started_at: '2026-11-03T08:00:00Z', updated_at: '2026-11-03T08:30:00Z' }]
   try {
     const rec = await build({}, [agent(7, 'x')])
     assert.deepEqual(rec.overlap, ['8']) // not itself, not the run that ended before this one began
     assert.equal(rec.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('overlap needs the same issue/PR: overlapping runs on different issues are not flagged, same issue are', async () => {
+  const win = { run_started_at: '2026-11-03T10:05:00Z', updated_at: '2026-11-03T10:40:00Z' }
+  try {
+    runsList = [{ id: 8, head_branch: 'work-77', pull_requests: [{ number: 5 }], ...win }]
+    const other = await build({}, [])
+    assert.deepEqual(other.overlap, [])
+    assert.equal(other.attribution, 'exact')
+    assert.deepEqual(other.produced, ['nothing']) // a run that made nothing still records nothing
+    runsList = [{ id: 8, head_branch: 'work-42', ...win }]
+    const mine = await build({}, [])
+    assert.deepEqual(mine.overlap, ['8'])
+    // the other side of the pair (run 8 on the same issue, seeing run 9) flags too
+    runsList = [{ id: 9, head_branch: 'work-42', run_started_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-03T10:30:00Z' }]
+    const peer = await buildRecord({ env: { ...base, RUN_ID: '8' }, api: async (p) => p.includes('/actions/runs/') ? { run_started_at: win.run_started_at } : p.includes('/actions/workflows/') ? { workflow_runs: runsList } : p.includes('/pulls?') ? [{ number: 99 }] : [], listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:40:00Z') })
+    assert.deepEqual(peer.overlap, ['9'])
   } finally { runsList = [] }
 })
 
