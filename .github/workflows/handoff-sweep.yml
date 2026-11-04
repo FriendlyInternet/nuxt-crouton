@@ -1,18 +1,22 @@
 name: Hand-off sweep (replay saved pipeline hand-offs)
 
 # Pipeline hand-offs that hit the GitHub API limit or a server error are saved as a
-# `handoff-pending` comment + the `handoff:pending` label (#3306). This replays them hourly.
+# `handoff-pending` comment + the `handoff:pending` label (#3306). This replays them hourly + after every CI run (#3361: GitHub skips many cron runs).
 # Each replay checks its own proof first, so a hand-off that half-worked is finished, not redone.
 # Red if one is still pending 24 h after it was first tried.
 
 on:
   schedule:
     - cron: '41 * * * *'
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
   issues: write
+  pull-requests: read
 
 concurrency:
   group: handoff-sweep
@@ -23,21 +27,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Cheap gate: runs with nothing pending spend no App allowance (workflow token only).
+      - name: Anything pending?
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/$GITHUB_REPOSITORY/issues?labels=handoff:pending&state=open&per_page=1" --jq length)
+          echo "n=$n" >> "$GITHUB_OUTPUT"
       # Replays MUST run as the App: the loop guard lets only nuxt-harness[bot] drive the pipeline.
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      - if: steps.pending.outputs.n != '0'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: steps.pending.outputs.n != '0'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: steps.pending.outputs.n != '0'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Replay pending hand-offs
+        if: steps.pending.outputs.n != '0'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}

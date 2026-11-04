@@ -1,4 +1,5 @@
 name: Auto-merge epic sub-PRs
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}"
 
 # The decompose pipeline's design (task-decompose SKILL): a NON-GATE sub-PR merges
 # into its epic branch automatically. The epic branch is a staging area — the only
@@ -91,9 +92,18 @@ on:
   # (kind=automerge-go). The caller's event is still issue_comment, so the branches below that
   # read `issue_comment` keep working unchanged.
   workflow_call:
+  # #3361: GitHub drops many scheduled runs, so the merge check can be re-run by hand (or by the
+  # hand-off sweep replaying a saved retry). With `pr` it evaluates that PR; empty = sweep all.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to evaluate; empty = sweep all open sub-PRs'
+        required: false
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   automerge:
@@ -102,6 +112,7 @@ jobs:
     # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
         (github.event.action != 'labeled' || github.event.label.name == 'build:approved')) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
@@ -129,6 +140,7 @@ jobs:
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}   # #3361: writes the retry note when the App is out of allowance
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -180,7 +192,7 @@ jobs:
 
             // Resolve candidate PR numbers from whatever event fired.
             const candidates = new Set()
-            if (context.eventName === 'schedule') {
+            if (context.eventName === 'schedule' || (context.eventName === 'workflow_dispatch' && !context.payload.inputs?.pr)) {
               // The level-triggered sweep (#2091): there is no event payload to read from, so
               // enumerate the population directly — every open, non-draft PR targeting an epic
               // branch. Drafts are the sign-off gates and are merged by resume-on-comment on
@@ -198,6 +210,8 @@ jobs:
               if (subPrs.length > SWEEP_MAX) {
                 core.warning(`Sweep cap ${SWEEP_MAX} reached — ${subPrs.length - SWEEP_MAX} sub-PR(s) NOT evaluated this tick. They will be picked up next hour, but if this recurs the cap needs raising.`)
               }
+            } else if (context.eventName === 'workflow_dispatch') {
+              candidates.add(Number(context.payload.inputs.pr))
             } else if (context.eventName === 'pull_request') {
               candidates.add(context.payload.pull_request.number)
             } else if (context.eventName === 'issue_comment') {
@@ -425,11 +439,13 @@ jobs:
            } catch (e) {
             // GitHub API allowance exhausted (#3287): not a failure of the PR. End green with a warning;
             // the hourly schedule re-evaluates every open PR. Any other error still goes red.
-            let deferOrThrow
+            // With a PR in hand, a retry of this merge check is saved for the hand-off sweep (#3361).
+            let deferMergeCheck
             try {
-              ({ deferOrThrow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`))
+              ({ deferMergeCheck } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`))
             } catch { throw e }
-            deferOrThrow(e, core.warning)
+            const r = await deferMergeCheck(e, currentPr, undefined, core.warning)
+            if (r.recorded) return
             // Tell the PR it is waiting (#3306). Best effort: with the allowance fully used this
             // comment may itself fail, so the run summary is the guaranteed record.
             try {
@@ -464,21 +480,27 @@ jobs:
               core.warning(`build review sweep skipped — scripts/build-review-sweep.mjs is not on the checked-out branch yet (${e.code || e.message})`)
               return
             }
-            const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
-            for (const p of open.filter(x => !x.draft && /^work-\d+$/.test(x.head.ref)).slice(0, 50)) {
-              try {
-                const sha = p.head.sha
-                const checks = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, per_page: 100 })
-                const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: p.number, per_page: 100 })
-                const commit = (await github.rest.repos.getCommit({ owner, repo, ref: sha })).data
-                const pr = { headRefName: p.head.ref, baseRefName: p.base.ref, headRefOid: sha, state: 'OPEN', isDraft: p.draft, author: { login: p.user.login } }
-                if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) continue
-                // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
-                await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
-                  body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
-                const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
-                await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
-                  () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
-                core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
-              } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
+            // #3361: a limit / 5xx here ends green with a warning; anything else still goes red.
+            try {
+              const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
+              for (const p of open.filter(x => !x.draft && /^work-\d+$/.test(x.head.ref)).slice(0, 50)) {
+                try {
+                  const sha = p.head.sha
+                  const checks = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, per_page: 100 })
+                  const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: p.number, per_page: 100 })
+                  const commit = (await github.rest.repos.getCommit({ owner, repo, ref: sha })).data
+                  const pr = { headRefName: p.head.ref, baseRefName: p.base.ref, headRefOid: sha, state: 'OPEN', isDraft: p.draft, author: { login: p.user.login } }
+                  if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) continue
+                  // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
+                  await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
+                    body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
+                  const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                  await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
+                    () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
+                  core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
+                } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
+              }
+            } catch (e) {
+              const { deferOrThrow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`)
+              deferOrThrow(e, core.warning)
             }

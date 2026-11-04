@@ -9,8 +9,9 @@ import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import {
   PENDING_LABEL, classifyHandoffError, handoffMarker, parseHandoff, handoffKey,
-  handoffRunTitle, labelHandoffDone, dispatchHandoffDone,
+  handoffRunTitle, labelHandoffDone, dispatchHandoffDone, automergeRetryStep,
 } from './lib/handoff.mjs'
+import { deferOrThrow } from './lib/rate-limit.mjs'
 
 const run = promisify(execFile)
 
@@ -184,6 +185,16 @@ export async function handoffGuard(step, fn, d = makeDeps()) {
     d.log(`::warning::hand-off ${step.kind} on #${step.issue} deferred (${c.reason}); the hourly sweep replays it`)
     return { deferred: true, reason: c.reason }
   }
+}
+
+// Outer catch of the merge check (#3361): not limit/5xx -> rethrown (red, nothing saved).
+// Limit/5xx -> green; with a PR in hand, a retry of the merge check is saved for the sweep.
+export async function deferMergeCheck(e, pr, d = makeDeps(), warn = d.log) {
+  deferOrThrow(e, warn)
+  const c = classifyHandoffError(e)
+  if (!pr || c.action !== 'defer') return { recorded: false }
+  try { await recordPending({ ...automergeRetryStep(pr), since: floorSec(d.now()) }, c, d); return { recorded: true } }
+  catch (re) { warn(`retry not recorded: ${re.message}`); return { recorded: false } }
 }
 
 async function main() {
