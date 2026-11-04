@@ -49,3 +49,13 @@ test('15 revise step verifies before the #2941 comment; baseline copies the scri
   assert.ok(v > 0 && v < c)
   assert.match(SRC, /cp scripts\/revise-push\.mjs "\$RUNNER_TEMP\/revise-push\.mjs"/)
 })
+
+test('16 early verify failure fails the run with the numbers (not just a warning)', () => {
+  const v = SRC.indexOf('revise-push.mjs" verify')
+  const elseAt = SRC.indexOf('else', v)
+  const block = SRC.slice(elseAt, SRC.indexOf('fi', SRC.indexOf('exit 1', elseAt)) + 2)
+  assert.match(block, /::error::\$\{VERIFY_MSG\}/)
+  assert.match(block, /\$VERIFY_MSG/)
+  assert.match(block, /exit 1/)
+  assert.ok(!block.includes('::warning::${VERIFY_MSG}'))
+})

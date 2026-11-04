@@ -535,8 +535,10 @@ jobs:
                 echo "base_pushed=1" >> "$GITHUB_OUTPUT"
                 [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
               else
-                echo "::warning::${VERIFY_MSG}"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not confirmed up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+                # Behind on GitHub (behind_by/ahead_by are in VERIFY_MSG): fail the run here, with the numbers.
+                echo "::error::${VERIFY_MSG}"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Not up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+                exit 1
               fi
             else
               echo "$PUSH_OUT" | tail -4
