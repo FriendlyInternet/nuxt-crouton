@@ -44,41 +44,50 @@ const lines = (out) => String(out).split('\n').map((l) => l.trim()).filter(Boole
 const pageJson = async (d, endpoint, jq) => lines(await d.gh(['api', '--paginate', endpoint, '--jq', jq]))
 const floorSec = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString()
 
+// Latest issue comment whose body contains `marker` (empty string when none).
+async function lastCommentWith(d, issue, marker) {
+  const out = await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${issue}/comments?per_page=100`,
+    '--jq', `[.[] | select(.body | contains("${marker}"))] | last | .id // empty`])
+  return String(out).split('\n').map((s) => s.trim()).filter(Boolean).pop()
+}
+
+async function resolvePlain(step, d) {
+  // Hand-back (fix-ci): the instruction comment POST is part of the step. First run posts it from
+  // postBodyFile; a replay (file gone) reuses the already-posted PR comment (fallbackFeedback).
+  if (!step.postBodyFile && !step.fallbackFeedback) return { workflow: step.workflow, inputs: step.inputs || {} }
+  let id = step.fallbackFeedback
+  if (step.postBodyFile && existsSync(step.postBodyFile)) {
+    id = String(await d.gh(['api', `repos/${d.repo}/issues/${step.issue}/comments`, '--method', 'POST', '-F', `body=@${step.postBodyFile}`, '--jq', '.id'])).trim()
+  }
+  return { workflow: step.workflow, inputs: { ...(step.inputs || {}), feedback: String(id) } }
+}
+
+async function resolveRevisePr(step, d) { // PR comment → its worker branch; the pulls.get read is deferrable too
+  const { routePrComment } = await import('./revise-route.mjs')
+  const pr = JSON.parse(await d.gh(['api', `repos/${d.repo}/pulls/${step.issue}`, '--jq', '{headRef: .head.ref, state}']))
+  const r = routePrComment({ pr, comment: {} })
+  return { workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(step.feedback), branch: r.branch } }
+}
+
+async function resolvePlanBuild(step, d) {
+  const id = await lastCommentWith(d, step.issue, '<!-- pipeline-plan:v1 -->')
+  if (!id) throw new Error(`plan:approved on #${step.issue} but no plan comment found — nothing to build from`)
+  return { workflow: 'work-issue-pidev.yml', inputs: { issue: step.issue, mode: 'build', plan: id } }
+}
+
+async function resolveReplan(step, d) {
+  const id = await lastCommentWith(d, step.issue, '<!-- plan-review-verdict:no-go -->')
+  if (!id) throw new Error(`no no-go review comment found on #${step.issue}`)
+  return { workflow: 'work-issue-pidev.yml', inputs: { issue: step.issue, mode: 'plan', feedback: id } }
+}
+
+const RESOLVERS = { dispatch: resolvePlain, 'revise-pr': resolveRevisePr, 'plan-build': resolvePlanBuild, replan: resolveReplan }
+
 // Resolve a step to a dispatch (workflow + inputs). Reads happen here, so a limit on a read defers too.
-async function resolveDispatch(step, d) {
-  if (step.kind === 'dispatch') {
-    // Hand-back (fix-ci): the instruction comment POST is part of the step. First run posts it from
-    // postBodyFile; a replay (file gone) reuses the already-posted PR comment (fallbackFeedback).
-    if (step.postBodyFile || step.fallbackFeedback) {
-      let id = step.fallbackFeedback
-      if (step.postBodyFile && existsSync(step.postBodyFile)) {
-        id = String(await d.gh(['api', `repos/${d.repo}/issues/${step.issue}/comments`, '--method', 'POST', '-F', `body=@${step.postBodyFile}`, '--jq', '.id'])).trim()
-      }
-      return { workflow: step.workflow, inputs: { ...(step.inputs || {}), feedback: String(id) } }
-    }
-    return { workflow: step.workflow, inputs: step.inputs || {} }
-  }
-  if (step.kind === 'revise-pr') { // PR comment → its worker branch; the pulls.get read is deferrable too
-    const { routePrComment } = await import('./revise-route.mjs')
-    const pr = JSON.parse(await d.gh(['api', `repos/${d.repo}/pulls/${step.issue}`, '--jq', '{headRef: .head.ref, state}']))
-    const r = routePrComment({ pr, comment: {} })
-    return { workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(step.feedback), branch: r.branch } }
-  }
-  if (step.kind === 'plan-build') {
-    const out = await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${step.issue}/comments?per_page=100`,
-      '--jq', '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .id // empty'])
-    const id = String(out).split('\n').map((s) => s.trim()).filter(Boolean).pop()
-    if (!id) throw new Error(`plan:approved on #${step.issue} but no plan comment found — nothing to build from`)
-    return { workflow: 'work-issue-pidev.yml', inputs: { issue: step.issue, mode: 'build', plan: id } }
-  }
-  if (step.kind === 'replan') {
-    const out = await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${step.issue}/comments?per_page=100`,
-      '--jq', '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | last | .id // empty'])
-    const id = String(out).split('\n').map((s) => s.trim()).filter(Boolean).pop()
-    if (!id) throw new Error(`no no-go review comment found on #${step.issue}`)
-    return { workflow: 'work-issue-pidev.yml', inputs: { issue: step.issue, mode: 'plan', feedback: id } }
-  }
-  throw new Error(`unknown hand-off kind: ${step.kind}`)
+function resolveDispatch(step, d) {
+  const fn = RESOLVERS[step.kind]
+  if (!fn) throw new Error(`unknown hand-off kind: ${step.kind}`)
+  return fn(step, d)
 }
 
 const labelEvents = (d, step) =>
