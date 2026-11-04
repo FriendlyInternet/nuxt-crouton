@@ -18,6 +18,7 @@
  */
 
 import { routeIssue } from './lib/plan-route.mjs'
+import { handoffGuard } from './handoff-exec.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
@@ -183,7 +184,9 @@ export async function releaseWaiting({ github, context }) {
     try {
       await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'work-this' })
     } catch { /* not present */ }
-    await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['work-this'] })
+    // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+    await handoffGuard({ kind: 'label', issue: it.number, label: 'work-this' },
+      () => github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['work-this'] }))
     await markReleased({ github, context, waitC })
     released.push(it.number)
     for (const l of scopeLabels(labels)) claimed.add(l)

@@ -67,10 +67,12 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
   const { readFileSync } = await import('node:fs')
   const wf = readFileSync('.github/workflows/work-issue-pidev.yml', 'utf8')
   assert.match(wf, /PI_MODEL: \$\{\{ inputs\.model \|\| \(inputs\.mode == 'plan' && steps\.model\.outputs\.plan\)/)
-  for (const f of ['.github/workflows/plan-review.yml', 'scripts/plan-hold.mjs']) {
+  for (const f of ['scripts/handoff-exec.mjs', 'scripts/plan-hold.mjs']) {
     assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
   }
-  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /work-issue-pidev\.yml[^\n]*-f mode=plan/)
+  // plan-review re-plans through the saved-hand-off wrapper (#3306); the dispatch itself lives in handoff-exec.
+  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
+  assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
-  assert.match(wf, /gh workflow run work-issue-pidev\.yml[^\n]*-f mode=plan/)
+  assert.match(wf, /handoff-exec\.mjs dispatch[^\n]*work-issue-pidev\.yml[^\n]*mode:"plan"/)
 })
