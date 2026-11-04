@@ -113,4 +113,28 @@ describe('redirects middleware', () => {
     expect(getTeamBySlug).toHaveBeenCalledWith(expect.anything(), 'led002')
     expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/new', 301)
   })
+  const withRows = (rows: any[]) => vi.doMock('../server/database/queries/redirects', () => ({ getActiveCroutonRedirects: vi.fn(async () => rows) }))
+
+  it('default-team setting set: another team\'s /led002 and /archief rows do not fire for a default-team path', async () => {
+    withRows([
+      { teamId: 'B', fromPath: '/led002', toPath: '/b-led', statusCode: '301' },
+      { teamId: 'B', fromPath: '/archief', toPath: '/b-archief', statusCode: '301' }
+    ])
+    await run('/led002', slug => (slug === 'led002' ? { id: 'A' } : null), {}, 'led002')
+    expect(sendRedirect).not.toHaveBeenCalled()
+    await run('/archief', slug => (slug === 'led002' ? { id: 'A' } : null), {}, 'led002')
+    expect(sendRedirect).not.toHaveBeenCalled()
+  })
+
+  it('team A renames slug and team B takes the old one: A\'s redirects do not fire for B, B\'s own do', async () => {
+    withRows([
+      { teamId: 'A', fromPath: '/old', toPath: '/new', statusCode: '301' },
+      { teamId: 'B', fromPath: '/b-old', toPath: '/b-new', statusCode: '301' }
+    ])
+    // slug "acme" now belongs to B
+    await run('/acme/old', slug => (slug === 'acme' ? { id: 'B' } : null))
+    expect(sendRedirect).not.toHaveBeenCalled()
+    await run('/acme/b-old', slug => (slug === 'acme' ? { id: 'B' } : null))
+    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/b-new', 301)
+  })
 })
