@@ -202,7 +202,7 @@ jobs:
             | awk '/^---$/ && n < 2 { n++; next } n >= 2' \
             | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{pr}}#${PR}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
                   -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" -e "s#{{diff_file}}#$D/diff.patch#g" > "$D/prompt.txt"
-          pi --print --approve --provider claude-bridge --model "$PI_MODEL" "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict
