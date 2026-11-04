@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      issues: read
+      issues: write
     env:
       ISSUE: ${{ github.event.issue.number }}
     steps:
@@ -28,17 +28,17 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
       - name: Dispatch the build with the approved plan
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           # The plan the reviewer approved = the newest plan comment (a sent-back plan is replaced).
-          PLAN_ID="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
-            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .id // empty' | tail -n 1)"
-          if [ -z "$PLAN_ID" ]; then
-            echo "::error::plan:approved on #$ISSUE but no plan comment found — nothing to build from"
-            exit 1
-          fi
-          echo "building #$ISSUE from approved plan comment $PLAN_ID"
-          gh workflow run work-issue-pidev.yml --repo "${{ github.repository }}" -f issue="$ISSUE" -f mode=build -f plan="$PLAN_ID"
+          # Read + dispatch are ONE hand-off: a limit / 5xx on either is saved and replayed (#3306).
+          node scripts/handoff-exec.mjs plan-build "$(jq -nc --argjson i "$ISSUE" '{issue:$i}')"

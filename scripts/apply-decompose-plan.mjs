@@ -33,7 +33,8 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
+import { pathToFileURL, fileURLToPath } from 'node:url'
+import { classifyHandoffError } from './lib/handoff.mjs'
 import { writePipelineBlock } from './pipeline-context.mjs'
 import { shouldReview, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
@@ -302,6 +303,19 @@ function realExec(file, args, input) {
 export const issueApi = (repo, n, tail = '') => `repos/${repo}/issues/${n}${tail}`
 export const ghGetBody = (exec, repo, n) => exec('gh', ['api', issueApi(repo, n), '-q', '.body']) || ''
 export const ghAddLabel = (exec, repo, n, label) => exec('gh', ['api', '--method', 'POST', issueApi(repo, n, '/labels'), '-f', `labels[]=${label}`])
+/**
+ * Run one hand-off call; a GitHub limit / 5xx is recorded as a pending hand-off (replayed hourly,
+ * #3306) instead of failing the plan. Anything else rethrows. Synchronous, like the rest of this file.
+ */
+export function deferHandoff(exec, step, fn, state) {
+  try { return fn() } catch (e) {
+    const c = classifyHandoffError(e)
+    if (c.action !== 'defer') throw e
+    exec('node', [fileURLToPath(new URL('./handoff-exec.mjs', import.meta.url)), 'record', JSON.stringify({ step, reason: c.reason, resetAt: c.resetAt || null })])
+    state.pending.push({ issue: step.issue, kind: step.kind, label: step.label || step.workflow, reason: c.reason })
+    state.log(`⏳ ${step.kind} on #${step.issue} deferred (${c.reason}) — the hourly sweep replays it`)
+  }
+}
 export const ghRemoveLabel = (exec, repo, n, label) => exec('gh', ['api', '--method', 'DELETE', issueApi(repo, n, `/labels/${encodeURIComponent(label)}`)])
 export const ghSetBody = (exec, repo, n, file) => exec('gh', ['api', '--method', 'PATCH', issueApi(repo, n), '-F', `body=@${file}`])
 export const ghComment = (exec, repo, n, file) => exec('gh', ['api', '--method', 'POST', issueApi(repo, n, '/comments'), '-F', `body=@${file}`])
@@ -320,13 +334,13 @@ export function ghCreateIssue(exec, repo, { title, file, labels = [] }) {
  * One small handler per action type (a dispatch table) — each closes over the shared run state.
  */
 export function runActions(actions, { repo, exec = realExec, log = console.error, writeBody = defaultWriteBody } = {}) {
-  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [], blocked: [] }
+  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [], blocked: [], pending: [] }
   for (const a of actions) {
     const handler = ACTION_HANDLERS[a.type]
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, mockupMissing: !!state.mockupMissing }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, pending: state.pending, mockupMissing: !!state.mockupMissing }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -463,13 +477,13 @@ const ACTION_HANDLERS = {
     ghAddLabel(exec, repo, a.issue, a.label)
     labelled.push({ issue: a.issue, label: a.label })
   },
-  'add-label'(a, { repo, exec, labelled }) {
+  'add-label'(a, { repo, exec, labelled, ...st }) {
     // Force a FRESH labeled event (#1764): the leaf target may already carry work-this from a
     // prior run, and a plain --add-label is then a silent no-op that fires NO `labeled` event —
     // so the single-use worker never triggers and the decompose gate sees no `leafDispatched`
     // (exactly the #1741 failure). Remove-then-add guarantees the event fires.
     try { ghRemoveLabel(exec, repo, a.issue, a.label) } catch { /* wasn't present */ }
-    ghAddLabel(exec, repo, a.issue, a.label)
+    deferHandoff(exec, { kind: 'label', issue: a.issue, label: a.label }, () => ghAddLabel(exec, repo, a.issue, a.label), { ...st, pending: st.pending, log: st.log })
     labelled.push({ issue: a.issue, label: a.label })
   },
   'create'(a, { repo, exec, writeBody, log, refToNumber, created }) {
@@ -484,14 +498,15 @@ const ACTION_HANDLERS = {
     const restId = exec('gh', ['api', `repos/${repo}/issues/${child}`, '-q', '.id'])
     exec('gh', ['api', '--method', 'POST', `repos/${repo}/issues/${a.parent}/sub_issues`, '-F', `sub_issue_id=${restId}`])
   },
-  'trigger-label'(a, { repo, exec, refToNumber, labelled }) {
+  'trigger-label'(a, { repo, exec, refToNumber, labelled, ...st }) {
     const child = refToNumber[a.ref]
-    ghAddLabel(exec, repo, child, a.label)
+    deferHandoff(exec, { kind: 'label', issue: child, label: a.label }, () => ghAddLabel(exec, repo, child, a.label), st)
     labelled.push({ issue: child, label: a.label })
   },
   // Hold-then-review (#2776): start the ticket review run, which releases the first tickets on go.
-  'request-ticket-review'(a, { repo, exec, log }) {
-    exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`])
+  'request-ticket-review'(a, { repo, exec, log, ...st }) {
+    deferHandoff(exec, { kind: 'dispatch', issue: a.epic, workflow: 'ticket-review.yml', inputs: { epic: String(a.epic) } },
+      () => exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`]), { ...st, log })
     log(`ticket review requested for epic #${a.epic} — no ticket starts until it is approved`)
   },
   // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
