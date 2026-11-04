@@ -204,6 +204,7 @@ jobs:
       issues: write
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
+      conflict: ${{ steps.revise.outputs.conflict }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -1820,7 +1821,7 @@ jobs:
           WORKFLOW_FILE: work-issue-pidev.yml
           ISSUE: "${{ inputs.issue || github.event.issue.number }}"
           BRANCH: "${{ inputs.branch }}"
-          STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && 'revise' || 'work') }}"
+          STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && (needs.work-pi.outputs.conflict == '1' && 'conflict' || 'revise') || 'work') }}"
           MODEL_TIER: default
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.work-pi.outputs.rl_start }}

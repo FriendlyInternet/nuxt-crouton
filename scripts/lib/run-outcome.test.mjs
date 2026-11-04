@@ -156,8 +156,10 @@ test('7. backfill: legacy rule + subject from log; nothing rows keep the run URL
 })
 
 // ── through the real record builder (bot filter, PR-by-branch lookup, overlap exclusion) ──
+let runsList = []
 const mkApi = (comments) => async (p) => {
   if (p.includes('/actions/runs/')) return { run_started_at: '2026-11-03T10:00:00Z' }
+  if (p.includes('/actions/workflows/')) return { workflow_runs: runsList }
   if (p.includes('/pulls?')) return [{ number: 99 }]
   if (p.includes('/issues/42/')) return comments
   return []
@@ -183,6 +185,21 @@ test('buildRecord: an overlapping sibling run’s comment is excluded from this 
   const sibling = async () => [{ workflow: 'plan-review.yml', issue: 42, run_id: '8', started_at: '2026-11-03T09:50:00Z', ended_at: '2026-11-03T10:20:00Z' }]
   const rec = await build({}, [agent(7, 'sibling plan')], sibling)
   assert.deepEqual(rec.overlap, ['8'])
+})
+
+test('buildRecord: an in-flight same-workflow run (no record yet) is flagged as overlap', async () => {
+  runsList = [{ id: 8, run_started_at: '2026-11-03T10:05:00Z', updated_at: '2026-11-03T10:40:00Z' }, { id: 9, run_started_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-03T10:30:00Z' }, { id: 7, run_started_at: '2026-11-03T08:00:00Z', updated_at: '2026-11-03T08:30:00Z' }]
+  try {
+    const rec = await build({}, [agent(7, 'x')])
+    assert.deepEqual(rec.overlap, ['8']) // not itself, not the run that ended before this one began
+    assert.equal(rec.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('the unmarked auto-merge note from the real PR #3308 is the reason every workflow note carries the marker', () => {
+  const real = { id: 5, created_at: at, user: { login: 'nuxt-harness[bot]' }, body: '<!-- automerge-ci-missing -->\n⏸️ **Not auto-merged — `CI Gate` never reported.**' }
+  assert.equal(classifyComment(real), 'comment') // unmarked: indistinguishable from agent output
+  assert.equal(classifyComment({ ...real, body: real.body.replace('\n', '\n<!-- pipeline-note -->\n') }), null)
 })
 
 test('tierModel reads the tier from the models file, unknown when unreadable', async () => {

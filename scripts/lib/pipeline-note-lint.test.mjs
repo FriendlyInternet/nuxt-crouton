@@ -61,6 +61,11 @@ test('lint over the real workflows: every non-output post carries the marker', (
 const SCRIPTS = ['traffic-control']
 const SCRIPT_DIR = join(DIR, '..', '..', 'scripts')
 
+test('lint over automerge-epic-subpr.yml: every note it posts carries the marker', () => {
+  const text = readFileSync(join(DIR, 'automerge-epic-subpr.yml'), 'utf8')
+  assert.deepEqual(findUnmarked('automerge-epic-subpr', text), [])
+})
+
 test('lint over the scripts the workflows call: every post carries the marker', () => {
   const all = []
   let sites = 0
@@ -83,7 +88,7 @@ test('record-outcome: runs after every other job, even failed or cancelled ones'
     const block = text.slice(text.indexOf('\n  record-outcome:\n'))
     const needs = /needs: \[([^\]]*)\]/.exec(block)[1].split(',').map((s) => s.trim())
     // on-comment: only the interpret chain is an agent run; dispatch/resume/approve paths get no record.
-    const others = jobs.filter((j) => j !== 'record-outcome' && (f !== 'on-comment' || /^(route|interpret-)/.test(j)))
+    const others = jobs.filter((j) => j !== 'record-outcome' && (f !== 'on-comment' || /^(rl-start|route|interpret-)/.test(j)))
     assert.deepEqual([...needs].sort(), [...others].sort(), `${f}: needs must list every other job`)
     assert.match(block, /if: \$\{\{ always\(\)/, `${f}: record-outcome must run with always()`)
     assert.match(block, /continue-on-error: true/, `${f}: a ledger failure must not fail the run`)

@@ -86,6 +86,15 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
       .filter((r) => r.workflow === env.WORKFLOW_FILE && ((issue && r.issue === issue) || (pr && r.pr === pr)))
       .map((r) => ({ run_id: r.run_id, start: r.started_at, end: r.ended_at }))
   } catch { /* ignore */ }
+  // Runs still in flight have no record yet, so also list the workflow's runs: each of two
+  // overlapping runs sees the other here, so BOTH rows are flagged (not only the later one).
+  try {
+    const wf = await api(`/repos/${repo}/actions/workflows/${env.WORKFLOW_FILE}/runs?created=%3E%3D${encodeURIComponent(start.slice(0, 10))}&per_page=100`)
+    for (const r of wf?.workflow_runs || []) {
+      if (String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
+      siblings.push({ run_id: r.id, start: r.run_started_at || r.created_at, end: r.updated_at || end })
+    }
+  } catch { /* ignore */ }
   const joined = joinRuns({ run_id: env.RUN_ID, start, end }, siblings, comments)
   const mine = comments.filter((c) => !joined.excludeIds.includes(c.id))
 

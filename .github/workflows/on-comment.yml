@@ -30,6 +30,33 @@ on:
     types: [created]
 
 jobs:
+  # Allowance at run start for the run record (#3251); the record job reads it again at the end.
+  rl-start:
+    name: Read API allowance at start
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Read API allowance
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
   route:
     # A bot's comment never routes (also stops our own replies re-triggering anything). Most
     # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
@@ -1407,7 +1434,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [route, interpret-read, interpret-decide, interpret-review, interpret-act]
+    needs: [rl-start, route, interpret-read, interpret-decide, interpret-review, interpret-act]
     if: ${{ always() && needs.interpret-read.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
@@ -1438,7 +1465,7 @@ jobs:
           STAGE: interpret
           MODEL_TIER: default
           NEEDS_JSON: ${{ toJSON(needs) }}
-          RL_START: ""
+          RL_START: ${{ needs.rl-start.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           DATA_TOKEN: ${{ steps.app-token.outputs.token }}
