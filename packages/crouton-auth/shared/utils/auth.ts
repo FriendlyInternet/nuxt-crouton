@@ -59,3 +59,18 @@ export function isSuperAdminUser(
 ): boolean {
   return user?.role === 'admin' || user?.superAdmin === true
 }
+
+/**
+ * Where a signed-in user belongs (#3130) — route by who you are, never hide buttons.
+ * team member → their team admin; may create teams → create-team; otherwise the
+ * "not in a team yet — ask for an invite" page.
+ */
+export function resolveTeamEntryRoute(opts: { teamSlug?: string | null, canCreateTeam: boolean }): string {
+  if (opts.teamSlug) return `/admin/${opts.teamSlug}`
+  return opts.canCreateTeam ? '/onboarding/create-team' : '/onboarding/no-team'
+}
+
+/** Opening create-team directly without permission → bounce to /admin, which routes by role. */
+export function resolveCreateTeamGuard(canCreateTeam: boolean): string | null {
+  return canCreateTeam ? null : '/admin'
+}

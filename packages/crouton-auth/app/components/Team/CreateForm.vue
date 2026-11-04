@@ -99,7 +99,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
   emit('submit', { name: event.data.name, slug: event.data.slug })
 
   if (!canCreateTeam.value) {
-    // Button is hidden for these users; never show the misleading "max teams" message
+    // Not allowed: the create-team page redirects these users away; no "max teams" message
     return
   }
 
@@ -197,7 +197,6 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
         {{ t('common.cancel') }}
       </UButton>
       <UButton
-        v-if="canCreateTeam"
         type="submit"
         :loading="isLoading"
       >

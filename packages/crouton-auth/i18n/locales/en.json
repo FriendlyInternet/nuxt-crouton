@@ -1,6 +1,8 @@
 {
   "onboarding": {
-    "noAccessYet": "You don't have access yet — ask for an invite",
+    "signOut": "Sign out",
+    "noTeamTitle": "You're not in a team yet",
+    "noTeamDescription": "Ask for an invite to join a team.",
     "createTeamTitle": "Create Your First Team",
     "createTeamDescription": "Get started by creating a workspace for your projects.",
     "settingUpWorkspace": "Setting up your workspace",
