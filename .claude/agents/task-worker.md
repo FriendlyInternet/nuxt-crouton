@@ -427,3 +427,5 @@ it carries the canonical shape: lead with the one decision **and a recommendatio
 `git push -u origin <branch>` **first**, then name that branch under *State so far*. An
 unpushed worktree is lost when you stop; a pushed branch is what the resuming session picks
 up. (This extends the step-8 "push immediately" checkpoint to the block path.)
+
+> Note (moved from root CLAUDE.md, #3350): the PR body opens with `Closes #NN`.
