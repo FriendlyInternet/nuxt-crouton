@@ -68,3 +68,41 @@ test('ok, then an owner **Worker:** comment, then the worker commit → no merge
   const fresh = [...comments, c('ok', '2026-10-28T16:20:00Z')]
   assert.equal(leaf({ go: goFor(fresh, commits) }).merge, true)
 })
+
+// ---- #3173: the owner's ok after a twice-rejected build merges a work-* → epic/* PR ----
+import { reviewState } from './build-review-state.mjs'
+const bots = ['app[bot]']
+const rv = (sha, at, final = true) => ({ user: { login: 'app[bot]', type: 'Bot' }, created_at: at,
+  body: `<!-- build-review-sha:${sha} -->\n${final ? '<!-- build-review-final -->\n' : ''}<!-- build-review-verdict:no-go -->\n\n${final ? '🔴 **Build rejected twice**' : '🔴 **Build sent back**'}\n` })
+const epicLeaf = (comments, headSha, o = {}) => {
+  const go = goFor(comments)
+  const st = reviewState({ comments, headSha, bots })
+  return decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go, finalHold: st.kind === 'final' ? st : null, red: false, ciGate: 'success', mergeableState: 'clean', ...o })
+}
+test('3173: final hold, then owner ok, green → merge', () => {
+  const d = epicLeaf([rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa')
+  assert.equal(d.merge, true)
+})
+test('3173: owner ok while a check is red → no merge', () => {
+  const d = epicLeaf([rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa', { red: true })
+  assert.equal(d.merge, false)
+  assert.equal(d.code, 'red')
+})
+test('3173: not ok, push, green, no verdict yet → no merge; fresh hold + ok → merge', () => {
+  const cs = [rv('aaa', '2026-11-01T10:00:00Z'), c('not ok: change it', '2026-11-01T11:00:00Z')]
+  assert.equal(epicLeaf(cs, 'bbb').merge, false)
+  const cs2 = [...cs, rv('bbb', '2026-11-01T13:00:00Z'), c('ok', '2026-11-01T14:00:00Z')]
+  assert.equal(epicLeaf(cs2, 'bbb').merge, true)
+})
+test('3173: ok BEFORE the final hold → no merge', () => {
+  const d = epicLeaf([c('ok', '2026-11-01T09:00:00Z'), rv('aaa', '2026-11-01T10:00:00Z')], 'aaa')
+  assert.equal(d.merge, false)
+  assert.equal(d.code, 'no-review')
+})
+test('3173: round-1 (not final) + ok → no merge', () => {
+  assert.equal(epicLeaf([rv('aaa', '2026-11-01T10:00:00Z', false), c('ok', '2026-11-01T11:00:00Z')], 'aaa').merge, false)
+})
+test('3173: work-* → main with owner ok, no verdict, no label → unchanged (merges)', () => {
+  assert.equal(leaf().merge, true)
+  assert.equal(decideLeafMerge({ baseRef: 'main', headRef: 'work-1', labels: [], go: { go: false }, finalHold: { at: '2026-11-01T10:00:00Z' }, red: false, ciGate: 'success', mergeableState: 'clean' }).merge, false)
+})
