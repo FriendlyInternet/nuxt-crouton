@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { reviewState } from './build-review-state.mjs'
+import { chooseOkReply } from './ok-reply.mjs'
+import { decideLeafMerge } from './pr-merge-gate.mjs'
 
 const bots = ['app[bot]']
 const bot = (body, at) => ({ user: { login: 'app[bot]', type: 'Bot' }, body, created_at: at })
@@ -32,4 +34,11 @@ test('needs-owner / go → other; newest comment for the SHA wins', () => {
   assert.equal(st([bot(verdict('bbb', 'needs-owner'), '2026-11-01T10:00:00Z')]).kind, 'other')
   const cs = [bot(verdict('bbb', 'no-go'), '2026-11-01T10:00:00Z'), bot(verdict('bbb', 'go'), '2026-11-01T11:00:00Z')]
   assert.equal(st(cs).kind, 'other')
+})
+test('needs-owner verdict + owner ok → no approval (no merge) and no reply', () => {
+  const state = st([bot(verdict('bbb', 'needs-owner'), '2026-11-01T10:00:00Z')])
+  assert.equal(state.kind, 'other')
+  const d = decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go: { go: true, at: '2026-11-01T11:00:00Z' }, finalHold: null, red: false, ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(d.merge, false)
+  assert.equal(chooseOkReply({ state, ownerOk: true }), null)
 })
