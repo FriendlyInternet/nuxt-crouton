@@ -87,16 +87,15 @@ invoking this skill, or when the `task-worker` agent determines staging isn't re
 |----------|------|-----------|
 | Mockup source | `writeups/ui-proposals/<slug>.html` | yes (editable source of truth) |
 | "What changes" list | `writeups/ui-proposals/<slug>.md` | yes (inline-commentable diff surface) |
-| Rendered image | `writeups/ui-proposals/<slug>.png` | **yes** — committed so it can be **embedded inline** in the sticky comment (#613) |
+| Rendered image | `screenshots/<slug>.png` | **no** — published to a non-branch ref and embedded by commit-ID URL (#3351) |
 
 `<slug>` = kebab of the surface, e.g. `mobile-collection-viewer`.
 
-> **Why the PNG is committed (not in `screenshots/`).** A GitHub comment can only show an
-> image inline if it has a fetchable URL. The PNG is committed to `writeups/ui-proposals/`
-> (gitignore-excepted, like `ticket-diagram`'s renders) and referenced by its
-> **`raw.githubusercontent.com/<repo>/<branch>/…png`** URL, so it renders as an image on web
-> **and mobile**. Linking the `.html` instead made the proposal "open as code" on mobile —
-> the #569 papercut this fixes.
+> **Why the PNG is not committed (#3351).** A comment can only show an image inline if it has a
+> fetchable URL (#569/#613). Committing PNGs bloated the repo, so they now go to a non-branch ref
+> (`refs/review-captures/issue<N>`) via `node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>`,
+> which prints a commit-pinned `https://raw.githubusercontent.com/<repo>/<sha>/<slug>.png` URL and
+> curl-verifies it. That URL renders on web **and mobile**. Only the `.html` + `.md` are committed.
 
 ### Step 1 — Understand the surface
 Read the component(s) you're about to change. The mockup must reflect the **actual** current
@@ -139,23 +138,18 @@ it lands in "Files changed" so the reviewer can inline-comment a specific change
 > makes the reviewer go hunting. Always embed a Markdown **image** by its raw URL, and only
 > after you've confirmed that URL serves the image.
 
-1. **Commit** the `.html` + `.md` + **`.png`** (via `/commit`, scope `docs`).
-2. **Push the branch so GitHub can serve the PNG.** The raw URL 404s until the commit is on
-   the remote — pushing is **not optional**, it's what makes the image appear. Push the current
-   branch (set upstream if new: `git push -u origin <branch>`). In an interactive session with
-   no PR, this is still required — the issue comment needs the same hosted file.
-3. **Verify the raw URL resolves** before you post — a 404 means a silent path-link fallback,
-   the exact failure this rule exists to prevent:
+1. **Commit** the `.html` + `.md` (via `/commit`, scope `docs`). Do not commit the PNG.
+2. **Publish the PNG** (renders to `screenshots/<slug>.png`):
    ```bash
-   url="https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png"
-   curl -s -o /dev/null -w '%{http_code}' "$url"   # must be 200
+   node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>   # prints sha= and url=; exits 1 if the URL doesn't serve image/png
    ```
+3. **Use the printed `url=`** (commit-ID pinned) in the comment below — a failing exit means no inline image.
 4. **Post the sticky comment with the PNG embedded inline** — on the **PR** if one exists,
    otherwise **on the tracking issue** (interactive / no-PR runs). Same body either way:
    ```markdown
    <!-- ui-proposal:<slug> -->
    ### 🎨 UI proposal — <slug>
-   ![<slug> mockup](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png)
+   ![<slug> mockup](<url= printed by publish-review-captures>)
 
    Review the **"what changes"** list (`writeups/ui-proposals/<slug>.md`) and comment any change.
    Reply `ok` when satisfied, or `not ok: what's wrong`.
