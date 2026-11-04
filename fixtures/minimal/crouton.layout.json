@@ -7,25 +7,49 @@
     "renderer": "panes",
     "root": {
       "type": "split",
-      "direction": "horizontal",
+      "direction": "vertical",
       "children": [
+        {
+          "type": "split",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "blockId": "collection-list",
+              "config": {
+                "collection": "mainItems",
+                "heading": "Items"
+              },
+              "defaultSize": 40
+            },
+            {
+              "type": "leaf",
+              "blockId": "entity-form",
+              "config": {
+                "collection": "mainItems",
+                "heading": "Items"
+              },
+              "defaultSize": 60
+            }
+          ]
+        },
         {
           "type": "leaf",
           "blockId": "collection-list",
           "config": {
-            "collection": "mainItems",
-            "heading": "Items"
+            "collection": "mainAdmindocs",
+            "heading": "Admindocs"
           },
-          "defaultSize": 40
+          "defaultSize": 34
         },
         {
           "type": "leaf",
-          "blockId": "entity-form",
+          "blockId": "collection-list",
           "config": {
-            "collection": "mainItems",
-            "heading": "Items"
+            "collection": "mainMembernotes",
+            "heading": "Membernotes"
           },
-          "defaultSize": 60
+          "defaultSize": 34
         }
       ]
     }
