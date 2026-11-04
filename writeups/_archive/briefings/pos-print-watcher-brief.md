@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** print-status endpoint and Bestel loading button shipped in crouton-sales. Historical record, not current guidance.
+
 # POS Print Watcher — the order button confirms the print
 
 ## Summary

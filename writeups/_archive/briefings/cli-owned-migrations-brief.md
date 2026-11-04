@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** epic https://github.com/FriendlyInternet/nuxt-crouton/issues/1445 closed completed. Historical record, not current guidance.
+
 # Epic plan (DRAFT rev 7, sixth review folded): CLI-owned migration generation — kill the nuxt-build round trip
 
 > **Status: rev 7 (2026-07-11) — TRACKED: epic
