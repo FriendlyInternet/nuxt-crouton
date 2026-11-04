@@ -115,3 +115,8 @@ test('CLI: --revised before or after the file fails a plan missing the section',
   assert.equal(spawnSync('node', [script, f, '--revised']).status, 1)
   assert.equal(spawnSync('node', [script, f]).status, 0)
 })
+
+test('#3359 marker not on the first line is rejected', () => {
+  const r = parsePlan(`intro text\n${PLAN_MARKER}\n`)
+  assert.ok(r.errors.some((e) => e.includes('must be the first line')))
+})

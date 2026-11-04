@@ -789,7 +789,7 @@ jobs:
         run: |
           set -uo pipefail
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
           if [ ! -s "$RUNNER_TEMP/plan.md" ]; then
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1

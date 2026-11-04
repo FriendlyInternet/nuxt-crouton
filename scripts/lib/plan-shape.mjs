@@ -25,6 +25,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { hasMarker } from './marker.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Assumptions', 'Needs owner']
@@ -112,6 +113,7 @@ export function parseReread(text) {
 export function parsePlan(body, { revised = false } = {}) {
   const errors = []
   if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
+  else if (!hasMarker(body, PLAN_MARKER)) errors.push(`marker ${PLAN_MARKER} must be the first line`)
   const sections = splitSections(body)
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
