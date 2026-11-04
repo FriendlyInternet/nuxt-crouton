@@ -528,8 +528,10 @@ jobs:
               echo "$PUSH_OUT" | tail -2
               RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
               # The push said yes — confirm GitHub really holds the merged base commit (#3347).
+              # rev_start moves whenever the push landed, verified or not: the finish step's lease must
+              # match the head this run itself pushed, or it refuses its own push as "PR changed".
+              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               if VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$REV_BRANCH")"; then
-                echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
                 echo "base_pushed=1" >> "$GITHUB_OUTPUT"
                 [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
               else
