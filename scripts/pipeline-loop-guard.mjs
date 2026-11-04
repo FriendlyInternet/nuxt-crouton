@@ -140,6 +140,7 @@ export function decideClaim({
   lastReopenedAt = null,
   self = {},
   revision = null,
+  mode = '',
 } = {}) {
   if (revision) return decideRevision(revision)
   if (issueState === 'closed') {
@@ -171,7 +172,8 @@ export function decideClaim({
   // from main and force-push it, wiping the revisions made on that PR (#2990: #2972 → PR #2976).
   // Revisions take the `revision` path above, so a fresh run has no legitimate reason to be here.
   const ownOpen = (linkedPRs || []).find((pr) => pr && mine.has(pr.number) && pr.state === 'open' && !pr.merged)
-  if (ownOpen) {
+  // A PLAN-only run builds nothing and never touches the branch, so it may proceed.
+  if (ownOpen && mode !== 'plan') {
     return { action: 'refuse', claimedBy: ownOpen.number, reason: `PR #${ownOpen.number} is already open for this issue — re-running would overwrite its branch and any revisions on it` }
   }
   const since = inProgressSince ? Date.parse(inProgressSince) : NaN

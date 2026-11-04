@@ -372,3 +372,30 @@ test('CLI: a merged-PR revision exits 1 and publishes claim_pr + claim_reason', 
   const o = readFileSync(out, 'utf8')
   assert.match(o, /claim_pr=77/); assert.match(o, /claim_reason=PR #77/)
 })
+
+// ── #2990: mode-aware refusal on an open own work- PR ────────────────────────────────
+const ownOpenFacts = (extra = {}) => ({
+  linkedPRs: [{ number: 7, state: 'open', merged: false, headRef: 'work-50', baseRef: 'main' }],
+  self: { pr: 7, prs: [7] },
+  ...extra,
+})
+
+test('build mode + open own PR → refuse, and the message names the PR (#2990)', () => {
+  const v = decideClaim(ownOpenFacts({ mode: 'build' }))
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 7)
+  assert.match(v.reason, /PR #7 is already open for this issue — re-running would overwrite its branch/)
+})
+
+test('no mode (decomposer lane) + open own PR → refuse (#2990)', () => {
+  assert.equal(decideClaim(ownOpenFacts()).action, 'refuse')
+})
+
+test('plan mode + open own PR → proceed (#2990)', () => {
+  assert.equal(decideClaim(ownOpenFacts({ mode: 'plan' })).action, 'proceed')
+})
+
+test('revision + open own PR → proceed (#2990)', () => {
+  const v = decideClaim(ownOpenFacts({ mode: 'build', revision: { branch: 'work-50', pr: 7, state: 'open', merged: false } }))
+  assert.equal(v.action, 'proceed')
+})

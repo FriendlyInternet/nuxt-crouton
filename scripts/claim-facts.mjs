@@ -92,9 +92,10 @@ async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
  * @param {object} [o.core]         optional logger; only `warning` is used
  * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
  *                                  Adds `revision` so the guard judges that PR, not the issue.
+ * @param {string} [o.mode]         the run mode ('plan' = plan-only); lets the guard let a plan run past an open own PR (#2990)
  * @returns {Promise<object>} the shape `decideClaim` consumes
  */
-export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '' }) {
+export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '', mode = '' }) {
   const { owner, repo } = context.repo
   const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
 
@@ -128,6 +129,7 @@ export async function gatherClaimFacts({ github, context, issueNumber, core, rev
 
   return {
     ...(revision ? { revision } : {}),
+    mode,
     issueState: issue.state,
     linkedPRs,
     inProgressSince,

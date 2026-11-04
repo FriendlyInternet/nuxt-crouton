@@ -194,3 +194,20 @@ test('revise run (reviseBranch) passes the revision through, and the same open o
   assert.deepEqual(f.revision, { branch: 'work-50', pr: 7, state: 'open', merged: false })
   assert.equal(decideClaim(f).action, 'proceed')
 })
+
+test('mode reaches the facts, and plan mode lets the guard proceed past an open own PR (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  const plan = await gatherClaimFacts({ github, context, issueNumber: 50, mode: 'plan' })
+  assert.equal(plan.mode, 'plan')
+  assert.equal(decideClaim(plan).action, 'proceed')
+  const build = await gatherClaimFacts({ github, context, issueNumber: 50, mode: 'build' })
+  assert.equal(build.mode, 'build')
+  assert.equal(decideClaim(build).action, 'refuse')
+})
+
+test('no mode given (decomposer lane) → facts carry an empty mode and the guard still refuses (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50 })
+  assert.equal(f.mode, '')
+  assert.equal(decideClaim(f).action, 'refuse')
+})
