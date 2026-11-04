@@ -159,3 +159,18 @@ test('9: pending 24 h after since → sweep reports it', async () => {
   await handoffExec(dispatchStep, w.deps); w.t += 25 * 3600e3
   const r = await sweep(w.deps); assert.equal(r.stale.length, 1)
 })
+
+// A real failing `gh` through execFileSync: the error carries status=1 plus gh's stderr (#3306).
+test('classifyHandoffError reads stderr of a real execFileSync failure (status=1)', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const run = (msg) => {
+    try { execFileSync('sh', ['-c', `echo '${msg}' >&2; exit 1`], { encoding: 'utf8', stdio: 'pipe' }) } catch (e) { return e }
+  }
+  const lim = run('gh: API rate limit exceeded for installation ID 1 (HTTP 403)')
+  assert.equal(lim.status, 1)
+  assert.deepEqual(classifyHandoffError(lim), { action: 'defer', reason: 'limit', resetAt: null })
+  const srv = run('could not create workflow dispatch event: HTTP 500 (x)')
+  assert.equal(srv.status, 1)
+  assert.deepEqual(classifyHandoffError(srv), { action: 'defer', reason: 'server' })
+  assert.equal(classifyHandoffError(run('gh: Not Found (HTTP 404)')).action, 'throw')
+})

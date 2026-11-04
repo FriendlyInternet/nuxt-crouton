@@ -11,11 +11,10 @@ export function classifyHandoffError(e) {
   if (!e) return { action: 'throw' }
   if (isRateLimitError(e)) return { action: 'defer', reason: 'limit', resetAt: rateLimitResetAt(e) }
   if (isServerError(e)) return { action: 'defer', reason: 'server' }
-  if (e.status === undefined) {
-    const text = typeof e.stderr === 'string' && e.stderr ? e.stderr : e.message || ''
-    if (fromGhStderr(text)) return { action: 'defer', reason: 'limit', resetAt: null }
-    if (serverErrorFromGhStderr(text)) return { action: 'defer', reason: 'server' }
-  }
+  // execFileSync errors carry status=1 (the exit code), so read gh's own stderr regardless of status.
+  const text = typeof e.stderr === 'string' && e.stderr ? e.stderr : e.message || ''
+  if (fromGhStderr(text)) return { action: 'defer', reason: 'limit', resetAt: null }
+  if (serverErrorFromGhStderr(text)) return { action: 'defer', reason: 'server' }
   return { action: 'throw' }
 }
 
