@@ -406,7 +406,7 @@ jobs:
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"
           mkdir -p "$PI_SESSION_DIR"
           pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+            < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)

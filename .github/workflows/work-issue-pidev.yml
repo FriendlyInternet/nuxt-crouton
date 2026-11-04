@@ -482,7 +482,9 @@ jobs:
           HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
+          echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — default=$DEFAULT hard=$HARD plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -520,6 +522,9 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
+          # merge=union (ledger files) is read from the checked-out side: a stale branch may lack
+          # .gitattributes, so seed it from the base, uncommitted (#3322).
+          git show "origin/${BASE}:.gitattributes" > "$(git rev-parse --git-path info/attributes)" 2>/dev/null || true
           if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
             echo "base merged: already up to date with ${BASE}"
             echo "base_merged=" >> "$GITHUB_OUTPUT"
@@ -565,7 +570,7 @@ jobs:
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -661,7 +666,7 @@ jobs:
           # "find the newest session" heuristic grabs the wrong run's session under concurrency (#1764).
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"; mkdir -p "$PI_SESSION_DIR"
           pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+            < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -683,7 +688,7 @@ jobs:
             cat "$HEAL_ERRS" >> "$HEAL_PROMPT"
             set +e
             pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-              "$(cat "$HEAL_PROMPT")" 2>&1 | tee -a "$LOG"
+              < "$HEAL_PROMPT" 2>&1 | tee -a "$LOG"
             set -e
             if node scripts/verify-touched-compiles.mjs > "$HEAL_ERRS" 2>&1; then
               echo "compile self-heal: touched .vue now compile ✓"
@@ -723,36 +728,52 @@ jobs:
           }
           HDR=$'<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
+          # Read the per-file state NOW, while the index is still unmerged: verify's `git add -u`
+          # and `git merge --abort` both empty this list (#3322).
+          LEFTOVER=""
+          ALL_UNTOUCHED=1
+          NFILES=0
+          for f in $(git diff --name-only --diff-filter=U); do
+            NFILES=$((NFILES + 1))
+            if grep -q '^<<<<<<< ' "$f" 2>/dev/null; then LEFTOVER="${LEFTOVER}- \`${f}\` — still has conflict markers"$'\n'; else ALL_UNTOUCHED=0; fi
+          done
+          [ "$NFILES" = 0 ] && ALL_UNTOUCHED=0
+          # bash -e is on for this step: capture verify's status so the failure branch can run.
+          set +e
+          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt" 2> "$RUNNER_TEMP/conflict-err.txt"
           RC=$?
+          set -e
+          cat "$RUNNER_TEMP/conflict-err.txt" >&2 || true
           if [ "$RC" = 3 ]; then
             git merge --abort || true
             say "$(printf '%s\n\n## 🔀 Blocked — this PR and `%s` want different things in the same place\n**Needs:** answer\n\n@pmcp %s\n\n<details><summary>Conflicting files</summary>\n\n%s\n</details>' "$HDR" "$BASE" "$(cat "$CHOICE_FILE")" "$UNMERGED")"
             gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             echo "::notice::conflict is a real clash of intent — asked the owner (#2848)"
+            echo "asked=1" >> "$GITHUB_OUTPUT"
             exit 0
           elif [ "$RC" != 0 ]; then
             git merge --abort || true
-            UNTOUCHED=1
-            for f in $(git diff --name-only --diff-filter=U); do grep -q '^<<<<<<< ' "$f" 2>/dev/null || UNTOUCHED=0; done
-            if [ -n "$UNMERGED" ] && [ "$UNTOUCHED" = 1 ] && [ ! -s "$CHOICE_FILE" ]; then
+            echo "failed=1" >> "$GITHUB_OUTPUT"
+            if [ -n "$UNMERGED" ] && [ "$ALL_UNTOUCHED" = 1 ] && [ ! -s "$CHOICE_FILE" ]; then
               say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and the resolver ended without resolving anything (#3002). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
               echo "::error::conflict resolver ended without resolving the merge (#3002)"
               exit 1
             fi
-            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks (see the run log). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
+            ERRS="$(grep '^::error::' "$RUNNER_TEMP/conflict-err.txt" 2>/dev/null | head -10 | sed 's/^::error:://' || true)"
+            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks. Nothing was pushed.\n\n%s\n<details><summary>Check output</summary>\n\n```\n%s\n```\n</details>' "$HDR" "$BASE" "${LEFTOVER:-$UNMERGED}" "$ERRS")"
             echo "::error::conflict resolution failed its checks (#2848)"
             exit 1
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
           # Message via a file, never argv: a long file list hit ARG_MAX -> exit 126 (#2954).
           { printf 'Merge %s into %s (resolve conflicts)\n\nConflicts resolved by the revise worker (#2848):\n' "$BASE" "$REV_BRANCH"; sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt"; } > "$RUNNER_TEMP/conflict-msg.txt"
-          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; exit 1; fi
+          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; echo "failed=1" >> "$GITHUB_OUTPUT"; exit 1; fi
           # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
           # is a flat copy of the base: the conflicts never clear (#2914).
           NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
           if [ "$NPAR" != 3 ]; then
             echo "::error::conflict resolution committed $((NPAR - 1)) parent(s), expected 2 — refusing to push a flat copy (#2914)"
+            echo "failed=1" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -1416,9 +1437,15 @@ jobs:
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
+          # paging "produced nothing" on the ticket too would be a false alarm.
+          CONFLICT_FAILED: ${{ steps.conflict.outputs.failed }}
+          CONFLICT_ASKED: ${{ steps.conflict.outputs.asked }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
+            if (process.env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
             if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
             if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }

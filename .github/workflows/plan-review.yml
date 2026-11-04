@@ -162,7 +162,7 @@ jobs:
           awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/plan-reviewer.md \
             | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
                   -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" > "$D/prompt.txt"
-          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict
@@ -200,7 +200,8 @@ jobs:
               gh issue edit "$ISSUE" --add-label "status:blocked"
               ;;
             no-go)
-              if [ "$ROUND" -ge 2 ]; then
+              ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold
+              if [ "$ROUTE" = hold ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
                 REVIEW_ID="$(gh api "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | last | .id')"
