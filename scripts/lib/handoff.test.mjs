@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { classifyHandoffError, RUN_NAME, handoffRunTitle, labelHandoffDone, handoffMarker, parseHandoff } from './handoff.mjs'
-import { handoffExec, handoffGuard, deferMergeCheck } from '../handoff-exec.mjs'
+import { handoffExec, handoffGuard, deferMergeCheck, recordFailed } from '../handoff-exec.mjs'
 import { sweep } from '../handoff-sweep.mjs'
 
 const ghErr = (stderr) => Object.assign(new Error('Command failed: gh'), { stderr })
@@ -218,4 +218,45 @@ test('10e: both tokens fail to write the retry -> still green, says so', async (
   const w = world({ failOn: (s) => (s.includes('/comments') ? LIMIT() : null) }); const warns = []
   const r = await deferMergeCheck(OCTO_LIMIT(), 7, w.deps, (m) => warns.push(m))
   assert.deepEqual(r, { recorded: false }); assert.ok(warns.some((m) => /retry not recorded/.test(m)))
+})
+
+const S502 = () => Object.assign(new Error('bad gateway'), { status: 502 })
+test('3g: guard — a 5xx that hid a landed label is not repeated by the sweep', async () => {
+  const w = world()
+  const step = { kind: 'label', issue: 6, label: 'work-this' }
+  const r = await handoffGuard(step, async () => {
+    w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: 'work-this' }, actor: { login: 'nuxt-harness[bot]' } })
+    w.t += 5000; throw S502()
+  }, w.deps)
+  assert.equal(r.deferred, true)
+  assert.match(w.comments[6][0].body, new RegExp(new Date(T0).toISOString()))
+  w.t += 3600e3; await sweep(w.deps)
+  assert.ok(!w.adds)
+  assert.ok(!w.calls.some((c) => /DELETE/.test(c) && /work-this/.test(c)))
+  assert.match(w.comments[6][0].body, /handoff-done/)
+})
+test('3h: guard — a dispatch whose 5xx hid a created run is not dispatched again', async () => {
+  const w = world()
+  const step = { ...dispatchStep }
+  await handoffGuard(step, async () => {
+    w.runs.push({ display_title: handoffRunTitle(step.workflow, step.inputs), created_at: new Date(w.t).toISOString() })
+    w.t += 5000; throw S502()
+  }, w.deps)
+  w.t += 3600e3; await sweep(w.deps)
+  assert.equal(w.dispatched, undefined)
+})
+test('3i: record path keeps the caller\'s pre-call since', async () => {
+  const w = world(); w.t = T0 + 60e3
+  await recordFailed({ step: { kind: 'label', issue: 5, label: 'work-this', since: '2026-11-04T09:59:00.000Z' }, reason: 'server' }, w.deps)
+  assert.match(w.comments[5][0].body, /2026-11-04T09:59:00\.000Z/)
+  const w2 = world(); w2.t = T0 + 60e3
+  await recordFailed({ step: { kind: 'label', issue: 5, label: 'work-this' }, reason: 'server' }, w2.deps)
+  assert.match(w2.comments[5][0].body, /2026-11-04T10:01:00\.000Z/)
+})
+test('3j: deferHandoff passes since taken before fn()', async () => {
+  const { deferHandoff } = await import('../apply-decompose-plan.mjs')
+  let clock = T0; const calls = []
+  deferHandoff((cmd, args) => { calls.push(args); return '' }, { kind: 'label', issue: 5, label: 'work-this' },
+    () => { clock += 5000; throw ghErr('HTTP 500') }, { pending: [], log() {}, now: () => clock })
+  assert.equal(JSON.parse(calls[0].at(-1)).step.since, new Date(T0).toISOString())
 })

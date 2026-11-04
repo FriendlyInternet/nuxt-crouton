@@ -269,7 +269,7 @@ jobs:
                   const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
                   try {
                     const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                      body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
+                      body: `${marker}\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
                         + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
                     const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
                     const rin = { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
@@ -297,7 +297,7 @@ jobs:
                   const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
                   if (!comments.some(c => (c.body || '').includes(marker))) {
                     await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                      body: `${marker}\n⏸️ **Not auto-merged — \`${REQUIRED_CHECK}\` never reported.**\n\n`
+                      body: `${marker}\n<!-- pipeline-note -->\n⏸️ **Not auto-merged — \`${REQUIRED_CHECK}\` never reported.**\n\n`
                         + `No \`${REQUIRED_CHECK}\` check-run exists for \`${pr.head.sha.slice(0, 8)}\`, so typecheck and tests have not run on this code. That is *not* the same as passing — auto-merge treated absence as success once before and a build break reached \`main\` (#1668), which is why this gate exists (#1698).\n\n`
                         + `**Fix:** GitHub intermittently drops \`pull_request\` events. Push any commit (an empty one works: \`git commit --allow-empty\`) to fire a \`synchronize\` event — checks then run normally and this merges itself.\n\n`
                         + '<sub>🤖 agent pipeline (CI) · auto-merge presence gate (#1698)</sub>' })
@@ -364,7 +364,7 @@ jobs:
                     const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
                     if (!prComments.some(c => (c.body || '').includes(marker))) {
                       await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                        body: `${marker}\n${reply.text}\n\n<sub>🤖 agent pipeline (CI) · auto-merge (#3173)</sub>` })
+                        body: `${marker}\n<!-- pipeline-note -->\n${reply.text}\n\n<sub>🤖 agent pipeline (CI) · auto-merge (#3173)</sub>` })
                     }
                   }
                 }
@@ -407,7 +407,7 @@ jobs:
                 const list = sharedCode.slice(0, 10).map(f => `- \`${f}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                  body: `⏸️ **Held for a human — this build PR changes ${what}.**\n\n`
+                  body: `<!-- pipeline-note -->\n⏸️ **Held for a human — this build PR changes ${what}.**\n\n`
                     + `**Fix:** ${why}\n\n`
                     + `<details><summary>held files (${sharedCode.length})</summary>\n\n${list}${more}\n</details>\n\n`
                     + '<sub>🤖 agent pipeline (CI) · auto-merge shared-code guard (#339)</sub>' })
@@ -456,7 +456,7 @@ jobs:
                 const { owner, repo } = context.repo
                 const existing = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: currentPr, per_page: 100 })
                 if (!existing.some(c => (c.body || '').includes(note.marker))) {
-                  await github.rest.issues.createComment({ owner, repo, issue_number: currentPr, body: `${note.marker}\n${note.body}` })
+                  await github.rest.issues.createComment({ owner, repo, issue_number: currentPr, body: `${note.marker}\n<!-- pipeline-note -->\n${note.body}` })
                 }
               }
             } catch (noteErr) { core.warning(`rate-limit note not posted: ${noteErr.message}`) }
@@ -493,7 +493,7 @@ jobs:
                   if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) continue
                   // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
                   await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
-                    body: `<!-- build-review-sweep:${sha} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
+                    body: `<!-- build-review-sweep:${sha} -->\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
                   const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
                   await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
                     () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))

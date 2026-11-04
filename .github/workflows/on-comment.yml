@@ -30,6 +30,33 @@ on:
     types: [created]
 
 jobs:
+  # Allowance at run start for the run record (#3251); the record job reads it again at the end.
+  rl-start:
+    name: Read API allowance at start
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Read API allowance
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
   route:
     # A bot's comment never routes (also stops our own replies re-triggering anything). Most
     # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
@@ -153,7 +180,7 @@ jobs:
 
             const kind = approvalKind(body) === 'check' ? '✅' : '`ok`'
             await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body:
-              `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
+              '<!-- pipeline-note -->\n' + `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
               + `This does **not** merge it: the green-gated auto-merge takes over from here, so a red check still holds it.\n\n`
               + `<sub>🤖 agent pipeline (CI) · approve-draft-pr #2051</sub>` })
             core.info(`Released #${pull_number} (${approvalKind(body)}).`)
@@ -213,7 +240,7 @@ jobs:
             const d = decideEpicMerge({ comment: context.payload.comment, pr, checkRuns, go })
             core.info(`#${pull_number}: ${d.action} — ${d.reason}`)
             const say = body => github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-              body: `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
+              body: '<!-- pipeline-note -->\n' + `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
 
             if (d.action === 'ignore') return
             if (!go.go) return // red/wait only matter while the ok stands
@@ -296,7 +323,7 @@ jobs:
               if (missing.includes('status:ready-to-close')) fixes.push('run the postmortem first — it stamps `status:ready-to-close` (#856)')
               await github.rest.issues.createComment({
                 ...context.repo, issue_number,
-                body: `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
+                body: '<!-- pipeline-note -->\n' + `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
                   + `🔴 **Not closed — this issue is missing ${missing.map(l => `\`${l}\``).join(' and ')}.**\n\n`
                   + `**You:** ${fixes.join('; then ')}, and comment \`/close-epic\` again.\n`
                   + `**Depth:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
@@ -314,7 +341,7 @@ jobs:
             }
             await github.rest.issues.createComment({
               ...context.repo, issue_number,
-              body: `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
+              body: '<!-- pipeline-note -->\n' + `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
                 + '<sub>🤖 agent pipeline (CI) · close-epic on comment (#856) · was status:ready-to-close</sub>',
             })
             core.info(`Closed epic #${issue_number} (requested by @${actor}).`)
@@ -403,7 +430,7 @@ jobs:
               ? `\n\n_Routed to the worker rather than the decomposer because \`work-${issue_number}\` already exists — there is work in flight to finish, not a plan to make (#2010)._`
               : ''
             await github.rest.issues.createComment({ owner, repo, issue_number,
-              body: `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
+              body: '<!-- pipeline-note -->\n' + `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
 
   resume:
@@ -451,7 +478,7 @@ jobs:
             if (open) return
             const closer = issue.closed_by ? issue.closed_by.login : 'unknown'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
+              body: '<!-- pipeline-note -->\n' + `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
                 + '**Fix:** reply on the successor issue/PR, or reopen this one and comment again to retry.\n\n'
                 + '<sub>🤖 Claude Code · agent pipeline (CI) · resume skipped, issue already closed (#1253)</sub>' })
             core.info(`Issue #${issue_number} is closed — skipping the resume agent run.`)
@@ -516,7 +543,7 @@ jobs:
             if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
                 + `🔧 **Revising PR #${pr.number} from your reply.** The pi worker is re-running on its branch with your comment as the instruction. `
                 + `Its commit lands on the PR, or it says plainly that it changed nothing. 🔗 [Follow the run](${runs})` })
             core.setOutput('revise', 'true')
@@ -565,7 +592,7 @@ jobs:
             await handoffGuard({ kind: 'label', issue: issue_number, label: 'delegate-pi' },
               () => github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] }))
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
                 + '🔁 **Re-running the planner on your reply.** It reads the thread and either revises the design or, if you approved, splits the epic into build children.' })
             core.setOutput('redispatch', 'true')
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
@@ -607,13 +634,13 @@ jobs:
             } catch (e) {
               const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
               const n = claimNotice({ reason: `I could not re-run the planner from your reply (${e.message}) — dispatch work-issue-pidev.yml with mode=plan by hand`, issue: issue_number, kind: 'replan-failed', runUrl })
-              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: '<!-- pipeline-note -->\n' + n.body })
               core.setFailed(`plan re-dispatch failed: ${e.message}`)
               return
             }
             core.setOutput('dispatched', 'true')
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
                 + `🔁 **Re-planning from your reply.** The planner is re-running with your comment as guidance; the block stays on until the plan review decides. 🔗 [Run log](${runUrl})` })
 
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
@@ -877,7 +904,7 @@ jobs:
               if (outcome !== 'nothing') { core.info(`Held-plan resume outcome: ${outcome}`); return }
               const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
               const n = claimNotice({ reason: 'your reply on the held plan produced no new plan', kind: 'replan-failed', issue: issue_number })
-              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+              await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: '<!-- pipeline-note -->\n' + n.body })
               core.setFailed(`Held plan #${issue_number}: resume produced nothing.`)
               return
             }
@@ -911,7 +938,7 @@ jobs:
                 + 'If the link looks correct to you, the matcher is at fault — see #1663.'
               : '**Fix:** re-dispatch with `/delegate` to retry.'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
+              body: '<!-- pipeline-note -->\n' + '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
                 + remedy + '\n\n'
                 + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
             core.setFailed(skipped
@@ -941,7 +968,7 @@ jobs:
             if (!ok && '${{ steps.agent.outcome }}' === 'failure') {
               const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
-                body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume failed_\n\n'
+                body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _resume failed_\n\n'
                   + '😕 The resume from your comment **errored before finishing** (billing / max-turns / tooling). '
                   + `🔗 [Run log](${runUrl}) — fix the cause, then comment again to retry.` })
             }
@@ -971,7 +998,7 @@ jobs:
             if ('${{ steps.gate.outputs.stillBlocked }}' === 'true' && '${{ steps.replan.outputs.replan }}' !== 'true') facts.push('still iterating — the block stays on for your next reply')
             const did = facts.length ? facts.join(' · ') : 'continued the pipeline'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
                 + `✅ **Resumed from your reply** — ${did}. 🔗 [Run log](${runUrl})` })
 
       # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
@@ -983,7 +1010,7 @@ jobs:
             const issue_number = context.payload.issue.number
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
                 + '⏱️ This resume was **cancelled** — almost always the 30-min job timeout. It may have '
                 + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })
 
@@ -1032,7 +1059,7 @@ jobs:
             if (already) { core.info('Already explained recently — staying quiet.'); return }
 
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '<!-- skipped-approval-notice -->\n'
+              body: '<!-- pipeline-note -->\n' + '<!-- skipped-approval-notice -->\n'
                 + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
                 + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
                 + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
@@ -1078,7 +1105,7 @@ jobs:
                 const prior = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: pull_number, per_page: 100 })
                 if (!prior.some(x => x.body.includes(marker))) {
                   await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
-                    body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _comment not routed (#2707)_\n\n`
+                    body: '<!-- pipeline-note -->\n' + `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _comment not routed (#2707)_\n\n`
                       + 'Not sent to the worker — start a line with `**Worker:**` to ask it for a change.' })
                 }
               }
@@ -1094,7 +1121,7 @@ jobs:
               }))
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your comment (#2446)_\n\n'
+              body: '<!-- pipeline-note -->\n' + '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your comment (#2446)_\n\n'
                 + `🔧 **Working on your comment.** The pi worker is re-running on this PR's branch with your comment as its instruction. `
                 + `Its commit lands here, or it says plainly that it changed nothing. 🔗 [Follow the run](${runs})` })
 
@@ -1446,3 +1473,47 @@ jobs:
               await relabel(label)
               await say(`🛠 ${opener}. Starting it now (\`${label}\`).`)
             }
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [rl-start, route, interpret-read, interpret-decide, interpret-review, interpret-act]
+    if: ${{ always() && needs.interpret-read.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: on-comment.yml
+          ISSUE: "${{ github.event.issue.number }}"
+          STAGE: interpret
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.rl-start.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

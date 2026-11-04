@@ -308,10 +308,11 @@ export const ghAddLabel = (exec, repo, n, label) => exec('gh', ['api', '--method
  * #3306) instead of failing the plan. Anything else rethrows. Synchronous, like the rest of this file.
  */
 export function deferHandoff(exec, step, fn, state) {
+  const since = new Date(Math.floor((state.now || Date.now)() / 1000) * 1000).toISOString() // before fn() (#3362)
   try { return fn() } catch (e) {
     const c = classifyHandoffError(e)
     if (c.action !== 'defer') throw e
-    exec('node', [fileURLToPath(new URL('./handoff-exec.mjs', import.meta.url)), 'record', JSON.stringify({ step, reason: c.reason, resetAt: c.resetAt || null })])
+    exec('node', [fileURLToPath(new URL('./handoff-exec.mjs', import.meta.url)), 'record', JSON.stringify({ step: { ...step, since }, reason: c.reason, resetAt: c.resetAt || null })])
     state.pending.push({ issue: step.issue, kind: step.kind, label: step.label || step.workflow, reason: c.reason })
     state.log(`⏳ ${step.kind} on #${step.issue} deferred (${c.reason}) — the hourly sweep replays it`)
   }
