@@ -68,25 +68,29 @@ const labelEvents = (d, step) =>
     '.[] | {event, created_at, label: {name: .label.name}, actor: {login: .actor.login}}')
 
 // Do the step. check=true (replay): look for the action's own proof first, finish rather than redo.
-// fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
 export async function perform(step, d, { check = false } = {}) {
-  if (step.kind === 'label') {
-    if (!check) {
-      await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${step.label}`])
-      return 'done'
-    }
-    if (labelHandoffDone(await labelEvents(d, step), { label: step.label, since: step.since })) return 'already'
-    try {
-      await d.gh(['api', '-X', 'DELETE', `repos/${d.repo}/issues/${step.issue}/labels/${encodeURIComponent(step.label)}`])
-    } catch (e) {
-      if (!/HTTP 404/.test(e.stderr || e.message || '')) throw e // 404 = label wasn't there; anything else is real
-    }
-    await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${step.label}`])
-    if (!labelHandoffDone(await labelEvents(d, step), { label: step.label, since: step.since })) {
-      throw new Error(`label hand-off not confirmed: no 'labeled ${step.label}' event on #${step.issue} after re-adding`)
-    }
-    return 'done'
+  return step.kind === 'label' ? performLabel(step, d, check) : performDispatch(step, d, check)
+}
+
+const addLabel = (d, step) =>
+  d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${step.label}`])
+
+async function performLabel(step, d, check) {
+  if (!check) { await addLabel(d, step); return 'done' }
+  if (labelHandoffDone(await labelEvents(d, step), { label: step.label, since: step.since })) return 'already'
+  try {
+    await d.gh(['api', '-X', 'DELETE', `repos/${d.repo}/issues/${step.issue}/labels/${encodeURIComponent(step.label)}`])
+  } catch (e) {
+    if (!/HTTP 404/.test(e.stderr || e.message || '')) throw e // 404 = label wasn't there; anything else is real
   }
+  await addLabel(d, step)
+  if (!labelHandoffDone(await labelEvents(d, step), { label: step.label, since: step.since })) {
+    throw new Error(`label hand-off not confirmed: no 'labeled ${step.label}' event on #${step.issue} after re-adding`)
+  }
+  return 'done'
+}
+
+async function performDispatch(step, d, check) {
   const { workflow, inputs } = await resolveDispatch(step, d)
   if (check) {
     const runs = await pageJson(d, `repos/${d.repo}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=50`,

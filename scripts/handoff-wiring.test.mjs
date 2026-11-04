@@ -49,7 +49,14 @@ const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && tex
 // Label adds that are state, not a stage start: status:*, plan:unverified, counters, managed epic labels, test-card state.
 const STATE_LABEL = /status:[\w-]+|plan:unverified|ci-fix-attempts|handoff:pending|ready-epic|test-card|'epic'|"epic"|\$\{?[A-Z_]*LABEL/i
 
-// fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
+function classifyHit(rel, text, kind, h, used) {
+  if (h.handled) return null
+  if (allowed(rel, h.text)) { ALLOW.forEach(([af, sub], i) => { if (rel.endsWith(af) && h.text.includes(sub)) used.add(i) }); return null }
+  const ctx = text.split('\n').slice(Math.max(0, h.line - 3), h.line + 1).join(' ')
+  const stateOnly = STATE_LABEL.test(`${h.text} ${ctx}`) && !/work-this|delegate|plan:approved|build:approved|tickets:approved|\[label\]|\[releaseWith\]|"\$L"|a\.label/.test(h.text)
+  return kind === 'label' && stateOnly ? null : `${rel}:${h.line} ${kind}: ${h.text}`
+}
+
 function scan() {
   const bad = []; const used = new Set(); const totals = { dispatch: 0, label: 0 }
   for (const f of files()) {
@@ -57,11 +64,8 @@ function scan() {
     for (const [kind, re] of [['dispatch', DISPATCH], ['label', LABEL]]) {
       for (const h of hits(text, re)) {
         totals[kind]++
-        if (h.handled) continue
-        const ctx = text.split('\n').slice(Math.max(0, h.line - 3), h.line + 1).join(' ')
-        if (allowed(rel, h.text)) { ALLOW.forEach(([af, sub], i) => { if (rel.endsWith(af) && h.text.includes(sub)) used.add(i) }); continue }
-        if (kind === 'label' && STATE_LABEL.test(`${h.text} ${ctx}`) && !/work-this|delegate|plan:approved|build:approved|tickets:approved|\[label\]|\[releaseWith\]|"\$L"|a\.label/.test(h.text)) continue
-        bad.push(`${rel}:${h.line} ${kind}: ${h.text}`)
+        const miss = classifyHit(rel, text, kind, h, used)
+        if (miss) bad.push(miss)
       }
     }
   }

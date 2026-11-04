@@ -49,16 +49,16 @@ export function isServerError(e) {
   return status >= 500 && status <= 599
 }
 
-// The one-line "waiting" note for a rate-limited decision (#3306). Pure: no I/O.
-// `marker` is stable per reset time so a repeat run can find the note instead of posting a second.
+// The "waiting" note for a PR held by a rate limit (#3306). Marker dedups per reset window.
 export function rateLimitNote(e) {
-  const reset = Number(header(e, 'x-ratelimit-reset'))
-  if (!Number.isFinite(reset) || reset <= 0) {
-    return { body: '🔁 GitHub API rate limit hit; retrying on the next run.', marker: '<!-- rate-limit-retry -->' }
+  const at = rateLimitResetAt(e)
+  if (!at) {
+    return { marker: '<!-- rate-limit-retry -->', body: '🔁 rate-limited by GitHub, retrying on the next hourly check' }
   }
-  const hhmm = new Date(reset * 1000).toISOString().slice(11, 16)
+  const reset = Math.floor(new Date(at).getTime() / 1000)
+  const hhmm = at.slice(11, 16)
   return {
-    body: `🔁 GitHub API rate limit hit; retrying after ${hhmm} UTC.`,
     marker: `<!-- rate-limit-retry:${reset} -->`,
+    body: `🔁 rate-limited by GitHub, retrying on the next hourly check after ${hhmm} UTC`,
   }
 }

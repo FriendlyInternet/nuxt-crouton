@@ -10,34 +10,43 @@ const LIMIT = () => ghErr('gh: API rate limit exceeded for installation ID 1 (HT
 const S500 = () => ghErr('could not create workflow dispatch event: HTTP 500 (…/dispatches)')
 const T0 = Date.parse('2026-11-04T10:00:00Z')
 
+// Route table for the fake `gh`: first matching pattern answers.
+function routes(w, args, j) {
+  const post = args.includes('POST')
+  const body = () => args.at(-1)
+  return [
+    [/^workflow run/, () => { w.dispatched = (w.dispatched || 0) + 1; return '' }],
+    [/rate_limit/, () => '5000'],
+    [/issues\/(\d+)\/comments/, (m) => {
+      if (!post) return j(w.comments[m[1]] || [])
+      ;(w.comments[m[1]] ||= []).push({ id: w.nextId++, body: body().slice(5) }); return ''
+    }],
+    [/issues\/comments\/(\d+)/, (m) => { for (const l of Object.values(w.comments)) for (const c of l) if (c.id == m[1]) c.body = body().slice(5); return '' }],
+    [/issues\/(\d+)\/labels\/(.+)$/, (m) => { if (args.includes('DELETE')) w.labels.delete(`${m[1]}:${decodeURIComponent(m[2])}`); return '' }],
+    [/issues\/(\d+)\/labels/, (m) => {
+      const l = body().slice(9); w.labels.add(`${m[1]}:${l}`); w.adds = (w.adds || 0) + (l === 'handoff:pending' ? 0 : 1)
+      if (l !== 'handoff:pending') w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: l }, actor: { login: 'nuxt-harness[bot]' } })
+      return ''
+    }],
+    [/issues\/\d+\/events/, () => j(w.events)],
+    [/actions\/workflows/, () => j(w.runs)],
+    [/issues\?labels=/, () => Object.entries(w.comments).filter(([n]) => w.labels.has(`${n}:handoff:pending`)).map(([n]) => n).join('\n')],
+    [/pipeline-plan/, () => '777'],
+    [/no-go/, () => '888'],
+  ]
+}
+
 // Fake GitHub: comments per issue, labels, events, runs; `failOn(args)` may return an Error to throw.
 function world({ failOn = () => null, runs = [], events = [], comments = {} } = {}) {
   const w = { calls: [], posted: [], labels: new Set(), runs, events, comments, nextId: 1000, t: T0, failOn }
   const j = (a) => a.map((x) => JSON.stringify(x)).join('\n')
   w.deps = {
     repo: 'o/r', tokens: ['app', 'fb'], log: () => {}, now: () => w.t,
-    // fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
     gh: async (args, { token } = {}) => {
       const s = args.join(' ')
       w.calls.push(s)
       const f = w.failOn(s, token); if (f) throw f
-      let m
-      if (s.startsWith('workflow run')) { w.dispatched = (w.dispatched || 0) + 1; return '' }
-      if (s.includes('rate_limit')) return '5000'
-      if ((m = /issues\/(\d+)\/comments/.exec(s)) && args.includes('POST')) { const id = w.nextId++; (w.comments[m[1]] ||= []).push({ id, body: args.at(-1).slice(5) }); return '' }
-      if ((m = /issues\/(\d+)\/comments/.exec(s))) return j(w.comments[m[1]] || [])
-      if ((m = /issues\/comments\/(\d+)/.exec(s))) { for (const l of Object.values(w.comments)) for (const c of l) if (c.id == m[1]) c.body = args.at(-1).slice(5); return '' }
-      if ((m = /issues\/(\d+)\/labels\/(.+)$/.exec(s)) && args.includes('DELETE')) { w.labels.delete(`${m[1]}:${decodeURIComponent(m[2])}`); return '' }
-      if ((m = /issues\/(\d+)\/labels/.exec(s)) && args.includes('POST')) {
-        const l = args.at(-1).slice(9); w.labels.add(`${m[1]}:${l}`); w.adds = (w.adds || 0) + (l === 'handoff:pending' ? 0 : 1)
-        if (l !== 'handoff:pending') w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: l }, actor: { login: 'nuxt-harness[bot]' } })
-        return ''
-      }
-      if (/issues\/\d+\/events/.test(s)) return j(w.events)
-      if (/actions\/workflows/.test(s)) return j(w.runs)
-      if (/issues\?labels=/.test(s)) return Object.entries(w.comments).filter(([n, l]) => w.labels.has(`${n}:handoff:pending`)).map(([n]) => n).join('\n')
-      if (/pipeline-plan/.test(s)) return '777'
-      if (/no-go/.test(s)) return '888'
+      for (const [re, fn] of routes(w, args, j)) { const m = re.exec(s); if (m) return fn(m) }
       throw new Error('unexpected gh ' + s)
     },
   }
@@ -107,12 +116,23 @@ test('3f: a landed add (event by the bot after since) is not redone; foreign eve
   w.events.push(ev({ created_at: new Date(T0 + 500).toISOString() })); w.ok = true; w.t += 3600e3
   await sweep(w.deps); assert.equal(w.adds, 0); assert.match(w.comments[5][0].body, /handoff-done/)
 })
-test('4/5: other errors rethrow with no marker, even after earlier output that mentions limits', async () => {
+test('4: other errors rethrow with no marker, even after earlier output that mentions limits', async () => {
   for (const e of [ghErr('gh: Not Found (HTTP 404)'), ghErr('gh: Validation Failed (HTTP 422)')]) {
     const w = world({ failOn: (s) => (s.startsWith('workflow run') ? e : null) })
     await assert.rejects(handoffExec(dispatchStep, w.deps))
     assert.equal(w.comments[5], undefined); assert.equal(w.labels.size, 0)
   }
+})
+test('5: judged from the failing call itself — an earlier successful call mentioning limits/HTTP 500 does not defer a 404', async () => {
+  // earlier read succeeds with limit-flavoured output; only the failing dispatch's own error counts
+  const w = world({ failOn: (s) => (s.startsWith('workflow run') ? ghErr('gh: Not Found (HTTP 404)') : null) })
+  const base = w.deps.gh
+  w.deps.gh = async (a, o) => { const r = await base(a, o); return a.join(' ').includes('/events') ? `${r}\nAPI rate limit exceeded HTTP 500` : r }
+  await assert.rejects(handoffExec(dispatchStep, w.deps))
+  assert.equal(w.comments[5], undefined); assert.equal(w.labels.size, 0)
+  // and the inverse: a real 5xx on the failing call itself does defer
+  const w2 = world({ failOn: (s) => (s.startsWith('workflow run') ? S500() : null) })
+  assert.equal((await handoffExec(dispatchStep, w2.deps)).status, 'deferred')
 })
 test('6: a marker 300 comments deep is found; unlabelled tickets are not scanned', async () => {
   const w = world(); w.comments[5] = Array.from({ length: 300 }, (_, i) => ({ id: i + 1, body: 'x' }))
