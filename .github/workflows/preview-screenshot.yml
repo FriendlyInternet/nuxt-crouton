@@ -61,12 +61,11 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           INPUT_PR: ${{ inputs.pr }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
             PR="$INPUT_PR"
-            read -r HEAD_REF HEAD_SHA < <(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '[.head.ref, .head.sha] | @tsv')
+            HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq ".head.sha")
             # Newest successful deploy run for this exact commit that left preview records.
             RUN_ID=""
             for wf in deploy-apps.yml deploy-pocs.yml; do
@@ -77,11 +76,10 @@ jobs:
           else
             PR=$(printf '%s' "$RUN_PRS" | jq -r '.[0].number // empty')
             HEAD_SHA="$RUN_SHA"
-            HEAD_REF="$RUN_BRANCH"
           fi
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
-          { echo "pr=$PR"; echo "head_ref=$HEAD_REF"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+          { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
 
       - name: Open check run
         id: check
