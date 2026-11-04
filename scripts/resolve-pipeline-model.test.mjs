@@ -44,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the four the workflows use', () => {
-  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review'])
+test('VALID_TIERS is exactly the five the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file
@@ -57,4 +57,20 @@ test('the committed .claude/pipeline-models.json resolves both tiers', async () 
     const m = resolveModel(cfg, tier)
     assert.match(m, /^claude-/, `${tier} should be a Claude subscription model (#1669), got ${m}`)
   }
+})
+
+test('plan tier resolves to its configured model (#3343)', () => {
+  assert.equal(resolveModel({ plan: 'claude-opus-5-5' }, 'plan'), 'claude-opus-5-5')
+})
+
+test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch targets work-issue-pidev.yml (#3343)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const wf = readFileSync('.github/workflows/work-issue-pidev.yml', 'utf8')
+  assert.match(wf, /PI_MODEL: \$\{\{ inputs\.model \|\| \(inputs\.mode == 'plan' && steps\.model\.outputs\.plan\)/)
+  for (const f of ['.github/workflows/plan-review.yml', 'scripts/plan-hold.mjs']) {
+    assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
+  }
+  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /work-issue-pidev\.yml[^\n]*-f mode=plan/)
+  assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
+  assert.match(wf, /gh workflow run work-issue-pidev\.yml[^\n]*-f mode=plan/)
 })
