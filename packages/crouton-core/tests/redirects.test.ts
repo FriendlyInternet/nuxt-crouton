@@ -61,14 +61,15 @@ describe('redirects middleware', () => {
   const getTeamBySlug = vi.fn()
   const sendRedirect = vi.fn((_e: any, to: string, code: number) => ({ to, code }))
 
-  async function run(path: string, team: { id: string } | null = null, ctx: Record<string, any> = {}) {
+  async function run(path: string, team: { id: string } | null | ((slug: string) => { id: string } | null) = null, ctx: Record<string, any> = {}, defaultTeamSlug?: string) {
     vi.resetModules()
     getTeamBySlug.mockReset()
-    getTeamBySlug.mockResolvedValue(team)
+    getTeamBySlug.mockImplementation(async (_e: any, slug: string) => (typeof team === 'function' ? team(slug) : team))
     sendRedirect.mockClear()
     ;(globalThis as any).defineEventHandler = (fn: any) => fn
     ;(globalThis as any).getRequestPath = () => path
     ;(globalThis as any).sendRedirect = sendRedirect
+    ;(globalThis as any).useRuntimeConfig = () => ({ public: { crouton: { auth: { teams: { defaultTeamSlug } } } } })
     vi.doMock('@fyit/crouton-auth/server/utils/team', () => ({ getTeamBySlug }))
     const mod = await import('../server/middleware/redirects')
     return (mod.default as any)({ context: ctx })
@@ -90,5 +91,26 @@ describe('redirects middleware', () => {
     await run('/acme/old', { id: 'A' })
     expect(getTeamBySlug).not.toHaveBeenCalled()
     expect(sendRedirect).not.toHaveBeenCalled()
+  })
+
+  it('slug renamed and taken by another team => old team redirects do not fire', async () => {
+    await run('/acme/old', { id: 'B' })
+    expect(sendRedirect).not.toHaveBeenCalled()
+  })
+
+  it('slug is looked up on every request (no cache)', async () => {
+    await run('/acme/old', { id: 'A' })
+    getTeamBySlug.mockResolvedValue({ id: 'B' })
+    const mod: any = await import('../server/middleware/redirects')
+    sendRedirect.mockClear()
+    await mod.default({ context: {} })
+    expect(getTeamBySlug).toHaveBeenCalledTimes(2)
+    expect(sendRedirect).not.toHaveBeenCalled()
+  })
+
+  it('single-team app path without a slug => redirects via the default team', async () => {
+    await run('/old', slug => (slug === 'led002' ? { id: 'A' } : null), {}, 'led002')
+    expect(getTeamBySlug).toHaveBeenCalledWith(expect.anything(), 'led002')
+    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/new', 301)
   })
 })
