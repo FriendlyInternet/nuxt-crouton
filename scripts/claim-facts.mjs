@@ -83,6 +83,28 @@ async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
 }
 
 /**
+ * Every PR whose body closes the issue, with refs/merge state. The search API returns neither
+ * head nor base ref, so each candidate is fetched (at most 20, usually 1).
+ */
+async function fetchLinkedPrs({ github, owner, repo, issueNumber, warn }) {
+  const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
+  const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
+  const linkedPRs = []
+  let selfPr = null
+  const selfPrs = []
+  for (const it of found.items || []) {
+    if (!referencesIssue(it.body, issueNumber)) continue
+    const { headRef, baseRef, merged, mergedAt } = await fetchPrFacts({ github, owner, repo, it, warn })
+    if (headRef === `work-${issueNumber}`) {
+      selfPr = it.number
+      selfPrs.push(it.number)
+    }
+    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
+  }
+  return { linkedPRs, selfPr, selfPrs }
+}
+
+/**
  * Gather the claim facts for one issue.
  *
  * @param {object}  o
@@ -101,23 +123,7 @@ export async function gatherClaimFacts({ github, context, issueNumber, core, rev
 
   const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
 
-  const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
-  const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
-
-  // The search API returns neither head nor base ref, so each candidate is fetched. Both refs
-  // are load-bearing (see the header), and the candidate list is small — at most 20, usually 1.
-  const linkedPRs = []
-  let selfPr = null
-  const selfPrs = []
-  for (const it of found.items || []) {
-    if (!referencesIssue(it.body, issueNumber)) continue
-    const { headRef, baseRef, merged, mergedAt } = await fetchPrFacts({ github, owner, repo, it, warn })
-    if (headRef === `work-${issueNumber}`) {
-      selfPr = it.number
-      selfPrs.push(it.number)
-    }
-    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
-  }
+  const { linkedPRs, selfPr, selfPrs } = await fetchLinkedPrs({ github, owner, repo, issueNumber, warn })
 
   const { inProgressSince, lastReopenedAt } = await fetchEventFacts({
     github, owner, repo, issueNumber, issue, linkedPRs,
