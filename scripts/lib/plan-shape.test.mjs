@@ -92,10 +92,18 @@ test('revised: bullet with neither Covered nor Not covered is an error', () => {
 })
 
 test('revised: valid section passes and is returned', () => {
-  const r = parsePlan(plan({ 'Ticket re-read': REREAD_OK }), { revised: true })
+  const r = parsePlan(plan({ 'Ticket re-read': REREAD_OK, 'Changes from the previous plan': '- Fix: reworded' }), { revised: true })
   assert.deepEqual(r.errors, [])
   assert.equal(r.reread.length, 2)
   assert.equal(r.reread[1].covered, false)
+})
+
+// #3341 — a revision says what it changed; --fresh waives it.
+test('revised: missing Changes section is an error, --fresh waives it', () => {
+  const body = plan({ 'Ticket re-read': REREAD_OK })
+  const r = parsePlan(body, { revised: true })
+  assert.ok(r.errors.some((e) => e.includes('Changes from the previous plan')))
+  assert.equal(parsePlan(body, { revised: true, fresh: true }).ok, true)
 })
 
 test('first plan without the section still passes', () => {
