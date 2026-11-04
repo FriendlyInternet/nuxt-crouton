@@ -1220,21 +1220,22 @@ jobs:
             echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
           fi
 
-          # 6c) VISUAL EVIDENCE GATE (#2057, epic #2045) — the worker prompt ASKS pi to capture
-          # a screenshot for a UI-touching change and commit it to writeups/ui-proposals/, but
-          # asking is not enforcing: three real PRs (#2132/#2133/#2134) opened with the
-          # "evidence should be attached above" hold note and NOTHING attached — the owner had
-          # no way to distinguish "reviewed the capture" from "trusting the pipeline blind"
-          # except opening the PR and finding nothing there. Read this off the COMMITTED diff,
-          # the same way UI_TOUCHED and TESTS_MISSING already are, rather than trusting pi's
-          # own narration that it captured something (the #1849 reasoning, again).
-          #
-          # Screenshots come from the deployed preview only (#2546): the PR body carries the issue's
-          # `<!-- review-surface: … -->` marker (copied below) and deploy-app.yml's capture step
-          # commits the PNG. No local boot here — it never produced a usable image (#2524/#2529/#2533).
-          EVIDENCE_ATTACHED=0
-          if [ "$UI_TOUCHED" = "1" ] && git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '^writeups/ui-proposals/'; then
-            EVIDENCE_ATTACHED=1
+          # 6c) VISUAL EVIDENCE GATE (#2057, epic #2045; reworked #3351) — the worker may shoot
+          # screenshots/{issue}-<surface>.png. They are NEVER committed (the folder is gitignored and
+          # the file list above skips ignored files). We publish them to a non-branch ref
+          # (refs/review-captures/issue<N>), curl-verify the raw URLs, and — once the PR number is
+          # known (step 8) — post ONE tagged comment embedding them. status.yml's sign-off gate and
+          # this step share one rule: evidence = that comment. Screenshots otherwise come from the
+          # deployed preview (#2546): deploy-side capture posts the same tagged comment.
+          EVIDENCE_ATTACHED=0; CAP_SHA=""; CAP_FILES=""
+          if [ "$UI_TOUCHED" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
+            if PUB="$(node scripts/publish-review-captures.mjs --dir screenshots --key "issue${ISSUE}" 2>&1)"; then
+              CAP_SHA="$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)"
+              CAP_FILES="$(cd screenshots && ls *.png | paste -sd, -)"
+              EVIDENCE_ATTACHED=1
+            else
+              echo "::warning::could not publish worker screenshots: $PUB"
+            fi
           fi
           [ "$UI_TOUCHED" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
 
@@ -1263,7 +1264,7 @@ jobs:
               # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
               # never mistakes an empty PR for a reviewed one. A live preview (#2140) should
               # still follow separately, so this is a lesser gap than it used to be.
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no capture landed in `writeups/ui-proposals/`. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
             fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
@@ -1298,6 +1299,15 @@ jobs:
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          # Post the tagged screenshot comment (same marker the deploy-side capture uses, #3351);
+          # if the write fails the run record must not claim an image the PR doesn't show.
+          if [ "$EVIDENCE_ATTACHED" = "1" ]; then
+            if [ -z "$PRNUM" ] || ! node scripts/comment-review-captures.mjs --pr "$PRNUM" --key "issue${ISSUE}" --sha "$CAP_SHA" --files "$CAP_FILES" \
+                --artifact-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; then
+              echo "::warning::screenshot comment not posted — resetting EVIDENCE_ATTACHED"
+              EVIDENCE_ATTACHED=0
+            fi
+          fi
           if [ -n "$PRNUM" ]; then
             cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
             EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || true)"
@@ -1330,7 +1340,7 @@ jobs:
               # reads, not just a line in the PR body nobody re-checks after the first read.
               [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
                 echo
-                echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no capture landed in \`writeups/ui-proposals/\` this run."
+                echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys."
                 echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`ok\`."
               }
             } > "$REC"
@@ -1345,6 +1355,15 @@ jobs:
           else
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Upload worker screenshots (download backup, #3351)
+        if: ${{ always() && inputs.mode != 'plan' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker-screenshots-${{ inputs.issue || github.event.issue.number }}
+          path: screenshots/*.png
+          retention-days: 14
+          if-no-files-found: ignore
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
