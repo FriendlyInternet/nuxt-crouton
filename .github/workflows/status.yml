@@ -21,7 +21,8 @@ name: Status
 
 on:
   # ⚠️ `check_suite` and `status` are NEARLY DEAD TRIGGERS here (#1884) — keep them for
-  # App-generated suites, but they do NOT fire for our own CI. Every check on a pipeline PR is
+  # App-generated suites, but they do NOT fire for our own CI. (check_suite IS what reruns this
+  # after the "Preview screenshot" check completes — that check lives in the App's own suite, #3351.) Every check on a pipeline PR is
   # created by GitHub Actions under GITHUB_TOKEN, and events triggered by GITHUB_TOKEN never
   # start a new workflow run (the same recursion guard that stops a GITHUB_TOKEN push from
   # cascading, #572/#626). So the only trigger that ever fired was `pull_request: opened`, and
@@ -301,11 +302,10 @@ jobs:
             // work-issue-pidev.yml (scripts/ui-touched.mjs, #3228): script-only .vue is not visual.
             // Old-side text is read at the MERGE BASE (patch line numbers refer to it, not
             // pr.base.sha). Any error → visual (fail toward holding). `hasEvidence` = a capture
-            // under writeups/ui-proposals/ (the worker's EVIDENCE_ATTACHED signal).
+            // = a review-capture screenshot comment on the PR (#3351).
             async function visualEvidenceState(prNumber) {
               const files = await github.paginate(github.rest.pulls.listFiles,
                 { owner, repo, pull_number: prNumber, per_page: 100 })
-              const paths = files.map(f => f.filename || '')
               let isVisual = true
               try {
                 const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
@@ -323,7 +323,15 @@ jobs:
               } catch (e) {
                 core.warning(`visual check failed, treating as visual: ${e.message}`)
               }
-              const hasEvidence = paths.some(p => /^writeups\/ui-proposals\//.test(p))
+              // One rule (#3351): a bot comment tagged review-capture that embeds a raw image.
+              let hasEvidence = false
+              try {
+                const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
+                hasEvidence = hasCaptureEvidence(await github.paginate(github.rest.issues.listComments,
+                  { owner, repo, issue_number: prNumber, per_page: 100 }))
+              } catch (e) {
+                core.warning(`capture-evidence check failed, treating as none: ${e.message}`)
+              }
               return { isVisual, hasEvidence }
             }
 
@@ -342,7 +350,7 @@ jobs:
                 `${marker}\n` +
                 `🚫 **Sign-off withheld — nothing to show yet** (${title}).\n\n` +
                 `PR #${prNumber} changes a visual surface, but no screenshot was captured this run ` +
-                `(none under \`writeups/ui-proposals/\`). The flow will not ask you to approve a ` +
+                `(no screenshot comment on the PR yet). The flow will not ask you to approve a ` +
                 `surface it hasn't shown you — a capture (or a working preview of the changed ` +
                 `surface) has to land first. Nothing for you to do here; the gap is the flow's to ` +
                 `close (#2057).\n\n` +
