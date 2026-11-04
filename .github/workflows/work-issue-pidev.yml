@@ -610,13 +610,7 @@ jobs:
               # #3341: hand over the BEST earlier plan (the one whose review passed the most checks,
               # newest on a tie) and the ticket's Decisions, so the planner revises instead of
               # rewriting. "start fresh" in the feedback or a Decision skips the old plan.
-              gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments" --paginate | jq -s -r --argjson fb "${FEEDBACK_ID}" '
-                add | map(select(.id < $fb)) as $c
-                | [$c[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] as $plans
-                | [$plans[] | . as $p
-                    | ([$c[] | select(.id > $p.id and (.body | contains("<!-- plan-review-verdict:")))] | first // {body: ""}) as $v
-                    | {id: $p.id, body: $p.body, score: ($v.body | [scan("✅")] | length)}]
-                | sort_by([.score, .id]) | last | .body // ""' > "$RUNNER_TEMP/prev-plan.txt" || : > "$RUNNER_TEMP/prev-plan.txt"
+              gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments" --paginate | jq -s -r --argjson fb "${FEEDBACK_ID}" 'add' | jq -r --argjson fb "${FEEDBACK_ID}" -f scripts/lib/best-plan.jq > "$RUNNER_TEMP/prev-plan.txt" || : > "$RUNNER_TEMP/prev-plan.txt"
               gh issue view "$ISSUE" --json body -q .body | awk '/^## Decisions[ \t]*$/{f=1;print;next} /^## /{f=0} f' > "$RUNNER_TEMP/decisions.txt" || : > "$RUNNER_TEMP/decisions.txt"
               FRESH=""; cat "$RUNNER_TEMP/feedback.txt" "$RUNNER_TEMP/decisions.txt" | grep -qi 'start fresh' && FRESH=1
               { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK (%s). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n' "$WHO"; cat "$RUNNER_TEMP/feedback.txt"
