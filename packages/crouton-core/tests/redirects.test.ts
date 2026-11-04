@@ -1,0 +1,94 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../server/database/queries/redirects', () => ({
+  getActiveCroutonRedirects: vi.fn(async () => [
+    { teamId: 'A', fromPath: '/old', toPath: '/new', statusCode: '301' },
+    { teamId: 'A', fromPath: '/', toPath: 'https://evil.example', statusCode: '302' },
+    { teamId: 'A', fromPath: '/x', toPath: '//evil.example', statusCode: '302' }
+  ])
+}))
+
+import { isSafeRedirectPath, validateRedirectInput } from '../server/utils/redirectValidation'
+import { findRedirect, getRedirectMap, invalidateRedirectCache } from '../server/utils/redirectCache'
+
+describe('isSafeRedirectPath', () => {
+  it('accepts same-site paths', () => {
+    expect(isSafeRedirectPath('/new')).toBe(true)
+    expect(isSafeRedirectPath('/a?x=1')).toBe(true)
+  })
+  it('rejects off-site / malformed targets', () => {
+    for (const v of ['https://x', '//evil', '/\\evil', 'javascript:alert(1)', '', '/a\nb', undefined]) {
+      expect(isSafeRedirectPath(v)).toBe(false)
+    }
+  })
+})
+
+describe('validateRedirectInput', () => {
+  beforeEach(() => {
+    ;(globalThis as any).createError = (e: any) => Object.assign(new Error(e.statusText), e)
+  })
+  it('accepts allowed status codes', () => {
+    expect(validateRedirectInput({ fromPath: '/a', toPath: '/b', statusCode: 308 }).statusCode).toBe('308')
+  })
+  it('rejects bad status codes and off-site targets', () => {
+    for (const statusCode of ['200', '303', 'abc']) {
+      expect(() => validateRedirectInput({ fromPath: '/a', toPath: '/b', statusCode })).toThrow()
+    }
+    expect(() => validateRedirectInput({ fromPath: '/', toPath: 'https://evil.example' })).toThrow()
+  })
+  it('partial allows omitted fields but still checks provided ones', () => {
+    expect(validateRedirectInput({ isActive: false }, true)).toEqual({ isActive: false })
+    expect(() => validateRedirectInput({ toPath: '//evil' }, true)).toThrow()
+  })
+})
+
+describe('team-scoped redirect lookup', () => {
+  beforeEach(() => invalidateRedirectCache())
+  it('matches only for the owning team', async () => {
+    const map = await getRedirectMap()
+    expect(findRedirect(map, 'A', '/old')?.toPath).toBe('/new')
+    expect(findRedirect(map, 'B', '/old')).toBeUndefined()
+    expect(findRedirect(map, null, '/old')).toBeUndefined()
+  })
+  it('drops stored off-site targets', async () => {
+    const map = await getRedirectMap()
+    expect(findRedirect(map, 'A', '/')).toBeUndefined()
+    expect(findRedirect(map, 'A', '/x')).toBeUndefined()
+  })
+})
+
+describe('redirects middleware', () => {
+  const getTeamBySlug = vi.fn()
+  const sendRedirect = vi.fn((_e: any, to: string, code: number) => ({ to, code }))
+
+  async function run(path: string, team: { id: string } | null = null, ctx: Record<string, any> = {}) {
+    vi.resetModules()
+    getTeamBySlug.mockReset()
+    getTeamBySlug.mockResolvedValue(team)
+    sendRedirect.mockClear()
+    ;(globalThis as any).defineEventHandler = (fn: any) => fn
+    ;(globalThis as any).getRequestPath = () => path
+    ;(globalThis as any).sendRedirect = sendRedirect
+    vi.doMock('@fyit/crouton-auth/server/utils/team', () => ({ getTeamBySlug }))
+    const mod = await import('../server/middleware/redirects')
+    return (mod.default as any)({ context: ctx })
+  }
+
+  it('nothing resolvable (unknown slug, no custom domain) => no redirect', async () => {
+    await run('/unknown/old')
+    expect(sendRedirect).not.toHaveBeenCalled()
+  })
+
+  it('redirects for the slug team', async () => {
+    await run('/acme/old?x=1', { id: 'A' })
+    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/new?x=1', 301)
+  })
+
+  it('empty map => getTeamBySlug never called', async () => {
+    const q = await import('../server/database/queries/redirects')
+    vi.mocked(q.getActiveCroutonRedirects).mockResolvedValueOnce([])
+    await run('/acme/old', { id: 'A' })
+    expect(getTeamBySlug).not.toHaveBeenCalled()
+    expect(sendRedirect).not.toHaveBeenCalled()
+  })
+})

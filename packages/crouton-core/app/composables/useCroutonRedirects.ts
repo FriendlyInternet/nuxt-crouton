@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 export const croutonRedirectSchema = z.object({
   fromPath: z.string().min(1, 'From path is required').startsWith('/', 'Path must start with /'),
-  toPath: z.string().min(1, 'To path is required').startsWith('/', 'Path must start with /'),
-  statusCode: z.enum(['301', '302']),
+  toPath: z.string().min(1, 'To path is required').regex(/^\/(?![/\\])/, 'Must be a same-site path starting with a single /'),
+  statusCode: z.enum(['301', '302', '307', '308']),
   isActive: z.boolean()
 })
 

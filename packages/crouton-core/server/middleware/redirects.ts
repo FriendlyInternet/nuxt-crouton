@@ -1,34 +1,51 @@
 /**
  * Server middleware that handles URL redirects.
  *
- * - Runs on every request
  * - Skips /api/, /admin/, /_nuxt/, /auth/ paths for performance
- * - Checks incoming path against active redirects
- * - Performs redirect with configured status code (301/302)
- * - Redirects are cached in memory and refreshed on CRUD operations
+ * - Redirects are scoped to a team: the request's team comes from the custom
+ *   domain (`resolvedDomainTeamId`) or the first path segment (team slug).
+ *   No resolvable team => no redirect.
+ * - `fromPath` is matched against the path with the `/<slug>` prefix removed.
+ * - Only same-site targets are followed.
  */
-import { getRedirectMap } from '../utils/redirectCache'
+import { findRedirect, getRedirectMap, getTeamIdForSlug } from '../utils/redirectCache'
+import { isSafeRedirectPath } from '../utils/redirectValidation'
 
 const SKIP_PREFIXES = ['/api/', '/admin/', '/_nuxt/', '/auth/', '/__nuxt']
 
 export default defineEventHandler(async (event) => {
   const path = getRequestPath(event)
 
-  // Skip internal paths for performance
   for (const prefix of SKIP_PREFIXES) {
     if (path.startsWith(prefix)) {
       return
     }
   }
 
-  // Strip query string for matching (redirects are path-only)
-  const pathWithoutQuery = path.split('?')[0]
-
+  // Nothing configured => skip the team lookup entirely
   const redirectMap = await getRedirectMap()
-  const redirect = redirectMap.get(pathWithoutQuery)
+  if (redirectMap.size === 0) return
 
-  if (redirect) {
-    // Preserve query string on redirect
+  const pathWithoutQuery = path.split('?')[0] ?? ''
+  const segments = pathWithoutQuery.split('/')
+  const slug = segments[1]
+  const ctxTeamId = (event.context as { resolvedDomainTeamId?: string | null }).resolvedDomainTeamId
+
+  let teamId: string | null | undefined = ctxTeamId
+  let matchPath = pathWithoutQuery
+
+  if (slug) {
+    const slugTeamId = await getTeamIdForSlug(slug, event)
+    if (slugTeamId && (!ctxTeamId || ctxTeamId === slugTeamId)) {
+      teamId = slugTeamId
+      matchPath = '/' + segments.slice(2).join('/')
+    }
+  }
+  if (!teamId) return
+
+  const redirect = findRedirect(redirectMap, teamId, matchPath)
+
+  if (redirect && isSafeRedirectPath(redirect.toPath)) {
     const query = path.includes('?') ? path.slice(path.indexOf('?')) : ''
     return sendRedirect(event, redirect.toPath + query, Number(redirect.statusCode))
   }

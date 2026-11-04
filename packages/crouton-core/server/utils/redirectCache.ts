@@ -1,13 +1,46 @@
 /**
  * In-memory redirect cache for fast path matching.
  *
- * Loads all active redirects from the database into a Map<fromPath, { toPath, statusCode }>.
+ * Loads all active redirects from the database into a Map<`${teamId}:${fromPath}`, { toPath, statusCode }>.
  * Invalidated when redirects are created, updated, or deleted via the API.
  */
 
 interface CachedRedirect {
   toPath: string
   statusCode: string
+}
+
+import { isSafeRedirectPath } from './redirectValidation'
+
+/** Redirects are scoped to the team that owns them. */
+export function redirectKey(teamId: string, fromPath: string): string {
+  return `${teamId}:${fromPath}`
+}
+
+/** Look up a redirect for one team; no team means no redirect. */
+export function findRedirect(
+  map: Map<string, CachedRedirect>,
+  teamId: string | null | undefined,
+  fromPath: string
+): CachedRedirect | undefined {
+  if (!teamId) return undefined
+  return map.get(redirectKey(teamId, fromPath))
+}
+
+const slugCache = new Map<string, string | null>()
+
+/** Resolve a team slug to its id (cached until the redirect cache is invalidated). */
+export async function getTeamIdForSlug(slug: string, event: any): Promise<string | null> {
+  if (slugCache.has(slug)) return slugCache.get(slug)!
+  let id: string | null = null
+  try {
+    const { getTeamBySlug } = await import('@fyit/crouton-auth/server/utils/team')
+    id = (await getTeamBySlug(event, slug))?.id ?? null
+  } catch {
+    id = null
+  }
+  slugCache.set(slug, id)
+  return id
 }
 
 let redirectMap: Map<string, CachedRedirect> | null = null
@@ -45,8 +78,9 @@ async function loadRedirects(): Promise<Map<string, CachedRedirect>> {
 
     for (const row of rows) {
       // First redirect for a path wins (shouldn't have duplicates due to unique index)
-      if (!map.has(row.fromPath)) {
-        map.set(row.fromPath, {
+      const key = redirectKey(row.teamId, row.fromPath)
+      if (!map.has(key) && isSafeRedirectPath(row.toPath)) {
+        map.set(key, {
           toPath: row.toPath,
           statusCode: row.statusCode
         })
@@ -68,4 +102,5 @@ async function loadRedirects(): Promise<Map<string, CachedRedirect>> {
  */
 export function invalidateRedirectCache(): void {
   redirectMap = null
+  slugCache.clear()
 }
