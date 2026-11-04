@@ -161,6 +161,17 @@ async function markReleased({ github, context, waitC }) {
   } catch { /* cannot edit: the event guard still protects a later pass */ }
 }
 
+/** Remove a label; false when it was already gone (404), any other error rethrows. */
+async function removeLabelIfPresent(github, params) {
+  try {
+    await github.rest.issues.removeLabel(params)
+    return true
+  } catch (e) {
+    if (e?.status === 404) return false
+    throw e
+  }
+}
+
 /** Re-check every waiting ticket; start the ones that are clear. Returns released numbers. */
 export async function releaseWaiting({ github, context }) {
   const { owner, repo } = context.repo
@@ -179,10 +190,12 @@ export async function releaseWaiting({ github, context }) {
     const labels = names(it.labels)
     const others = await gatherTrafficFacts({ github, context, issueNumber: it.number, labels })
     if (decideTraffic({ issue: it.number, labels, body: it.body, others }).action !== 'proceed') continue
-    await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'status:blocked' })
-    try {
-      await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'work-this' })
-    } catch { /* not present */ }
+    // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
+    if (!(await removeLabelIfPresent(github, { owner, repo, issue_number: it.number, name: 'status:blocked' }))) {
+      for (const l of scopeLabels(labels)) claimed.add(l)
+      continue
+    }
+    await removeLabelIfPresent(github, { owner, repo, issue_number: it.number, name: 'work-this' })
     await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['work-this'] })
     await markReleased({ github, context, waitC })
     released.push(it.number)
