@@ -401,10 +401,11 @@ jobs:
             echo
             echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
           } > "$RUNNER_TEMP/handback.md"
-          gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
+          PRC_URL="$(gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md")"
           if [ -n "$ISSUE" ]; then
-            CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" --arg b "$BRANCH" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c,branch:$b}}')"
+            # Comment POST + dispatch are ONE protected hand-off step (#3306): a limit / 5xx saves it for the sweep,
+            # which falls back to the PR comment just posted (an issue-comment id, readable the same way).
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg b "$BRANCH" --arg f "$RUNNER_TEMP/handback.md" --arg p "${PRC_URL##*issuecomment-}" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),branch:$b},postBodyFile:$f,fallbackFeedback:$p}')"
           fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).

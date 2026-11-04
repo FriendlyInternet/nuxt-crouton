@@ -102,3 +102,21 @@ test('push retry is wired: worker pushes call git-push-retry.mjs and the baselin
   assert.match(w, /cp scripts\/git-push-retry\.mjs "\$RUNNER_TEMP\/git-push-retry\.mjs"/)
   assert.match(readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8'), /node scripts\/git-push-retry\.mjs origin/)
 })
+
+// Review round (#3306): the READS inside a hand-off and the hand-back comment POST are part of the step.
+// A read/POST outside the guard dies on a rate limit before the guard is ever reached.
+test('reads and the hand-back POST sit inside the protected hand-off step', () => {
+  const oc = readFileSync(join(ROOT, '.github/workflows/on-comment.yml'), 'utf8')
+  const fix = readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8')
+  // every pulls.list / pulls.get in on-comment.yml that precedes a dispatch must be within a handoffGuard callback
+  const L = oc.split('\n')
+  L.forEach((line, i) => {
+    if (!/rest\.pulls\.(list|get)\(/.test(line) || /^\s*(#|\/\/)/.test(line)) return
+    const before = L.slice(Math.max(0, i - 6), i + 1).join('\n')
+    const after = L.slice(i, i + 12).join('\n')
+    if (!/createWorkflowDispatch/.test(after)) return // a read that feeds no dispatch is not a hand-off read
+    assert.match(before, /handoffGuard\(/, `on-comment.yml:${i + 1} reads before a dispatch outside handoffGuard`)
+  })
+  assert.doesNotMatch(fix, /issues\/\$ISSUE\/comments" --method POST/, 'fix-ci hand-back POST must run inside handoff-exec')
+  assert.match(fix, /postBodyFile/)
+})

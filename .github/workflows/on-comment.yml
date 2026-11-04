@@ -496,15 +496,22 @@ jobs:
             const c = context.payload.comment
             const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
-            const prs = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:work-${issue_number}`, per_page: 5 })
-            const pr = prs.data[0]
-            if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
-            await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(issue_number), feedback: String(c.id) } },
-              () => github.rest.actions.createWorkflowDispatch({
-                ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
-                inputs: { issue: String(issue_number), feedback: String(c.id) },
-              }))
+            // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
+            const g = await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(issue_number), feedback: String(c.id) } },
+              async () => {
+                const prs = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:work-${issue_number}`, per_page: 5 })
+                const pr = prs.data[0]
+                if (!pr) return null
+                await github.rest.actions.createWorkflowDispatch({
+                  ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+                  inputs: { issue: String(issue_number), feedback: String(c.id) },
+                })
+                return pr
+              })
+            if (g.deferred) { core.setOutput('revise', 'true'); core.info('revision saved for the hourly sweep'); return }
+            const pr = g.value
+            if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
@@ -1419,12 +1426,15 @@ jobs:
               await say(`👀 ${opener}. Review below.${trimmed ? ' The PR diff was too long, so the review saw only its first ~60k characters.' : ''}`,
                 rev ? `<details><summary>Independent review</summary>\n\n${modelText(rev, 6000)}\n\n</details>` : '_The review run produced no text — reply again to retry._')
             } else if (d.action === 'revise') {
-              const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
-              const r = routePrComment({ pr: { headRef: pr.head.ref, state: pr.state }, comment: {} })
-              await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } },
-                () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml',
-                  ref: context.payload.repository.default_branch,
-                  inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } }))
+              const g = await handoffGuard({ kind: 'revise-pr', issue: issue_number, feedback: String(c.id) },
+                async () => {
+                  const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
+                  const r = routePrComment({ pr: { headRef: pr.head.ref, state: pr.state }, comment: {} })
+                  await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml',
+                    ref: context.payload.repository.default_branch,
+                    inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } })
+                })
+              if (g.deferred) { await say(`🛠 ${opener}. GitHub is busy — the worker will start on this PR at the next hourly sweep.`); return }
               await say(`🛠 ${opener}. The worker is re-running on this PR with your comment.`)
             } else if (d.action === 'start') {
               let hasWorkBranch = false

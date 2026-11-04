@@ -5,6 +5,7 @@
 //   node scripts/handoff-exec.mjs <kind> '<json>'      kinds: dispatch | plan-build | replan | label
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import {
   PENDING_LABEL, classifyHandoffError, handoffMarker, parseHandoff, handoffKey,
@@ -45,7 +46,24 @@ const floorSec = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString()
 
 // Resolve a step to a dispatch (workflow + inputs). Reads happen here, so a limit on a read defers too.
 async function resolveDispatch(step, d) {
-  if (step.kind === 'dispatch') return { workflow: step.workflow, inputs: step.inputs || {} }
+  if (step.kind === 'dispatch') {
+    // Hand-back (fix-ci): the instruction comment POST is part of the step. First run posts it from
+    // postBodyFile; a replay (file gone) reuses the already-posted PR comment (fallbackFeedback).
+    if (step.postBodyFile || step.fallbackFeedback) {
+      let id = step.fallbackFeedback
+      if (step.postBodyFile && existsSync(step.postBodyFile)) {
+        id = String(await d.gh(['api', `repos/${d.repo}/issues/${step.issue}/comments`, '--method', 'POST', '-F', `body=@${step.postBodyFile}`, '--jq', '.id'])).trim()
+      }
+      return { workflow: step.workflow, inputs: { ...(step.inputs || {}), feedback: String(id) } }
+    }
+    return { workflow: step.workflow, inputs: step.inputs || {} }
+  }
+  if (step.kind === 'revise-pr') { // PR comment → its worker branch; the pulls.get read is deferrable too
+    const { routePrComment } = await import('./revise-route.mjs')
+    const pr = JSON.parse(await d.gh(['api', `repos/${d.repo}/pulls/${step.issue}`, '--jq', '{headRef: .head.ref, state}']))
+    const r = routePrComment({ pr, comment: {} })
+    return { workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(step.feedback), branch: r.branch } }
+  }
   if (step.kind === 'plan-build') {
     const out = await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${step.issue}/comments?per_page=100`,
       '--jq', '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .id // empty'])

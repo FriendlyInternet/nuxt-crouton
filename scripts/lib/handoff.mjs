@@ -32,7 +32,7 @@ export function parseHandoff(body) {
 
 // Same step (kind + issue + inputs/label) → same key, so a second deferral updates one marker.
 export function handoffKey(step) {
-  return enc({ kind: step.kind, issue: step.issue, workflow: step.workflow, label: step.label, inputs: step.inputs || {} })
+  return enc({ kind: step.kind, issue: step.issue, workflow: step.workflow, label: step.label, inputs: step.inputs || {}, feedback: step.feedback })
 }
 
 // One definition of the run title; the workflows' `run-name:` is pinned to it by a test.
