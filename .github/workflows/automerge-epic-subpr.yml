@@ -78,7 +78,9 @@ on:
   schedule:
     - cron: '17 * * * *'   # hourly, off-the-hour so it doesn't pile onto :00 with everything else
   pull_request:
-    types: [opened, ready_for_review, synchronize]
+    # #3229: `build:approved` IS the reviewer's approval and arrives as a label event — a PR green
+    # before approval otherwise waits for an unrelated event. Other labels are filtered out in the script (scripts/lib/automerge-trigger.mjs).
+    types: [opened, ready_for_review, synchronize, labeled]
   check_suite:
     types: [completed]
   workflow_run:
@@ -100,7 +102,8 @@ jobs:
     # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+        (github.event.action != 'labeled' || github.event.label.name == 'build:approved')) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type != 'Bot' &&
         (github.event.comment.author_association == 'OWNER' ||
@@ -131,6 +134,18 @@ jobs:
            let currentPr = null   // PR being evaluated, so a rate-limit note can name it (#3306)
            try {
             const { owner, repo } = context.repo
+            // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
+            // Bootstrap-safe: if the helper is not on the default branch yet, fall back to the job-level `if:` alone.
+            let shouldRunOnEvent = () => true
+            try {
+              ({ shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`))
+            } catch (e) {
+              core.warning(`scripts/lib/automerge-trigger.mjs not loadable (${e.code || e.message}); relying on the job-level label filter.`)
+            }
+            if (!shouldRunOnEvent(context.eventName, context.payload)) {
+              core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
+              return
+            }
             const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
 
