@@ -1,4 +1,5 @@
 name: Fix CI on failure
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}"
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the
@@ -381,7 +382,7 @@ jobs:
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
           if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
             exit 0
           fi
 
@@ -415,10 +416,11 @@ jobs:
             echo
             echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
           } > "$RUNNER_TEMP/handback.md"
-          gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
+          PRC_URL="$(gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md")"
           if [ -n "$ISSUE" ]; then
-            CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
-            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID" -f branch="$BRANCH"
+            # Comment POST + dispatch are ONE protected hand-off step (#3306): a limit / 5xx saves it for the sweep,
+            # which falls back to the PR comment just posted (an issue-comment id, readable the same way).
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg b "$BRANCH" --arg f "$RUNNER_TEMP/handback.md" --arg p "${PRC_URL##*issuecomment-}" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),branch:$b},postBodyFile:$f,fallbackFeedback:$p}')"
           fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).

@@ -261,7 +261,10 @@ jobs:
               // Fire a FRESH `labeled` event — the workers trigger on the label being ADDED,
               // never on it merely being present, so a re-dispatch must remove it first.
               try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: number, name: label }) } catch (e) {}
-              await github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] })
+              // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+              const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+              await handoffGuard({ kind: 'label', issue: number, label },
+                () => github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] }))
               done.push(`#${number} → \`${label}\``)
             }
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`

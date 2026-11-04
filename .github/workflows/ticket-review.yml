@@ -1,4 +1,5 @@
 name: Ticket review (independent reviewer — pi.dev)
+run-name: "ticket-review #${{ inputs.epic }}"
 
 # #2776 (epic #2754) — before an epic's first ticket starts, the same top-model reviewer as the plan
 # review (the `review` tier of .claude/pipeline-models.json) reads the epic, its Decisions log, every
@@ -130,6 +131,8 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           MODEL: ${{ steps.model.outputs.model }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -150,10 +153,10 @@ jobs:
           echo "verdict: $VERDICT → $URL"
           case "$VERDICT" in
             go)
-              gh issue edit "$EPIC" --add-label "tickets:approved"
+              node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$EPIC" '{issue:$i,label:"tickets:approved"}')"
               node scripts/lib/ticket-verdict.mjs releasable "$D/tickets.json" | jq -c '.[]' | while read -r R; do
                 N="$(echo "$R" | jq -r .number)"; L="$(echo "$R" | jq -r .label)"
-                gh issue edit "$N" --add-label "$L"
+                node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$N" --arg l "$L" '{issue:$i,label:$l}')"
                 echo "released #$N with $L"
               done
               ;;

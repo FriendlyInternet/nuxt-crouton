@@ -1,4 +1,5 @@
 name: Work issue (pi.dev · single-use worker)
+run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}"
 
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
@@ -175,7 +176,7 @@ jobs:
           MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
           if [ "$MODE" = "plan" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
-            gh workflow run work-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f mode=plan
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),mode:"plan"}}')"
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -468,6 +469,8 @@ jobs:
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
+          # Push retry (#3306): one GitHub server error must not throw away a finished build.
+          cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
           cp scripts/run-record.mjs "$RUNNER_TEMP/run-record.mjs"
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
@@ -834,7 +837,7 @@ jobs:
         run: |
           set -uo pipefail
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
           if [ ! -s "$RUNNER_TEMP/plan.md" ]; then
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
@@ -1015,7 +1018,7 @@ jobs:
               # The lease refuses to overwrite a push someone made to the PR while this ran. That is
               # the right call — but say so, don't crash (a bare `git push | tail` + pipefail killed
               # the step with "workflow bug" and no explanation).
-              if PUSH_OUT="$(git push -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
+              if PUSH_OUT="$(node "$RUNNER_TEMP/git-push-retry.mjs" -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
                 echo "$PUSH_OUT" | tail -2; HAVE_COMMITS=1
               else
                 echo "$PUSH_OUT" | tail -4
@@ -1037,7 +1040,7 @@ jobs:
               echo "revise: no new commit on ${BR}"
             fi
           elif [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
-            git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
+            node "$RUNNER_TEMP/git-push-retry.mjs" -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
           else
             echo "no commits ahead of ${BASE} — no PR to open"
           fi
