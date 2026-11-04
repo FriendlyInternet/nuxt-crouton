@@ -82,7 +82,7 @@ describe('redirects middleware', () => {
 
   it('redirects for the slug team', async () => {
     await run('/acme/old?x=1', { id: 'A' })
-    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/new?x=1', 301)
+    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/acme/new?x=1', 301)
   })
 
   it('empty map => getTeamBySlug never called', async () => {
@@ -135,6 +135,6 @@ describe('redirects middleware', () => {
     await run('/acme/old', slug => (slug === 'acme' ? { id: 'B' } : null))
     expect(sendRedirect).not.toHaveBeenCalled()
     await run('/acme/b-old', slug => (slug === 'acme' ? { id: 'B' } : null))
-    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/b-new', 301)
+    expect(sendRedirect).toHaveBeenCalledWith(expect.anything(), '/acme/b-new', 301)
   })
 })

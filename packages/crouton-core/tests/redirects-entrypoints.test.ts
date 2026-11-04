@@ -7,6 +7,9 @@ const domains = { current: undefined as string | undefined }
 vi.mock('../server/database/queries/redirects', () => ({
   getActiveCroutonRedirects: vi.fn(async () => [
     { teamId: 'A', fromPath: '/old', toPath: '/new', statusCode: '301' },
+    { teamId: 'A', fromPath: '/a/legacy', toPath: '/a/legacy-new', statusCode: '301' },
+    { teamId: 'A', fromPath: '/dup', toPath: '/a/dup2', statusCode: '301' },
+    { teamId: 'B', fromPath: '/b/legacy', toPath: '/x', statusCode: '301' },
     { teamId: 'B', fromPath: '/led002', toPath: '/b-new', statusCode: '302' }
   ]),
   createCroutonRedirect: vi.fn(async (v: any) => v),
@@ -57,16 +60,33 @@ describe('redirect middleware (real handler)', () => {
   })
 
   it('5) after team A renames a -> a2, /a2/old still redirects', async () => {
-    expect(await mw('/a/old')).toEqual({ redirected: '/new', code: 301 })
+    expect(await mw('/a/old')).toEqual({ redirected: '/a/new', code: 301 })
     delete slugs.a
     slugs.a2 = 'A'
-    expect(await mw('/a2/old')).toEqual({ redirected: '/new', code: 301 })
+    expect(await mw('/a2/old')).toEqual({ redirected: '/a2/new', code: 301 })
     expect(await mw('/a/old')).toBeUndefined()
   })
 
   it('6) another team\'s /led002 does not fire for this team', async () => {
     expect(await mw('/a/led002')).toBeUndefined()
-    expect(await mw('/b/led002')).toEqual({ redirected: '/b-new', code: 302 })
+    expect(await mw('/b/led002')).toEqual({ redirected: '/b/b-new', code: 302 })
+  })
+})
+
+describe('redirect review findings', () => {
+  it('1) custom domain: team from host, not first path segment', async () => {
+    expect(await mw('/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
+    expect(await mw('/b/led002', { resolvedDomainTeamId: 'A' })).toBeUndefined()
+  })
+  it('2) legacy row stored with the team prefix still works, same team only', async () => {
+    expect(await mw('/a/legacy')).toEqual({ redirected: '/a/legacy-new', code: 301 })
+    expect(await mw('/b/legacy')).toEqual({ redirected: '/b/x', code: 301 })
+    expect(await mw('/a/b/legacy')).toBeUndefined()
+  })
+  it('3) Location keeps team prefix by mode', async () => {
+    expect(await mw('/a/old?x=1')).toEqual({ redirected: '/a/new?x=1', code: 301 })
+    expect(await mw('/a/dup')).toEqual({ redirected: '/a/dup2', code: 301 })
+    expect(await mw('/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
   })
 })
 
