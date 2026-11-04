@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** https://github.com/FriendlyInternet/nuxt-crouton/issues/1636 and https://github.com/FriendlyInternet/nuxt-crouton/issues/1634 were closed not planned. Historical record, not current guidance.
+
 # Crouton Provider-Agnostic Deploy Plan
 
 ## Summary

@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** shipped as the user-profile locale in crouton-auth. Historical record, not current guidance.
+
 # User Locale Persistence
 
 ## Summary
