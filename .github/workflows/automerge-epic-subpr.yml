@@ -128,6 +128,7 @@ jobs:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -291,13 +292,6 @@ jobs:
               // Green + presence gates above still apply — `ok` never overrides a red check.
               const prComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
               const prCommits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number, per_page: 100 })
-              // listCommits omits files; fetch them for non-merge commits so review-capture
-              // commits (writeups/ui-proposals/** only) don't void an approval.
-              for (const k of prCommits) {
-                if ((k.parents || []).length > 1) continue
-                const full = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
-                k.files = (full.data.files || []).map(f => f.filename)
-              }
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
@@ -330,7 +324,33 @@ jobs:
                 const d = decideEpicMerge({ pr, checkRuns, go })
                 gate = { merge: d.action === 'merge', reason: d.reason }
               } else {
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, red, ciGate: checkState, mergeableState: state })
+                // #3173: a work-* PR on an epic branch that the reviewer rejected twice is held for the owner,
+                // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
+                // New modules load from the default-branch checkout in try/catch: absent → plain label rule.
+                let reviewSt = { kind: 'other' }
+                let chooseOkReply = () => null
+                if (pr.base.ref.startsWith('epic/') && pr.head.ref.startsWith('work-')) {
+                  try {
+                    const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
+                    ;({ chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`))
+                    reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
+                  } catch (e) {
+                    core.warning(`#${pull_number} final-hold state unavailable (${e.code || e.message}) — label rule only.`)
+                  }
+                }
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, finalHold: reviewSt.kind === 'final' ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
+                if (!gate.merge && gate.code === 'no-review' && go.go) {
+                  const okBeforeFinal = reviewSt.kind === 'final' && !(new Date(go.approvedAt) > new Date(reviewSt.at))
+                  const reply = chooseOkReply({ state: reviewSt, ownerOk: true, okBeforeFinal })
+                  if (reply) {
+                    const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
+                    if (!prComments.some(c => (c.body || '').includes(marker))) {
+                      await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                        body: `${marker}\n${reply.text}\n\n<sub>🤖 agent pipeline (CI) · auto-merge (#3173)</sub>` })
+                    }
+                  }
+                }
               }
               if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
 
