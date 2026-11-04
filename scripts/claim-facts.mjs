@@ -83,28 +83,12 @@ async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
 }
 
 /**
- * Gather the claim facts for one issue.
- *
- * @param {object}  o
- * @param {object}  o.github        an Octokit-shaped client (the `github` global in github-script)
- * @param {object}  o.context       the github-script `context`
- * @param {number}  o.issueNumber
- * @param {object} [o.core]         optional logger; only `warning` is used
- * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
- *                                  Adds `revision` so the guard judges that PR, not the issue.
- * @returns {Promise<object>} the shape `decideClaim` consumes
+ * Every PR whose body closes the issue, with refs/merge state. The search API returns neither
+ * head nor base ref, so each candidate is fetched (at most 20, usually 1).
  */
-export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '' }) {
-  const { owner, repo } = context.repo
-  const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
-
-  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
-
+async function fetchLinkedPrs({ github, owner, repo, issueNumber, warn }) {
   const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
   const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
-
-  // The search API returns neither head nor base ref, so each candidate is fetched. Both refs
-  // are load-bearing (see the header), and the candidate list is small — at most 20, usually 1.
   const linkedPRs = []
   let selfPr = null
   const selfPrs = []
@@ -117,6 +101,29 @@ export async function gatherClaimFacts({ github, context, issueNumber, core, rev
     }
     linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
   }
+  return { linkedPRs, selfPr, selfPrs }
+}
+
+/**
+ * Gather the claim facts for one issue.
+ *
+ * @param {object}  o
+ * @param {object}  o.github        an Octokit-shaped client (the `github` global in github-script)
+ * @param {object}  o.context       the github-script `context`
+ * @param {number}  o.issueNumber
+ * @param {object} [o.core]         optional logger; only `warning` is used
+ * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
+ *                                  Adds `revision` so the guard judges that PR, not the issue.
+ * @param {string} [o.mode]         the run mode ('plan' = plan-only); lets the guard let a plan run past an open own PR (#2990)
+ * @returns {Promise<object>} the shape `decideClaim` consumes
+ */
+export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '', mode = '' }) {
+  const { owner, repo } = context.repo
+  const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
+
+  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
+
+  const { linkedPRs, selfPr, selfPrs } = await fetchLinkedPrs({ github, owner, repo, issueNumber, warn })
 
   const { inProgressSince, lastReopenedAt } = await fetchEventFacts({
     github, owner, repo, issueNumber, issue, linkedPRs,
@@ -128,6 +135,7 @@ export async function gatherClaimFacts({ github, context, issueNumber, core, rev
 
   return {
     ...(revision ? { revision } : {}),
+    mode,
     issueState: issue.state,
     linkedPRs,
     inProgressSince,

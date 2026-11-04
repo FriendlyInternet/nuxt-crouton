@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — dropped:** Resend is still the only transport; the portability initiative it served (https://github.com/FriendlyInternet/nuxt-crouton/issues/1636) was closed not planned. Historical record, not current guidance.
+
 # Crouton Email — Multi-Driver Refactor Plan
 
 ## Summary

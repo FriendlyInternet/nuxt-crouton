@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done (superseded):** folded into writeups/strategy/crouton-vision.md; epic https://github.com/FriendlyInternet/nuxt-crouton/issues/703 closed completed. Historical record, not current guidance.
+
 # Crouton — Vision Brief
 
 > Internal positioning notes. Originally captured from a thinking-out-loud session (2026-06-23),

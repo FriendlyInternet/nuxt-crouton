@@ -1,3 +1,5 @@
+> 🗄️ **Archived 2026-11-04 (#3352) — done:** epic https://github.com/FriendlyInternet/nuxt-crouton/issues/983 closed completed. Historical record, not current guidance.
+
 > ⚠️ **Campaign snapshot (2026-07-02) for the live #983 builder graduation — non-authoritative and fast-decaying** (#504). Originally authored as a skill in PR #1091 (epic #1073); relocated here because a live issue's battle state belongs on the issue/briefing, not in a trigger-loaded skill (a stale campaign skill actively misleads). The graduation *method* is owned by the `graduate`/`spec`/`conformance` skills. When #983 closes with a postmortem, this file is history.
 
 

@@ -256,7 +256,7 @@ jobs:
             // A revision (feedback, not a re-plan) is guarded on its PR, not its issue (#3061).
             const isRevision = '${{ inputs.feedback }}' !== '' && '${{ inputs.mode }}' !== 'plan'
             const reviseBranch = isRevision ? ('${{ inputs.branch }}' || `work-${issue_number}`) : ''
-            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core, reviseBranch })
+            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core, reviseBranch, mode: '${{ inputs.mode }}' })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/claim-facts.json`, JSON.stringify(facts))
             core.info(`claim facts: ${JSON.stringify(facts)}`)
       - name: Claim guard
