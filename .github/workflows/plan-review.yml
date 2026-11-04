@@ -158,6 +158,8 @@ jobs:
           MODEL: ${{ steps.model.outputs.model }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PLAN_ID: ${{ github.event.comment.id }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/plan-review"
@@ -180,7 +182,7 @@ jobs:
           echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
           case "$VERDICT" in
             go)
-              gh issue edit "$ISSUE" --add-label "plan:approved"
+              node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$ISSUE" '{issue:$i,label:"plan:approved"}')"
               ;;
             needs-owner)
               gh issue edit "$ISSUE" --add-label "status:blocked"
@@ -190,8 +192,8 @@ jobs:
               if [ "$ROUTE" = hold ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
-                REVIEW_ID="$(gh api "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | last | .id')"
-                gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f mode=plan -f feedback="$REVIEW_ID"
+                # The read + the dispatch are ONE hand-off: a limit / 5xx on either is saved and replayed (#3306).
+                node scripts/handoff-exec.mjs replan "$(jq -nc --argjson i "$ISSUE" '{issue:$i}')"
               fi
               ;;
           esac

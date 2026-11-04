@@ -4,6 +4,7 @@
 //
 // Every function takes the github-script globals: `{ github, context, core }`.
 import * as gate from './wave-gate.mjs'
+import { handoffGuard } from './handoff-exec.mjs'
 
 /** Collapse an epic branch's CI into success | failure | pending | unknown. */
 async function branchStatus({ github, context, core }, ref) {
@@ -69,7 +70,9 @@ async function releaseOne(ctx, it, blockers, { onlyBlockedBy, branch }) {
   }
 
   const releaseWith = decision.label || 'delegate'
-  await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] })
+  // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+  await handoffGuard({ kind: 'label', issue: it.number, label: releaseWith },
+    () => github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] }))
   await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
     body: gate.formatReleaseComment({ doneNumber, branchStatus: status, label: releaseWith }) })
   core.info(`Released #${it.number} with ${releaseWith} (${decision.reason})`)
