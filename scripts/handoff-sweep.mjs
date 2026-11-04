@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { PENDING_LABEL, classifyHandoffError, handoffMarker, isStale } from './lib/handoff.mjs'
 import { makeDeps, perform, listMarkers } from './handoff-exec.mjs'
 
+// fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
 export async function sweep(d = makeDeps()) {
   const remaining = Number(String(await d.gh(['api', 'rate_limit', '--jq', '.resources.core.remaining'])).trim())
   if (Number.isFinite(remaining) && remaining < 200) {

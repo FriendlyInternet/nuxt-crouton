@@ -1,5 +1,5 @@
 name: Work issue (pi.dev · single-use worker)
-run-name: ${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}
+run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}"
 
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the

@@ -1,5 +1,5 @@
 name: Ticket review (independent reviewer — pi.dev)
-run-name: ticket-review #${{ inputs.epic }}
+run-name: "ticket-review #${{ inputs.epic }}"
 
 # #2776 (epic #2754) — before an epic's first ticket starts, the same top-model reviewer as the plan
 # review (the `review` tier of .claude/pipeline-models.json) reads the epic, its Decisions log, every

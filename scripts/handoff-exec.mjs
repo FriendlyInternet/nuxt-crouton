@@ -68,6 +68,7 @@ const labelEvents = (d, step) =>
     '.[] | {event, created_at, label: {name: .label.name}, actor: {login: .actor.login}}')
 
 // Do the step. check=true (replay): look for the action's own proof first, finish rather than redo.
+// fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
 export async function perform(step, d, { check = false } = {}) {
   if (step.kind === 'label') {
     if (!check) {

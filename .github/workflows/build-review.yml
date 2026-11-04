@@ -1,5 +1,5 @@
 name: Build review (independent reviewer — pi.dev)
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}"
 
 # #2777 (epic #2754) — when a pipeline PR (head `work-<N>`) turns green, the same top-model
 # reviewer as the plan review (the `review` tier of .claude/pipeline-models.json) reads the

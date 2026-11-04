@@ -1,5 +1,5 @@
 name: Fix CI on failure
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}"
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the

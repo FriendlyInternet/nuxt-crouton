@@ -16,6 +16,7 @@ function world({ failOn = () => null, runs = [], events = [], comments = {} } = 
   const j = (a) => a.map((x) => JSON.stringify(x)).join('\n')
   w.deps = {
     repo: 'o/r', tokens: ['app', 'fb'], log: () => {}, now: () => w.t,
+    // fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
     gh: async (args, { token } = {}) => {
       const s = args.join(' ')
       w.calls.push(s)
@@ -122,7 +123,7 @@ test('6: a marker 300 comments deep is found; unlabelled tickets are not scanned
 })
 test('7: run titles match the run-name in each workflow file', () => {
   for (const [wf, tpl] of Object.entries(RUN_NAME))
-    assert.ok(readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8').includes(`run-name: ${tpl}`), wf)
+    assert.ok(readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8').includes(`run-name: "${tpl}"`), wf)
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', plan: '9' }), 'work #5 build 9')
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', feedback: '3' }), 'work #5 revise 3')
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), 'work #5 plan -')

@@ -49,6 +49,7 @@ const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && tex
 // Label adds that are state, not a stage start: status:*, plan:unverified, counters, managed epic labels, test-card state.
 const STATE_LABEL = /status:[\w-]+|plan:unverified|ci-fix-attempts|handoff:pending|ready-epic|test-card|'epic'|"epic"|\$\{?[A-Z_]*LABEL/i
 
+// fallow-ignore-next-line complexity -- handoff dispatcher/test fake: branchy by nature of the retry/fallback matrix (#3306)
 function scan() {
   const bad = []; const used = new Set(); const totals = { dispatch: 0, label: 0 }
   for (const f of files()) {
