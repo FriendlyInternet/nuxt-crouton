@@ -70,4 +70,7 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
   for (const f of ['.github/workflows/plan-review.yml', 'scripts/plan-hold.mjs']) {
     assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
   }
+  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /work-issue-pidev\.yml[^\n]*-f mode=plan/)
+  assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
+  assert.match(wf, /gh workflow run work-issue-pidev\.yml[^\n]*-f mode=plan/)
 })
