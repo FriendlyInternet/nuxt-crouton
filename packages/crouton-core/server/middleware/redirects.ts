@@ -27,20 +27,12 @@ async function getTeamIdForSlug(slug: string, event: any): Promise<string | null
 
 const SKIP_PREFIXES = ['/api/', '/admin/', '/_nuxt/', '/auth/', '/__nuxt']
 
-export default defineEventHandler(async (event) => {
-  const path = getRequestPath(event)
+function isSkippedPath(path: string): boolean {
+  return SKIP_PREFIXES.some(prefix => path.startsWith(prefix))
+}
 
-  for (const prefix of SKIP_PREFIXES) {
-    if (path.startsWith(prefix)) {
-      return
-    }
-  }
-
-  // Nothing configured => skip the team lookup entirely
-  const redirectMap = await getRedirectMap()
-  if (redirectMap.size === 0) return
-
-  const pathWithoutQuery = path.split('?')[0] ?? ''
+/** Find the team for this request and the path to match redirects against. */
+async function resolveTeam(event: any, pathWithoutQuery: string): Promise<{ teamId: string | null | undefined, matchPath: string }> {
   const segments = pathWithoutQuery.split('/')
   const slug = segments[1]
   const ctxTeamId = (event.context as { resolvedDomainTeamId?: string | null }).resolvedDomainTeamId
@@ -63,12 +55,29 @@ export default defineEventHandler(async (event) => {
       matchPath = pathWithoutQuery
     }
   }
+  return { teamId, matchPath }
+}
+
+/** Send the redirect (keeping the query string) when the target is safe. */
+function applyRedirect(event: any, path: string, redirect: { toPath: string, statusCode: number | string }) {
+  const query = path.includes('?') ? path.slice(path.indexOf('?')) : ''
+  return sendRedirect(event, redirect.toPath + query, Number(redirect.statusCode))
+}
+
+export default defineEventHandler(async (event) => {
+  const path = getRequestPath(event)
+  if (isSkippedPath(path)) return
+
+  // Nothing configured => skip the team lookup entirely
+  const redirectMap = await getRedirectMap()
+  if (redirectMap.size === 0) return
+
+  const pathWithoutQuery = path.split('?')[0] ?? ''
+  const { teamId, matchPath } = await resolveTeam(event, pathWithoutQuery)
   if (!teamId) return
 
   const redirect = findRedirect(redirectMap, teamId, matchPath)
-
   if (redirect && isSafeRedirectPath(redirect.toPath)) {
-    const query = path.includes('?') ? path.slice(path.indexOf('?')) : ''
-    return sendRedirect(event, redirect.toPath + query, Number(redirect.statusCode))
+    return applyRedirect(event, path, redirect)
   }
 })
