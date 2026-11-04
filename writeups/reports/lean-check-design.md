@@ -59,5 +59,5 @@ AGENTS.md warns about (run the rule over the corpus, not just its tests). So the
 
 The worker runs `node scripts/lean-check.mjs --base origin/main` on its diff. A candidate is a
 *prompt*, not a verdict: remove the now-dead key/page, **or** state on the PR why it stays. This is
-the machine half of the "remove what you orphan" rule (AGENTS.md *Working style* / CLAUDE.md *Core
+the machine half of the "remove what you orphan" rule (AGENTS.md *Working style* / AGENTS.md *Working
 Principles* / the evidenced worker step in `.claude/agents/task-worker.md`).

@@ -214,6 +214,7 @@ jobs:
           ISSUE: ${{ steps.pr.outputs.issue }}
           PR: ${{ steps.pr.outputs.pr }}
           SHA: ${{ steps.pr.outputs.sha }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/build-review"
@@ -229,7 +230,29 @@ jobs:
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
           DECISION="$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
           VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
-          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL"; } > "$D/comment.md"
+          # #3173: on the final hold, tell the owner if their earlier `ok` came too early. Trusted default-branch
+          # copies only (mirrored tree so ../approval.mjs resolves); any failure just means no extra line.
+          OKAGAIN=""
+          if [ "$VERDICT" = "no-go" ] && [ "$ROUND" -ge 2 ]; then
+            T="$RUNNER_TEMP/trusted/scripts"
+            for F in approval.mjs comment-command.mjs lib/earlier-owner-ok.mjs lib/ok-reply.mjs; do
+              mkdir -p "$T/$(dirname "$F")"
+              git show "origin/${{ github.event.repository.default_branch }}:scripts/$F" > "$T/$F" 2>/dev/null || rm -f "$T/$F"
+            done
+            gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments" --jq '.[]' > "$D/comments.ndjson" 2>/dev/null || true
+            OKAGAIN="$(T="$T" CF="$D/comments.ndjson" node --input-type=module -e '
+              import { readFileSync } from "node:fs"
+              import { pathToFileURL } from "node:url"
+              const u = (f) => pathToFileURL(process.env.T + "/lib/" + f).href
+              const { earlierOwnerOk, lastVerdictAt } = await import(u("earlier-owner-ok.mjs"))
+              const { chooseOkReply } = await import(u("ok-reply.mjs"))
+              const comments = readFileSync(process.env.CF, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
+              const okBeforeFinal = earlierOwnerOk({ comments, owner: process.env.OWNER_LOGIN, since: lastVerdictAt(comments) })
+              const r = chooseOkReply({ state: { kind: "final" }, ownerOk: okBeforeFinal, okBeforeFinal })
+              if (r) process.stdout.write(r.text)
+            ' 2>/dev/null)" || OKAGAIN=""
+          fi
+          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
           # remove-then-add: re-adding a label the PR already carries fires no event.
           gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
