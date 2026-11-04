@@ -182,6 +182,8 @@ jobs:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -216,8 +218,11 @@ jobs:
             if (d.action === 'red') {
               const names = d.failing.map(f => `\`${f}\``).join(', ')
               try {
-                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'fix-ci-on-failure.yml', ref: 'main',
-                  inputs: { pr: String(pull_number) } })
+                // A limit / 5xx on the dispatch is saved and replayed hourly (#3306), not lost.
+                const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'fix-ci-on-failure.yml', inputs: { pr: String(pull_number) } },
+                  () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'fix-ci-on-failure.yml', ref: 'main',
+                    inputs: { pr: String(pull_number) } }))
                 await say(`🔴 **${names} red — the CI fix is running.** This merges when green while your \`ok\` stands.`)
               } catch (e) {
                 await say(`🔴 **${names} red, and the CI fix could not be started** (${e.message}). Your \`ok\` stands; fix it and it merges when green.`)
@@ -338,6 +343,9 @@ jobs:
           fetch-depth: 1
 
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -376,7 +384,10 @@ jobs:
             if (cur.includes(label)) {
               try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }) } catch (e) {}
             }
-            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] })
+            // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+            const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+            await handoffGuard({ kind: 'label', issue: issue_number, label },
+              () => github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] }))
 
             // Acknowledge so the commenter sees it registered (handy on mobile).
             try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content: 'rocket' }) } catch (e) {}
@@ -476,6 +487,8 @@ jobs:
         id: revise
         if: steps.state.outputs.open == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           script: |
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
@@ -486,10 +499,12 @@ jobs:
             const prs = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:work-${issue_number}`, per_page: 5 })
             const pr = prs.data[0]
             if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
-            await github.rest.actions.createWorkflowDispatch({
-              ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
-              inputs: { issue: String(issue_number), feedback: String(c.id) },
-            })
+            const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+            await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(issue_number), feedback: String(c.id) } },
+              () => github.rest.actions.createWorkflowDispatch({
+                ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+                inputs: { issue: String(issue_number), feedback: String(c.id) },
+              }))
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
@@ -518,6 +533,9 @@ jobs:
         id: piredispatch
         if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ steps.app-token-early.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ steps.app-token-early.outputs.token }}
           script: |
@@ -534,7 +552,9 @@ jobs:
             // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
-            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
+            const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+            await handoffGuard({ kind: 'label', issue: issue_number, label: 'delegate-pi' },
+              () => github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] }))
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
                 + '🔁 **Re-running the planner on your reply.** It reads the thread and either revises the design or, if you approved, splits the epic into build children.' })
@@ -551,6 +571,8 @@ jobs:
         id: replan
         if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true' && steps.piredispatch.outputs.redispatch != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           script: |
             const { pathToFileURL } = require('node:url')
@@ -566,10 +588,13 @@ jobs:
             core.setOutput('dispatched', 'false')
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             try {
-              await github.rest.actions.createWorkflowDispatch({
-                ...context.repo, ref: context.payload.repository.default_branch,
-                ...replanDispatch({ issue: issue_number, commentId: context.payload.comment.id }),
-              })
+              const { handoffGuard } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`).href)
+              const rd = replanDispatch({ issue: issue_number, commentId: context.payload.comment.id })
+              await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: rd.workflow_id, inputs: rd.inputs },
+                () => github.rest.actions.createWorkflowDispatch({
+                  ...context.repo, ref: context.payload.repository.default_branch,
+                  ...replanDispatch({ issue: issue_number, commentId: context.payload.comment.id }),
+                }))
             } catch (e) {
               const { claimNotice } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-loop-guard.mjs`).href)
               const n = claimNotice({ reason: `I could not re-run the planner from your reply (${e.message}) — dispatch work-issue-pidev.yml with mode=plan by hand`, issue: issue_number, kind: 'replan-failed', runUrl })
@@ -1024,6 +1049,8 @@ jobs:
           fetch-depth: 1
       - name: Route the comment
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           script: |
             const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
@@ -1050,10 +1077,12 @@ jobs:
             }
 
             try { await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id: c.id, content: 'eyes' }) } catch (e) {}
-            await github.rest.actions.createWorkflowDispatch({
-              ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
-              inputs: { issue: String(route.issue), feedback: String(c.id), branch: route.branch },
-            })
+            const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+            await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(route.issue), feedback: String(c.id), branch: route.branch } },
+              () => github.rest.actions.createWorkflowDispatch({
+                ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+                inputs: { issue: String(route.issue), feedback: String(c.id), branch: route.branch },
+              }))
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your comment (#2446)_\n\n'
@@ -1348,6 +1377,9 @@ jobs:
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Act on the decision (one action)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -1364,10 +1396,12 @@ jobs:
             const say = (brief, more) => github.rest.issues.createComment({ owner, repo, issue_number,
               body: `${header}${brief}${more ? `\n\n${more}` : ''}` })
             const opener = readAs(d)
+            const { handoffGuard } = await import(`${root}/scripts/handoff-exec.mjs`)
             const relabel = async (label) => {
               const cur = (context.payload.issue.labels || []).map(l => l.name)
               if (cur.includes(label)) { try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }) } catch {} }
-              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] })
+              await handoffGuard({ kind: 'label', issue: issue_number, label },
+                () => github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] }))
             }
             if (d.action === 'ignore') { core.info('FYI comment — no reply.'); return }
             try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: c.id, content: 'eyes' }) } catch {}
@@ -1387,9 +1421,10 @@ jobs:
             } else if (d.action === 'revise') {
               const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
               const r = routePrComment({ pr: { headRef: pr.head.ref, state: pr.state }, comment: {} })
-              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml',
-                ref: context.payload.repository.default_branch,
-                inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } })
+              await handoffGuard({ kind: 'dispatch', issue: issue_number, workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } },
+                () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml',
+                  ref: context.payload.repository.default_branch,
+                  inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } }))
               await say(`🛠 ${opener}. The worker is re-running on this PR with your comment.`)
             } else if (d.action === 'start') {
               let hasWorkBranch = false

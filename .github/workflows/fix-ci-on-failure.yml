@@ -1,4 +1,5 @@
 name: Fix CI on failure
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the
@@ -367,7 +368,7 @@ jobs:
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
           if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
             exit 0
           fi
 
@@ -403,7 +404,7 @@ jobs:
           gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
           if [ -n "$ISSUE" ]; then
             CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
-            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID" -f branch="$BRANCH"
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" --arg b "$BRANCH" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c,branch:$b}}')"
           fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
