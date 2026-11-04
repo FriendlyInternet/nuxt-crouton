@@ -447,6 +447,8 @@ jobs:
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
+          # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
+          cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -507,6 +509,7 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
+          BASE_TARGET="$(git rev-parse "origin/${BASE}")"
           # merge=union (ledger files) is read from the checked-out side: a stale branch may lack
           # .gitattributes, so seed it from the base, uncommitted (#3322).
           git show "origin/${BASE}:.gitattributes" > "$(git rev-parse --git-path info/attributes)" 2>/dev/null || true
@@ -521,12 +524,24 @@ jobs:
             # the merge used to be pushed — never delivers it. A plain (fast-forward) push: a
             # concurrent push to the PR is refused, never overwritten. rev_start moves to the pushed
             # head so the finish step's lease and "did this run change anything" stay correct.
-            if git push origin "HEAD:${REV_BRANCH}" 2>&1 | tail -2 && [ "${PIPESTATUS[0]}" = 0 ]; then
-              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-              echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+            if PUSH_OUT="$(git push origin "HEAD:${REV_BRANCH}" 2>&1)"; then
+              echo "$PUSH_OUT" | tail -2
               RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+              # The push said yes — confirm GitHub really holds the merged base commit (#3347).
+              if VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$REV_BRANCH")"; then
+                echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+                echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+              else
+                echo "::warning::${VERIFY_MSG}"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not confirmed up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+              fi
             else
+              echo "$PUSH_OUT" | tail -4
+              PUSH_KIND="$(printf '%s' "$PUSH_OUT" | node "$RUNNER_TEMP/revise-push.mjs" classify "$(git rev-parse "origin/${REV_BRANCH}" 2>/dev/null || true)" "$REV_BRANCH" || true)"
+              PUSH_LINE="${PUSH_KIND#*$'\t'}"
+              echo "base_push_error=${PUSH_LINE}" >> "$GITHUB_OUTPUT"
+              printf '\nNOTE (workflow): the base merge %s exists only in this run — GitHub refused the push (%s). Do not report the branch as up to date; the workflow checks that on GitHub.\n' "$BASE_TIP" "$PUSH_LINE" >> "$RUNNER_TEMP/feedback.txt"
               echo "::warning::could not push the base merge — the finish step will retry (#2941)"
             fi
           else
@@ -911,6 +926,8 @@ jobs:
             CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
             git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
             node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
+            # The exact base commit HEAD now contains (#3347) — what GitHub must hold after the push.
+            BASE_TARGET="$(git rev-parse "origin/${BASE}")"
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
             # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
             # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
@@ -972,10 +989,19 @@ jobs:
                 echo "$PUSH_OUT" | tail -2; HAVE_COMMITS=1
               else
                 echo "$PUSH_OUT" | tail -4
-                echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                # Decide "PR changed" from GitHub's head, not from the fact the push failed (#3347).
+                PUSH_KIND="$(printf '%s' "$PUSH_OUT" | node "$RUNNER_TEMP/revise-push.mjs" classify "$REV_START" "$BR" || true)"
+                PUSH_WHY="${PUSH_KIND%%$'\t'*}"; PUSH_LINE="${PUSH_KIND#*$'\t'}"
                 echo "revise_conflict=1" >> "$GITHUB_OUTPUT"
                 CPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-                [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                if [ "$PUSH_WHY" = "moved" ]; then
+                  echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                else
+                  echo "::error::revise push refused by GitHub — ${PUSH_LINE}"
+                  UNSURE=""; [ "$PUSH_WHY" = "unknown" ] && UNSURE=" I could not confirm whether the PR moved."
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not pushed — GitHub refused the push** (`%s`). This PR is unchanged at `%s`; nothing was overwritten.%s Comment again to retry.' "$PUSH_LINE" "$(git rev-parse --short "$REV_START")" "$UNSURE")" 2>&1 | tail -1 || true
+                fi
               fi
             else
               echo "revise: no new commit on ${BR}"
@@ -984,6 +1010,18 @@ jobs:
             git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
           else
             echo "no commits ahead of ${BASE} — no PR to open"
+          fi
+
+          # 5a) GitHub must hold the base commit this run merged (#3347) — a local merge a refused push
+          #     never delivered must not be reported as "up to date". Skipped when the push was refused
+          #     (already reported above) or nothing reached GitHub.
+          if [ -n "${REV_START:-}" ] && [ -n "${BASE_MERGED:-}" ] && { [ "$HAVE_COMMITS" = "1" ] || [ "${BASE_PUSHED:-}" = "1" ]; } && ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
+            if ! VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$BR")"; then
+              echo "::error::${VERIFY_MSG}"
+              VPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+              [ -n "$VPR" ] && gh pr comment "$VPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Still behind** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+              exit 1
+            fi
           fi
 
           # 5b) REVISE verdict (#2446) — say on the PR what the comment produced. The previous
