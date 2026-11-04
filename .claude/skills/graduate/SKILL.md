@@ -221,3 +221,5 @@ Defers to the **root `CLAUDE.md`** / `AGENTS.md` for workflow/commit/issue conve
 spec entry**). Reuses `/conformance` (the C2 gate), `/postmortem`, `/test-review`, `/schema-review`,
 `/ui-proposal`, `/frontend-review`, `/a11y`, `/e2e-smoke`, `/deploy`, `/remove-app`, and the `/spec`
 capture (`pocs/CLAUDE.md`). This skill *orchestrates* that checkpoint — it doesn't replace any of them.
+
+> Note (moved from root CLAUDE.md, #3350): the behaviour spec the POC discovers is the `<poc>/spec.json` ledger.

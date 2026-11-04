@@ -18,6 +18,7 @@
  */
 
 import { routeIssue } from './lib/plan-route.mjs'
+import { handoffGuard } from './handoff-exec.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
@@ -130,7 +131,7 @@ export async function applyWait({ github, context, issueNumber, verdict }) {
     await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'work-this' })
   } catch { /* already gone (workflow_dispatch) */ }
   await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-    `⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
+    `<!-- pipeline-note -->\n⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
     + `> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#2786)_\n\n${WAIT_MARKER}` })
 }
 
@@ -186,7 +187,9 @@ async function releaseOne({ github, context, it }) {
   // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
   if (!(await removeLabelIfPresent(github, { ...ref, name: 'status:blocked' }))) return scopeLabels(labels)
   await removeLabelIfPresent(github, { ...ref, name: 'work-this' })
-  await github.rest.issues.addLabels({ ...ref, labels: ['work-this'] })
+  // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+  await handoffGuard({ kind: 'label', issue: it.number, label: 'work-this' },
+    () => github.rest.issues.addLabels({ ...ref, labels: ['work-this'] }))
   await markReleased({ github, context, waitC })
   return { released: true, scopes: scopeLabels(labels) }
 }
