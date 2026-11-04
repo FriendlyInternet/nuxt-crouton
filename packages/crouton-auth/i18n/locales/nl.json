@@ -1,5 +1,6 @@
 {
   "onboarding": {
+    "noAccessYet": "Je hebt nog geen toegang — vraag om een uitnodiging",
     "createTeamTitle": "Maak Je Eerste Team",
     "createTeamDescription": "Begin door een werkruimte voor je projecten aan te maken.",
     "settingUpWorkspace": "Je werkruimte wordt klaargezet",

@@ -1,5 +1,6 @@
 {
   "onboarding": {
+    "noAccessYet": "Vous n'avez pas encore accès — demandez une invitation",
     "createTeamTitle": "Créez Votre Première Équipe",
     "createTeamDescription": "Commencez par créer un espace de travail pour vos projets.",
     "settingUpWorkspace": "Préparation de votre espace de travail",

@@ -9,7 +9,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
-const { teams, switchTeamBySlug } = useTeam()
+const { teams, switchTeamBySlug, canCreateTeam } = useTeam()
+const { t } = useT()
 const { isPending } = useSession()
 const route = useRoute()
 const nuxtApp = useNuxtApp()
@@ -67,8 +68,12 @@ async function fetchAndRedirect() {
     }
     await nuxtApp.runWithContext(() => navigateTo(`/admin/${firstTeam!.slug}`, { replace: true }))
   } else {
-    // No teams - redirect to create one
-    await nuxtApp.runWithContext(() => navigateTo('/onboarding/create-team', { replace: true }))
+    // No teams - create one only if allowed, otherwise home with a notice
+    const target = resolveNoTeamRoute(canCreateTeam.value)
+    if (target === '/' && import.meta.client) {
+      useToast().add({ title: t('onboarding.noAccessYet'), color: 'warning' })
+    }
+    await nuxtApp.runWithContext(() => navigateTo(target, { replace: true }))
   }
 }
 
