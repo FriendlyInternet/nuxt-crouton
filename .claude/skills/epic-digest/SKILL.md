@@ -211,3 +211,5 @@ node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .         
   *scheduled* job is what delivers (emails via Resend, see above).
 - The renderer sorts **blocked epics first**, then by % complete, so attention
   lands where it's needed.
+
+> Note (moved from root CLAUDE.md, #3350): the "✅ Ready to close" band is driven by the `status:ready-to-close` / `status:needs-postmortem` labels (#763).
