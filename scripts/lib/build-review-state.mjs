@@ -19,28 +19,30 @@ const isReviewerBot = (c, bots) =>
 // First visible line: skip HTML comments, blockquotes and blanks (legacy holds had no final marker).
 const firstHeading = (body) => String(body).replace(/<!--[\s\S]*?-->/g, '').split('\n').map(l => l.trim()).find(l => l && !l.startsWith('>')) || ''
 
+const stateOf = (c) => {
+  const body = c.body || ''
+  const failed = body.match(FAILED_RE)
+  const sha = body.match(SHA_RE)
+  return { sha: failed?.[1] || sha?.[1], failed: Boolean(failed && !sha) }
+}
+
+const isFinal = (body) => body.includes(FINAL_MARKER) || firstHeading(body).startsWith('🔴 **Build rejected twice**')
+
+const kindOf = (c, failed) => {
+  if (failed) return 'failed'
+  const body = c.body || ''
+  if (body.match(VERDICT_RE)?.[1] !== 'no-go') return 'other'
+  return isFinal(body) ? 'final' : 'round1'
+}
+
 /** @returns {{kind: 'final'|'round1'|'failed'|'other'|'pending', at?: string}} */
 export function reviewState({ comments = [], headSha, bots = [] }) {
-  let best = null
-  for (const c of comments) {
-    if (!isReviewerBot(c, bots)) continue
-    const body = c.body || ''
-    const failed = body.match(FAILED_RE)
-    const sha = body.match(SHA_RE)
-    const marked = failed?.[1] || sha?.[1]
-    if (!marked || marked !== headSha) continue
-    if (best && new Date(c.created_at) < new Date(best.c.created_at)) continue
-    best = { c, failed: Boolean(failed && !sha) }
-  }
-  if (!best) return { kind: 'pending' }
-  const { c, failed } = best
-  const at = c.created_at
-  if (failed) return { kind: 'failed', at }
-  const body = c.body || ''
-  const verdict = body.match(VERDICT_RE)?.[1]
-  if (verdict === 'no-go') {
-    const final = body.includes(FINAL_MARKER) || firstHeading(body).startsWith('🔴 **Build rejected twice**')
-    return { kind: final ? 'final' : 'round1', at }
-  }
-  return { kind: 'other', at }
+  const mine = comments
+    .filter(c => isReviewerBot(c, bots))
+    .map(c => ({ c, ...stateOf(c) }))
+    .filter(x => x.sha && x.sha === headSha)
+  if (!mine.length) return { kind: 'pending' }
+  // Latest wins; on equal timestamps the later comment in the list wins.
+  const best = mine.reduce((a, b) => (new Date(b.c.created_at) < new Date(a.c.created_at) ? a : b))
+  return { kind: kindOf(best.c, best.failed), at: best.c.created_at }
 }
