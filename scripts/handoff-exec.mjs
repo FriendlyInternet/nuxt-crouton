@@ -47,7 +47,7 @@ const floorSec = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString()
 // Latest issue comment whose body contains `marker` (empty string when none).
 async function lastCommentWith(d, issue, marker) {
   const out = await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${issue}/comments?per_page=100`,
-    '--jq', `[.[] | select(.body | contains("${marker}"))] | last | .id // empty`])
+    '--jq', `[.[] | select(.body | test("\\\\A(?:[ \\\\t]*<!--[^\\\\n]*-->[ \\\\t]*\\\\r?\\\\n)*[ \\\\t]*${marker}[ \\\\t]*(\\\\r?\\\\n|\\\\z)"))] | last | .id // empty`])
   return String(out).split('\n').map((s) => s.trim()).filter(Boolean).pop()
 }
 

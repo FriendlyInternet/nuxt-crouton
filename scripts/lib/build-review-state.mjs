@@ -8,6 +8,7 @@
 //   failed  — the review itself failed to run
 //   other   — go / needs-owner
 //   pending — no state comment for this SHA yet
+import { markerValue } from './marker.mjs'
 export const FINAL_MARKER = '<!-- build-review-final -->'
 const SHA_RE = /<!-- build-review-sha:([0-9a-f]+) -->/
 const FAILED_RE = /<!-- build-review-failed-sha:([0-9a-f]+) -->/
@@ -31,7 +32,7 @@ const isFinal = (body) => body.includes(FINAL_MARKER) || firstHeading(body).star
 const kindOf = (c, failed) => {
   if (failed) return 'failed'
   const body = c.body || ''
-  if (body.match(VERDICT_RE)?.[1] !== 'no-go') return 'other'
+  if (markerValue(body, VERDICT_RE) !== 'no-go') return 'other'
   return isFinal(body) ? 'final' : 'round1'
 }
 

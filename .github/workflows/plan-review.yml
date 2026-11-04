@@ -29,7 +29,7 @@ jobs:
     if: >-
       ${{ !github.event.issue.pull_request
       && github.event.comment.user.login == 'nuxt-harness[bot]'
-      && contains(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
+      && startsWith(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
@@ -113,7 +113,7 @@ jobs:
           gh api "repos/${{ github.repository }}/issues/comments/${PLAN_ID}" --jq .body > "$D/plan.md"
           # Prior review rounds: each sent-back verdict carries a hidden verdict line.
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- plan-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
           echo "$PRIOR" > "$D/prior"
           echo "prior sent-back rounds: $PRIOR"
 

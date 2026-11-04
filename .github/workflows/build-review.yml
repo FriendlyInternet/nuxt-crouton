@@ -155,10 +155,10 @@ jobs:
           gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
           # The newest approved plan comment, if the issue went through plan review.
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // ""' > "$D/plan.md"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .body // ""' > "$D/plan.md"
           # Prior sent-back rounds for THIS PR.
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- build-review-verdict:no-go -->"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- build-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
           echo "$PRIOR" > "$D/prior"
           # The PR head as DATA (never executed here), diffed with copy detection against the base.
           git fetch --no-tags origin "$BASE" "pull/${PR}/head"
