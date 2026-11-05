@@ -4,6 +4,8 @@
 //
 // Every function takes the github-script globals: `{ github, context, core }`.
 import * as gate from './wave-gate.mjs'
+import { handoffGuard } from './handoff-exec.mjs'
+import { ownerMergeGo } from './lib/owner-merge-go.mjs'
 
 /** Collapse an epic branch's CI into success | failure | pending | unknown. */
 async function branchStatus({ github, context, core }, ref) {
@@ -69,7 +71,9 @@ async function releaseOne(ctx, it, blockers, { onlyBlockedBy, branch }) {
   }
 
   const releaseWith = decision.label || 'delegate'
-  await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] })
+  // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+  await handoffGuard({ kind: 'label', issue: it.number, label: releaseWith },
+    () => github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] }))
   await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
     body: gate.formatReleaseComment({ doneNumber, branchStatus: status, label: releaseWith }) })
   core.info(`Released #${it.number} with ${releaseWith} (${decision.reason})`)
@@ -114,6 +118,31 @@ export async function retryOnCiFinished(ctx) {
   await releaseReady(ctx, { branch: wr.head_branch })
 }
 
+const hasLabel = (labels, name) => (labels || []).some(l => (typeof l === 'string' ? l : l.name) === name)
+
+/**
+ * #1035: never auto-close a HELD issue (`status:blocked` = a human step is pending), unless
+ * #3039 the PR carries `build:approved` (the held label is a stale no-go) or
+ * #3202 the owner merged it by hand (that merge is the human step), or
+ * #3368 the owner's standing `ok` on the PR drove a bot merge (`ownerGo`).
+ */
+export function mayCloseHeldIssue({ labels, prLabels, mergedBy, owner, ownerGo = false }) {
+  if (!hasLabel(labels, 'status:blocked')) return true
+  return ownerGo || hasLabel(prLabels, 'build:approved') || (!!mergedBy && mergedBy === owner)
+}
+
+/** #3368: did the owner's standing `ok` on the PR drive this merge? Unreadable => false (keep the hold). */
+async function ownerOkOnPr({ github, context, core }, pr, n, ownerLogin) {
+  const { owner, repo } = context.repo
+  try {
+    const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
+    const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
+    const { go } = ownerMergeGo({ comments, commits, owner: ownerLogin })
+    if (go) core.info(`#${n}: owner ok on the PR drove the merge - releasing the hold.`)
+    return go
+  } catch (e) { core.warning(`#${n}: could not check owner ok (${e.message}) - keeping the hold.`); return false }
+}
+
 /**
  * A merged PR closes its `Closes #NN` issues. Sub-PRs merge into the EPIC branch, so GitHub does
  * NOT auto-close them (auto-close is default-branch only) — close them here; the resulting
@@ -141,12 +170,13 @@ export async function closeLinkedIssues(ctx) {
     try {
       const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
       if (gi.data.state === 'closed') continue
-      // #1035: never auto-close a HELD issue — `status:blocked` means a human step is pending.
-      const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-      // #3039: a build:approved PR means the build review went `go` — a leftover status:blocked
-      // is the reviewer's own stale no-go hold, not a pending human step.
-      const approved = (pr.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'build:approved')
-      if (held && !approved) { core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue }
+      const ownerLogin = process.env.OWNER_LOGIN || 'pmcp'
+      const check = (ownerGo = false) => mayCloseHeldIssue({ labels: gi.data.labels, prLabels: pr.labels, mergedBy: pr.merged_by?.login, owner: ownerLogin, ownerGo })
+      // #3368: a bot merge driven by the owner's `ok` on the PR is the human step too.
+      const may = check() || check(await ownerOkOnPr(ctx, pr, n, ownerLogin))
+      if (!may) {
+        core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
+      }
       await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
       core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
     } catch (e) { core.warning(`Could not close #${n}: ${e.message}`) }

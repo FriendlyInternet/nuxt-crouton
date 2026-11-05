@@ -87,7 +87,7 @@ Only update if:
 - A critical gotcha was discovered (add to gotchas section)
 - A dev command changed (update commands section)
 - Architecture changed fundamentally
-- A new skill/agent was added (add to artifacts table)
+- A new skill/agent was added (run `node scripts/gen-skills-doc.mjs`, add it to `META`)
 
 ### 3. Docs App Content (`docs/content/`)
 
