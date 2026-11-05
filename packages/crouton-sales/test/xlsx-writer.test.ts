@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { buildXlsx } from '../app/utils/xlsx-writer'
+import { describe, expect, it, vi } from 'vitest'
+import { buildXlsx, downloadXlsx } from '../app/utils/xlsx-writer'
 
 // buildXlsx hand-rolls a STORE (uncompressed) zip, so each part's raw bytes
 // sit verbatim after its local file header — no zlib needed to read them back.
@@ -62,5 +62,25 @@ describe('buildXlsx', () => {
     expect(sheet).toContain('<c r="Z1">')
     expect(sheet).toContain('<c r="AA1">')
     expect(sheet).toContain('<c r="AB1">')
+  })
+})
+
+describe('downloadXlsx', () => {
+  it('clicks an anchor that downloads a .xlsx file', () => {
+    const a = { href: '', download: '', click: vi.fn() }
+    vi.stubGlobal('document', { createElement: vi.fn(() => a) })
+    const createObjectURL = vi.fn(() => 'blob:x')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+
+    downloadXlsx('sales-units-by-product-and-day.xlsx', 'Sales', [['a', 1]])
+
+    expect(a.download).toBe('sales-units-by-product-and-day.xlsx')
+    expect(a.href).toBe('blob:x')
+    expect(a.click).toHaveBeenCalledOnce()
+    const blob = (createObjectURL.mock.calls[0] as unknown[])[0] as Blob
+    expect(blob.type).toContain('spreadsheetml.sheet')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    vi.unstubAllGlobals()
   })
 })
