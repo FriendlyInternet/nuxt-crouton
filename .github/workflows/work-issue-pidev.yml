@@ -4,38 +4,15 @@ run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} lab
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
 # artifact-gate (#461) and the telemetry capture are preserved VERBATIM. What differs:
-#   • Trigger — the `work-this` label on a LEAF issue (not `delegate*`), applied by a human or,
-#     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
+#   • Trigger — the `work-this` label on an issue (the Route job picks leaf vs epic), applied by a human or
+#     by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
 #   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
 #     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
-# ⚠️ CLEANUP PENDING (#1686): many inherited comments/vars below still say "decompose"/"decompose-pi"
-#   and describe the tree flow — they are stale here. Functional edits (trigger, if, prompt) are done;
-#   the comment sweep + on-box test (label a leaf → PR on claude-bridge) are the remaining WS1 items.
-# ── original decompose-flow header follows (context for the shared machinery) ──
-
-# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
-# `decompose-on-issue.yml` with ONE thing swapped: the agent step
-# (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
-# (the current setting) THIS flow — not the claude one — works our `delegate` issues.
-#
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
-#
-# HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
-# every one of those locks has since been removed. Do NOT reintroduce that framing:
-# superseded by #1017 (`delegate-pi` trigger), #1077 (the AGENT_HARNESS=pi flip), and
-# #1421/#1423 (the funded zai/GLM-5.2 lane). Stale dormancy prose here cost a session
-# once — it reads as authoritative while sitting directly above code that refutes it.
+# DISPATCH RULE (#3208): `work-this` is the ONE label a human applies. The Route job reads the
+#   issue: an `epic`-labelled (big) issue is handed to decompose-on-issue-pidev.yml (the splitter);
+#   anything else is built here as a single leaf. People apply only `work-this`. `delegate` / `delegate-pi` are
+#   internal hand-offs applied only by the pipeline — a human adding one starts nothing.
+# Shared machinery below (push path, artifact-gate, telemetry) is inherited from decompose-on-issue-pidev.yml.
 #
 # WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
 #   • PUSH PATH (#1004 piece 1, the load-bearing change): unlike the reports-only
@@ -66,7 +43,7 @@ run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} lab
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
 # label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
 # on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
@@ -170,6 +147,13 @@ jobs:
           if echo ",$LABELS," | grep -q ',plan:approved,'; then
             echo "issue #$ISSUE already carries plan:approved → build"
             echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
+          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
+            echo "issue #$ISSUE is an epic → splitter"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"decompose-on-issue-pidev.yml",inputs:{issue:($i|tostring),harness:"pi"}}')"
+            exit 0
           fi
           R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
           echo "route: $R"
@@ -485,12 +469,10 @@ jobs:
       - id: model
         run: |
           DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
           echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD plan=$PLAN (from .claude/pipeline-models.json)"
+          echo "pipeline models — default=$DEFAULT plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -586,14 +568,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
-          # still escalates, but by MODEL (default → hard) on the same provider — no metered lane.
-          # Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
           # (claude setup-token, 1y) authenticates the Claude Code child that claude-bridge spawns;
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
-          # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          # a hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -882,7 +862,7 @@ jobs:
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail
