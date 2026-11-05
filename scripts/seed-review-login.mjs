@@ -148,6 +148,22 @@ export async function resetPasswordSql(email, password, hashPassword) {
     `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
 }
 
+/**
+ * SQL that closes the "stranger pre-registered the predictable review address" hole
+ * (#3162). The feedback guard only trusts a VERIFIED email, and sign-up leaves it
+ * unverified. Run it ONLY after the seed proved the account holds the seed password
+ * (sign-up succeeded, or sign-in with the seed password worked) and after the seed's
+ * own API calls. (a) an unverified account's sessions are dropped (could be a
+ * stranger's); (b) it is then marked verified. On redeploy the row is already
+ * verified, so (a) matches nothing — no session is revoked.
+ */
+export function markReviewerVerifiedSql(email) {
+  const e = sqlStr(String(email).toLowerCase())
+  return `DELETE FROM "session" WHERE "userId" IN ` +
+    `(SELECT "id" FROM "user" WHERE lower("email") = ${e} AND "emailVerified" = 0); ` +
+    `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -340,6 +356,17 @@ async function main() {
       }
     } catch (e) {
       warn(`team create error: ${e?.message || e} — login still works; reviewer may need to pick a team.`)
+    }
+  }
+
+  // 4. Verify the reviewer address (#3162) — last, so the seed's own session survived
+  //    every call above. Only reached when the account holds the seed password.
+  if (args.db || args.sqlite) {
+    try {
+      execSeedSql(args, markReviewerVerifiedSql(email))
+      info(`marked ${email} verified.`)
+    } catch (e) {
+      warn(`could not mark ${email} verified: ${e?.message || e} — feedback pins will be refused.`)
     }
   }
 

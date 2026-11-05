@@ -1,4 +1,5 @@
 name: Work issue (pi.dev · single-use worker)
+run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}"
 
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
@@ -175,7 +176,7 @@ jobs:
           MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
           if [ "$MODE" = "plan" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
-            gh workflow run work-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f mode=plan
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),mode:"plan"}}')"
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -202,6 +203,9 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+      conflict: ${{ steps.revise.outputs.conflict }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -212,6 +216,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -256,7 +272,7 @@ jobs:
             // A revision (feedback, not a re-plan) is guarded on its PR, not its issue (#3061).
             const isRevision = '${{ inputs.feedback }}' !== '' && '${{ inputs.mode }}' !== 'plan'
             const reviseBranch = isRevision ? ('${{ inputs.branch }}' || `work-${issue_number}`) : ''
-            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core, reviseBranch })
+            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core, reviseBranch, mode: '${{ inputs.mode }}' })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/claim-facts.json`, JSON.stringify(facts))
             core.info(`claim facts: ${JSON.stringify(facts)}`)
       - name: Claim guard
@@ -271,7 +287,8 @@ jobs:
       # Revision runs (inputs.feedback, #2446) finish work already in flight — they never wait.
       - name: Traffic control
         id: traffic
-        if: ${{ inputs.feedback == '' }}
+        # #3214: plan mode changes no code and can't collide — only the BUILD waits its turn.
+        if: ${{ inputs.feedback == '' && inputs.mode != 'plan' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -283,12 +300,19 @@ jobs:
               const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
               const labels = issue.labels.map((l) => l.name || l)
               const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
-              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, body: issue.body, others })
             } catch (e) {
               core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
               return
             }
-            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            if (verdict.action === 'proceed') {
+              core.info(`Traffic control OK — ${verdict.reason}.`)
+              if (verdict.unblocking?.length) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+                  `<!-- pipeline-note -->\n⏩ ${verdict.reason}.\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#3280)_` })
+              }
+              return
+            }
             await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
             core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
 
@@ -314,6 +338,7 @@ jobs:
               const marker = `<!-- work-run:${issue_number} -->`
               const body = [
                 marker,
+                '<!-- pipeline-note -->',
                 '> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _single-use worker_',
                 '',
                 `🏗️ **Working this now** — follow the run live: ${runUrl}`,
@@ -326,7 +351,7 @@ jobs:
                 await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body })
                 core.info(`updated breadcrumb comment ${existing.id}`)
               } else {
-                await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
                 core.info('posted breadcrumb comment')
               }
             } catch (e) {
@@ -375,7 +400,7 @@ jobs:
           echo "resolved base='${BASE}'"
           if [ -n "$BASE_ERR" ]; then
             echo "::error::${BASE_ERR}"
-            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
+            [ -n "$PR_NUM" ] && gh pr comment "$PR_NUM" --body "<!-- pipeline-note -->"$'\n'"🔀 Revise stopped: ${BASE_ERR}. Fix the ticket's epic_branch or the PR base, then re-run." || true
             exit 1
           fi
 
@@ -439,9 +464,13 @@ jobs:
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
+          # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
+          cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
+          # Push retry (#3306): one GitHub server error must not throw away a finished build.
+          cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
           cp scripts/run-record.mjs "$RUNNER_TEMP/run-record.mjs"
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
@@ -459,7 +488,9 @@ jobs:
           HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
+          echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — default=$DEFAULT hard=$HARD plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -497,6 +528,10 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
+          BASE_TARGET="$(git rev-parse "origin/${BASE}")"
+          # merge=union (ledger files) is read from the checked-out side: a stale branch may lack
+          # .gitattributes, so seed it from the base, uncommitted (#3322).
+          git show "origin/${BASE}:.gitattributes" > "$(git rev-parse --git-path info/attributes)" 2>/dev/null || true
           if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
             echo "base merged: already up to date with ${BASE}"
             echo "base_merged=" >> "$GITHUB_OUTPUT"
@@ -508,12 +543,28 @@ jobs:
             # the merge used to be pushed — never delivers it. A plain (fast-forward) push: a
             # concurrent push to the PR is refused, never overwritten. rev_start moves to the pushed
             # head so the finish step's lease and "did this run change anything" stay correct.
-            if git push origin "HEAD:${REV_BRANCH}" 2>&1 | tail -2 && [ "${PIPESTATUS[0]}" = 0 ]; then
-              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-              echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+            if PUSH_OUT="$(git push origin "HEAD:${REV_BRANCH}" 2>&1)"; then
+              echo "$PUSH_OUT" | tail -2
               RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+              # The push said yes — confirm GitHub really holds the merged base commit (#3347).
+              # rev_start moves whenever the push landed, verified or not: the finish step's lease must
+              # match the head this run itself pushed, or it refuses its own push as "PR changed".
+              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              if VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$REV_BRANCH")"; then
+                echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+              else
+                # Behind on GitHub (behind_by/ahead_by are in VERIFY_MSG): fail the run here, with the numbers.
+                echo "::error::${VERIFY_MSG}"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Not up to date** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+                exit 1
+              fi
             else
+              echo "$PUSH_OUT" | tail -4
+              PUSH_KIND="$(printf '%s' "$PUSH_OUT" | node "$RUNNER_TEMP/revise-push.mjs" classify "$(git rev-parse "origin/${REV_BRANCH}" 2>/dev/null || true)" "$REV_BRANCH" || true)"
+              PUSH_LINE="${PUSH_KIND#*$'\t'}"
+              echo "base_push_error=${PUSH_LINE}" >> "$GITHUB_OUTPUT"
+              printf '\nNOTE (workflow): the base merge %s exists only in this run — GitHub refused the push (%s). Do not report the branch as up to date; the workflow checks that on GitHub.\n' "$BASE_TIP" "$PUSH_LINE" >> "$RUNNER_TEMP/feedback.txt"
               echo "::warning::could not push the base merge — the finish step will retry (#2941)"
             fi
           else
@@ -542,7 +593,7 @@ jobs:
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -594,7 +645,17 @@ jobs:
               else
                 WHO='by the plan reviewer'
               fi
-              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK (%s). Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n' "$WHO"; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
+              # #3341: hand over the BEST earlier plan (the one whose review passed the most checks,
+              # newest on a tie) and the ticket's Decisions, so the planner revises instead of
+              # rewriting. "start fresh" in the feedback or a Decision skips the old plan.
+              gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments" --paginate | jq -s -r --argjson fb "${FEEDBACK_ID}" 'add' | jq -r --argjson fb "${FEEDBACK_ID}" -f scripts/lib/best-plan.jq > "$RUNNER_TEMP/prev-plan.txt" || : > "$RUNNER_TEMP/prev-plan.txt"
+              gh issue view "$ISSUE" --json body -q .body | awk '/^## Decisions[ \t]*$/{f=1;print;next} /^## /{f=0} f' > "$RUNNER_TEMP/decisions.txt" || : > "$RUNNER_TEMP/decisions.txt"
+              FRESH=""; cat "$RUNNER_TEMP/feedback.txt" "$RUNNER_TEMP/decisions.txt" | grep -qi 'start fresh' && FRESH=1
+              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK (%s). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n' "$WHO"; cat "$RUNNER_TEMP/feedback.txt"
+                if [ -n "$FRESH" ]; then printf '\n\nThe feedback says START FRESH: discard the previous plan, write a new one, and check it with `--revised --fresh`.\n'
+                elif [ -s "$RUNNER_TEMP/prev-plan.txt" ]; then printf '\n\nPREVIOUS PLAN (revise this):\n\n'; cat "$RUNNER_TEMP/prev-plan.txt"; fi
+                if [ -s "$RUNNER_TEMP/decisions.txt" ]; then printf '\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n'; cat "$RUNNER_TEMP/decisions.txt"; fi
+              } >> "$PROMPT_FILE"
             fi
           elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
@@ -638,7 +699,7 @@ jobs:
           # "find the newest session" heuristic grabs the wrong run's session under concurrency (#1764).
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"; mkdir -p "$PI_SESSION_DIR"
           pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+            < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -660,7 +721,7 @@ jobs:
             cat "$HEAL_ERRS" >> "$HEAL_PROMPT"
             set +e
             pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-              "$(cat "$HEAL_PROMPT")" 2>&1 | tee -a "$LOG"
+              < "$HEAL_PROMPT" 2>&1 | tee -a "$LOG"
             set -e
             if node scripts/verify-touched-compiles.mjs > "$HEAL_ERRS" 2>&1; then
               echo "compile self-heal: touched .vue now compile ✓"
@@ -698,38 +759,54 @@ jobs:
             if [ -z "$RPR" ]; then echo "::error::conflict note not posted: no open PR found for ${REV_BRANCH}"; return 0; fi
             gh pr comment "$RPR" --body "$1" >/dev/null 2>&1 || echo "::error::conflict note could not be posted on PR #${RPR}"
           }
-          HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
+          HDR=$'<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
+          # Read the per-file state NOW, while the index is still unmerged: verify's `git add -u`
+          # and `git merge --abort` both empty this list (#3322).
+          LEFTOVER=""
+          ALL_UNTOUCHED=1
+          NFILES=0
+          for f in $(git diff --name-only --diff-filter=U); do
+            NFILES=$((NFILES + 1))
+            if grep -q '^<<<<<<< ' "$f" 2>/dev/null; then LEFTOVER="${LEFTOVER}- \`${f}\` — still has conflict markers"$'\n'; else ALL_UNTOUCHED=0; fi
+          done
+          [ "$NFILES" = 0 ] && ALL_UNTOUCHED=0
+          # bash -e is on for this step: capture verify's status so the failure branch can run.
+          set +e
+          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt" 2> "$RUNNER_TEMP/conflict-err.txt"
           RC=$?
+          set -e
+          cat "$RUNNER_TEMP/conflict-err.txt" >&2 || true
           if [ "$RC" = 3 ]; then
             git merge --abort || true
             say "$(printf '%s\n\n## 🔀 Blocked — this PR and `%s` want different things in the same place\n**Needs:** answer\n\n@pmcp %s\n\n<details><summary>Conflicting files</summary>\n\n%s\n</details>' "$HDR" "$BASE" "$(cat "$CHOICE_FILE")" "$UNMERGED")"
             gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             echo "::notice::conflict is a real clash of intent — asked the owner (#2848)"
+            echo "asked=1" >> "$GITHUB_OUTPUT"
             exit 0
           elif [ "$RC" != 0 ]; then
             git merge --abort || true
-            UNTOUCHED=1
-            for f in $(git diff --name-only --diff-filter=U); do grep -q '^<<<<<<< ' "$f" 2>/dev/null || UNTOUCHED=0; done
-            if [ -n "$UNMERGED" ] && [ "$UNTOUCHED" = 1 ] && [ ! -s "$CHOICE_FILE" ]; then
+            echo "failed=1" >> "$GITHUB_OUTPUT"
+            if [ -n "$UNMERGED" ] && [ "$ALL_UNTOUCHED" = 1 ] && [ ! -s "$CHOICE_FILE" ]; then
               say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and the resolver ended without resolving anything (#3002). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
               echo "::error::conflict resolver ended without resolving the merge (#3002)"
               exit 1
             fi
-            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks (see the run log). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
+            ERRS="$(grep '^::error::' "$RUNNER_TEMP/conflict-err.txt" 2>/dev/null | head -10 | sed 's/^::error:://' || true)"
+            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks. Nothing was pushed.\n\n%s\n<details><summary>Check output</summary>\n\n```\n%s\n```\n</details>' "$HDR" "$BASE" "${LEFTOVER:-$UNMERGED}" "$ERRS")"
             echo "::error::conflict resolution failed its checks (#2848)"
             exit 1
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
           # Message via a file, never argv: a long file list hit ARG_MAX -> exit 126 (#2954).
           { printf 'Merge %s into %s (resolve conflicts)\n\nConflicts resolved by the revise worker (#2848):\n' "$BASE" "$REV_BRANCH"; sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt"; } > "$RUNNER_TEMP/conflict-msg.txt"
-          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; exit 1; fi
+          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; echo "failed=1" >> "$GITHUB_OUTPUT"; exit 1; fi
           # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
           # is a flat copy of the base: the conflicts never clear (#2914).
           NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
           if [ "$NPAR" != 3 ]; then
             echo "::error::conflict resolution committed $((NPAR - 1)) parent(s), expected 2 — refusing to push a flat copy (#2914)"
+            echo "failed=1" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -760,7 +837,7 @@ jobs:
         run: |
           set -uo pipefail
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
           if [ ! -s "$RUNNER_TEMP/plan.md" ]; then
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
@@ -769,7 +846,7 @@ jobs:
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
-            gh issue comment "$ISSUE" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
@@ -882,6 +959,8 @@ jobs:
             CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
             git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
             node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
+            # The exact base commit HEAD now contains (#3347) — what GitHub must hold after the push.
+            BASE_TARGET="$(git rev-parse "origin/${BASE}")"
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
             # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
             # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
@@ -939,22 +1018,43 @@ jobs:
               # The lease refuses to overwrite a push someone made to the PR while this ran. That is
               # the right call — but say so, don't crash (a bare `git push | tail` + pipefail killed
               # the step with "workflow bug" and no explanation).
-              if PUSH_OUT="$(git push -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
+              if PUSH_OUT="$(node "$RUNNER_TEMP/git-push-retry.mjs" -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
                 echo "$PUSH_OUT" | tail -2; HAVE_COMMITS=1
               else
                 echo "$PUSH_OUT" | tail -4
-                echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                # Decide "PR changed" from GitHub's head, not from the fact the push failed (#3347).
+                PUSH_KIND="$(printf '%s' "$PUSH_OUT" | node "$RUNNER_TEMP/revise-push.mjs" classify "$REV_START" "$BR" || true)"
+                PUSH_WHY="${PUSH_KIND%%$'\t'*}"; PUSH_LINE="${PUSH_KIND#*$'\t'}"
                 echo "revise_conflict=1" >> "$GITHUB_OUTPUT"
                 CPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-                [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                if [ "$PUSH_WHY" = "moved" ]; then
+                  echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                else
+                  echo "::error::revise push refused by GitHub — ${PUSH_LINE}"
+                  UNSURE=""; [ "$PUSH_WHY" = "unknown" ] && UNSURE=" I could not confirm whether the PR moved."
+                  [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n⚠️ **Not pushed — GitHub refused the push** (`%s`). This PR is unchanged at `%s`; nothing was overwritten.%s Comment again to retry.' "$PUSH_LINE" "$(git rev-parse --short "$REV_START")" "$UNSURE")" 2>&1 | tail -1 || true
+                fi
               fi
             else
               echo "revise: no new commit on ${BR}"
             fi
           elif [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
-            git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
+            node "$RUNNER_TEMP/git-push-retry.mjs" -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
           else
             echo "no commits ahead of ${BASE} — no PR to open"
+          fi
+
+          # 5a) GitHub must hold the base commit this run merged (#3347) — a local merge a refused push
+          #     never delivered must not be reported as "up to date". Skipped when the push was refused
+          #     (already reported above) or nothing reached GitHub.
+          if [ -n "${REV_START:-}" ] && [ -n "${BASE_MERGED:-}" ] && { [ "$HAVE_COMMITS" = "1" ] || [ "${BASE_PUSHED:-}" = "1" ]; } && ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
+            if ! VERIFY_MSG="$(node "$RUNNER_TEMP/revise-push.mjs" verify "$GITHUB_REPOSITORY" "$BASE_TARGET" "$BASE" "$BR")"; then
+              echo "::error::${VERIFY_MSG}"
+              VPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+              [ -n "$VPR" ] && gh pr comment "$VPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3347)_\n\n❌ **Still behind** — %s' "$VERIFY_MSG")" 2>&1 | tail -1 || true
+              exit 1
+            fi
           fi
 
           # 5b) REVISE verdict (#2446) — say on the PR what the comment produced. The previous
@@ -965,10 +1065,10 @@ jobs:
             if [ "$HAVE_COMMITS" = "1" ]; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
               if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
               else
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
-              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
               fi
             elif [ "${BASE_PUSHED:-}" = "1" ]; then
               echo "revise: base merge pushed by the revise step (#2941)"
@@ -981,7 +1081,7 @@ jobs:
               else
                 echo "::error::revise produced no commit and no reply (#2446)"
                 echo "revise_noop=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
               fi
             fi
           fi
@@ -1046,8 +1146,8 @@ jobs:
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
           # the same reason the acceptance verdict is (#1849). A change the owner has to LOOK at
           # cannot be reviewed from a diff on a phone, so it opens as a draft and waits.
-          # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
-          # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
+          # #3228: a .vue change that sits wholly inside <script> is NOT visual; template/style are.
+          # server/**, config, tests and docs do not count either (#307's scope).
           UI_TOUCHED=0
           # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
           # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
@@ -1181,21 +1281,22 @@ jobs:
             echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
           fi
 
-          # 6c) VISUAL EVIDENCE GATE (#2057, epic #2045) — the worker prompt ASKS pi to capture
-          # a screenshot for a UI-touching change and commit it to writeups/ui-proposals/, but
-          # asking is not enforcing: three real PRs (#2132/#2133/#2134) opened with the
-          # "evidence should be attached above" hold note and NOTHING attached — the owner had
-          # no way to distinguish "reviewed the capture" from "trusting the pipeline blind"
-          # except opening the PR and finding nothing there. Read this off the COMMITTED diff,
-          # the same way UI_TOUCHED and TESTS_MISSING already are, rather than trusting pi's
-          # own narration that it captured something (the #1849 reasoning, again).
-          #
-          # Screenshots come from the deployed preview only (#2546): the PR body carries the issue's
-          # `<!-- review-surface: … -->` marker (copied below) and deploy-app.yml's capture step
-          # commits the PNG. No local boot here — it never produced a usable image (#2524/#2529/#2533).
-          EVIDENCE_ATTACHED=0
-          if [ "$UI_TOUCHED" = "1" ] && git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '^writeups/ui-proposals/'; then
-            EVIDENCE_ATTACHED=1
+          # 6c) VISUAL EVIDENCE GATE (#2057, epic #2045; reworked #3351) — the worker may shoot
+          # screenshots/{issue}-<surface>.png. They are NEVER committed (the folder is gitignored and
+          # the file list above skips ignored files). We publish them to a non-branch ref
+          # (refs/review-captures/issue<N>), curl-verify the raw URLs, and — once the PR number is
+          # known (step 8) — post ONE tagged comment embedding them. status.yml's sign-off gate and
+          # this step share one rule: evidence = that comment. Screenshots otherwise come from the
+          # deployed preview (#2546): deploy-side capture posts the same tagged comment.
+          EVIDENCE_ATTACHED=0; CAP_SHA=""; CAP_FILES=""
+          if [ "$UI_TOUCHED" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
+            if PUB="$(node scripts/publish-review-captures.mjs --dir screenshots --key "issue${ISSUE}" 2>&1)"; then
+              CAP_SHA="$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)"
+              CAP_FILES="$(cd screenshots && ls *.png | paste -sd, -)"
+              EVIDENCE_ATTACHED=1
+            else
+              echo "::warning::could not publish worker screenshots: $PUB"
+            fi
           fi
           [ "$UI_TOUCHED" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
 
@@ -1224,7 +1325,7 @@ jobs:
               # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
               # never mistakes an empty PR for a reviewed one. A live preview (#2140) should
               # still follow separately, so this is a lesser gap than it used to be.
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no capture landed in `writeups/ui-proposals/`. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
             fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
@@ -1259,6 +1360,15 @@ jobs:
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          # Post the tagged screenshot comment (same marker the deploy-side capture uses, #3351);
+          # if the write fails the run record must not claim an image the PR doesn't show.
+          if [ "$EVIDENCE_ATTACHED" = "1" ]; then
+            if [ -z "$PRNUM" ] || ! node scripts/comment-review-captures.mjs --pr "$PRNUM" --key "issue${ISSUE}" --sha "$CAP_SHA" --files "$CAP_FILES" \
+                --artifact-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; then
+              echo "::warning::screenshot comment not posted — resetting EVIDENCE_ATTACHED"
+              EVIDENCE_ATTACHED=0
+            fi
+          fi
           if [ -n "$PRNUM" ]; then
             cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
             EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || true)"
@@ -1270,6 +1380,7 @@ jobs:
             esac
             REC="$RUNNER_TEMP/run-record.md"
             {
+              echo "<!-- pipeline-note -->"
               echo "> 🤖 **pi worker — run record** · model \`${PI_MODEL:-?}\` (${PI_PROVIDER:-?}) · _facts from the commit + git + typecheck, not pi's narration (#1849)_"
               echo
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
@@ -1291,7 +1402,7 @@ jobs:
               # reads, not just a line in the PR body nobody re-checks after the first read.
               [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
                 echo
-                echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no capture landed in \`writeups/ui-proposals/\` this run."
+                echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys."
                 echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`ok\`."
               }
             } > "$REC"
@@ -1306,6 +1417,15 @@ jobs:
           else
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Upload worker screenshots (download backup, #3351)
+        if: ${{ always() && inputs.mode != 'plan' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker-screenshots-${{ inputs.issue || github.event.issue.number }}
+          path: screenshots/*.png
+          retention-days: 14
+          if-no-files-found: ignore
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
@@ -1337,7 +1457,7 @@ jobs:
               runUrl,
               runner: '${{ vars.AGENT_RUNNER || 'github-hosted' }}',
             })
-            await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: n.body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number: n.number, body: '<!-- pipeline-note -->\n' + n.body })
 
       # Run record (#2464): a red finish step explains itself through the check-runs API —
       # the last 40 lines as one ::error:: annotation plus a run-record artifact.
@@ -1392,9 +1512,15 @@ jobs:
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
+          # paging "produced nothing" on the ticket too would be a false alarm.
+          CONFLICT_FAILED: ${{ steps.conflict.outputs.failed }}
+          CONFLICT_ASKED: ${{ steps.conflict.outputs.asked }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
+            if (process.env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
             if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
             if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
@@ -1478,7 +1604,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -1521,7 +1647,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -1678,7 +1804,7 @@ jobs:
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${said}${det}${foot}`
               : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${said}${foot}`
 
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
@@ -1732,3 +1858,48 @@ jobs:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/
           if-no-files-found: ignore
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [route, work-pi]
+    if: ${{ always() && needs.work-pi.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: work-issue-pidev.yml
+          ISSUE: "${{ inputs.issue || github.event.issue.number }}"
+          BRANCH: "${{ inputs.branch }}"
+          STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && (needs.work-pi.outputs.conflict == '1' && 'conflict' || 'revise') || 'work') }}"
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.work-pi.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

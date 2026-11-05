@@ -20,6 +20,10 @@ now-unused leftover is part of your diff, not a later cleanup. The two orphan sh
 graph can't see — a dead i18n key and a stranded Nuxt page — are surfaced (report-only, never
 blocking) by `scripts/lean-check.mjs`; run it, remove the leftover, or record why it stays.
 
+**Smoke what you ship.** A new or changed package endpoint lands in every consuming app's
+`smoke.reads` (`<app>/deploy.config.json`, run by `scripts/smoke-deployed.mjs`), or the PR says why
+not. A smoke that only exercises one CRUD route stays green while the endpoint you changed returns 500.
+
 ## Plain language (write for the owner, not the machine)
 
 Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,
