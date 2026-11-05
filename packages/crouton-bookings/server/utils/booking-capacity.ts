@@ -46,6 +46,28 @@ function bad(status: number, statusText: string): never {
   throw createError({ status, statusText })
 }
 
+function toIdList(slotIdsIn: unknown): string[] {
+  if (Array.isArray(slotIdsIn)) return slotIdsIn.map(String).filter(id => id !== 'inventory')
+  if (typeof slotIdsIn === 'string' && slotIdsIn && slotIdsIn !== 'inventory') return [slotIdsIn]
+  return []
+}
+
+function normaliseSlotIds(location: GuardLocation, slots: { id: string }[], slotIdsIn: unknown): string[] {
+  const ids = toIdList(slotIdsIn)
+
+  if (slots.length === 0) {
+    if (ids.some(id => id !== FULL_DAY_ID)) bad(400, 'Unknown slot')
+    return [FULL_DAY_ID]
+  }
+  if (ids.length === 0) bad(400, 'Pick a slot')
+  const known = new Set(slots.map(s => s.id))
+  if (location.offerFullDay) known.add(FULL_DAY_ID)
+  if (ids.some(id => !known.has(id))) bad(400, 'Unknown slot')
+  const unique = [...new Set(ids)]
+  if (fullDayConflict(unique, [])) bad(400, 'The full day can\'t be combined with another slot')
+  return unique
+}
+
 /** Normalise + validate what is being booked at `location`; throws 400. */
 export function validateSelection(location: GuardLocation, slotIdsIn: unknown, quantityIn?: unknown): Selection {
   const slots = parseSlots(location.slots)
@@ -60,21 +82,7 @@ export function validateSelection(location: GuardLocation, slotIdsIn: unknown, q
     return { slot: null, quantity: q, slotIds: [], plan, inventory: true }
   }
 
-  let ids: string[] = Array.isArray(slotIdsIn) ? (slotIdsIn as unknown[]).map(String) : (typeof slotIdsIn === 'string' && slotIdsIn ? [slotIdsIn] : [])
-  ids = ids.filter(id => id !== 'inventory')
-
-  if (slots.length === 0) {
-    if (ids.some(id => id !== FULL_DAY_ID)) bad(400, 'Unknown slot')
-    ids = [FULL_DAY_ID]
-  }
-  else {
-    if (ids.length === 0) bad(400, 'Pick a slot')
-    const known = new Set(slots.map(s => s.id))
-    if (location.offerFullDay) known.add(FULL_DAY_ID)
-    if (ids.some(id => !known.has(id))) bad(400, 'Unknown slot')
-    ids = [...new Set(ids)]
-    if (fullDayConflict(ids, [])) bad(400, 'The full day can\'t be combined with another slot')
-  }
+  const ids = normaliseSlotIds(location, slots, slotIdsIn)
   return {
     slot: ids,
     quantity: 1,
@@ -214,6 +222,60 @@ export async function runAtomic(db: any, statements: SQL[], noRoomMessage = 'No 
 
 const sameSlots = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
+const PLAIN_KEYS = ['location', 'slot', 'group', 'quantity', 'status'] as const
+
+/** Does the patch change what is booked (where, when, which slot, how many)? */
+function isMove(
+  patch: { location?: string, quantity?: number },
+  current: any,
+  r: { slotPatch: unknown, newRange: DayRange | null, curTs: number },
+): boolean {
+  if (patch.location !== undefined && patch.location !== current.location) return true
+  if (r.newRange !== null && r.newRange.storedTs !== r.curTs) return true
+  if (r.slotPatch !== undefined && !sameSlots(r.slotPatch, current.slot)) return true
+  return patch.quantity !== undefined && patch.quantity !== current.quantity
+}
+
+function mergeBooking(
+  patch: { location?: string, quantity?: number, status?: string, group?: string | null },
+  current: any,
+  slotPatch: unknown,
+  storedTs: number,
+) {
+  return {
+    location: patch.location ?? current.location,
+    slot: slotPatch ?? current.slot,
+    quantity: patch.quantity ?? current.quantity,
+    status: patch.status ?? current.status,
+    group: patch.group === undefined ? current.group : patch.group,
+    storedTs,
+  }
+}
+
+function parsePatchDate(date: string | Date | null | undefined, tz: string): DayRange | null {
+  if (date === undefined || date === null) return null
+  const range = dayRange(date, tz)
+  if (!range) throw createError({ status: 400, statusText: 'Invalid date' })
+  return range
+}
+
+function toSlotPatch(slot: unknown): unknown[] | undefined {
+  if (slot === undefined) return undefined
+  return Array.isArray(slot) ? slot : [slot]
+}
+
+function plainSet(
+  patch: Record<string, unknown>,
+  r: { slotPatch: unknown, newRange: DayRange | null, userId: string, nowTs: number },
+): Record<string, unknown> {
+  const set: Record<string, unknown> = { updatedBy: r.userId, updatedAt: new Date(r.nowTs * 1000) }
+  for (const k of PLAIN_KEYS) {
+    if (patch[k] !== undefined) set[k] = k === 'slot' ? r.slotPatch : patch[k]
+  }
+  if (r.newRange) set.date = new Date(r.newRange.storedTs * 1000)
+  return set
+}
+
 /**
  * Patch a booking, re-checking capacity when it moves or comes back from
  * cancelled. `ownerId` restricts the row to its owner (non-admin callers).
@@ -233,32 +295,17 @@ export async function patchBookingGuarded(db: any, o: {
   const [current] = await db.select().from(tables.bookings).where(and(...conds))
   if (!current) throw createError({ status: 404, statusText: 'Booking not found or unauthorized' })
 
-  const slotPatch = patch.slot === undefined ? undefined : (Array.isArray(patch.slot) ? patch.slot : [patch.slot])
+  const slotPatch = toSlotPatch(patch.slot)
   const curTs = Math.floor(new Date(current.date).getTime() / 1000)
-  const newRange = patch.date !== undefined && patch.date !== null ? dayRange(patch.date, tz) : null
-  if (patch.date !== undefined && patch.date !== null && !newRange) throw createError({ status: 400, statusText: 'Invalid date' })
+  const newRange = parsePatchDate(patch.date, tz)
 
-  const moved = (patch.location !== undefined && patch.location !== current.location)
-    || (newRange !== null && newRange.storedTs !== curTs)
-    || (slotPatch !== undefined && !sameSlots(slotPatch, current.slot))
-    || (patch.quantity !== undefined && patch.quantity !== current.quantity)
-  const merged = {
-    location: patch.location ?? current.location,
-    slot: slotPatch ?? current.slot,
-    quantity: patch.quantity ?? current.quantity,
-    status: patch.status ?? current.status,
-    group: patch.group === undefined ? current.group : patch.group,
-    storedTs: newRange?.storedTs ?? curTs,
-  }
+  const moved = isMove(patch, current, { slotPatch, newRange, curTs })
+  const merged = mergeBooking(patch, current, slotPatch, newRange?.storedTs ?? curTs)
   const reactivated = current.status === 'cancelled' && merged.status !== 'cancelled'
   const nowTs = Math.floor(Date.now() / 1000)
 
   if (!(moved || reactivated) || merged.status === 'cancelled') {
-    const set: Record<string, unknown> = { updatedBy: userId, updatedAt: new Date(nowTs * 1000) }
-    for (const k of ['location', 'slot', 'group', 'quantity', 'status'] as const) {
-      if (patch[k] !== undefined) set[k] = k === 'slot' ? slotPatch : patch[k]
-    }
-    if (newRange) set.date = new Date(newRange.storedTs * 1000)
+    const set = plainSet(patch, { slotPatch, newRange, userId, nowTs })
     const [updated] = await db.update(tables.bookings).set(set).where(and(...conds)).returning()
     return updated
   }
