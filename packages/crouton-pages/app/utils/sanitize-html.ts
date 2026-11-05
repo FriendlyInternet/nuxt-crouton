@@ -75,16 +75,20 @@ const filter = new FilterXSS({
     if ((name === 'href' || name === 'src') && safeAttrUrl(value) === undefined) return ''
     return undefined
   },
-  onTag(tag, html, options) {
-    if (tag === 'a' && !options.isClosing && /target="_blank"/.test(html) && !/rel=/.test(html)) {
-      return html.replace(/>$/, ' rel="noopener noreferrer">')
-    }
-    return undefined
-  },
 })
 
+// Runs on already-filtered output: every attribute is `name="value"` with
+// `>` and `"` escaped, so this regex can't be fooled. (An `onTag` hook that
+// returns a string skips the attribute allow-list entirely — #3375.)
+const BLANK_TARGET = /\starget="_blank"/i
+const HAS_REL = /\srel="/i
+function addNoopener(clean: string): string {
+  return clean.replace(/<a\s[^>]*>/gi, tag =>
+    BLANK_TARGET.test(tag) && !HAS_REL.test(tag) ? tag.replace(/>$/, ' rel="noopener noreferrer">') : tag)
+}
+
 export function sanitizeHtml(html: string): string {
-  return filter.process(html || '')
+  return addNoopener(filter.process(html || ''))
 }
 
 const MARK_TAGS: Record<string, string> = {

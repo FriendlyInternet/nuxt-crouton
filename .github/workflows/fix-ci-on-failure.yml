@@ -1,4 +1,5 @@
 name: Fix CI on failure
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}"
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the
@@ -67,6 +68,8 @@ jobs:
       id-token: write
       # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
       actions: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
       # Default branch first (#3105): the gate imports trusted pure helpers (ownerMergeGo,
       # decideFixBotDispatch) from here, never from the PR head. The head is checked out later.
@@ -82,7 +85,6 @@ jobs:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
-            const MAX = 3
             const { owner, repo } = context.repo
             const manual = context.eventName === 'workflow_dispatch'
             let run = context.payload.workflow_run
@@ -113,7 +115,7 @@ jobs:
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
             // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
             // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
-            const { decideFixBotDispatch, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            const { fixBotWillTry, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
             let go
             if (/^epic\//.test(full.head.ref)) {
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
@@ -126,48 +128,47 @@ jobs:
               }
               go = ownerMergeGo({ comments, commits, owner: process.env.OWNER_LOGIN || 'pmcp' })
             }
-            const verdict = decideFixBotDispatch({ head: full.head.ref, base: full.base.ref, state: full.state, go })
-            if (!verdict.run) {
-              core.info(`Not fixing #${pr.number}: ${verdict.reason}.`); core.setOutput('proceed', 'false'); return
-            }
+            const labels = (full.labels || []).map(l => l.name)
             // Started by hand: there is no workflow_run payload, so find the failing CI/E2E run for
             // this head (a WORKFLOW run id — a check-run id would make `gh run view` fail silently).
+            let failed = null
             if (manual) {
               const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                 { owner, repo, head_sha: full.head.sha, per_page: 100 })
-              const failed = pickFailedRun(runs)
-              if (!failed) {
-                await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
-                  `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
-                  `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
-                core.setOutput('proceed', 'false'); return
-              }
-              run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref }
+              failed = pickFailedRun(runs)
+              if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
             }
-            const labels = (full.labels || []).map(l => l.name)
-            // Already escalated — don't pile on while a human is in the loop.
-            if (labels.includes('status:blocked')) {
-              core.info('PR already blocked — standing down.'); core.setOutput('proceed', 'false'); return
+            // #3373: the single "will the bot try?" decision (shared with status.yml's red ping).
+            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels,
+              failures: run ? [{ workflow: run.name, conclusion: run.conclusion }] : [] })
+            if (d.who === 'none') {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
+                '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
+                `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
+              core.setOutput('proceed', 'false'); return
             }
+            if (d.who === 'owner') {
+              core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('proceed', 'false'); return
+            }
+            const attemptLabel = d.attemptLabel
+            const attempts = d.attempts
 
             // Attempt count lives in a `ci-fix-attempts:N` label on the PR (also read by #337).
-            const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
-            const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
             // The pi worker's `work-<n>` branch.
             const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
-            if (attempts >= MAX) {
+            if (d.who === 'gave-up') {
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
-                `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
+                '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
                 `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
                 FOOTER(run.html_url) })
               if (issueNumber) {
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
                 await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-                  `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
+                  '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
                   `**Fix:** take a look, then reply here and the pipeline resumes.` +
                   FOOTER(run.html_url) })
               }
@@ -223,6 +224,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       - if: steps.gate.outputs.proceed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -353,7 +366,19 @@ jobs:
           REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
           PUSHED=0
           if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
-          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then echo "No fix commit — nothing to push."; exit 0; fi
+          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then
+            echo "No fix commit — nothing to push."
+            # #3373: the first-failure ping no longer mentions the owner while the bot is on it, so a
+            # silent no-fix exit would reach nobody. Ping once unless the agent already blocked the issue.
+            if [ -n "${ISSUE:-}" ] && ! gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx 'status:blocked'; then
+              gh pr comment "$PR" --body "<!-- pipeline-note -->
+          🔴 **@pmcp — auto-fix stopped without a fix; \`$RUN_NAME\` is still failing.**
+
+          **Fix:** take a look, then push a fix or reply to resume." || true
+              gh issue edit "$ISSUE" --add-label "status:blocked" || true
+            fi
+            exit 0
+          fi
           git fetch -q origin "$BASE"
           git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
           git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
@@ -367,7 +392,7 @@ jobs:
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
           if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
             exit 0
           fi
 
@@ -376,13 +401,14 @@ jobs:
           # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
           # Undo only the fix-bot's own commits; a worker revision pushed meanwhile must survive (#2978).
           if [ "$PUSHED" = 1 ] && ! bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH" "$HEAD_NOW"; then
-            UNDONE_NOTE="> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
+            UNDONE_NOTE="<!-- pipeline-note -->"$'\n'"> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
             UNDONE_NOTE="$UNDONE_NOTE"$'\n\n'"⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
             gh pr comment "$PR" --body "$UNDONE_NOTE"
           fi
           LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
           ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
           {
+            echo "<!-- pipeline-note -->"
             echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
             echo
             echo "🔧 **Auto-fix not pushed: it would delete code this PR was asked to add.** Handing back to the worker to implement the missing piece instead."
@@ -400,12 +426,58 @@ jobs:
             echo
             echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
           } > "$RUNNER_TEMP/handback.md"
-          gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
+          PRC_URL="$(gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md")"
           if [ -n "$ISSUE" ]; then
-            CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
-            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID" -f branch="$BRANCH"
+            # Comment POST + dispatch are ONE protected hand-off step (#3306): a limit / 5xx saves it for the sweep,
+            # which falls back to the PR comment just posted (an issue-comment id, readable the same way).
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg b "$BRANCH" --arg f "$RUNNER_TEMP/handback.md" --arg p "${PRC_URL##*issuecomment-}" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),branch:$b},postBodyFile:$f,fallbackFeedback:$p}')"
           fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
         if: always()
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [fixbot]
+    if: ${{ always() && needs.fixbot.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: fix-ci-on-failure.yml
+          PR: "${{ inputs.pr }}"
+          BRANCH: "${{ github.event.workflow_run.head_branch }}"
+          STAGE: fix-ci
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.fixbot.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

@@ -42,7 +42,7 @@ const CLOSE_EPIC = /(^|\s)\/close-epic(\s|$)/i
  * delegate-style label. Only those have a resume job that does something with a reply (#2980).
  */
 export function isPipelineOwned({ body = '', labels = [] } = {}) {
-  return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l))
+  return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|work-this)$/.test(l))
 }
 
 /** Routing for a comment on a plain issue. */

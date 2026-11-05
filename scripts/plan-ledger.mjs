@@ -9,11 +9,12 @@
  */
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { hasMarker, markerValue } from './lib/marker.mjs'
 
 export function ledgerRow(issue, comments) {
   const bodies = comments.map((c) => c.body || '')
-  const plans = bodies.filter((b) => b.includes('<!-- pipeline-plan:v1 -->')).length
-  const verdicts = bodies.flatMap((b) => [...b.matchAll(/<!-- plan-review-verdict:([a-z-]+) -->/g)].map((m) => m[1]))
+  const plans = bodies.filter((b) => hasMarker(b, '<!-- pipeline-plan:v1 -->')).length
+  const verdicts = bodies.map((b) => markerValue(b, /<!-- plan-review-verdict:([a-z-]+) -->/)).filter(Boolean)
   return { issue: Number(issue), planRounds: plans, verdict: verdicts.at(-1) || 'none', fixRounds: 0 }
 }
 
