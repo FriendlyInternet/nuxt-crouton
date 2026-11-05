@@ -140,7 +140,7 @@ jobs:
       - name: Run MCP Server tests
         run: pnpm --filter @fyit/crouton-mcp test
 
-  # A POC has no app typecheck sweep and no AI reviews (#2894): this is its one check.
+  # A POC has no app typecheck sweep and no AI reviews (#2894): typecheck plus the POC's own tests (#3315) are its checks.
   poc-typecheck:
     name: Typecheck POC
     needs: changes
@@ -162,7 +162,7 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
-      - name: Typecheck each changed POC
+      - name: Typecheck and test each changed POC
         env:
           POCS: ${{ needs.changes.outputs.pocs }}
           NODE_OPTIONS: '--max-old-space-size=8192'
@@ -171,12 +171,24 @@ jobs:
           for poc in $(echo "$POCS" | jq -r '.[]'); do
             dir="pocs/$poc"
             [ -f "$dir/package.json" ] || { echo "skip $poc (deleted)"; continue; }
-            if ! jq -e '.scripts.typecheck' "$dir/package.json" >/dev/null; then
-              echo "skip $poc (no typecheck script)"; continue
+            has_tc=0; has_test=0
+            jq -e '.scripts.typecheck' "$dir/package.json" >/dev/null && has_tc=1
+            jq -e '.scripts.test' "$dir/package.json" >/dev/null && has_test=1
+            if [ "$has_tc" = 0 ] && [ "$has_test" = 0 ]; then
+              echo "skip $poc (no typecheck or test script)"; continue
             fi
             echo "::group::$poc"
             [ -f "$dir/nuxt.config.ts" ] && (cd "$dir" && npx nuxt prepare)
-            pnpm --filter "./$dir" typecheck
+            if [ "$has_tc" = 1 ]; then
+              pnpm --filter "./$dir" typecheck
+            else
+              echo "skip $poc typecheck (no typecheck script)"
+            fi
+            if [ "$has_test" = 1 ]; then
+              pnpm --filter "./$dir" test
+            else
+              echo "skip $poc tests (no test script)"
+            fi
             echo "::endgroup::"
           done
 
