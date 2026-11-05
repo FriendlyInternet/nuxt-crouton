@@ -105,3 +105,12 @@ test('lockstep: status.yml uses the shared decision and builder', () => {
   assert.ok(statusYml.includes('fixBotWillTry(')); assert.ok(statusYml.includes('redPingHeading('))
   assert.ok(!statusYml.includes('`🔴 **@${OWNER} — CI failed '))
 })
+
+test('redPingHeading: epic → main wording', async () => {
+  const { redPingHeading } = await import('./fix-bot-dispatch.mjs')
+  const h = redPingHeading({ who: 'owner', owner: 'pmcp', base: 'main', head: 'epic/3-x', count: 1, list: '`A`' })
+  const all = h.heading + h.needed
+  assert.ok(all.includes('@pmcp'))
+  assert.ok(all.includes("won't merge"))
+  assert.ok(!all.includes('sub-PR'))
+})

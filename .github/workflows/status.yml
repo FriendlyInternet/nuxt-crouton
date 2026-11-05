@@ -14,8 +14,9 @@ name: Status
 # marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
 # firing just refreshes the same two comments (no spam).
 #
-# Scope: only PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
-# the dead `claude/issue-*` pipeline branch was dropped in #2891). Human PRs are never touched. Uses
+# Scope: PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
+# the dead `claude/issue-*` pipeline branch was dropped in #2891) — plus `epic/N-*` → `main` PRs,
+# which get ONLY the red-CI failure note when a gate is red (#3006). Other human PRs are never touched. Uses
 # GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
 # so no App token is required).
 
@@ -191,9 +192,11 @@ jobs:
               // and sends the reader to a log that only says "not every job succeeded". Drop it
               // whenever something else is red — but keep it when it is the ONLY red check, since
               // that means something genuinely different (a needed job cancelled or stuck).
-              const ROLLUPS = new Set(['CI Gate', 'E2E Gate']) // every aggregate gate (#2710)
+              const { causesOf, redNoteAction, statusScope } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
               const all = st.failing || []
-              const causes = all.length > 1 ? all.filter(f => !ROLLUPS.has(f.name)) : all
+              const act = redNoteAction({ scope: statusScope({ head: pr.head.ref, base: pr.base.ref }), failing: all, existingForSha: !!existing })
+              if (act === 'skip') return
+              const causes = causesOf(all)
               const names = causes.slice(0, 5)
               const more = causes.length - names.length
               const list = names.length
@@ -273,7 +276,7 @@ jobs:
               }
               const { redPingHeading } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
               const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, owner: OWNER, reason: dec.reason,
-                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref })
+                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
               const body =
                 `${marker}\n` +
                 `${hd.heading}${why}${tails}\n\n` +
@@ -418,8 +421,15 @@ jobs:
                 else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
                 else {
                   const pr = await childPr(s.number)
-                  if (pr && pr.merged_at) { icon = '✅'; note = `PR #${pr.number} merged` }
-                  else if (pr && pr.state === 'open') { icon = '🔨'; note = `PR #${pr.number}` }
+                  if (pr && pr.state === 'open') {
+                    const { rollupChildNote } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+                    const cst = await ciState(pr.head.sha)
+                    ;({ icon, note } = rollupChildNote({ pr, failing: cst.failure ? cst.failing : [] }))
+                  } else {
+                    const { rollupChildNote } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+                    const r = rollupChildNote({ pr })
+                    if (r) ({ icon, note } = r)
+                  }
                 }
                 lines.push(`- ${icon} #${s.number} ${s.title}${note ? ` — ${note}` : ''}`)
               }
@@ -524,8 +534,14 @@ jobs:
               if (pr.state !== 'open') continue
               // Pipeline-authored branches: the pi pipeline (`work-*`; `claude/issue-*` dropped in #2891). The pi branches were silently skipped before #1815, so no pi
               // worker PR ever got a status note — the main reason the owner saw no signal at all.
-              const isPipeline = pr.head.ref.startsWith('work-')
-              if (!isPipeline) {
+              const { statusScope } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+              const scope = statusScope({ head: pr.head.ref, base: pr.base.ref })
+              if (scope === 'epic') {
+                // epic → main (#3006): failure note only when a gate is red; no sticky, no rollup.
+                await pingOnRed(pr, await ciState(pr.head.sha))
+                core.info(`Checked red note for epic PR #${pull_number}.`); continue
+              }
+              if (scope !== 'leaf') {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }
               await updatePr(pr)
