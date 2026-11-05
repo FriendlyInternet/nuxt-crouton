@@ -44,6 +44,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-09-19',
 
   nitro: {
+    experimental: { asyncContext: true },
     prerender: {
       routes: ['/'],
       crawlLinks: true

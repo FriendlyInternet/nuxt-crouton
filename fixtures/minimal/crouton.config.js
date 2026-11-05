@@ -13,11 +13,14 @@ export default {
 
   // Minimal e2e fixture: one simple collection to exercise list + CRUD
   collections: [
-    { name: 'items', fieldsFile: './schemas/items.json' }
+    { name: 'items', fieldsFile: './schemas/items.json' },
+    // Access-declaration fixtures (#3148): drive e2e/access.smoke.spec.ts
+    { name: 'admindocs', fieldsFile: './schemas/admindocs.json', hierarchy: true, access: { create: 'admin', reorder: 'admin' } },
+    { name: 'membernotes', fieldsFile: './schemas/membernotes.json', access: { create: 'member', list: 'own' } }
   ],
 
   targets: [
-    { layer: 'main', collections: ['items'] }
+    { layer: 'main', collections: ['items', 'admindocs', 'membernotes'] }
   ],
 
   dialect: 'sqlite'

@@ -1,7 +1,7 @@
 import { updateCroutonRedirect } from '../../../../database/queries/redirects'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { invalidateRedirectCache } from '../../../../utils/redirectCache'
-import type { CroutonRedirect } from '../../../../../types/redirects'
+import { validateRedirectInput } from '../../../../utils/redirectValidation'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
@@ -12,10 +12,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await requireTeamAdmin(event)
   authTimer.end()
 
-  const body = await readBody<Partial<CroutonRedirect>>(event)
+  const body = validateRedirectInput(await readBody(event), true)
 
   const dbTimer = timing.start('db')
   const result = await updateCroutonRedirect(redirectId, team.id, user.id, {
