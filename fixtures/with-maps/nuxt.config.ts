@@ -4,6 +4,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-i18n', '@fyit/crouton-maps', './layers/main'],
+
   hub: {
     db: 'sqlite',
     kv: true
@@ -19,4 +20,17 @@ export default defineNuxtConfig({
     }
   },
 
+  runtimeConfig: {
+    croutonMaps: {
+      style: 'liberty',
+      geocodingUrl: 'https://nominatim.openstreetmap.org',
+    },
+
+    public: {
+      croutonMaps: {
+        style: 'liberty',
+        geocodingUrl: 'https://nominatim.openstreetmap.org',
+      },
+    },
+  },
 })

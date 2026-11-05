@@ -17,7 +17,7 @@ The chronicle of every major incident in this repo, so a fresh session cites pre
 | An epic just closed — you need the *retro mechanics* (what-went-well comment, minting `workflow` issues) | `postmortem` skill |
 | A symptom → root-cause lookup for a *current* error message, and each incident's fix mechanics | `crouton-diagnostics-index` (fast lookup; this skill carries the story behind those entries) |
 | Which gate fires on your change, approval semantics | `crouton-change-control` |
-| The live #983/#992 graduation rebuild itself | issue #983 + the `graduate` skill (point-in-time snapshot: `writeups/briefings/crouton-builder-graduation-campaign-20260702.md`) |
+| The #983/#992 graduation rebuild (closed) | issue #983 + the `graduate` skill (point-in-time snapshot: `writeups/_archive/briefings/crouton-builder-graduation-campaign-20260702.md`) |
 | The architectural WHY behind an invariant | `crouton-architecture-contract` |
 
 Jargon used below: **crouton** = this repo's schema-JSON → generated CRUD system (the `packages/*` layer — mostly `@fyit/crouton-*` Nuxt layers, plus the CLI/MCP/module exceptions; see `crouton-architecture-contract` §1); **POC** = an incubating app under `pocs/`; **graduation** = rebuilding a proven POC as a real crouton app/package (`graduate` skill); **fixture** = a throwaway generated app under `fixtures/` that the e2e smoke boots; **NuxtHub** = the storage abstraction mapping `hub:{db}` to Cloudflare D1.

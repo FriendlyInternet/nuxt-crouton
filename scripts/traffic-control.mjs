@@ -18,6 +18,7 @@
  */
 
 import { routeIssue } from './lib/plan-route.mjs'
+import { handoffGuard } from './handoff-exec.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
@@ -130,8 +131,67 @@ export async function applyWait({ github, context, issueNumber, verdict }) {
     await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'work-this' })
   } catch { /* already gone (workflow_dispatch) */ }
   await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-    `⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
+    `<!-- pipeline-note -->\n⏸️ **${verdict.reason}.**\n\nAnother ticket on the same package is still being built. This one starts by itself when that work lands.\n\n`
     + `> 🤖 **pi.dev harness** · agent pipeline (CI) · _traffic control (#2786)_\n\n${WAIT_MARKER}` })
+}
+
+/**
+ * (#3311) The wait comment of a hold traffic control still owns, else null: no one blocked the
+ * ticket after the wait comment (applyWait labels first, then comments), and no open work PR
+ * (that is a revision, not a fresh run).
+ */
+async function ownedWaitComment({ github, context, issue, comments }) {
+  const { owner, repo } = context.repo
+  const waitC = comments.filter((c) => String(c.body || '').includes(WAIT_MARKER)).at(-1)
+  if (!waitC) return null
+  const events = await github.paginate(github.rest.issues.listEvents,
+    { owner, repo, issue_number: issue, per_page: 100 })
+  const lastBlock = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:blocked')
+    .map((e) => Date.parse(e.created_at)).filter((t) => !Number.isNaN(t)).sort((a, b) => b - a)[0]
+  if (lastBlock !== undefined && lastBlock > Date.parse(waitC.created_at)) return null
+  const { data: ownPrs } = await github.rest.pulls.list(
+    { owner, repo, state: 'open', head: `${owner}:work-${issue}`, per_page: 5 })
+  return ownPrs.length ? null : waitC
+}
+
+async function markReleased({ github, context, waitC }) {
+  const { owner, repo } = context.repo
+  try {
+    await github.rest.issues.updateComment({ owner, repo, comment_id: waitC.id,
+      body: String(waitC.body).replaceAll(WAIT_MARKER, '<!-- traffic-released -->') })
+  } catch { /* cannot edit: the event guard still protects a later pass */ }
+}
+
+/** Remove a label; false when it was already gone (404), any other error rethrows. */
+async function removeLabelIfPresent(github, params) {
+  try {
+    await github.rest.issues.removeLabel(params)
+    return true
+  } catch (e) {
+    if (e?.status === 404) return false
+    throw e
+  }
+}
+
+/** Release one waiting ticket if its wait comment is ours and traffic is clear. Returns the scope labels it took, or null. */
+async function releaseOne({ github, context, it }) {
+  const { owner, repo } = context.repo
+  const comments = await github.paginate(github.rest.issues.listComments,
+    { owner, repo, issue_number: it.number, per_page: 100 })
+  const waitC = await ownedWaitComment({ github, context, issue: it.number, comments })
+  if (!waitC) return null
+  const labels = names(it.labels)
+  const others = await gatherTrafficFacts({ github, context, issueNumber: it.number, labels })
+  if (decideTraffic({ issue: it.number, labels, body: it.body, others }).action !== 'proceed') return null
+  const ref = { owner, repo, issue_number: it.number }
+  // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
+  if (!(await removeLabelIfPresent(github, { ...ref, name: 'status:blocked' }))) return scopeLabels(labels)
+  await removeLabelIfPresent(github, { ...ref, name: 'work-this' })
+  // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+  await handoffGuard({ kind: 'label', issue: it.number, label: 'work-this' },
+    () => github.rest.issues.addLabels({ ...ref, labels: ['work-this'] }))
+  await markReleased({ github, context, waitC })
+  return { released: true, scopes: scopeLabels(labels) }
 }
 
 /** Re-check every waiting ticket; start the ones that are clear. Returns released numbers. */
@@ -143,21 +203,12 @@ export async function releaseWaiting({ github, context }) {
   const claimed = new Set() // scopes already released this pass: one ticket per scope
   waiting.sort((a, b) => a.number - b.number)
   for (const it of waiting) {
-    if (it.pull_request) continue
-    if (scopeLabels(it.labels).some((l) => claimed.has(l))) continue
-    const comments = await github.paginate(github.rest.issues.listComments,
-      { owner, repo, issue_number: it.number, per_page: 100 })
-    if (!comments.some((c) => String(c.body || '').includes(WAIT_MARKER))) continue
-    const labels = names(it.labels)
-    const others = await gatherTrafficFacts({ github, context, issueNumber: it.number, labels })
-    if (decideTraffic({ issue: it.number, labels, body: it.body, others }).action !== 'proceed') continue
-    await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'status:blocked' })
-    try {
-      await github.rest.issues.removeLabel({ owner, repo, issue_number: it.number, name: 'work-this' })
-    } catch { /* not present */ }
-    await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['work-this'] })
-    released.push(it.number)
-    for (const l of scopeLabels(labels)) claimed.add(l)
+    if (it.pull_request || scopeLabels(it.labels).some((l) => claimed.has(l))) continue
+    const res = await releaseOne({ github, context, it })
+    if (!res) continue
+    const scopes = Array.isArray(res) ? res : res.scopes
+    if (!Array.isArray(res)) released.push(it.number)
+    for (const l of scopes) claimed.add(l)
   }
   return released
 }
