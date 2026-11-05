@@ -400,7 +400,9 @@ export const authEmailLog = sqliteTable('auth_email_log', {
   /** Recipient email address */
   recipientEmail: text('recipientEmail').notNull(),
   /** Delivery status */
-  status: text('status').notNull().default('pending'), // pending, sent, failed
+  status: text('status').notNull().default('pending'), // pending, sent, failed, delivered, bounced, delayed, complained
+  /** Provider message id (Resend), used to match delivery callbacks */
+  providerMessageId: text('providerMessageId'),
   /** Error message if delivery failed */
   error: text('error'),
   /** When the email was actually sent */
@@ -412,6 +414,7 @@ export const authEmailLog = sqliteTable('auth_email_log', {
   index('auth_email_log_org_idx').on(table.organizationId),
   index('auth_email_log_type_idx').on(table.emailType),
   index('auth_email_log_status_idx').on(table.status),
+  index('auth_email_log_provider_idx').on(table.providerMessageId),
   index('auth_email_log_recipient_idx').on(table.recipientEmail),
   index('auth_email_log_created_idx').on(table.createdAt)
 ])

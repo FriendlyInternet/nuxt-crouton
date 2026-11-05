@@ -75,7 +75,7 @@ export default defineNitroPlugin((nitroApp) => {
   // same recipient/type in the same instant are effectively unique). A miss
   // (e.g. the result arrived before the insert) safely leaves the row
   // `pending` rather than fabricating a status.
-  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error }) => {
+  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error, providerId }) => {
     try {
       const db = useDB()
 
@@ -97,12 +97,39 @@ export default defineNitroPlugin((nitroApp) => {
         .set({
           status: ok ? 'sent' : 'failed',
           sentAt: ok ? new Date() : null,
+          providerMessageId: providerId ?? null,
           error: ok ? null : (error ?? 'send failed')
         })
         .where(eq(tables.authEmailLog.id, row.id))
     }
     catch (err) {
       console.error('[crouton-auth] Failed to reconcile email log:', err)
+    }
+  })
+
+  // Provider delivery confirmation (#3419): flip the row to the confirmed state.
+  // `delivered` never overwrites a worse state that arrived first (bounce is final).
+  nitroApp.hooks.hook('crouton:email:delivery', async ({ providerId, state, detail }) => {
+    try {
+      const db = useDB()
+      const [row] = await db
+        .select({ id: tables.authEmailLog.id, status: tables.authEmailLog.status })
+        .from(tables.authEmailLog)
+        .where(eq(tables.authEmailLog.providerMessageId, providerId))
+        .limit(1)
+      if (!row) return
+      if (state === 'delivered' && (row.status === 'bounced' || row.status === 'complained')) return
+
+      await db
+        .update(tables.authEmailLog)
+        .set({
+          status: state,
+          ...(state === 'bounced' || state === 'complained' ? { error: detail ?? state } : {})
+        })
+        .where(eq(tables.authEmailLog.id, row.id))
+    }
+    catch (err) {
+      console.error('[crouton-auth] Failed to apply email delivery event:', err)
     }
   })
 })
