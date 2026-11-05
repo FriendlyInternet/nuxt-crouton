@@ -124,7 +124,7 @@ jobs:
                 // — or a run superseded by a newer push — proved nothing about the code, so it
                 // must not drive the 🔴 ping. It is still not green: counted apart, shown apart.
                 else if (r.conclusion === 'cancelled') cancelled++
-                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, timed_out, action_required, stale
+                else { failure++; failing.push({ name: r.name, id: r.id, suite: r.check_suite?.id, conclusion: r.conclusion }) } // failure, timed_out, action_required, stale
               }
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
@@ -252,16 +252,34 @@ jobs:
                   } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
                 }
               } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
+              // #3373: mention the owner ONLY when the fix-bot will not handle this failure. The
+              // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
+              let dec
+              try {
+                const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                  { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+                const bySuite = new Map(runs.map(r => [r.check_suite_id, r]))
+                const failures = causes.map(f => {
+                  const run = f.suite ? bySuite.get(f.suite) : null
+                  if (!run) return { workflow: null, conclusion: null }
+                  return { workflow: run.name, conclusion: expectedRunConclusion({ runConclusion: run.conclusion, checkConclusion: f.conclusion }) }
+                })
+                const labels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+                dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels, failures })
+              } catch (e) {
+                core.warning(`fix-bot decision unavailable: ${e.message}`)
+                dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }
+              }
+              const { redPingHeading } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+              const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, owner: OWNER, reason: dec.reason,
+                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref })
               const body =
                 `${marker}\n` +
-                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${causes.length} failing ` +
-                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}${tails}\n\n` +
-                `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
-                `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
-                `epic, so it sits until one of those happens — **it does not mean the work is ` +
-                `finished and waiting on your approval**.\n\n` +
+                `${hd.heading}${why}${tails}\n\n` +
+                `${hd.needed}\n\n` +
                 `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
-                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909)</sub>`
+                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909/#3373)</sub>`
               if (existing) {
                 if ((existing.body || '').trim() === body.trim()) return // nothing new to say
                 await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
@@ -269,7 +287,7 @@ jobs:
                 return
               }
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
-              core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
+              core.info(`Red ping on #${pr.number} (${pr.head.sha.slice(0, 7)}): ${dec.who === 'bot' || dec.who === 'gave-up' ? 'no mention' : 'mentioned @' + OWNER} (decision: ${dec.code}).`)
             }
 
             // #2135: one-shot @mention the moment an epic shows "Awaiting your sign-off" — the

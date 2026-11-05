@@ -1,5 +1,8 @@
 name: Decompose on issue (pi.dev variant)
 
+# #3210: runs carry the issue number.
+run-name: "#${{ inputs.issue || github.event.issue.number }} · decompose"
+
 # WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
 # `decompose-on-issue.yml` with ONE thing swapped: the agent step
 # (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`

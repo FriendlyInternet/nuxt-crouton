@@ -278,6 +278,9 @@ jobs:
           gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
+          # #3210 — tick "Build review" from the trusted default-branch copy (the checkout is the PR head). Cosmetic.
+          git show "origin/${{ github.event.repository.default_branch }}:scripts/flow-checklist.mjs" > "$RUNNER_TEMP/trusted/flow-checklist.mjs" 2>/dev/null \
+            && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" || true
           case "$VERDICT" in
             go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
             needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
