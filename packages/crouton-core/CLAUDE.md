@@ -98,11 +98,11 @@ export default defineNuxtConfig({
 | `app/composables/useCroutonRedirects.ts` | Built-in redirects collection config, Zod schema, columns |
 | `app/components/RedirectsList.vue` | `CroutonRedirectsList` — Admin list with path display and status badge |
 | `app/components/RedirectsForm.vue` | `CroutonRedirectsForm` — Create/edit form for redirects |
-| `server/middleware/redirects.ts` | Server middleware — matches incoming paths against active redirects |
+| `server/middleware/redirects.ts` | Server middleware — team-scoped: team from custom domain or `/<slug>` (looked up per request, no slug cache), falling back to `auth.teams.defaultTeamSlug` for single-team apps; only same-site targets |
 | `server/utils/redirectCache.ts` | In-memory redirect cache with thundering herd protection |
 | `server/database/schema/redirects.ts` | Drizzle schema for `crouton_redirects` table |
 | `server/database/queries/redirects.ts` | CRUD queries + `getActiveCroutonRedirects()` for cache |
-| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API for managing redirects |
+| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — admin-only (`requireTeamAdmin`); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
 | `types/redirects.ts` | `CroutonRedirect`, `CroutonRedirectFormData`, `NewCroutonRedirect` types |
 
 ## Architecture
