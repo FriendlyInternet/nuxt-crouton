@@ -172,8 +172,9 @@ jobs:
             // tested helper, fall back to the inline rule if it is not on the default branch yet.
             let isDone = r => r.status === 'completed'
             let requiredCheckStateFn = null
+            let liveCheckRuns = runs => runs // #2950: identity until the helper loads
             try {
-              ({ isDone, requiredCheckState: requiredCheckStateFn } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`))
+              ({ isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`))
             } catch (e) {
               core.warning(`scripts/lib/required-check-state.mjs not loadable (${e.code || e.message}); using the status-only rule.`)
             }
@@ -293,7 +294,13 @@ jobs:
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
               // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
-              const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+              // #2950: drop check-runs of a CI run a newer run on this commit replaced (a cancelled
+              // first run leaves reds that no later run overwrites). Same rule feeds every reader.
+              let wfRuns = []
+              try {
+                wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+              } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
+              const checkRuns = liveCheckRuns(await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }), wfRuns)
               const red = await isRed(pr.head.sha, checkRuns)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
