@@ -5,7 +5,7 @@
  * Hooks into crouton:auth:email and persists a log entry for every email
  * dispatched through the auth system. Runs independently of crouton-email.
  */
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { useDB, tables } from '../utils/database'
 
 interface AuthEmailPayload {
@@ -75,7 +75,7 @@ export default defineNitroPlugin((nitroApp) => {
   // same recipient/type in the same instant are effectively unique). A miss
   // (e.g. the result arrived before the insert) safely leaves the row
   // `pending` rather than fabricating a status.
-  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error, providerId }) => {
+  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error }) => {
     try {
       const db = useDB()
 
@@ -97,7 +97,6 @@ export default defineNitroPlugin((nitroApp) => {
         .set({
           status: ok ? 'sent' : 'failed',
           sentAt: ok ? new Date() : null,
-          providerMessageId: providerId ?? null,
           error: ok ? null : (error ?? 'send failed')
         })
         .where(eq(tables.authEmailLog.id, row.id))
@@ -107,18 +106,23 @@ export default defineNitroPlugin((nitroApp) => {
     }
   })
 
-  // Provider delivery confirmation (#3419): flip the row to the confirmed state.
+  // Provider delivery confirmation (#3419): flip the newest unconfirmed row for
+  // that recipient. Matched by recipient (no extra column / app migration needed).
   // `delivered` never overwrites a worse state that arrived first (bounce is final).
-  nitroApp.hooks.hook('crouton:email:delivery', async ({ providerId, state, detail }) => {
+  nitroApp.hooks.hook('crouton:email:delivery', async ({ to, state, detail }) => {
+    if (!to) return
     try {
       const db = useDB()
       const [row] = await db
-        .select({ id: tables.authEmailLog.id, status: tables.authEmailLog.status })
+        .select({ id: tables.authEmailLog.id })
         .from(tables.authEmailLog)
-        .where(eq(tables.authEmailLog.providerMessageId, providerId))
+        .where(and(
+          eq(tables.authEmailLog.recipientEmail, to),
+          inArray(tables.authEmailLog.status, state === 'delivered' ? ['sent', 'delayed'] : ['sent', 'delayed', 'delivered'])
+        ))
+        .orderBy(desc(tables.authEmailLog.createdAt))
         .limit(1)
       if (!row) return
-      if (state === 'delivered' && (row.status === 'bounced' || row.status === 'complained')) return
 
       await db
         .update(tables.authEmailLog)

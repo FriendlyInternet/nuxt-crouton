@@ -87,7 +87,7 @@ await sendWelcome({
 
 ## Delivery Confirmation (webhook)
 
-`POST /api/webhooks/resend` receives Resend delivery callbacks (Svix-signed; set `NUXT_EMAIL_RESEND_WEBHOOK_SECRET` = `whsec_…`). `server/utils/delivery-events.ts` is the provider seam: it translates Resend events into our own states (`delivered` / `bounced` / `delayed` / `complained`) and emits the `crouton:email:delivery` hook; crouton-auth's email logger matches the row by `providerMessageId`. `isEmailProblem(row)` = failed/bounced/complained, or sent/pending with no confirmation after 15 min. Downstream code never sees Resend's format.
+`POST /api/webhooks/resend` receives Resend delivery callbacks (Svix-signed; set `NUXT_EMAIL_RESEND_WEBHOOK_SECRET` = `whsec_…`). `server/utils/delivery-events.ts` is the provider seam: it translates Resend events into our own states (`delivered` / `bounced` / `delayed` / `complained`) and emits the `crouton:email:delivery` hook; crouton-auth's email logger updates the newest unconfirmed row for that recipient (no extra column on `auth_email_log`, so no app migration). `isEmailProblem(row)` = failed/bounced/complained, or sent/pending with no confirmation after 15 min. Downstream code never sees Resend's format.
 
 ## Client Components
 

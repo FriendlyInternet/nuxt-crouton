@@ -10,8 +10,10 @@
 export type EmailDeliveryState = 'delivered' | 'bounced' | 'delayed' | 'complained'
 
 export interface EmailDeliveryEvent {
-  /** The provider's message id, as stored on the log row when sending. */
+  /** The provider's message id. */
   providerId: string
+  /** First recipient address; the log row is matched on this. */
+  to?: string
   state: EmailDeliveryState
   /** Short human-readable reason (bounce type etc.), if the provider gave one. */
   detail?: string
@@ -36,7 +38,8 @@ export function translateResendEvent(body: unknown): EmailDeliveryEvent | null {
   const providerId = data?.email_id
   if (!state || typeof providerId !== 'string' || !providerId) return null
   const detail = data?.bounce?.message ?? data?.bounce?.type
-  return { providerId, state, ...(typeof detail === 'string' && { detail }) }
+  const to = Array.isArray(data?.to) ? data.to[0] : data?.to
+  return { providerId, state, ...(typeof to === 'string' && { to }), ...(typeof detail === 'string' && { detail }) }
 }
 
 function base64ToBytes(b64: string): Uint8Array {

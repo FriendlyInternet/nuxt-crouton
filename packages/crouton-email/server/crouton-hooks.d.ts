@@ -23,7 +23,7 @@ declare module 'nitropack' {
     'crouton:auth:email:result': (payload: CroutonAuthEmailResultPayload) => void | Promise<void>
 
     /** Provider delivery confirmation, already translated into our own states (#3419). */
-    'crouton:email:delivery': (payload: { providerId: string, state: 'delivered' | 'bounced' | 'delayed' | 'complained', detail?: string }) => void | Promise<void>
+    'crouton:email:delivery': (payload: { providerId: string, to?: string, state: 'delivered' | 'bounced' | 'delayed' | 'complained', detail?: string }) => void | Promise<void>
   }
 }
 
@@ -36,8 +36,6 @@ export interface CroutonAuthEmailResultPayload {
   type: 'verification' | 'password-reset' | 'invitation' | 'magic-link'
   ok: boolean
   error?: string
-  /** Provider message id, so a later delivery callback can find this row (#3419). */
-  providerId?: string
 }
 
 export type CroutonAuthEmailPayload = {
