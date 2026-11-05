@@ -13,6 +13,7 @@ import { localizeError } from '../../utils/errors'
 import type { FormSubmitEvent, AuthFormField, ButtonProps } from '@nuxt/ui'
 
 const { t } = useT()
+const inviteOnly = computed(() => useAuthConfig()?.signup === 'invite')
 const notify = useNotify()
 const authModal = useAuthModal()
 const { state } = authModal
@@ -432,15 +433,20 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                   {{ t('auth.magicLinkDescription') }}
                 </template>
                 <template v-else>
-                  {{ t('auth.dontHaveAccount') }}
-                  <UButton
-                    variant="link"
-                    size="md"
-                    class="p-0"
-                    @click="authModal.setMode('register')"
-                  >
-                    {{ t('auth.signUp') }}
-                  </UButton>
+                  <template v-if="inviteOnly">
+                    {{ t('auth.inviteOnly') }}
+                  </template>
+                  <template v-else>
+                    {{ t('auth.dontHaveAccount') }}
+                    <UButton
+                      variant="link"
+                      size="md"
+                      class="p-0"
+                      @click="authModal.setMode('register')"
+                    >
+                      {{ t('auth.signUp') }}
+                    </UButton>
+                  </template>
                 </template>
               </template>
 
@@ -501,15 +507,20 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                   {{ t('auth.welcomeBack') }}
                 </h2>
                 <p class="mt-2 text-muted">
-                  {{ t('auth.dontHaveAccount') }}
-                  <UButton
-                    variant="link"
-                    size="md"
-                    class="p-0"
-                    @click="authModal.setMode('register')"
-                  >
-                    {{ t('auth.signUp') }}
-                  </UButton>
+                  <template v-if="inviteOnly">
+                    {{ t('auth.inviteOnly') }}
+                  </template>
+                  <template v-else>
+                    {{ t('auth.dontHaveAccount') }}
+                    <UButton
+                      variant="link"
+                      size="md"
+                      class="p-0"
+                      @click="authModal.setMode('register')"
+                    >
+                      {{ t('auth.signUp') }}
+                    </UButton>
+                  </template>
                 </p>
               </div>
               <div class="space-y-3">

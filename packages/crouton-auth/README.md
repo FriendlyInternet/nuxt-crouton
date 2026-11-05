@@ -171,6 +171,10 @@ interface CroutonAuthConfig {
   defaultTeamId?: string
   appName?: string
 
+  // Who may create an account: 'open' (default) or 'invite' (only emails with a
+  // pending team invitation; enforced server-side on password, magic link and OAuth)
+  signup?: 'open' | 'invite'
+
   // Authentication methods
   methods?: {
     // Email/password

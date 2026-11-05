@@ -68,6 +68,8 @@ export default defineEventHandler(async (event: H3Event): Promise<AdminUser> => 
   // Delegate user creation to Better Auth so it owns password hashing
   const auth = useServerAuth(event)
   const signUpResult = await auth.api.signUpEmail({
+    // Forward the admin's session so invite-only sign-up lets super admins through
+    headers: event.headers,
     body: {
       name: body.name.trim(),
       email: body.email.toLowerCase().trim(),

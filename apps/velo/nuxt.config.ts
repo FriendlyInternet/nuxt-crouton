@@ -68,6 +68,8 @@ export default defineNuxtConfig({
 
   // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
   croutonAuth: {
+    // Invite-only: accounts are created only from a team invitation (#3340)
+    signup: 'invite',
     methods: {
       passkeys: false
     }

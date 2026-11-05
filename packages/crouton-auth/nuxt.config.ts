@@ -46,6 +46,7 @@ export default defineNuxtConfig({
     public: {
       crouton: {
         auth: {
+          signup: 'open',
           methods: {
             password: true,
             oauth: undefined,

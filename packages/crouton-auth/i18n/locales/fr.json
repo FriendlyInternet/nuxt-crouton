@@ -6,6 +6,7 @@
     "justAMoment": "Un instant…"
   },
   "auth": {
+    "inviteOnly": "Sur invitation uniquement — demandez une invitation pour créer un compte.",
     "resetLinkSentDescription": "Nous avons envoyé un lien de réinitialisation à votre e-mail. Cliquez sur le lien pour réinitialiser votre mot de passe.",
     "magicLinkSentDescription": "Nous avons envoyé un lien magique à votre e-mail. Cliquez sur le lien pour vous connecter.",
     "tryAnotherEmail": "Essayer un autre e-mail",

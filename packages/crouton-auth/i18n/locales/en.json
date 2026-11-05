@@ -6,6 +6,7 @@
     "justAMoment": "Just a moment…"
   },
   "auth": {
+    "inviteOnly": "Invite only — ask for an invite to create an account.",
     "resetLinkSentDescription": "We sent a password reset link to your email. Click the link to reset your password.",
     "magicLinkSentDescription": "We sent a magic link to your email. Click the link to sign in.",
     "tryAnotherEmail": "Try another email",
