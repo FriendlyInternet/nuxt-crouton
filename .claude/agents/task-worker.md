@@ -135,7 +135,7 @@ a feature branch.
    **into the epic branch** when one was passed (else the repo base). The body MUST contain
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
    with the PR link** (e.g. `→ built in #<pr>`) so the ticket shows where its work went —
-   never leave the issue blank while the work lives in a PR (the #442 failure mode). Body
+   never leave the issue blank while the work lives in a PR (the #442 failure mode). Never put the `<!-- pipeline-note -->` marker in your own comments — it is reserved for the workflow's notes and makes a comment not count as your output (#3251). Body
    follows `github-tasks` (👤/🤖 + `## 🧪 How to test`). End the PR body with the
    Generated-with-Claude-Code footer.
    - **`Closes` does NOT auto-close on an epic-branch PR.** GitHub only auto-closes the
@@ -191,9 +191,10 @@ skill for POC apps, or `pnpm cf:staging` for `apps/`). Run the **`ui-proposal`**
 Use when staging is unavailable (e.g. packages-only change with no runnable app, or the
 deploy pipeline is down). Run the **`ui-proposal`** skill with `--static`. Then:
 
-- Commit the `<slug>.html` + `<slug>.md` "what changes" list **+ the rendered
-  `writeups/ui-proposals/<slug>.png`** (via `/commit`, scope `docs`) and push.
-- Post the PNG **inline** (Markdown image via its `raw.githubusercontent.com/<repo>/<branch>/…png`
+- Commit the `<slug>.html` + `<slug>.md` "what changes" list (via `/commit`, scope `docs`) and push.
+  Render the PNG to `screenshots/<slug>.png` and publish it with
+  `node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>` (#3351) — never commit it.
+- Post the PNG **inline** (Markdown image via the printed commit-ID `raw.githubusercontent.com/<repo>/<sha>/…png`
   URL) in a `<!-- ui-proposal:<slug> -->` sticky comment — never a link to the `.html`, which
   "opens as code" on mobile (#569/#613). See the `ui-proposal` skill step 4 for the exact comment.
   **Steer feedback to inline comments on the committed `.md`** — the PNG is the glance, the
@@ -426,3 +427,5 @@ it carries the canonical shape: lead with the one decision **and a recommendatio
 `git push -u origin <branch>` **first**, then name that branch under *State so far*. An
 unpushed worktree is lost when you stop; a pushed branch is what the resuming session picks
 up. (This extends the step-8 "push immediately" checkpoint to the block path.)
+
+> Note (moved from root CLAUDE.md, #3350): the PR body opens with `Closes #NN`.
