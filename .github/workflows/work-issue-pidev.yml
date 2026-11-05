@@ -1584,8 +1584,26 @@ jobs:
             const askedQuestion = signoffHeld && holdKind === 'answer'
             const needsAction = signoffHeld && holdKind === 'action'
 
-            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
-              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+            // #3219: a commit pushed to work-<N> THIS run is a deliverable even when the PR already
+            // existed (its cross-reference predates t0, so linkedPR is false). A failed finish step
+            // is still a failure, handled in the classifier below.
+            let workBranch = null
+            try {
+              const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
+              const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
+              const committedAt = new Date(commit.data.committer?.date || 0).getTime()
+              // Only a commit from THIS run counts (as on main); an older branch is not a deliverable
+              // and must not feed the harness-failure verdict below.
+              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7), committedAt }
+            } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
+
+            // Load from the RUNNER_TEMP copy (baseline step): work-<N> may predate this helper.
+            const { decideDeliverable, pushedThisRun } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/run-deliverable.mjs')).href)
+            const workBranchPushed = pushedThisRun({ committedAt: workBranch ? workBranch.committedAt : null, sinceMs, finishOutcome: process.env.FINISH_OUTCOME })
+
+            const deliverable = decideDeliverable({ linkedPR, workBranchPushed, signoffHeld, alreadyClosed, createdSubIssues })
+            if (deliverable.ok) {
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} workBranchPushed=${workBranchPushed} via=${deliverable.via}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
               // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
@@ -1597,6 +1615,7 @@ jobs:
                 // hold branches (holdKind requires a non-empty holdBody).
                 const what = freshPR
                   ? `done → PR #${freshPR}`
+                  : workBranchPushed ? `pushed a commit to \`work-${issue_number}\` (existing PR updated)`
                   : needsAction ? `**needs you to APPLY something** — not an answer, not an approval. **[→ the ask](${holdComment.html_url})** says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.`
                   : askedQuestion ? `**asked you a question** — it needs an *answer*, not an approval. **[→ the ask](${holdComment.html_url})** leads with the recommendation; reply with your pick and the work resumes in a fresh run.`
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
@@ -1642,7 +1661,7 @@ jobs:
                 }
               }
             } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
-            if (childDeliverable) {
+            if (decideDeliverable({ childDeliverable }).ok) {
               core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
@@ -1670,14 +1689,6 @@ jobs:
             // told the owner their ISSUE was underspecified — while a branch with their work sat
             // on the remote (#1874/#1875). A pushed `work-<issue>` branch is proof the agent
             // produced something; the only thing missing is the PR the harness died before opening.
-            let workBranch = null
-            try {
-              const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
-              const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
-              const committedAt = new Date(commit.data.committer?.date || 0).getTime()
-              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7) }
-            } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
-
             if (workBranch && process.env.FINISH_OUTCOME === 'failure') {
               why = `the HARNESS failed after committing — \`work-${issue_number}\` (\`${workBranch.sha}\`) was pushed this run, but the finish step died before opening the PR`
               action = 'open the run log at the `finish` step — this is a workflow bug, NOT an underspecified issue. '
