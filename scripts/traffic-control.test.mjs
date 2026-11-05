@@ -137,7 +137,92 @@ test('releaseWaiting releases a parked ticket whose body has Unblocks:', async (
     paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [blocker]) : [{ body: '<!-- traffic-wait -->' }]),
     rest: { issues: { listForRepo: 'list', listComments: 'comments',
       removeLabel: async () => {}, addLabels: async (o) => added.push(o.issue_number) },
-      pulls: { list: async () => ({ data: [{ number: 99 }] }) } } }
+      pulls: { list: async (o) => ({ data: o.head.endsWith('work-10') ? [{ number: 99 }] : [] }) } } }
   const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
   assert.deepEqual(released, [20])
+})
+
+// ── (#3311) release only holds traffic control still owns ───────────────────────
+function releaseHarness({ comments, events, ownPr }) {
+  const parked = { number: 31, labels: [{ name: 'status:blocked' }, { name: 'pkg:b' }] }
+  const calls = []
+  const store = { comments: comments.map((c, i) => ({ id: i + 1, ...c })) }
+  const github = {
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [])
+      : fn === 'events' ? events : store.comments),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
+      removeLabel: async (o) => calls.push(`rm ${o.name}`), addLabels: async (o) => calls.push(`add ${o.labels}`),
+      updateComment: async (o) => { store.comments.find((c) => c.id === o.comment_id).body = o.body } },
+      pulls: { list: async () => ({ data: ownPr ? [{ number: 1 }] : [] }) } } }
+  return { github, calls, store, run: () => releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } }) }
+}
+const blocked = (at) => ({ event: 'labeled', label: { name: 'status:blocked' }, created_at: at })
+const wait = (at) => ({ body: '<!-- traffic-wait -->', created_at: at })
+
+test('replay #3131: old wait comment, newer blocks, open PR → not released', async () => {
+  const h = releaseHarness({
+    comments: [wait('2026-11-02T16:18:00Z'), { body: 'CI fix gave up', created_at: '2026-11-03T17:01:00Z' }],
+    events: [blocked('2026-11-02T16:18:00Z'), blocked('2026-11-03T17:01:00Z'), blocked('2026-11-03T18:02:00Z')], ownPr: true })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
+
+test('genuine park releases once and retires the marker', async () => {
+  const h = releaseHarness({ comments: [wait('2026-11-02T16:18:01Z')], events: [blocked('2026-11-02T16:18:00Z')], ownPr: false })
+  assert.deepEqual(await h.run(), [31])
+  assert.ok(!h.store.comments[0].body.includes('<!-- traffic-wait -->'))
+  assert.deepEqual(await h.run(), []) // second pass
+})
+
+test('parked ticket with an open work PR is not re-dispatched', async () => {
+  const h = releaseHarness({ comments: [wait('2026-11-02T16:18:01Z')], events: [blocked('2026-11-02T16:18:00Z')], ownPr: true })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
+
+test('blocked again after the wait comment, no open PR → left alone', async () => {
+  const h = releaseHarness({
+    comments: [wait('2026-11-02T16:18:01Z')],
+    events: [blocked('2026-11-02T16:18:00Z'), blocked('2026-11-03T17:01:00Z')], ownPr: false })
+  assert.deepEqual(await h.run(), [])
+  assert.deepEqual(h.calls, [])
+})
+
+// ── (#3323) a label removal that 404s must not crash the release pass ───────────
+function removalHarness(failFor) {
+  const mk = (n, scope) => ({ number: n, labels: [{ name: 'status:blocked' }, { name: scope }] })
+  const parked = [mk(41, 'pkg:a'), mk(42, 'pkg:b'), mk(43, 'pkg:a')]
+  const calls = []
+  const github = {
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? parked : [])
+      : fn === 'events' ? [] : [{ id: 1, body: '<!-- traffic-wait -->', created_at: '2026-11-02T16:18:01Z' }]),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
+      removeLabel: async (o) => {
+        const status = failFor(o)
+        if (status) throw Object.assign(new Error('x'), { status })
+        calls.push(`rm ${o.issue_number} ${o.name}`)
+      },
+      addLabels: async (o) => calls.push(`add ${o.issue_number} ${o.labels}`),
+      updateComment: async () => {} },
+      pulls: { list: async () => ({ data: [] }) } } }
+  return { calls, run: () => releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } }) }
+}
+
+test('status:blocked 404 → peer released it: skip, claim scope, release other scopes', async () => {
+  const h = removalHarness((o) => (o.issue_number === 41 && o.name === 'status:blocked' ? 404 : 0))
+  assert.deepEqual(await h.run(), [42])
+  assert.ok(!h.calls.some((c) => c.startsWith('add 41')))
+  assert.ok(!h.calls.some((c) => c.includes(' 43 '))) // same scope as 41: not released
+})
+
+test('status:blocked 500 → rejects', async () => {
+  const h = removalHarness((o) => (o.name === 'status:blocked' ? 500 : 0))
+  await assert.rejects(h.run())
+})
+
+test('work-this removal: 404 ignored, 500 rejects', async () => {
+  const ok = removalHarness((o) => (o.name === 'work-this' ? 404 : 0))
+  assert.deepEqual(await ok.run(), [41, 42])
+  const bad = removalHarness((o) => (o.name === 'work-this' ? 500 : 0))
+  await assert.rejects(bad.run())
 })

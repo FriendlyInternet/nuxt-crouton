@@ -8,6 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { renderPrompt } from './pipeline-prompt.mjs'
 
 const fx = (n) => readFileSync(new URL(`./fixtures/pipeline-prompt/${n}`, import.meta.url), 'utf8')
@@ -59,4 +60,14 @@ test('pi-planner (plan mode, #2755)', () => {
 
 test('a missing variable is a hard error, not an empty string', () => {
   assert.throws(() => renderPrompt('pi-worker', { issue: '1' }), /missing --var branch_instr/)
+})
+
+test('pi-worker reuse search finds an existing helper (#3073)', () => {
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main' })
+  assert.ok(out.includes('REUSE BEFORE YOU WRITE'))
+  assert.ok(out.includes('Maintaining AI Documentation'))
+  const cmd = out.match(/`(grep -rniE '<verb\|noun>'[^`]*)`/)[1].replace('<verb|noun>', 'redirect')
+  const root = new URL('..', import.meta.url).pathname
+  const found = execFileSync('bash', ['-c', cmd], { cwd: root, encoding: 'utf8' })
+  assert.ok(found.includes('sanitizeRedirectUrl'))
 })

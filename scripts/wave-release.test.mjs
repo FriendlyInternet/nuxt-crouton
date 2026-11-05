@@ -139,3 +139,41 @@ test('mayCloseHeldIssue: bot merge keeps the hold', () => assert.equal(may({ lab
 test('mayCloseHeldIssue: missing mergedBy keeps the hold', () => assert.equal(may({ labels: held, mergedBy: undefined }), false))
 test('mayCloseHeldIssue: owner merge closes a held issue', () => assert.equal(may({ labels: held, mergedBy: 'pmcp' }), true))
 test('mayCloseHeldIssue: build:approved closes a held issue', () => assert.equal(may({ labels: held, prLabels: ['build:approved'] }), true))
+
+// #3368: a bot merge driven by the owner's `ok` on the PR releases the hold.
+const OK = { user: { login: 'pmcp', type: 'User' }, body: 'ok', created_at: '2026-11-04T19:58:32Z' }
+const commitAt = (d, parents = [1]) => ({ parents, commit: { committer: { date: d } } })
+function okWorld({ comments = [OK], commits = [commitAt('2026-11-04T19:00:00Z')], throws = false } = {}) {
+  const w = prWorld('Closes #3131', { 3131: { state: 'open', labels: lbl(['status:blocked']) } })
+  w.context.payload.pull_request.number = 3192
+  w.context.payload.pull_request.merged_by = { login: 'nuxt-harness[bot]' }
+  w.fetched = 0
+  w.github.rest.pulls.listCommits = () => 'commits'
+  w.github.rest.issues.listComments = () => 'comments'
+  w.github.paginate = async fn => {
+    w.fetched++
+    if (throws) throw new Error('boom')
+    return fn() === 'commits' ? commits : comments
+  }
+  return w
+}
+test('mayCloseHeldIssue: owner ok on the PR closes a held issue (bot merge)', () => assert.equal(may({ labels: held, ownerGo: true }), true))
+test('closeLinkedIssues: held issue + owner ok comment → closes', async () => {
+  const w = okWorld(); await closeLinkedIssues(w)
+  assert.deepEqual(w.calls.updates.map(u => [u.issue_number, u.state]), [[3131, 'closed']])
+})
+test('closeLinkedIssues: held issue + owner ok voided by a later worker commit → stays open', async () => {
+  const w = okWorld({ commits: [commitAt('2026-11-04T20:00:00Z')] }); await closeLinkedIssues(w)
+  assert.equal(w.calls.updates.length, 0)
+})
+test('closeLinkedIssues: held issue, comments fetch throws → stays open', async () => {
+  const w = okWorld({ throws: true }); await closeLinkedIssues(w)
+  assert.equal(w.calls.updates.length, 0)
+})
+test('closeLinkedIssues: unheld issue → no comment fetch', async () => {
+  const w = okWorld(); w.context.payload.pull_request.body = 'Closes #5'
+  w.github.rest.issues.get = async () => ({ data: { state: 'open', labels: [] } })
+  await closeLinkedIssues(w)
+  assert.equal(w.fetched, 0)
+  assert.equal(w.calls.updates.length, 1)
+})
