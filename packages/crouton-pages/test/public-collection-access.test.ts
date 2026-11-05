@@ -89,6 +89,17 @@ describe('public endpoints vs collection access (#3380)', () => {
     expect(item.data.id).toBe('n2')
   })
 
+  it('real regenerated fixtures/minimal membernotes (list: own) → both endpoints 404', async () => {
+    const q: any = await import('../../../fixtures/minimal/layers/main/collections/membernotes/server/database/queries')
+    expect(q.MainMembernotesAccess).toMatchObject({ list: 'own' })
+    register(async () => q.MainMembernotesAccess)
+    await expect((listHandler as any)({})).rejects.toMatchObject({ statusCode: 404 })
+    ;(globalThis as any).__db = makeDb()
+    await expect((itemHandler as any)({})).rejects.toMatchObject({ statusCode: 404 })
+    expect(getAll).not.toHaveBeenCalled()
+    expect(getByIds).not.toHaveBeenCalled()
+  })
+
   it('no access loader (legacy registry) → behaviour unchanged', async () => {
     register()
     const list: any = await (listHandler as any)({})

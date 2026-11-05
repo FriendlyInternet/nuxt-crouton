@@ -26,23 +26,30 @@
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  access?: () => Promise<any>
 }> = {
   mainAdmindocs: {
     getAll: () => import('~~/layers/main/collections/admindocs/server/database/queries')
       .then(m => m.getAllMainAdmindocs),
     getByIds: () => import('~~/layers/main/collections/admindocs/server/database/queries')
       .then(m => m.getMainAdmindocsByIds),
+    access: () => import('~~/layers/main/collections/admindocs/server/database/queries')
+      .then(m => m.MainAdmindocsAccess),
   },
   mainItems: {
     getAll: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getAllMainItems),
     getByIds: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getMainItemsByIds),
+    access: () => import('~~/layers/main/collections/items/server/database/queries')
+      .then(m => m.MainItemsAccess),
   },
   mainMembernotes: {
     getAll: () => import('~~/layers/main/collections/membernotes/server/database/queries')
       .then(m => m.getAllMainMembernotes),
     getByIds: () => import('~~/layers/main/collections/membernotes/server/database/queries')
       .then(m => m.getMainMembernotesByIds),
+    access: () => import('~~/layers/main/collections/membernotes/server/database/queries')
+      .then(m => m.MainMembernotesAccess),
   },
 }

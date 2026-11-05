@@ -354,3 +354,4 @@ export async function reorderSiblingsMainAdmindocs(
 
   return results
 }
+export const MainAdmindocsAccess = {"create":"admin","reorder":"admin"} as const
