@@ -144,9 +144,9 @@ test('6: a marker 300 comments deep is found; unlabelled tickets are not scanned
 test('7: run titles match the run-name in each workflow file', () => {
   for (const [wf, tpl] of Object.entries(RUN_NAME))
     assert.ok(readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8').includes(`run-name: "${tpl}"`), wf)
-  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', plan: '9' }), 'work #5 build 9')
-  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', feedback: '3' }), 'work #5 revise 3')
-  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), 'work #5 plan -')
+  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', plan: '9' }), '#5 · build')
+  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', feedback: '3' }), '#5 · build · revise')
+  assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), '#5 · plan')
   assert.equal(handoffRunTitle('automerge-epic-subpr.yml', { pr: '7' }), 'automerge #7')
 })
 test('8: marker write falls back to the second token; both failing rethrows', async () => {
