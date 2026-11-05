@@ -766,29 +766,34 @@ jobs:
       # Email apps (#3418): any app whose layerPackages has @fyit/crouton-email must prove its mail
       # works. Order matters: detect → key → probe, after every secret-writing step above, so the
       # Worker has its Resend key and BETTER_AUTH_SECRET (sign-up needs it) before we send.
+      # Production (#3437) only CHECKS the key (never pushes it, never sends a test mail).
       - name: Email app? (crouton-email)
         id: email-app
-        if: ${{ inputs.environment != 'production' }}
         run: node scripts/email-probe.mjs detect "${{ inputs.workspace }}/${{ inputs.app }}/deploy.config.json" >> "$GITHUB_OUTPUT"
 
       - name: Ensure email key on the Worker
-        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' }}
+        if: ${{ steps.email-app.outputs.is_email == 'true' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
-          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
+          if [ "${{ inputs.environment }}" = "production" ]; then TARGET=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
           if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-            if [ -n "$RESEND_API_KEY" ]; then
+            if [ "${{ inputs.environment }}" != "production" ] && [ -n "$RESEND_API_KEY" ]; then
               echo "::notice::No email key on the Worker — pushing NUXT_EMAIL_RESEND_API_KEY from the RESEND_API_KEY repo secret."
               printf '%s' "$RESEND_API_KEY" | npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY $TARGET
             fi
             LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
           fi
           if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
+            if [ "${{ inputs.environment }}" = "production" ]; then
+              echo "::error::email key missing on PRODUCTION — ${{ inputs.app }} uses @fyit/crouton-email but its production Worker has no NUXT_EMAIL_RESEND_API_KEY (run: npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY in ${{ inputs.workspace }}/${{ inputs.app }}, or add it to WORKER_SECRETS_JSON)"
+              exit 1
+            fi
             echo "::error::email key missing — ${{ inputs.app }} uses @fyit/crouton-email but its Worker has no NUXT_EMAIL_RESEND_API_KEY (set the RESEND_API_KEY repo secret, or add it to WORKER_SECRETS_JSON)"
             exit 1
           fi
