@@ -31,6 +31,7 @@
 {"issue":3183,"planRounds":5,"verdict":"go","fixRounds":0}
 {"issue":3280,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3287,"planRounds":2,"verdict":"go","fixRounds":0}
+{"issue":3305,"planRounds":3,"verdict":"go","fixRounds":0}
 {"issue":3317,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3324,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3315,"planRounds":2,"verdict":"go","fixRounds":0}
@@ -56,3 +57,4 @@
 {"issue":3388,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3422,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3429,"planRounds":1,"verdict":"go","fixRounds":0}
+{"issue":3428,"planRounds":1,"verdict":"go","fixRounds":0}
