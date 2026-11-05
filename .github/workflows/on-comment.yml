@@ -23,7 +23,7 @@ name: On comment
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
-# The bot filter is here once: a bot's comment exits at the router with kind=none.
+# The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no runner.
 
 on:
   issue_comment:
@@ -33,6 +33,11 @@ jobs:
   # Allowance at run start for the run record (#3251); the record job reads it again at the end.
   rl-start:
     name: Read API allowance at start
+    # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.performed_via_github_app == null ||
+       github.event.comment.performed_via_github_app.name == 'Claude')
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
