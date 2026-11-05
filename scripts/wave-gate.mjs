@@ -111,7 +111,7 @@ export function formatHoldComment({ issueNumber, branch, doneNumber }) {
     + `Its last blocker (#${doneNumber}) closed, so the dependency chain is satisfied — but the branch it builds on currently fails CI. `
     + `Starting here would build on top of code that does not work (epic #1652: a merged test contract whose implementation never landed left 35 red tests, and wave 2 released onto a throwing stub).\n\n`
     + `**This releases itself** as soon as CI goes green on \`${branch}\` — no action needed. `
-    + `If the branch is red for an unrelated reason, apply \`delegate\` by hand to override.\n\n`
+    + `If the branch is red for an unrelated reason, apply \`work-this\` by hand to override.\n\n`
     + `<sub>🤖 wave scheduler · green-branch gate (#1688/#283)</sub>`
 }
 

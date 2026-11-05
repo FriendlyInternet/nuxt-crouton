@@ -1,0 +1,6 @@
+# Append-only ledger: parallel PRs each add a row at EOF; union keeps both instead of conflicting.
+# (A later row for the same issue supersedes an earlier one; union may order same-issue rows from
+# parallel branches either way — acceptable, as parallel epics write different issues.)
+writeups/reports/plan-review-ledger.jsonl merge=union
+# Append-only ledger written by scripts/eval-ledger/append.mjs from PR branches.
+writeups/reports/eval-ledger.jsonl merge=union

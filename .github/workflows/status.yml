@@ -21,7 +21,8 @@ name: Status
 
 on:
   # ⚠️ `check_suite` and `status` are NEARLY DEAD TRIGGERS here (#1884) — keep them for
-  # App-generated suites, but they do NOT fire for our own CI. Every check on a pipeline PR is
+  # App-generated suites, but they do NOT fire for our own CI. (check_suite IS what reruns this
+  # after the "Preview screenshot" check completes — that check lives in the App's own suite, #3351.) Every check on a pipeline PR is
   # created by GitHub Actions under GITHUB_TOKEN, and events triggered by GITHUB_TOKEN never
   # start a new workflow run (the same recursion guard that stops a GITHUB_TOKEN push from
   # cascading, #572/#626). So the only trigger that ever fired was `pull_request: opened`, and
@@ -81,11 +82,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Default branch only (never PR code) — just the pure log-tail helper (#2677).
+      # Default branch only (never PR code) — scripts/: the pure log-tail helper (#2677) and the visual-change rule (ui-touched.mjs, #3228).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts/lib
+          sparse-checkout: scripts
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -123,7 +124,7 @@ jobs:
                 // — or a run superseded by a newer push — proved nothing about the code, so it
                 // must not drive the 🔴 ping. It is still not green: counted apart, shown apart.
                 else if (r.conclusion === 'cancelled') cancelled++
-                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, timed_out, action_required, stale
+                else { failure++; failing.push({ name: r.name, id: r.id, suite: r.check_suite?.id, conclusion: r.conclusion }) } // failure, timed_out, action_required, stale
               }
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
@@ -251,16 +252,34 @@ jobs:
                   } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
                 }
               } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
+              // #3373: mention the owner ONLY when the fix-bot will not handle this failure. The
+              // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
+              let dec
+              try {
+                const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                  { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+                const bySuite = new Map(runs.map(r => [r.check_suite_id, r]))
+                const failures = causes.map(f => {
+                  const run = f.suite ? bySuite.get(f.suite) : null
+                  if (!run) return { workflow: null, conclusion: null }
+                  return { workflow: run.name, conclusion: expectedRunConclusion({ runConclusion: run.conclusion, checkConclusion: f.conclusion }) }
+                })
+                const labels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+                dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels, failures })
+              } catch (e) {
+                core.warning(`fix-bot decision unavailable: ${e.message}`)
+                dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }
+              }
+              const { redPingHeading } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+              const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, owner: OWNER, reason: dec.reason,
+                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref })
               const body =
                 `${marker}\n` +
-                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${causes.length} failing ` +
-                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}${tails}\n\n` +
-                `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
-                `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
-                `epic, so it sits until one of those happens — **it does not mean the work is ` +
-                `finished and waiting on your approval**.\n\n` +
+                `${hd.heading}${why}${tails}\n\n` +
+                `${hd.needed}\n\n` +
                 `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
-                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909)</sub>`
+                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909/#3373)</sub>`
               if (existing) {
                 if ((existing.body || '').trim() === body.trim()) return // nothing new to say
                 await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
@@ -268,7 +287,7 @@ jobs:
                 return
               }
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
-              core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
+              core.info(`Red ping on #${pr.number} (${pr.head.sha.slice(0, 7)}): ${dec.who === 'bot' || dec.who === 'gave-up' ? 'no mention' : 'mentioned @' + OWNER} (decision: ${dec.code}).`)
             }
 
             // #2135: one-shot @mention the moment an epic shows "Awaiting your sign-off" — the
@@ -297,17 +316,40 @@ jobs:
             }
 
             // #2171: never ASK for a visual sign-off the flow can't SHOW. Read the PR's OWN
-            // committed files (not a body claim — the #1849 rule). `isVisual` mirrors
-            // work-issue-pidev.yml's UI_TOUCHED EXACTLY — a looser match would wrongly FREEZE a
-            // non-visual sign-off. `hasEvidence` = a capture under writeups/ui-proposals/ (the
-            // worker's EVIDENCE_ATTACHED signal).
+            // committed files (not a body claim — the #1849 rule). `isVisual` uses the SAME rule as
+            // work-issue-pidev.yml (scripts/ui-touched.mjs, #3228): script-only .vue is not visual.
+            // Old-side text is read at the MERGE BASE (patch line numbers refer to it, not
+            // pr.base.sha). Any error → visual (fail toward holding). `hasEvidence` = a capture
+            // = a review-capture screenshot comment on the PR (#3351).
             async function visualEvidenceState(prNumber) {
               const files = await github.paginate(github.rest.pulls.listFiles,
                 { owner, repo, pull_number: prNumber, per_page: 100 })
-              const paths = files.map(f => f.filename || '')
-              const isVisual = paths.some(p =>
-                /\.(vue|css)$/.test(p) || /\/app\/(components|layouts|pages)\//.test(p) || /app\.config\.ts$/.test(p))
-              const hasEvidence = paths.some(p => /^writeups\/ui-proposals\//.test(p))
+              let isVisual = true
+              try {
+                const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
+                const pr = (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data
+                const cmp = await github.rest.repos.compareCommits(
+                  { owner, repo, base: pr.base.sha, head: pr.head.sha, per_page: 1 })
+                const mergeBase = cmp.data.merge_base_commit.sha
+                const readText = async (ref, path) => {
+                  const r = await github.rest.repos.getContent({ owner, repo, path,
+                    ref: ref === 'head' ? pr.head.sha : mergeBase,
+                    mediaType: { format: 'raw' } })
+                  return typeof r.data === 'string' ? r.data : null
+                }
+                isVisual = (await uiTouchedFromFiles(files, readText)) === 1
+              } catch (e) {
+                core.warning(`visual check failed, treating as visual: ${e.message}`)
+              }
+              // One rule (#3351): a bot comment tagged review-capture that embeds a raw image.
+              let hasEvidence = false
+              try {
+                const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
+                hasEvidence = hasCaptureEvidence(await github.paginate(github.rest.issues.listComments,
+                  { owner, repo, issue_number: prNumber, per_page: 100 }))
+              } catch (e) {
+                core.warning(`capture-evidence check failed, treating as none: ${e.message}`)
+              }
               return { isVisual, hasEvidence }
             }
 
@@ -326,7 +368,7 @@ jobs:
                 `${marker}\n` +
                 `🚫 **Sign-off withheld — nothing to show yet** (${title}).\n\n` +
                 `PR #${prNumber} changes a visual surface, but no screenshot was captured this run ` +
-                `(none under \`writeups/ui-proposals/\`). The flow will not ask you to approve a ` +
+                `(no screenshot comment on the PR yet). The flow will not ask you to approve a ` +
                 `surface it hasn't shown you — a capture (or a working preview of the changed ` +
                 `surface) has to land first. Nothing for you to do here; the gap is the flow's to ` +
                 `close (#2057).\n\n` +

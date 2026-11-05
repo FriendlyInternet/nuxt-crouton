@@ -12,23 +12,6 @@ interface Props {
 
 const props = defineProps<Props>()
 
-/**
- * Minimal XSS sanitizer — strips <script> tags and on* event handler attributes.
- * SSR-safe: returns the original string unchanged when running server-side.
- */
-function sanitizeHtml(html: string): string {
-  if (typeof window === 'undefined') return html
-  const div = document.createElement('div')
-  div.innerHTML = html
-  div.querySelectorAll('script').forEach(el => el.remove())
-  div.querySelectorAll('*').forEach(el => {
-    ;[...el.attributes].forEach(attr => {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
-    })
-  })
-  return div.innerHTML
-}
-
 const sanitizedContent = computed(() => props.attrs.content ? sanitizeHtml(props.attrs.content) : '')
 </script>
 

@@ -16,7 +16,7 @@
  *
  * Two layers, so a lenient model cannot wave a bad plan through:
  *  - `precheck(plan)` is DETERMINISTIC — it fails items 1, 1b, 2, 3 straight from the plan's own
- *    text (not reproduced, unlinked evidence, hedging words in Cause, unverified assumptions).
+ *    text (not reproduced, unlinked evidence, hedging words in Cause).
  *  - `decide(plan, verdict)` merges both: any precheck FAIL overrides the model's PASS, and the
  *    stated verdict must agree with the rubric (a `go` with a FAIL is rejected, not trusted).
  *
@@ -32,7 +32,7 @@ export const RUBRIC = [
   { id: '1', name: 'Reproduced? (observed, not reasoned)' },
   { id: '1b', name: 'Every assumption has a reason and a working evidence link' },
   { id: '2', name: 'Cause proven? (evidence ties symptom to cause)' },
-  { id: '3', name: 'No unverified assumptions' },
+  { id: '3', name: 'No undeclared assumptions' },
   { id: '4', name: 'Smallest change (no over-engineering)' },
   { id: '5', name: 'Best practice, no hacks' },
   { id: '6', name: 'Scope matches the issue' },
@@ -80,11 +80,17 @@ export function precheck(planBody) {
   const hedge = cause.match(HEDGE)
   if (!cause) fails['2'] = { pass: false, evidence: 'Cause section is missing or empty' }
   else if (hedge) fails['2'] = { pass: false, evidence: `Cause is stated without a check ("${hedge[0]}")` }
-  const unverified = plan.assumptions.filter((a) => a.status === 'unverified')
-  if (unverified.length) fails['3'] = { pass: false, evidence: `plan relies on ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` }
+  // Declared `unverified` assumptions (with a reason, enforced by plan-shape → 1b) are not a floor
+  // failure: a reviewer with a read-only token checks them itself. See `planNotes`.
   const shapeErr = plan.errors.filter((e) => !/^Reproduced/.test(e) && !/^assumption \d+/.test(e))
   if (shapeErr.length) fails['1'] ||= { pass: false, evidence: `plan is malformed: ${shapeErr.join('; ')}` }
   return fails
+}
+
+/** PURE. Declared-unverified claims, surfaced under check 3 instead of failing it (#3035). */
+export function planNotes(planBody) {
+  const unverified = parsePlan(planBody).assumptions.filter((a) => a.status === 'unverified')
+  return unverified.length ? { 3: `plan declares ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` } : {}
 }
 
 /** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision. */
@@ -106,18 +112,29 @@ export function decide(planBody, verdictBody) {
   }
   if (verdict === 'needs-owner' && !v.question) errors.push('needs-owner needs a Question section')
   if (errors.length) return { ok: false, errors }
-  return { ok: true, verdict, stated: v.stated, items, failed, question: v.question, overridden: Object.keys(floor) }
+  return { ok: true, verdict, stated: v.stated, items, failed, question: v.question, overridden: Object.keys(floor), notes: planNotes(planBody) }
+}
+
+export const MAX_ROUNDS = 3
+export const JUDGEMENT = ['7', '9']
+
+/** PURE. After a no-go: hold for the owner, or re-run the planner? Only a failed judgement check
+ *  (7, 9) holds from round 2; mechanical failures retry up to MAX_ROUNDS (#3279). */
+export function holdOrRetry({ round, failedChecks = [] }) {
+  if (round >= MAX_ROUNDS) return 'hold'
+  if (round < 2) return 'retry'
+  return failedChecks.some((id) => JUDGEMENT.includes(String(id))) ? 'hold' : 'retry'
 }
 
 /** PURE. The typed-brief comment (plain language, depth collapsed). */
-export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) {
-  const final = d.verdict === 'no-go' && round >= maxRounds
-  const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}`).join('\n')
+export function renderComment(d, { round = 1, model = '' } = {}) {
+  const final = d.verdict === 'no-go' && holdOrRetry({ round, failedChecks: d.failed }) === 'hold'
+  const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}${d.notes?.[r.id] ? `\n  - _Declared:_ ${d.notes[r.id]}` : ''}`).join('\n')
   const head = {
     go: '✅ **Plan approved** — safe to build from it.\n**Next:** none, the build can start.',
     'no-go': final
-      ? `🔴 **Plan rejected twice** — the planner could not fix ${d.failed.filter((i) => i !== '7').length} check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.`
-      : `🔴 **Plan sent back** (round ${round} of ${maxRounds}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
+      ? `🔴 **Plan rejected after ${round} round${round === 1 ? '' : 's'}** — the planner could not fix ${d.failed.filter((i) => i !== '7').length} check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.`
+      : `🔴 **Plan sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
   return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
@@ -126,12 +143,18 @@ export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const render = args[0] === 'render'
-  const [planFile, verdictFile, round, model] = render ? args.slice(1) : args
-  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render] <plan-file> <verdict-file> [round model]'); process.exit(2) }
+  const route = args[0] === 'route'
+  const [planFile, verdictFile, round, model] = render || route ? args.slice(1) : args
+  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render|route] <plan-file> <verdict-file> [round model]'); process.exit(2) }
   let d
   try { d = decide(readFileSync(planFile, 'utf8'), readFileSync(verdictFile, 'utf8')) }
   catch (e) { console.error(e.message); process.exit(1) }
   if (!d.ok) console.error(d.errors.join('\n'))
+  if (route) {
+    if (!d.ok || d.verdict !== 'no-go') { console.error('route needs a no-go decision'); process.exit(1) }
+    console.log(holdOrRetry({ round: Number(round) || 1, failedChecks: d.failed }))
+    process.exit(0)
+  }
   console.log(render && d.ok ? renderComment(d, { round: Number(round) || 1, model: model || '' }) : JSON.stringify(d))
   process.exit(d.ok ? 0 : 1)
 }

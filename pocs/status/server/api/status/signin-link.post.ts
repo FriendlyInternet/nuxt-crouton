@@ -1,4 +1,4 @@
-import { maskEmail, rateLimitOk, safeRedirect } from '../../utils/signin-link-core'
+import { maskEmail, rateLimitOk, safeRedirect, sendSignInLink } from '../../utils/signin-link-core'
 
 // Owner-only sign-in: emails a magic link to the configured owner address. The caller
 // supplies no address, so this can never mail anyone else. Rate limited to 1 per minute.
@@ -23,11 +23,11 @@ export default defineEventHandler(async (event) => {
   await storage.setItem(key, now)
 
   try {
-    await (useServerAuth(event).api as any).signInMagicLink({
-      body: { email: owner, callbackURL: redirect },
-      headers: event.headers
-    })
-  } catch {
+    await sendSignInLink(useServerAuth(event).api, { email: owner, callbackURL: redirect, headers: event.headers })
+  } catch (e) {
+    if ((e as { statusCode?: number }).statusCode === 501) {
+      throw createError({ statusCode: 501, statusMessage: 'Magic-link sign-in is not enabled on this build.' })
+    }
     throw createError({ statusCode: 502, statusMessage: 'Could not send the sign-in link.' })
   }
   return { sent: true, hint: maskEmail(owner) }

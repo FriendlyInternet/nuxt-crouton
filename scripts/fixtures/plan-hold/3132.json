@@ -1,0 +1,56 @@
+{
+ "issue": 3132,
+ "labels": [
+  "status:blocked"
+ ],
+ "comments": [
+  {
+   "body": "<!-- work-run:3132 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/41479046452\n\nIts PR + preview land here when it finishes.",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _via the `delegate-pi` label_\n\nclassified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes. Not booted (needs a NuxtHub blob + login); reproduced by reading the code and NuxtHub's own check. `croutonUpload.allowedTypes: []` in crouton-assets is public runtime config; `upload-image.post.ts` does `uploadConfig.allowedTypes || [defaults]`, and `[]` is truthy so the defaults never apply. NuxtHub's `ensureBlob` only checks type when `options.types?.length` is non-zero, so an empty list ",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan sent back** (round 1 of 2) — 2 check(s) failed. The planner is re-run with these reasons.\n\n<details><summary>Review checklist</summary>\n\n- ❌ **1. Reproduced? (observed, not reasoned)** — The plan says \"yes\", then admits \"Not booted… reproduced by reading the code\". No test was run. A unit test against the real `ensureBlob` would have been cheap.",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes. Ran NuxtHub 0.10.8's real `ensureBlob` (from node_modules, h3 import shimmed) with a `text/html` Blob and 10MB max: `types: []` printed `ACCEPTED text/html`; `types: ['image/png']` printed `REJECTED File type is invalid, must be: image/png`. `croutonUpload.allowedTypes: []` (crouton-assets config) reaches `upload-image.post.ts`, where `||` keeps the truthy `[]`, so the upload route accepts a",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 1 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I re-ran NuxtHub 0.10.8's own `ensureBlob` (from the npm tarball, `dist/blob/lib/ensure.mjs`, h3 import shim",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision, agreed in chat 2026-10-29 22:46_\n\nDecision: allowed uploads are raster images, PDF and Office files (doc/docx/xls/xlsx/ppt/pptx); no HTML, no SVG. Everything that is not a raster image is served with `Content-Disposition: attachment` and `nosniff`. Read the active team from the full session (`getServerSession`/`requireServerSession`, `crouton-auth/server/utils/auth.ts:22,52`), not from `requ",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40960696266)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes. Ran NuxtHub 0.10.8's real `ensureBlob` (node_modules, h3 import shimmed) with a `text/html` Blob and 10MB max: `types: []` printed `ACCEPTED text/html`; `types: ['image/png']` printed `REJECTED File type is invalid, must be: image/png`. `croutonUpload.allowedTypes: []` (crouton-assets config) reaches `upload-image.post.ts`, where `||` keeps the truthy `[]`, so any type is accepted. The delet",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964606222).",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964606222).",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n✅ **Plan approved** — safe to build from it.\n**Next:** none, the build can start.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I re-ran NuxtHub 0.10.8's own type check myself (`npm pack @nuxthub/core@0.10.8`, `dist/blob/lib/ensure.mjs`, h3 import shimmed) on a `text/html` file: `[]` → ACCEPTED, `[\"image/png",
+   "userType": "Bot"
+  }
+ ]
+}

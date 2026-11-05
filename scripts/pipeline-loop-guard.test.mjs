@@ -10,8 +10,12 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
-  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim,
+  botActorAllowed, jobShouldFire, decideSplit, labelForChild, decideClaim, claimNotice,
   ALLOWED_BOT, MAX_DEPTH, MAX_CHILDREN, WORKER_TRIGGER, CLAIM_TTL_MINUTES,
 } from './pipeline-loop-guard.mjs'
 
@@ -46,10 +50,9 @@ test('the worker job fires on an exact work-this label, not on status:in-progres
   assert.equal(fire('delegate-pi'), false)
 })
 
-test('the decompose job fires on delegate-pi / delegate-hard only', () => {
-  const fire = (labelName) => jobShouldFire({ eventName: 'issues', action: 'labeled', labelName, trigger: ['delegate-pi', 'delegate-hard'] })
+test('the decompose job fires on delegate-pi only', () => {
+  const fire = (labelName) => jobShouldFire({ eventName: 'issues', action: 'labeled', labelName, trigger: ['delegate-pi'] })
   assert.equal(fire('delegate-pi'), true)
-  assert.equal(fire('delegate-hard'), true)
   assert.equal(fire('work-this'), false)
   assert.equal(fire('status:in-progress'), false)
 })
@@ -136,11 +139,33 @@ test('a CLOSED-unmerged PR does not refuse — a rejected attempt frees the issu
   assert.equal(v.action, 'proceed')
 })
 
-test('this run\'s OWN pr is ignored — a re-dispatch must not refuse itself', () => {
+test('a fresh run on an issue whose OWN PR is open is refused — it would force-push over the PR (#2990)', () => {
   const v = decideClaim({
     issueState: 'open',
     linkedPRs: [{ number: 1808, state: 'open' }],
-    self: { pr: 1808 },
+    self: { pr: 1808, prs: [1808] },
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 1808)
+})
+
+test('a CLOSED own PR is not a claim — a re-dispatch may rebuild the branch', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1808, state: 'closed', merged: false }],
+    self: { pr: 1808, prs: [1808] },
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a revision of an open own PR still proceeds (#2990 must not block revisions)', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1808, state: 'open' }],
+    self: { pr: 1808, prs: [1808] },
+    revision: { branch: 'work-1', pr: 1808, state: 'open', merged: false },
     now: T0,
   })
   assert.equal(v.action, 'proceed')
@@ -295,4 +320,81 @@ test('unknown merge time fails safe → still refuses even if reopened', () => {
     now: T0,
   })
   assert.equal(v.action, 'refuse')
+})
+
+// ── #3061: a revision is guarded on its PR, not its issue ───────────────────────────
+test('closed epic issue + open epic PR → a revision proceeds (#3061)', () => {
+  const v = decideClaim({ issueState: 'closed', revision: { branch: 'epic/1-x', pr: 3027, state: 'open', merged: false } })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a revision of a closed, merged or missing PR is refused and names it', () => {
+  const closed = decideClaim({ revision: { branch: 'b', pr: 5, state: 'closed', merged: false } })
+  const merged = decideClaim({ revision: { branch: 'b', pr: 6, state: 'closed', merged: true } })
+  const none = decideClaim({ revision: { branch: 'b', pr: null } })
+  assert.equal(closed.action, 'refuse'); assert.equal(closed.pr, 5); assert.match(closed.reason, /#5/)
+  assert.equal(merged.action, 'refuse'); assert.equal(merged.pr, 6); assert.match(merged.reason, /#6/)
+  assert.equal(none.action, 'refuse'); assert.equal(none.pr, undefined)
+})
+
+test('a failed PR lookup fails open even with a closed issue', () => {
+  assert.equal(decideClaim({ issueState: 'closed', revision: { branch: 'b', lookupFailed: true } }).action, 'proceed')
+})
+
+test('no revision + closed issue still refuses', () => {
+  assert.equal(decideClaim({ issueState: 'closed' }).action, 'refuse')
+})
+
+test('claimNotice posts a revision refusal on the PR, no @mention', () => {
+  const n = claimNotice({ reason: 'PR #3027 is already merged', pr: 3027, issue: 2826 })
+  assert.equal(n.target, 'pr'); assert.equal(n.number, 3027)
+  assert.ok(n.body.startsWith('🔴 Revision did not run')); assert.ok(!n.body.includes('@'))
+  const i = claimNotice({ reason: 'x', issue: 9 })
+  assert.equal(i.target, 'issue'); assert.equal(i.number, 9); assert.match(i.body, /Not picked up — x/)
+})
+
+test('claimNotice replan-failed is a 🔴 on the issue; the ⏸️ case is unchanged', () => {
+  const n = claimNotice({ reason: 'x', issue: 9, kind: 'replan-failed' })
+  assert.equal(n.target, 'issue'); assert.equal(n.number, 9)
+  assert.ok(n.body.startsWith('🔴 Your reply on the held plan produced no new plan — x'))
+  assert.match(claimNotice({ reason: 'x', issue: 9 }).body, /^⏸️/)
+})
+
+test('CLI: a merged-PR revision exits 1 and publishes claim_pr + claim_reason', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'claim-'))
+  const out = join(dir, 'out')
+  const r = spawnSync('node', [new URL('./pipeline-loop-guard.mjs', import.meta.url).pathname, 'claim-guard'], {
+    input: JSON.stringify({ issueState: 'closed', revision: { branch: 'b', pr: 77, state: 'closed', merged: true } }),
+    env: { ...process.env, GITHUB_OUTPUT: out }, encoding: 'utf8',
+  })
+  assert.equal(r.status, 1)
+  const o = readFileSync(out, 'utf8')
+  assert.match(o, /claim_pr=77/); assert.match(o, /claim_reason=PR #77/)
+})
+
+// ── #2990: mode-aware refusal on an open own work- PR ────────────────────────────────
+const ownOpenFacts = (extra = {}) => ({
+  linkedPRs: [{ number: 7, state: 'open', merged: false, headRef: 'work-50', baseRef: 'main' }],
+  self: { pr: 7, prs: [7] },
+  ...extra,
+})
+
+test('build mode + open own PR → refuse, and the message names the PR (#2990)', () => {
+  const v = decideClaim(ownOpenFacts({ mode: 'build' }))
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 7)
+  assert.match(v.reason, /PR #7 is already open for this issue — re-running would overwrite its branch/)
+})
+
+test('no mode (decomposer lane) + open own PR → refuse (#2990)', () => {
+  assert.equal(decideClaim(ownOpenFacts()).action, 'refuse')
+})
+
+test('plan mode + open own PR → proceed (#2990)', () => {
+  assert.equal(decideClaim(ownOpenFacts({ mode: 'plan' })).action, 'proceed')
+})
+
+test('revision + open own PR → proceed (#2990)', () => {
+  const v = decideClaim(ownOpenFacts({ mode: 'build', revision: { branch: 'work-50', pr: 7, state: 'open', merged: false } }))
+  assert.equal(v.action, 'proceed')
 })
