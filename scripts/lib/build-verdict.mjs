@@ -15,7 +15,7 @@
  *
  * Two layers, so a lenient model cannot wave a bad PR through:
  *  - `precheck(diff, ticket)` is DETERMINISTIC, read from `git diff -C --find-copies-harder`:
- *    item 2 fails on a file that is a copy of another (the original left behind), item 3 fails on
+ *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits), item 3 fails on
  *    an edit to a quality gate (`.fallow*`, lint/test config, the CI workflow) or a newly skipped
  *    test — unless the ticket names that file.
  *  - `decide(diff, ticket, verdict)` merges both: a precheck FAIL overrides the model's PASS.
@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url'
 
 export const REVIEW_MARKER = '<!-- build-review:v1 -->'
 export const MAX_ROUNDS = 2
+export const FINAL_MARKER = '<!-- build-review-final -->'
 export const RUBRIC = [
   { id: '1', name: 'Rule held (the diff keeps the ticket\'s rule, and a test aims at the rule itself)' },
   { id: '2', name: 'Moved, not copied (no duplicated file; anything orphaned is removed)' },
@@ -94,7 +95,16 @@ export function parseDiff(diff) {
 export function precheck(diff, ticket = '') {
   const files = parseDiff(diff)
   const fails = {}
-  const copies = files.filter((f) => f.status === 'copied')
+  // --find-copies-harder reports a copy of ANY tracked file, so a copy only means "original left
+  // behind" when its source is named in the ticket or sits in a package the diff also edits (#3160).
+  const scopeOf = (p) => {
+    const seg = p.split('/')
+    if (['packages', 'apps', 'pocs'].includes(seg[0]) && seg.length > 2) return `${seg[0]}/${seg[1]}`
+    if (['scripts', '.github'].includes(seg[0])) return seg[0]
+    return null
+  }
+  const touched = new Set(files.filter((f) => f.status !== 'copied' && f.status !== 'added').map((f) => scopeOf(f.from)).filter(Boolean))
+  const copies = files.filter((f) => f.status === 'copied' && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
   if (copies.length) {
     fails['2'] = { pass: false, evidence: `copied, original left behind: ${copies.map((f) => `${f.from} → ${f.path}`).join('; ')}` }
   }
@@ -130,24 +140,24 @@ export function decide(diff, ticket, verdictBody) {
 }
 
 /** PURE. The typed-brief comment (plain language, depth collapsed). */
-export function renderComment(d, { round = 1, model = '' } = {}) {
+export function renderComment(d, { round = 1, model = '', okAgain = '' } = {}) {
   const final = d.verdict === 'no-go' && round >= MAX_ROUNDS
   const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}`).join('\n')
   const reasons = d.failed.map((id) => `- ${RUBRIC.find((r) => r.id === id).name.split(' (')[0]}: ${d.items[id].evidence}`).join('\n')
   const head = {
     go: '✅ **Build checked against its ticket** — nothing wrong found, safe to merge.\n**Next:** none.',
     'no-go': final
-      ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply with how this should change.`
+      ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.${okAgain ? `\n${okAgain}` : ''}`
       : `🔴 **Build sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.length} problem(s) found.\n**Worker:** fix these, then push again:\n${reasons}`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
-  return `${REVIEW_MARKER}\n<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
+  return `${REVIEW_MARKER}\n${final ? `${FINAL_MARKER}\n` : ''}<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const render = args[0] === 'render'
-  const [diffFile, ticketFile, verdictFile, round, model] = render ? args.slice(1) : args
+  const [diffFile, ticketFile, verdictFile, round, model, okAgain] = render ? args.slice(1) : args
   if (!diffFile || !ticketFile || !verdictFile) {
     console.error('usage: build-verdict.mjs [render] <diff-file> <ticket-file> <verdict-file> [round model]')
     process.exit(2)
@@ -156,6 +166,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try { d = decide(readFileSync(diffFile, 'utf8'), readFileSync(ticketFile, 'utf8'), readFileSync(verdictFile, 'utf8')) }
   catch (e) { console.error(e.message); process.exit(1) }
   if (!d.ok) console.error(d.errors.join('\n'))
-  console.log(render && d.ok ? renderComment(d, { round: Number(round) || 1, model: model || '' }) : JSON.stringify(d))
+  console.log(render && d.ok ? renderComment(d, { round: Number(round) || 1, model: model || '', okAgain: okAgain || '' }) : JSON.stringify(d))
   process.exit(d.ok ? 0 : 1)
 }
