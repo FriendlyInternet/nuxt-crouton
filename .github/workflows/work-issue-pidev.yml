@@ -1099,7 +1099,7 @@ jobs:
                 if [ "$REREVIEW" = "true" ]; then TAIL="a second build review runs on the same commit."; else TAIL="nothing else to review."; fi
                 [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3432)_\n\n📝 **PR description updated from [your comment](%s)** — no code change; %s' "$FEEDBACK_FROM" "$TAIL")" 2>&1 | tail -1 || true
                 if [ "$REREVIEW" = "true" ]; then
-                  gh workflow run build-review.yml --repo "$GITHUB_REPOSITORY" -f pr="$RPR" -f reason=body || echo "::warning::could not dispatch the body re-review (#3432)"
+                  node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$RPR" '{issue:$i,workflow:"build-review.yml",inputs:{pr:($i|tostring),reason:"body"}}')" || echo "::warning::could not dispatch the body re-review (#3432)"
                 fi
               elif [ "$NOTE" = "reply" ]; then
                 echo "revise: answered on the PR without a code change"
