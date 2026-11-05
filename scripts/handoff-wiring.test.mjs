@@ -120,3 +120,19 @@ test('reads and the hand-back POST sit inside the protected hand-off step', () =
   assert.doesNotMatch(fix, /issues\/\$ISSUE\/comments" --method POST/, 'fix-ci hand-back POST must run inside handoff-exec')
   assert.match(fix, /postBodyFile/)
 })
+
+// #3361: the merge check saves a retry, the safety net never goes red on the limit, the sweep isn't cron-only.
+test("merge check's outer catch goes through deferMergeCheck", () => {
+  const a = readFileSync(join(ROOT, '.github/workflows/automerge-epic-subpr.yml'), 'utf8')
+  for (const t of ['workflow_dispatch:', 'deferMergeCheck(e, currentPr', 'HANDOFF_FALLBACK_TOKEN', 'issues: write']) assert.ok(a.includes(t), t)
+  const merge = a.slice(0, a.indexOf('Sweep — dispatch build review'))
+  assert.ok(!merge.includes('deferOrThrow(e, core.warning)'))
+})
+test('build-review safety net defers the limit', () => {
+  const a = readFileSync(join(ROOT, '.github/workflows/automerge-epic-subpr.yml'), 'utf8')
+  assert.ok(a.slice(a.indexOf('Sweep — dispatch build review')).includes('deferOrThrow(e, core.warning)'))
+})
+test('hand-off sweep does not depend on cron alone', () => {
+  const h = readFileSync(join(ROOT, '.github/workflows/handoff-sweep.yml'), 'utf8')
+  assert.ok(h.includes('workflow_run:') && h.includes('workflows: ["CI"]'))
+})

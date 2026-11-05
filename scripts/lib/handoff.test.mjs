@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { classifyHandoffError, RUN_NAME, handoffRunTitle, labelHandoffDone, handoffMarker, parseHandoff } from './handoff.mjs'
-import { handoffExec, handoffGuard } from '../handoff-exec.mjs'
+import { handoffExec, handoffGuard, deferMergeCheck, recordFailed } from '../handoff-exec.mjs'
 import { sweep } from '../handoff-sweep.mjs'
 
 const ghErr = (stderr) => Object.assign(new Error('Command failed: gh'), { stderr })
@@ -147,6 +147,7 @@ test('7: run titles match the run-name in each workflow file', () => {
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', plan: '9' }), 'work #5 build 9')
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', feedback: '3' }), 'work #5 revise 3')
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), 'work #5 plan -')
+  assert.equal(handoffRunTitle('automerge-epic-subpr.yml', { pr: '7' }), 'automerge #7')
 })
 test('8: marker write falls back to the second token; both failing rethrows', async () => {
   const w = world({ failOn: (s, t) => (s.startsWith('workflow run') ? S500() : t === 'app' && s.includes('/comments') ? LIMIT() : null) })
@@ -173,4 +174,89 @@ test('classifyHandoffError reads stderr of a real execFileSync failure (status=1
   assert.equal(srv.status, 1)
   assert.deepEqual(classifyHandoffError(srv), { action: 'defer', reason: 'server' })
   assert.equal(classifyHandoffError(run('gh: Not Found (HTTP 404)')).action, 'throw')
+})
+
+// #3361: the merge check's outer catch saves a retry on limit / 5xx; anything else stays red.
+const OCTO_LIMIT = () => Object.assign(new Error('API rate limit exceeded for installation ID 1'), { status: 403, response: { headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(T0 / 1000 + 1800) } } })
+const pendingMarkers = (w, n) => (w.comments[n] || []).filter((c) => parseHandoff(c.body))
+test('10: merge check hit by the limit -> a retry is saved; the sweep replays it once', async () => {
+  const w = world(); const warns = []
+  const r = await deferMergeCheck(OCTO_LIMIT(), 7, w.deps, (m) => warns.push(m))
+  assert.equal(r.recorded, true); assert.equal(warns.length, 1)
+  const ms = pendingMarkers(w, 7); assert.equal(ms.length, 1)
+  const step = parseHandoff(ms[0].body)
+  assert.equal(step.workflow, 'automerge-epic-subpr.yml'); assert.equal(step.inputs.pr, '7'); assert.equal(step.reason, 'limit')
+  assert.ok(w.labels.has('7:handoff:pending'))
+  w.t += 3600e3
+  await sweep(w.deps); assert.equal(w.dispatched, 1)
+  await sweep(w.deps); assert.equal(w.dispatched, 1)
+})
+test('10a: a 502 in the merge check is saved the same way', async () => {
+  const w = world()
+  const r = await deferMergeCheck(Object.assign(new Error('Bad Gateway'), { status: 502 }), 7, w.deps, () => {})
+  assert.equal(r.recorded, true); assert.equal(parseHandoff(pendingMarkers(w, 7)[0].body).reason, 'server')
+})
+test('10b: a run titled automerge #7 after since already exists -> the replay does not dispatch', async () => {
+  const w = world({ runs: [{ display_title: 'automerge #7', created_at: new Date(T0 + 1800e3).toISOString() }] })
+  await deferMergeCheck(OCTO_LIMIT(), 7, w.deps, () => {})
+  w.t += 3600e3
+  await sweep(w.deps); assert.equal(w.dispatched || 0, 0)
+})
+test('10c: any other error rethrows and saves nothing', async () => {
+  for (const e of [Object.assign(new Error('Not Found'), { status: 404 }), new TypeError('boom')]) {
+    const w = world(); const warns = []
+    await assert.rejects(deferMergeCheck(e, 7, w.deps, (m) => warns.push(m)), (x) => x === e)
+    assert.equal(pendingMarkers(w, 7).length, 0); assert.ok(!w.labels.has('7:handoff:pending')); assert.equal(warns.length, 0)
+  }
+})
+test('10d: limit with no PR in hand -> green, nothing saved', async () => {
+  const w = world()
+  assert.deepEqual(await deferMergeCheck(OCTO_LIMIT(), null, w.deps, () => {}), { recorded: false })
+  assert.equal(w.calls.length, 0)
+})
+test('10e: both tokens fail to write the retry -> still green, says so', async () => {
+  const w = world({ failOn: (s) => (s.includes('/comments') ? LIMIT() : null) }); const warns = []
+  const r = await deferMergeCheck(OCTO_LIMIT(), 7, w.deps, (m) => warns.push(m))
+  assert.deepEqual(r, { recorded: false }); assert.ok(warns.some((m) => /retry not recorded/.test(m)))
+})
+
+const S502 = () => Object.assign(new Error('bad gateway'), { status: 502 })
+test('3g: guard — a 5xx that hid a landed label is not repeated by the sweep', async () => {
+  const w = world()
+  const step = { kind: 'label', issue: 6, label: 'work-this' }
+  const r = await handoffGuard(step, async () => {
+    w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: 'work-this' }, actor: { login: 'nuxt-harness[bot]' } })
+    w.t += 5000; throw S502()
+  }, w.deps)
+  assert.equal(r.deferred, true)
+  assert.match(w.comments[6][0].body, new RegExp(new Date(T0).toISOString()))
+  w.t += 3600e3; await sweep(w.deps)
+  assert.ok(!w.adds)
+  assert.ok(!w.calls.some((c) => /DELETE/.test(c) && /work-this/.test(c)))
+  assert.match(w.comments[6][0].body, /handoff-done/)
+})
+test('3h: guard — a dispatch whose 5xx hid a created run is not dispatched again', async () => {
+  const w = world()
+  const step = { ...dispatchStep }
+  await handoffGuard(step, async () => {
+    w.runs.push({ display_title: handoffRunTitle(step.workflow, step.inputs), created_at: new Date(w.t).toISOString() })
+    w.t += 5000; throw S502()
+  }, w.deps)
+  w.t += 3600e3; await sweep(w.deps)
+  assert.equal(w.dispatched, undefined)
+})
+test('3i: record path keeps the caller\'s pre-call since', async () => {
+  const w = world(); w.t = T0 + 60e3
+  await recordFailed({ step: { kind: 'label', issue: 5, label: 'work-this', since: '2026-11-04T09:59:00.000Z' }, reason: 'server' }, w.deps)
+  assert.match(w.comments[5][0].body, /2026-11-04T09:59:00\.000Z/)
+  const w2 = world(); w2.t = T0 + 60e3
+  await recordFailed({ step: { kind: 'label', issue: 5, label: 'work-this' }, reason: 'server' }, w2.deps)
+  assert.match(w2.comments[5][0].body, /2026-11-04T10:01:00\.000Z/)
+})
+test('3j: deferHandoff passes since taken before fn()', async () => {
+  const { deferHandoff } = await import('../apply-decompose-plan.mjs')
+  let clock = T0; const calls = []
+  deferHandoff((cmd, args) => { calls.push(args); return '' }, { kind: 'label', issue: 5, label: 'work-this' },
+    () => { clock += 5000; throw ghErr('HTTP 500') }, { pending: [], log() {}, now: () => clock })
+  assert.equal(JSON.parse(calls[0].at(-1)).step.since, new Date(T0).toISOString())
 })

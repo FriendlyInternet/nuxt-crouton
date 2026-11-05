@@ -9,8 +9,9 @@ import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import {
   PENDING_LABEL, classifyHandoffError, handoffMarker, parseHandoff, handoffKey,
-  handoffRunTitle, labelHandoffDone, dispatchHandoffDone,
+  handoffRunTitle, labelHandoffDone, dispatchHandoffDone, automergeRetryStep,
 } from './lib/handoff.mjs'
+import { deferOrThrow } from './lib/rate-limit.mjs'
 
 const run = promisify(execFile)
 
@@ -175,15 +176,31 @@ export async function handoffExec(step, d = makeDeps()) {
 
 // For octokit call sites: run fn(); on limit/5xx record the step and return {deferred:true}.
 export async function handoffGuard(step, fn, d = makeDeps()) {
+  const since = floorSec(d.now()) // before fn(): a 5xx can hide a write that landed (#3362)
   try {
     return { deferred: false, value: await fn() }
   } catch (e) {
     const c = classifyHandoffError(e)
     if (c.action !== 'defer') throw e
-    await recordPending({ ...step, since: floorSec(d.now()) }, c, d)
+    await recordPending({ ...step, since }, c, d)
     d.log(`::warning::hand-off ${step.kind} on #${step.issue} deferred (${c.reason}); the hourly sweep replays it`)
     return { deferred: true, reason: c.reason }
   }
+}
+
+// Outer catch of the merge check (#3361): not limit/5xx -> rethrown (red, nothing saved).
+// Limit/5xx -> green; with a PR in hand, a retry of the merge check is saved for the sweep.
+export async function deferMergeCheck(e, pr, d = makeDeps(), warn = d.log) {
+  deferOrThrow(e, warn)
+  const c = classifyHandoffError(e)
+  if (!pr || c.action !== 'defer') return { recorded: false }
+  try { await recordPending({ ...automergeRetryStep(pr), since: floorSec(d.now()) }, c, d); return { recorded: true } }
+  catch (re) { warn(`retry not recorded: ${re.message}`); return { recorded: false } }
+}
+
+// For synchronous callers: the step already failed. Keeps a caller-supplied pre-call `since` (#3362).
+export async function recordFailed({ step, reason, resetAt }, d = makeDeps()) {
+  return recordPending({ ...step, since: step.since || floorSec(d.now()) }, { reason, resetAt }, d)
 }
 
 async function main() {
@@ -191,8 +208,7 @@ async function main() {
   if (!kind || !json) { console.error("usage: handoff-exec.mjs <kind> '<json>'"); process.exit(2) }
   if (kind === 'record') { // for synchronous callers (apply-decompose-plan): {step, reason, resetAt} already failed
     const { step, reason, resetAt } = JSON.parse(json)
-    const d = makeDeps()
-    await recordPending({ ...step, since: floorSec(d.now()) }, { reason, resetAt }, d)
+    await recordFailed({ step, reason, resetAt })
     console.log(`hand-off ${step.kind} on #${step.issue}: recorded as pending (${reason})`)
     return
   }
