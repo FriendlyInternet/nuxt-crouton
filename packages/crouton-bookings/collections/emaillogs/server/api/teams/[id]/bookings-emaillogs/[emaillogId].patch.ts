@@ -25,12 +25,12 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)
 
   return await updateBookingsEmaillog(emaillogId, team.id, user.id, {
-    bookingId: body.bookingId,
-    templateId: body.templateId,
+    bookingId: body.bookingId ?? undefined,
+    templateId: body.templateId ?? undefined,
     recipientEmail: body.recipientEmail,
     triggerType: body.triggerType,
     status: body.status,
-    sentAt: body.sentAt,
-    error: body.error
+    sentAt: body.sentAt ?? undefined,
+    error: body.error ?? undefined
   }, { role: membership.role })
 })

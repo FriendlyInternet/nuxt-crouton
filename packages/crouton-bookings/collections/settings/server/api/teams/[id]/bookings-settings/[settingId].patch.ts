@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)
 
   return await updateBookingsSetting(settingId, team.id, user.id, {
-    statuses: body.statuses,
-    groups: body.groups
+    statuses: body.statuses ?? undefined,
+    groups: body.groups ?? undefined
   }, { role: membership.role })
 })

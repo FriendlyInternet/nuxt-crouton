@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     location: body.location,
     date: body.date,
     slot: body.slot,
-    group: body.group,
+    group: body.group ?? undefined,
     quantity: body.quantity,
     status: body.status
   }, { role: membership.role })

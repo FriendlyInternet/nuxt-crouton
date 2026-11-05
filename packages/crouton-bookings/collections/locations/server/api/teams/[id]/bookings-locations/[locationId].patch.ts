@@ -60,20 +60,20 @@ export default defineEventHandler(async (event) => {
 
   return await updateBookingsLocation(locationId, team.id, user.id, {
     title: body.title,
-    color: body.color,
-    street: body.street,
-    zip: body.zip,
-    city: body.city,
-    location: body.location,
-    content: body.content,
-    allowedMemberIds: body.allowedMemberIds,
-    slots: body.slots,
-    openDays: body.openDays,
-    slotSchedule: body.slotSchedule,
-    blockedDates: body.blockedDates,
-    inventoryMode: body.inventoryMode,
-    quantity: body.quantity,
-    maxBookingsPerMonth: body.maxBookingsPerMonth,
-    translations: body.translations
+    color: body.color ?? undefined,
+    street: body.street ?? undefined,
+    zip: body.zip ?? undefined,
+    city: body.city ?? undefined,
+    location: body.location ?? undefined,
+    content: body.content ?? undefined,
+    allowedMemberIds: body.allowedMemberIds ?? undefined,
+    slots: body.slots ?? undefined,
+    openDays: (body.openDays ?? undefined) as unknown as string[] | undefined,
+    slotSchedule: body.slotSchedule ?? undefined,
+    blockedDates: body.blockedDates ?? undefined,
+    inventoryMode: body.inventoryMode ?? undefined,
+    quantity: body.quantity ?? undefined,
+    maxBookingsPerMonth: body.maxBookingsPerMonth ?? undefined,
+    translations: body.translations ?? undefined
   }, { role: membership.role })
 })

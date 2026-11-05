@@ -1,6 +1,7 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { z } from 'zod'
+import type { NewBookingsSetting } from '../../../../../types'
 import { createBookingsSetting } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 
@@ -21,5 +22,5 @@ export default defineEventHandler(async (event) => {
     owner: user.id,
     createdBy: user.id,
     updatedBy: user.id
-  })
+  } as NewBookingsSetting)
 })

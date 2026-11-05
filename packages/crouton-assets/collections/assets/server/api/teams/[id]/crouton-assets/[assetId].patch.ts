@@ -31,12 +31,12 @@ export default defineEventHandler(async (event) => {
   return await updateCroutonAsset(assetId, team.id, user.id, {
     filename: body.filename,
     pathname: body.pathname,
-    contentType: body.contentType,
-    size: body.size,
-    category: body.category,
-    width: body.width,
-    height: body.height,
-    alt: body.alt,
+    contentType: body.contentType ?? undefined,
+    size: body.size ?? undefined,
+    category: body.category ?? undefined,
+    width: body.width ?? undefined,
+    height: body.height ?? undefined,
+    alt: body.alt ?? undefined,
     uploadedAt: body.uploadedAt
   }, { role: membership.role })
 })

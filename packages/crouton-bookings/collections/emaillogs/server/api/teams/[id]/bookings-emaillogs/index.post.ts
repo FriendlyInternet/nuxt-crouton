@@ -26,5 +26,5 @@ export default defineEventHandler(async (event) => {
     owner: user.id,
     createdBy: user.id,
     updatedBy: user.id
-  })
+  } as Parameters<typeof createBookingsEmaillog>[0])
 })
