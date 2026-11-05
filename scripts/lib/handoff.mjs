@@ -38,7 +38,7 @@ export function handoffKey(step) {
 // One definition of the run title; the workflows' `run-name:` is pinned to it by a test.
 export const RUN_NAME = {
   'work-issue-pidev.yml':
-    "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}",
+    "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode || 'build' }}${{ inputs.feedback != '' && ' · revise' || '' }}",
   'build-review.yml':
     "${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}",
   'fix-ci-on-failure.yml':
@@ -56,7 +56,7 @@ export function handoffRunTitle(workflow, inputs = {}) {
   const i = inputs
   switch (workflow) {
     case 'work-issue-pidev.yml':
-      return `work #${i.issue} ${i.feedback ? 'revise' : i.mode || 'build'} ${i.plan || i.feedback || '-'}`
+      return `#${i.issue} · ${i.mode || 'build'}${i.feedback ? ' · revise' : ''}`
     case 'build-review.yml': return `build-review #${i.pr}`
     case 'fix-ci-on-failure.yml': return `fix-ci #${i.pr}`
     case 'ticket-review.yml': return `ticket-review #${i.epic}`

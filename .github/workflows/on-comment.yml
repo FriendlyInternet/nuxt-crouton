@@ -185,6 +185,16 @@ jobs:
               + `<sub>🤖 agent pipeline (CI) · approve-draft-pr #2051</sub>` })
             core.info(`Released #${pull_number} (${approvalKind(body)}).`)
 
+            // #3210 — tick "Owner ok" ONLY here: a real owner `ok` (isApproval above, which rejects
+            // agent comments), never the plan:approved label. Cosmetic; never fails the run.
+            try {
+              const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
+              const closes = issueFromPrBody(pr.body || '')
+              if (closes) require('node:child_process').execFileSync('node',
+                ['scripts/flow-checklist.mjs', String(closes), 'ok', '--link', context.payload.comment.html_url],
+                { env: { ...process.env, GH_TOKEN: '${{ steps.app-token.outputs.token }}', GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
+            } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
+
   approve-epic:
     needs: route
     if: needs.route.outputs.kind == 'approve-epic'
