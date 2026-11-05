@@ -52,9 +52,9 @@ export default defineEventHandler(async (event) => {
     fromEmail: body.fromEmail,
     triggerType: body.triggerType,
     recipientType: body.recipientType,
-    isActive: body.isActive ?? undefined,
-    daysOffset: body.daysOffset ?? undefined,
-    locationId: body.locationId ?? undefined,
-    translations: body.translations ?? undefined
-  }, { role: membership.role })
+    isActive: body.isActive,
+    daysOffset: body.daysOffset,
+    locationId: body.locationId,
+    translations: body.translations
+  } as Parameters<typeof updateBookingsEmailtemplate>[3], { role: membership.role })
 })

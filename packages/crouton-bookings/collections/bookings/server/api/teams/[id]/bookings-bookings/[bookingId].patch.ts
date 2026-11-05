@@ -27,8 +27,8 @@ export default defineEventHandler(async (event) => {
     location: body.location,
     date: body.date,
     slot: body.slot,
-    group: body.group ?? undefined,
+    group: body.group,
     quantity: body.quantity,
     status: body.status
-  }, { role: membership.role })
+  } as Parameters<typeof updateBookingsBooking>[3], { role: membership.role })
 })

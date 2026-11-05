@@ -82,4 +82,17 @@ describe('package collection body validation (#3377)', () => {
     await expect(run(`../${G}/index.post`)).rejects.toThrow()
     expect(hoisted.create).not.toHaveBeenCalled()
   })
+
+  it('PATCH keeps null so a field can be cleared', async () => {
+    params = { bookingId: 'b1', locationId: 'l1', emailtemplateId: 'e1' }
+    body = { group: null }
+    await run(`../${B}/[bookingId].patch`)
+    expect(hoisted.update.mock.calls.at(-1)![3].group).toBeNull()
+    body = { maxBookingsPerMonth: null }
+    await run(`../${L}/[locationId].patch`)
+    expect(hoisted.update.mock.calls.at(-1)![3].maxBookingsPerMonth).toBeNull()
+    body = { locationId: null }
+    await run(`../${E}/[emailtemplateId].patch`)
+    expect(hoisted.update.mock.calls.at(-1)![3].locationId).toBeNull()
+  })
 })
