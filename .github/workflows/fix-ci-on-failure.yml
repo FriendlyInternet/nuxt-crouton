@@ -85,7 +85,6 @@ jobs:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
-            const MAX = 3
             const { owner, repo } = context.repo
             const manual = context.eventName === 'workflow_dispatch'
             let run = context.payload.workflow_run
@@ -116,7 +115,7 @@ jobs:
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
             // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
             // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
-            const { decideFixBotDispatch, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            const { fixBotWillTry, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
             let go
             if (/^epic\//.test(full.head.ref)) {
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
@@ -129,40 +128,39 @@ jobs:
               }
               go = ownerMergeGo({ comments, commits, owner: process.env.OWNER_LOGIN || 'pmcp' })
             }
-            const verdict = decideFixBotDispatch({ head: full.head.ref, base: full.base.ref, state: full.state, go })
-            if (!verdict.run) {
-              core.info(`Not fixing #${pr.number}: ${verdict.reason}.`); core.setOutput('proceed', 'false'); return
-            }
+            const labels = (full.labels || []).map(l => l.name)
             // Started by hand: there is no workflow_run payload, so find the failing CI/E2E run for
             // this head (a WORKFLOW run id — a check-run id would make `gh run view` fail silently).
+            let failed = null
             if (manual) {
               const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                 { owner, repo, head_sha: full.head.sha, per_page: 100 })
-              const failed = pickFailedRun(runs)
-              if (!failed) {
-                await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
-                  '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
-                  `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
-                core.setOutput('proceed', 'false'); return
-              }
-              run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref }
+              failed = pickFailedRun(runs)
+              if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
             }
-            const labels = (full.labels || []).map(l => l.name)
-            // Already escalated — don't pile on while a human is in the loop.
-            if (labels.includes('status:blocked')) {
-              core.info('PR already blocked — standing down.'); core.setOutput('proceed', 'false'); return
+            // #3373: the single "will the bot try?" decision (shared with status.yml's red ping).
+            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels,
+              failures: run ? [{ workflow: run.name, conclusion: run.conclusion }] : [] })
+            if (d.who === 'none') {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
+                '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
+                `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
+              core.setOutput('proceed', 'false'); return
             }
+            if (d.who === 'owner') {
+              core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('proceed', 'false'); return
+            }
+            const attemptLabel = d.attemptLabel
+            const attempts = d.attempts
 
             // Attempt count lives in a `ci-fix-attempts:N` label on the PR (also read by #337).
-            const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
-            const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
             // The pi worker's `work-<n>` branch.
             const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
-            if (attempts >= MAX) {
+            if (d.who === 'gave-up') {
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
                 '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
                 `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
@@ -368,7 +366,19 @@ jobs:
           REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
           PUSHED=0
           if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
-          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then echo "No fix commit — nothing to push."; exit 0; fi
+          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then
+            echo "No fix commit — nothing to push."
+            # #3373: the first-failure ping no longer mentions the owner while the bot is on it, so a
+            # silent no-fix exit would reach nobody. Ping once unless the agent already blocked the issue.
+            if [ -n "${ISSUE:-}" ] && ! gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx 'status:blocked'; then
+              gh pr comment "$PR" --body "<!-- pipeline-note -->
+          🔴 **@pmcp — auto-fix stopped without a fix; \`$RUN_NAME\` is still failing.**
+
+          **Fix:** take a look, then push a fix or reply to resume." || true
+              gh issue edit "$ISSUE" --add-label "status:blocked" || true
+            fi
+            exit 0
+          fi
           git fetch -q origin "$BASE"
           git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
           git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
