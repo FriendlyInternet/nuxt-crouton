@@ -21,15 +21,18 @@
  *   - <ticket item> — Covered: <where in this plan>   (or `— Not covered: <reason>`)
  * It proves the section was written, not that it is true. First plans are unchanged.
  *
- *   node scripts/lib/plan-shape.mjs [--revised] <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
+ *   node scripts/lib/plan-shape.mjs [--revised [--fresh]] <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { hasMarker } from './marker.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Assumptions', 'Needs owner']
 // Required only on a re-plan (`--revised`, #3149): proof the planner re-read the ticket.
 export const REREAD = 'Ticket re-read'
+// #3341: a revision also says what it changed (waived by `--fresh`, a plan started from scratch).
+export const CHANGES = 'Changes from the previous plan'
 
 const norm = (s) => s.toLowerCase().replace(/[^a-z]/g, '')
 
@@ -39,7 +42,7 @@ function splitSections(body) {
   for (const line of body.split('\n')) {
     const h = line.match(/^#{2,4}\s+\**\s*(.+?)\s*\**\s*$/)
     if (h) {
-      cur = [...SECTIONS, REREAD].find((s) => norm(s) === norm(h[1])) || null
+      cur = [...SECTIONS, REREAD, CHANGES].find((s) => norm(s) === norm(h[1])) || null
       if (cur) out[cur] = ''
       continue
     }
@@ -109,9 +112,10 @@ export function parseReread(text) {
   return { items, errors }
 }
 
-export function parsePlan(body, { revised = false } = {}) {
+export function parsePlan(body, { revised = false, fresh = false } = {}) {
   const errors = []
   if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
+  else if (!hasMarker(body, PLAN_MARKER)) errors.push(`marker ${PLAN_MARKER} must be the first line`)
   const sections = splitSections(body)
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
@@ -125,6 +129,7 @@ export function parsePlan(body, { revised = false } = {}) {
       errors.push(...r.errors)
     }
   }
+  if (revised && !fresh && !sections[CHANGES]) errors.push(`missing or empty section: ${CHANGES} (required on a re-plan; --fresh waives it)`)
   const reproduced = sections.Reproduced ? parseReproduced(sections.Reproduced, errors) : null
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
@@ -135,9 +140,10 @@ export function parsePlan(body, { revised = false } = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const revised = args.includes('--revised')
+  const fresh = args.includes('--fresh')
   const file = args.find((a) => !a.startsWith('--'))
-  if (!file) { console.error('usage: plan-shape.mjs [--revised] <comment-body-file>'); process.exit(2) }
-  const verdict = parsePlan(readFileSync(file, 'utf8'), { revised })
+  if (!file) { console.error('usage: plan-shape.mjs [--revised [--fresh]] <comment-body-file>'); process.exit(2) }
+  const verdict = parsePlan(readFileSync(file, 'utf8'), { revised, fresh })
   console.log(JSON.stringify(verdict))
   process.exit(verdict.ok ? 0 : 1)
 }
