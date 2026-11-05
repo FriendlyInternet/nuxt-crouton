@@ -411,4 +411,12 @@ describe('allowCreate: superAdmin mapping', () => {
     expect(resolve(true)).toBe(true)
     expect(resolve(false)).toBe(false)
   })
+  it('unset allowCreate defaults to true', () => {
+    const cfg = buildOrganizationConfig({ teams: {} } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(true)
+  })
+  it('unset allowCreate with defaultTeamSlug defaults to false', () => {
+    const cfg = buildOrganizationConfig({ teams: { defaultTeamSlug: 'acme' } } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(false)
+  })
 })

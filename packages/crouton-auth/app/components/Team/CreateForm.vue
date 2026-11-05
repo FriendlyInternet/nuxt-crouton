@@ -99,7 +99,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
   emit('submit', { name: event.data.name, slug: event.data.slug })
 
   if (!canCreateTeam.value) {
-    // Not allowed: the create-team page redirects these users away; no "max teams" message
+    notify.error(t('teams.cannotCreateTeam'), { description: t('teams.maxTeamsReached') })
     return
   }
 
