@@ -9,6 +9,7 @@ import path from 'node:path'
 const LIMIT = 21000
 
 /** Yield { line, key, value } for block scalars and single-line values containing `${{`. */
+// fallow-ignore-next-line complexity -- one line-scan over YAML scalar forms (block/inline/quoted); each branch is a distinct form, covered by workflow-expr-limit.test.mjs (#3382)
 export function scalarsOf(text) {
   const lines = text.split('\n')
   const out = []
@@ -76,6 +77,7 @@ export function check(text, { limit = 18000, warnAt = 15000, file = '' } = {}) {
   return { errors, warnings, max, expressions }
 }
 
+// fallow-ignore-next-line complexity -- flat workflow-file discovery with a few existence guards; CRAP is a zero-coverage artifact on a CLI helper (#3382)
 function defaultFiles() {
   const files = []
   const wf = '.github/workflows'

@@ -6,6 +6,7 @@ import { execFileSync as nodeExecFileSync } from 'node:child_process'
 import { parseRunStart } from './run-start.mjs'
 import { decideDeliverable, pushedThisRun } from './run-deliverable.mjs'
 
+// fallow-ignore-next-line complexity -- the pi worker's artifact-gate moved verbatim out of work-issue-pidev.yml; each branch is a distinct deliverable check, covered by artifact-gate.test.mjs (#3382)
 export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync }) {
   const issue_number = Number(env.ISSUE_NUMBER)
   if (env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
