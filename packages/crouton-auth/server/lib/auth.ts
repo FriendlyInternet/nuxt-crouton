@@ -410,6 +410,15 @@ function buildDatabaseHooks(
         // magic link, OAuth) goes through user creation, so one hook covers all.
         before: async (user, ctx) => {
           if (config.signup !== 'invite') return
+          // Review previews only: the seeded reviewer account (review+<app>-<key>@example.com,
+          // scripts/seed-review-login.mjs) signs up without an invite so the deployed
+          // smoke can log in. Never active on a non-review (production) build.
+          try {
+            const isReview = (useRuntimeConfig().public as { croutonReview?: unknown } | undefined)?.croutonReview
+            if (isReview && /^review\+[^@]+@example\.com$/i.test(String(user.email))) return
+          } catch {
+            // no runtime config -> not a review build
+          }
           // Site super admins may create users (admin create-user screen)
           try {
             const session = ctx ? await getSessionFromCtx(ctx) : null
