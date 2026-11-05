@@ -1,8 +1,21 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
+import { z } from 'zod'
 import { updateCroutonAsset } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import type { CroutonAsset } from '../../../../../types'
+
+// Hand-added body validation (#3377)
+const bodySchema = z.object({
+  filename: z.string().min(1),
+  pathname: z.string().min(1),
+  contentType: z.string().nullish(),
+  size: z.number().int().nullish(),
+  category: z.string().nullish(),
+  width: z.number().int().nullish(),
+  height: z.number().int().nullish(),
+  alt: z.string().nullish(),
+  uploadedAt: z.coerce.date().nullish()
+}).partial().strip()
 
 export default defineEventHandler(async (event) => {
   const { assetId } = getRouterParams(event)
@@ -11,7 +24,7 @@ export default defineEventHandler(async (event) => {
   }
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
 
-  const body = await readBody<Partial<CroutonAsset>>(event)
+  const body = await readValidatedBody(event, bodySchema.parse)
 
   // id, teamId, userId and updatedBy are server-owned: taking them from the
   // body let a member move an asset into another team (#2278).
@@ -24,6 +37,6 @@ export default defineEventHandler(async (event) => {
     width: body.width,
     height: body.height,
     alt: body.alt,
-    uploadedAt: body.uploadedAt ? new Date(body.uploadedAt) : body.uploadedAt,
+    uploadedAt: body.uploadedAt
   }, { role: membership.role })
 })
