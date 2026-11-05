@@ -1125,7 +1125,10 @@ jobs:
           # sign-off hold commits nothing) versus "the planner never ran" (a harness bug). Only the
           # second is a failure, and it is the one that must be loud.
           PLAN_ERR="$RUNNER_TEMP/plan-stderr.txt"
-          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
+          # #3411: the tests gate judges the whole PR, not just this run's commit.
+          PR_FILES="$RUNNER_TEMP/pr-files.txt"
+          git diff --name-only --diff-filter=d "$BASE_SHA"..HEAD > "$PR_FILES" 2>/dev/null || : > "$PR_FILES"
+          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" "$PR_FILES" 2>"$PLAN_ERR")"
           PLAN_RC=$?
           if [ "$PLAN_RC" -ne 0 ]; then
             echo "::error::pi-finish plan exited $PLAN_RC — the harness could not read this run's result. This is a WORKFLOW bug, not an underspecified issue."
@@ -1145,6 +1148,7 @@ jobs:
           PKG_LOGIC="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC=//p')"; PKG_LOGIC=${PKG_LOGIC:-0}
           TEST_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TEST_FILES=//p')"; TEST_FILES=${TEST_FILES:-0}
           TESTS_MISSING="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TESTS_MISSING=//p')"; TESTS_MISSING=${TESTS_MISSING:-0}
+          PKG_LOGIC_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC_FILES=//p')"
           echo "plan (#1904) — app=${APP_DIR:-<none>} packages-logic=$PKG_LOGIC test-files=$TEST_FILES tests-missing=$TESTS_MISSING"
 
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
@@ -1314,6 +1318,10 @@ jobs:
             # waits for an `lgtm` reply exactly like the claude lane's UI gate (#307/#572).
             DRAFT_FLAG=""
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
+            # #3411: say WHICH files lack a test on the ticket too, not just in the run record.
+            if [ "$TESTS_MISSING" = "1" ]; then
+              gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _tests gate (#3411)_\n\n🧪 **Drafted: no test for** `%s`. Build review skips drafts, so it will not run until a test is added (comment on the PR asking for one) or the PR is marked ready by hand.' "${PKG_LOGIC_FILES//,/\`, \`}")" || true
+            fi
             HOLD_NOTE=""
             # Trailing HTML comment on BOTH branches is a MACHINE marker, not owner-facing prose:
             # deploy-detect.mjs (#2140) greps the PR body for it to opt this PR into a real
@@ -1357,7 +1365,7 @@ jobs:
               # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
               elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
-              echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
+              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
             fi
           fi
 
@@ -1403,8 +1411,7 @@ jobs:
               # Name the missing test in the run record, or the draft state is unexplained (#1885).
               [ "$TESTS_MISSING" = "1" ] && {
                 echo
-                echo "🧪 **tests: MISSING** — ${PKG_LOGIC} \`packages/\` logic file(s) landed with no test file."
-                echo "Opened as a DRAFT so it can't auto-merge. Add the test (or say on the issue why it can't run here), then re-dispatch."
+                echo "🧪 **Drafted: no test for** \`${PKG_LOGIC_FILES//,/\`, \`}\`. Build review skips drafts, so it won't run until a test is added (comment on this PR asking for one) or you mark the PR ready by hand."
               }
               # #2057 — make a missing capture LOUD in the one comment a reviewer actually
               # reads, not just a line in the PR body nobody re-checks after the first read.

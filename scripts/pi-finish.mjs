@@ -48,8 +48,11 @@ export function planAcceptance({ committedFiles }) {
 const LOGIC_RE = /^packages\/[^/]+\/.*\.(ts|mjs|js)$/;
 const TEST_RE = /(^|\/)(test|tests|__tests__)\/|\.(test|spec)\./;
 
-export function planTestsGate({ committedFiles }) {
-  const files = (committedFiles || []).map((f) => String(f).trim()).filter(Boolean);
+// #3411: judged over the WHOLE PR (this run's commits + `prFiles`), not just the last commit — a
+// revision that touches only code on a PR that already has its test is not "missing a test".
+export function planTestsGate({ committedFiles, prFiles }) {
+  const files = [...new Set([...(committedFiles || []), ...(prFiles || [])]
+    .map((f) => String(f).trim()).filter(Boolean))];
   const pkgLogic = files.filter((f) => LOGIC_RE.test(f) && !TEST_RE.test(f));
   const testFiles = files.filter((f) => TEST_RE.test(f));
   return { pkgLogic, testFiles, missing: pkgLogic.length > 0 && testFiles.length === 0 };
@@ -83,22 +86,23 @@ export function readFileList(p) {
 //   pi-finish.mjs session <dir>              → the newest *.jsonl path, or nothing
 //   pi-finish.mjs plan <committed-files.txt> → APP_DIR= / PKG_LOGIC= / TEST_FILES= / TESTS_MISSING=
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [cmd, arg] = process.argv.slice(2);
+  const [cmd, arg, arg2] = process.argv.slice(2);
   try {
     if (cmd === 'session') {
       process.stdout.write(`${resolveSession(arg) || ''}\n`);
     } else if (cmd === 'plan') {
       const committedFiles = readFileList(arg);
       const { appDir } = planAcceptance({ committedFiles });
-      const { pkgLogic, testFiles, missing } = planTestsGate({ committedFiles });
+      const { pkgLogic, testFiles, missing } = planTestsGate({ committedFiles, prFiles: readFileList(arg2) });
       process.stdout.write(
         `APP_DIR=${appDir || ''}\n`
         + `PKG_LOGIC=${pkgLogic.length}\n`
         + `TEST_FILES=${testFiles.length}\n`
         + `TESTS_MISSING=${missing ? 1 : 0}\n`
+        + `PKG_LOGIC_FILES=${pkgLogic.join(',')}\n`
       );
     } else {
-      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt>');
+      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt> [<pr-files.txt>]');
       process.exit(2);
     }
   } catch (e) {
