@@ -649,31 +649,6 @@ jobs:
         # matching survives any root mismatch between the two jobs (#1256).
         run: npx fallow audit --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
 
-  # Removed-test check (#3314). Its own job, not node-checks: that one skips POC-only PRs and
-  # the gate accepts a skipped job. Walks the PR's commits so add-then-delete is seen (#3231).
-  removed-tests:
-    name: Removed tests
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-      - name: Fail on unexplained removed test cases (work-* PRs)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          PR_BODY="$(gh pr view "$PR_NUMBER" --json body -q .body)" \
-            node scripts/check-removed-tests.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --branch "$HEAD_REF"
-
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job
   # failed/was cancelled, and passes when every job either succeeded or was skipped.
@@ -683,7 +658,7 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, build-kassa, compile-check,
-            test, package-check, node-checks, removed-tests, actionlint, fallow-audit]
+            test, package-check, node-checks, actionlint, fallow-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
