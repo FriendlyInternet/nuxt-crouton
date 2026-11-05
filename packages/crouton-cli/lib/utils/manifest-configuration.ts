@@ -33,10 +33,12 @@ interface ManifestConfigOption {
   description?: string
   default: unknown
   options?: Array<{ value: string; label: string }>
+  runtimeConfig?: 'public' | 'server' | 'both'
 }
 
 interface Manifest {
   id: string
+  runtimeConfigKey?: string
   configuration?: Record<string, ManifestConfigOption>
 }
 
@@ -49,6 +51,8 @@ export interface PromptedConfig {
   runtimeConfig?: { server: Record<string, unknown>; public: Record<string, unknown> }
   /** .env hints to display after generation */
   envHints?: string[]
+  /** Non-fatal notes, e.g. the package did not declare its runtimeConfig key */
+  warnings?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -158,18 +162,38 @@ async function promptForConfiguration(
 /**
  * Build runtimeConfig and .env hints from a prompted config object.
  */
-function buildRuntimeAndEnvHints(
+export function buildRuntimeAndEnvHints(
   featureKey: string,
   configObj: Record<string, unknown>,
-): Pick<PromptedConfig, 'runtimeConfig' | 'envHints'> {
-  const rtKey = toRuntimeConfigKey(featureKey)
+  manifest?: Manifest,
+): Pick<PromptedConfig, 'runtimeConfig' | 'envHints' | 'warnings'> {
   const inner = configObj.config as Record<string, unknown> | undefined
 
   if (!inner) return {}
 
+  // The package declares the key it reads; only guess when it does not (#3398)
+  const warnings: string[] = []
+  let rtKey = manifest?.runtimeConfigKey
+  if (!rtKey) {
+    rtKey = toRuntimeConfigKey(featureKey)
+    const msg = `[crouton] ${manifest?.id ?? featureKey} declares configuration but no runtimeConfigKey — writing runtimeConfig.${rtKey}; declare runtimeConfigKey in its crouton.manifest.ts`
+    warnings.push(msg)
+    console.warn(msg)
+  }
+
+  // Each setting goes where the package reads it (default: both sides)
+  const server: Record<string, unknown> = {}
+  const pub: Record<string, unknown> = {}
+  for (const [dotPath, option] of Object.entries(manifest?.configuration ?? {})) {
+    const value = getNestedValue(inner, dotPath)
+    if (value === undefined) continue
+    const placement = option.runtimeConfig ?? 'both'
+    if (placement !== 'public') setNestedValue(server, dotPath, value)
+    if (placement !== 'server') setNestedValue(pub, dotPath, value)
+  }
   const runtimeConfig = {
-    server: { [rtKey]: inner },
-    public: { [rtKey]: inner },
+    server: Object.keys(server).length ? { [rtKey]: server } : {},
+    public: Object.keys(pub).length ? { [rtKey]: pub } : {},
   }
 
   const envHints: string[] = []
@@ -182,7 +206,11 @@ function buildRuntimeAndEnvHints(
     )
   }
 
-  return { runtimeConfig, envHints: envHints.length > 0 ? envHints : undefined }
+  return {
+    runtimeConfig,
+    envHints: envHints.length > 0 ? envHints : undefined,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  }
 }
 
 /** The manifest's default answers, used when nobody can be asked (CI). */
@@ -233,7 +261,7 @@ export async function applyManifestConfiguration(config: CroutonConfig, extended
       featureKey,
       manifestId: manifest.id,
       configObject: configObj,
-      ...buildRuntimeAndEnvHints(featureKey, configObj),
+      ...buildRuntimeAndEnvHints(featureKey, configObj, manifest),
     })
   }
 

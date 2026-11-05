@@ -119,8 +119,11 @@ export default defineCroutonManifest({
     }
   ],
 
+  runtimeConfigKey: 'croutonSales',
+
   configuration: {
     'print.enabled': {
+      runtimeConfig: 'server',
       type: 'boolean',
       label: 'Enable Thermal Printing',
       description: 'Enable receipt printing to thermal printers. Requires network-connected printers.',

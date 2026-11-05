@@ -760,7 +760,7 @@ Drizzle schema, queries, routes, list, composable, form — from its own layer (
   `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
 
 The package's manifest `configuration` questions (bookings: email) are **still asked** for a package
-the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The CLI
+the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The answers are written under the manifest's `runtimeConfigKey` (the key the package reads), each setting on the side its `runtimeConfig: 'public'|'server'|'both'` names; an undeclared key falls back to `crouton<Feature>` with a warning (#3398). The CLI
 no longer merges manifest `collections` into the app config at all: every package that listed them owns
 them, so that path was removed (#2316). Answers land
 under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.config.ts` as before.
