@@ -18,7 +18,7 @@ import { DEDUP_RE, NO_TEST_STEPS_MSG } from './epic-scaffold.mjs'
 import { hasTestSteps } from './test-card.mjs'
 import { ATTESTATION_RE } from './packages-guard.mjs'
 import { writePipelineBlock, resolveContext } from './pipeline-context.mjs'
-import { ghCreateIssue, ghAddLabel, sanitizeLabels } from './apply-decompose-plan.mjs'
+import { ghCreateIssue, ghAddLabel, deferHandoff, sanitizeLabels } from './apply-decompose-plan.mjs'
 
 export const DEFAULT_TRIGGER = 'work-this'
 const STOPWORDS = new Set('a an and are as at be by for from in into is it of on or the to with add new use via when that this make'.split(' '))
@@ -126,7 +126,8 @@ export function newTicket(opts, { exec, repo, knownLabels = [], log = console.er
     if (err) { out.errors.push(err); return out }
     linkToParent({ exec, repo, parent, number })
   }
-  ghAddLabel(exec, repo, number, trigger) // LAST: only now may the pipeline pick it up
+  // LAST: only now may the pipeline pick it up. deferHandoff records a rate-limited add for the hourly replay.
+  deferHandoff(exec, { kind: 'label', issue: number, label: trigger }, () => ghAddLabel(exec, repo, number, trigger), { pending: [], log })
   log(`filed #${number}`)
   out.ok = true
   out.exitCode = 0
