@@ -38,6 +38,7 @@ the only thing it writes.
   isn't a currently-open epic: a closed epic left with unfinished work, or a parent missing
   the `epic` label (#980).
 - **🔀 Idle PRs** — open PRs with no activity in >N days.
+- **🚧 Epic PRs with no CI / ⚔️ Approved but conflicting** (#3317) — `epic/*`→`main` PRs with no `CI Gate` run for >3d, and owner-`ok`'d PRs now `dirty` for >1d (`scripts/lib/stuck-prs.mjs`).
 - **📚 Skill freshness** — knowledge skills (the `verified:` provenance contract, #1073/#1091)
   whose citations drifted or whose stamp aged out, via `scripts/skill-freshness.mjs` (fs+git, no
   LLM): a cited path that **vanished** (🔴), a cited file with commits **newer than the stamp**
