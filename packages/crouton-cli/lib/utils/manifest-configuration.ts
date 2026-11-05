@@ -239,3 +239,44 @@ export async function applyManifestConfiguration(config: CroutonConfig, extended
 
   return promptedConfigs
 }
+
+/** Character ranges of `//` and block comments in JS source (string-aware). */
+function commentRanges(src: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    const n = src[i + 1]
+    if (c === '"' || c === '\'' || c === '`') {
+      i++
+      while (i < src.length && src[i] !== c) i += src[i] === '\\' ? 2 : 1
+      i++
+    } else if (c === '/' && n === '/') {
+      const end = src.indexOf('\n', i)
+      const e = end === -1 ? src.length : end
+      ranges.push([i, e])
+      i = e
+    } else if (c === '/' && n === '*') {
+      const end = src.indexOf('*/', i + 2)
+      const e = end === -1 ? src.length : end + 2
+      ranges.push([i, e])
+      i = e
+    } else {
+      i++
+    }
+  }
+  return ranges
+}
+
+/**
+ * Rewrite `<featureKey>: true` into `<featureKey>: <configObject>` in
+ * crouton.config.js source — real properties only, never text inside comments.
+ */
+export function replaceFeatureFlag(source: string, featureKey: string, configObject: unknown): string {
+  const comments = commentRanges(source)
+  const configStr = JSON.stringify(configObject, null, 2).replace(/\n/g, '\n    ')
+  const pattern = new RegExp(`(\\b${featureKey}\\s*:\\s*)true`, 'g')
+  return source.replace(pattern, (match, prefix: string, offset: number) =>
+    comments.some(([s, e]) => offset >= s && offset < e) ? match : `${prefix}${configStr}`
+  )
+}

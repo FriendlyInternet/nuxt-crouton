@@ -1,7 +1,7 @@
 // .github/labels.yml is applied to GitHub by labels.yml (crazy-max/ghaction-github-labeler)
 // on every push to main. GitHub rejects a label description over 100 characters, and the
 // labeler aborts the whole sync on the first rejection — so ONE long description silently
-// froze every label change from 2026-10-19 on: `delegate-hard` and `frontend` were never
+// froze every label change from 2026-10-19 on: `frontend` and others were never
 // created, and `delegate` kept a description saying it starts the Claude pipeline while it
 // routes to pi (#2427). These checks catch it on the PR instead of on main.
 //

@@ -40,7 +40,6 @@ const _mainGalleriesConfig = {
   name: 'mainGalleries',
   layer: 'main',
   apiPath: 'main-galleries',
-  componentName: 'MainGalleriesForm',
   defaultValues: {
     title: '',
     imageId: ''

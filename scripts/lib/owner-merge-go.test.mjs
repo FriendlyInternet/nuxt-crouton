@@ -45,11 +45,11 @@ test('ok followed by a non-verdict change request resets to no go', () => {
   assert.equal(ownerMergeGo({ owner, comments, commits: [] }).go, false)
 })
 
-test('commits touching only writeups/ui-proposals do not void an approval; mixed ones do', () => {
+test('a commit touching only writeups/ui-proposals now voids an approval (no capture exemption, #3351)', () => {
   const comments = [c('pmcp', 'ok', '2026-10-27T10:00:00Z')]
   const cap = { ...k('2026-10-27T11:00:00Z'), files: ['writeups/ui-proposals/2832-a.png'] }
   const mixed = { ...k('2026-10-27T11:00:00Z'), files: ['writeups/ui-proposals/2832-a.png', 'scripts/x.mjs'] }
-  assert.equal(ownerMergeGo({ owner, comments, commits: [cap] }).go, true)
+  assert.equal(ownerMergeGo({ owner, comments, commits: [cap] }).go, false)
   assert.equal(ownerMergeGo({ owner, comments, commits: [mixed] }).go, false)
 })
 
