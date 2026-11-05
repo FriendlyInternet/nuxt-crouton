@@ -41,6 +41,18 @@ export function hasEmailKey(secretListJson) {
   }
 }
 
+/** Does a WORKER_SECRETS_JSON bundle (JSON object) carry a Resend key? Names only. */
+export function bundleHasEmailKey(bundleJson) {
+  try {
+    const o = JSON.parse(bundleJson)
+    return !!o && typeof o === 'object' && !Array.isArray(o)
+      && ['NUXT_EMAIL_RESEND_API_KEY', 'RESEND_API_KEY'].some(k => typeof o[k] === 'string' && o[k] !== '')
+  }
+  catch {
+    return false
+  }
+}
+
 /** Verdict from `wrangler d1 execute --json` output for the latest auth_email_log row. */
 export function verdict(d1Json) {
   let rows
@@ -76,6 +88,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   else if (cmd === 'has-key') {
     process.exit(hasEmailKey(readStdin()) ? 0 : 1)
+  }
+  else if (cmd === 'bundle-has-key') {
+    process.exit(bundleHasEmailKey(readStdin()) ? 0 : 1)
   }
   else if (cmd === 'verdict') {
     const v = verdict(readStdin())
