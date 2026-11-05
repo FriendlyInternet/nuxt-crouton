@@ -77,7 +77,7 @@ const rv = (sha, at, final = true) => ({ user: { login: 'app[bot]', type: 'Bot' 
 const epicLeaf = (comments, headSha, o = {}, commits = []) => {
   const go = goFor(comments, commits)
   const st = reviewState({ comments, headSha, bots })
-  return decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go, finalHold: st.kind === 'final' ? st : null, red: false, ciGate: 'success', mergeableState: 'clean', ...o })
+  return decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go, ownerHold: ['final', 'needs-owner'].includes(st.kind) ? st : null, red: false, ciGate: 'success', mergeableState: 'clean', ...o })
 }
 test('3173: final hold, then owner ok, green → merge', () => {
   const d = epicLeaf([rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa')
@@ -104,10 +104,32 @@ test('3173: round-1 (not final) + ok → no merge', () => {
 })
 test('3173: work-* → main with owner ok, no verdict, no label → unchanged (merges)', () => {
   assert.equal(leaf().merge, true)
-  assert.equal(decideLeafMerge({ baseRef: 'main', headRef: 'work-1', labels: [], go: { go: false }, finalHold: { at: '2026-11-01T10:00:00Z' }, red: false, ciGate: 'success', mergeableState: 'clean' }).merge, false)
+  assert.equal(decideLeafMerge({ baseRef: 'main', headRef: 'work-1', labels: [], go: { go: false }, ownerHold: { at: '2026-11-01T10:00:00Z' }, red: false, ciGate: 'success', mergeableState: 'clean' }).merge, false)
 })
 test('3173: final hold, owner ok, then a later non-merge commit → no merge (epic path)', () => {
   const cs = [rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')]
   assert.equal(epicLeaf(cs, 'aaa', {}, []).merge, true)
   assert.equal(epicLeaf(cs, 'aaa', {}, [k('2026-11-01T12:00:00Z')]).merge, false)
+})
+
+// ---- #3428: the owner's ok after a needs-owner verdict merges ----
+const needsOwner = (sha, at) => ({ user: { login: 'app[bot]', type: 'Bot' }, created_at: at,
+  body: `<!-- build-review-sha:${sha} -->\n<!-- build-review-verdict:needs-owner -->\n\n🔀 **Needs your call**\n` })
+test('3428: needs-owner verdict, then owner ok, green → merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa')
+  assert.equal(d.merge, true)
+  assert.equal(d.reason, 'owner ok after needs-owner')
+})
+test('3428: ok BEFORE the needs-owner verdict → no merge', () => {
+  const d = epicLeaf([c('ok', '2026-11-01T09:00:00Z'), needsOwner('aaa', '2026-11-01T10:00:00Z')], 'aaa')
+  assert.equal(d.merge, false)
+  assert.equal(d.code, 'no-review')
+})
+test('3428: needs-owner on an older SHA, head moved → no merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb')
+  assert.equal(d.merge, false)
+})
+test('3428: needs-owner + ok but a check is red → no merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa', { red: true })
+  assert.equal(d.code, 'red')
 })

@@ -162,3 +162,9 @@ test('#3173: only the final hold carries the final marker, the ok wording and th
   const first = renderComment(d, { round: 1, okAgain: 'AGAIN-LINE' })
   assert.doesNotMatch(first, /build-review-final|AGAIN-LINE/)
 })
+
+test('3428: a needs-owner comment says ok merges', () => {
+  const d = decide(cleanDiff, TICKET, verdict('needs-owner', {}))
+  assert.equal(d.verdict, 'needs-owner')
+  assert.match(renderComment(d), /reply `ok` to merge as is/)
+})

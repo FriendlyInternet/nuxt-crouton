@@ -342,7 +342,7 @@ jobs:
                 const d = decideEpicMerge({ pr, checkRuns, go })
                 gate = { merge: d.action === 'merge', reason: d.reason }
               } else {
-                // #3173: a work-* PR on an epic branch that the reviewer rejected twice is held for the owner,
+                // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
                 // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
                 // New modules load from the default-branch checkout in try/catch: absent → plain label rule.
                 let reviewSt = { kind: 'other' }
@@ -356,10 +356,10 @@ jobs:
                     core.warning(`#${pull_number} final-hold state unavailable (${e.code || e.message}) — label rule only.`)
                   }
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, finalHold: reviewSt.kind === 'final' ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
-                  const okBeforeFinal = reviewSt.kind === 'final' && !(new Date(go.approvedAt) > new Date(reviewSt.at))
+                  const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
                   const reply = chooseOkReply({ state: reviewSt, ownerOk: true, okBeforeFinal })
                   if (reply) {
                     const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
