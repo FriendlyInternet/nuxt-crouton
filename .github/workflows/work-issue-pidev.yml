@@ -1,5 +1,6 @@
 name: Work issue (pi.dev · single-use worker)
-run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}"
+# #3210: dispatched runs carry the issue number + mode, e.g. "#3207 · plan".
+run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode || 'build' }}${{ inputs.feedback != '' && ' · revise' || '' }}"
 
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
@@ -341,6 +342,25 @@ jobs:
             } catch (e) {
               core.warning(`follow-along breadcrumb failed (non-fatal): ${e.message}`)
             }
+
+      # #3210 — tick the per-ticket flow checklist (one comment, edited in place). Cosmetic: never fails the job.
+      - name: Tick flow checklist (routed)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          ISSUE="${{ inputs.issue || github.event.issue.number }}"
+          # Same router the dispatcher used → "mode: reason" (falls back to mode alone).
+          REASON="$( (gh issue view "$ISSUE" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/flow-issue.txt" \
+            && LABELS="$(gh issue view "$ISSUE" --json labels --jq '[.labels[].name] | join(",")')" \
+            && node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/flow-issue.txt" \
+            | node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(r.reason)') 2>/dev/null || true)"
+          NOTE="${{ inputs.mode || 'build' }}"
+          [ -n "$REASON" ] && NOTE="$NOTE ($REASON)"
+          node scripts/flow-checklist.mjs "$ISSUE" routed \
+            --note "$NOTE" \
+            --link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
       # The single-use worker has no Agent-prompt channel; the parent wrote the context into a
@@ -830,6 +850,10 @@ jobs:
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
+          # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
+          PLAN_URL="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .html_url // empty' | tail -n 1)"
+          GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" plan --link "$PLAN_URL" || true
           if [ "$(echo "$VERDICT" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).unverified)')" = "true" ]; then
             gh issue edit "$ISSUE" --add-label "plan:unverified" || true
           fi
@@ -1336,6 +1360,10 @@ jobs:
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
           fi
+
+          # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
+          TICK_PR="$(gh pr list --head "$BR" --base "$BASE" --json url -q '.[0].url' 2>/dev/null || true)"
+          [ -n "$TICK_PR" ] && GITHUB_REPOSITORY="$GITHUB_REPOSITORY" node scripts/flow-checklist.mjs "$ISSUE" pr --link "$TICK_PR" || true
 
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
