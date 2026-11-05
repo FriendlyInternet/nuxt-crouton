@@ -94,3 +94,21 @@ describe('validateConfig — dialect', () => {
     expect(dialectErrors(result)).toEqual([])
   })
 })
+
+describe('validateConfig — access (#3380)', () => {
+  const cfg = (access: any) => ({ collections: [{ name: 'notes', fieldsFile: '/nonexistent.json', access }] })
+  let log: ReturnType<typeof vi.spyOn>
+  beforeEach(() => { log = vi.spyOn(console, 'log').mockImplementation(() => {}) })
+  afterEach(() => { log.mockRestore() })
+
+  it('rejects an unknown access value', async () => {
+    const r = await validateConfig(cfg({ list: 'mine' }))
+    expect(r.valid).toBe(false)
+    expect(r.errors.some(e => e.includes('Invalid access.list'))).toBe(true)
+  })
+
+  it('accepts a valid access value', async () => {
+    const r = await validateConfig(cfg({ list: 'own' }))
+    expect(r.errors.some(e => e.includes('Invalid access'))).toBe(false)
+  })
+})

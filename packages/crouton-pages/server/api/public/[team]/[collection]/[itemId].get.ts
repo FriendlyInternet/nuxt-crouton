@@ -88,6 +88,12 @@ export default defineCachedEventHandler(async (event) => {
       throw createError({ status: 404, statusText: 'Not found' })
     }
 
+    // A `list: 'own'` collection is per-member data; an anonymous caller owns nothing (#3380)
+    const access = await collectionQueries.access?.()
+    if (access?.list === 'own') {
+      throw createError({ status: 404, statusText: 'Not found' })
+    }
+
     // ── 4. Fetch item by ID ──
     const getByIdsFn = await collectionQueries.getByIds()
     const items = await getByIdsFn(team.id, [itemId])

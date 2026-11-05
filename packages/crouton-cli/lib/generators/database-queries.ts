@@ -1,6 +1,7 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -841,6 +842,12 @@ export function generateQueries(
     own
   }
 
+  // Runtime-readable access declaration, so public endpoints can refuse `list: 'own'` (#3380)
+  const access = resolveAccess(data)
+  const accessExport = Object.keys(access).length > 0
+    ? `\nexport const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const\n`
+    : ''
+
   return buildFileHeader(ctx)
     + buildGetAllQuery(ctx)
     + buildGetByIdsQuery(ctx)
@@ -849,4 +856,5 @@ export function generateQueries(
     + buildDeleteQuery(ctx)
     + treeQueries
     + sortableQueries
+    + accessExport
 }

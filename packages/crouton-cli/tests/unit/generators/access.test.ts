@@ -26,6 +26,12 @@ describe('per-collection access (#3148)', () => {
     expect(generateQueries(none, cfg)).not.toContain('ownerId')
   })
 
+  it('list: own exports the access declaration for the runtime registry (#3380)', () => {
+    const out = generateQueries(withAccess({ list: 'own' }), cfg)
+    expect(out).toMatch(/export const \w+Access = \{"list":"own"\} as const/)
+    expect(generateQueries(none, cfg)).not.toContain('Access =')
+  })
+
   it('create: admin guards POST with requireTeamRole', () => {
     const out = generatePostEndpoint(withAccess({ create: 'admin' }), cfg)
     expect(out).toContain(`requireTeamRole(event, 'admin')`)
