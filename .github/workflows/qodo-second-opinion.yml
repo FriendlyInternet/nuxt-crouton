@@ -5,6 +5,8 @@ run-name: "Qodo second opinion (workflow run)"
 # review, so we can score how often our review misses real problems. ADVISORY ONLY: this posts one
 # `/review` comment per head SHA and nothing else. It never labels, blocks or requests revisions
 # (bot comments are ignored by the comment router and revise-route.mjs).
+# NOTE: Qodo has so far only answered `/review` posted by the human account; this posts as the app.
+# If Qodo ignores app comments, the score report prints a "Qodo has not answered" warning.
 # Score the results with: node scripts/qodo-score.mjs
 #
 # Workflow-change: new advisory workflow for the Qodo review experiment (#3370).
@@ -58,7 +60,9 @@ jobs:
             echo "not a ready pipeline PR — skip"; exit 0
           fi
           SHA="$(echo "$J" | jq -r .headRefOid)"
-          if gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- qodo-asked-sha:$SHA -->"; then
+          # Write to a file first: piping into `grep -q` under pipefail can SIGPIPE gh and read as "not asked".
+          gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
+          if node scripts/qodo-score.mjs --asked-at "$RUNNER_TEMP/comments.json" "$SHA"; then
             echo "already asked for $SHA — skip"; exit 0
           fi
           # The marker goes in the same comment, so Qodo still sees `/review` as the command.
