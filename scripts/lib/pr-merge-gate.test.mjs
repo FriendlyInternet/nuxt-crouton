@@ -133,3 +133,9 @@ test('3428: needs-owner + ok but a check is red → no merge', () => {
   const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa', { red: true })
   assert.equal(d.code, 'red')
 })
+test('3428: go verdict, no build:approved label, owner ok → no merge', () => {
+  const goReview = { user: { login: 'app[bot]', type: 'Bot' }, created_at: '2026-11-01T10:00:00Z',
+    body: '<!-- build-review-sha:aaa -->\n<!-- build-review-verdict:go -->\n\n✅ **Build looks good**\n' }
+  const d = epicLeaf([goReview, c('ok', '2026-11-01T11:00:00Z')], 'aaa')
+  assert.equal(d.merge, false)
+})
