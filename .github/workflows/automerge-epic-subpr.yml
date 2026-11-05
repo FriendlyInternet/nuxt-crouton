@@ -168,9 +168,18 @@ jobs:
             const REQUIRED_CHECK = 'CI Gate'
 
             // Any RED check for this SHA? (failed check-run or failed commit status.)
+            // #3429: GitHub can leave a finished run `in_progress` with a conclusion — load the
+            // tested helper, fall back to the inline rule if it is not on the default branch yet.
+            let isDone = r => r.status === 'completed'
+            let requiredCheckStateFn = null
+            try {
+              ({ isDone, requiredCheckState: requiredCheckStateFn } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`))
+            } catch (e) {
+              core.warning(`scripts/lib/required-check-state.mjs not loadable (${e.code || e.message}); using the status-only rule.`)
+            }
             async function isRed(ref, runs) {
               const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
-              if (runs.some(r => r.status === 'completed' && RED.includes(r.conclusion))) return true
+              if (runs.some(r => isDone(r) && RED.includes(r.conclusion))) return true
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) return true
@@ -182,6 +191,7 @@ jobs:
             // 'success' | 'pending' | 'missing' so the caller can log why it declined.
             // Missing ≠ passing — that conflation is exactly what #1668 exploited.
             async function requiredCheckState(runs) {
+              if (requiredCheckStateFn) return requiredCheckStateFn(runs, REQUIRED_CHECK)
               const mine = runs.filter(r => r.name === REQUIRED_CHECK)
               if (!mine.length) return 'missing'
               // Newest attempt wins — a re-run supersedes an earlier verdict.
