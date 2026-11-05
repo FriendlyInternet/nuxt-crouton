@@ -54,7 +54,7 @@ const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.ur
 for (const [file, step] of [
   ['work-issue-pidev.yml', 'routed'],
   ['work-issue-pidev.yml', 'plan'],
-  ['plan-approved.yml', 'ok'],
+  ['on-comment.yml', 'ok'],
   ['work-issue-pidev.yml', 'pr'],
   ['build-review.yml', 'review'],
   ['automerge-epic-subpr.yml', 'merged']
@@ -97,4 +97,11 @@ test('apply: a human comment quoting the marker is not mistaken for ours', () =>
 test('run-name carries the issue number', () => {
   assert.match(wf('work-issue-pidev.yml'), /^run-name: .*inputs\.issue/m)
   assert.match(wf('decompose-on-issue-pidev.yml'), /^run-name: .*issue/m)
+})
+
+test('"Owner ok" is ticked only from a real owner approval, never the plan:approved label (#3210)', () => {
+  const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+  assert.ok(!/flow-checklist\.mjs[^\n]*\bok\b/.test(wf('plan-approved.yml')), 'plan-approved.yml must not tick ok')
+  const oc = wf('on-comment.yml')
+  assert.ok(oc.indexOf("'ok', '--link'") > oc.indexOf('isApproval(body)'), 'ok tick sits after the isApproval check')
 })
