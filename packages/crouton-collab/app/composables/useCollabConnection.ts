@@ -1,6 +1,7 @@
 import * as Y from 'yjs'
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { tryOnMounted, tryOnUnmounted } from '@vueuse/core'
+import { useCollabTeamId } from './useCollabTeamId'
 import type { CollabConnectionState, CollabRoomMessage, CollabAwarenessState } from '../types/collab'
 
 export interface UseCollabConnectionOptions {
@@ -9,8 +10,8 @@ export interface UseCollabConnectionOptions {
   /** Room type (e.g., 'page', 'flow', 'document') */
   roomType: string
   /**
-   * Team ID for server-side membership verification.
-   * When provided, the server will reject connections from non-members.
+   * Team ID (or slug). Rooms are namespaced by team and the server rejects non-members.
+   * Defaults to the current team from crouton-auth; no connection is made without one.
    */
   teamId?: string | null
   /** Auto-connect on mount (default: true) */
@@ -62,7 +63,10 @@ export interface UseCollabConnectionReturn {
  * ```
  */
 export function useCollabConnection(options: UseCollabConnectionOptions): UseCollabConnectionReturn {
-  const { roomId, roomType, teamId = null, autoConnect = true } = options
+  const { roomId, roomType, autoConnect = true } = options
+  const requestedTeamId = options.teamId ?? useCollabTeamId()
+  // Canonical team id — replaced by the id the token endpoint returns (the input may be a slug)
+  let resolvedTeamId: string | null = requestedTeamId
 
   // Skip on SSR (check for window/document availability)
   const isServer = typeof window === 'undefined'
@@ -100,24 +104,20 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
    *   at wss://{worker}/{roomKey}/ws?{params} — bypasses Nitro which can't proxy WS frames
    */
   function buildWebSocketUrl(): string {
-    if (isServer || !roomId) return ''
+    if (isServer || !roomId || !resolvedTeamId) return ''
 
     const config = useRuntimeConfig()
     const workerUrl = config.public.collabWorkerUrl as string
 
     const params = new URLSearchParams({ type: roomType })
-    if (teamId) {
-      params.set('teamId', teamId)
-    }
-    // Also pass roomId and teamId as query params for the DO's metadata extraction
+    params.set('teamId', resolvedTeamId)
     params.set('roomId', roomId)
 
     if (workerUrl) {
       // Production: connect directly to the collab worker
       // Worker expects: /{roomKey}/{action}?{params}
-      const roomKey = encodeURIComponent(`${roomType}:${roomId}`)
+      const roomKey = encodeURIComponent(`${resolvedTeamId}:${roomType}:${roomId}`)
       const wsUrl = workerUrl.replace(/^https?:/, 'wss:')
-      params.set('appOrigin', window.location.origin)
       return `${wsUrl}/${roomKey}/ws?${params.toString()}`
     }
 
@@ -135,7 +135,10 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
    */
   async function fetchCollabToken(): Promise<string | null> {
     try {
-      const result = await $fetch<{ token: string }>('/api/collab/token')
+      const result = await $fetch<{ token: string, teamId: string }>('/api/collab/token', {
+        query: { teamId: requestedTeamId, room: `${requestedTeamId}:${roomType}:${roomId}` }
+      })
+      resolvedTeamId = result.teamId
       return result.token
     } catch {
       return null
@@ -147,6 +150,10 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
    */
   async function connect(): Promise<void> {
     if (isServer || !roomId) return
+    if (!requestedTeamId) {
+      state.value = { ...state.value, error: new Error('No team to scope the collab room to') }
+      return
+    }
 
     // Clean up existing connection
     if (ws.value) {

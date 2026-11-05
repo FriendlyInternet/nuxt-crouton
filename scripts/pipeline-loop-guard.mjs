@@ -91,6 +91,16 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
   return decideSplit({ depth, isLeaf, maxDepth }).action === 'leaf' ? WORKER_TRIGGER : 'delegate-pi'
 }
 
+// A REVISION continues an existing PR, so the PR is the unit judged — not the issue (#3061).
+// An epic issue can close while its epic → main PR is still open for review.
+function decideRevision(revision) {
+  if (revision.lookupFailed) return { action: 'proceed', reason: 'could not look up the PR being revised — proceeding' }
+  if (revision.pr == null) return { action: 'refuse', reason: `there is no PR on branch ${revision.branch} to revise` }
+  if (revision.merged) return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is already merged` }
+  if (revision.state === 'closed') return { action: 'refuse', pr: revision.pr, reason: `PR #${revision.pr} is closed` }
+  return { action: 'proceed', reason: `revising open PR #${revision.pr}` }
+}
+
 /**
  * INVARIANT 4 — is this issue already claimed? (#1890)
  *
@@ -120,24 +130,14 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
 export const CLAIM_TTL_MINUTES = 90
 export const DEFAULT_BRANCH = 'main'
 
-export function decideClaim({
-  issueState = 'open',
-  linkedPRs = [],
-  inProgressSince = null,
-  now = null,
-  ttlMinutes = CLAIM_TTL_MINUTES,
-  defaultBranch = DEFAULT_BRANCH,
-  lastReopenedAt = null,
-  self = {},
-} = {}) {
-  if (issueState === 'closed') {
-    return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
-  }
+// Each rule takes the claim context and returns a verdict, or null to fall through to the next.
+function ruleIssueClosed(ctx) {
+  if (ctx.issueState !== 'closed') return null
+  return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
+}
 
-  // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
-  // `self.prs` holds EVERY PR on our branch (a re-run can leave a closed one beside an open one).
-  const mine = new Set([...(self?.prs || []), self?.pr].filter((n) => n != null))
-  const others = (linkedPRs || []).filter((pr) => pr && !mine.has(pr.number))
+function ruleMergedElsewhere(ctx) {
+  const { others, defaultBranch, lastReopenedAt } = ctx
   // A merge that PREDATES the issue's last reopen is history: reopening means "work it again"
   // (#2779 — #813 was reopened after PR #817 removed its feature, and the guard refused it).
   // An unknown time on either side fails SAFE: the merge still counts.
@@ -147,24 +147,66 @@ export function decideClaim({
     return Number.isFinite(reopened) && Number.isFinite(at) && at < reopened
   }
   const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch) && !predatesReopen(pr))
-  if (merged) {
-    return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue (reopened after it? that counts as new work — reopen the issue after the merge to work it again)` }
-  }
-  const open = others.find((pr) => pr.state === 'open')
-  if (open) {
-    return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
-  }
+  if (!merged) return null
+  return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue (reopened after it? that counts as new work — reopen the issue after the merge to work it again)` }
+}
 
-  const since = inProgressSince ? Date.parse(inProgressSince) : NaN
-  const at = now ? Date.parse(now) : NaN
-  if (Number.isFinite(since) && Number.isFinite(at)) {
-    const ageMin = (at - since) / 60_000
-    if (ageMin < ttlMinutes) {
-      return { action: 'refuse', reason: `status:in-progress was stamped ${Math.round(ageMin)}m ago (< ${ttlMinutes}m) — another run holds it` }
-    }
-    return { action: 'proceed', reason: `status:in-progress is stale (${Math.round(ageMin)}m > ${ttlMinutes}m) — treating the prior run as dead` }
-  }
+function ruleCompetingOpenPR(ctx) {
+  const open = ctx.others.find((pr) => pr.state === 'open')
+  if (!open) return null
+  return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
+}
 
+// A fresh run on an issue whose OWN branch already has an open PR would rebuild `work-<n>`
+// from main and force-push it, wiping the revisions made on that PR (#2990: #2972 → PR #2976).
+// Revisions take the `revision` path, so a fresh run has no legitimate reason to be here.
+// A PLAN-only run builds nothing and never touches the branch, so it may proceed.
+function ruleOwnOpenPR(ctx) {
+  if (ctx.mode === 'plan') return null
+  const ownOpen = ctx.linkedPRs.find((pr) => pr && ctx.mine.has(pr.number) && pr.state === 'open' && !pr.merged)
+  if (!ownOpen) return null
+  return { action: 'refuse', claimedBy: ownOpen.number, reason: `PR #${ownOpen.number} is already open for this issue — re-running would overwrite its branch and any revisions on it` }
+}
+
+function ruleInProgressStamp(ctx) {
+  const since = ctx.inProgressSince ? Date.parse(ctx.inProgressSince) : NaN
+  const at = ctx.now ? Date.parse(ctx.now) : NaN
+  if (!Number.isFinite(since) || !Number.isFinite(at)) return null
+  const ageMin = (at - since) / 60_000
+  if (ageMin < ctx.ttlMinutes) {
+    return { action: 'refuse', reason: `status:in-progress was stamped ${Math.round(ageMin)}m ago (< ${ctx.ttlMinutes}m) — another run holds it` }
+  }
+  return { action: 'proceed', reason: `status:in-progress is stale (${Math.round(ageMin)}m > ${ctx.ttlMinutes}m) — treating the prior run as dead` }
+}
+
+const CLAIM_RULES = [ruleIssueClosed, ruleMergedElsewhere, ruleCompetingOpenPR, ruleOwnOpenPR, ruleInProgressStamp]
+
+export function decideClaim({
+  issueState = 'open',
+  linkedPRs = [],
+  inProgressSince = null,
+  now = null,
+  ttlMinutes = CLAIM_TTL_MINUTES,
+  defaultBranch = DEFAULT_BRANCH,
+  lastReopenedAt = null,
+  self = {},
+  revision = null,
+  mode = '',
+} = {}) {
+  if (revision) return decideRevision(revision)
+
+  // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
+  // `self.prs` holds EVERY PR on our branch (a re-run can leave a closed one beside an open one).
+  const mine = new Set([...(self?.prs || []), self?.pr].filter((n) => n != null))
+  const prs = linkedPRs || []
+  const ctx = {
+    issueState, linkedPRs: prs, inProgressSince, now, ttlMinutes, defaultBranch, lastReopenedAt, mode, mine,
+    others: prs.filter((pr) => pr && !mine.has(pr.number)),
+  }
+  for (const rule of CLAIM_RULES) {
+    const verdict = rule(ctx)
+    if (verdict) return verdict
+  }
   return { action: 'proceed', reason: 'no claim found' }
 }
 
@@ -182,11 +224,44 @@ export function decideClaim({
  * run log to learn the run stopped on purpose. Reasons are single-line by construction; strip
  * newlines anyway rather than corrupt the output file. Diagnostics only — never throws.
  */
-function publishClaimReason(reason) {
+function publishClaimReason(reason, pr = null) {
   if (!process.env.GITHUB_OUTPUT) return
   try {
-    appendFileSync(process.env.GITHUB_OUTPUT, `claim_reason=${String(reason).replace(/[\r\n]+/g, ' ')}\n`)
+    appendFileSync(process.env.GITHUB_OUTPUT, `claim_reason=${String(reason).replace(/[\r\n]+/g, ' ')}\n${pr ? `claim_pr=${pr}\n` : ''}`)
   } catch { /* the guard's verdict still stands; only the explanation is lost */ }
+}
+
+/**
+ * Build the comment for a refused claim (#3061). A refused revision is posted on the PR the
+ * owner is waiting on (🔴); a refused build or re-plan keeps the calm ⏸️ note on the issue (#2027).
+ */
+export function claimNotice({ reason, pr = null, issue, kind = '', runUrl = '', runner = 'github-hosted' } = {}) {
+  const why = reason || 'another run already holds this issue'
+  const log = runUrl ? ` · <a href="${runUrl}">run log</a>` : ''
+  if (kind === 'replan-failed') {
+    return {
+      target: 'issue',
+      number: Number(issue),
+      body: `🔴 Your reply on the held plan produced no new plan — ${why}.\n\n`
+        + `<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #3061${log}</sub>`,
+    }
+  }
+  if (pr) {
+    return {
+      target: 'pr',
+      number: Number(pr),
+      body: `🔴 Revision did not run — ${why}.\n\nThe worker stopped before touching the branch. `
+        + `Nothing was changed.\n\n<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #3061${log}</sub>`,
+    }
+  }
+  return {
+    target: 'issue',
+    number: Number(issue),
+    body: `⏸️ **Not picked up — ${why}.**\n\n`
+      + `Nothing is broken and nothing was lost: the worker stopped before starting so two runs `
+      + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
+      + `<sub>🤖 pi.dev harness (CI · ${runner}) · claim guard #1890${log}</sub>`,
+  }
 }
 
 function main(argv) {
@@ -207,7 +282,7 @@ function main(argv) {
       console.log(`Claim guard OK — ${verdict.reason}.`)
       return
     }
-    publishClaimReason(verdict.reason)
+    publishClaimReason(verdict.reason, verdict.pr)
     console.log(`::error::Claim guard: refusing to work this issue — ${verdict.reason}. This is a deliberate stop, not a build failure (#1890).`)
     process.exit(1)
   }

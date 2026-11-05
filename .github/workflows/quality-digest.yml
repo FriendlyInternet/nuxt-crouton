@@ -1,0 +1,68 @@
+name: quality-digest
+
+# Weekly deterministic gather of what the pipeline merged (#3063/#3065) — no LLM. Writes
+# writeups/reports/quality-digest-YYYYMMDD.json and uploads it as an artifact. Cadence lives in
+# .github/digests.yml (weekly:mon); the daily cron is a cheap wake-up that schedule.mjs gates.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Window start (YYYY-MM-DD); default 7 days before until'
+        required: false
+      until:
+        description: 'Window end (YYYY-MM-DD); default today'
+        required: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: quality-digest
+  cancel-in-progress: false
+
+jobs:
+  gather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history — the main-commit counts read `git log` over the window.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Decide if today is a send day
+        id: gate
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node .claude/skills/housekeeping/schedule.mjs quality-digest
+
+      - name: Gather
+        if: steps.gate.outputs.send == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST_REPO: ${{ github.repository }}
+          IN_SINCE: ${{ inputs.since }}
+          IN_UNTIL: ${{ inputs.until }}
+        run: |
+          ARGS=()
+          [ -n "$IN_SINCE" ] && ARGS+=(--since "$IN_SINCE")
+          [ -n "$IN_UNTIL" ] && ARGS+=(--until "$IN_UNTIL")
+          node scripts/quality-digest/gather.mjs "${ARGS[@]}"
+
+      - name: Upload the gather JSON
+        if: steps.gate.outputs.send == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-digest
+          path: writeups/reports/quality-digest-*.json
+          if-no-files-found: error
