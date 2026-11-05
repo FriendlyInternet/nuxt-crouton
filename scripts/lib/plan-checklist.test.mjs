@@ -46,3 +46,8 @@ test('plan-shape: Manual-only and T0 are valid; prose or no Test section is reje
   assert.equal(parsePlan(plan('write foo.test.ts')).ok, false)
   assert.equal(parsePlan(plan(OK).replace('### Test', '### Nope')).ok, false)
 })
+
+test('non-bullet prose line is rejected; bullet with Run is ok', () => {
+  assert.ok(parseChecklist(OK + '\nsome loose prose').errors.length > 0)
+  assert.equal(parseChecklist('- [ ] T1 — x — Run: `a`').errors.length, 0)
+})

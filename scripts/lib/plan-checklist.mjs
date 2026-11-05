@@ -12,7 +12,11 @@ const LINE = /^\s*(?:[-*]|\d+\.)\s+(.*)$/
 export function parseChecklist(text) {
   const errors = []
   const items = []
-  const bullets = String(text || '').split('\n').map((l) => l.match(LINE)).filter(Boolean).map((m) => m[1])
+  const lines = String(text || '').split('\n')
+  for (const l of lines) {
+    if (l.trim() && !LINE.test(l) && !/\b(Run|Manual)\b\**:/i.test(l)) errors.push(`non-bullet line "${l.trim().slice(0, 40)}" needs "Run:" or "Manual:"`)
+  }
+  const bullets = lines.map((l) => l.match(LINE)).filter(Boolean).map((m) => m[1])
   if (!bullets.length) return { items, errors: ['Test must be a checklist: - [ ] T1 — <what> — Run: `cmd` | Manual: <why>'] }
   const seen = new Set()
   let last = -1
