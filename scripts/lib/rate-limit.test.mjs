@@ -38,3 +38,46 @@ test('deferOrThrow rethrows real failures and never warns', () => {
     assert.equal(calls.length, 0)
   }
 })
+
+// ── #3251 case 11: API usage per run ──
+import { readRateLimit, diffRateLimit } from './rate-limit.mjs'
+
+test('diffRateLimit: same reset window → remaining difference', () => {
+  assert.deepEqual(diffRateLimit({ remaining: 4000, reset: 100 }, { remaining: 3700, reset: 100 }), { api_calls: 300, reason: null })
+})
+
+test('diffRateLimit: reset window rolled over → null', () => {
+  assert.deepEqual(diffRateLimit({ remaining: 4000, reset: 100 }, { remaining: 4900, reset: 200 }), { api_calls: null, reason: 'reset-window-changed' })
+})
+
+test('diffRateLimit: failed reads → null with reason', () => {
+  assert.deepEqual(diffRateLimit({ error: 'x' }, { remaining: 1, reset: 1 }), { api_calls: null, reason: 'start-read-failed' })
+  assert.deepEqual(diffRateLimit({ remaining: 1, reset: 1 }, { error: 'x' }), { api_calls: null, reason: 'end-read-failed' })
+})
+
+test('readRateLimit: parses resources.core; never throws', async () => {
+  const ok = async () => ({ ok: true, status: 200, json: async () => ({ resources: { core: { remaining: 4000, reset: 100, limit: 5000 } } }) })
+  assert.deepEqual(await readRateLimit('t', { fetchImpl: ok }), { remaining: 4000, reset: 100, limit: 5000 })
+  const boom = async () => { throw new Error('network down') }
+  assert.deepEqual(await readRateLimit('t', { fetchImpl: boom }), { error: 'network down' })
+  const forbidden = async () => ({ ok: false, status: 403 })
+  assert.deepEqual(await readRateLimit('t', { fetchImpl: forbidden }), { error: 'HTTP 403' })
+})
+
+import { rateLimitNote } from './rate-limit.mjs'
+import { test as t3306 } from 'node:test'
+import assert3306 from 'node:assert/strict'
+
+const rl = (status, reset) => ({ status, message: 'API rate limit exceeded', response: { headers: reset ? { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) } : {} } })
+
+t3306('rateLimitNote: reset header gives HH:MM and epoch marker', () => {
+  const n = rateLimitNote(rl(403, 1700000000))
+  assert3306.match(n.body, /after 22:13 UTC/)
+  assert3306.equal(n.marker, '<!-- rate-limit-retry:1700000000 -->')
+  assert3306.equal(rateLimitNote(rl(403, 1700000000)).marker, n.marker)
+})
+t3306('rateLimitNote: no header gives generic note', () => {
+  const n = rateLimitNote(rl(429))
+  assert3306.equal(n.marker, '<!-- rate-limit-retry -->')
+  assert3306.doesNotMatch(n.body, /UTC/)
+})
