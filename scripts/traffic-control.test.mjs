@@ -187,3 +187,42 @@ test('blocked again after the wait comment, no open PR → left alone', async ()
   assert.deepEqual(await h.run(), [])
   assert.deepEqual(h.calls, [])
 })
+
+// ── (#3323) a label removal that 404s must not crash the release pass ───────────
+function removalHarness(failFor) {
+  const mk = (n, scope) => ({ number: n, labels: [{ name: 'status:blocked' }, { name: scope }] })
+  const parked = [mk(41, 'pkg:a'), mk(42, 'pkg:b'), mk(43, 'pkg:a')]
+  const calls = []
+  const github = {
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? parked : [])
+      : fn === 'events' ? [] : [{ id: 1, body: '<!-- traffic-wait -->', created_at: '2026-11-02T16:18:01Z' }]),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
+      removeLabel: async (o) => {
+        const status = failFor(o)
+        if (status) throw Object.assign(new Error('x'), { status })
+        calls.push(`rm ${o.issue_number} ${o.name}`)
+      },
+      addLabels: async (o) => calls.push(`add ${o.issue_number} ${o.labels}`),
+      updateComment: async () => {} },
+      pulls: { list: async () => ({ data: [] }) } } }
+  return { calls, run: () => releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } }) }
+}
+
+test('status:blocked 404 → peer released it: skip, claim scope, release other scopes', async () => {
+  const h = removalHarness((o) => (o.issue_number === 41 && o.name === 'status:blocked' ? 404 : 0))
+  assert.deepEqual(await h.run(), [42])
+  assert.ok(!h.calls.some((c) => c.startsWith('add 41')))
+  assert.ok(!h.calls.some((c) => c.includes(' 43 '))) // same scope as 41: not released
+})
+
+test('status:blocked 500 → rejects', async () => {
+  const h = removalHarness((o) => (o.name === 'status:blocked' ? 500 : 0))
+  await assert.rejects(h.run())
+})
+
+test('work-this removal: 404 ignored, 500 rejects', async () => {
+  const ok = removalHarness((o) => (o.name === 'work-this' ? 404 : 0))
+  assert.deepEqual(await ok.run(), [41, 42])
+  const bad = removalHarness((o) => (o.name === 'work-this' ? 500 : 0))
+  await assert.rejects(bad.run())
+})
