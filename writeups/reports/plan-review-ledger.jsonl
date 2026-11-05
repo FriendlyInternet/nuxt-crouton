@@ -46,3 +46,4 @@
 {"issue":3359,"planRounds":4,"verdict":"no-go","fixRounds":0}
 {"issue":3347,"planRounds":4,"verdict":"go","fixRounds":0}
 {"issue":3361,"planRounds":2,"verdict":"go","fixRounds":0}
+{"issue":3373,"planRounds":2,"verdict":"go","fixRounds":0}
