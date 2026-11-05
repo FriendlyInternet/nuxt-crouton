@@ -24,3 +24,9 @@ test('comments after the feedback are ignored', () => {
   const comments = [plan(1, 'A'), review(2, 1), plan(10, 'late'), review(11, 9)]
   assert.match(run(comments, 2), /plan A/)
 })
+
+test('a comment that only quotes the plan marker is not taken for a plan (#3359)', () => {
+  const quoter = { id: 5, body: 'Review of the plan:\n> <!-- pipeline-plan:v1 -->\nquoted <!-- pipeline-plan:v1 --> inline' }
+  const comments = [plan(1, 'real'), quoter, review(6, 1)]
+  assert.match(run(comments, 6), /plan real/)
+})

@@ -7,6 +7,7 @@
 // `plan:approved` label, or an approval reply (`ok`) does not count — approval is not a re-plan.
 
 import { isApproval } from './approval.mjs'
+import { markerValue } from './lib/marker.mjs'
 
 const VERDICT = /<!--\s*plan-review-verdict:(go|no-go|needs-owner)\s*-->/
 
@@ -20,8 +21,8 @@ function verdicts(comments) {
   const out = []
   for (const c of comments || []) {
     if (isHuman(c)) continue
-    const m = VERDICT.exec(c?.body || '')
-    if (m) out.push(m[1])
+    const v = markerValue(c?.body || '', VERDICT)
+    if (v) out.push(v)
   }
   return out
 }
