@@ -94,21 +94,3 @@ function timingSafeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
   return diff === 0
 }
-
-/**
- * A log row is a "problem" when it bounced, was complained about, failed to
- * send, or was accepted by the provider but never confirmed within `graceMs`.
- * `delayed` is a warning, not yet a problem.
- */
-export function isEmailProblem(
-  row: { status: string, createdAt: Date | number },
-  now: number = Date.now(),
-  graceMs: number = 15 * 60 * 1000
-): boolean {
-  if (['failed', 'bounced', 'complained'].includes(row.status)) return true
-  if (row.status === 'sent' || row.status === 'pending') {
-    const created = row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt
-    return now - created > graceMs
-  }
-  return false
-}
