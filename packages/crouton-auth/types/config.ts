@@ -419,6 +419,17 @@ export interface CroutonAuthConfig {
   methods?: AuthMethodsConfig
 
   /**
+   * Who may create an account.
+   *
+   * - `'open'` (default): anyone can sign up.
+   * - `'invite'`: only an email with a pending team invitation can sign up
+   *   (password, magic link and OAuth alike). Super admins can still create users.
+   *
+   * @default 'open'
+   */
+  signup?: 'open' | 'invite'
+
+  /**
    * Team (organization) configuration
    *
    * Controls team creation behavior, permissions, and UI display.

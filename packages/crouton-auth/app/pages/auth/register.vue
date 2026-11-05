@@ -12,7 +12,16 @@ definePageMeta({
 const route = useRoute()
 const authModal = useAuthModal()
 
+const { t } = useT()
+const inviteOnly = useAuthConfig()?.signup === 'invite'
+
 onMounted(async () => {
+  // Invite-only apps: only the accept-invitation redirect (?email=) may register
+  if (inviteOnly && !route.query.email) {
+    await navigateTo('/', { replace: true })
+    useNotify().info(t('auth.inviteOnly'))
+    return
+  }
   const redirectTo = (route.query.redirect as string) || '/'
   const email = (route.query.email as string) || undefined
   await navigateTo('/', { replace: true })

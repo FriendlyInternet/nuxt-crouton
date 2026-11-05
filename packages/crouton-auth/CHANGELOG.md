@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `signup: 'open' | 'invite'` option (default `'open'`). `'invite'` refuses account creation (password, magic link, OAuth) unless the email has a pending invitation; super admins are exempt; register links are hidden. Note: a pending invitation does not prove mailbox ownership until verify-on-signup lands (#3138).
+
 ## [0.1.0] - 2024-12-17
 
 ### Added

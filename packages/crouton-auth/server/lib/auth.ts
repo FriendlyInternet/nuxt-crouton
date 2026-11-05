@@ -16,6 +16,7 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization, twoFactor, magicLink, admin, haveIBeenPwned, type TwoFactorOptions } from 'better-auth/plugins'
+import { APIError, getSessionFromCtx } from 'better-auth/api'
 import { i18n } from '@better-auth/i18n'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
@@ -405,6 +406,28 @@ function buildDatabaseHooks(
   return {
     user: {
       create: {
+        // Invite-only sign-up (#3340). Every account-creating path (password,
+        // magic link, OAuth) goes through user creation, so one hook covers all.
+        before: async (user, ctx) => {
+          if (config.signup !== 'invite') return
+          // Site super admins may create users (admin create-user screen)
+          try {
+            const session = ctx ? await getSessionFromCtx(ctx) : null
+            if ((session?.user as { superAdmin?: boolean } | undefined)?.superAdmin) return
+          } catch {
+            // no readable session -> fall through to the invitation check
+          }
+          const rows = await db.all(sql`
+            SELECT id FROM invitation
+            WHERE lower(email) = ${String(user.email).toLowerCase()}
+              AND status = 'pending'
+              AND expiresAt > ${Date.now()}
+            LIMIT 1
+          `)
+          if (rows.length === 0) {
+            throw new APIError('FORBIDDEN', { message: 'Sign-up is by invitation only' })
+          }
+        },
         after: async (user) => {
           // Emit operation event for new user registration
           useNitroApp().hooks.callHook('crouton:operation', {

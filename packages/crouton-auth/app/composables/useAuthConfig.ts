@@ -22,6 +22,7 @@ interface RuntimeAuthConfig {
   mode?: string
   defaultTeamId?: string
   appName?: string
+  signup?: 'open' | 'invite'
   methods?: {
     password?: boolean | object
     oauth?: object

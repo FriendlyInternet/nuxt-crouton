@@ -169,6 +169,10 @@ export default defineNuxtConfig({
   modules: ['@crouton/auth'],
 
   croutonAuth: {
+    // Sign-up: 'open' (default) | 'invite' (only emails with a pending invitation;
+    // server hook in buildDatabaseHooks, super admins exempt) — Velo uses 'invite'
+    // signup: 'invite',
+
     // Team configuration (see Configuration Patterns above)
     teams: {
       allowCreate: true,     // Can create additional teams
