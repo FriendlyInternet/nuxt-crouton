@@ -8,7 +8,7 @@ useHead({ title: 'Crate', meta: [{ name: 'viewport', content: 'width=device-widt
 
 const crate = useCrate()
 const toast = useToast()
-const { status, children, ancestors, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
+const { status, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
 
 // ── Level (which pile we're inside) ───────────────────────────────────────
 const levelId = ref<string | null>(null)
@@ -48,7 +48,7 @@ function togglePile(pile: CratePile) {
 
 // Card swiped down: the pile list takes the screen and a tap opens a pile instead of filing.
 const deckCollapsed = ref(false)
-const deck = ref<{ playSrc: (url: string) => void, pause: () => void }>()
+const deck = ref<{ playSrc: (url: string) => void, pause: () => void, toggle: () => void, skip: (seconds: number) => void }>()
 
 // ── Listen to a pile (#2221) ──────────────────────────────────────────────
 const listener = ref<{ show: (p: CratePile, tracks: CrateTrack[]) => void, start: () => void }>()
@@ -125,6 +125,84 @@ async function onCreate(name: string, parentId: string | null, fileTrack: boolea
   if (fileTrack) pin()
   await crate.createPile(name, parentId, fileTrack ? current.value : null)
 }
+
+// ── Edit mode (#2211) ─────────────────────────────────────────────────────
+const editing = ref(false)
+const editor = ref<{ start: (p: CratePile) => void }>()
+function onRow(pile: CratePile) {
+  if (editing.value) editor.value?.start(pile)
+  else onPileToggle(pile)
+}
+watch(() => crate.piles.value.some(p => p.id === levelId.value), (exists) => {
+  // The level we're inside was removed (or undone away): go back to the top.
+  if (levelId.value && !exists) levelId.value = null
+})
+
+// ── Drag onto a pile (#2210) ──────────────────────────────────────────────
+// Dragging may spring-load deeper levels; after the drop we return to where the drag started.
+let dragFrom: string | null = null
+const drag = useCrateDrag({
+  drop(pileId) {
+    const pile = crate.piles.value.find(p => p.id === pileId)
+    if (pile && current.value && !isIn(current.value, pile)) crate.fileInto(current.value, pile)
+  },
+  spring(target) {
+    if (target.kind === 'up') goUp()
+    else openLevel(crate.piles.value.find(p => p.id === target.id) ?? null)
+  },
+  end() {
+    if (levelId.value !== dragFrom) openLevel(crate.piles.value.find(p => p.id === dragFrom) ?? null)
+  }
+})
+function pressCard(e: PointerEvent) {
+  if (!current.value || editing.value) return
+  pin()
+  dragFrom = levelId.value
+  drag.press(e)
+}
+const dropPileId = computed(() => drag.over.value?.kind === 'pile' ? drag.over.value.id : null)
+const springOf = (pile: CratePile) => dropPileId.value === pile.id ? drag.progress.value : 0
+const hasSubPiles = (pile: CratePile) => children(pile.id).length > 0
+const ghost = computed(() => drag.dragging.value ? current.value : null)
+
+// "↑ Not <pile>": inside a pile, take the track out of it.
+const notIn = computed(() => level.value && current.value && isIn(current.value, level.value) ? level.value : null)
+function notInLevel(pile: CratePile) {
+  pin()
+  if (current.value) takeOutOf(current.value, pile)
+}
+
+// ── Desktop keyboard (#2210) ──────────────────────────────────────────────
+const anyOverlay = computed(() => listOpen.value || newPileOpen.value)
+useEventListener(import.meta.client ? window : undefined, 'keydown', (e: KeyboardEvent) => {
+  const el = e.target as HTMLElement | null
+  if (el?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="dialog"]')) return
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault()
+    return crate.undo()
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey || anyOverlay.value || drag.dragging.value) return
+  const n = Number(e.key)
+  if (n >= 1 && n <= 9 && !editing.value) {
+    const pile = shownPiles.value[n - 1]
+    if (pile) togglePile(pile)
+    return
+  }
+  const actions: Record<string, () => void> = {
+    ' ': () => deck.value?.toggle(),
+    'ArrowUp': previous,
+    'ArrowDown': next,
+    'ArrowLeft': () => deck.value?.skip(-15),
+    'ArrowRight': () => deck.value?.skip(15),
+    'Enter': next,
+    'Escape': () => { if (level.value) goUp() },
+    '/': () => { listOpen.value = true }
+  }
+  const act = actions[e.key]
+  if (!act) return
+  e.preventDefault()
+  act()
+})
 
 const inPiles = computed(() => current.value ? leafPiles(current.value) : [])
 const deckOther = computed(() => current.value ? otherTags(current.value) : [])
@@ -203,6 +281,9 @@ function startNewPile() {
       @list="listOpen = true"
       @listen="listen"
       @upload="fileInput?.click()"
+      :editing="editing"
+      :drop-key="drag.overKey.value"
+      @edit="editing = !editing"
     />
     <input ref="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.aif,.aiff,.wav,.flac,.ogg" multiple class="hidden" @change="onFiles">
     <UProgress
@@ -228,7 +309,11 @@ function startNewPile() {
             :ticked="pileTicked(pile)"
             :disabled="!current && !deckCollapsed"
             :glow="pileGlow(pile)"
-            @toggle="onPileToggle(pile)"
+            :editing="editing"
+            :springs="hasSubPiles(pile)"
+            :drop-over="dropPileId === pile.id"
+            :spring="springOf(pile)"
+            @toggle="onRow(pile)"
             @open="openLevel(pile)"
           />
           <UButton
@@ -255,11 +340,14 @@ function startNewPile() {
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
       :checked="deckChecked"
+      :not-in="notIn"
       @next="next"
       @previous="previous"
       @done="done"
       @edit="editOpen = true"
       @remove="removeFromDeck"
+      @press="pressCard"
+      @not="notInLevel"
     >
       <template #hints>
         <CrateHints
@@ -277,11 +365,34 @@ function startNewPile() {
       </template>
     </CrateDeck>
 
+    <!-- The dragged track follows the finger; pointer-events-none so elementFromPoint sees what's under it. -->
+    <div
+      v-if="ghost"
+      class="pointer-events-none fixed z-50 max-w-60 -translate-x-1/2 -translate-y-[130%] truncate rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-inverted shadow-lg"
+      :style="{ left: `${drag.x.value}px`, top: `${drag.y.value}px` }"
+    >
+      {{ ghost.name }}
+    </div>
+
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
 
     <CrateUploadEdit v-model:open="editOpen" :track="current" @save="saveUpload" @delete="removeUpload" />
 
-    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
+    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" :tags="crate.loneTags.value" @create="onCreate" />
+
+    <CrateEditPile
+      ref="editor"
+      :piles="crate.piles.value"
+      :path-label="pathLabel"
+      :descendants="descendants"
+      :children="children"
+      :count="(p) => counts.get(p.id) ?? 0"
+      @rename="(p, name) => crate.editPile(p, { op: 'rename', name })"
+      @move="(p, parentId) => crate.editPile(p, { op: 'move', parentId })"
+      @up="(p) => crate.editPile(p, { op: 'up' })"
+      @shift="(p, dir) => crate.editPile(p, { op: 'shift', dir })"
+      @remove="(p) => crate.editPile(p, { op: 'remove' })"
+    />
 
     <CrateTrackList
       v-model:open="listOpen"

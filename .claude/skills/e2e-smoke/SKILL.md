@@ -151,3 +151,22 @@ checkout/remote container pays that cold every time. Levers, by payoff:
   `e2e.manifest.json` `surfaces` or add a fixture — see `e2e/CLAUDE.md`. Editing
   the manifest/fixture is fine (they're in `fixtures/`, not `packages/`); editing
   the harness specs in `e2e/` is also outside the packages gate.
+
+## Harness layout (moved from root CLAUDE.md, #3350)
+
+A Playwright smoke that boots a **real generated crouton app** and verifies it
+still **boots → authenticates → does CRUD → renders package surfaces**. This is
+the "did a `packages/` change or dependency bump break a consuming app" check —
+run it after touching `crouton-core`/`crouton-auth`/the CLI, or after a dep bump.
+
+Two folders, one split:
+- **`fixtures/<name>/`** — the apps under test (real generated crouton apps, one
+  per package config: `minimal`, `with-pages`, `with-bookings`). Throwaway, not
+  deployed. What each one smokes is declared in its `e2e.manifest.json`. See
+  **`fixtures/CLAUDE.md`**.
+- **`e2e/`** — the Playwright harness (config, generic manifest-driven specs,
+  auth flow). The full reference — manifest format, auth realities, adding a
+  fixture, gotchas — lives in **`e2e/CLAUDE.md`**.
+
+Run via the **`e2e-smoke` skill** (`.claude/skills/e2e-smoke/`), or directly:
+`E2E_FIXTURE=<name> BETTER_AUTH_SECRET=dev BETTER_AUTH_URL=http://localhost:3000 pnpm test:e2e`.

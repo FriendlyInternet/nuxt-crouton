@@ -124,6 +124,8 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -134,6 +136,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -247,12 +261,15 @@ jobs:
               // Fire a FRESH `labeled` event — the workers trigger on the label being ADDED,
               // never on it merely being present, so a re-dispatch must remove it first.
               try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: number, name: label }) } catch (e) {}
-              await github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] })
+              // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+              const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+              await handoffGuard({ kind: 'label', issue: number, label },
+                () => github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] }))
               done.push(`#${number} → \`${label}\``)
             }
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-              `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
+              '<!-- pipeline-note -->\n' + `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
               + (done.length ? `Dispatched: ${done.join(' · ')}\n\n` : `Nothing dispatchable right now — every open child is waiting on a sibling.\n\n`)
               + `_${process.env.REASON}_\n\n`
               + `<sub>🤖 pi.dev harness (CI) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
@@ -392,7 +409,7 @@ jobs:
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"
           mkdir -p "$PI_SESSION_DIR"
           pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+            < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)
@@ -473,7 +490,7 @@ jobs:
                 && git checkout -B "$EPIC_BRANCH" FETCH_HEAD 2>/dev/null \
                 || git checkout -B "$EPIC_BRANCH" 2>/dev/null
               # -f: the rendered PNGs live under writeups/schema-reviews (and ui-mockups), which the
-              # global `*.png` .gitignore rule covers (only writeups/diagrams + ui-proposals are
+              # global `*.png` .gitignore rule covers (only writeups/diagrams is
               # allowlisted). These are an explicit, known-safe sign-off artifact list, so force past
               # the ignore — without -f `git add` silently skips the PNG and the comment's image 404s.
               for f in $ARTIFACTS; do [ -f "$f" ] && git add -f -- "$f"; done
@@ -509,7 +526,7 @@ jobs:
             const reason = process.env.CLAIM_REASON || 'another run already holds this issue'
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-              `⏸️ **Not picked up — ${reason}.**\n\n`
+              '<!-- pipeline-note -->\n' + `⏸️ **Not picked up — ${reason}.**\n\n`
               + `Nothing is broken and nothing was lost: the run stopped before starting so two runs `
               + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
               + `<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
@@ -623,7 +640,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -666,7 +683,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -757,7 +774,7 @@ jobs:
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
               : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${foot}`
 
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
@@ -798,3 +815,47 @@ jobs:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/
           if-no-files-found: ignore
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [decompose-pi]
+    if: ${{ always() && needs.decompose-pi.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: decompose-on-issue-pidev.yml
+          ISSUE: "${{ inputs.issue || github.event.issue.number }}"
+          STAGE: decompose
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.decompose-pi.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs
