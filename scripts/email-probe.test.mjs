@@ -68,7 +68,7 @@ test('gate fires on anything but pass (a skipped probe goes red)', () => {
   assert.ok(!g.includes("== 'fail'"))
 })
 
-// #3437 — production checks the email key but never sends.
+// #3437 — production checks the email key BEFORE the deploy and never sends.
 const wfText = readFileSync(new URL('../.github/workflows/deploy-app.yml', import.meta.url), 'utf8')
 function stepBlock(name) {
   const start = wfText.indexOf(`- name: ${name}`)
@@ -77,14 +77,14 @@ function stepBlock(name) {
   return wfText.slice(start, next === -1 ? undefined : next)
 }
 
-test('production: key check runs, send does not', () => {
-  assert.ok(!stepBlock('Email app? (crouton-email)').includes("!= 'production'"))
-  const key = stepBlock('Ensure email key on the Worker')
-  const ifLine = key.split('\n').find(l => l.trim().startsWith('if:'))
-  assert.ok(!ifLine.includes('!= \'production\''))
-  assert.ok(key.includes('= "production" ]; then TARGET=""'))
-  const guard = key.indexOf('!= "production"')
-  assert.ok(guard !== -1 && guard < key.indexOf('secret put'))
+test('production: key check runs before deploy; staging steps and send stay non-production', () => {
+  const check = 'Require email key on the production Worker (before deploy)'
+  const deploy = 'Deploy (build'
+  assert.ok(wfText.indexOf(`- name: ${check}`) < wfText.indexOf(`- name: ${deploy}`), 'check must precede deploy')
+  const blk = stepBlock(check)
+  assert.ok(blk.includes("inputs.environment == 'production'"))
+  assert.ok(blk.includes('has-key') && blk.includes('exit 1'))
+  assert.ok(!blk.includes('secret put NUXT') || !/\|\s*npx wrangler secret put/.test(blk), 'never pushes a key')
+  assert.ok(stepBlock('Ensure email key on the Worker').includes("inputs.environment != 'production'"))
   assert.ok(stepBlock('Probe email send').includes("inputs.environment != 'production'"))
-  assert.ok(stepBlock('Gate on email probe').includes("inputs.environment != 'production'"))
 })
