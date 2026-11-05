@@ -4,7 +4,12 @@ export default {
   // form is auto-injected because the `locations` collection has address +
   // coordinate fields (the crouton-maps generator detector fires on them).
   features: {
-    maps: true
+    maps: {
+      "config": {
+        "style": "liberty",
+        "geocodingUrl": "https://nominatim.openstreetmap.org"
+      }
+    }
   },
 
   // Single locale — this fixture exercises maps, not i18n locale-switching.

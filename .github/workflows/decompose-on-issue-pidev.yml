@@ -1,22 +1,18 @@
 name: Decompose on issue (pi.dev variant)
 
+# #3210: runs carry the issue number.
+run-name: "#${{ inputs.issue || github.event.issue.number }} · decompose"
+
 # WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
 # `decompose-on-issue.yml` with ONE thing swapped: the agent step
 # (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
 # (the current setting) THIS flow — not the claude one — works our `delegate` issues.
 #
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
+# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative):
+#   • `workflow_dispatch` — the router in work-issue-pidev.yml sends an `epic` issue here when a
+#     human applies `work-this` (#3208). You can also dispatch any issue number by hand.
+#   • `delegate` / `delegate-pi` label — INTERNAL hand-offs only: they start a run only when applied
+#     by nuxt-harness[bot]; a human adding one starts nothing.
 #
 # HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
 # every one of those locks has since been removed. Do NOT reintroduce that framing:
@@ -53,9 +49,9 @@ name: Decompose on issue (pi.dev variant)
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
+# (or `delegate`) label to an issue (mirrors the claude `delegate` flow). People apply only
+# `work-this` (#3208); a human adding `delegate*` starts nothing. On success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
@@ -82,31 +78,29 @@ on:
         default: "claude-bridge"
         type: choice
         options: ["claude-bridge", "zai", "anthropic"]
-  # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
-  # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
-  # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
-  # `opened` added for the WS7 flip (#1077): when AGENT_HARNESS=pi, an issue *created with* the
-  # plain `delegate` label must land here (the claude flow handles that shape and now yields).
+  # We fire on EVERY labeled event but the job `if` gates to the exact delegate / delegate-pi labels
+  # applied by the pipeline app (nuxt-harness[bot]), so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
   issues:
-    types: [labeled, opened]
+    types: [labeled]
 
 jobs:
   decompose-pi:
-    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` label freshly applied
-    # to an issue (#1017), OR — when the WS7 flip is ON (vars.AGENT_HARNESS == 'pi', #1077) —
-    # the same plain-`delegate` shapes the claude flow handles (which then yields via its own
-    # guard). The specific-label checks are what stop a re-fire loop when the worker adds its
+    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` / `delegate` label freshly
+    # applied BY THE PIPELINE APP (#1017; never by a person). The specific-label checks are what stop a re-fire loop when the worker adds its
     # own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
+    # #3208: `work-this` is the ONE label a human applies. Its router (work-issue-pidev.yml) sends a
+    # big issue here by `workflow_dispatch`. The `delegate*` labels are INTERNAL hand-offs only
+    # (the decomposer's own needsSplit children, wave release, comment re-dispatch): they start a run
+    # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-pi') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
+        contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
-    # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both
-    # `opened` and `labeled`, so two runs start in the same second and both applied a plan
+    # One decompose at a time per issue (#2645). An issue created WITH a label fires only
+    # `labeled` (`opened` is no longer a trigger), yet two labeled events can still start two runs
+    # in the same second and both applied a plan
     # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
     # "Resume an already-decomposed tree" (#2048), sees the first run's children and
     # dispatches them instead of planning again.
@@ -329,10 +323,8 @@ jobs:
       - id: model
         run: |
           DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+          echo "pipeline models — default=$DEFAULT (from .claude/pipeline-models.json)"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -342,14 +334,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
-          # still escalates, but by MODEL (default → hard) on the same provider — no metered
-          # lane. Headless subscription auth on a GitHub-hosted runner (#2275):
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275):
           # CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y) authenticates the Claude Code child that
           # claude-bridge spawns; the CLI is installed + preflighted by setup-pi (#2119).
           # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
-          # hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          # hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -542,11 +532,14 @@ jobs:
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number, since,

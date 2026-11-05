@@ -13,7 +13,7 @@
 //     `work-issue-pidev.yml` / `decompose-on-issue-pidev.yml` call the `bot-guard` CLI below.
 //
 //  2. EXACT-LABEL GATING (#535) — a job fires ONLY on the exact trigger label freshly applied
-//     (`work-this` for the worker, `delegate-pi`/`delegate-hard` for the decomposer), never on a
+//     (`work-this` for the worker, `delegate-pi` for the decomposer), never on a
 //     worker's incidental `status:in-progress` add. This mirrors each workflow's job `if:` so the
 //     re-fire loop is closed. (`jobShouldFire` is the executable spec of that `if:`.)
 //
@@ -37,9 +37,9 @@ import { appendFileSync, readFileSync } from 'node:fs'
 export const ALLOWED_BOT = 'nuxt-harness[bot]'
 export const MAX_DEPTH = 3
 export const MAX_CHILDREN = 6
-// The labels that legitimately DRIVE a fresh pipeline run (a human or the App may apply them).
+// The labels that legitimately DRIVE a fresh pipeline run (only the pipeline app applies `delegate` / `delegate-pi`; people apply `work-this`).
 export const WORKER_TRIGGER = 'work-this'
-export const DECOMPOSE_TRIGGERS = ['delegate-pi', 'delegate-hard']
+export const DECOMPOSE_TRIGGERS = ['delegate-pi']
 
 /**
  * INVARIANT 1 — may `actor` drive the pipeline?

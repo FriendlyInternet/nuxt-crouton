@@ -185,6 +185,16 @@ jobs:
               + `<sub>🤖 agent pipeline (CI) · approve-draft-pr #2051</sub>` })
             core.info(`Released #${pull_number} (${approvalKind(body)}).`)
 
+            // #3210 — tick "Owner ok" ONLY here: a real owner `ok` (isApproval above, which rejects
+            // agent comments), never the plan:approved label. Cosmetic; never fails the run.
+            try {
+              const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
+              const closes = issueFromPrBody(pr.body || '')
+              if (closes) require('node:child_process').execFileSync('node',
+                ['scripts/flow-checklist.mjs', String(closes), 'ok', '--link', context.payload.comment.html_url],
+                { env: { ...process.env, GH_TOKEN: '${{ steps.app-token.outputs.token }}', GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
+            } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
+
   approve-epic:
     needs: route
     if: needs.route.outputs.kind == 'approve-epic'
@@ -853,11 +863,14 @@ jobs:
           # env, not `${{ }}` inside the script — the value is multi-line and interpolating
           # it into JS source would break the script.
           MERGE_SKIPPED: ${{ steps.mergegate.outputs.skipped }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |
             const issue_number = context.payload.issue.number
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             // (a) sub-issues created this run (a plan/decompose gate proceeding)
             let createdSubIssues = false

@@ -40,7 +40,7 @@ Use TodoWrite for 3+ step tasks *when the harness exposes it* (one `in_progress`
 
 See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
 
-- **Hand off** by labelling the ticket `delegate` (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Hand off** by labelling the ticket `work-this` — the one label a human applies; `delegate*` are bot-only hand-offs (#3208) (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
 - **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
 - **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
 
@@ -366,6 +366,8 @@ Chromium is pre-installed at `/opt/pw-browsers`; `npx playwright install` fails 
 ## Sign-off gates (UI · Schema · Test)
 
 UI-touching → `ui-proposal` · collection schema → `schema-review` · `packages/*` logic → `test-review`. Which gate fires, each gate's scope, and what counts as approval (a reply that is only `ok`): `crouton-change-control`. Pipeline lane: `.claude/agents/task-worker.md`; plan→review→build for bugs/`packages/` work: `.claude/plan-routing.json`.
+
+**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing.
 
 ## Documentation Organization
 

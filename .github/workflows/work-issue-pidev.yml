@@ -1,41 +1,19 @@
 name: Work issue (pi.dev · single-use worker)
-run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} label {1}', github.event.issue.number, github.event.label.name) || format('work #{0} {1} {2}', inputs.issue, inputs.feedback != '' && 'revise' || inputs.mode, inputs.plan || inputs.feedback || '-') }}"
+# #3210: dispatched runs carry the issue number + mode, e.g. "#3207 · plan".
+run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode || 'build' }}${{ inputs.feedback != '' && ' · revise' || '' }}"
 
 # WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
 # Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
 # artifact-gate (#461) and the telemetry capture are preserved VERBATIM. What differs:
-#   • Trigger — the `work-this` label on a LEAF issue (not `delegate*`), applied by a human or,
-#     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
+#   • Trigger — the `work-this` label on an issue (the Route job picks leaf vs epic), applied by a human or
+#     by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
 #   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
 #     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
-# ⚠️ CLEANUP PENDING (#1686): many inherited comments/vars below still say "decompose"/"decompose-pi"
-#   and describe the tree flow — they are stale here. Functional edits (trigger, if, prompt) are done;
-#   the comment sweep + on-box test (label a leaf → PR on claude-bridge) are the remaining WS1 items.
-# ── original decompose-flow header follows (context for the shared machinery) ──
-
-# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
-# `decompose-on-issue.yml` with ONE thing swapped: the agent step
-# (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
-# (the current setting) THIS flow — not the claude one — works our `delegate` issues.
-#
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
-#
-# HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
-# every one of those locks has since been removed. Do NOT reintroduce that framing:
-# superseded by #1017 (`delegate-pi` trigger), #1077 (the AGENT_HARNESS=pi flip), and
-# #1421/#1423 (the funded zai/GLM-5.2 lane). Stale dormancy prose here cost a session
-# once — it reads as authoritative while sitting directly above code that refutes it.
+# DISPATCH RULE (#3208): `work-this` is the ONE label a human applies. The Route job reads the
+#   issue: an `epic`-labelled (big) issue is handed to decompose-on-issue-pidev.yml (the splitter);
+#   anything else is built here as a single leaf. People apply only `work-this`. `delegate` / `delegate-pi` are
+#   internal hand-offs applied only by the pipeline — a human adding one starts nothing.
+# Shared machinery below (push path, artifact-gate, telemetry) is inherited from decompose-on-issue-pidev.yml.
 #
 # WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
 #   • PUSH PATH (#1004 piece 1, the load-bearing change): unlike the reports-only
@@ -66,7 +44,7 @@ run-name: "${{ github.event_name != 'workflow_dispatch' && format('work #{0} lab
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
 # label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
 # on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
@@ -170,6 +148,13 @@ jobs:
           if echo ",$LABELS," | grep -q ',plan:approved,'; then
             echo "issue #$ISSUE already carries plan:approved → build"
             echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
+          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
+            echo "issue #$ISSUE is an epic → splitter"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"decompose-on-issue-pidev.yml",inputs:{issue:($i|tostring),harness:"pi"}}')"
+            exit 0
           fi
           R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
           echo "route: $R"
@@ -358,6 +343,25 @@ jobs:
               core.warning(`follow-along breadcrumb failed (non-fatal): ${e.message}`)
             }
 
+      # #3210 — tick the per-ticket flow checklist (one comment, edited in place). Cosmetic: never fails the job.
+      - name: Tick flow checklist (routed)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          ISSUE="${{ inputs.issue || github.event.issue.number }}"
+          # Same router the dispatcher used → "mode: reason" (falls back to mode alone).
+          REASON="$( (gh issue view "$ISSUE" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/flow-issue.txt" \
+            && LABELS="$(gh issue view "$ISSUE" --json labels --jq '[.labels[].name] | join(",")')" \
+            && node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/flow-issue.txt" \
+            | node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(r.reason)') 2>/dev/null || true)"
+          NOTE="${{ inputs.mode || 'build' }}"
+          [ -n "$REASON" ] && NOTE="$NOTE ($REASON)"
+          node scripts/flow-checklist.mjs "$ISSUE" routed \
+            --note "$NOTE" \
+            --link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
       # The single-use worker has no Agent-prompt channel; the parent wrote the context into a
       # `<!-- pipeline: epic=.. depth=.. epic_branch=.. -->` block on the issue. Fetch the body via
@@ -485,12 +489,10 @@ jobs:
       - id: model
         run: |
           DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
           echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT hard=$HARD plan=$PLAN (from .claude/pipeline-models.json)"
+          echo "pipeline models — default=$DEFAULT plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -586,14 +588,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
-          # still escalates, but by MODEL (default → hard) on the same provider — no metered lane.
-          # Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
           # (claude setup-token, 1y) authenticates the Claude Code child that claude-bridge spawns;
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
-          # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          # a hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -850,6 +850,10 @@ jobs:
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
+          # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
+          PLAN_URL="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .html_url // empty' | tail -n 1)"
+          GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" plan --link "$PLAN_URL" || true
           if [ "$(echo "$VERDICT" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).unverified)')" = "true" ]; then
             gh issue edit "$ISSUE" --add-label "plan:unverified" || true
           fi
@@ -882,7 +886,7 @@ jobs:
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail
@@ -1357,6 +1361,10 @@ jobs:
             fi
           fi
 
+          # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
+          TICK_PR="$(gh pr list --head "$BR" --base "$BASE" --json url -q '.[0].url' 2>/dev/null || true)"
+          [ -n "$TICK_PR" ] && GITHUB_REPOSITORY="$GITHUB_REPOSITORY" node scripts/flow-checklist.mjs "$ISSUE" pr --link "$TICK_PR" || true
+
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
@@ -1493,6 +1501,7 @@ jobs:
         if: ${{ always() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          AGENT_RUNNER_LABEL: ${{ vars.AGENT_RUNNER || 'github-hosted' }}  # passed via env so the script below has no expressions (GitHub's 21000-char expression limit)
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           # #1764: '1' only when the deterministic finish step could NOT persist pi's edits
@@ -1512,6 +1521,7 @@ jobs:
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
           # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
           # paging "produced nothing" on the ticket too would be a false alarm.
           CONFLICT_FAILED: ${{ steps.conflict.outputs.failed }}
@@ -1524,8 +1534,10 @@ jobs:
             if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
             if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number, since,
@@ -1623,7 +1635,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -1666,7 +1678,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -1800,7 +1812,7 @@ jobs:
             // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
             // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${process.env.AGENT_RUNNER_LABEL}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
             // #2464: quote pi's own last words — often the whole explanation ("nothing left to do").
             let piSaid = ''
             try {

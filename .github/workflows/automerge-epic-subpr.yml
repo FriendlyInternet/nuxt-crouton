@@ -139,6 +139,7 @@ jobs:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+          FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}   # #3361: writes the retry note when the App is out of allowance
         with:
@@ -422,6 +423,14 @@ jobs:
                   await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
                   merged = true
                   core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
+                  // #3210 — tick "Merged" on the ticket's flow checklist (cosmetic; default-branch script).
+                  try {
+                    const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
+                    const closes = issueFromPrBody(pr.body || '')
+                    if (closes) require('node:child_process').execFileSync('node',
+                      ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
+                      { env: { ...process.env, GH_TOKEN: process.env.FLOW_TOKEN, GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
+                  } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
                 } catch (e) {
                   const baseMoved = e.status === 405 && /base branch was modified/i.test(e.message || '')
                   if (baseMoved && attempt < 3) {
