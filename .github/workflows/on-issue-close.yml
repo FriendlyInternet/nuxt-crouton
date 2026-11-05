@@ -142,7 +142,7 @@ jobs:
             const { owner, repo } = context.repo
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
             const ws = process.env.GITHUB_WORKSPACE
-            const { parsePipelineBlock } = await import(`${ws}/scripts/pipeline-context.mjs`)
+            const { parsePipelineBlock, resolveContext } = await import(`${ws}/scripts/pipeline-context.mjs`)
             const { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers, collectApprovalLines } = await import(`${ws}/scripts/epic-ready.mjs`)
 
             // Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
@@ -160,7 +160,15 @@ jobs:
             } else {
               const closed = context.payload.issue
               closedIssueNumber = closed.number
-              const block = parsePipelineBlock(closed.body || '')
+              let block = parsePipelineBlock(closed.body || '')
+              // #3209: a child with no branch of its own inherits its parent's via resolveContext.
+              if (!block.epic_branch) {
+                try {
+                  const { data: parent } = await github.request('GET /repos/{owner}/{repo}/issues/{issue_number}/parent', { owner, repo, issue_number: closed.number })
+                  const ctx = resolveContext({ issue: { body: closed.body || '' }, parent: { body: parent.body || '' }, parentNumber: parent.number })
+                  if (ctx) block = { ...block, ...ctx }
+                } catch (e) { core.info(`no parent context: ${e.message}`) }
+              }
               blockEpicNumber = block.epic
               epicNumber = block.epic ?? closed.number
               epicBranch = block.epic_branch

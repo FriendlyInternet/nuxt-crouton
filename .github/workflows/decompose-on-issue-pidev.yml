@@ -443,6 +443,15 @@ jobs:
           echo "── decompose-plan.json ──"; cat decompose-plan.json; echo
           # Resolve pipeline context off the target's WS2 block (epic/depth/epic_branch).
           BODY="$(gh issue view "$ISSUE" --repo "$REPO" --json body -q .body)"
+          # #3209: inherit the parent's epic context via the one shared rule (resolveContext).
+          PARENT_BODY="$(gh api "repos/${REPO}/issues/${ISSUE}/parent" -q .body 2>/dev/null || true)"
+          PARENT_NUM="$(gh api "repos/${REPO}/issues/${ISSUE}/parent" -q .number 2>/dev/null || true)"
+          BODY="$(CHILD_BODY="$BODY" PARENT_BODY="$PARENT_BODY" PARENT_NUM="$PARENT_NUM" node --input-type=module -e "
+            import { resolveContext, writePipelineBlock } from './scripts/pipeline-context.mjs'
+            const b = process.env.CHILD_BODY
+            const ctx = process.env.PARENT_BODY ? resolveContext({ issue: { body: b }, parent: { body: process.env.PARENT_BODY }, parentNumber: Number(process.env.PARENT_NUM) || null }) : null
+            process.stdout.write(ctx ? writePipelineBlock(b, ctx) : b)
+          ")"
           EPIC="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read epic)"
           DEPTH="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read depth)"
           EPIC_BRANCH="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read epic_branch)"

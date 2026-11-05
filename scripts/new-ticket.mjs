@@ -139,6 +139,12 @@ function inheritParentContext({ exec, repo, parent, number, body, log, writeBody
   const ctx = resolveContext({ issue: { body }, parent: { body: parentBody }, parentNumber: parent })
   if (!ctx) {
     log(`parent #${parent} is an umbrella (no epic branch) — #${number} is its own epic`)
+    // Plan step 3: stamp the umbrella child as its own depth-0 epic (no branch yet).
+    try {
+      exec('gh', ['api', '--method', 'PATCH', `repos/${repo}/issues/${number}`, '-F', `body=@${writeBody(writePipelineBlock(body, { epic: number, depth: 0 }))}`])
+    } catch (e) {
+      return `could not add the pipeline: line to #${number} (${e.message}) — trigger label NOT added`
+    }
     return null
   }
   try {

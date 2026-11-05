@@ -372,7 +372,15 @@ jobs:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
-            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
+            // #3209: inherit the parent's epic context via the one shared rule (resolveContext).
+            let body = data.body || ''
+            try {
+              const { resolveContext, writePipelineBlock } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-context.mjs`)
+              const { data: parent } = await github.request('GET /repos/{owner}/{repo}/issues/{issue_number}/parent', { ...context.repo, issue_number })
+              const ctx = resolveContext({ issue: { body }, parent: { body: parent.body || '' }, parentNumber: parent.number })
+              if (ctx) body = writePipelineBlock(body, ctx)
+            } catch (e) { core.info(`no parent context: ${e.message}`) }
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, body)
       - id: ctx
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

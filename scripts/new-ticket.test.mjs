@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { checkBody, labelsFor, newTicket, dedupQueries, parseLabelNames } from './new-ticket.mjs'
 
 const KNOWN = ['type:feat', 'pkg:crouton-auth', 'app:docs', 'work-this']
@@ -98,11 +99,18 @@ test('parent with an epic branch → child gets epic, depth+1, same branch', () 
   assert.match(w.at(-1), /<!-- pipeline: epic=5 depth=2 epic_branch=epic\/5-x -->/)
 })
 
-test('umbrella parent (no branch) → no pipeline line, no empty branch', () => {
-  const { r, w, calls } = ctxRun('children are standalone')
+test('umbrella parent (no branch) → own depth-0 epic, no epic_branch', () => {
+  const { r, w } = ctxRun('children are standalone')
   assert.ok(r.ok)
-  assert.ok(w.every(b => !/pipeline:/.test(b)))
-  assert.ok(!calls.some(c => c.includes('PATCH')))
+  assert.match(w.at(-1), /<!-- pipeline: epic=\d+ depth=0 -->/)
+  assert.ok(!/epic_branch/.test(w.at(-1)))
+})
+
+test('the three workflow readers call resolveContext (#3209)', () => {
+  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'on-issue-close.yml']) {
+    const src = readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+    assert.match(src, /resolveContext/, `${f} must use resolveContext`)
+  }
 })
 
 test('failed body edit → trigger label NOT added', () => {
