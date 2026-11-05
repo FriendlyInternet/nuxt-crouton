@@ -527,38 +527,6 @@ jobs:
           push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
           push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
 
-      # Magic-link mail swallows every error (crouton-auth `.catch(() => {})`, crouton-email's
-      # try/catch), so a preview can look fine while nothing is sent (#2557). Prove it from CI:
-      # tail the Worker, request a link for the owner, and print the `[crouton-email]` lines
-      # (URLs masked). It mails Resend's test inbox, never the owner (#2702).
-      - name: Probe status magic-link send (PR preview)
-        if: ${{ inputs.app == 'status' && github.event.pull_request.number != '' && inputs.environment != 'production' }}
-        continue-on-error: true
-        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
-        env:
-          # Resend's test inbox: the send is real (and logged) but never reaches the owner (#2702).
-          PROBE_EMAIL: delivered@resend.dev
-          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-        run: |
-          if [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
-            echo "::notice::magic-link probe skipped (URL or built config missing)."
-            exit 0
-          fi
-          npx wrangler tail --config .output/server/wrangler.json --format pretty > "$RUNNER_TEMP/tail.log" 2>&1 &
-          TAIL_PID=$!
-          sleep 15
-          BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
-          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
-            -H 'Content-Type: application/json' -d "$BODY" || true)
-          echo "probe request → HTTP $CODE"
-          sleep 10
-          kill "$TAIL_PID" 2>/dev/null || true
-          echo "--- [crouton-email] lines from the Worker tail ---"
-          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/tail.log" \
-            | grep -F -e '[crouton-email]' -e 'Error' -e 'POST' \
-            | sed -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
-            | head -40 || echo "(no matching lines)"
-
       # Send the owner a sign-in link when status updates on staging, so they never have to type
       # an email on a phone. Owner address is never printed.
       - name: Email owner a status sign-in link
@@ -794,6 +762,93 @@ jobs:
           else ENV_FLAG="--env staging"; fi
           npx wrangler secret put COLLAB_TOKEN_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-token-secret"
           rm -f "$RUNNER_TEMP/collab-token-secret"
+
+      # Email apps (#3418): any app whose layerPackages has @fyit/crouton-email must prove its mail
+      # works. Order matters: detect → key → probe, after every secret-writing step above, so the
+      # Worker has its Resend key and BETTER_AUTH_SECRET (sign-up needs it) before we send.
+      - name: Email app? (crouton-email)
+        id: email-app
+        if: ${{ inputs.environment != 'production' }}
+        run: node scripts/email-probe.mjs detect "${{ inputs.workspace }}/${{ inputs.app }}/deploy.config.json" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure email key on the Worker
+        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
+          else TARGET="--env staging"; fi
+          LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+          if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
+            if [ -n "$RESEND_API_KEY" ]; then
+              echo "::notice::No email key on the Worker — pushing NUXT_EMAIL_RESEND_API_KEY from the RESEND_API_KEY repo secret."
+              printf '%s' "$RESEND_API_KEY" | npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY $TARGET
+            fi
+            LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+          fi
+          if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
+            echo "::error::email key missing — ${{ inputs.app }} uses @fyit/crouton-email but its Worker has no NUXT_EMAIL_RESEND_API_KEY (set the RESEND_API_KEY repo secret, or add it to WORKER_SECRETS_JSON)"
+            exit 1
+          fi
+          echo "✓ email key present on the Worker"
+
+      # Proves a real send. The package swallows every send error, so the verdict is read from the
+      # auth_email_log row (pending → sent/failed). Mails Resend's test inbox only. Report-only here;
+      # "Gate on email probe" at the end turns anything but a recorded send into a red check.
+      - name: Probe email send
+        id: email-probe
+        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.deploy.outputs.url != '' }}
+        continue-on-error: true
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          APP: ${{ inputs.app }}
+          MODE: ${{ steps.email-app.outputs.mode }}
+        run: |
+          echo "result=fail" >> "$GITHUB_OUTPUT"   # overwritten on success; a crash stays red
+          PROBE_EMAIL="delivered+${APP}@resend.dev"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
+          else TARGET="--env staging"; fi
+          START=$(date +%s)
+          if [ "$MODE" = "magic-link" ]; then
+            BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
+            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+              -H 'Content-Type: application/json' -d "$BODY" || true)
+            echo "magic-link request → HTTP $CODE"
+          else
+            PW=$(openssl rand -hex 12)
+            SU=$(jq -n --arg e "$PROBE_EMAIL" --arg p "$PW" --arg n "email-probe" '{email:$e, password:$p, name:$n}')
+            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-up/email" \
+              -H 'Content-Type: application/json' -d "$SU" || true)
+            echo "sign-up → HTTP $CODE (200 new, 422 already exists — both fine)"
+            RB=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, redirectTo:"/"}')
+            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/request-password-reset" \
+              -H 'Content-Type: application/json' -d "$RB" || true)
+            echo "request-password-reset → HTTP $CODE"
+          fi
+          REASON="no send recorded"
+          for _ in 1 2 3 4 5 6; do
+            sleep 5
+            OUT=$(npx wrangler d1 execute DB --remote $TARGET --json --command "SELECT status, error FROM auth_email_log WHERE recipientEmail='${PROBE_EMAIL}' AND createdAt >= ${START} ORDER BY createdAt DESC LIMIT 1" 2>/dev/null || true)
+            if V=$(echo "$OUT" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" verdict); then
+              echo "result=pass" >> "$GITHUB_OUTPUT"
+              echo "✓ email probe: sent"
+              echo "✓ email probe (${APP}): sent to ${PROBE_EMAIL}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            REASON="$V"
+            [ "$REASON" = "never confirmed" ] || [ "$REASON" = "no send recorded" ] || break
+          done
+          if [ "$REASON" = "no send recorded" ] || [ "$REASON" = "never confirmed" ]; then
+            echo "::error::email probe: no send recorded"
+          else
+            echo "::error::email probe failed: $REASON"
+          fi
+          echo "✗ email probe (${APP}): ${REASON}" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
@@ -1086,3 +1141,12 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body })
             }
+
+      # Email send gate (#3418): the check goes red unless the probe recorded a real send. Gating
+      # on "not pass" (not "is fail") means a skipped or crashed probe is red too. Runs last so
+      # seed + smoke still happen — the check fails, the deploy stays.
+      - name: Gate on email probe
+        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.email-probe.outputs.result != 'pass' }}
+        run: |
+          echo "::error::email probe did not confirm a send (result='${{ steps.email-probe.outputs.result }}')"
+          exit 1
