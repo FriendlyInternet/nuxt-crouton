@@ -1592,7 +1592,9 @@ jobs:
               const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
               const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
               const committedAt = new Date(commit.data.committer?.date || 0).getTime()
-              workBranch = { sha: ref.data.object.sha.slice(0, 7), committedAt }
+              // Only a commit from THIS run counts (as on main); an older branch is not a deliverable
+              // and must not feed the harness-failure verdict below.
+              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7), committedAt }
             } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
 
             // Load from the RUNNER_TEMP copy (baseline step): work-<N> may predate this helper.

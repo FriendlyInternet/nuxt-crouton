@@ -35,3 +35,9 @@ test('pushedThisRun: old commit, missing branch or failed finish do not count; a
   assert.equal(pushedThisRun({ committedAt: 2000, sinceMs: 1000, finishOutcome: 'failure' }), false)
   assert.equal(decideDeliverable({ workBranchPushed: false }).ok, false)
 })
+
+test('a branch whose newest commit is from an earlier run is not a deliverable', () => {
+  const pushed = pushedThisRun({ committedAt: 999, sinceMs: 1000, finishOutcome: 'success' })
+  assert.equal(pushed, false)
+  assert.equal(decideDeliverable({ workBranchPushed: pushed }).ok, false)
+})
