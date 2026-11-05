@@ -853,11 +853,14 @@ jobs:
           # env, not `${{ }}` inside the script — the value is multi-line and interpolating
           # it into JS source would break the script.
           MERGE_SKIPPED: ${{ steps.mergegate.outputs.skipped }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |
             const issue_number = context.payload.issue.number
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             // (a) sub-issues created this run (a plan/decompose gate proceeding)
             let createdSubIssues = false
