@@ -34,31 +34,7 @@ When improving code, use multiple focused passes:
 
 ### 4. Task Management with TodoWrite (when available)
 
-**Use the TodoWrite tool proactively for complex tasks — *when the harness exposes it*.**
-
-> ⚠️ **TodoWrite is not available on every harness** (notably Claude Code on the
-> web, where the tool errors with *"not enabled in this context"*). It's a
-> **capability, not a guarantee** — don't assume it, and don't waste turns
-> retrying it after it errors. When it's absent, **fall back** to:
-> 1. a short inline checklist in your reply (the breakdown lives in chat), and
-> 2. the **GitHub issue's own acceptance-criteria checkboxes** as the durable,
->    coarse tracker — tick them as you satisfy each criterion.
->
-> Do **not** push ephemeral per-step micro-todos onto the GitHub issue (comment
-> spam / body churn) — the issue tracks the *unit of work* (epic + sub-issues +
-> acceptance criteria), the inline checklist tracks *this session's steps*.
-
-**When to use:** Any task with 3+ steps, multi-file changes, debugging, feature implementations.
-**When NOT to use:** Single straightforward tasks, trivial changes, purely conversational queries.
-
-**Critical Rules (when using TodoWrite):**
-- Exactly ONE task must be `in_progress` at any time
-- Mark tasks `completed` IMMEDIATELY after finishing
-- ONLY mark complete when FULLY accomplished — never if tests fail or work is partial
-
-Each todo requires:
-- `content`: Imperative form (e.g., "Fix authentication bug")
-- `activeForm`: Present continuous (e.g., "Fixing authentication bug")
+Use TodoWrite for 3+ step tasks *when the harness exposes it* (one `in_progress` at a time; complete only when fully done). It is absent on some harnesses (e.g. Claude Code on the web) — then don't retry it: keep a short checklist in the reply and tick the issue's acceptance-criteria checkboxes.
 
 ## Interactive session = plan, hand off, follow up (#2785)
 
@@ -86,47 +62,21 @@ Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and fol
 
 ### GitHub Issue Tracking
 
-**ISSUE-FIRST (HARD GATE): open the tracking issue BEFORE writing code.** For any new feature/package/app/initiative, the *first* action is creating the GitHub issue (epic + sub-issues for anything multi-step) via the `github-tasks` skill — not after the work, not at PR time. If you catch yourself editing files for an initiative that has no issue, STOP and open it first. New package or app? It also needs its `pkg:`/`app:` label in `.github/labels.yml`. This is the step most easily skipped — treat a missing issue like a failing build.
+**ISSUE-FIRST (HARD GATE): open the tracking issue BEFORE writing code** (epic + sub-issues for multi-step work, via the `github-tasks` skill; a new package/app also needs its `pkg:`/`app:` label in `.github/labels.yml`). A missing issue is a failing build.
 
-**DEDUP-BEFORE-CREATE (HARD GATE): search for an existing related issue/epic BEFORE opening a new one.** Issue-first's failure mode is the *duplicate* — an ephemeral session opens a second epic for work that's already tracked (the #257/#265 blog case). Before any `issue_write` create, run the **`issue-dedup`** skill: search open **and** recently-closed issues/epics, surface matches, and force a **reuse / replace / new** decision — if a match exists, **reuse it, don't mint a duplicate**. This is enforced: the `require-issue-dedup` PreToolUse hook (`.claude/hooks/`) blocks a `create` whose body lacks a `Dedup-checked:` attestation line. (#297)
+**DEDUP-BEFORE-CREATE (HARD GATE):** run the `issue-dedup` skill before any `issue_write` create and reuse an existing match; the `require-issue-dedup` hook blocks a create lacking a `Dedup-checked:` line. (#297)
 
-Tasks are tracked as **GitHub issues** (`FriendlyInternet/nuxt-crouton`) — see the `github-tasks` skill. The issue is the unit of work: open an **epic + sub-issues** for an initiative, label each by **package or app** (never `root`; exactly one `type:*`). Work lands via a **PR** on a feature branch (commit with `/commit`, reference `(#NN)`, put `Closes #NN` in the PR body to auto-close on merge) — not direct pushes to `main`. `writeups/PROGRESS_TRACKER.md` becomes an optional phase-level rollup, not the per-task tracker.
+Work lands via a PR on a feature branch (`/commit`, `(#NN)`, `Closes #NN` in the PR body). Issue rules, links, typed brief, mentions: `AGENTS.md` → *Issues* and the `owner-brief` skill (the `require-owner-brief` hook enforces the brief; it also holds the `@`-mention detail).
 
-**Always link issues & PRs when you mention them in chat.** Whenever you reference an issue or PR to the user (in prose, lists, or tables), include its full URL so it's one click to open — `#NN` alone isn't clickable. Format: `#303` → `[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)` for issues, `…/pull/376` for PRs. This is a **chat-reply** convention only — keep bare `(#NN)` in commit messages, and use `Closes #NN` (not a URL) in PR bodies so GitHub's auto-close works.
+**Agent comments LEAD with a 🤖 provenance header** (`require-comment-provenance` hook), by who the comment posts as:
+- interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping.
+- pipeline (bot account): `> 🤖 **Claude Code** · agent pipeline (CI) · _<context>_` — no human disclaimer.
 
-**Agent-posted GitHub comments LEAD with a 🤖 provenance header.** Pick the header by **who the comment actually posts as** — there are two cases, and the disclaimer differs:
-
-- **Interactive agent** — a comment written via the `add_issue_comment` MCP tool posts under the **@pmcp human account**, so it can be mistaken for Maarten. It MUST disclaim that:
-  `> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<one-line context>_`
-- **Autonomous pipeline** — a CI workflow / worker comment posts under an **unmistakable bot account** (`claude[bot]` / `nuxt-harness[bot]`), so the @pmcp disclaimer would be **false** — do NOT add it. Just name the source:
-  `> 🤖 **Claude Code** · agent pipeline (CI) · _<one-line context>_`
-
-The auto-appended "Generated by Claude Code" footer is too easy to miss; the 🤖 header is the unmistakable signal. Enforced by the `require-comment-provenance` PreToolUse hook (`.claude/hooks/`), which fires on the interactive `add_issue_comment` path and blocks a comment lacking the `🤖` header. (Applies to comments only — issue/PR *bodies* are already clearly agent-authored work items.)
-
-**…and they LEAD with a typed brief (#2081).** The header says *who*; the brief says *what you need back*. Every agent comment opens with one of **🔴 issue · 💡 proposal · ✅ done · 🔀 choice · 🛠 action · 👀 review**, one `**You:**` line naming the single next action, one `**Depth:**` link — and **everything else collapsed inside `<details>`**. Visible part ≤700 chars / ≤10 lines; nothing inside `<details>`, a code fence, the provenance blockquote or the footer counts, so **the depth is moved, never cut**. Enforced by the `require-owner-brief` PreToolUse hook (decision in the unit-tested `scripts/owner-brief.mjs`); the shape + the six types live in the **`owner-brief`** skill. `ask-human` remains the deep template for the three *blocking* types. **Structure is only half — say the visible part in PLAIN LANGUAGE too** (`AGENTS.md` → *Plain language*, examples in `owner-brief`): no repo jargon, lead with what the owner does or gets (not the mechanism), end an ask with a plain `yes/no` or `A/B`. This applies to **chat replies too**, not only comments — the owner shouldn't have to ask "be concrete" every time.
-
-**A change request for a pipeline worker names it.** An interactive-agent comment on a pipeline-built PR
-re-runs the pi worker only when it carries a line starting `**Worker:** <what to change>` (#2453,
-`scripts/revise-route.mjs`); every other 🤖-headed comment (status, FYI, the pipeline's own) is ignored by
-the revision loop, and a plain human comment is feedback as before.
-
-**And a type that needs nothing back must NOT @mention** — a mention is a request for action, so a ✅ carrying one is refused. Careful: a mention notifies from inside a blockquote **and** from inside `<details>`; only code spans and fenced blocks are exempt. That is why the provenance disclaimer above backticks the handle (`` `@pmcp` ``) — unbackticked it pinged on *every* interactive comment, which was **17 of the last 29 notifications, 59% of all pings, carrying no ask at all**.
-
-**Write issues & epics as hypotheses, not task lists (default).** The 4-part frame is in [`AGENTS.md`](./AGENTS.md) (*Issues → Write as a hypothesis*). Full template + worked examples in the `github-tasks` skill (epic #359).
+**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop.
 
 ### Task Decomposition Pipeline (`/task-decompose`)
 
-For a big/fuzzy initiative, you can let agents do the epic→sub-issue breakdown **and** the work. `/task-decompose "<task>"` (or `/task-decompose #NN` to reuse an existing epic) creates the epic, then spawns a recursive agent pipeline that builds out the whole issue tree and works the leaves:
-
-```
-/task-decompose '<task>'
-  └─ task-orchestrator (depth 0)   reads epic → 2–6 sub-issues → spawns a decomposer per child
-       └─ task-decomposer (depth 1+, RECURSIVE)   LEAF TEST one issue:
-            ├─ leaf / at depth cap → spawn task-worker (worktree) → PR (Closes #N)
-            └─ too big            → create sub-issues → spawn a decomposer per child (recurse)
-```
-
-**Stop-conditions** (so it can't run away): `MAX_DEPTH = 3`, `MAX_CHILDREN = 6`, and a four-part **LEAF TEST** (single coherent change · bounded files · clear/testable acceptance · doable in one focused run). All four true ⇒ build it, don't split. Tune in `.claude/agents/task-decomposer.md`. Everything persists as real GitHub issues (it obeys the same `github-tasks` + `/commit` + no-squash rules); it does **not** auto-merge. Details: `.claude/skills/task-decompose/SKILL.md` and `.claude/agents/CLAUDE.md`. (Epic #249.)
+Big/fuzzy initiative → `/task-decompose "<task>"` or `#NN`: see `AGENTS.md` → *Decomposition pipeline* and the `task-decompose` skill (diagram, `MAX_DEPTH`/`MAX_CHILDREN`, leaf test).
 
 ### Commit Format (enforced by /commit skill)
 
@@ -199,32 +149,10 @@ After each task: announce completion, STOP. User runs `/clear`. Fresh agent read
 
 ### NuxtHub's role + Deployment (current — ignore historical/general knowledge)
 
-**NuxtHub here is ONLY the storage abstraction, NOT the deploy tool.** `hub: { db: 'sqlite', kv?, blob? }` maps to Cloudflare **D1 / KV / R2** at runtime. We do **NOT** use `npx nuxthub deploy` or the NuxtHub Admin/managed cloud — do not suggest it.
-
-**Apps deploy to Cloudflare WORKERS (static assets) with auto-provisioning** — the crouton standard (#108/#114; *not* Pages — ignore older docs/commits that say Pages). Wrangler auto-creates the app's D1 + KV on the first deploy (no manual resource/project creation, no id-juggling). Canonical examples: **`apps/velo`**, **`apps/kassa`** (their `wrangler.jsonc` is generated by the **`/deploy` skill** — copy that pattern, don't invent one).
-
-**Two-domain topology (#133):** production → **`<app>.friendlyinter.net`**, staging → **`<app>.pmcp.dev`** (separate registrable domains = bulletproof session/cookie isolation). The deploy env is named **`staging`** (not `preview`).
-
-**🟦 STANDING RULE — deploy to STAGING, never production (#318).** The default deploy target is **always staging**: agents, skills, and routine work deploy to staging only (`/deploy` skill / `cf:staging` / **merge to `main`**). **NEVER deploy to production** except via the dedicated **`/deploy-production`** skill, invoked on an **explicit human request** to ship to prod. Production stays a deliberate, manual `workflow_dispatch` (env=production) — never a side effect of an agent flow.
-
-**🟦 STANDING RULE — the owner tests on MOBILE, on the go: the deliverable is a deployed STAGING URL, not a local run.** Maarten reviews from his phone and **cannot run the app locally** — so for any UI-touching or human-testable change, "how do you test this" is answered by a **live staging URL + review creds**, never "run `pnpm dev`". Local dev (+ the pre-installed chromium) is for the **agent's own** verification before shipping; it is **not** a test path you hand the owner. So the last step of such work is: **proactively deploy to staging and hand back the clickable URL** — don't offer local as an option, and don't wait to be asked to deploy. Targets: a `pocs/*` app → dispatch **`deploy-pocs.yml`** (`workflow_dispatch` checks out the branch you run it FROM, so dispatch it on the feature branch — the PR head need not match) with `app:<name>` (+ `review_pr:<n>` to comment the URL on the PR); a launched `apps/*` app → `/deploy` skill / `cf:staging` / merge to `main`. Staging seeds on deploy, so the live app has data. Getting in: every staging deploy creates a per-app review login and **emails the owner a one-click sign-in link** (#2358) — never put a username/password in docs, config or comments; this repo is public (#2356). (Sign-off gates that need a *device* walk — e.g. touch-gesture `status:new` spec entries — are gated on this staging URL, not a local screenshot.)
-
-**Trunk = staging (#347):** a **merge to `main`** that touches an app's paths auto-deploys its **staging** env (`<app>.pmcp.dev`) — landing code previews itself. The old separate `staging` branch is retired. This can't ever reach production: a `push` event never sets `environment=production` (that input is gated on `workflow_dispatch`), so #318 holds structurally, not just by convention.
-
-**The check ladder (#632)** — which checks gate at which rung of PR → staging → prod. The right check at the right rung: PRs stay fast, prod stays safe. Full panel (exact workflows, path filters, gaps): `writeups/architecture/deployment-topology.html`.
-
-- **Rung 1 — the PR (blocking, cheap+fast):** `ci` (lint + typecheck), `e2e` (fixture smoke, smart-selected), `red-team` (server/app surfaces), `frontend-review` + `a11y` (`.vue`-touching PRs), staging preview deploy + deployed smoke (`scripts/smoke-deployed.mjs`, report-only unless the app sets `smoke.required`). This rung **is** the #336/#339 auto-merge green gate — "green PR" and "safe to land on trunk" mean the same thing. Two of these are **required** by the `main` ruleset for any merge, human or bot: `CI Gate` (#1133) and `E2E Gate` (#2334); both always report, skipping their heavy work on irrelevant PRs instead of not running.
-- **Rung 2 — merge→`main`, on the deployed `*.pmcp.dev` (integration):** path-filtered staging deploy with remote D1 migrations, deployed smoke against the live URL — **gating by default on push-to-main** (#1106; opt out per app with `smoke.gateOnMain: false`), so a red post-merge deploy always reaches `report-failed-deploy.yml`, which opens an issue. Nightly full-matrix e2e backstop.
-- **Rung 3 — before prod (confidence gate):** production is a deliberate manual `workflow_dispatch` only (#318), via the `/deploy-production` skill. CI enforces the pre-flight (#1107): the dispatch smokes the app's **live staging URL** first and refuses to deploy prod while it's red (emergency escape hatch: `skip_staging_smoke=true`, loud warning).
-
-The pattern, end to end:
-- **`wrangler.jsonc`** (Workers): **no** `pages_build_output_dir`; `compatibility_flags: ["nodejs_compat"]`; bindings `DB` (D1), `KV`/`BLOB` (R2) as needed — **id-less** so the first deploy auto-provisions them; plus an **`env.staging`** block with **separate** staging ids + a `<app>.pmcp.dev` custom-domain `route` (bindings do NOT inherit across envs). `name`/`main`/`assets` are injected by the preset at build.
-- **Build preset**: `NITRO_PRESET=cloudflare_module nuxt build` → output in `.output/`.
-- **Scripts**: `cf:deploy` (prod: build → `wrangler deploy` auto-provision → `sync:ids` → migrate `--remote`), `cf:staging` (build → `inject-wrangler-env` → `wrangler deploy --env staging` → `sync:ids` → migrate), `sync:ids` (writes provisioned ids back into `wrangler.jsonc`), `db:migrate*`. NB: the staging migrate step must **not** pass `--config .output/...` (doubles the path → "no migrations"; #138).
-- **CI** (`.github/workflows/deploy-apps.yml` — ONE generic workflow for all apps, #481/#638; the old per-app `deploy-<app>.yml` callers are retired): an app opts in with a `deploy.config.json` (`stagingUrl` / `productionUrl` / `layerPackages`); the `detect` job derives each app's watch paths from its `package.json` (app dir + lockfile + every `@fyit/*` dep, transitively — #2397, no hand-written `watchPaths` list) and fans out one reusable **`deploy-app.yml`** call per affected app. Merge to `main` / PR (path-filtered) → staging; manual `workflow_dispatch` env=production → prod (#347). Auth via **repo-level** secrets `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (the token needs **account** Workers Scripts/D1/KV/R2 Edit **and** **zone** Workers Routes + DNS Edit for custom-domain binding).
-- **First-time setup / migrating a Pages app**: run the **`/deploy` skill** — don't hand-roll it. Worker secrets do NOT transfer from Pages — re-set them (`wrangler secret bulk … --env staging`), pointing `BETTER_AUTH_URL` at the deployed URL.
-
-**Local-only testing** needs no Cloudflare: `pnpm dev` with `hub: { db: 'sqlite' }`. For a quick public URL without a full deploy, a Cloudflare Tunnel over `pnpm dev` works; a stable URL means `cf:staging` / the `/deploy` skill.
+- NuxtHub is ONLY the storage abstraction (`hub: { db: 'sqlite' }` → D1/KV/R2). No `npx nuxthub deploy`, no NuxtHub Admin.
+- Apps deploy to Cloudflare **Workers** (not Pages) with auto-provisioning; copy `apps/velo` and the `/deploy` skill's `wrangler.jsonc`.
+- **Staging only (#318):** merge to `main` → `<app>.pmcp.dev`. Production only via the deliberate `/deploy-production` skill on an explicit human request. The owner reviews on mobile: hand back a deployed staging URL, not "run `pnpm dev`".
+- Topology, check ladder, wrangler/CI anatomy: `crouton-ci-and-deploy-map` skill → *NuxtHub's role + deploy anatomy*.
 
 ### Optional Cross-Package Components (Stub Pattern)
 
@@ -284,7 +212,7 @@ session catches what the PR would, not after:
    structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
    dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
    check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
-   dead-code` for a wider look — see the Fallow MCP row in the artifacts table.)
+   dead-code` for a wider look.)
 3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
    fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
    library's async state instead of deriving from the source event, an over-engineered
@@ -313,8 +241,6 @@ When generating UI: include hover states, transitions, micro-interactions. Apply
 ### 5. General Solutions
 Write high-quality, general-purpose solutions that work for all valid inputs, not just specific test cases.
 
-### 6. Remove What You Orphan
-A change that removes the *last* caller of a symbol, i18n key, or route removes the callee too — or states on the issue/PR why it stays. Deleting the only button that used a translation, or the only link to a page, leaves that translation and that page dead; the leftover is part of *your* diff, not a later cleanup. The two orphan shapes a JS import graph can't see — a dead i18n key and a stranded Nuxt page — are surfaced report-only (never blocking) by `scripts/lean-check.mjs`; run it, remove the leftover, or record why it stays. (AGENTS.md → *Working style*; #2190.)
 
 ## Nuxt Layers Architecture
 
@@ -384,34 +310,11 @@ npx wrangler d1 migrations apply  # Remote DB migrations
 
 ### Updating Dependencies
 
-Shared versions live in the `catalog:` block of `pnpm-workspace.yaml` (single source of truth — bump there once, not in each `package.json`). We deliberately use **no update bot** (Renovate/Dependabot); for a solo dev that's PR noise, not help. Update on-demand with **`taze`** (catalog-aware):
-
-```bash
-npx taze minor -r -w   # review + write available minor/patch bumps across the monorepo
-pnpm install           # then verify: pnpm -r --filter './apps/*' typecheck
-npx taze major -r      # majors: review only (-w to write), one family at a time
-```
-
-For the full flow — sweep → triage (safe/deliberate/wait) → catalog bump → typecheck + e2e gate → tracking — invoke the **`dependency-sweep` skill** (don't hand-roll it). It encodes the gotchas (caret ranges don't downgrade; stale-install `@vue/compiler-sfc` false error; framework minors aren't auto-safe). A recurring **quarterly sweep ticket** keeps it on the calendar.
+Versions live in the `catalog:` block of `pnpm-workspace.yaml`; no update bot. Use the `dependency-sweep` skill (`npx taze minor -r -w` → `pnpm install` → typecheck + e2e).
 
 ## E2E Fixture Harness
 
-A Playwright smoke that boots a **real generated crouton app** and verifies it
-still **boots → authenticates → does CRUD → renders package surfaces**. This is
-the "did a `packages/` change or dependency bump break a consuming app" check —
-run it after touching `crouton-core`/`crouton-auth`/the CLI, or after a dep bump.
-
-Two folders, one split:
-- **`fixtures/<name>/`** — the apps under test (real generated crouton apps, one
-  per package config: `minimal`, `with-pages`, `with-bookings`). Throwaway, not
-  deployed. What each one smokes is declared in its `e2e.manifest.json`. See
-  **`fixtures/CLAUDE.md`**.
-- **`e2e/`** — the Playwright harness (config, generic manifest-driven specs,
-  auth flow). The full reference — manifest format, auth realities, adding a
-  fixture, gotchas — lives in **`e2e/CLAUDE.md`**.
-
-Run via the **`e2e-smoke` skill** (`.claude/skills/e2e-smoke/`), or directly:
-`E2E_FIXTURE=<name> BETTER_AUTH_SECRET=dev BETTER_AUTH_URL=http://localhost:3000 pnpm test:e2e`.
+Playwright smoke over real generated apps (`fixtures/`, harness in `e2e/`). Run via the `e2e-smoke` skill after touching `crouton-core`/`crouton-auth`/the CLI or a dep bump; reference in `e2e/CLAUDE.md`.
 
 ## State Management (No Pinia)
 
@@ -458,182 +361,17 @@ Agent definitions live in `.claude/agents/*.md` (the recursive `task-orchestrato
 
 ## You HAVE a headless browser (verify capabilities, don't assume)
 
-**This environment has a working headless browser** — Playwright + a chromium
-pre-installed under `/opt/pw-browsers/`. You **can** render pages, screenshot UI,
-and drive a live preview locally. The recurring trap: the Playwright browser
-**download host is egress-blocked**, so `npx playwright install` fails — and a
-session wrongly concludes "no Chromium / no browser" and plans around a
-limitation that **doesn't exist**. Don't. Use the already-installed browser:
+Chromium is pre-installed at `/opt/pw-browsers`; `npx playwright install` fails (egress-blocked) but is not needed. Probe before declaring any tool absent — `node scripts/app-shots.mjs <baseUrl> <path:name>`; full how-to, staging reach and the fidelity ladder: `crouton-harness-observability` §5 and `crouton-run-and-operate`.
 
-```bash
-# Easiest — screenshot a running app (auto-resolves the chromium build):
-node scripts/app-shots.mjs <baseUrl> <path[:name]> [more...]   # → screenshots/<name>.png
-# In Playwright code, point launch() at the installed binary (build number varies):
-#   chromium.launch({ executablePath: <…/opt/pw-browsers/chromium-*/chrome-linux/chrome> })
-```
+## Sign-off gates (UI · Schema · Test)
 
-The `SessionStart` hook announces the browser + its path every session. **General
-rule:** a prior session's (or a task brief's) claimed limitation is a
-*hypothesis* — verify it with a 5-second check before designing around it. The
-same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
-don't trust a stale assertion.
-
-**The sandbox can BOTH run a crouton app locally AND reach the live staging preview.**
-Local: `pnpm dev` + this chromium. Deployed: `*.pmcp.dev` staging egress is now
-**allowlisted** (#760), so from a web session you can `curl`/`$fetch`-drive the **real
-deployed build** — log in with the review creds, hit the live API, and observe
-deploy-only state (remote D1, a seed that actually ran) that local dev cannot show
-(verified: signup → set-active → create round-trips against a live `*.pmcp.dev`).
-Match the bug to the right rung of the **fidelity ladder** (`typecheck → local dev →
-deployed staging → the user's device`): a **runtime** bug (reload loop, 500, broken
-interaction) reproduce + verify **locally** first (the #988 board-reload lesson: three
-blind pushes vs one local repro), but a **deploy-only / production-build** bug must be
-checked against the **live** preview, not local. **Two residual gaps:** (a) **iOS/WebKit**
-— no Safari engine here, so a device-specific crash stays the user's call to confirm;
-(b) live **screenshots** — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
-egress proxy's re-terminated TLS, so pixel capture of a `*.pmcp.dev` page needs the proxy
-CA trusted in a chromium NSS profile first (**#1172**; functional/API drive already works).
-Never push an unverified guess and wait ~15 min for a deploy to learn it was wrong. The
-method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*, incl.
-the fidelity ladder); the concrete boot + browser-drive + auth/team recipe is the
-**`crouton-run-and-operate`** skill.
-
-## UI Sign-Off (deploy a live preview before you build) — epic #307
-
-**When a task changes a visual surface, get sign-off before you build it.** Treat work as
-UI-touching if it adds/changes a `.vue` component, `app/components|layouts|pages/**`, a theme
-(`crouton-themes`, a `ui:` block in `app.config.ts`), or app CSS/theme tokens. Pure
-`<script>`/composables/types, `server/**`, config, tests, and docs are **not** UI — skip this.
-
-**Look before you report.** An interactive agent never merges a UI-touching PR. It *looks at* the preview screenshot of the named `review-surface` page and tells the owner (preview link + one yes/no). If the screenshot is missing, blank or a loader, it says so instead of approving.
-
-**Default gate — live preview:** run the **`ui-proposal`** skill to deploy a rough build to
-staging with `NUXT_PUBLIC_CROUTON_REVIEW=true` (via `/poc-deploy` or `pnpm cf:staging`), post the
-preview URL on a draft PR, and hold on `status:blocked`. The reviewer opens the running page,
-pins comments on elements they want changed; each pin arrives as a `🎯 Preview feedback` PR
-comment naming the source file. The agent fixes the named file, redeploys, and iterates. Capture
-machinery lives in `@fyit/crouton-devtools` (wired by epic #590 WS1+WS2).
-
-**Shared components — the gallery (#2462):** a PR that changes a `.vue` under
-`packages/*/app/components` needs no hand-written preview page. The gallery (`pocs/gallery`)
-deploys for that PR and its preview comment links each changed piece (`/__review?file=…`). If a
-piece needs input to show, add one line in `pocs/gallery/app/review-samples.ts`. A new package
-with components must be added to the gallery — `scripts/gallery-coverage.test.mjs` fails CI otherwise.
-
-**Fallback — static mockup (`--static`):** when a live deploy isn't available (a packages
-change that isn't a component — e.g. a theme — or the deploy pipeline is down), pass `--static` to the `ui-proposal`
-skill. It produces an offline HTML/CSS mockup + PNG. Commit the `<slug>.html` + `<slug>.md`
-"what changes" list; post the PNG as a sticky comment on the draft PR. Steer feedback to **inline
-comments on the committed `.md`** in the diff (the PNG is a glance, not the feedback surface).
-
-In the agent pipeline both paths are automated as a gate in `.claude/agents/task-worker.md`
-(deploy or mockup → draft PR → hold → revise on feedback (#310) → build → screenshot (#311)).
-In an interactive session, do the same by hand. Be conservative — when unsure whether a diff is
-"visual", don't gate.
-
-**What counts as approval** (the sign-off signal): a **reply comment that is only `ok`** (`not ok: …` is a change request; `lgtm`/`approve` still accepted). On a PR held for a human (shared code, workflows, epic → main) the owner's `ok` is also the merge go: the pipeline merges once green (#2832).
-That comment is the *only* thing that resumes the pipeline — a 👍 reaction and the `ui-approved`
-label do **not** trigger anything (`on-comment.yml` (the `resume` job) fires only on `issue_comment`; reactions
-raise no event and no workflow listens for the label) (#572). Anything else is a change request —
-iterate (redeploy for live-preview, re-render for `--static`) until approved (#310). On a
-**pi-built PR** (head `work-<N>`), a change-request comment **on the PR** (or on its issue)
-re-runs the pi worker on that branch with the comment as its instruction and stacks a commit
-on the PR — `on-comment.yml` (`revise` job) → `work-issue-pidev.yml` `feedback` input (#2446).
-
-## Schema Sign-Off (review the data model before you generate) — epic #314
-
-**When a task creates or changes a collection schema, review it before generating.** Before
-running `crouton config` / `generate_collection` (or editing a `schemas/*.json` fieldsFile), run
-the **`schema-review`** skill to render the field table, get a human to sign off on the **data
-model** first, and only then generate. The schema is the foundation — every Form/List/API/
-migration derives from it, so a wrong type or missing relationship is cheap to fix here and
-expensive after. This sits **after** the machine `validate_schema` step (the human gate on top of
-it). In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the
-same by hand. It **reuses the same revision/approval loop and signal as the UI gate** (#310) —
-feedback goes inline on the committed `<collection>.md` in the diff; approval (a **comment**
-that is only `ok` (legacy `lgtm`/`approve`) — not a reaction or label, #572) unblocks generation.
-
-## Test Sign-Off (agree on the test before you write the code) — epic #774
-
-**When a task adds or changes hand-written LOGIC in `packages/*`, write the test first and agree on
-it before writing the code.** Run the **`test-review`** skill to render the proposed *failing*
-test(s) — the cases being asserted, in plain language plus the test code — get a human to sign off
-on the **behaviour**, and only then write the code that makes it green. The agreed test is the
-contract: "done" = that test passes. This is the third sign-off gate alongside Schema (#314, the
-data model) and UI (#307, the look) — pick the gate by *what the change is*.
-
-**Scope is by where the code currently lives (#779), not its origin or destiny.** The
-canonical, queryable source is the **stage model** (`harness.config.mjs`, epic #952): run
-`node scripts/harness-stages.mjs <path>` to see a path's stage and whether `test-first` is
-`on` / `opt-in` / `off` — don't re-derive it from the folder name by hand. The table below is
-the **default profile** rendered for humans (rename `poc`→`spike` etc. in that one file):
-
-| Current home | Stage | Test-first |
-|---|---|---|
-| `packages/*` | `package` | **On** (default) — what we maintain; every consuming app inherits its correctness |
-| `apps/*` | `app` | **Opt-in** — may be another user's app; their call, not ours to impose |
-| `pocs/*` | `poc` | **Off** — the incubator must stay fast and safe-to-fail |
-
-The gate moves *with the code*: a POC has no fixed identity, so it's exempt while it's a POC, and
-**graduating to `packages/*` is the checkpoint to backfill its tests** (see the `pocs/` note above).
-Within `packages/*` the gate fires only on hand-written **logic** — a data model routes to the
-Schema gate, how something looks routes to the UI gate, and deterministic generated CRUD is covered
-by the e2e fixture smoke, not here.
-
-In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the same by
-hand. It **reuses the same revision/approval loop and signal as the UI/Schema gates** (#310) — hold
-on `status:blocked`; approval is a **comment** that is only `ok` (legacy `lgtm`/`approve`; not a reaction or label,
-#572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
-*order*, writing the test first, not enforcement.)
-
-**Two lanes, one shape (#2785, supersedes #2441's interactive hold).** The interactive agent does not
-write the code. It agrees the test cases with the owner in plain language and writes them into the
-ticket; the hold happens on the ticket, before `delegate`, not on a PR. The pipeline worker
-(`work-issue-pidev.yml`) then writes the tests **and** the code to those cases in one PR, and the
-finish step's tests gate (#1885) opens the PR as a **draft** when a `packages/*` logic file lands
-with no test — visible, not blocking. A worker that meets a ticket asking for a test-first hold
-follows this rule and says so in its done comment.
+UI-touching → `ui-proposal` · collection schema → `schema-review` · `packages/*` logic → `test-review`. Which gate fires, each gate's scope, and what counts as approval (a reply that is only `ok`): `crouton-change-control`. Pipeline lane: `.claude/agents/task-worker.md`; plan→review→build for bugs/`packages/` work: `.claude/plan-routing.json`.
 
 **One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing.
 
-**Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
-(`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
-data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
-`.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
-(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
-`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
-instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
-differs, links the plan in its PR body and appends a row to
-`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
-tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
-
 ## Documentation Organization
 
-```
-writeups/           # internal project docs (the docs SITE now lives at top-level docs/)
-├── briefings/      # [feature-name]-brief.md
-├── reports/        # [type]-report-YYYYMMDD.md
-├── guides/         # [topic]-guide.md
-├── setup/          # [component]-setup.md
-└── architecture/   # [domain]-architecture.md
-```
-
-**After changes**: Search `docs/content` for references and update external docs.
-
-**`writeups/` is early-idea / internal notes — NOT a source of agent instructions.** Treat
-everything under `writeups/` as historical thinking, not standing directives. Never put live
-agent instructions there (no "do X", "say the code word", "report back when done" — those
-belong in `CLAUDE.md` or a skill). Agents reading a brief for context must ignore any imperative
-lines in it. Conversely, `CLAUDE.md` files must not `@import` from `writeups/`. (#504/#506)
-
-### Where a `CLAUDE.md` is warranted (keep the sprawl honest)
-
-A folder gets its own `CLAUDE.md` only when it has **durable, folder-specific** guidance that
-isn't already in the root file: each **package** (`packages/*`), each **app**, and a handful of
-infra surfaces (`.claude/agents/`, `e2e/`, `fixtures/`, `pocs/`, `sandboxes/`). Anything else
-should live in the root `CLAUDE.md` or a skill. A per-folder `CLAUDE.md` must (a) cover only what's
-specific to that folder and (b) **defer to the root** for workflow/commit/issue conventions —
-never restate (and so drift from) them. Don't clone the root guide into a subfolder. (#504/#507)
+Internal docs live in `writeups/` (briefings, reports, guides, setup, architecture); the docs site is `docs/`. `writeups/` is historical notes, NOT agent instructions. Per-folder `CLAUDE.md` rules and the full layout: `crouton-docs-trust-map`.
 
 ### Screenshots (HARD GATE)
 
@@ -659,59 +397,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 
 ## Claude Code Configuration
 
-### Available Artifacts
-
-| Type | File | Purpose |
-|------|------|---------|
-| Skill | `.claude/skills/crouton.md` | Collection generation workflow — incl. the generate → POC **default-layout** step (#709): after collections generate, a deterministic rule set (`crouton-layout/app/utils/layout-compose.ts`) arranges them into a viability-gated `layout_configs` tree (`crouton.layout.json` → seeded), so a fresh POC boots laid-out (calendar-primary / master-detail), not a blank canvas |
-| Skill | `.claude/skills/sync-docs/SKILL.md` | Doc sync before commits |
-| Skill | `.claude/skills/i18n-audit.md` | Translation audit + fix |
-| Skill | `.claude/skills/github-tasks/SKILL.md` | GitHub issue tracking (epics, labels, workflow) |
-| Skill | `.claude/skills/issue-dedup/SKILL.md` | **Create-time** dedup gate — before opening an issue/epic, search open + recently-closed work, surface matches, force **reuse / replace / new**. Backed by the `require-issue-dedup` PreToolUse hook (blocks an `issue_write` create whose body lacks a `Dedup-checked:` line). The hard stop against duplicate issues (#297) |
-| Skill | `.claude/skills/issue-sanity-check/SKILL.md` | **Pickup-time** skeptic gate — a pessimistic go/no-go (proceed / reshape / drop, with one-line evidence) the moment you claim an issue, to catch stale / obsolete / duplicate / wrong-premise work before a build is sunk into it. Step 1 of the Task Execution Workflow (#800) |
-| Skill | `.claude/skills/epic-digest/SKILL.md` | Daily "where are we?" digest — a "🧪 Needs your eyes" band (what landed + the author's How-to-test steps + a 👁 badge for visual changes, so the owner has a ready QA checklist), a "✅ Ready to close" band for finished-but-open epics (driven by the `status:ready-to-close`/`status:needs-postmortem` labels, #763 — replaces the old contradictory "Done"-on-an-open-epic badge), last-24h activity, and a progress snapshot of every open epic, rendered dependency-free (HTML/text, or Markdown). Interactive run gathers via GitHub MCP; a scheduled GitHub Action (`gather.mjs` → `render.mjs` → email via Resend) sends it every morning with no LLM (#357, #408, #495, #551). For a status rapport / "what moved this week" |
-| Skill | `.claude/skills/housekeeping/SKILL.md` | Daily "🧹 Housekeeping" digest — a **report-only** sweep that catches the drift the event-driven jobs miss (stale unmerged branches, issues missing `type:`/component labels, `packages/apps/pocs/workers` dirs with no matching `.github/labels.yml` label, stuck `status:in-progress` tickets, epics with all children closed — split by `status:ready-to-close`/`status:needs-postmortem` (#763), idle PRs). Mirrors `epic-digest`'s deterministic `gather.mjs → render.mjs → post-comment.sh` (no LLM/secrets) → one rolling standing issue; **never mutates** a branch/label/issue. Cadence + delivery are config-as-data in `.github/digests.yml` (`schedule.mjs` gates a daily cron → only sends on the configured day; `issue`/`email` rails). Scheduled by `.github/workflows/housekeeping.yml` (epic #633) |
-| Skill | `.claude/skills/skills-digest/SKILL.md` | Monthly digest of the skills in `.claude/skills/` — a **render-only** email listing every skill grouped by job (Build/Plan/Commit/Review/Deploy/Verify/Meta) with its trigger badge (`auto`/`on ask`/`in flow`), plus a **📋 What changed since last digest** band (✨ added · ✏️ updated · 🗑️ removed) computed from `git` history. Keeps the skill surface honest (sprawl, dead skills, overlap). Single source of truth: imports `META`/`GROUPS`/`discover()` from `scripts/gen-skills-doc.mjs` (can't drift from `skills-and-triggers.html`). Mirrors `epic-digest`'s `gather.mjs → render.mjs → email via Resend`; cadence is config-as-data in `.github/digests.yml` (`monthly:<dom>`, added in #839). Scheduled by `.github/workflows/skills-digest.yml` (checks out `fetch-depth: 0` for the delta). Also carries a **🔀 flow view** (#843) — a trigger→skill lane diagram ("when each skill fires", e.g. on commit / on a PR / on a schedule) rendered from the exported `FLOWS` map in `scripts/gen-skills-doc.mjs`, so the email and `skills-and-triggers.html` draw the same lanes from one source. Epic #838 |
-| Skill | `.claude/skills/ticket-diagram/SKILL.md` | Attach a self-contained **Excalidraw** status diagram to a GitHub epic — read the epic + sub-issue tree → boxes-coloured-by-status with bound dependency arrows → a committed **PNG that renders on the GitHub mobile app AND has the editable scene embedded inside it** (open the PNG in Excalidraw to edit), plus a diffable `<slug>.graph.json` → sticky comment → iterate to approval (reuses the #310 sign-off loop). Round-trip human edits back via `scripts/ticket-excalidraw-import.mjs` (decode embedded scene from an attached PNG → re-render → re-embed). Generator: `scripts/ticket-excalidraw.mjs` (+ `scripts/lib/excalidraw.mjs`, `scripts/lib/excalidraw-png.mjs` codec). NOT live Mermaid (stalls on mobile). Workstream #2 of #479, epic #483 |
-| Skill | `.claude/skills/ecosystem-check/SKILL.md` | Check Nuxt/UnJS/Vite/OSS prior art before building |
-| Skill | `.claude/skills/provider-swap/SKILL.md` | Swap the external library/provider behind a `packages/*` package (map renderer, geocoder, editor engine, storage SDK) while keeping the public API stable so consuming apps need no changes — the keep-the-API-stable playbook + gotchas (dist `.d.ts` over docs, generator templates, fixtures, dup-dep type clashes). From the Mapbox→MapLibre swap (#538) |
-| Skill | `.claude/skills/e2e-smoke/SKILL.md` | Run the Playwright fixture smoke harness (boot + auth + CRUD) after a dep bump or `packages/` change |
-| Skill | `.claude/skills/db-migrations/SKILL.md` | The migrate step (`db:generate` schema.mjs-after-build gotcha) + package-owned infra tables. App collections use the `crouton` CLI, not this |
-| Skill | `.claude/skills/db-clone/SKILL.md` | Mirror one Cloudflare D1 database into another env (`scripts/db-clone.mjs` / `pnpm db:clone`) — refresh staging from prod, seed a preview. Full mirror; `--dry-run` first; prod target needs typed-confirm + backup. Not for per-collection seeding (use `seedData/`) or migrations (use db-migrations) |
-| Skill | `.claude/skills/remove-app/SKILL.md` | One-command teardown of a poc/app — the inverse of `/deploy`. Removes code (PR) + Cloudflare Worker/D1/KV (both scopes) + the app's branches + closes the epic/sub-issues. CF deletes + branch deletes run in CI (`teardown-app.yml` / `scripts/teardown-app.mjs`) because the chat env has no CF creds and 403s on ref deletion. `--dry-run` first; `pocs/` is the safe default, `apps/` (prod) needs a typed `--confirm`. `--archive` moves code to `retired/` instead of deleting it (archive != keep-deployed — CF resources are still torn down). Complements #613 (auto post-merge branch cleanup) (#618) |
-| Skill | `.claude/skills/dependency-sweep/SKILL.md` | The "get dependencies current" flow — sweep, triage (safe/deliberate/wait), bump the pnpm catalog, prove it with the typecheck + e2e gate. No update bot by design (#141); run on-demand or when the quarterly sweep ticket is due |
-| Skill | `.claude/skills/task-decompose/SKILL.md` | Entry point to the recursive task-decomposition pipeline (`/task-decompose`) — one task → an epic + tree of sub-issues → agents. See "Task Decomposition Pipeline" below |
-| Skill | `.claude/skills/ui-proposal/SKILL.md` | Deploy a live staging preview (with `NUXT_PUBLIC_CROUTON_REVIEW=true`) for design sign-off before building UI — the default gate. `--static` fallback generates an offline HTML/CSS mockup + PNG. Part of the UI sign-off loop (#307, #488) |
-| Skill | `.claude/skills/schema-review/SKILL.md` | Render a collection schema (field-definition JSON) into a human-readable field table + relationships (HTML + PNG + Markdown) for data-model sign-off before `crouton config` generates code. Part of the schema sign-off loop (#314) |
-| Skill | `.claude/skills/test-review/SKILL.md` | Propose the failing test(s) FIRST and get a human to sign off on the **behaviour** before writing code — the test analog of schema-review/ui-proposal. Scoped by location (`packages/*` on, `apps/*` opt-in, `pocs/*` off, #779) and to hand-written **logic** within packages; reuses the `lgtm`/`status:blocked` loop (#310/#572). Part of the test sign-off gate (#774) |
-| Skill | `.claude/skills/block-authoring/SKILL.md` | Author a placeable layout block (`croutonLayoutBlocks`) that looks right at **any pane size** — the one hard rule (size to the pane via `@container`, never the viewport) + list/form playbooks + the sizing contract (`minWidth`…) the viability metric reads. Use when adding/converting a layout block or when one breaks in a narrow pane (layout engine, #703/#710) |
-| Skill | `.claude/skills/postmortem/SKILL.md` | At epic close (after the verify rollup, before closing): post a retro comment — what went well / what was hard (evidence-backed) / 1–3 proposals — and offer to mint accepted proposals as `workflow` issues. Tightens the loop over time (#403) |
-| Skill | `.claude/skills/ask-human/SKILL.md` | The scannable, recommendation-first handoff an agent posts when it hits a fork it can't own — leads with the one decision + a recommendation, 10-second-readable, self-contained enough for a fresh `resume-on-comment.yml` session to boot from. Extends the #639 handoff block; pairs with the `AGENTS.md` *Deciding vs asking* rule; carries the multi-modal medium-selection guide (which of preview / screenshot / video / schema / diagram fits the question) (WS3+WS4 of epic #1182, #1189/#1190) |
-| Skill | `.claude/skills/spec/SKILL.md` | Capture a POC's **signed-off behaviour** into its spec ledger (`<poc>/spec.json`) — the structured, walkable behaviour contract graduation freezes as authoritative (the third leg beside `HANDOFF.md` prose + `changelog.json` history). Run at the moment a behaviour is approved ("ok, this works"), same trigger as the handoff update. Enforces the schema (`pocs/CLAUDE.md`) + the done-rule: `settled` needs a recorded `signedOff` (blocked otherwise by `gate-spec-signoff.mjs`). Consumed by `/graduate` at A0 (freeze) + C1 (walk). Use when a POC behaviour is signed off / "capture this spec" (#992 WS2) |
-| Skill | `.claude/skills/graduate/SKILL.md` | The deliberate **"step back and rebuild"** checkpoint after heavy POC iteration — **spec-driven** (#992): the POC *discovers* a behaviour spec (the `<poc>/spec.json` ledger, captured at each sign-off), graduation *freezes* it authoritative, and the app is **rebuilt the crouton way to satisfy it** — never a port. A POC is a **floor, not a ceiling**, so the app is a *superset* in three buckets: **Preserve** (proven experience → C1 side-by-side) · **Replace** (POC fakes → real crouton) · **Add** (completeness the POC left open → its own schema/UI/test gate). Promotes only when **both** acceptance axes are signed off — experience (C1) **and** crouton-conformance (`/conformance`, C2). "Done" is *derived* from a recorded `lgtm`, never a green build (the #988 lesson). Use when a POC is "done" / "graduate this poc" / "make it a real app" (#916, #992) |
-| Skill | `.claude/skills/conformance/SKILL.md` | The **crouton-conformance gate** — graduation's second acceptance axis (C2; the first is the experience side-by-side, C1). Certifies a graduated app is a *real crouton app* — **CLI-scaffolded** (`server/db/schema.ts` present, the #988 500) · **real collections** not stub blocks · **consumes the correct packages without reinventing them** (DRY) — by **composing** the existing probes (`/frontend-review`, `/a11y`, `/e2e-smoke`, `pnpm typecheck`) plus crouton-structural checks, then rendering a *required, signed-off* checklist on the graduation PR (holds on `status:blocked`). A gate, not a finding-rater. Run at `/graduate` stage C2, or "is this app crouton-native" (#992) |
-| Skill | `.claude/skills/bug-archaeology/SKILL.md` | First step of bug work (HARD GATE): research how & when a bug was introduced — `git log -S`/`blame`/`bisect` to the first-bad commit, or rule it a non-code cause (stale install/env/data) — and record the finding on the issue/PR before fixing. Use the moment a bug/regression/broken build is reported (#424) |
-| Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate (the scheduled deep sweep was deleted, #2892). Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
-| Agent | `.claude/agents/red-team.md` | Adversarial security prober — given `{ scope, depth }` reads code as an attacker (cross-team IDOR, auth bypass, injection, secret exposure, SSRF, upload/cache/rate-limit) and returns structured findings; static-first, `deep` dynamically confirms against a fixture. Reports only, never patches. Steered by `/red-team` + the CI/daily workflows (#540) |
-| Skill | `.claude/skills/a11y/SKILL.md` | Accessibility review — the code-cleaning analog of `/code-review` for WCAG/ARIA. Reviews just your diff (or `--scope <pkg>`/`--file`) via the depth-aware `a11y` subagent (`quick`=eslint-a11y + ARIA/keyboard smells, `standard`=one package, `deep`=boot a fixture + `@axe-core/playwright`), rates findings (axe critical/serious → 🔴, moderate → 🟡, minor → 🔵, reusing `/review`'s 3-level format), then `--comment` (inline PR comments) or `--fix` (safe `alt`/`aria-label`/label-for/`role`+`tabindex` → `pnpm typecheck`). On-demand layer atop the warn-first eslint-a11y rules (#726/#729) |
-| Agent | `.claude/agents/a11y.md` | Accessibility prober — given `{ scope, depth, fix }` reads templates as a screen-reader/keyboard user (ARIA-without-keyboard, missing `alt`/labels, positive `tabindex`, bad roles) and returns structured severity-rated findings; static-first via eslint-a11y, `deep` runs `@axe-core/playwright` against a fixture. Reports only; patches the safe set under `fix:true`. Steered by `/a11y` (#726/#729) |
-| Skill | `.claude/skills/frontend-review/SKILL.md` | Front-end **conventions** review — the component-usage analog of `/a11y`, pointed at Nuxt UI 4 + crouton conventions. Reviews just your diff (or `--scope`/`--file`) via the depth-aware `frontend-review` subagent for v3 component names (`UDropdown`→`UDropdownMenu`…), the v4 overlay pattern (`#content`, no `UCard` inside), Options API, raw-HTML re-implementations, and hardcoded colors; rates 🔴/🟡/🔵 (reusing `/review`'s format), then `--comment` (inline PR) or `--fix` (safe v3→v4 renames → `pnpm typecheck`). The on-demand brain behind the per-PR CI gate. Use to "check the frontend", "are we using Nuxt UI right", "review component usage" (#834) |
-| Agent | `.claude/agents/frontend-review.md` | Front-end conventions prober — given `{ scope, depth, fix }` reads `.vue` templates as a Nuxt UI 4 reviewer (v3 names, overlay pattern, Options API, raw-HTML over components, hardcoded colors) and returns structured severity-rated findings; static-first via deterministic greps, `deep` cross-checks the real `@nuxt/ui` component set. Reports only; patches the safe deterministic set (v3→v4 renames) under `fix:true`. Steered by `/frontend-review` + the per-PR CI gate (#834) |
-| Skill | `.claude/skills/demo-video/SKILL.md` | Record a WebM demo of a UI flow with `shot-scraper video` — a YAML storyboard drives the browser (click/type/scroll/wait; `server:` can boot the app) with an animated cursor overlay, so a reviewer *watches* the feature instead of driving it. The motion analog of `scripts/app-shots.mjs`: evidence for the UI sign-off gate (#307) and `## 🧪 How to test` sections — NOT assertion testing (that stays `/e2e-smoke`; Playwright's own test-run videos stay #356). Setup: `bash scripts/demo-video-setup.sh` (pip install + browser shim for the egress-blocked web harness). Output goes in `screenshots/` (gitignored `*.webm`). Use to "record a demo", "video of this flow", "show me it working" (#1108) |
-| Agent | `.claude/agents/task-orchestrator.md` | Reads an epic, fans it into 2–6 top-level sub-issues, spawns a decomposer per child |
-| Agent | `.claude/agents/task-decomposer.md` | Recursive: LEAF TEST one issue → spawn a worker (leaf) or split into sub-issues + spawn a decomposer per child |
-| Agent | `.claude/agents/task-worker.md` | Implements one leaf issue on an isolated worktree branch → `pnpm typecheck` → `/commit` → PR (`Closes #NN`) |
-| MCP Server | `packages/crouton-mcp/` | AI collection generation |
-| MCP Server | `fallow-mcp` (root devDep, [fallow](https://docs.fallow.tools/)) | Deterministic codebase intelligence — `audit` / `dead_code` / `dupes` / `health` tools for dead code, duplication, complexity, and dependency hygiene. CLI: `npx fallow audit` (diff-scoped PR verdict), `npx fallow health --score`, `npx fallow dead-code`. Config: `.fallowrc.json` (root; `_archive`/`retired`/build output ignored). Prefer it over grep for "who imports this / is this export used / what's duplicated" (#1120). **⚠️ Deletion protocol (#1149): a zero-imports finding is a hypothesis, not a verdict** — before deleting a "dead" file, rule out the *dynamic* mechanisms a static graph can't see: directory scanners (`@nuxtjs/mcp-toolkit` loads `server/mcp/**` at runtime — the #1143 near-miss), `@nuxt/kit` resolver paths (module runtime dirs), spawn-by-path (crouton-cli `bin/` → `lib/`), config-string refs (nuxt.config `css:`, vite `optimizeDeps`), and published-exports consumers outside this repo. Grep for the *loader*, not just the import |
-| Themes | `packages/crouton-themes/` | Swappable UI themes |
-
-### MCP Server Tools
-`design_schema` → `validate_schema` → `generate_collection` | also: `list_collections`, `list_layers`
-
-Resources: `crouton://field-types`, `crouton://field-types/json`, `crouton://schema-template`
-
-### Themes Package
-Available: `KO` theme (hardware-inspired). Usage: `extends: ['@fyit/crouton-themes/ko']`
+Skills: your session's skill list + `writeups/architecture/skills-and-triggers.html` (generated by `gen-skills-doc.mjs`). Agents: `.claude/agents/*.md`. MCP: `packages/crouton-mcp/CLAUDE.md`; `fallow-mcp` (CLI: `npx fallow audit` / `npx fallow health`). Themes: `packages/crouton-themes/CLAUDE.md`.
 
 ## MCP Improvement Capture
 

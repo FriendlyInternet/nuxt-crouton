@@ -228,3 +228,17 @@ To change who gets pinged, edit `NOTIFY_HANDLE` here and in `.claude/agents/CLAU
   workflow; the agents enforce those rules themselves.
 - Sub-PRs may auto-merge into the **epic branch** (a staging area). The final
   **epic→`main`** PR is **not** auto-merged — that's the human review/merge gate.
+
+## Pipeline overview (moved from root CLAUDE.md, #3350)
+
+For a big/fuzzy initiative, you can let agents do the epic→sub-issue breakdown **and** the work. `/task-decompose "<task>"` (or `/task-decompose #NN` to reuse an existing epic) creates the epic, then spawns a recursive agent pipeline that builds out the whole issue tree and works the leaves:
+
+```
+/task-decompose '<task>'
+  └─ task-orchestrator (depth 0)   reads epic → 2–6 sub-issues → spawns a decomposer per child
+       └─ task-decomposer (depth 1+, RECURSIVE)   LEAF TEST one issue:
+            ├─ leaf / at depth cap → spawn task-worker (worktree) → PR (Closes #N)
+            └─ too big            → create sub-issues → spawn a decomposer per child (recurse)
+```
+
+**Stop-conditions** (so it can't run away): `MAX_DEPTH = 3`, `MAX_CHILDREN = 6`, and a four-part **LEAF TEST** (single coherent change · bounded files · clear/testable acceptance · doable in one focused run). All four true ⇒ build it, don't split. Tune in `.claude/agents/task-decomposer.md`. Everything persists as real GitHub issues (it obeys the same `github-tasks` + `/commit` + no-squash rules); it does **not** auto-merge. Details: `.claude/skills/task-decompose/SKILL.md` and `.claude/agents/CLAUDE.md`. (Epic #249.)
