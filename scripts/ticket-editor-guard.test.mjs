@@ -94,3 +94,60 @@ test('token constants match what the status app signs', async () => {
   assert.equal(payload.aud, TOKEN_AUD)
   assert.ok(payload.exp - Math.floor(Date.now() / 1000) <= MAX_TOKEN_LIFETIME_S)
 })
+
+// ── save() end to end, through worker.fetch (#3261 review) ──────────────────────────────────────
+const { privateKey } = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])
+const PEM = '-----BEGIN PRIVATE KEY-----\n' + Buffer.from(await crypto.subtle.exportKey('pkcs8', privateKey)).toString('base64') + '\n-----END PRIVATE KEY-----'
+const ENV = { REPO, OWNER_TOKEN_SECRET: SECRET, GITHUB_APP_ID: '1', GITHUB_APP_INSTALLATION_ID: '2', GITHUB_APP_PRIVATE_KEY: PEM, DIAGRAMS_DIR: 'writeups/diagrams' }
+
+async function ownerSave(body, s = stub()) {
+  const impl = async (url, init = {}) => {
+    if (url.endsWith('/access_tokens')) return new Response(JSON.stringify({ token: 'inst' }), { status: 201 })
+    return s.impl(url, init)
+  }
+  const orig = globalThis.fetch
+  globalThis.fetch = impl
+  try {
+    const tok = await signEditorToken(SECRET, Date.now())
+    const res = await worker.fetch(new Request('https://d/api/save', { method: 'POST', headers: { authorization: 'Bearer ' + tok }, body: JSON.stringify({ slug: 'x', scene: {}, png: 'AAAA', ...body }) }), ENV)
+    return { res, calls: s.calls }
+  } finally { globalThis.fetch = orig }
+}
+const puts = (calls) => calls.filter((c) => c.method === 'PUT')
+
+test('save as owner to a work branch → both files committed (2 PUTs)', async () => {
+  const { res, calls } = await ownerSave({ branch: 'diagram-test' })
+  assert.equal(res.status, 200)
+  assert.equal(puts(calls).length, 2)
+})
+
+test('save as owner to main → 403 and no PUT', async () => {
+  const { res, calls } = await ownerSave({ branch: 'main' })
+  assert.equal(res.status, 403)
+  assert.equal(puts(calls).length, 0)
+})
+
+test('save as owner to a protected branch → 403 and no PUT', async () => {
+  const { res, calls } = await ownerSave({ branch: 'rel' }, stub({ branches: { rel: true } }))
+  assert.equal(res.status, 403)
+  assert.equal(puts(calls).length, 0)
+})
+
+test('save when the branch lookup errors → 403 and no PUT (fails closed)', async () => {
+  const { res, calls } = await ownerSave({ branch: 'diagram-test' }, stub({ branchStatus: 500 }))
+  assert.equal(res.status, 403)
+  assert.equal(puts(calls).length, 0)
+})
+
+test('save with a pull-request number as issue → 403, no PUT, no comment', async () => {
+  const { res, calls } = await ownerSave({ branch: 'diagram-test', issue: 6 }, stub({ issues: { 6: { pull_request: {} } } }))
+  assert.equal(res.status, 403)
+  assert.equal(calls.filter((c) => c.method !== 'GET').length, 0)
+})
+
+test('save with a real issue → files committed and a comment posted', async () => {
+  const { res, calls } = await ownerSave({ branch: 'diagram-test', issue: 5 })
+  assert.equal(res.status, 200)
+  assert.equal(puts(calls).length, 2)
+  assert.ok(calls.some((c) => c.method === 'POST' && c.url.endsWith('/issues/5/comments')))
+})
