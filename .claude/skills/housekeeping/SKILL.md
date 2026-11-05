@@ -126,3 +126,5 @@ epic-digest email's bands, so both digests agree. Dry-run by default; set repo v
 - `HOUSEKEEPING_ISSUE_TITLE` (env, default `🧹 Housekeeping`) — the standing issue title.
 
 The scheduled run lives in `.github/workflows/housekeeping.yml`.
+
+> Note (moved from root CLAUDE.md, #3350): label-coverage checks the `packages/apps/pocs/workers` dirs against `.github/labels.yml`; the pipeline is `gather.mjs → render.mjs → post-comment.sh`, same as `epic-digest`.
