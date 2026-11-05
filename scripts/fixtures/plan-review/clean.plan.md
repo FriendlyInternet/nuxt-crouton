@@ -10,7 +10,7 @@ Add the team id to the key.
 ### Files
 - packages/crouton-core/app/composables/useList.ts
 ### Test
-useList.test.ts: two teams get separate keys.
+- [ ] T1 — two teams get separate keys — Run: `node --test useList.test.ts`
 ### Assumptions
 - the key is only built in useList — Why: grep shows one call site — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/abc123/packages/crouton-core/app/composables/useList.ts#L12 — Status: verified
 ### Needs owner

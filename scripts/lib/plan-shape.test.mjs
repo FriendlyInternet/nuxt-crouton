@@ -19,7 +19,7 @@ const plan = (over = {}) => {
     Cause: 'foo.ts:10 reads undefined',
     Fix: 'guard the read',
     Files: '- foo.ts',
-    Test: 'foo.test.ts',
+    Test: '- [ ] T1 — guard holds — Run: `node --test foo.test.mjs`',
     Assumptions: A_OK,
     'Needs owner': 'no — mechanical',
     ...over,
