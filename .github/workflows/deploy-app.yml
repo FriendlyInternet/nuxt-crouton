@@ -303,18 +303,25 @@ jobs:
           printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
           node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
 
-      # Production email key (#3437): CHECK ONLY, and BEFORE the deploy so a release with no email
-      # key never goes live. Presence only (names, never values); never pushes a key, never sends.
-      - name: Require email key on the production Worker (before deploy)
+      # Production email key (#3437): CHECK ONLY. Before the deploy it passes if the key is in the
+      # WORKER_SECRETS_JSON bundle (synced after deploy) or already on the Worker; "Confirm email key
+      # on the production Worker" re-checks after the sync. Presence only (names, never values).
+      - name: Require email key for production (before deploy)
         if: ${{ inputs.environment == 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
         run: |
           IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
           if [ "$IS" = "true" ]; then
-            LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
-            if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-              echo "::error::email key missing on PRODUCTION — ${{ inputs.app }} uses @fyit/crouton-email but its production Worker has no NUXT_EMAIL_RESEND_API_KEY (run: npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY in ${{ inputs.workspace }}/${{ inputs.app }}, or add it to WORKER_SECRETS_JSON). Deploy stopped."
-              exit 1
+            if printf '%s' "$SECRETS_JSON" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" bundle-has-key; then
+              echo "✓ email key is in WORKER_SECRETS_JSON (will be synced)"
+            else
+              LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+              if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
+                echo "::error::email key missing for PRODUCTION — ${{ inputs.app }} uses @fyit/crouton-email but NUXT_EMAIL_RESEND_API_KEY is neither in WORKER_SECRETS_JSON nor on its production Worker. Add the key to WORKER_SECRETS_JSON. Deploy stopped."
+                exit 1
+              fi
             fi
           fi
 
@@ -498,6 +505,20 @@ jobs:
             npx wrangler secret bulk "$RUNNER_TEMP/worker-secrets.json" --env staging
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
+
+      - name: Confirm email key on the production Worker
+        if: ${{ inputs.environment == 'production' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        run: |
+          IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
+          if [ "$IS" = "true" ]; then
+            LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+            if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
+              echo "::error::email key missing on PRODUCTION after secrets sync — ${{ inputs.app }} has no NUXT_EMAIL_RESEND_API_KEY. Add it to WORKER_SECRETS_JSON."
+              exit 1
+            fi
+            echo "✓ email key present on the production Worker"
+          fi
 
       # The status app (pocs/status) derives every app's review-login password to offer one-tap
       # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
