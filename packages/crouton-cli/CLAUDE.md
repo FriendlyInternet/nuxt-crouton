@@ -823,6 +823,7 @@ export default {
     // Access (optional; absent = output unchanged). create/reorder: 'member'|'admin'
     // (reorder also guards [id]/move); list: 'team'|'own' ('own' filters list AND ?ids= for non-admins)
     { name: 'notes', fieldsFile: './schemas/notes.json', access: { create: 'admin', list: 'own' } }
+    // The generator also emits an `<X>Access` export per collection and the generated query registry carries an `access` loader; crouton-pages public endpoints use it to 404 `list: 'own'` collections.
   ],
   dialect: 'sqlite',
   seed: {

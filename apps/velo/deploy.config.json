@@ -66,6 +66,10 @@
         "path": "/api/teams/{teamId}/pages-pages"
       },
       {
+        "path": "/api/public/{teamId}/pagesPages",
+        "expectStatus": [200, 404]
+      },
+      {
         "path": "/api/teams/{teamId}/pages"
       },
       {
