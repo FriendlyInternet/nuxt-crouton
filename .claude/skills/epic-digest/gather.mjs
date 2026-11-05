@@ -18,6 +18,8 @@
  *   DIGEST_WINDOW_HOURS   default 24
  */
 
+import { tallyScreenshotChecks } from './screenshot-metric.mjs'
+
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
 const windowHours = Number(process.env.DIGEST_WINDOW_HOURS || 24)
@@ -337,6 +339,19 @@ const epicActionables = await Promise.all(
 )
 const actionables = [...epicActionables, ...prActionables]
 
+// Useful screenshots this week (#2700): the "Preview screenshot" check on each merged PR's head.
+const weekAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString().slice(0, 10)
+const weekPRs = (await search(`repo:${REPO} is:pr is:merged merged:>=${weekAgo}`)).slice(0, 60)
+const checkRunsPerPr = await Promise.all(weekPRs.map(async (pr) => {
+  try {
+    const { head } = await gh(`/repos/${OWNER}/${NAME}/pulls/${pr.number}`)
+    return (await gh(`/repos/${OWNER}/${NAME}/commits/${head.sha}/check-runs?per_page=100`)).check_runs || []
+  } catch {
+    return []
+  }
+}))
+const screenshots = tallyScreenshotChecks(checkRunsPerPr)
+
 const data = {
   generatedAt: new Date().toISOString(),
   windowHours,
@@ -347,6 +362,7 @@ const data = {
     mergedPRs: mergedPRs.map((i) => slim(i, 'pr'))
   },
   actionables,
+  screenshots,
   initiatives,
   epics: regularEpics,
   loose

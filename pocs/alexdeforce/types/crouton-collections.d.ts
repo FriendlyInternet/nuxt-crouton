@@ -17,16 +17,12 @@
  * - contentArticles: ContentArticle
  * - contentCategories: ContentCategory
  * - contentTags: ContentTag
- * - croutonAssets: CroutonAsset
- * - pagesPages: PagesPage
  */
 
 import type { ContentAgenda, ContentAgendaFormData, NewContentAgenda } from './layers/content/collections/agendas/types'
 import type { ContentArticle, ContentArticleFormData, NewContentArticle } from './layers/content/collections/articles/types'
 import type { ContentCategory, ContentCategoryFormData, NewContentCategory } from './layers/content/collections/categories/types'
 import type { ContentTag, ContentTagFormData, NewContentTag } from './layers/content/collections/tags/types'
-import type { CroutonAsset, CroutonAssetFormData, NewCroutonAsset } from './layers/crouton/collections/assets/types'
-import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/collections/pages/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
@@ -49,16 +45,6 @@ declare module '#crouton/types' {
       Item: ContentTag
       FormData: ContentTagFormData
       NewItem: NewContentTag
-    }
-    croutonAssets: {
-      Item: CroutonAsset
-      FormData: CroutonAssetFormData
-      NewItem: NewCroutonAsset
-    }
-    pagesPages: {
-      Item: PagesPage
-      FormData: PagesPageFormData
-      NewItem: NewPagesPage
     }
   }
 }

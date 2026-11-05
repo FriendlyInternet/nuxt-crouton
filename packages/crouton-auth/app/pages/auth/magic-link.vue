@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Magic Link Page
  *
@@ -61,7 +62,7 @@ async function verifyMagicLink() {
       router.push(redirects.afterLogin)
     }, 1500)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('auth.magicLink.verificationFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.magicLink.verificationFailed')
     verifyError.value = message
     notify.error(t('auth.magicLink.signInFailed'), { description: message })
   } finally {

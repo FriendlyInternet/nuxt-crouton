@@ -320,7 +320,8 @@ const bubbleToolbarItems: EditorToolbarItem[][] = [
       v-if="editor && showToolbar"
       :editor="editor"
       :items="toolbarItems"
-      class="border-b border-default px-2 py-1.5 flex-shrink-0"
+      class="border-b border-default px-2 py-1.5 flex-shrink-0 flex-nowrap overflow-x-auto overscroll-x-contain touch-pan-x"
+      :ui="{ group: 'shrink-0' }"
     >
       <!-- Loading indicator when translating or uploading -->
       <template v-if="isTranslating || isUploadingImage" #append>

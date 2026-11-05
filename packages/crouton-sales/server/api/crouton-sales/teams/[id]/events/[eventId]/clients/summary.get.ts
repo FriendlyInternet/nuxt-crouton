@@ -6,9 +6,9 @@
  */
 import { eq, and, ne, countDistinct, sql, asc } from 'drizzle-orm'
 import { requireTeamEvent } from '../../../../../../../utils/team-event'
-import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
+import { salesClients } from '../../../../../../../../collections/clients/server/database/schema'
+import { salesOrders } from '../../../../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../../../../collections/orderitems/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team, db, eventId } = await requireTeamEvent(event)

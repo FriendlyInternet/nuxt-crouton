@@ -78,7 +78,7 @@
 
     <UModal
       v-model:open="modalOpen"
-      :title="`Translation - ${selectedLang?.toUpperCase()}`"
+      :title="tString('i18n.display.modalTitle', { locale: selectedLang?.toUpperCase() ?? '' })"
     >
       <template #body>
         <div class="space-y-4">

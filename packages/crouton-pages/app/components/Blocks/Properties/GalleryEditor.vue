@@ -12,6 +12,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const emit = defineEmits<{
   'update:modelValue': [value: GalleryItem[]]
@@ -65,7 +66,7 @@ function moveImage(index: number, direction: 'up' | 'down') {
     >
       <!-- Header with move/delete -->
       <div class="flex items-center justify-between">
-        <span class="text-sm font-medium">Image {{ index + 1 }}</span>
+        <span class="text-sm font-medium">{{ t('pages.blockEditors.imageN', { n: index + 1 }) }}</span>
         <div class="flex items-center gap-1">
           <UButton
             color="neutral"
@@ -103,7 +104,7 @@ function moveImage(index: number, direction: 'up' | 'down') {
       <!-- Alt text -->
       <UInput
         :model-value="image.alt || ''"
-        placeholder="Alt text (optional)"
+        :placeholder="t('pages.blockEditors.altPlaceholder')"
         size="sm"
         @update:model-value="updateImage(index, 'alt', $event)"
       />
@@ -118,7 +119,7 @@ function moveImage(index: number, direction: 'up' | 'down') {
       block
       @click="addImage"
     >
-      Add Image
+      {{ t('pages.blockEditors.addImage') }}
     </UButton>
   </div>
 </template>

@@ -1,8 +1,13 @@
+import { croutonAssetsConfig } from '../collections/assets/app/composables/useCroutonAssets'
+// The assets collection ships with this package (#2278); registering it here
+// means a consuming app lists nothing for assets in its own app.config.
+
 export default defineAppConfig({
-  // Container config for assets collection (form component is auto-detected via manifest)
   croutonCollections: {
     croutonAssets: {
-      container: 'modal'
+      ...croutonAssetsConfig,
+      container: 'modal',
+      adminNav: { label: 'crouton.collections.assets.title' }
     }
   },
 

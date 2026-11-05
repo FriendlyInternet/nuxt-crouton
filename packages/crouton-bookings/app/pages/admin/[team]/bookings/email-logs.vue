@@ -91,7 +91,7 @@ function viewError(error: string) {
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>

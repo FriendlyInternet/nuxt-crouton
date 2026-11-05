@@ -9,8 +9,8 @@
  * this is the hard remove for mistaken / test orders.
  */
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
+import { salesOrders } from '../../../../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../../../../collections/orderitems/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { deleteOrderCascade, findOwnedOrder } from '../../../../../../../utils/delete-order'
 

@@ -143,6 +143,8 @@ async function handleTeamCreated(team: Team) {
         <UAvatar
           v-if="currentTeam?.logo"
           :src="currentTeam.logo"
+          :ui="{ image: 'object-contain' }"
+          :as="{ img: 'img' }"
           :alt="currentTeam?.name"
           :size="(ui.leadingAvatarSize() as AvatarProps['size'])"
           :class="ui.leadingAvatar()"
@@ -182,6 +184,8 @@ async function handleTeamCreated(team: Team) {
     <UAvatar
       v-if="currentTeam.logo"
       :src="currentTeam.logo"
+      :ui="{ image: 'object-contain' }"
+      :as="{ img: 'img' }"
       :alt="currentTeam.name"
       size="2xs"
     />

@@ -51,7 +51,7 @@
         <UButton
           :loading="deleteLoading"
           :disabled="disabled"
-          icon="i-ph-trash-duotone"
+          icon="i-lucide-trash-2"
           color="error"
           variant="soft"
           size="xs"
@@ -65,7 +65,7 @@
         v-else
         :loading="deleteLoading"
         :disabled="disabled"
-        icon="i-ph-trash-duotone"
+        icon="i-lucide-trash-2"
         color="error"
         variant="soft"
         size="xs"
@@ -87,7 +87,7 @@
         <UButton
           :loading="updateLoading"
           :disabled="disabled"
-          icon="i-ph-pencil"
+          icon="i-lucide-pencil"
           color="neutral"
           size="xs"
           :class="buttonClasses"
@@ -99,7 +99,7 @@
         v-else
         :loading="updateLoading"
         :disabled="disabled"
-        icon="i-ph-pencil"
+        icon="i-lucide-pencil"
         color="primary"
         variant="soft"
         size="xs"

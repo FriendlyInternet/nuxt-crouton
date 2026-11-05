@@ -104,125 +104,40 @@ async function refresh() {
   }
 }
 
-// Ref for Calendar control (to sync with list scroll)
-const calendarRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
+// Scroll container for map + list (also the list's observer root)
+const scrollAreaRef = ref<HTMLElement | null>(null)
 
 // Ref for PanelMap control (to fly to specific locations)
 const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(null)
-
-// Scroll direction detection — reveals filters on scroll-up, hides on scroll-down
-const scrollingUp = ref(false)
-let lastScrollY = 0
-
-function onScroll() {
-  const y = window.scrollY
-  scrollingUp.value = y < lastScrollY
-  lastScrollY = y
-}
-
-onMounted(() => {
-  lastScrollY = window.scrollY
-  window.addEventListener('scroll', onScroll, { passive: true })
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
-})
 
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
 const { isAdmin } = useTeam()
 const notify = useNotify()
-const { parseSlotIds } = useBookingSlots()
 
 // Preview mode - injected from admin page, defaults to false
 const previewMode = inject<Ref<boolean>>('bookings-preview-mode', ref(false))
 
-// Schedule rules per location — used to disable closed days in the calendar
-const locationScheduleRules = computed(() => {
-  return resolvedLocations.value.map((location) => {
-    const openDaysRaw = location.openDays
-    let openDays: number[] | null = null
-    if (openDaysRaw != null) {
-      if (Array.isArray(openDaysRaw)) {
-        openDays = openDaysRaw.length > 0 ? openDaysRaw : null
-      } else if (typeof openDaysRaw === 'string') {
-        try {
-          const parsed = JSON.parse(openDaysRaw)
-          openDays = Array.isArray(parsed) && parsed.length > 0 ? parsed : null
-        } catch {
-          openDays = null
-        }
-      }
-    }
-
-    let blockedDates: { startDate: string, endDate: string, blockedSlots?: string[] }[] = []
-    const blockedRaw = location.blockedDates
-    if (blockedRaw != null) {
-      if (Array.isArray(blockedRaw)) {
-        blockedDates = blockedRaw
-      } else if (typeof blockedRaw === 'string') {
-        try {
-          const parsed = JSON.parse(blockedRaw)
-          blockedDates = Array.isArray(parsed) ? parsed : []
-        } catch {
-          blockedDates = []
-        }
-      }
-    }
-
-    return { openDays, blockedDates }
-  })
+// This screen's shared state — filters, the selected day, hover, the new-booking
+// date, the calendar's period and the list's scroll target (#2561). The bookings
+// layout blocks will read the same store.
+const store = provideBookingsStore({
+  bookings: resolvedBookings,
+  calendarBookings: resolvedCalendarBookings,
+  locations: resolvedLocations,
+  readOnly: previewMode,
+  initialFilters: props.initialFilters,
 })
 
-// Check if ALL visible locations are unavailable on a date (closed or fully blocked)
+// Closed days in the calendar: no location takes bookings that day.
 function isDateUnavailableForAll(date: Date): boolean {
-  const rules = locationScheduleRules.value
-  if (rules.length === 0) return false
-
-  const dayOfWeek = date.getDay()
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  return rules.every(({ openDays, blockedDates }) => {
-    // Check openDays
-    if (openDays && !openDays.includes(dayOfWeek)) return true
-
-    // Check full-day blocked dates
-    for (const blocked of blockedDates) {
-      if (!blocked.startDate || !blocked.endDate) continue
-      if (dateKey >= blocked.startDate && dateKey <= blocked.endDate) {
-        if (!blocked.blockedSlots || blocked.blockedSlots.length === 0) return true
-      }
-    }
-
-    return false
-  })
+  return store.closedReason(date) !== null
 }
 
-// Get reason why a date is unavailable
 function getBlockedReasonForAll(date: Date): string | null {
-  if (!isDateUnavailableForAll(date)) return null
-
-  const dayOfWeek = date.getDay()
-  const rules = locationScheduleRules.value
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  // Check if all are closed by openDays
-  const allClosedByOpenDays = rules.every(({ openDays }) => openDays && !openDays.includes(dayOfWeek))
-  if (allClosedByOpenDays) return t('bookings.calendar.closed')
-
-  // Check for blocked date reason
-  for (const { blockedDates } of rules) {
-    for (const blocked of blockedDates) {
-      if (!blocked.startDate || !blocked.endDate) continue
-      if (dateKey >= blocked.startDate && dateKey <= blocked.endDate) {
-        if (!blocked.blockedSlots || blocked.blockedSlots.length === 0) {
-          return (blocked as { reason?: string }).reason || t('bookings.calendar.blocked')
-        }
-      }
-    }
-  }
-
+  const reason = store.closedReason(date)
+  if (!reason) return null
+  if (reason.kind === 'blocked') return reason.reason || t('bookings.calendar.blocked')
   return t('bookings.calendar.closed')
 }
 
@@ -272,18 +187,11 @@ nuxtApp.hook('crouton:mutation', async (event: { operation: string; collection: 
   }
 })
 
-// Selected dates (from calendar clicks) - toggle multi-select to highlight bookings
-const selectedDates = ref<Date[]>([])
-
-// Hovered booking ID (from calendar indicator hover) - used to highlight specific booking in list
-const hoveredBookingId = ref<string | null>(null)
-
-// Filter state (status, location and showCancelled toggle)
-const filterState = ref<FilterState>({
-  statuses: props.initialFilters.statuses ?? [],
-  locations: props.initialFilters.locations ?? [],
-  showCancelled: props.initialFilters.showCancelled ?? false,
-})
+const selectedDate = store.selectedDate
+const shownDate = store.shownDate
+const scrollTarget = store.scrollTarget
+const hoveredBookingId = store.hoveredBookingId
+const filterState = store.filters
 
 // Visibility states for panel sections
 const showCalendar = ref(true)
@@ -294,9 +202,7 @@ const showMap = ref(false)
 const calendarView = ref<'week' | 'month'>('week')
 
 // Handle go-to-today from pill controls
-function onGoToToday() {
-  calendarRef.value?.goToToday()
-}
+const onGoToToday = store.goToToday
 
 // Parse GeoJSON coordinates from location data
 function parseLocationCoordinates(location: LocationData): [number, number] | null {
@@ -328,16 +234,7 @@ const hasLocationsWithCoordinates = computed(() => {
 })
 
 // Toggle location filter (used by map marker clicks)
-function toggleLocation(locationId: string) {
-  const current = [...filterState.value.locations]
-  const index = current.indexOf(locationId)
-  if (index === -1) {
-    current.push(locationId)
-  } else {
-    current.splice(index, 1)
-  }
-  filterState.value.locations = current
-}
+const toggleLocation = store.toggleLocation
 
 // Emit filter changes
 watch(filterState, (newFilters) => {
@@ -345,7 +242,7 @@ watch(filterState, (newFilters) => {
 }, { deep: true })
 
 // Inline creation state - date where we're creating a booking
-const creatingAtDate = ref<Date | null>(null)
+const creatingAtDate = store.creatingAt
 
 // Watch for booking creation signal from shared state.
 // The emit('created') chain from BookingCreateCard → List → Panel can be lost
@@ -357,150 +254,40 @@ watch(lastBookingCreatedAt, (ts) => {
   }
 })
 
-// Scroll to date - triggers scroll after booking creation
-const scrollToDate = ref<Date | null>(null)
+const hasActiveFilters = store.hasActiveFilters
+const filteredBookings = store.filteredBookings
 
-// Check if any filters are active
-const hasActiveFilters = computed(() => {
-  return filterState.value.statuses.length > 0
-    || filterState.value.locations.length > 0
-    || filterState.value.showCancelled
-})
+// Select a day, show its period and scroll the list to it (a booking's date)
+const selectDate = store.selectDate
 
-// Apply filters to bookings
-const filteredBookings = computed(() => {
-  let result = resolvedBookings.value
-
-  // Filter cancelled bookings based on toggle
-  // By default (showCancelled = false), hide cancelled bookings
-  if (!filterState.value.showCancelled) {
-    result = result.filter(booking => booking.status !== 'cancelled')
-  }
-
-  // Filter by specific statuses if provided
-  if (filterState.value.statuses.length > 0) {
-    result = result.filter(booking =>
-      filterState.value.statuses.includes(booking.status),
-    )
-  }
-
-  // Filter by location
-  if (filterState.value.locations.length > 0) {
-    result = result.filter(booking =>
-      filterState.value.locations.includes(booking.location),
-    )
-  }
-
-  return result
-})
-
-// Helper to compare dates by day
-function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
-}
-
-// Handle calendar day select - toggle date in multi-select array
+// Handle calendar day select (the period is already visible)
 function onCalendarSelect(date: Date | null) {
-  if (!date) return
-  const idx = selectedDates.value.findIndex(d => isSameDay(d, date))
-  if (idx !== -1) {
-    selectedDates.value.splice(idx, 1)
-  } else {
-    selectedDates.value.push(date)
-  }
+  if (date) store.selectDay(date)
 }
 
-// Check if all locations are fully booked for a given date
-function isDayFullyBookedAllLocations(date: Date): boolean {
-  const locations = resolvedLocations.value
-  if (locations.length === 0) return false
-
-  const dateStr = date.toISOString().split('T')[0]
-
-  // Get non-cancelled bookings for this date (use calendar bookings for accurate team-wide availability)
-  const dateBookings = resolvedCalendarBookings.value.filter((b) => {
-    const bookingDate = new Date(b.date).toISOString().split('T')[0]
-    return bookingDate === dateStr && b.status !== 'cancelled'
-  })
-
-  return locations.every((location) => {
-    const locationBookings = dateBookings.filter(b => b.location === location.id)
-
-    if (location.inventoryMode) {
-      const quantity = location.quantity ?? 0
-      return locationBookings.length >= quantity
-    }
-
-    // Slot mode: parse location slots
-    let slots: { id: string; capacity?: number }[] = []
-    if (location.slots) {
-      if (typeof location.slots === 'string') {
-        try { slots = JSON.parse(location.slots) }
-        catch { slots = [] }
-      }
-      else if (Array.isArray(location.slots)) {
-        slots = location.slots
-      }
-    }
-
-    // No named slots → single "all-day" slot with capacity 1
-    if (slots.length === 0) {
-      return locationBookings.length >= 1
-    }
-
-    // Check each slot's capacity
-    return slots.every((slot) => {
-      const capacity = slot.capacity ?? 1
-      const bookedCount = locationBookings.filter((b) => {
-        const ids = parseSlotIds(b.slot)
-        return ids.includes(slot.id)
-      }).length
-      return bookedCount >= capacity
-    })
-  })
-}
+// Calendar bookings give team-wide availability
+const isDayFullyBookedAllLocations = store.isFullyBooked
 
 // Handle calendar day click (+ button) - start inline creation at that date (disabled in preview mode)
 function onCalendarDayClick(date: Date) {
-  if (previewMode.value) return
-  if (resolvedLocations.value.length === 0) return
-
-  if (isDateUnavailableForAll(date)) return
-
-  if (isDayFullyBookedAllLocations(date)) {
+  const result = store.startCreate(date)
+  if (result === 'no-locations') {
+    notify.warning(t('bookings.notifications.noLocations'), {
+      description: t('bookings.notifications.noLocationsDescription'),
+    })
+  }
+  else if (result === 'full') {
     notify.warning(t('bookings.notifications.allSlotsTaken'), {
       description: t('bookings.notifications.allSlotsTakenDescription'),
     })
-    return
   }
-
-  creatingAtDate.value = date
 }
 
-// Handle booking created - refresh all data (including calendar indicators), then scroll
-function onBookingCreated() {
-  const dateToScrollTo = creatingAtDate.value
-  creatingAtDate.value = null
+// Handle booking created - refresh all data (including calendar indicators), then scroll to its day
+async function onBookingCreated() {
+  const done = store.finishCreate(refresh)
   emit('created')
-
-  // Refresh all data so calendar indicators update immediately
-  refresh()
-
-  if (!dateToScrollTo) return
-
-  // submitAll() (running in background for auto-book) calls refreshMyBookings()
-  // which updates resolvedBookings. Wait for that data change before scrolling
-  // so the DOM is stable and the new booking element exists.
-  const stop = watch(resolvedBookings, async () => {
-    stop()
-    await nextTick()
-    scrollToDate.value = dateToScrollTo
-  })
-
-  // Safety: if no data change within 5s (e.g. API failure), clean up
-  setTimeout(() => stop(), 5000)
+  await done
 }
 
 // Handle booking updated - refresh the list
@@ -516,39 +303,27 @@ async function onEmailSent() {
 }
 
 // Handle cancel creation
-function onCancelCreate() {
-  creatingAtDate.value = null
-}
+const onCancelCreate = store.cancelCreate
 
 // Handle list scroll - sync calendar to top visible date (week changes)
-function onTopVisibleDateChange(date: Date) {
-  calendarRef.value?.goToDate(date)
-}
-
-// Handle click on booking date - navigate calendar and toggle selection
-function onDateClick(date: Date) {
-  calendarRef.value?.goToDate(date)
-  onCalendarSelect(date)
-}
+const onTopVisibleDateChange = store.showPeriod
 
 // Expose methods for external control
 defineExpose({
   refresh,
-  goToDate: (date: Date) => calendarRef.value?.goToDate(date),
 })
 </script>
 
 <template>
-  <div class="booking-panel rounded-[calc(var(--ui-radius)*2)] border border-default bg-default">
-      <!-- Sticky: filters + calendar. Negative top hides filters above viewport;
-           scrolling up reveals them. Calendar stays pinned. -->
-      <div class="sticky z-20 bg-default rounded-t-[calc(var(--ui-radius)*2)] transition-[top] duration-300 flex flex-col gap-2" :class="scrollingUp ? 'top-0' : '-top-12'">
-        <!-- Filter controls (hidden above viewport when stuck) -->
+  <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
+      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <div class="shrink-0 flex flex-col gap-2 border-b border-default">
+        <!-- Filter controls -->
         <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
             :selected-locations="filterState.locations"
-            :selected-dates-count="selectedDates.length"
+            :has-selected-date="!!selectedDate"
             :show-locations="showLocations"
             :show-map="showMap"
             :show-calendar="showCalendar"
@@ -570,15 +345,15 @@ defineExpose({
         </div>
 
         <!-- Calendar -->
-        <div v-if="showCalendar" class="border-b border-default px-2 pb-2">
+        <div v-if="showCalendar" class="px-2 pb-2">
           <CroutonBookingsCalendar
-            ref="calendarRef"
             v-model:filters="filterState"
+            v-model:date="shownDate"
             :bookings="resolvedCalendarBookings"
             :locations="resolvedLocations"
             :settings="resolvedSettings"
             :view="calendarView"
-            :selected-dates="selectedDates"
+            :selected-date="selectedDate"
             :creating-at-date="creatingAtDate"
             :is-date-unavailable="isDateUnavailableForAll"
             :get-blocked-reason="getBlockedReasonForAll"
@@ -587,50 +362,55 @@ defineExpose({
             @hover-booking="(id) => hoveredBookingId = id"
           />
         </div>
-        <div v-else class="border-b border-default" />
       </div>
 
-      <!-- Map section (scrolls with content) -->
-      <Transition
-        enter-active-class="transition-all duration-300 ease-out"
-        enter-from-class="opacity-0 max-h-0"
-        enter-to-class="opacity-100 max-h-[300px]"
-        leave-active-class="transition-all duration-200 ease-in"
-        leave-from-class="opacity-100 max-h-[300px]"
-        leave-to-class="opacity-0 max-h-0"
-      >
-        <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
-          <CroutonBookingsPanelMap
-            ref="panelMapRef"
-            :locations="resolvedLocations"
-            :selected-locations="filterState.locations"
-            @toggle-location="toggleLocation"
-            @ready="onMapReady"
+      <!-- Scroll area: map + list -->
+      <div ref="scrollAreaRef" class="flex-1 min-h-0 overflow-y-auto">
+        <!-- Map section (scrolls with content) -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[300px]"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 max-h-[300px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
+            <CroutonBookingsPanelMap
+              ref="panelMapRef"
+              :locations="resolvedLocations"
+              :selected-locations="filterState.locations"
+              @toggle-location="toggleLocation"
+              @ready="onMapReady"
+            />
+          </div>
+        </Transition>
+
+        <!-- List section -->
+        <div class="px-2 py-3 md:px-4 md:py-4">
+          <CroutonBookingsList
+            :scroll-root="scrollAreaRef"
+            :bookings="filteredBookings"
+            :loading="resolvedLoading"
+            :error="resolvedError"
+            :has-active-filters="hasActiveFilters"
+            :selected-date="selectedDate"
+            :highlighted-booking-id="hoveredBookingId"
+            :creating-at-date="creatingAtDate"
+            :scroll-target="scrollTarget"
+            :active-location-filter="filterState.locations"
+            :empty-message="resolvedEmptyMessage"
+            @created="onBookingCreated"
+            :is-day-fully-booked="isDayFullyBookedAllLocations"
+            @cancel-create="onCancelCreate"
+            @new-booking="onCalendarDayClick"
+            @top-visible-date-change="onTopVisibleDateChange"
+            @date-click="selectDate"
+            @updated="onBookingUpdated"
+            @email-sent="onEmailSent"
           />
         </div>
-      </Transition>
-
-      <!-- List section -->
-      <div class="px-2 py-3 md:px-4 md:py-4">
-        <CroutonBookingsList
-          :bookings="filteredBookings"
-          :loading="resolvedLoading"
-          :error="resolvedError"
-          :has-active-filters="hasActiveFilters"
-          :selected-dates="selectedDates"
-          :highlighted-booking-id="hoveredBookingId"
-          :creating-at-date="creatingAtDate"
-          :scroll-to-date="scrollToDate"
-          :active-location-filter="filterState.locations"
-          :empty-message="resolvedEmptyMessage"
-          @created="onBookingCreated"
-          @cancel-create="onCancelCreate"
-          @top-visible-date-change="onTopVisibleDateChange"
-          @date-click="onDateClick"
-          @updated="onBookingUpdated"
-          @email-sent="onEmailSent"
-        />
-      </div>
+        </div>
   </div>
 </template>
 

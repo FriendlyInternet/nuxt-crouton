@@ -5,7 +5,7 @@ import { requireTeamEvent } from '../../../../../../utils/team-event'
 // crouton-printing owns that canonical default. A local copy here diverged
 // (English) from the formatter (Dutch), so the form lied about what prints.
 import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
-import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
+import { salesEventsettings } from '../../../../../../../collections/eventsettings/server/database/schema'
 
 export type { ReceiptSettings }
 

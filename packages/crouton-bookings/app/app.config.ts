@@ -1,3 +1,10 @@
+import { bookingsBookingsConfig } from '../collections/bookings/app/composables/useBookingsBookings'
+import { bookingsLocationsConfig } from '../collections/locations/app/composables/useBookingsLocations'
+import { bookingsSettingsConfig } from '../collections/settings/app/composables/useBookingsSettings'
+import { bookingsEmailtemplatesConfig } from '../collections/emailtemplates/app/composables/useBookingsEmailtemplates'
+import { bookingsEmaillogsConfig } from '../collections/emaillogs/app/composables/useBookingsEmaillogs'
+// The five collections above ship with this package (#2278); registering them here
+// means a consuming app lists nothing for bookings in its own app.config.
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
 import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
 
@@ -90,15 +97,15 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
 
 const bookingBlockDefinition: CroutonBlockDefinition = {
   type: 'bookingBlock',
-  name: 'Booking',
-  description: 'Embed a booking panel',
+  name: 'bookings.blocks.booking.name',
+  description: 'bookings.blocks.booking.description',
   icon: 'i-lucide-calendar-check',
   category: 'customer',
   clientOnly: true,
   defaultAttrs: {
     title: '',
     emptyMessage: '',
-    access: 'public',
+    loggedOut: 'prompt',
     scope: 'personal'
   },
   components: {
@@ -109,33 +116,35 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
     {
       name: 'title',
       type: 'text',
-      label: 'Title',
-      description: 'Optional heading displayed above the booking UI'
+      label: 'bookings.blocks.booking.fields.title.label',
+      description: 'bookings.blocks.booking.fields.title.description'
     },
     {
       name: 'emptyMessage',
       type: 'text',
-      label: 'Empty message',
-      description: 'Message shown when no bookings exist'
+      label: 'bookings.blocks.booking.fields.emptyMessage.label',
+      description: 'bookings.blocks.booking.fields.emptyMessage.description'
     },
     {
-      name: 'access',
+      // Who sees the block at all is the generic Visibility panel; this only
+      // decides what a logged-out visitor gets — booking needs an account (#2263)
+      name: 'loggedOut',
       type: 'select',
-      label: 'Access',
-      description: 'Who can see this booking block',
+      label: 'bookings.blocks.booking.fields.loggedOut.label',
+      description: 'bookings.blocks.booking.fields.loggedOut.description',
       options: [
-        { label: 'Everyone', value: 'public' },
-        { label: 'Members only', value: 'members' }
+        { label: 'bookings.blocks.booking.fields.loggedOut.options.prompt', value: 'prompt' },
+        { label: 'bookings.blocks.booking.fields.loggedOut.options.hide', value: 'hide' }
       ]
     },
     {
       name: 'scope',
       type: 'select',
-      label: 'Booking scope',
-      description: 'What bookings are shown to the user',
+      label: 'bookings.blocks.booking.fields.scope.label',
+      description: 'bookings.blocks.booking.fields.scope.description',
       options: [
-        { label: 'Personal bookings', value: 'personal' },
-        { label: 'All team bookings', value: 'team' }
+        { label: 'bookings.blocks.booking.fields.scope.options.personal', value: 'personal' },
+        { label: 'bookings.blocks.booking.fields.scope.options.team', value: 'team' }
       ]
     }
   ],
@@ -144,18 +153,25 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
     attributes: {
       title: { default: '' },
       emptyMessage: { default: '' },
-      access: { default: 'public' },
+      loggedOut: { default: 'prompt' },
       scope: { default: 'personal' }
     }
   }
 }
 
+// Sidebar label = the title key this package already ships for the collection
+const withNavLabel = <T extends object>(config: T, labelKey: string) => ({
+  ...config,
+  adminNav: { label: labelKey }
+})
+
 export default defineAppConfig({
-  // Package-provided form for bookings locations (overrides CLI-generated _Form.vue)
   croutonCollections: {
-    bookingsLocations: {
-      packageForm: 'CroutonBookingsLocationForm'
-    }
+    bookingsBookings: withNavLabel(bookingsBookingsConfig, 'bookings.collections.bookings.title'),
+    bookingsLocations: withNavLabel(bookingsLocationsConfig, 'bookings.collections.locations.title'),
+    bookingsSettings: withNavLabel(bookingsSettingsConfig, 'bookings.collections.settings.title'),
+    bookingsEmailtemplates: withNavLabel(bookingsEmailtemplatesConfig, 'bookings.collections.emailtemplates.title'),
+    bookingsEmaillogs: withNavLabel(bookingsEmaillogsConfig, 'bookings.collections.emaillogs.title')
   },
   // App auto-discovery registration for crouton-bookings
   croutonApps: {
@@ -211,8 +227,8 @@ export default defineAppConfig({
       pageTypes: [
         {
           id: 'booking',
-          name: 'Booking Page',
-          description: 'Interactive booking page with calendar and availability',
+          name: 'bookings.pageTypes.booking.name',
+          description: 'bookings.pageTypes.booking.description',
           icon: 'i-lucide-calendar',
           component: 'CroutonBookingsPanel',
           category: 'customer',

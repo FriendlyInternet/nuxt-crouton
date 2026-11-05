@@ -37,7 +37,7 @@ const columns = [
 </script>
 
 <template>
-  <div class="space-y-4 p-6">
+  <div class="space-y-4 p-4 sm:p-6">
     <div class="flex items-center justify-between">
       <div>
         <h2 class="text-2xl font-semibold">{{ t('sales.helpers.title') }}</h2>

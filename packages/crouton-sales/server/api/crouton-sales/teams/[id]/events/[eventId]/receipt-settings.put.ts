@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
-import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
+import { salesEventsettings } from '../../../../../../../collections/eventsettings/server/database/schema'
 
 export interface ReceiptSettings {
   special_instructions_title: string

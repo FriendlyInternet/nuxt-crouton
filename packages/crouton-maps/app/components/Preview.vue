@@ -24,11 +24,11 @@
         v-else
         class="flex items-center justify-center h-full text-xs text-gray-400"
       >
-        No location
+        {{ t('maps.preview.noLocation') }}
       </div>
     </div>
 
-    <UModal title="Location Map">
+    <UModal :title="t('maps.preview.title')">
       <UButton
         icon="i-lucide-eye"
         size="xs"
@@ -60,9 +60,9 @@
           v-if="coordinates"
           class="mt-4 text-sm text-gray-600"
         >
-          <p><strong>Coordinates:</strong></p>
-          <p>Latitude: {{ coordinates[1].toFixed(6) }}</p>
-          <p>Longitude: {{ coordinates[0].toFixed(6) }}</p>
+          <p><strong>{{ t('maps.preview.coordinates') }}</strong></p>
+          <p>{{ t('maps.preview.latitude', { value: coordinates[1].toFixed(6) }) }}</p>
+          <p>{{ t('maps.preview.longitude', { value: coordinates[0].toFixed(6) }) }}</p>
         </div>
       </template>
     </UModal>
@@ -74,6 +74,7 @@ const props = defineProps<{
   location?: string | [number, number]
 }>()
 
+const { t } = useT()
 const markerColor = useMarkerColor()
 
 // Parse coordinates from string or array

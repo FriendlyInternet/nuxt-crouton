@@ -3,7 +3,6 @@
 
 import { readFile, writeFile, access } from 'node:fs/promises'
 import { parseModule, generateCode } from 'magicast'
-import { getFrameworkPackages } from './framework-packages.ts'
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -34,28 +33,99 @@ export async function addToNuxtConfigExtends(configPath: string, packageName: st
     return { added: false, reason: 'nuxt.config.ts not found' }
   }
 
-  const code = await readFile(configPath, 'utf-8')
+  return addToConfigArray(configPath, 'extends', packageName, entries => entries.some(e => isSameExtendsEntry(e, packageName)))
+}
 
-  // Quick check before parsing
-  if (code.includes(packageName)) {
-    return { added: false, reason: 'already in config' }
+/**
+ * Add `entry` to a top-level array option (`extends`, `css`, …) of nuxt.config.ts,
+ * creating the array when missing. Edits the AST, so comments and formatting
+ * around the array survive. `isPresent` decides whether the entry is already there.
+ */
+export async function addToConfigArray(
+  configPath: string,
+  key: string,
+  entry: string,
+  isPresent: (entries: string[]) => boolean = entries => entries.includes(entry),
+): Promise<{ added: boolean; reason?: string }> {
+  if (!await pathExists(configPath)) {
+    return { added: false, reason: 'nuxt.config.ts not found' }
   }
+
+  const code = await readFile(configPath, 'utf-8')
 
   try {
     const mod = parseModule(code)
     const options = getNuxtConfigOptions(mod)
 
-    // Ensure extends array exists
-    options.extends ||= []
+    if (isPresent(arrayEntries(options[key]))) {
+      return { added: false, reason: 'already in config' }
+    }
 
-    // Add the package
-    options.extends.push(packageName)
+    options[key] ||= []
+    options[key].push(entry)
 
     const result = generateCode(mod)
     await writeFile(configPath, result.code, 'utf-8')
     return { added: true }
   } catch {
     return { added: false, reason: 'could not parse nuxt.config.ts' }
+  }
+}
+
+/**
+ * Set a top-level option of nuxt.config.ts only when it is not there yet.
+ */
+export async function setConfigOptionIfMissing(
+  configPath: string,
+  key: string,
+  value: Record<string, unknown>,
+): Promise<{ added: boolean; reason?: string }> {
+  if (!await pathExists(configPath)) {
+    return { added: false, reason: 'nuxt.config.ts not found' }
+  }
+
+  try {
+    const mod = parseModule(await readFile(configPath, 'utf-8'))
+    const options = getNuxtConfigOptions(mod)
+    if (options[key]) return { added: false, reason: 'already in config' }
+    options[key] = value
+    await writeFile(configPath, generateCode(mod).code, 'utf-8')
+    return { added: true }
+  } catch {
+    return { added: false, reason: 'could not parse nuxt.config.ts' }
+  }
+}
+
+/** String entries of a proxified array (non-string entries are skipped). */
+function arrayEntries(arr: any): string[] {
+  if (!arr) return []
+  const out: string[] = []
+  for (let i = 0; i < arr.length; i++) {
+    if (typeof arr[i] === 'string') out.push(arr[i])
+  }
+  return out
+}
+
+/**
+ * `@fyit/crouton-core` is the same layer as `/path/to/crouton-core` (a local
+ * checkout); anything else must match exactly.
+ */
+function isSameExtendsEntry(entry: string, packageName: string): boolean {
+  if (entry === packageName) return true
+  if (!packageName.startsWith('@')) return false
+  const shortName = packageName.slice(packageName.lastIndexOf('/') + 1)
+  if (entry.startsWith('@')) return false
+  return entry.replace(/\\/g, '/').replace(/\/+$/, '').endsWith(`/${shortName}`)
+}
+
+/** The string entries of nuxt.config.ts `extends` — AST, so comments never count. */
+export async function readNuxtConfigExtends(configPath: string): Promise<string[]> {
+  if (!await pathExists(configPath)) return []
+  try {
+    const mod = parseModule(await readFile(configPath, 'utf-8'))
+    return arrayEntries(getNuxtConfigOptions(mod).extends)
+  } catch {
+    return []
   }
 }
 
@@ -68,10 +138,6 @@ export async function removeFromNuxtConfigExtends(configPath: string, pattern: s
   }
 
   const code = await readFile(configPath, 'utf-8')
-
-  if (!code.includes(pattern)) {
-    return { removed: false, reason: 'not found in config' }
-  }
 
   try {
     const mod = parseModule(code)
@@ -114,51 +180,10 @@ export async function isInNuxtConfigExtends(configPath: string, packageName: str
   if (!await pathExists(configPath)) {
     return false
   }
-  const content = await readFile(configPath, 'utf-8')
-  return content.includes(packageName)
+  const entries = await readNuxtConfigExtends(configPath)
+  return entries.some(e => isSameExtendsEntry(e, packageName))
 }
 
-/**
- * Sync framework packages in nuxt.config.ts based on features config.
- * Removes getCroutonLayers() usage if present, then ensures all
- * feature-based packages are in the extends array.
- */
-export async function syncFrameworkPackages(configPath: string, features: Record<string, boolean | Record<string, unknown>> = {}): Promise<{ synced: boolean; packages?: string[]; reason?: string }> {
-  if (!await pathExists(configPath)) {
-    return { synced: false, reason: 'nuxt.config.ts not found' }
-  }
-
-  let code = await readFile(configPath, 'utf-8')
-  let modified = false
-
-  // Remove getCroutonLayers() import if present
-  const importRegex = /import\s*\{\s*getCroutonLayers\s*\}\s*from\s*['"]@fyit\/crouton['"]\s*\n?/g
-  if (importRegex.test(code)) {
-    code = code.replace(importRegex, '')
-    modified = true
-  }
-
-  // Remove ...getCroutonLayers() spread if present
-  const spreadRegex = /\.\.\.getCroutonLayers\([^)]*\),?\s*/g
-  if (spreadRegex.test(code)) {
-    code = code.replace(spreadRegex, '')
-    modified = true
-  }
-
-  if (modified) {
-    await writeFile(configPath, code, 'utf-8')
-  }
-
-  // Get framework packages based on features
-  const packages = getFrameworkPackages(features)
-
-  // Add each package to extends (handles deduplication)
-  for (const pkg of packages) {
-    await addToNuxtConfigExtends(configPath, pkg)
-  }
-
-  return { synced: true, packages }
-}
 
 /**
  * Deep-merge `source` into `target`, creating nested objects as needed.

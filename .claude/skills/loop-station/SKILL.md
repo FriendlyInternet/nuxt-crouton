@@ -24,7 +24,7 @@ clean and reproducible.
 
 ## What it measures
 
-Walking root `CLAUDE.md` + every skill (`.claude/skills/**`) + every agent
+Walking root `CLAUDE.md` **plus every file it `@imports`** (`AGENTS.md` — Claude Code inlines those into every session, so they are always-on too, #2387) + every skill (`.claude/skills/**`) + every agent
 (`.claude/agents/**`) + each LLM CI workflow's `prompt:` block:
 
 - **tokens per artifact** — via Anthropic `count_tokens` when `ANTHROPIC_API_KEY`
@@ -151,6 +151,13 @@ observatory panel (#1065) and the advisor's dead-weight rule (#1066) read it.
 > `history.jsonl` commits for size. The record carries `source: 'ci-rollup'`
 > and `scope: 'pipeline'` so a consumer can't over-read it: **0 means "never
 > fired in CI"**, not "never used" (interactive coverage is #1067).
+>
+> Where the skill counts come from (#2403): the four claude-code-action review gates run with
+> an allowlist that excludes the `Skill` tool, so their traces never carry a skill. The **pi
+> worker** does: pi loads a skill by `read`ing its `SKILL.md`, and `pi-telemetry.mjs --session`
+> turns each such read into a `kind:'skill'` event (`lib/skill-loads.mjs`). So the dead-weight
+> panel's counts are **pipeline-worker usage** — the usage that matters once work is fully
+> pipeline — and `skillAware` in the viewer flips on with the first such event.
 
 ## Files
 
@@ -170,8 +177,8 @@ node .claude/skills/loop-station/aggregate-usage.mjs --window 7 trace1.jsonl tra
 
 ## In CI
 
-`.github/workflows/loop-station-usage.yml` runs **weekly** (Mondays 06:41 UTC,
-before the advisor): list the window's `loop-station-trace-*` artifacts →
+`.github/workflows/weekly.yml` (`usage` job) runs **weekly** (Mondays 06:30 UTC,
+first, before `findings` and `advisor`): list the window's `loop-station-trace-*` artifacts →
 download → aggregate → append → commit back `[skip ci]`. Fail-loud contract
 (#1037): a listing failure **fails the job** (an outage must not read as a
 quiet week); zero artifacts appends a meta-only record (a gap you can see).
@@ -194,7 +201,7 @@ issue assigned to the maintainer with concrete recommendations.
 |------|------|
 | `advisor.mjs` | **deterministic gate** — reads `history.jsonl` + `usage.jsonl`, surfaces candidate findings (scorecard reds, sharp always-on growth, redundancy jumps, dead-weight skills), decides `actionable`. No LLM, no issue. Importable `analyze()` / `usageCoverage()`. |
 | `lib/advisor.test.mjs` | findings logic (reds flag, growth flags, cross-tokenizer deltas are NOT compared, dead-weight coverage gates, deterministic) |
-| `.github/workflows/loop-station-advisor.yml` | weekly: run the gate → **only if actionable** invoke `claude-code-action` to open/update ONE `loop-station-advisor` issue assigned to `pmcp` |
+| `.github/workflows/weekly.yml` (`advisor` job) | weekly: run the gate → **only if actionable** invoke `claude-code-action` to open/update ONE `loop-station-advisor` issue assigned to `pmcp` |
 
 ### Dead-weight rule (#1066)
 
@@ -273,8 +280,7 @@ Two deterministic sources feed `findings.jsonl` — **no LLM, no CI state machin
    caught* defect; closed ⇒ dropped; open ⇒ left for a later run.
 2. **Reverts** — a `reverted` run in the eval-ledger ⇒ a *confirmed escaped* defect.
 
-`.github/workflows/loop-station-findings.yml` (merge-to-`main` + weekly, mirrors
-`loop-station-usage.yml`) downloads the candidates, resolves them, runs `reconcile`, and
+`.github/workflows/weekly.yml` (`findings` job, after `usage`) downloads the candidates, resolves them, runs `reconcile`, and
 commits new findings to `main`. **Only this main-context job writes the committed ledger** —
 a PR-branch gate run never does. Rendered in `pocs/loop-station` (the `AccountabilityBoard`
 panel, staged by its `prepare-data.mjs`).

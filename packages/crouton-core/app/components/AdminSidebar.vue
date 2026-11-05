@@ -5,23 +5,12 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const hasTeamSwitcher = ref(false)
 const TeamSwitcherComponent = shallowRef<ReturnType<typeof resolveComponent> | null>(null)
 
-// Check if UserMenu is available (from nuxt-crouton-auth)
-const hasUserMenu = ref(false)
-const UserMenuComponent = shallowRef<ReturnType<typeof resolveComponent> | null>(null)
-
 onMounted(() => {
   // Resolve TeamSwitcher (always resolve — the component handles showSwitcher:false internally)
   const teamSwitcher = resolveComponent('TeamSwitcher')
   if (typeof teamSwitcher !== 'string') {
     TeamSwitcherComponent.value = teamSwitcher
     hasTeamSwitcher.value = true
-  }
-
-  // Resolve UserMenu (SidebarUserMenu)
-  const userMenu = resolveComponent('SidebarUserMenu')
-  if (typeof userMenu !== 'string') {
-    UserMenuComponent.value = userMenu
-    hasUserMenu.value = true
   }
 })
 
@@ -260,12 +249,15 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
     label: t(`navigation.${group.kind}`) || group.label,
     icon: group.icon,
     defaultOpen: group.kind === 'content',
-    children: group.items.map(col => ({
-      label: col.label,
-      icon: col.icon,
-      to: `${basePath}/${col.name}`,
-      active: route.path.includes(`${basePath}/${col.name}`)
-    }))
+    children: group.items
+      .map(col => ({ col, label: tLabel(col.label) }))
+      .sort((a, b) => (a.col.order - b.col.order) || a.label.localeCompare(b.label))
+      .map(({ col, label }) => ({
+        label,
+        icon: col.icon,
+        to: `${basePath}/${col.name}`,
+        active: route.path.includes(`${basePath}/${col.name}`)
+      }))
   }))
 })
 
@@ -398,15 +390,6 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
         orientation="vertical"
         class="mt-auto"
         :external-icon="false"
-      />
-    </template>
-
-    <template #footer="{ collapsed }">
-      <!-- User Menu -->
-      <component
-        :is="UserMenuComponent"
-        v-if="hasUserMenu"
-        :collapsed="collapsed"
       />
     </template>
   </UDashboardSidebar>

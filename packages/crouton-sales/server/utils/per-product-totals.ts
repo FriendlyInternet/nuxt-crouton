@@ -30,14 +30,14 @@
  * path that cannot duplicate, and costs one extra round trip on a query whose
  * parameter count is fixed by the scope rather than by the data (#1766).
  *
- * Tables are injected, not imported: they live in the consuming app's generated
- * layer (`~~/layers/sales/...`), which a package unit test cannot resolve — the
- * same reason `handover.ts` takes its table as a parameter.
+ * Tables are injected, not imported, so a unit test can pass a throwaway
+ * in-memory schema.
  */
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { locationBlocksDeliverySql } from './location-handover'
 import { excludesCancelledOrders } from './order-status'
 import { personnelConditionOn } from './personnel-condition'
+import { productCategoryCondition } from './product-category-filter'
 
 export interface PerProductTables {
   orders: any
@@ -67,6 +67,9 @@ export interface PerProductTotalsInput {
   eventId: string
   /** `all` | `exclude` | `only` — the Data pane's staff toggle. */
   personnel?: unknown
+  /** Optional product/category narrowing (#2146) — see `product-category-filter.ts`. */
+  productIds?: unknown
+  categoryIds?: unknown
 }
 
 export async function buildPerProductTotals(
@@ -87,7 +90,11 @@ export async function buildPerProductTotals(
     eq(orders.teamId, input.teamId),
     eq(orders.eventId, input.eventId),
     excludesCancelledOrders(orders),
-    personnelConditionOn(orders.isPersonnel, input.personnel)
+    personnelConditionOn(orders.isPersonnel, input.personnel),
+    productCategoryCondition(products.id, products.categoryId, {
+      productIds: input.productIds,
+      categoryIds: input.categoryIds
+    })
   )
 
   // --- sold -----------------------------------------------------------------

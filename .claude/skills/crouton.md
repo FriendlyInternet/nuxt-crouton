@@ -60,8 +60,8 @@ If the Crouton MCP server is configured, you can use these tools for AI-assisted
 3. Call `validate_schema` to check schema
 4. Call `dry_run` to preview what will be generated
 5. **Schema sign-off gate (#314)** — run the **`schema-review`** skill and get **human sign-off**
-   on the field table **before** generating (see the `schema-review` skill + the "Schema Sign-Off"
-   rule in root `CLAUDE.md`). `validate_schema` is the machine check; this is the human one.
+   on the field table **before** generating (see the `schema-review` skill + the schema sign-off
+   gate in `crouton-change-control` §7). `validate_schema` is the machine check; this is the human one.
 6. Call `generate_collection` to create files — **only after approval**
 
 **Quick Commands:**
@@ -92,7 +92,7 @@ Use this skill when the user mentions:
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file |
 | `--count <n>` | Seed record count (default: 25) |
-| `--no-tests` | Skip the per-collection tests — schema-smoke (#785) + API route handler test (#791); both emitted by default |
+| `--tests` | Also emit the per-collection tests — schema-smoke (#785) + API route handler test (#791); off by default (#2286) |
 | `--dry-run` | Preview without writing |
 
 ### Field Types
@@ -101,6 +101,7 @@ Use this skill when the user mentions:
 |-----------|-------------|---------|
 | text, string, name, title | `string` | `"name": { "type": "string" }` |
 | long text, description, content | `text` | `"description": { "type": "text" }` |
+| rich text, formatted content (needs crouton-editor) | `richText` | `"content": { "type": "richText" }` |
 | number, count, quantity | `number` | `"quantity": { "type": "number" }` |
 | price, amount, decimal | `decimal` | `"price": { "type": "decimal", "meta": { "precision": 10, "scale": 2 } }` |
 | boolean, yes/no, active | `boolean` | `"active": { "type": "boolean" }` |
@@ -209,6 +210,15 @@ For repeater fields where each item needs translations (e.g., time slots, option
   }
 }
 ```
+
+## Package-owned collections — don't generate them (#2278)
+
+Some packages ship their collections whole (schema, routes, list, form). Today: **`@fyit/crouton-sales`**
+(events, products, categories, orders, orderitems, locations, clients, eventsettings, printers,
+printqueues, kdsbumps). Extend the package and you have them — do **not** add them to
+`crouton.config.js`; `crouton config` refuses with `… is owned by @fyit/crouton-sales`. To change one,
+edit the package (`packages/crouton-sales/collections/<name>/`), not the app. Details:
+`packages/crouton-cli/CLAUDE.md` → *Package-owned collections*.
 
 ## Scaffold a NEW app or POC — `crouton init` (run this FIRST for a new app)
 
@@ -353,7 +363,7 @@ the LLM `/layout` pass (#711) is gated and out of scope.
 layers/{layer}/collections/{collection}/
 ├── app/
 │   ├── components/
-│   │   ├── _Form.vue         # CRUD form with Zod validation (note the underscore; skipped when formComponent is set)
+│   │   ├── _Form.vue         # CRUD form with Zod validation (note the underscore; named `<Layer><Plural>Form`; eject by adding that name in the app's `app/components`)
 │   │   └── List.vue          # Data table with actions
 │   └── composables/
 │       └── use{Layer}{Collection}s.ts  # Schema, columns, config
@@ -367,14 +377,14 @@ layers/{layer}/collections/{collection}/
 │       ├── schema.ts         # Drizzle ORM schema
 │       ├── queries.ts        # Database operations
 │       └── seed.ts           # Seed data (with --seed flag)
-├── {Layer}{Collection}s.test.ts      # Zod schema-smoke test (#785) — skip with --no-tests
-├── {Layer}{Collection}s.api.test.ts  # API route handler test (#791) — skip with --no-tests
+├── {Layer}{Collection}s.test.ts      # Zod schema-smoke test (#785) — only with --tests
+├── {Layer}{Collection}s.api.test.ts  # API route handler test (#791) — only with --tests
 ├── types.ts                  # TypeScript interfaces
 ├── nuxt.config.ts           # Layer configuration
 └── README.md                # Collection documentation
 ```
 
-Two tests are emitted per collection by default (skip both with `--no-tests`):
+With `--tests` (off by default — the e2e fixture smoke covers generated CRUD, #2286) two tests are emitted per collection:
 
 - A **schema-smoke test** (#785): runtime-free (zod only), it asserts the generated
   Zod schema accepts a valid record and rejects an invalid one.

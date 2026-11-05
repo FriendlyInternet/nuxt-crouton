@@ -1,0 +1,5 @@
+{
+  "stagingUrl": "https://crate-staging.pmcp.dev",
+  "productionUrl": "https://crate.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n"
+}

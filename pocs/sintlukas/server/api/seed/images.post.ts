@@ -26,7 +26,7 @@ import { contentAteliers } from '~~/layers/content/collections/ateliers/server/d
 import { contentPersons } from '~~/layers/content/collections/persons/server/database/schema'
 import { contentNews } from '~~/layers/content/collections/news/server/database/schema'
 import { contentCategories } from '~~/layers/content/collections/categories/server/database/schema'
-import { croutonAssets } from '~~/layers/crouton/collections/assets/server/database/schema'
+import { croutonAssets } from '@fyit/crouton-assets/collections/assets/server/database/schema'
 import { organization, member } from '~~/server/db/schema'
 
 // ---------------------------------------------------------------------------

@@ -57,3 +57,13 @@ test('excludes paths outside the repo root and non-existent files', () => {
   assert.deepEqual(out, ['src/keep.ts']);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('tool names are matched case-insensitively (Edit/Write/MultiEdit) — #2434', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-led-'));
+  const session = path.join(root, 's.jsonl');
+  fs.writeFileSync(path.join(root, 'a.ts'), 'x');
+  fs.writeFileSync(session, JSON.stringify({ message: { content: [{ type: 'toolCall', name: 'Edit', arguments: { path: 'a.ts' } }] } }));
+  const out = execFileSync('node', [path.join(import.meta.dirname, 'pi-edited-files.mjs'), session, root], { encoding: 'utf8' }).split('\n').filter(Boolean);
+  assert.deepEqual(out, ['a.ts']);
+  fs.rmSync(root, { recursive: true, force: true });
+});

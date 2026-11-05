@@ -116,7 +116,7 @@ The boundary stays honest at the Yjs layer (`node.ephemeral` is a true sibling o
 ## Dependencies
 
 - **Extends**: `@fyit/crouton-collab` (for collaboration infrastructure)
-- **Peer Dependencies**: `@fyit/crouton`
+- **Peer Dependencies**: `@fyit/crouton-core`
 - **Core**: `@vue-flow/core`, `@dagrejs/dagre`, `yjs`
 - **Plugins**: `@vue-flow/background`, `@vue-flow/controls`, `@vue-flow/minimap`
 
@@ -295,7 +295,7 @@ The flow package already extends crouton-collab, so you get this automatically w
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-flow'  // Already extends crouton-collab
   ]
 })

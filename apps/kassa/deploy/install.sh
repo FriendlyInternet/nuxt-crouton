@@ -214,6 +214,10 @@ claim_device() {
   cat > "$DEVICE_FILE" <<EOF
 # Written by install.sh at claim time (#804). Do not edit by hand —
 # re-run the installer with --reclaim to replace this identity.
+# Kassa names — the cloud-sync pusher reads these (#2725).
+CROUTON_SALES_DEVICE_ID=$dev
+CROUTON_SALES_DEVICE_SECRET=$sec
+# Legacy names, kept as a fallback for older bundles.
 FANFARE_DEVICE_ID=$dev
 FANFARE_ORG_ID=$org
 FANFARE_EVENT_ID=$evt

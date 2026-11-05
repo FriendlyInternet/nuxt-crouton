@@ -135,7 +135,7 @@ a feature branch.
    **into the epic branch** when one was passed (else the repo base). The body MUST contain
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
    with the PR link** (e.g. `→ built in #<pr>`) so the ticket shows where its work went —
-   never leave the issue blank while the work lives in a PR (the #442 failure mode). Body
+   never leave the issue blank while the work lives in a PR (the #442 failure mode). Never put the `<!-- pipeline-note -->` marker in your own comments — it is reserved for the workflow's notes and makes a comment not count as your output (#3251). Body
    follows `github-tasks` (👤/🤖 + `## 🧪 How to test`). End the PR body with the
    Generated-with-Claude-Code footer.
    - **`Closes` does NOT auto-close on an epic-branch PR.** GitHub only auto-closes the
@@ -191,9 +191,10 @@ skill for POC apps, or `pnpm cf:staging` for `apps/`). Run the **`ui-proposal`**
 Use when staging is unavailable (e.g. packages-only change with no runnable app, or the
 deploy pipeline is down). Run the **`ui-proposal`** skill with `--static`. Then:
 
-- Commit the `<slug>.html` + `<slug>.md` "what changes" list **+ the rendered
-  `writeups/ui-proposals/<slug>.png`** (via `/commit`, scope `docs`) and push.
-- Post the PNG **inline** (Markdown image via its `raw.githubusercontent.com/<repo>/<branch>/…png`
+- Commit the `<slug>.html` + `<slug>.md` "what changes" list (via `/commit`, scope `docs`) and push.
+  Render the PNG to `screenshots/<slug>.png` and publish it with
+  `node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>` (#3351) — never commit it.
+- Post the PNG **inline** (Markdown image via the printed commit-ID `raw.githubusercontent.com/<repo>/<sha>/…png`
   URL) in a `<!-- ui-proposal:<slug> -->` sticky comment — never a link to the `.html`, which
   "opens as code" on mobile (#569/#613). See the `ui-proposal` skill step 4 for the exact comment.
   **Steer feedback to inline comments on the committed `.md`** — the PNG is the glance, the
@@ -318,6 +319,14 @@ sticky comment marked `<!-- ui-screenshot:<slug> -->` (distinct from the mockup'
   running app (no route, needs unavailable data/auth), **say so explicitly** in the comment
   rather than implying verification — post the after-only shot or a plain note, never a fake
   "before".
+- **The caveat MUST be posted, not written to a local file (#2059).** "Say so explicitly"
+  means an actual `add_issue_comment` on the PR/issue — never a local `*-comment.md`
+  (or any other stray file) that nobody reads. PR #2044's worker correctly judged its
+  screenshot insufficient but wrote that honest caveat to `issue-2031-comment.md` at the
+  repo root instead of posting it; the caveat never reached the reviewer, only the blank
+  image did, so the PR read as verified when it wasn't. If you draft the caveat as a file
+  first, something in the same turn must actually post it via the comment API, and the
+  draft file must not be committed as if it were a deliverable.
 - This is the closing step: once the screenshot comment is posted, mark the draft PR **ready
   for review**.
 
@@ -366,6 +375,14 @@ job):
 
 ## Guardrails
 
+- **Remove what you orphan — REQUIRED + EVIDENCED, not an optional checkbox (#2190).** A change
+  that removes the *last* caller of a symbol, i18n key, or route removes the callee too. Your
+  run-record (the PR body's 🤖 section) MUST state one of two things: **(a)** what dead leftover you
+  removed and the deleted caller that orphaned it, or **(b)** "nothing orphaned" **plus the proving
+  grep** you ran (e.g. the surviving `t('<key>')` caller, or the surviving `to="/route"` link).
+  `scripts/lean-check.mjs` (report-only, never blocks) surfaces the two orphan shapes a JS import
+  graph can't see — a dead i18n key and a stranded Nuxt page: run
+  `node scripts/lean-check.mjs --base origin/<base>` and act on any candidate, or record why it stays.
 - Green typecheck is non-negotiable before the PR is "ready".
 - **Dep change ⇒ lockfile change (#614).** Touched a `package.json` dependency? `pnpm install`
   and commit `pnpm-lock.yaml` in the same PR, or the frozen-lockfile deploy install fails.
@@ -410,3 +427,5 @@ it carries the canonical shape: lead with the one decision **and a recommendatio
 `git push -u origin <branch>` **first**, then name that branch under *State so far*. An
 unpushed worktree is lost when you stop; a pushed branch is what the resuming session picks
 up. (This extends the step-8 "push immediately" checkpoint to the block path.)
+
+> Note (moved from root CLAUDE.md, #3350): the PR body opens with `Closes #NN`.

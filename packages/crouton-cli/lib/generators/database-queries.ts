@@ -1,5 +1,5 @@
 // Generator for database queries
-import { toKebabCase, pascal } from '../utils/helpers.ts'
+import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Shared context for the tree-query template builders below
@@ -317,7 +317,6 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
   // Add standard team/metadata user references
   // These are always single references
   // Team fields are always required (all generated endpoints use @crouton/auth)
-  const useMetadata = config?.flags?.useMetadata ?? true
 
   // owner is always included (required for @crouton/auth)
   singleReferences.push({
@@ -327,31 +326,20 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
     isUserReference: true
   })
 
-  if (useMetadata) {
-    singleReferences.push({
-      fieldName: 'createdBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-    singleReferences.push({
-      fieldName: 'updatedBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-  }
+  singleReferences.push({
+    fieldName: 'createdBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
+  singleReferences.push({
+    fieldName: 'updatedBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
 
   return { singleReferences, arrayReferences }
-}
-
-// Convert a layer name to camelCase to ensure a valid JavaScript identifier
-// (e.g. my-app_core -> myAppCore)
-function toLayerCamelCase(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
 }
 
 // Generate imports for referenced schemas (external, cross-layer, or same-layer)
@@ -359,7 +347,8 @@ function buildSchemaImports(
   singleReferences: Record<string, any>[],
   arrayReferences: Record<string, any>[],
   currentLayer: string,
-  collectionLayerMap: Map<string, string>
+  collectionLayerMap: Map<string, string>,
+  ownedTargets: Map<string, { importPath: string }> = new Map()
 ): string {
   let schemaImports = ''
   const allReferences = [...singleReferences, ...arrayReferences]
@@ -375,6 +364,10 @@ function buildSchemaImports(
       // NuxtHub v0.10+ expects schema at server/db/schema.ts
       const schemaExportName = collection === 'users' ? 'user' : collection
       schemaImports += `import { ${schemaExportName} } from '~~/server/db/schema'
+`
+    } else if (ownedTargets.has(collection.toLowerCase())) {
+      // Package-owned collection (#2311) — the table lives in the package, not under layers/
+      schemaImports += `import * as ${collection}Schema from '${ownedTargets.get(collection.toLowerCase())!.importPath}'
 `
     } else {
       // Local or cross-layer collection
@@ -468,7 +461,7 @@ function buildSelectJoins(
 }
 
 // Generate post-query processing code for JSON fields (repeater, json types)
-// These fields come back as strings from SQLite and need to be parsed
+// jsonColumn.fromDriver already parses them, so only null defaults are applied here
 function buildJsonFieldProcessing(
   jsonFields: { fieldName: string; fieldType: string; defaultValue: string }[],
   camelCasePlural: string
@@ -476,15 +469,7 @@ function buildJsonFieldProcessing(
   let jsonFieldProcessing = ''
   if (jsonFields.length > 0) {
     const fieldParsers = jsonFields.map(field => `
-      // Parse ${field.fieldName} from JSON string
-      if (typeof item.${field.fieldName} === 'string') {
-        try {
-          item.${field.fieldName} = JSON.parse(item.${field.fieldName})
-        } catch (e) {
-          console.error('Error parsing ${field.fieldName}:', e)
-          item.${field.fieldName} = ${field.defaultValue}
-        }
-      }
+      // ${field.fieldName} is already parsed by jsonColumn.fromDriver; only default it
       if (item.${field.fieldName} === null || item.${field.fieldName} === undefined) {
         item.${field.fieldName} = ${field.defaultValue}
       }`).join('')
@@ -507,7 +492,7 @@ function buildArrayRefProcessing(
   let postQueryProcessing = ''
   if (arrayReferences.length > 0) {
     // Group array references by target collection for efficient querying
-    const refsByCollection = {}
+    const refsByCollection: Record<string, any[]> = {}
     arrayReferences.forEach((ref) => {
       const collection = ref.targetCollection
       if (!refsByCollection[collection]) {
@@ -531,35 +516,16 @@ function buildArrayRefProcessing(
       // Build the ID collection logic for all fields referencing this collection
       const idCollectionCode = refs.map(ref => `
     ${camelCasePlural}.forEach(item => {
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              ids.forEach(id => all${collectionVarName}Ids.add(id))
-            }
-          } catch (e) {
-            // Handle parsing errors gracefully
-            console.error('Error parsing ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}.forEach(id => all${collectionVarName}Ids.add(id))
         }
       })`).join('')
 
       // Build the mapping logic for all fields
       const mappingCode = refs.map(ref => `
         item.${ref.fieldName}Data = []
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              item.${ref.fieldName}Data = related${collectionVarName}.filter(r => ids.includes(r.id))
-            }
-          } catch (e) {
-            console.error('Error mapping ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}Data = related${collectionVarName}.filter(r => item.${ref.fieldName}.includes(r.id))
         }`).join('')
 
       processingBlocks.push(`
@@ -590,15 +556,16 @@ function buildArrayRefProcessing(
 // pagination. When `limit` is provided the function returns { items, total }
 // (total via a parallel count(*)); otherwise it returns the bare array — so
 // existing non-paginated callers are unaffected (enforced by the overloads).
-function buildGetAllOpts(filterFields: string[], tableName: string): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
-  const fkTypeFields = filterFields.map(f => `${f}?: string`).join('; ')
+function buildGetAllOpts(filterFields: string[], tableName: string, own = false): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
+  // list: 'own' adds an ownerId option (callers pass it for non-admins only)
+  const fkTypeFields = [...filterFields.map(f => `${f}?: string`), ...(own ? ['ownerId?: string'] : [])].join('; ')
   return {
     overload1Opts: `opts?: {${fkTypeFields ? ` ${fkTypeFields} ` : ''}}`,
     overload2Opts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit: number; offset?: number }`,
     implOpts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit?: number; offset?: number } = {}`,
     filterConditions: filterFields
       .map(f => `\n  if (opts.${f}) conditions.push(eq(tables.${tableName}.${f}, opts.${f}))`)
-      .join('')
+      .join('') + (own ? `\n  if (opts.ownerId) conditions.push(eq(tables.${tableName}.owner, opts.ownerId))` : '')
   }
 }
 
@@ -609,7 +576,6 @@ interface QueryTemplateContext {
   prefixedPascalCasePlural: string
   camelCase: string
   camelCasePlural: string
-  useMetadata: boolean
   typesPath: string
   ascImport: string
   schemaImports: string
@@ -623,6 +589,7 @@ interface QueryTemplateContext {
   overload2Opts: string
   implOpts: string
   filterConditions: string
+  own: boolean
 }
 
 // Imports + schema imports header of the generated queries file
@@ -630,7 +597,7 @@ function buildFileHeader(ctx: QueryTemplateContext): string {
   // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
   const sqlImport = ', sql'
   return `// Generated with JSON field post-processing support (v2025-01-11)
-import { eq, and${ctx.useMetadata ? ', desc' : ''}${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
+import { eq, and, desc${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { ${ctx.prefixedPascalCase}, New${ctx.prefixedPascalCase} } from '${ctx.typesPath}'
@@ -678,7 +645,7 @@ ${ctx.jsonFieldProcessing}${ctx.postQueryProcessing}
 function buildGetByIdsQuery(ctx: QueryTemplateContext): string {
   return `
 
-export async function get${ctx.prefixedPascalCasePlural}ByIds(teamId: string, ${ctx.camelCase}Ids: string[]) {
+export async function get${ctx.prefixedPascalCasePlural}ByIds(teamId: string, ${ctx.camelCase}Ids: string[]${ctx.own ? ', ownerId?: string' : ''}) {
   const db = useDB()
 ${ctx.aliasDefinitions}
   const ${ctx.camelCasePlural} = await (db as any)
@@ -687,7 +654,8 @@ ${ctx.aliasDefinitions}
     .where(
       and(
         eq(tables.${ctx.tableName}.teamId, teamId),
-        inArray(tables.${ctx.tableName}.id, ${ctx.camelCase}Ids)
+        inArray(tables.${ctx.tableName}.id, ${ctx.camelCase}Ids)${ctx.own ? `,
+        ...(ownerId ? [eq(tables.${ctx.tableName}.owner, ownerId)] : [])` : ''}
       )
     )${ctx.orderByClause ? `
     .orderBy(${ctx.orderByClause})` : ''}
@@ -737,8 +705,8 @@ export async function update${ctx.prefixedPascalCase}(
   const [${ctx.camelCase}] = await (db as any)
     .update(tables.${ctx.tableName})
     .set({
-      ...updates,${ctx.useMetadata ? `
-      updatedBy: userId` : ''}
+      ...updates,
+      updatedBy: userId
     })
     .where(and(...conditions))
     .returning()
@@ -791,7 +759,14 @@ export async function delete${ctx.prefixedPascalCase}(
 }`
 }
 
-export function generateQueries(data: Record<string, any>, config: Record<string, any> | null = null, currentLayer: string = '', collectionLayerMap: Map<string, string> = new Map()): string {
+export function generateQueries(
+  data: Record<string, any>,
+  config: Record<string, any> | null = null,
+  currentLayer: string = '',
+  collectionLayerMap: Map<string, string> = new Map(),
+  // refTarget (plural dir) → the owning package's schema export (#2311)
+  ownedTargets: Map<string, { importPath: string }> = new Map(),
+): string {
   const { singular, camelCase, camelCasePlural, plural, pascalCase, pascalCasePlural, layer, layerPascalCase } = data
   // Use layer-prefixed table name to match schema export
   // Convert layer to camelCase to ensure valid JavaScript identifier
@@ -818,7 +793,7 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // Shared with api-endpoints.ts so the emitted params and this opts type cannot drift.
   const filterFields = collectFilterFields(data, config)
 
-  const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap)
+  const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap, ownedTargets)
   const { selectClause, leftJoins, aliasDefinitions } = buildSelectJoins(singleReferences, tableName, getTargetLayerCamelCase)
 
   // Post-query processing for JSON/repeater fields and array references
@@ -828,16 +803,11 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
-  const useMetadata = config?.flags?.useMetadata ?? true
-  const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
+  const ascImport = hasSortable ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
-    ? (useMetadata
-        ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
-        : `asc(tables.${tableName}.${orderField})`)
-    : (useMetadata
-        ? `desc(tables.${tableName}.createdAt)`
-        : '')
+    ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
+    : `desc(tables.${tableName}.createdAt)`
 
   // Generate tree queries if hierarchy is enabled
   const treeQueries = generateTreeQueries(data, tableName, prefixedPascalCase, prefixedPascalCasePlural, camelCasePlural)
@@ -846,7 +816,8 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName)
+  const own = data.collectionConfig?.access?.list === 'own'
+  const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
     tableName,
@@ -854,7 +825,6 @@ export function generateQueries(data: Record<string, any>, config: Record<string
     prefixedPascalCasePlural,
     camelCase,
     camelCasePlural,
-    useMetadata,
     typesPath,
     ascImport,
     schemaImports,
@@ -867,7 +837,8 @@ export function generateQueries(data: Record<string, any>, config: Record<string
     overload1Opts,
     overload2Opts,
     implOpts,
-    filterConditions
+    filterConditions,
+    own
   }
 
   return buildFileHeader(ctx)

@@ -13,7 +13,7 @@
     "@fyit/crouton-devtools": "workspace:*"
   },
   "devDependencies": {
-    "@nuxt/devtools": "^1.6.4",
+    "@nuxt/devtools": "^3.4.2",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"
   }

@@ -16,9 +16,8 @@
  * request shaping, and a missing WHERE clause breaks no build. These cases are
  * the guard — they assert the LIST answers the same sentence as the count.
  *
- * The tables are parameters (see `OutstandingOrderTables`), which is the only
- * reason this is reachable from a package test at all — in the endpoint they
- * come from `~~/layers/sales/...`, an alias that resolves only inside an app.
+ * The tables are parameters (see `OutstandingOrderTables`), so this runs against
+ * a throwaway in-memory schema instead of the Nuxt-bound `collections/*` tables.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'

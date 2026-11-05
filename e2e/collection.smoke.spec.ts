@@ -12,9 +12,9 @@
  *
  * Uses the saved auth state (see auth.setup.ts).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { collectionUrl, ensureAuthed, fixtureManifest, fillField, TEAM_FILE, FIXTURE } from './helpers'
+import { test, collectionUrl, ensureAuthed, fixtureManifest, fillField, TEAM_FILE, FIXTURE } from './helpers'
 
 const manifest = fixtureManifest()
 

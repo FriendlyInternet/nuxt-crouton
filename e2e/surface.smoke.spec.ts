@@ -12,9 +12,9 @@
  *
  * Uses the saved auth state (see auth.setup.ts).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
+import { test, surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
 
 const manifest = fixtureManifest()
 const surfaces = manifest.surfaces ?? []
@@ -36,6 +36,10 @@ test.describe(`fixture "${FIXTURE}" surfaces`, () => {
       await ensureAuthed(page, base)
       await page.goto(surfaceUrl(base, slug, surface.path), { waitUntil: 'domcontentloaded' })
       await page.waitForLoadState('networkidle').catch(() => {})
+
+      for (const selector of [surface.click ?? []].flat()) {
+        await page.locator(selector).first().click({ timeout: 180000 })
+      }
 
       const { visible, heading } = surface.expect
       // Generous timeout: the dev server compiles the route on first hit.

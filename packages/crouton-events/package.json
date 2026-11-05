@@ -4,9 +4,17 @@
   "description": "Event tracking layer for Nuxt Crouton - Audit trail for all CRUD operations",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "exports": {
+    ".": "./nuxt.config.ts",
+    "./nuxt.config": "./nuxt.config.ts",
+    "./nuxt.config.ts": "./nuxt.config.ts",
+    "./server/database/schema": "./server/database/schema.ts",
+    "./package.json": "./package.json"
+  },
   "files": [
     "app",
     "server",
+    "i18n",
     "nuxt.config.ts",
     "README.md"
   ],
@@ -38,5 +46,8 @@
     "nuxt": "^4.0.0",
     "@nuxt/ui": "^4.3.0",
     "@fyit/crouton-core": "workspace:*"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }

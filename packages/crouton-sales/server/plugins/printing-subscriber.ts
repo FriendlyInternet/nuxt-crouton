@@ -12,9 +12,8 @@
  * The reactions are the order-completion + cloud-sync-outbox logic that used to
  * live in the deleted `print-job-complete.ts` and the thermal spooler callbacks
  * — now driven off the generic queue instead. The generic `print_jobs` table is
- * imported from crouton-printing; `salesOrders` from the consuming app's
- * generated layer is loaded lazily (the `~~/layers` alias only resolves in the
- * app, same pattern the deleted util used).
+ * imported from crouton-printing; `salesOrders` (this package's
+ * `collections/orders`) is loaded lazily.
  *
  * Every handler is best-effort: it logs and swallows so a sales reaction can
  * never fail a print transition (crouton-printing has already committed the
@@ -32,7 +31,7 @@ import {
 } from '../utils/printing-reactions'
 
 const loadOrdersSchema = () =>
-  import('~~/layers/sales/collections/orders/server/database/schema')
+  import('../../collections/orders/server/database/schema')
 
 const deps: PrintingReactionDeps = {
   recordOutboxEvents,

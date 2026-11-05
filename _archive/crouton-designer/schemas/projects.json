@@ -1,8 +1,0 @@
-{
-  "id": { "type": "uuid", "meta": { "primaryKey": true } },
-  "name": { "type": "string", "meta": { "required": true, "maxLength": 200, "label": "Project Name" } },
-  "currentPhase": { "type": "integer", "meta": { "required": true, "default": 1, "label": "Current Phase" } },
-  "config": { "type": "json", "meta": { "label": "App Configuration", "area": "main" } },
-  "messages": { "type": "json", "meta": { "label": "Chat Messages Per Phase" } },
-  "seedData": { "type": "json", "meta": { "label": "Seed Data Per Collection" } }
-}

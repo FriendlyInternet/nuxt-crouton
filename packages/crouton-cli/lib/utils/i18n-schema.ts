@@ -77,7 +77,7 @@ export type NewTranslationsUi = typeof translationsUi.$inferInsert
     console.log(`! Running: npx nuxt db generate (30s timeout)`)
 
     try {
-      const timeoutPromise = new Promise((_, reject) => {
+      const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
       })
 

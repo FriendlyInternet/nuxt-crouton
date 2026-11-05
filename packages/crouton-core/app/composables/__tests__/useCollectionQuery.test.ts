@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, effectScope, getCurrentScope, onScopeDispose } from 'vue'
 
 // Mock route
 let mockRoute: { path: string; params: Record<string, any> } = {
@@ -29,19 +29,10 @@ const mockCollectionsConfig: Record<string, any> = {
   products: {
     layer: 'shop',
     apiPath: 'shop-products',
-    componentName: 'ShopProductsForm'
   },
   posts: {
     layer: 'blog',
     fetchStrategy: 'restful'
-  },
-  proxiedItems: {
-    layer: 'external',
-    proxy: {
-      enabled: true,
-      sourceEndpoint: 'https://api.example.com/items',
-      transform: (item: any) => ({ ...item, proxied: true })
-    }
   }
 }
 
@@ -59,6 +50,17 @@ vi.stubGlobal('reactive', reactive)
 vi.stubGlobal('watch', watch)
 vi.stubGlobal('useRoute', () => mockRoute)
 vi.stubGlobal('useFetch', mockUseFetch)
+vi.stubGlobal('getCurrentScope', getCurrentScope)
+vi.stubGlobal('onScopeDispose', onScopeDispose)
+
+// Minimal nuxtApp hook registry: hook() returns an unsubscribe fn
+const remoteHooks = new Set<(e: any) => any>()
+vi.stubGlobal('useNuxtApp', () => ({
+  hook: (name: string, fn: (e: any) => any) => {
+    if (name === 'crouton:remoteChange') remoteHooks.add(fn)
+    return () => remoteHooks.delete(fn)
+  }
+}))
 
 vi.stubGlobal('useAppConfig', () => ({
   croutonCollections: mockCollectionsConfig
@@ -89,12 +91,11 @@ vi.stubGlobal('console', {
 // Import composables/utils after mocking
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
-import { applyProxyTransform, getProxiedEndpoint } from '../useCollectionProxy'
+import { useRemoteCollectionRefresh } from '../useRemoteCollectionRefresh'
 
 vi.stubGlobal('useCollections', useCollections)
 vi.stubGlobal('useTeamContext', useTeamContext)
-vi.stubGlobal('applyProxyTransform', applyProxyTransform)
-vi.stubGlobal('getProxiedEndpoint', getProxiedEndpoint)
+vi.stubGlobal('useRemoteCollectionRefresh', useRemoteCollectionRefresh)
 
 // Import the composable under test
 import { useCollectionQuery } from '../useCollectionQuery'
@@ -494,33 +495,11 @@ describe('useCollectionQuery', () => {
     })
   })
 
-  describe('proxy integration', () => {
-    it('applies transform when proxy configured', async () => {
-      const mockItems = [
-        { id: '1', name: 'Item 1' },
-        { id: '2', name: 'Item 2' }
-      ]
-      mockFetchState.data = ref(mockItems)
-
-      const { items } = await useCollectionQuery('proxiedItems')
-
-      // Items should be transformed with the proxy transform
-      expect(items.value).toEqual([
-        { id: '1', name: 'Item 1', proxied: true },
-        { id: '2', name: 'Item 2', proxied: true }
-      ])
-    })
-
-    // TODO: This test needs to be updated - useFetch now receives a function not a string
-    // The proxy behavior should be verified by calling the URL function and checking its return value
-    it.skip('uses proxied endpoint when configured', async () => {
-      await useCollectionQuery('proxiedItems')
-
-      // The proxied endpoint replaces the apiPath in the URL
-      expect(mockUseFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.example.com'),
-        expect.any(Object)
-      )
+  describe('remote change subscription', () => {
+    it('wires remote changes to refresh', async () => {
+      await useCollectionQuery('products')
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
     })
   })
 

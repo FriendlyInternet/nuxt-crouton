@@ -2,7 +2,14 @@
   <div class="flex flex-col h-full min-h-0">
     <!-- Header with title and layout switcher - fixed height -->
     <div class="px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between gap-2 shrink-0">
-      <h2 class="text-lg sm:text-xl font-semibold truncate min-w-0">
+      <!-- Below sm only: TableHeader's navbar supplies its own toggle from sm up -->
+      <div
+        v-if="$slots.leading"
+        class="sm:hidden shrink-0"
+      >
+        <slot name="leading" />
+      </div>
+      <h2 class="text-lg sm:text-xl font-semibold truncate min-w-0 flex-1 sm:flex-none">
         {{ camelToTitleCase(collectionName) }}
       </h2>
       <!-- Layout Switcher: inline icon group on desktop -->
@@ -14,7 +21,7 @@
           :color="displayedLayout === layoutOption.value ? 'primary' : 'neutral'"
           :variant="displayedLayout === layoutOption.value ? 'solid' : 'ghost'"
           size="sm"
-          :aria-label="camelToTitleCase(layoutOption.value)"
+          :aria-label="t(`collection.layouts.${layoutOption.value}`)"
           :aria-pressed="displayedLayout === layoutOption.value"
           @click="selectLayout(layoutOption.value)"
         />
@@ -37,7 +44,7 @@
             variant="outline"
             size="sm"
             trailing-icon="i-lucide-chevron-down"
-            aria-label="Change layout"
+            :aria-label="t('collection.changeLayout')"
           />
         </UDropdownMenu>
 
@@ -69,16 +76,9 @@
         :class="showInlineEditor ? 'w-2/5 border-r border-default' : 'w-full'"
         class="transition-all duration-200 min-h-0 overflow-auto"
       >
-        <div
-          v-if="componentError"
-          class="text-red-600 p-4 bg-red-50 rounded"
-        >
-          {{ t('collection.componentError', { error: componentError }) }}
-        </div>
-
         <!-- Workspace layout: render CroutonWorkspace directly -->
         <CroutonWorkspace
-          v-else-if="currentLayout === 'workspace'"
+          v-if="currentLayout === 'workspace'"
           :collection="collectionName"
           class="h-full"
         />
@@ -88,9 +88,9 @@
              effectiveLayout gives the component cards-on-mobile (#690) while
              honoring an explicit pick (#1169); the skeleton takes the
              plain-string displayedLayout so it matches what will render. -->
-        <Suspense v-else-if="componentName">
+        <Suspense v-else-if="listComponent">
           <component
-            :is="componentName"
+            :is="listComponent"
             :layout="effectiveLayout"
             class="h-full"
           />
@@ -126,7 +126,7 @@
       >
         <div class="text-center">
           <UIcon name="i-lucide-mouse-pointer-click" class="size-12 mb-3 opacity-30" />
-          <p class="text-sm">{{ t('collection.selectItem') || 'Select an item to edit' }}</p>
+          <p class="text-sm">{{ t('collection.selectItem') }}</p>
           <p class="text-xs text-muted mt-1">
             {{ t('collection.orPressN') || 'or press N to create new' }}
           </p>
@@ -138,8 +138,8 @@
 
 <script setup lang="ts">
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 import type { CroutonItemAction } from '../types/table'
-import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
 
 interface Props {
   collectionName: string
@@ -151,7 +151,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useT()
-const componentError = ref<string | null>(null)
 const currentLayout = ref(props.defaultLayout)
 
 // Use composable for formatting
@@ -167,58 +166,27 @@ const container = computed(() =>
 )
 const isInlineMode = computed(() => container.value === 'inline')
 
-// Inline editor state
-const inlineItemId = ref<string | null>(null)
-const inlineMode = ref<'view' | 'create' | 'edit'>('view')
-const inlineSessionKey = ref(0)
+// Which record is open + where (#2598) — the shared selection, so layout blocks
+// reuse this logic rather than a copy. In inline mode this viewer's own editor
+// panel is "on screen", so rows open beside the list; otherwise in an overlay.
+// The route page can swap collections without remounting, so follow the prop.
+const selections = provideCollectionSelections()
+const selection = computed(() => selections.get(props.collectionName))
+watchEffect((onCleanup) => {
+  if (isInlineMode.value) onCleanup(selection.value.attachEditor())
+})
+const inlineItemId = computed(() => selection.value.itemId.value)
+const inlineSessionKey = computed(() => selection.value.sessionKey.value)
 const showInlineEditor = computed(() =>
-  isInlineMode.value && (inlineMode.value === 'create' || (inlineMode.value === 'edit' && !!inlineItemId.value))
+  isInlineMode.value && (selection.value.mode.value === 'create' || (selection.value.mode.value === 'edit' && !!inlineItemId.value))
 )
 
-// Provide the item action handler for all child components
-const crouton = useCrouton()
+provideSelectionItemActions(() => props.collectionName, selections)
+const handleItemAction: CroutonItemAction = (action, ids, initialData) => selection.value.act(action, ids, initialData)
 
-const handleItemAction: CroutonItemAction = (action, ids = [], initialData?) => {
-  if (isInlineMode.value && action !== 'delete') {
-    // Inline mode: show editor panel
-    if (action === 'create') {
-      inlineItemId.value = null
-      inlineMode.value = 'create'
-      inlineSessionKey.value++
-    } else if (action === 'update' || action === 'view') {
-      inlineItemId.value = ids[0] ?? null
-      inlineMode.value = action === 'view' ? 'view' : 'edit'
-      inlineSessionKey.value++
-    }
-  } else {
-    // Modal/slideover/dialog mode (or delete which always uses overlay)
-    const effectiveContainer = action === 'delete' ? 'modal' : container.value === 'inline' ? 'slideover' : container.value
-    crouton.open(action, props.collectionName, ids, effectiveContainer as any, initialData)
-  }
-}
-
-provide(CROUTON_ITEM_ACTION_KEY, handleItemAction)
-
-// Inline editor event handlers
-function handleInlineSave(savedItem: any) {
-  if (savedItem?.id) {
-    inlineItemId.value = savedItem.id
-    inlineMode.value = 'edit'
-  }
-  inlineSessionKey.value++
-}
-
-function handleInlineDelete() {
-  inlineItemId.value = null
-  inlineMode.value = 'view'
-}
-
-function handleInlineCancel() {
-  if (inlineMode.value === 'create') {
-    inlineMode.value = 'view'
-    inlineItemId.value = null
-  }
-}
+const handleInlineSave = (item: any) => selection.value.saved(item)
+const handleInlineDelete = () => selection.value.deleted()
+const handleInlineCancel = () => selection.value.cancelled()
 
 // All available layout options
 const allLayoutOptions = [
@@ -284,7 +252,7 @@ const currentLayoutIcon = computed(() =>
 // Mobile switcher: same options as the desktop group, as a dropdown menu
 const switcherMenuItems = computed(() =>
   layoutOptions.value.map(o => ({
-    label: camelToTitleCase(o.value),
+    label: t(`collection.layouts.${o.value}`),
     icon: o.icon,
     onSelect: () => selectLayout(o.value)
   }))
@@ -299,20 +267,9 @@ const componentName = computed(() => {
   return `${toPascalCase(props.collectionName)}List`
 })
 
-// Try to resolve the component
-onMounted(async () => {
-  if (!componentName.value) return
-
-  try {
-    // Check if component exists in the global scope
-    const globalComponents = getCurrentInstance()?.appContext.components
-    if (!globalComponents || !globalComponents[componentName.value]) {
-      // Component might be auto-imported but not registered yet
-      // This is fine, Vue will handle it
-      console.debug(`Component ${componentName.value} will be resolved by auto-import`)
-    }
-  } catch (err) {
-    componentError.value = err instanceof Error ? err.message : String(err)
-  }
+// Nuxt's resolved winner (app beats layer) from the build-time map
+const listComponent = computed(() => {
+  if (!componentName.value) return null
+  return collectionForms[componentName.value] ?? null
 })
 </script>

@@ -48,6 +48,45 @@ const jobs = ref<KdsJob[]>([])
 // source of truth — the next refresh confirms it's gone.
 const bumping = ref<Set<string>>(new Set())
 
+// Two-step tap-to-arm-then-confirm (#2115): a single tap in a busy kitchen
+// shouldn't bump an order. Tapping a resting card arms it (reveals a
+// full-card confirm overlay); tapping the overlay bumps it. Tapping anywhere
+// else, or letting it sit for a few seconds, disarms it again.
+const armedId = ref<string | null>(null)
+const justConfirmed = ref<string | null>(null)
+const DISARM_MS = 4000
+let disarmTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearDisarmTimer() {
+  if (disarmTimer) {
+    clearTimeout(disarmTimer)
+    disarmTimer = null
+  }
+}
+
+function arm(job: KdsJob) {
+  armedId.value = job.id
+  clearDisarmTimer()
+  disarmTimer = setTimeout(() => {
+    if (armedId.value === job.id) armedId.value = null
+  }, DISARM_MS)
+}
+
+function disarm() {
+  armedId.value = null
+  clearDisarmTimer()
+}
+
+async function confirmBump(job: KdsJob) {
+  clearDisarmTimer()
+  armedId.value = null
+  justConfirmed.value = job.id
+  await bump(job)
+  if (justConfirmed.value === job.id) justConfirmed.value = null
+}
+
+onUnmounted(() => clearDisarmTimer())
+
 async function resolveEvent() {
   if (!eventSlug.value || !teamParam.value) return
   try {
@@ -213,8 +252,9 @@ function ago(iso: string) {
         <div
           v-for="o in active"
           :key="o.id"
-          class="rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
+          class="relative rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
           :class="o.isPersonnel ? 'ring-warning/60' : ''"
+          @click="armedId !== o.id && arm(o)"
         >
           <div
             class="flex items-center justify-between px-4 py-3 border-b border-default"
@@ -241,14 +281,29 @@ function ago(iso: string) {
           </div>
 
           <UButton
-            color="success"
+            color="neutral"
+            variant="soft"
             size="lg"
             block
             icon="i-lucide-check"
             :label="t('sales.blocks.kitchenDisplay.ui.bump')"
             class="rounded-none font-bold uppercase tracking-wide"
-            @click="bump(o)"
+            @click.stop="armedId !== o.id && arm(o)"
           />
+
+          <!-- Armed state: full-card confirm overlay (#2115) -->
+          <Transition name="confirm-overlay">
+            <button
+              v-if="armedId === o.id"
+              type="button"
+              class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-success text-inverted font-bold uppercase tracking-wide cursor-pointer"
+              @click.stop="confirmBump(o)"
+            >
+              <UIcon :name="justConfirmed === o.id ? 'i-lucide-check-circle-2' : 'i-lucide-check'" class="size-10" />
+              <span class="text-lg">{{ t('sales.blocks.kitchenDisplay.ui.bump') }}</span>
+              <span class="text-xs font-normal normal-case opacity-80">{{ t('sales.blocks.kitchenDisplay.ui.tapToConfirm') }}</span>
+            </button>
+          </Transition>
         </div>
       </TransitionGroup>
     </UCard>
@@ -259,4 +314,7 @@ function ago(iso: string) {
 .order-enter-active, .order-leave-active { transition: all .35s ease; }
 .order-enter-from { opacity: 0; transform: translateY(-10px) scale(.97); }
 .order-leave-to { opacity: 0; transform: scale(.92); }
+
+.confirm-overlay-enter-active, .confirm-overlay-leave-active { transition: opacity .15s ease; }
+.confirm-overlay-enter-from, .confirm-overlay-leave-to { opacity: 0; }
 </style>

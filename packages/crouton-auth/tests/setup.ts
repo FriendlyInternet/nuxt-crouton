@@ -1,4 +1,16 @@
 import { vi } from 'vitest'
+import en from '../i18n/locales/en.json'
+import sharedEn from '../../crouton-i18n/locales/en.json'
+
+// useT() is auto-imported in the app; composables now use it for user-facing
+// text (#2285). Resolve keys from the real English locales ({x} interpolation).
+vi.stubGlobal('useT', () => ({
+  t: (key: string, params: Record<string, unknown> = {}) => {
+    const lookup = (src: unknown) => key.split('.').reduce<any>((node, part) => node?.[part], src)
+    const msg = lookup(en) ?? lookup(sharedEn)
+    return typeof msg === 'string' ? msg.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? '')) : key
+  }
+}))
 
 // Mock window object for browser APIs
 Object.defineProperty(globalThis, 'window', {

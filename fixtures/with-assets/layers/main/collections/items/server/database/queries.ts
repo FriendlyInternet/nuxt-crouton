@@ -7,15 +7,18 @@ import { user } from '~~/server/db/schema'
 
 // Overload order matters: the paginated signature (required `limit`) must come
 // first so non-paginated calls fall through to the array overload.
-export async function getAllMainItems(teamId: string, opts: { limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
-export async function getAllMainItems(teamId: string, opts?: {}): Promise<any[]>
-export async function getAllMainItems(teamId: string, opts: { limit?: number; offset?: number } = {}) {
+export async function getAllMainItems(teamId: string, opts: { owner?: string; createdBy?: string; updatedBy?: string; limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
+export async function getAllMainItems(teamId: string, opts?: { owner?: string; createdBy?: string; updatedBy?: string }): Promise<any[]>
+export async function getAllMainItems(teamId: string, opts: { owner?: string; createdBy?: string; updatedBy?: string; limit?: number; offset?: number } = {}) {
   const db = useDB()
 
   const ownerUser = alias(user as any, 'ownerUser')
   const createdByUser = alias(user as any, 'createdByUser')
   const updatedByUser = alias(user as any, 'updatedByUser')
   const conditions = [eq(tables.mainItems.teamId, teamId)]
+  if (opts.owner) conditions.push(eq(tables.mainItems.owner, opts.owner))
+  if (opts.createdBy) conditions.push(eq(tables.mainItems.createdBy, opts.createdBy))
+  if (opts.updatedBy) conditions.push(eq(tables.mainItems.updatedBy, opts.updatedBy))
   const whereExpr = and(...conditions)
 
   let listQuery = (db as any)

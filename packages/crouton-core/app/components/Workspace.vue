@@ -160,7 +160,7 @@ onKeyStroke('/', (e) => {
           variant="ghost"
           icon="i-lucide-plus"
           size="sm"
-          :aria-label="`Create ${camelToTitleCase(collection)}`"
+          :aria-label="t('workspace.createNamed', { collection: camelToTitleCase(collection) })"
           @click="handleCreate"
         />
       </div>
@@ -211,7 +211,7 @@ onKeyStroke('/', (e) => {
       <div v-else class="flex-1 flex items-center justify-center text-muted">
         <div class="text-center">
           <UIcon name="i-lucide-mouse-pointer-click" class="size-12 mb-3 opacity-30" />
-          <p class="text-sm">{{ t('collection.selectItem') || 'Select an item to edit' }}</p>
+          <p class="text-sm">{{ t('collection.selectItem') }}</p>
           <p class="text-xs text-muted mt-1">
             {{ t('collection.orPressN') || 'or press N to create new' }}
           </p>

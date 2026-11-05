@@ -85,10 +85,10 @@ async function revokeOtherSessions() {
 }
 
 function parseUserAgent(ua?: string): { browser: string, os: string, icon: string } {
-  if (!ua) return { browser: 'Unknown', os: 'Unknown', icon: 'i-lucide-monitor' }
+  if (!ua) return { browser: t('account.sessions.unknown'), os: t('account.sessions.unknown'), icon: 'i-lucide-monitor' }
 
-  let browser = 'Unknown'
-  let os = 'Unknown'
+  let browser = t('account.sessions.unknown')
+  let os = t('account.sessions.unknown')
   let icon = 'i-lucide-monitor'
 
   if (ua.includes('Firefox')) browser = 'Firefox'
@@ -163,7 +163,7 @@ const otherSessionsCount = computed(() => sessions.value.filter(s => !s.isCurren
           <div>
             <div class="flex items-center gap-2">
               <span class="font-medium text-sm">
-                {{ parseUserAgent(s.userAgent).browser }} on {{ parseUserAgent(s.userAgent).os }}
+                {{ t('account.sessions.browserOnOs', { browser: parseUserAgent(s.userAgent).browser, os: parseUserAgent(s.userAgent).os }) }}
               </span>
               <UBadge v-if="s.isCurrent" color="primary" variant="subtle" size="xs">
                 {{ t('account.sessions.current') }}

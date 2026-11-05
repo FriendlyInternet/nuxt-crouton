@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, toRef, TransitionGroup } from 'vue'
+import { computed, toRef } from 'vue'
 import type { CollabAwarenessState } from '../types/collab'
 import { useCollabRoomUsers } from '../composables/useCollabRoomUsers'
-import { getInitials, getTextColor } from '../utils/avatar'
 
 /**
  * CollabEditingBadge - Shows "X editing" indicator for collection list items
@@ -59,6 +58,9 @@ interface Props {
 
   /** Show self in the count (for testing) - normally only shows other users */
   showSelf?: boolean
+
+  /** Fixed users to show instead of polling the room (previews, tests) */
+  users?: CollabAwarenessState[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -69,54 +71,38 @@ const props = withDefaults(defineProps<Props>(), {
   showAvatars: true,
   maxAvatars: 5,
   variant: 'badge',
-  showSelf: false
+  showSelf: false,
+  users: undefined
 })
 
 // Use the composable with reactive roomId
-const { otherUsers, otherCount, loading, users } = useCollabRoomUsers({
+const { otherUsers, loading, users: polledUsers } = useCollabRoomUsers({
   roomId: toRef(() => props.roomId),
   roomType: props.roomType,
   currentUserId: toRef(() => props.currentUserId),
   pollInterval: props.pollInterval,
   excludeSelf: !!props.currentUserId,
-  immediate: true
+  immediate: !props.users
 })
 
 // Display users/count - use all users when showSelf is true, otherwise just others
-const displayUsers = computed(() => props.showSelf ? users.value : otherUsers.value)
+const displayUsers = computed(() => props.users ?? (props.showSelf ? polledUsers.value : otherUsers.value))
 const displayCount = computed(() => displayUsers.value.length)
+
+const { t } = useT()
 
 // Badge text
 const badgeText = computed(() => {
   const count = displayCount.value
-  if (count === 0) return ''
-  if (count === 1) return '1 editing'
-  return `${count} editing`
+  return count === 0 ? '' : t('collab.editingCount', { count })
 })
 
-// Size classes - avatars are slightly larger for better visibility
+// Pill sizing only; avatars come from CollabPresence
 const sizeClasses = computed(() => {
   switch (props.size) {
-    case 'xs':
-      return {
-        badge: 'text-[10px] px-1.5 py-0.5',
-        avatar: 'size-5 text-[9px]'
-      }
-    case 'sm':
-      return {
-        badge: 'text-xs px-2 py-0.5',
-        avatar: 'size-6 text-[10px]'
-      }
-    case 'md':
-      return {
-        badge: 'text-sm px-2 py-1',
-        avatar: 'size-7 text-xs'
-      }
-    default:
-      return {
-        badge: 'text-[10px] px-1.5 py-0.5',
-        avatar: 'size-5 text-[9px]'
-      }
+    case 'sm': return { badge: 'text-xs px-2 py-0.5' }
+    case 'md': return { badge: 'text-sm px-2 py-1' }
+    default: return { badge: 'text-[10px] px-1.5 py-0.5' }
   }
 })
 
@@ -153,12 +139,12 @@ const avatarsTooltip = computed(() => {
   const names = displayUsers.value.map(u => u.user?.name || 'Unknown')
 
   if (count === 1) {
-    return `1 editing: ${names[0]}`
+    return `${badgeText.value}: ${names[0]}`
   }
   if (names.length <= 3) {
-    return `${count} editing: ${names.join(', ')}`
+    return `${badgeText.value}: ${names.join(', ')}`
   }
-  return `${count} editing: ${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+  return `${badgeText.value}: ${names.slice(0, 3).join(', ')} +${names.length - 3}`
 })
 </script>
 
@@ -167,37 +153,20 @@ const avatarsTooltip = computed(() => {
     v-if="displayCount > 0 && !loading"
     class="collab-editing-badge inline-flex items-center"
   >
-    <!-- AVATARS VARIANT: Just stacked circles with simple tooltip -->
+    <!-- AVATARS VARIANT: stacked circles + "N editing" label, simple tooltip -->
     <UTooltip
       v-if="variant === 'avatars'"
       :delay-duration="200"
       :text="avatarsTooltip"
     >
-      <div class="flex -space-x-1.5">
-        <TransitionGroup name="avatar-pop">
-          <div
-            v-for="(user, index) in visibleUsers.slice(0, 3)"
-            :key="user.user?.id || index"
-            class="rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 shadow-sm"
-            :class="sizeClasses.avatar"
-            :style="{
-              backgroundColor: user.user?.color || '#6b7280',
-              color: getTextColor(user.user?.color || '#6b7280'),
-              zIndex: 3 - index
-            }"
-          >
-            {{ getInitials(user.user?.name || '') }}
-          </div>
-          <!-- Overflow indicator -->
-          <div
-            v-if="displayCount > 3"
-            key="overflow"
-            class="rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-sm"
-            :class="sizeClasses.avatar"
-          >
-            +{{ displayCount - 3 }}
-          </div>
-        </TransitionGroup>
+      <div class="inline-flex items-center gap-2">
+        <CollabPresence
+          :users="displayUsers"
+          :max-visible="3"
+          :size="size"
+          :show-tooltip="false"
+        />
+        <span class="text-xs font-medium text-muted whitespace-nowrap">{{ badgeText }}</span>
       </div>
     </UTooltip>
 
@@ -211,24 +180,12 @@ const avatarsTooltip = computed(() => {
           class="inline-flex items-center gap-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium"
           :class="sizeClasses.badge"
         >
-          <!-- Stacked mini avatars -->
-          <div class="flex -space-x-1">
-            <TransitionGroup name="avatar-pop">
-              <div
-                v-for="(user, index) in visibleUsers.slice(0, 3)"
-                :key="user.user?.id || index"
-                class="rounded-full flex items-center justify-center font-medium border border-white dark:border-gray-800"
-                :class="sizeClasses.avatar"
-                :style="{
-                  backgroundColor: user.user?.color || '#6b7280',
-                  color: getTextColor(user.user?.color || '#6b7280'),
-                  zIndex: 3 - index
-                }"
-              >
-                {{ getInitials(user.user?.name || '') }}
-              </div>
-            </TransitionGroup>
-          </div>
+          <CollabPresence
+            :users="displayUsers"
+            :max-visible="3"
+            size="xs"
+            :show-tooltip="false"
+          />
           <span>{{ badgeText }}</span>
         </div>
       </template>
@@ -236,7 +193,7 @@ const avatarsTooltip = computed(() => {
       <template #content>
         <div class="p-2 max-w-xs">
           <p class="text-sm font-medium mb-2">
-            Currently editing:
+            {{ t('collab.currentlyEditing') }}
           </p>
           <div class="flex flex-wrap gap-1.5">
             <div
@@ -245,15 +202,11 @@ const avatarsTooltip = computed(() => {
               class="user-chip flex items-center gap-1.5 bg-muted/50 rounded-full px-2 py-0.5"
               :style="{ animationDelay: `${index * 60}ms` }"
             >
-              <div
-                class="size-5 rounded-full flex items-center justify-center text-[10px] font-medium"
-                :style="{
-                  backgroundColor: user.user?.color || '#6b7280',
-                  color: getTextColor(user.user?.color || '#6b7280')
-                }"
-              >
-                {{ getInitials(user.user?.name || '') }}
-              </div>
+              <CollabPresence
+                :users="[user]"
+                size="xs"
+                :show-tooltip="false"
+              />
               <span class="text-xs">{{ user.user?.name || 'Unknown' }}</span>
             </div>
             <div
@@ -286,50 +239,6 @@ const avatarsTooltip = computed(() => {
   min-height: 1em;
 }
 
-/* Avatar pop-in animation */
-.avatar-pop-enter-active {
-  animation: avatar-bounce-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.avatar-pop-leave-active {
-  animation: avatar-pop-out 0.2s ease-in forwards;
-}
-
-.avatar-pop-move {
-  transition: transform 0.3s ease;
-}
-
-@keyframes avatar-bounce-in {
-  0% {
-    opacity: 0;
-    transform: scale(0) rotate(-180deg);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1.4) rotate(15deg);
-  }
-  60% {
-    transform: scale(0.85) rotate(-8deg);
-  }
-  80% {
-    transform: scale(1.1) rotate(3deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
-@keyframes avatar-pop-out {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0);
-  }
-}
 
 /* User chip pop-in animation (for tooltip content) */
 .user-chip {

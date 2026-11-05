@@ -175,7 +175,7 @@ export async function removeSchemaExport(schemaPath: string, pattern: string): P
     }
 
     // Remove the node from the program body
-    const body = mod.$ast.program?.body || mod.$ast.body || []
+    const body = (mod.$ast as any).program?.body || (mod.$ast as any).body || []
     const index = body.indexOf(node)
     if (index !== -1) {
       body.splice(index, 1)

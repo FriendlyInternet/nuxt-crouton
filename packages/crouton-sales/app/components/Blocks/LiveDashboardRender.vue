@@ -64,7 +64,7 @@ const teamParam = computed(() => String(route.params.team || ''))
             <h2 class="text-lg font-semibold">
               {{ props.attrs.title || event.title || t('sales.blocks.liveDashboard.ui.defaultTitle') }}
             </h2>
-            <SalesSyncStatus :team-param="teamParam" />
+            <SalesSyncStatus :team-param="teamParam" detailed />
           </div>
 
           <!-- Sales summary (headline numbers + top products) -->

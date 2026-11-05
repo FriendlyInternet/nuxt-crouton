@@ -44,13 +44,7 @@ const main = defineCommand({
     },
     locale: {
       type: 'string',
-      description: 'Locale for demo content',
-      default: 'nl'
-    },
-    'with-staff': {
-      type: 'boolean',
-      description: 'Also seed optional staff/login accounts',
-      default: false
+      description: 'Locale for demo content (default: the app\'s crouton.config defaultLocale, else en)'
     },
     'dry-run': {
       type: 'boolean',
@@ -66,7 +60,6 @@ const main = defineCommand({
       dir: args.dir,
       team: args.team,
       locale: args.locale,
-      withStaff: args['with-staff'],
       dryRun: args['dry-run']
     })
   }

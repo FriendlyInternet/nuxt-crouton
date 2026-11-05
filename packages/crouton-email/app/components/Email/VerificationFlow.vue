@@ -17,6 +17,8 @@
  */
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 
+const { t } = useT()
+
 interface Props {
   /** Email address being verified */
   email: string
@@ -135,10 +137,10 @@ defineExpose({ reset, focus })
         />
       </div>
       <h2 class="text-xl font-semibold text-default">
-        Check your email
+        {{ t('email.checkYourEmail') }}
       </h2>
       <p class="text-sm text-muted mt-2">
-        We sent a verification code to
+        {{ t('email.codeSentTo') }}
         <span class="font-medium text-default">{{ email }}</span>
       </p>
     </div>
@@ -146,7 +148,7 @@ defineExpose({ reset, focus })
     <!-- Code input -->
     <div class="space-y-2">
       <label class="text-sm font-medium text-default">
-        Verification code
+        {{ t('email.verificationCode') }}
       </label>
       <UInput
         ref="codeInput"
@@ -179,12 +181,12 @@ defineExpose({ reset, focus })
       :loading="loading"
       @click="handleSubmit"
     >
-      Verify email
+      {{ t('email.verifyEmail') }}
     </UButton>
 
     <!-- Resend section -->
     <div class="flex items-center justify-center gap-1 text-sm text-muted">
-      <span>Didn't receive the code?</span>
+      <span>{{ t('email.noCodeReceived') }}</span>
       <EmailResendButton
         :cooldown="resendCooldown"
         :loading="isResending"
@@ -194,7 +196,7 @@ defineExpose({ reset, focus })
 
     <!-- Help text -->
     <p class="text-xs text-center text-muted">
-      Check your spam folder if you don't see the email.
+      {{ t('email.checkSpamHint') }}
     </p>
   </div>
 </template>

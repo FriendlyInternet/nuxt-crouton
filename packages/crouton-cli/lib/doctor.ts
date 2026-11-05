@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { access, readFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
+import { resolveExtendedPackages, packageAlias } from './utils/extended-packages.ts'
 
 interface DoctorCheck {
   name: string
@@ -32,8 +33,8 @@ export async function doctor(appDir: string): Promise<DoctorResult> {
   // Load package.json
   const pkg = await loadJson(join(appDir, 'package.json'))
 
-  // 1. Missing dependencies vs crouton.config features
-  checks.push(...await checkFeatureDeps(config, pkg))
+  // 1. Missing dependencies vs the packages nuxt.config.ts extends (#2286)
+  checks.push(...await checkFeatureDeps(appDir, config, pkg))
 
   // 2. Stale wrangler.toml placeholder IDs
   checks.push(...await checkWranglerIds(appDir))
@@ -89,7 +90,7 @@ async function loadConfig(appDir: string): Promise<Record<string, any> | null> {
 
 // ─── Check 1: Feature dependencies ───────────────────────────────
 
-async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<string, any> | null): Promise<DoctorCheck[]> {
+async function checkFeatureDeps(appDir: string, config: Record<string, any> | null, pkg: Record<string, any> | null): Promise<DoctorCheck[]> {
   const results: DoctorCheck[] = []
 
   if (!config) {
@@ -103,28 +104,26 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
 
   const MODULES = await loadModules()
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies }
-  const features = config.features || {}
 
-  for (const [feature, enabled] of Object.entries(features)) {
-    if (!enabled) continue
-    const mod = MODULES[feature]
+  // The packages the app extends are the ones that must be installed (#2286).
+  for (const id of resolveExtendedPackages(appDir)) {
+    const mod = MODULES[packageAlias(id)]
     if (!mod) continue
     if (mod.bundled) continue // bundled in @fyit/crouton-core
 
-    // Check if the package or @fyit/crouton (which bundles everything) is in deps
-    const hasPkg = mod.package in allDeps || '@fyit/crouton' in allDeps
+    const hasPkg = mod.package in allDeps
     if (!hasPkg) {
       results.push({
         name: 'deps',
         status: 'fail',
-        message: `Feature "${feature}" enabled but ${mod.package} not in dependencies`
+        message: `nuxt.config.ts extends ${mod.package} but it is not in dependencies`
       })
     }
   }
 
   // Check flags that imply dependencies
   if (config.flags?.useMaps) {
-    const hasMaps = '@fyit/crouton-maps' in allDeps || '@fyit/crouton' in allDeps
+    const hasMaps = '@fyit/crouton-maps' in allDeps
     if (!hasMaps) {
       results.push({ name: 'deps', status: 'fail', message: 'Flag useMaps enabled but @fyit/crouton-maps not in dependencies' })
     }

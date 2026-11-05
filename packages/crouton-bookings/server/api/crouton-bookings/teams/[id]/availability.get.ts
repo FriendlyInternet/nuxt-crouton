@@ -17,7 +17,7 @@
  */
 import { eq, and, gte, lte, ne } from 'drizzle-orm'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
+import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
 
 export default defineEventHandler(async (event) => {
@@ -70,6 +70,7 @@ export default defineEventHandler(async (event) => {
 
   // Build where conditions
   const conditions = [
+    eq(bookingsBookings.teamId as any, team.id),
     eq(bookingsBookings.location as any, locationId),
     ne(bookingsBookings.status as any, 'cancelled'),
     gte(bookingsBookings.date as any, startDate),

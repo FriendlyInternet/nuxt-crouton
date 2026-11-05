@@ -2,13 +2,14 @@
 /**
  * Fanfare Events Dashboard
  *
- * Grid of event cards. Clicking a card opens the event workspace
- * (products / orders / printers / settings tabs from crouton-sales);
- * each card also exposes the POS ("Kassa openen") and the edit form.
+ * Grid of event cards. Clicking a card opens the ONE event-workspace
+ * experience (the adaptive block: kassa + orders / clients / data / settings).
+ * No separate "Kassa openen" vs "Werkruimte" split anymore — the card is the
+ * single entry, and the block's own "Open kassa" reaches the POS (#2186).
  *
  * @route /admin/[team]/sales/events
  */
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '@fyit/crouton-sales/collections/events/types'
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -28,13 +29,10 @@ const statusColor = (status?: string) => {
 
 const workspacePath = (event: SalesEvent) =>
   `/admin/${teamSlug.value}/sales/events/${event.slug}`
-
-const orderPath = (event: SalesEvent) =>
-  `/admin/${teamSlug.value}/sales/events/${event.slug}/order`
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     <div class="flex items-end justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-2xl font-bold tracking-tight">{{ t('sales.events.title') }}</h1>
@@ -59,13 +57,14 @@ const orderPath = (event: SalesEvent) =>
       v-else-if="events?.length"
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
     >
-      <div
+      <!-- A real link, so the card is keyboard- and screen-reader-reachable (#2419). -->
+      <NuxtLink
         v-for="event in events"
         :key="event.id"
-        role="link"
-        class="group rounded-xl border border-default bg-default p-5 cursor-pointer
-               transition-all duration-150 hover:border-primary/50 hover:shadow-md"
-        @click="navigateTo(workspacePath(event))"
+        :to="workspacePath(event)"
+        class="group block rounded-xl border border-default bg-default p-5
+               transition-all duration-150 hover:border-primary/50 hover:shadow-md
+               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <div class="flex items-start justify-between gap-3">
           <h3 class="font-semibold text-lg leading-tight truncate group-hover:text-primary transition-colors">
@@ -76,29 +75,18 @@ const orderPath = (event: SalesEvent) =>
           </UBadge>
         </div>
 
-        <div class="flex items-center gap-2 mt-4">
-          <UButton
-            icon="i-lucide-store"
-            size="sm"
-            color="primary"
-            variant="soft"
-            :label="t('sales.events.openPos')"
-            @click.stop="navigateTo(orderPath(event))"
-          />
-          <UButton
-            icon="i-lucide-layout-dashboard"
-            size="sm"
-            color="neutral"
-            variant="ghost"
-            :label="t('sales.events.workspace')"
-            @click.stop="navigateTo(workspacePath(event))"
-          />
-        </div>
-      </div>
+        <!-- One entry: the card click opens the unified workspace (#2186).
+             The block's own "Open kassa" reaches the POS from there — no
+             separate "Kassa openen" shortcut, no "Werkruimte" duplicate. -->
+        <p class="text-muted text-sm mt-4 inline-flex items-center gap-1.5 group-hover:text-primary transition-colors">
+          <UIcon name="i-lucide-arrow-right" class="size-4" aria-hidden="true" />
+          {{ t('sales.events.workspace') }}
+        </p>
+      </NuxtLink>
     </div>
 
     <div v-else class="text-center text-muted p-12 border border-dashed border-default rounded-xl">
-      <UIcon name="i-lucide-calendar-off" class="w-8 h-8 mx-auto mb-2" />
+      <UIcon name="i-lucide-calendar-off" class="w-8 h-8 mx-auto mb-2" aria-hidden="true" />
       <p class="font-medium">{{ t('sales.events.noEvents') }}</p>
     </div>
   </div>

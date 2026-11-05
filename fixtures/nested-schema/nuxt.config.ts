@@ -5,7 +5,6 @@
 // sales -> printing edge (crouton-sales/nuxt.config.ts extends crouton-printing),
 // never listed here. Do not add crouton-printing to extends or to the deps.
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
   compatibilityDate: '2025-07-15',
   extends: ['@fyit/crouton-core', '@fyit/crouton-sales'],
   hub: {

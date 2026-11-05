@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ingest-findings.mjs — resolve captured finding CANDIDATES into committed findings (#1570).
-// The main-context rollup (loop-station-findings.yml) runs this after downloading the
+// The main-context rollup (weekly.yml `findings` job) runs this after downloading the
 // gate workflows' `loop-station-finding-*` candidate artifacts. Confirmation comes from
 // the DURABLE PR-merge fact, not an ephemeral CI state machine:
 //

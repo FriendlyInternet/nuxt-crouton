@@ -1,7 +1,0 @@
-{
-  "id": { "type": "uuid", "meta": { "primaryKey": true } },
-  "projectId": { "type": "uuid", "refTarget": "projects", "meta": { "required": true, "label": "Project" } },
-  "name": { "type": "string", "meta": { "required": true, "maxLength": 100, "label": "Collection Name" } },
-  "description": { "type": "text", "meta": { "label": "Description" } },
-  "sortOrder": { "type": "integer", "meta": { "default": 0, "label": "Sort Order" } }
-}

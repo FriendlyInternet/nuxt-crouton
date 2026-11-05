@@ -1,0 +1,52 @@
+# Secret scan for this PUBLIC repo (#2376). Default gitleaks rules catch API keys and
+# tokens but NOT a password written as a plain value — which is how three working
+# logins sat here for months (#2356). The three rules below close that gap; the
+# allowlists keep test fixtures, translations and documented examples quiet.
+# Allow one deliberate line with an inline `gitleaks:allow` comment and a reason.
+title = "crouton secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures, e2e helpers and translation files"
+paths = [
+  '''(^|/)(tests?|__tests__|e2e|fixtures)/''',
+  '''\.(test|spec)\.[cm]?[jt]sx?$''',
+  '''(^|/)i18n/locales/''',
+]
+
+[[allowlists]]
+description = "Documented placeholder values (not real credentials)"
+regexes = [
+  '''^TestPassword123!$''',
+  '''^sk_live_123abc$''',
+]
+
+[[rules]]
+id = "password-literal"
+description = "A password written as a literal value (code or JSON)"
+regex = '''(?i)["']?(?:password|passwd|pwd)["']?\s*[:=]\s*["']([^"'\s$<{}]{6,})["']'''
+secretGroup = 1
+keywords = ["password", "passwd", "pwd"]
+[[rules.allowlists]]
+description = "Words and i18n keys, not passwords"
+regexes = [
+  '''(?i)password|wachtwoord|passe''',
+  '''(?i)^[a-z]+$''',
+  '''^[\w-]+\.[\w.-]+$''',
+]
+
+[[rules]]
+id = "hash-password-literal"
+description = "hashPassword() called with a literal password"
+regex = '''hashPassword\(\s*["'`]([^"'`$]{6,})["'`]\s*\)'''
+secretGroup = 1
+keywords = ["hashpassword"]
+
+[[rules]]
+id = "doc-login-pair"
+description = "An email / password pair written out in docs"
+regex = '''[\w.+-]+@[\w-]+\.[\w.]+`?\s*/\s*`([^`\s]{6,})`'''
+secretGroup = 1
+keywords = ["@"]

@@ -90,7 +90,8 @@ export function useTeamFavicon() {
   })
 
   useHead({
-    link: [{ rel: 'icon', type: 'image/svg+xml', href: faviconHref }]
+    // Only the generated/default icons are SVG; an uploaded one can be PNG, ICO, …
+    link: [{ rel: 'icon', type: computed(() => siteSettings.value?.favicon ? undefined : 'image/svg+xml'), href: faviconHref }]
   })
 
   return { faviconHref }

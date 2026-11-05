@@ -1,0 +1,1 @@
+ALTER TABLE `bookings_locations` ADD `offerFullDay` integer;

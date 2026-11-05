@@ -77,12 +77,12 @@ Author the test next to the code it will cover, following the package's existing
 the test code, so the reviewer agrees on *behaviour*, not syntax.
 
 - **Interactive session:** show the case list + test in chat and hold. The reviewer says
-  `lgtm`/`approve` to proceed, or asks for changes (add a case, fix an expectation) → revise and
+  `ok` to proceed (or `not ok: …`), or asks for changes (add a case, fix an expectation) → revise and
   re-show.
 - **Agent pipeline / PR:** commit the failing test (via `/commit`, scope = the package, e.g.
   `test(crouton-core): …`) so it lands in the PR's "Files changed". The reviewer comments inline on
   any `it(...)` to change a case. Set the issue to `status:blocked` while holding. Approval is a
-  **comment** containing `lgtm`/`approve` — **not** a reaction or label (#572) — and it unblocks
+  **comment** that is only `ok` (legacy `lgtm`/`approve`) — **not** a reaction or label (#572) — and it unblocks
   implementation.
 
 Iterate Step 1–3 until approved. Do **not** write implementation code before the test is agreed.

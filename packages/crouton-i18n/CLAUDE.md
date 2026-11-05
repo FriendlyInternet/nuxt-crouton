@@ -95,6 +95,16 @@ When `showAITranslate` is enabled, a "Translate" button appears next to the Engl
 - `@fyit/crouton-ai` must be extended in your nuxt.config
 - OpenAI API key must be configured (`NUXT_OPENAI_API_KEY`)
 
+### Placeholder stubs (`app/stubs/`)
+
+`CroutonI18nInput` references components from optional packages. When the owning package isn't installed, an empty placeholder in `app/stubs/` keeps Vue from warning `Failed to resolve component`; the real package overrides it by name when present.
+
+- `AITranslateButton.vue` — real one from `@fyit/crouton-ai`
+- `CroutonPagesEditorBlockEditor.vue` — real one from `@fyit/crouton-pages`
+- `CroutonPagesEditorBlockEditorWithPreview.vue` — real one from `@fyit/crouton-pages`
+
+The `with-pages` e2e fixture asserts the real block editor (`.ProseMirror`) mounts rather than a stub.
+
 ## Component Naming
 
 All components auto-import with `CroutonI18n` prefix:
@@ -135,7 +145,7 @@ crouton-generate seed-translations --layer shop # Specific layer
 // Layer nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-i18n'
   ],
   i18n: {
@@ -202,7 +212,7 @@ langDir: './locales'
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Bundled by**: `@fyit/crouton-core` (extends this layer; apps may list it explicitly too)
 - **Peer deps**: `@nuxtjs/i18n ^9.0.0`, `drizzle-orm >=0.30.0`, `zod ^3.20.0`
 
 ## Testing

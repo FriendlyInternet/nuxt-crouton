@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   // Same resolution as generate-print-queues: formatter defaults overlaid with
   // the saved receipt_settings row (if any), so the preview mirrors printing.
   let receiptSettings: ReceiptSettings = DEFAULT_RECEIPT_SETTINGS
-  const { salesEventsettings } = await import('~~/layers/sales/collections/eventsettings/server/database/schema')
+  const { salesEventsettings } = await import('../../../../../../../../../collections/eventsettings/server/database/schema')
   const [settingsRow] = await db
     .select()
     .from(salesEventsettings)

@@ -30,6 +30,8 @@ The hypothesis has **4 parts**:
 
 A good epic body therefore *opens* with a `## Hypothesis` block, then the 👤/🤖 sections expand it, then the check closes it. See epic #359 and #357 / issues #358, #360, #361 for worked examples.
 
+An epic body **must** carry a `## 🧪 How to test` section of 2–3 phone steps — it becomes the owner's test card (#2519). `scripts/epic-scaffold.mjs` and the `require-issue-dedup` hook refuse an epic without one.
+
 ## Writing for two audiences (REQUIRED — applies to issues, PRs, and commits)
 
 Everything that lands in GitHub is written for **two readers**, in this order:
@@ -149,6 +151,20 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
 
+## Pipeline fixes close on evidence, not on merge (`workflow` issues, #2657)
+
+A fix to the pipeline itself can merge green and still not work. So its PR uses **`Refs #NN`** (never `Closes #NN`), and the issue body carries one line: **`Evidence-needed: <text a real run will annotate>`** (e.g. `Evidence-needed: pi mcp: not blocked`). `verify-fix-evidence.yml` runs after each worker run, looks for that text in the run's annotations (`scripts/fix-evidence.mjs`), and on a match comments the run link and closes the issue. No match → silent; the issue stays open. Only runs created after the PR merged count. Add a `Verified-by-run:` line by hand if you close one manually.
+
+## Design handoff (epics that change a visual surface)
+
+If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it copies them to `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Commit and push those files (until they reach the branch in `--branch`, the images don't load). Pipeline workers are told to `read` them before building; `ui-proposal` shows them next to the preview.
+
+## Naming the screen to shoot (`review-surface` marker)
+
+A ticket that changes something you LOOK at ends with one marker: `<!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->`, e.g. `<!-- review-surface: kassa /admin/{team}/crouton/salesCategories -->` (`{team}` becomes the seeded `test1`). The PR body inherits it (#2433) and, once the PR's preview Worker deploys, `deploy-app.yml` screenshots that page and commits `pr<N>-<app>-<name>.png` (`scripts/capture-review-surfaces.mjs`, #2173). Without a marker the preview shoots the app's start page — name the page that shows the change.
+
+A PR opened by hand that touches only `packages/**` gets no preview Worker unless its body also carries `<!-- deploy-preview: full-watch -->` (the pipeline adds it automatically to held UI PRs; `scripts/deploy-detect.mjs`, #2140) — without a preview there is nothing to screenshot. Adding it to an open PR's body needs a new `pull_request` event (push, or close + reopen) before a preview builds.
+
 ## Structure
 
 - **Epic** — one tracking issue per initiative. Body: goals, a checklist of workstreams, links to design docs. Labels: `epic` + the primary `pkg:`/`app:` it spans.
@@ -168,6 +184,19 @@ Issues, sub-issues, and labels are managed through the GitHub MCP tools:
 **Labels must already exist** before you can apply them — applying an unknown label errors. New labels are added via labels-as-code (below), not by the API.
 
 **Projects v2 boards can't be created or managed via these tools** (UI-only). Tell the user to create the board in the web/iOS app; if they enable the project's "Auto-add" workflow, issues you create land on the board automatically.
+
+## Pipeline-ready epic (one command)
+
+An epic the agent pipeline can run needs: the hidden `<!-- pipeline: epic=N depth=1 epic_branch=… -->` block on each child, `Blocked-by: #NN` ordering, a `pkg:*` label (or a `Packages-approved:` line) so `packages-guard` accepts the worker's PR, and the `epic/<N>-<slug>` branch created before the first worker. Don't hand-build these — write a JSON plan `{ title, body, labels, packagesApproved?, children: [{ title, body, labels, blockedBy: [siblingIdx] }] }` and run:
+
+```
+node scripts/epic-scaffold.mjs --dry-run plan.json   # print the tree, create nothing
+node scripts/epic-scaffold.mjs plan.json             # epic + branch + children + sub-issue links
+```
+
+A ticket that must run while a same-package ticket is open — because that one is waiting on it (e.g. a fix for its failing PR) — carries a line `Unblocks: #NN` in its body. Traffic control then lets it proceed past #NN (it comments "proceeding before #NN"); adding the line to an already-parked ticket releases it at once (the `edited` trigger in `on-issue-close.yml`). Only declare it when it is true.
+
+The epic body must carry a `Dedup-checked:` line (the script refuses otherwise). Running the script already starts the work: every child with no `Blocked-by` gets `work-this` immediately, and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi` afterwards — that runs the decomposer on an epic that already has children and dispatches the unblocked ones a second time. Use `--dry-run` to look before anything starts. It reuses `apply-decompose-plan.mjs`; tests: `scripts/epic-scaffold.test.mjs`.
 
 ## Labels-as-code
 

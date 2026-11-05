@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { planCommits, serializeBucket, writeBuckets } from './pi-commit-plan.mjs'
+import { planCommits, generatorRanInSession, serializeBucket, writeBuckets } from './pi-commit-plan.mjs'
 
 test('the #1830 case: generated collection lands in `generated`, config/schema in `inputs`', () => {
   // pi hand-authored (ledger) the config + schema; `crouton config` GENERATED the collection.
@@ -104,4 +104,33 @@ test('#1876: writeBuckets round-trips every path back out, last one included', (
   // or the harness reports files it did not commit — the second half of the #1876 defect.
   assert.equal(readBack('inputs.txt').length, 3)
   fs.rmSync(dir, { recursive: true, force: true })
+})
+
+// #2434 — a hand edit made outside the write tools must not be filed as "generated".
+const sessionOf = (...calls) => calls.map(c => JSON.stringify({ message: { content: [{ type: 'toolCall', ...c }] } })).join('\n') + '\n'
+const tmpSession = (text) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-'))
+  const f = path.join(d, 's.jsonl')
+  fs.writeFileSync(f, text)
+  return f
+}
+
+test('no generator ran → every changed file is an input (bash-edited file)', () => {
+  const f = tmpSession(sessionOf({ name: 'bash', arguments: { command: "sed -i 's/a/b/' x.ts" } }))
+  assert.equal(generatorRanInSession(f), false)
+  const { inputs, generated } = planCommits({ ledger: [], changed: ['x.ts'], generatorRan: false })
+  assert.deepEqual(inputs, ['x.ts'])
+  assert.deepEqual(generated, [])
+})
+
+test('a `crouton config` run keeps the split', () => {
+  const f = tmpSession(sessionOf({ name: 'bash', arguments: { command: 'npx crouton config' } }))
+  assert.equal(generatorRanInSession(f), true)
+  const { inputs, generated } = planCommits({ ledger: ['schemas/a.json'], changed: ['schemas/a.json', 'gen/x.ts'], generatorRan: true })
+  assert.deepEqual(inputs, ['schemas/a.json'])
+  assert.deepEqual(generated, ['gen/x.ts'])
+})
+
+test('MCP generate_collection counts as a generator', () => {
+  assert.equal(generatorRanInSession(tmpSession(sessionOf({ name: 'generate_collection', arguments: {} }))), true)
 })

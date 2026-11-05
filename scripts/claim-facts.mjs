@@ -27,6 +27,83 @@ export function referencesIssue(body, issueNumber) {
   return re.test(String(body || ''))
 }
 
+/** Head/base refs and merge state of one search hit (the search API returns neither ref). */
+async function fetchPrFacts({ github, owner, repo, it, warn }) {
+  let headRef = null
+  let baseRef = null
+  let merged = Boolean(it.pull_request?.merged_at)
+  let mergedAt = it.pull_request?.merged_at ?? null
+  try {
+    const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: it.number })
+    headRef = pr.head?.ref ?? null
+    baseRef = pr.base?.ref ?? null
+    merged = Boolean(pr.merged_at)
+    mergedAt = pr.merged_at ?? null
+  } catch (e) {
+    // Leave baseRef null. `decideClaim` then treats a merge as landed — the safer
+    // pre-#2027 default, so an unreachable API cannot silently UNLOCK an issue.
+    warn(`claim facts: could not fetch PR #${it.number} (${e.message})`)
+  }
+  return { headRef, baseRef, merged, mergedAt }
+}
+
+/** When `status:in-progress` was applied (the weakest signal) and when the issue was last reopened. */
+async function fetchEventFacts({ github, owner, repo, issueNumber, issue, linkedPRs }) {
+  let inProgressSince = null
+  let lastReopenedAt = null
+  const hasInProgress = (issue.labels || []).some((l) => (l.name || l) === 'status:in-progress')
+  // Events are also needed for the last `reopened` (#2779): a merge older than the reopen is
+  // history, not a claim. Only an issue that was reopened can need it.
+  if (hasInProgress || issue.state_reason === 'reopened' || linkedPRs.some((p) => p.merged)) {
+    const events = await github.paginate(github.rest.issues.listEvents,
+      { owner, repo, issue_number: issueNumber, per_page: 100 })
+    lastReopenedAt = events.filter((e) => e.event === 'reopened').pop()?.created_at || null
+    const last = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:in-progress').pop()
+    inProgressSince = hasInProgress ? (last?.created_at || null) : null
+  }
+  return { inProgressSince, lastReopenedAt }
+}
+
+/**
+ * The PR a revision continues (#3061): newest PR on the branch, any state. A lookup failure
+ * returns `lookupFailed` so the guard fails open rather than refuse a revision on a glitch.
+ */
+async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
+  try {
+    const { data } = await github.rest.pulls.list({
+      owner, repo, head: `${owner}:${branch}`, state: 'all', sort: 'created', direction: 'desc', per_page: 5,
+    })
+    const pr = (data || [])[0]
+    if (!pr) return { branch, pr: null }
+    return { branch, pr: pr.number, state: pr.state, merged: Boolean(pr.merged_at) }
+  } catch (e) {
+    warn(`claim facts: could not look up the PR on ${branch} (${e.message})`)
+    return { branch, lookupFailed: true }
+  }
+}
+
+/**
+ * Every PR whose body closes the issue, with refs/merge state. The search API returns neither
+ * head nor base ref, so each candidate is fetched (at most 20, usually 1).
+ */
+async function fetchLinkedPrs({ github, owner, repo, issueNumber, warn }) {
+  const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
+  const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
+  const linkedPRs = []
+  let selfPr = null
+  const selfPrs = []
+  for (const it of found.items || []) {
+    if (!referencesIssue(it.body, issueNumber)) continue
+    const { headRef, baseRef, merged, mergedAt } = await fetchPrFacts({ github, owner, repo, it, warn })
+    if (headRef === `work-${issueNumber}`) {
+      selfPr = it.number
+      selfPrs.push(it.number)
+    }
+    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
+  }
+  return { linkedPRs, selfPr, selfPrs }
+}
+
 /**
  * Gather the claim facts for one issue.
  *
@@ -35,56 +112,36 @@ export function referencesIssue(body, issueNumber) {
  * @param {object}  o.context       the github-script `context`
  * @param {number}  o.issueNumber
  * @param {object} [o.core]         optional logger; only `warning` is used
+ * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
+ *                                  Adds `revision` so the guard judges that PR, not the issue.
+ * @param {string} [o.mode]         the run mode ('plan' = plan-only); lets the guard let a plan run past an open own PR (#2990)
  * @returns {Promise<object>} the shape `decideClaim` consumes
  */
-export async function gatherClaimFacts({ github, context, issueNumber, core }) {
+export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '', mode = '' }) {
   const { owner, repo } = context.repo
   const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
 
   const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
 
-  const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
-  const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
+  const { linkedPRs, selfPr, selfPrs } = await fetchLinkedPrs({ github, owner, repo, issueNumber, warn })
 
-  // The search API returns neither head nor base ref, so each candidate is fetched. Both refs
-  // are load-bearing (see the header), and the candidate list is small — at most 20, usually 1.
-  const linkedPRs = []
-  let selfPr = null
-  for (const it of found.items || []) {
-    if (!referencesIssue(it.body, issueNumber)) continue
-    let headRef = null
-    let baseRef = null
-    let merged = Boolean(it.pull_request?.merged_at)
-    try {
-      const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: it.number })
-      headRef = pr.head?.ref ?? null
-      baseRef = pr.base?.ref ?? null
-      merged = Boolean(pr.merged_at)
-    } catch (e) {
-      // Leave baseRef null. `decideClaim` then treats a merge as landed — the safer
-      // pre-#2027 default, so an unreachable API cannot silently UNLOCK an issue.
-      warn(`claim facts: could not fetch PR #${it.number} (${e.message})`)
-    }
-    if (headRef === `work-${issueNumber}`) selfPr = it.number
-    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef })
-  }
+  const { inProgressSince, lastReopenedAt } = await fetchEventFacts({
+    github, owner, repo, issueNumber, issue, linkedPRs,
+  })
 
-  // When `status:in-progress` was applied — the weakest signal, so it needs its timestamp.
-  let inProgressSince = null
-  const hasInProgress = (issue.labels || []).some((l) => (l.name || l) === 'status:in-progress')
-  if (hasInProgress) {
-    const events = await github.paginate(github.rest.issues.listEvents,
-      { owner, repo, issue_number: issueNumber, per_page: 100 })
-    const last = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:in-progress').pop()
-    inProgressSince = last?.created_at || null
-  }
+  const revision = reviseBranch
+    ? await fetchRevisionFacts({ github, owner, repo, branch: reviseBranch, warn })
+    : undefined
 
   return {
+    ...(revision ? { revision } : {}),
+    mode,
     issueState: issue.state,
     linkedPRs,
     inProgressSince,
+    lastReopenedAt,
     now: new Date().toISOString(),
     defaultBranch: context.payload?.repository?.default_branch || 'main',
-    self: { pr: selfPr },
+    self: { pr: selfPr, prs: selfPrs },
   }
 }

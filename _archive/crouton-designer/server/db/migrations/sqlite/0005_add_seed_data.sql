@@ -1,1 +1,0 @@
-ALTER TABLE `designer_projects` ADD `seedData` text;

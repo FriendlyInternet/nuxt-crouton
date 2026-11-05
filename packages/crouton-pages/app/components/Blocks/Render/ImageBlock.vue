@@ -16,6 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const widthClass = computed(() => {
   switch (props.attrs.width) {
@@ -34,8 +35,8 @@ const widthClass = computed(() => {
       v-if="!attrs.src"
       color="neutral"
       icon="i-lucide-image"
-      title="No image configured"
-      description="Edit this block to add an image."
+      :title="t('pages.blockRender.noImageTitle')"
+      :description="t('pages.blockRender.noImageDescription')"
     />
 
     <!-- Render image -->

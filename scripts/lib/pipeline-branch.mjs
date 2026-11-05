@@ -1,7 +1,7 @@
 /**
  * Is this head branch one the agent pipeline authored? (#2089)
  *
- * ONE definition, because the two-copy version already cost us. `pipeline-pr-status.yml`
+ * ONE definition, because the two-copy version already cost us. `status.yml`
  * learned about the pi worker's `work-<n>` branches in #1815; `fix-ci-on-failure.yml` did
  * not — and since `AGENT_HARNESS=pi` made that the live lane, its guard
  * (`startsWith(head_branch, 'claude/issue-')`) could no longer be true for any PR. The
@@ -17,8 +17,8 @@
  * edit your work.
  */
 
-/** Prefixes the pipeline opens PRs from. `claude/issue-` = the claude lane, `work-` = pi. */
-export const PIPELINE_BRANCH_PREFIXES = ['claude/issue-', 'work-']
+/** Prefixes the pipeline opens PRs from. `work-` = the pi worker (the `claude/issue-` lane was dropped, #2892). */
+export const PIPELINE_BRANCH_PREFIXES = ['work-']
 
 export function isPipelineBranch(ref) {
   const s = String(ref || '')

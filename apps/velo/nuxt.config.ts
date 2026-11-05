@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   // (#2073). In a production build the module gates itself off entirely — it
   // returns before installing anything unless dev / the devtools flag / the review
   // flag is set — so this costs a normal deploy nothing.
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -24,10 +24,9 @@ export default defineNuxtConfig({
     '@fyit/crouton-pages',
     '@fyit/crouton-bookings',
     '@fyit/crouton-email',
-    './layers/bookings',
-    './layers/pages',
     '@fyit/crouton-maps',
-    './layers/crouton'
+    '@fyit/crouton-events',
+    '@fyit/crouton-collab',
   ],
   hub: {
     blob: true,
@@ -36,6 +35,8 @@ export default defineNuxtConfig({
 
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
   ogImage: { enabled: false },
+  // og:site_name + schema-org site name — Site Config v4 no longer infers it
+  site: { name: 'Velotheek' },
 
   // Enable booking email notifications
   runtimeConfig: {
@@ -52,6 +53,9 @@ export default defineNuxtConfig({
           brand: {
             name: 'Velotheek',
             primaryColor: '#0F766E',
+            // Production default. Staging overrides it at runtime with the Worker var
+            // NUXT_PUBLIC_CROUTON_EMAIL_BRAND_URL (wrangler.jsonc → env.staging.vars), so
+            // a booking email sent from velo.pmcp.dev links back to staging (#2405).
             url: 'https://velo.friendlyinter.net'
           }
         }

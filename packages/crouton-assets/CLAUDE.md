@@ -14,7 +14,9 @@ Centralized asset management for Nuxt Crouton. Provides picker/uploader componen
 | `app/components/AssetTile.vue` | Selection tile for Picker modal (selected state, checkmark) |
 | `app/components/Uploader.vue` | Upload with optional crop step and metadata form |
 | `app/composables/useAssetUpload.ts` | Programmatic upload/delete helper with progress tracking |
-| `assets-schema.json` | Reference schema (includes category, width, height fields) |
+| `collections/assets/` | **The `croutonAssets` collection, owned end to end (#2278)** — `server/database/{schema,queries}.ts` (`crouton_assets`), CRUD routes `server/api/teams/[id]/crouton-assets/*`, `types.ts`, `app/composables/useCroutonAssets.ts`, `app/components/List.vue` (`CroutonAssetsList`). Extended by `nuxt.config.ts`; registered in `app/app.config.ts` (`container: 'modal'`, form = `CroutonAssetsForm`). Moved verbatim from velo's generated `crouton` layer; table, route path and registry key unchanged. Importable: `@fyit/crouton-assets/collections/assets/types` and `…/server/database/{schema,queries}` |
+| `server/db/schema.ts` | Re-exports `croutonAssets` so each consuming app's `db:generate` picks up the table |
+| `assets-schema.json` | Field description read by the manifest for AI hints. **Not** a generator input any more (#2278); the source of truth is `collections/assets/server/database/schema.ts`. Note it marks `alt` translatable, the table has no `translations` column (velo's shape) |
 
 ## Architecture
 
@@ -30,11 +32,8 @@ nuxt-crouton-assets (this package)
 ├── useAssetUpload()            # Composable
 ├── assets-schema.json          # Schema template
 
-Your Project (generated)
-├── layers/crouton/collections/assets/
-│   ├── API endpoints (crouton-assets)
-│   ├── Form.vue, List.vue
-│   └── useCroutonAssets()
+Your Project
+└── extends @fyit/crouton-assets — generates nothing for assets (#2278)
 ```
 
 ## Setup
@@ -43,7 +42,7 @@ Your Project (generated)
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-assets'
   ],
   hub: {
@@ -52,13 +51,21 @@ export default defineNuxtConfig({
 })
 ```
 
-## Generate Assets Collection
+## The Assets Collection Ships With the Package (#2278)
 
-```bash
-crouton-generate crouton assets \
-  --fields-file=node_modules/@fyit/crouton-assets/assets-schema.json \
-  --dialect=sqlite
-```
+Extending the package gives the app the `croutonAssets` collection (table `crouton_assets`,
+routes `/api/teams/[id]/crouton-assets`). Run `pnpm db:generate` to add the table to the app's
+migrations. The manifest sets `ownsCollections: true` with layer `crouton` / collection `asset`,
+so `crouton config` refuses `crouton/assets`. Changing a column = edit
+`collections/assets/server/database/schema.ts` here, then `db:generate` in each app.
+
+An app collection may reference the library: `"imageId": { "type": "string", "refTarget": "assets" }`
+generates a query that joins `croutonAssets` (imported from this package's
+`./collections/assets/server/database/schema` export) and a form picker / list cell bound to the
+`croutonAssets` collection key (#2311). `image`/`file` fields still work for a plain asset id.
+
+`server/plugins/query-registry.ts` registers `croutonAssets` in the process-wide query registry so
+crouton-pages' public collection endpoints can serve it without the app generating anything (#2309).
 
 ## Usage
 
@@ -123,8 +130,8 @@ Components auto-import with `CroutonAssets` prefix:
 ## Common Tasks
 
 ### Add custom metadata field
-1. Extend `assets-schema.json` with new field
-2. Regenerate collection
+1. Add the column in `collections/assets/server/database/schema.ts` (+ `types.ts`, the composable, `assets-schema.json`)
+2. `pnpm db:generate` in every app that extends this package
 3. Update uploader component if needed
 
 ### Filter assets by type
@@ -132,7 +139,7 @@ Query with `contentType` filter (e.g., `image/*`).
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Extends**: `@fyit/crouton-core` (required)
 - **Requires**: `@nuxthub/core` with `hub.blob: true`
 - **Peer deps**: `@vueuse/core ^11.0.0`
 

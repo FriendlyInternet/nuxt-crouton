@@ -62,7 +62,7 @@ onMounted(() => {
 
   // Create marker instance directly
   import('maplibre-gl').then((maplibregl) => {
-    const Marker = maplibregl.Marker || maplibregl.default?.Marker
+    const Marker = maplibregl.Marker
 
     if (!Marker) {
       console.error('[CroutonMapMarker] Failed to load MapLibre Marker')
@@ -74,9 +74,8 @@ onMounted(() => {
       .addTo(props.map)
 
     // Add popup if specified — use setText (not setHTML) to avoid XSS
-    if (props.popupText && (maplibregl.Popup || maplibregl.default?.Popup)) {
-      const Popup = maplibregl.Popup || maplibregl.default?.Popup
-      const popup = new Popup().setText(props.popupText)
+    if (props.popupText) {
+      const popup = new maplibregl.Popup().setText(props.popupText)
       marker.value.setPopup(popup)
     }
 

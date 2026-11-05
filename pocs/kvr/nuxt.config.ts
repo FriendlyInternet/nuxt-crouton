@@ -6,7 +6,6 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
-  modules: ['@fyit/crouton'],
   compatibilityDate: '2025-07-15',
   devServer: { port: 3011 },
   devtools: { enabled: true },

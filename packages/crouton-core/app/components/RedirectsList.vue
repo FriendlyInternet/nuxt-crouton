@@ -42,7 +42,22 @@ withDefaults(defineProps<{
   layout: 'table'
 })
 
-const { columns } = useCroutonRedirects()
+const { t } = useT()
+const { columns: baseColumns } = useCroutonRedirects()
+
+// Column headers in the config are static English; translate them here
+const columnHeaderKeys: Record<string, string> = {
+  fromPath: 'redirects.columnFrom',
+  toPath: 'redirects.columnTo',
+  statusCode: 'redirects.columnStatus',
+  isActive: 'redirects.active'
+}
+const columns = computed(() =>
+  baseColumns.map(column => ({
+    ...column,
+    header: columnHeaderKeys[column.accessorKey] ? t(columnHeaderKeys[column.accessorKey]!) : column.header
+  }))
+)
 
 const { items: redirects, pending } = await useCollectionQuery(
   'croutonRedirects'

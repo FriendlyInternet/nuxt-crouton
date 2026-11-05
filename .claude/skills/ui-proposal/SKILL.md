@@ -14,7 +14,7 @@ PNG. A `--static` fallback (offline HTML/CSS mockup + PNG) is available when a l
 isn't practical.
 
 Either way the outcome is identical: a draft PR is posted, the reviewer gives feedback,
-you iterate, and an `approve`/`lgtm` comment unblocks the build.
+you iterate, and an `ok` comment unblocks the build.
 
 ## When to use
 - A task's diff adds or changes a **visual surface**: a `.vue` component, a layout, a page,
@@ -23,6 +23,10 @@ you iterate, and an `approve`/`lgtm` comment unblocks the build.
 - **Skip** for pure `<script>`/composables/types, `server/**`, config, tests, and docs — no
   visible result, no gate.
 
+## Reference design (if the epic has one)
+
+If `writeups/design/<epic>/` exists (see `scripts/design-handoff.mjs`), `read` its PNGs **before building** — they are the spec. When you post the preview URL, embed the matching reference PNG right beside it so the reviewer compares reference and live side by side.
+
 ## Which path to choose
 
 | | Default (live preview) | Fallback (`--static`) |
@@ -30,7 +34,7 @@ you iterate, and an `approve`/`lgtm` comment unblocks the build.
 | **When** | App can be deployed to staging | Deploy is unavailable, broken, or would take too long |
 | **Fidelity** | Real Nuxt UI styling, real data, real responsive behaviour | Offline HTML/CSS approximation |
 | **Reviewer UX** | Click the running page, pin a comment | Read a PNG, comment inline on the `.md` diff |
-| **Approval signal** | Reply `approve` / `lgtm` — same loop | Reply `approve` / `lgtm` — same loop |
+| **Approval signal** | Reply `ok` (or `not ok: …`) — same loop | Reply `ok` (or `not ok: …`) — same loop |
 
 ---
 
@@ -51,13 +55,13 @@ The loop (capture tooling provided by `@fyit/crouton-devtools`):
    🔍 Live preview ready: https://<name>.pmcp.dev
    Reviewer: open the link, click any element, and type your change in the overlay.
    Each pin posts a 🎯 Preview feedback comment here naming the source file.
-   Reply `lgtm` or `approve` when satisfied.
+   Reply `ok` when satisfied, or `not ok: what's wrong`.
    ```
 4. **Apply `status:blocked`**, @mention `@pmcp`, and **stop**. Do not build further until
    approved.
 5. **On each `🎯 Preview feedback` comment:** read the named source file, make the change,
    commit, redeploy. Reply to the comment when done.
-6. **On `approve` / `lgtm` reply:** remove `status:blocked`, drop a short note on the PR,
+6. **On `ok` reply:** remove `status:blocked`, drop a short note on the PR,
    and resume building/generating (step 6 of `task-worker`).
 
 ### Env contract (already wired by WS2 of epic #590)
@@ -72,8 +76,10 @@ script and they're handled automatically.
 
 ## Fallback path — static mockup (`--static`)
 
-Use when a live deploy is not available (e.g. packages-only change with no runnable app, or
-the deploy pipeline is broken and speed matters more than fidelity). Pass `--static` when
+Use when a live deploy is not available (e.g. a packages change that isn't a component, or
+the deploy pipeline is broken and speed matters more than fidelity). A changed shared
+**component** (`packages/*/app/components/**.vue`) is NOT this case: its PR gets a live gallery
+link per changed piece automatically (`pocs/gallery`, #2462) — no mockup, no preview page. Pass `--static` when
 invoking this skill, or when the `task-worker` agent determines staging isn't reachable.
 
 ### What it produces
@@ -81,16 +87,15 @@ invoking this skill, or when the `task-worker` agent determines staging isn't re
 |----------|------|-----------|
 | Mockup source | `writeups/ui-proposals/<slug>.html` | yes (editable source of truth) |
 | "What changes" list | `writeups/ui-proposals/<slug>.md` | yes (inline-commentable diff surface) |
-| Rendered image | `writeups/ui-proposals/<slug>.png` | **yes** — committed so it can be **embedded inline** in the sticky comment (#613) |
+| Rendered image | `screenshots/<slug>.png` | **no** — published to a non-branch ref and embedded by commit-ID URL (#3351) |
 
 `<slug>` = kebab of the surface, e.g. `mobile-collection-viewer`.
 
-> **Why the PNG is committed (not in `screenshots/`).** A GitHub comment can only show an
-> image inline if it has a fetchable URL. The PNG is committed to `writeups/ui-proposals/`
-> (gitignore-excepted, like `ticket-diagram`'s renders) and referenced by its
-> **`raw.githubusercontent.com/<repo>/<branch>/…png`** URL, so it renders as an image on web
-> **and mobile**. Linking the `.html` instead made the proposal "open as code" on mobile —
-> the #569 papercut this fixes.
+> **Why the PNG is not committed (#3351).** A comment can only show an image inline if it has a
+> fetchable URL (#569/#613). Committing PNGs bloated the repo, so they now go to a non-branch ref
+> (`refs/review-captures/issue<N>`) via `node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>`,
+> which prints a commit-pinned `https://raw.githubusercontent.com/<repo>/<sha>/<slug>.png` URL and
+> curl-verifies it. That URL renders on web **and mobile**. Only the `.html` + `.md` are committed.
 
 ### Step 1 — Understand the surface
 Read the component(s) you're about to change. The mockup must reflect the **actual** current
@@ -115,12 +120,12 @@ Rules (keep it portable):
 
 ### Step 3 — Render to PNG
 ```bash
-node .claude/skills/ui-proposal/render.mjs writeups/ui-proposals/<slug>.html writeups/ui-proposals/<slug>.png
+node .claude/skills/ui-proposal/render.mjs writeups/ui-proposals/<slug>.html screenshots/<slug>.png
 # optional: --width 1100   (default 1000)   --selector ".stage"   (crop to element)
 ```
 Uses the repo's Playwright (`@playwright/test`) headless Chromium — no network, 2× for crisp
-image. Render **into `writeups/ui-proposals/`** (not `screenshots/`) so the PNG is committed and
-can be embedded inline (step 4).
+image. Render **into `screenshots/`** — the PNG is never committed (#3351); step 4 publishes it to a
+non-branch ref and embeds it inline.
 
 ### Step 4 — Hand off (review happens on the DIFF)
 **Commit a text artifact so feedback can be inline.** Alongside the `.html`, write the
@@ -133,26 +138,21 @@ it lands in "Files changed" so the reviewer can inline-comment a specific change
 > makes the reviewer go hunting. Always embed a Markdown **image** by its raw URL, and only
 > after you've confirmed that URL serves the image.
 
-1. **Commit** the `.html` + `.md` + **`.png`** (via `/commit`, scope `docs`).
-2. **Push the branch so GitHub can serve the PNG.** The raw URL 404s until the commit is on
-   the remote — pushing is **not optional**, it's what makes the image appear. Push the current
-   branch (set upstream if new: `git push -u origin <branch>`). In an interactive session with
-   no PR, this is still required — the issue comment needs the same hosted file.
-3. **Verify the raw URL resolves** before you post — a 404 means a silent path-link fallback,
-   the exact failure this rule exists to prevent:
+1. **Commit** the `.html` + `.md` (via `/commit`, scope `docs`). Do not commit the PNG.
+2. **Publish the PNG** (renders to `screenshots/<slug>.png`):
    ```bash
-   url="https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png"
-   curl -s -o /dev/null -w '%{http_code}' "$url"   # must be 200
+   node scripts/publish-review-captures.mjs --dir screenshots --key issue<N>   # prints sha= and url=; exits 1 if the URL doesn't serve image/png
    ```
+3. **Use the printed `url=`** (commit-ID pinned) in the comment below — a failing exit means no inline image.
 4. **Post the sticky comment with the PNG embedded inline** — on the **PR** if one exists,
    otherwise **on the tracking issue** (interactive / no-PR runs). Same body either way:
    ```markdown
    <!-- ui-proposal:<slug> -->
    ### 🎨 UI proposal — <slug>
-   ![<slug> mockup](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png)
+   ![<slug> mockup](<url= printed by publish-review-captures>)
 
    Review the **"what changes"** list (`writeups/ui-proposals/<slug>.md`) and comment any change.
-   Reply `lgtm` / `approve` when satisfied.
+   Reply `ok` when satisfied, or `not ok: what's wrong`.
    ```
    Use the actual **head branch** in the URL (e.g. `receiptDesign`, `claude/issue-<NN>-<slug>`);
    the image re-renders whenever the committed file changes, so editing in place (step 5) works.
@@ -169,7 +169,7 @@ On each change request: revise the proposal (mockup files for `--static`, source
 live-preview), re-render / redeploy, **edit the sticky comment in place** (never post a new
 one), and reply to/resolve each inline thread you addressed. Commit and push.
 
-On `approve` / `lgtm` reply: remove `status:blocked`, note "approved → building" on the
+On `ok` reply: remove `status:blocked`, note "approved → building" on the
 sticky comment, and resume.
 
 ---

@@ -2,13 +2,14 @@
 
 ## Package Purpose
 
-Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton` and `@fyit/crouton-auth`.
+Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `nuxt.config.ts` | Layer configuration, component registration, i18n setup |
+| `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one; the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
 | `app/composables/useBookingAvailability.ts` | Check slot/inventory availability |
 | `app/composables/useBookingCart.ts` | Shopping cart for bookings |
 | `app/composables/useBookingsSettings.ts` | Team booking settings |
@@ -18,8 +19,12 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | `app/types/booking.ts` | TypeScript type definitions |
 | `server/api/crouton-bookings/` | API endpoints |
 | `server/utils/booking-emails.ts` | Email utilities |
-| `schemas/` | JSON schema definitions |
+| `collections/<name>/` | **The 5 bookings collections, owned end to end (#2278)** — `bookings`, `locations`, `settings`, `emailtemplates`, `emaillogs`: `server/database/{schema,queries}.ts`, `server/api/teams/[id]/bookings-<plural>/*`, `types.ts`, `app/composables/useBookings<Plural>.ts`, `app/components/List.vue` (+ `_Form.vue`, repeater inputs). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate. Moved verbatim from velo's generated layer, hand edits included. Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Importable: `@fyit/crouton-bookings/collections/<name>/types` and `…/server/database/{schema,queries}` |
+| `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps pick up the 5 collection tables in `db:generate` (velo: "No schema changes" after the move) |
+| `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
 | `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two slot-mode courts, one inventory-mode rental) + a few bookings, so previews open populated |
+
+**Note:** Since #2278 the collection composables (`useBookingsBookings()`, `useBookingsLocations()`, …), tables and CRUD routes ship from this package (`collections/*`). A consuming app only extends `@fyit/crouton-bookings`; it generates nothing for bookings and lists nothing in `crouton.config.js` for it. `features.bookings` in that file only carries the email configuration. Changing a column = edit `collections/<name>/server/database/schema.ts` here, then `db:generate` in each app.
 
 ## Architecture
 
@@ -40,7 +45,6 @@ CroutonBooking
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
-├── WeekStrip.vue       - Week date navigation
 ├── DateBadge.vue       - Date display badge
 ├── PanelFilters.vue    - Filter controls
 └── PanelMap.vue        - Map display
@@ -52,7 +56,7 @@ CroutonBooking
 |------|--------|---------|
 | `/api/crouton-bookings/teams/[id]/availability` | GET | Get booked slots for date range |
 | `/api/crouton-bookings/teams/[id]/customer-bookings` | GET | Get user's bookings with email stats |
-| `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout) |
+| `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (any team member) |
@@ -66,14 +70,21 @@ CroutonBooking
    - UI shows "X left" / "Full" badges when capacity > 1
 2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
 
+**Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
+`all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
+offer it *next to* them. The full day is exclusive: it can't share a date with any other slot —
+booked, in the cart, or ticked in the same booking. The rules are pure and shared by the form
+and the create endpoint: `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
+`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
+(booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
+
 ## Configuration
 
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',
+    '@fyit/crouton-core',  // bundles crouton-auth
     '@fyit/crouton-bookings',
     './layers/bookings' // Generated collections
   ],
@@ -180,7 +191,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton`, `@fyit/crouton-auth`
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 

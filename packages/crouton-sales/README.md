@@ -91,8 +91,7 @@ This creates `./layers/sales/` with all CRUD components, composables, and API en
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',  // Required for helper auth
+    '@fyit/crouton-core',  // bundles crouton-auth (helper auth)
     '@fyit/crouton-sales',
     './layers/sales'  // Your generated layer
   ]
@@ -323,8 +322,7 @@ This is why the `layer: 'sales'` configuration is **required**.
 ## Dependencies
 
 ### Required
-- `@fyit/crouton` - Core module
-- `@fyit/crouton-auth` - For helper authentication
+- `@fyit/crouton-core` - Core layer (bundles `@fyit/crouton-auth`, used for helper authentication)
 - `@nuxtjs/i18n` ^9.0.0 or ^10.0.0
 - `zod` ^3.0.0
 

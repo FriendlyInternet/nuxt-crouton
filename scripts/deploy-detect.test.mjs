@@ -10,7 +10,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA
+  watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA,
+  deriveWatchPaths
 } from './deploy-detect.mjs'
 
 // A stand-in for the injected git: declared-resolvable refs + canned diffs.
@@ -20,14 +21,16 @@ import {
 // and three-dot were indistinguishable to it — every test passed against the wrong diff
 // form because the fake shared the code's assumption. `isResolvable` covers `a...b` too,
 // which is how the merge-base guard is exercised.
-const fakeGit = ({ resolvable = [], diffs = {}, mergeBase = true }) => ({
+const fakeGit = ({ resolvable = [], diffs = {}, mergeBase = true, ancestor = true }) => ({
   isResolvable: ref => resolvable.includes(ref),
   diff: (a, b) => diffs[`${a}..${b}`] || [],
   diffFrom: (a, b) => diffs[`${a}...${b}`] || [],
   // Its own knob, because it is its own git question (`git merge-base`). The first cut of
   // this fix expressed it as isResolvable('a...b'); the fake said yes, real git says no —
   // a range is not a commit — and the guard threw on every PR (#2087).
-  hasMergeBase: () => mergeBase
+  hasMergeBase: () => mergeBase,
+  // `git merge-base --is-ancestor before after` — false for a force-push / rewritten history.
+  isAncestor: () => ancestor
 })
 
 const APPS = [
@@ -85,6 +88,37 @@ test('a PR deploys ONLY the app whose own paths changed, ignoring shared-package
   assert.deepEqual(names(r), ['triage']) // NOT fanfare — PRs don't fan out on shared pkgs
 })
 
+// ── computeMatrix: pull_request + UI-sign-off hold (#2140) ────────────────────
+test('#2140: a UI-sign-off-held PR (fullWatchPr) matches the full watchPaths, like a push', () => {
+  const r = computeMatrix({
+    event: 'pull_request',
+    changedFiles: ['packages/crouton-sales/app/x.vue'],
+    apps: APPS,
+    fullWatchPr: true
+  })
+  assert.deepEqual(names(r), ['fanfare'])
+  assert.equal(r.any, true)
+  assert.equal(r.include[0].environment, 'staging') // still staging-only (#318), never production
+})
+
+test('#2140: without the marker, the same PR still deploys nothing (#1297 unaffected)', () => {
+  const r = computeMatrix({
+    event: 'pull_request',
+    changedFiles: ['packages/crouton-sales/app/x.vue'],
+    apps: APPS,
+    fullWatchPr: false
+  })
+  assert.deepEqual(names(r), [])
+})
+
+test('#2140: fullWatchPr does not affect push or workflow_dispatch (pull_request-only knob)', () => {
+  const push = computeMatrix({ event: 'push', changedFiles: ['packages/crouton-sales/x.ts'], apps: APPS, fullWatchPr: true })
+  assert.deepEqual(names(push), ['fanfare']) // same as the non-marker push test above
+
+  const dispatch = computeMatrix({ event: 'workflow_dispatch', dispatchApp: 'fanfare', dispatchEnv: '', apps: APPS, fullWatchPr: true })
+  assert.equal(dispatch.include[0].environment, 'staging') // unchanged — #318 whitelist still governs
+})
+
 // ── computeMatrix: workflow_dispatch ──────────────────────────────────────────
 test('dispatch honours production only for the explicit choice (#318 whitelist)', () => {
   assert.equal(computeMatrix({ event: 'workflow_dispatch', dispatchApp: 'fanfare', dispatchEnv: 'production', apps: APPS }).include[0].environment, 'production')
@@ -97,18 +131,45 @@ test('dispatch for an unknown app yields an empty matrix', () => {
 })
 
 // ── resolveChangedFiles: the #1499 core (never a silent empty) ─────────────────
-test('push prefers the first-parent diff (HEAD~1..HEAD)', () => {
-  const git = fakeGit({ resolvable: ['HEAD~1'], diffs: { 'HEAD~1..HEAD': ['packages/crouton-sales/x.ts'] } })
-  const r = resolveChangedFiles({ event: 'push', baseSha: 'deadbeef', headSha: 'cafe', git })
-  assert.equal(r.source, 'push:first-parent')
-  assert.deepEqual(r.files, ['packages/crouton-sales/x.ts'])
-})
-
-test('push falls back to before..after only when HEAD~1 is unavailable', () => {
-  const git = fakeGit({ resolvable: ['base1'], diffs: { 'base1..head1': ['apps/velo/x.vue'] } })
+// Was `push prefers the first-parent diff (HEAD~1..HEAD)` — that pinned #2396. HEAD~1..HEAD
+// is only the net change when the push is ONE merge commit. A rebase merge (the repo's
+// no-squash policy) pushes N commits; HEAD~1..HEAD then sees only the last one, so apps that
+// only an earlier commit touched were silently not deployed.
+test('#2396: push diffs the WHOLE push (before..after), not just the last commit', () => {
+  const git = fakeGit({
+    resolvable: ['base1', 'HEAD~1'],
+    diffs: {
+      'base1..head1': ['packages/crouton-bookings/a.vue', 'packages/crouton-sales/b.vue'],
+      'HEAD~1..HEAD': ['packages/crouton-sales/b.vue']
+    }
+  })
   const r = resolveChangedFiles({ event: 'push', baseSha: 'base1', headSha: 'head1', git })
   assert.equal(r.source, 'push:before..after')
+  assert.deepEqual(r.files, ['packages/crouton-bookings/a.vue', 'packages/crouton-sales/b.vue'])
+})
+
+test('#2396 end to end: a rebase merge whose LAST commit misses velo still deploys velo', () => {
+  const { files } = resolveChangedFiles({
+    event: 'push', baseSha: 'base1', headSha: 'head1',
+    git: fakeGit({
+      resolvable: ['base1', 'HEAD~1'],
+      diffs: { 'base1..head1': ['packages/crouton-bookings/a.vue', 'packages/crouton-sales/b.vue'], 'HEAD~1..HEAD': ['packages/crouton-sales/b.vue'] }
+    })
+  })
+  assert.deepEqual(names(computeMatrix({ event: 'push', changedFiles: files, apps: APPS })).sort(), ['fanfare', 'velo'])
+})
+
+test('push falls back to the first-parent diff when before is not an ancestor (force-push)', () => {
+  const git = fakeGit({ resolvable: ['base1', 'HEAD~1'], ancestor: false, diffs: { 'HEAD~1..HEAD': ['apps/velo/x.vue'] } })
+  const r = resolveChangedFiles({ event: 'push', baseSha: 'base1', headSha: 'head1', git })
+  assert.equal(r.source, 'push:first-parent')
   assert.deepEqual(r.files, ['apps/velo/x.vue'])
+})
+
+test('push falls back to the first-parent diff when before is the all-zero sha', () => {
+  const git = fakeGit({ resolvable: ['HEAD~1'], diffs: { 'HEAD~1..HEAD': ['apps/velo/x.vue'] } })
+  const r = resolveChangedFiles({ event: 'push', baseSha: ZERO_SHA, headSha: 'head1', git })
+  assert.equal(r.source, 'push:first-parent')
 })
 
 test('push throws (does NOT return empty) when no base resolves — the #1499 silent-skip guard', () => {
@@ -211,4 +272,58 @@ test('#2087: the push path is untouched — still first-parent two-dot', () => {
   })
   assert.equal(r.source, 'push:first-parent')
   assert.deepEqual(r.files, ['apps/velo/x.ts'])
+})
+
+// ── #2397: watchPaths derived from package.json ──────────────────────────────
+
+test('#2397: every @fyit/* dep (deps + devDeps) becomes a packages/<pkg>/** watch path', () => {
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: {
+      dependencies: { '@fyit/crouton-core': 'workspace:*', '@fyit/crouton-maps': 'workspace:*', nuxt: 'catalog:' },
+      devDependencies: { '@fyit/crouton-cli': 'workspace:*', wrangler: 'catalog:' }
+    }
+  })
+  assert.deepEqual(w, [
+    'apps/velo/**', 'pnpm-lock.yaml',
+    'packages/crouton-core/**', 'packages/crouton-maps/**', 'packages/crouton-cli/**'
+  ])
+})
+
+test('#2397: explicit watchPaths are kept and deduplicated against the derived set', () => {
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: { dependencies: { '@fyit/crouton-core': 'workspace:*' } },
+    explicit: ['apps/velo/**', 'packages/crouton-core/**', 'packages/crouton/**', '']
+  })
+  assert.deepEqual(w, ['apps/velo/**', 'pnpm-lock.yaml', 'packages/crouton-core/**', 'packages/crouton/**'])
+})
+
+test('#2397: an app with no package.json still watches itself and the lockfile', () => {
+  assert.deepEqual(deriveWatchPaths({ app: 'x' }), ['apps/x/**', 'pnpm-lock.yaml'])
+})
+
+test('#2397 regression: a crouton-maps change deploys velo even though deploy.config.json never listed it', () => {
+  const velo = {
+    app: 'velo',
+    watchPaths: deriveWatchPaths({ app: 'velo', pkg: { dependencies: { '@fyit/crouton-maps': 'workspace:*' } }, explicit: ['packages/crouton-core/**'] })
+  }
+  const { include } = computeMatrix({ event: 'push', changedFiles: ['packages/crouton-maps/app/x.vue'], apps: [velo] })
+  assert.deepEqual(include.map(i => i.app), ['velo'])
+})
+
+test('#2397: transitive @fyit deps are watched too (velo gets crouton-auth through crouton-core)', () => {
+  const workspace = {
+    '@fyit/crouton-core': { dependencies: { '@fyit/crouton-auth': 'workspace:*', '@fyit/crouton-i18n': 'workspace:*' } },
+    '@fyit/crouton-auth': { dependencies: { '@fyit/crouton-core': 'workspace:*' } } // cycle must terminate
+  }
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: { dependencies: { '@fyit/crouton-core': 'workspace:*' } },
+    readPkg: n => workspace[n] || null
+  })
+  assert.deepEqual(w, [
+    'apps/velo/**', 'pnpm-lock.yaml',
+    'packages/crouton-core/**', 'packages/crouton-auth/**', 'packages/crouton-i18n/**'
+  ])
 })

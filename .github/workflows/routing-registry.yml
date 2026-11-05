@@ -4,6 +4,7 @@ name: routing-registry
 # .claude/agents/*.md model frontmatter in sync (WS6a / #864, guard #1029). `gen-routing.mjs --check`
 # fails if the registry is stale OR if a route's tier drifts from the model an agent actually pins —
 # the exact silent drift that bit us (task-orchestrator/decomposer → opus without a routing.json update).
+# The listener-fold guard (scripts/workflow-listeners.mjs) rides here too, same trigger paths.
 # gen-routing.mjs parses .claude/routing.json with a Node built-in (JSON.parse), so no install step is needed.
 
 on:
@@ -13,12 +14,20 @@ on:
       - '.claude/agents/**'          # an agent model change is the drift we guard against
       - 'scripts/gen-routing.mjs'
       - 'writeups/architecture/routing-registry.md'
+      - '.claude/pipeline-models.json'   # the ONE model setting (#2161)
+      - '.github/workflows/**'           # a hard-coded model in a workflow is drift (#2161)
+      - '.github/workflow-listeners.allow'
+      - 'scripts/workflow-listeners.mjs'
   push:
     branches: [main]
     paths:
       - '.claude/routing.json'
       - '.claude/agents/**'
       - 'scripts/gen-routing.mjs'
+      - '.claude/pipeline-models.json'
+      - '.github/workflows/**'
+      - '.github/workflow-listeners.allow'
+      - 'scripts/workflow-listeners.mjs'
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so a push→main run is
@@ -30,10 +39,13 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
-      - name: Verify routing registry is current + matches agent frontmatter
+          node-version: '22'
+      - name: Verify routing registry is current + no model drift (agents / model setting / workflows)
         run: node scripts/gen-routing.mjs --check
+      - name: Listeners stay folded (one comment / issue-close / PR-close workflow, #2893)
+        run: node scripts/workflow-listeners.mjs

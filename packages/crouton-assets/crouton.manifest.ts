@@ -10,6 +10,26 @@ export default defineCroutonManifest({
   aiHint: 'use when app has media uploads or file management',
   dependencies: [],
 
+  layer: {
+    name: 'crouton',
+    editable: false,
+    reason: 'The table is croutonAssets (crouton_assets), shared by every app that extends this package.',
+  },
+
+  // The collection below ships from this package (collections/assets), end to end (#2278).
+  // The CLI refuses to generate it into an app; `collections` stays as the
+  // package's self-description for AI hints and docs.
+  ownsCollections: true,
+
+  collections: [
+    {
+      name: 'asset',
+      tableName: 'croutonAssets',
+      description: 'Media library: uploaded files in blob storage with alt text and dimensions',
+      schemaPath: './assets-schema.json',
+    },
+  ],
+
   // Registers as 'assets' app — detectable via useCroutonApps().hasApp('assets')
   croutonApp: {
     id: 'assets',
@@ -24,7 +44,7 @@ export default defineCroutonManifest({
       { name: 'CroutonAssetsUploader', description: 'Upload component with optional crop step and metadata form', props: ['modelValue'] },
       { name: 'CroutonAssetsCard', description: 'Media card for CroutonCollection grid (image/icon, edit/delete)', props: ['item'] },
       { name: 'CroutonAssetsAssetTile', description: 'Selection tile for Picker modal with selected state and checkmark', props: ['item', 'selected'] },
-      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (registered as packageForm for assets collection)', props: [] },
+      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (the assets collection form)', props: [] },
       { name: 'CroutonAssetsFormUpdate', description: 'Asset update/metadata edit form', props: ['item'] },
     ],
     apiRoutes: [
@@ -47,12 +67,6 @@ export default defineCroutonManifest({
 // ---------------------------------------------------------------------------
 
 export const generatorContribution = defineGeneratorContribution({
-  getFormComponent(ctx) {
-    // When generating the assets collection itself, use the package's custom form
-    if (ctx.collectionName === 'assets') return 'CroutonAssetsForm'
-    return null
-  },
-
   enhanceForm(ctx) {
     const { detected } = ctx
     const { assetFields } = detected

@@ -6,28 +6,37 @@ The single view of **what runs on what model**. Source of truth: `.claude/routin
 demotion. `$out/Mtok` is the Claude baseline output price — the cost lever.
 
 ## Tiers
-- **small** — Claude `claude-haiku-4-5` · pi `zai/glm-5.2` · ~$5/Mtok out — reports / triage / decompose — no code written. pi tier MEASURED (#1409: beat the Haiku baseline on report fidelity at $0 marginal, flat GLM Coding Plan)
-- **medium** — Claude `claude-sonnet-5` · pi `zai/glm-5.2` · ~$15/Mtok out — most work. pi tier MEASURED (#1421: autonomous code-writing eval — correct house-style PR, artifact-gate PASS, no #1019 stall, $0 marginal)
-- **large** — Claude `claude-opus-4-8` · pi `claude-opus-4-8` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
+- **small** — Claude `claude-haiku-4-5` · pi `claude-haiku-4-5` · ~$5/Mtok out — reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)
+- **medium** — Claude `claude-sonnet-5-5` · pi `claude-sonnet-5-5` · ~$15/Mtok out — most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)
+- **review** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — independent plan reviewer (#2756) — strongest model, read-only, never edits code
+- **plan** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — plan-mode run (#3343) — investigation + the plan comment, strongest model
+- **large** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
 
 Default tier: **medium**
 
 ## Routes
 | Agent / flow | Current tier | Claude model | pi / local | $out/Mtok | Proposed | Why |
 |---|---|---|---|---|---|---|
-| `task-worker` | large | claude-opus-4-8 | claude-opus-4-8 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
-| `task-orchestrator` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
-| `task-decomposer` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |
-| `red-team` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
-| `a11y` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
-| `frontend-review` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
-| `simplify` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | simplification / code-smell review, reports-only + ADVISORY (never blocks). Judgment-heavy and false-positive-sensitive (a noisy taste call teaches people to mute the check), so Sonnet not Haiku — mirrors red-team's reports-but-judgment tier. Reversible via the #865 scoreboard if it proves noisy (#1576). |
+| `ticket-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent ticket review before an epic starts (#2776) — reads the epic, its tickets and the code they name, returns go / no-go / needs-owner per ticket; never edits. Same tier and model as plan-reviewer |
+| `build-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits |
+| `plan-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27 |
+| `task-worker` | large | claude-opus-5-5 | claude-opus-5-5 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
+| `pi-worker` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier |
+| `pi-reviser` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker |
+| `pi-planner` | plan | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi worker in PLAN mode (#2755/#3343) — investigates and posts the plan comment; runs on the strongest model so the plan is right before the builder starts |
+| `pi-decomposer` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi event-driven decomposer persona (#2431) — plan-only, no code written; extracted from decompose-on-issue-pidev.yml |
+| `task-orchestrator` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
+| `task-decomposer` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |
+| `red-team` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
+| `a11y` | small | claude-haiku-4-5 | claude-haiku-4-5 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
+| `frontend-review` | small | claude-haiku-4-5 | claude-haiku-4-5 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
+| `simplify` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | simplification / code-smell review, reports-only + ADVISORY (never blocks). Judgment-heavy and false-positive-sensitive (a noisy taste call teaches people to mute the check), so Sonnet not Haiku — mirrors red-team's reports-but-judgment tier. Reversible via the #865 scoreboard if it proves noisy (#1576). |
 
 ## Overrides (per-flow exact-model pins)
-- **a11y-daily-pidev** → `zai/glm-5.2` — #1409 eval: matched engine ground truth (153/152), beat the metered Haiku baseline (+28% overcount, $0.347/run) at $0 marginal on the flat GLM Coding Plan. Workflow default since #1413.
-- **decompose-on-issue-pidev** → `zai/glm-5.2` — #1421 eval: autonomous code-writing run produced a correct house-style PR (#1434), artifact-gate PASS, no #1019 stall, $0 marginal. Owner-approved flip 2026-07-11; metered anthropic/sonnet lane stays selectable as baseline. Subscription auth never backs unattended CI — the zai flat plan is vendor-permitted for pi (officially whitelisted).
+- **a11y-daily-pidev** → `claude-haiku-4-5` — SUPERSEDED by #1669: ran GLM (zai/glm-5.2) after #1409's eval matched engine ground truth at $0 marginal; reverted to the Claude subscription (haiku, the small tier) when the mini's `claude` login proved to work headless.
+- **decompose-on-issue-pidev** → `claude-sonnet-5` — SUPERSEDED by #1669: ran GLM (zai/glm-5.2) after #1421's eval produced a correct house-style PR at $0 marginal; reverted to the Claude subscription (sonnet, the medium tier). Now matches the medium default, so this override is only kept as the recorded reversal.
 
 ## Known gaps
-The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)
+The top-level workflow loop (fix-ci and the weekly sweeps)
 runs on the `claude-code-action` **default** model — unpinned. Pinning those promotes
 them into the routes table above.

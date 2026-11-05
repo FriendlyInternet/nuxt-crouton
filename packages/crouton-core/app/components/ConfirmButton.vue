@@ -30,11 +30,13 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  confirmLabel: 'Sure?',
+  confirmLabel: undefined,
   icon: undefined,
   loading: false,
   disabled: false
 })
+
+const { t } = useT()
 
 const emit = defineEmits<{
   confirm: []
@@ -87,6 +89,6 @@ watch(() => props.loading, (isLoading, wasLoading) => {
     class="shrink-0 whitespace-nowrap transition-all"
     @click.stop="handleClick"
   >
-    {{ confirming ? confirmLabel : label }}
+    {{ confirming ? (confirmLabel ?? t('common.sure')) : label }}
   </UButton>
 </template>

@@ -18,6 +18,7 @@
 import { useMediaQuery } from '@vueuse/core'
 
 // Get page layout from shared state (set by page component via useState)
+const { t } = useT()
 const pageLayout = useState<'default' | 'full-height' | 'full-screen'>('pageLayout', () => 'default')
 
 // Detect single-page mode — content starts higher (in line with the right utility pill)
@@ -219,7 +220,7 @@ const mainClasses = computed(() => {
             <div v-else class="flex items-center justify-center h-full text-muted">
               <div class="text-center space-y-2">
                 <UIcon name="i-lucide-file-text" class="size-8 mx-auto opacity-50" />
-                <p class="text-sm">Select a page to edit</p>
+                <p class="text-sm">{{ t('pages.workspace.selectPageToEdit') }}</p>
               </div>
             </div>
           </div>

@@ -5,7 +5,7 @@
     redundant second bar. Restored at `sm+`. (#691)
   -->
   <div class="hidden sm:block">
-    <UDashboardNavbar :title="collection || 'Data'">
+    <UDashboardNavbar :title="collection || t('table.data')">
       <template #left>
         <h2>
           {{ title }}

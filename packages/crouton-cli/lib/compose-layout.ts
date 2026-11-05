@@ -12,7 +12,7 @@
 // round-trips through `CroutonLayout` and the UI sign-off loop can regenerate it.
 import path from 'node:path'
 import { writeFile } from 'node:fs/promises'
-import { toCase } from './utils/helpers.ts'
+import { toCase, toLayerCamelCase } from './utils/helpers.ts'
 import { composeDefaultLayout, type ComposeCollectionInput } from '@fyit/crouton-layout/app/utils/layout-compose'
 // Layout TYPES intentionally stay in crouton-core (shared contract); only the
 // implementation moved to @fyit/crouton-layout (#751).
@@ -40,25 +40,17 @@ const BOOKINGS_BLOCKS: CroutonLayoutBlockRegistry = {
   },
 }
 
-/** camelCase a layer name the same way the generator does (registry key prefix). */
-function layerCamel(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-    .join('')
-}
-
 /** The collection's registry key, e.g. `bookingsBookings` (matches the generated composable/config). */
 export function registryKeyFor(layer: string, collection: string): string {
-  return `${layerCamel(layer)}${toCase(collection).pascalCasePlural}`
+  return `${toLayerCamelCase(layer)}${toCase(collection).pascalCasePlural}`
 }
 
-/** Is the bookings package in play (feature flag on, or a collection landed in the `bookings` layer)? */
+/** Is the bookings package in play (the app extends it, or a collection landed in the `bookings` layer)? */
 function bookingsEnabled(
-  features: Record<string, unknown> | undefined,
+  packages: string[] | undefined,
   collections: GeneratedCollection[],
 ): boolean {
-  if (features && features.bookings) return true
+  if (packages?.includes('crouton-bookings')) return true
   return collections.some(c => c.layer === 'bookings')
 }
 
@@ -75,8 +67,8 @@ export interface GeneratedCollection {
 export interface WriteDefaultLayoutOptions {
   /** The collections just generated (name + layer). */
   allCollections: GeneratedCollection[]
-  /** The config `features` block (to detect bookings even before its collection lands). */
-  features?: Record<string, unknown>
+  /** The crouton package ids the app extends (to detect bookings even before its collection lands). */
+  packages?: string[]
   /** App directory (defaults to cwd). */
   cwd?: string
   /** Don't write — just compute (returns the chosen pattern). */
@@ -102,7 +94,7 @@ export async function writeDefaultLayout(opts: WriteDefaultLayoutOptions): Promi
   const collections = opts.allCollections ?? []
   if (!collections.length) return { written: false, reason: 'no-collections' }
 
-  const hasBookings = bookingsEnabled(opts.features, collections)
+  const hasBookings = bookingsEnabled(opts.packages, collections)
   const registry: CroutonLayoutBlockRegistry = {
     ...CORE_BLOCKS,
     ...(hasBookings ? BOOKINGS_BLOCKS : {}),

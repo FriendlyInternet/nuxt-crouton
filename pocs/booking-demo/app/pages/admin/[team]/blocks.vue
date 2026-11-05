@@ -59,6 +59,10 @@ const tree: LayoutTree = {
     ],
   },
 }
+// `?render=page` draws the same tree the way a served page does (content height,
+// one scroll) instead of the admin fill — to check both modes side by side (#2560).
+const route = useRoute()
+const pageRender = computed(() => route.query.render === 'page')
 </script>
 
 <template>
@@ -75,8 +79,8 @@ const tree: LayoutTree = {
     </template>
 
     <template #body>
-      <div class="h-full w-full">
-        <CroutonLayoutRenderer :node="tree.root" />
+      <div :class="pageRender ? 'w-full' : 'h-full w-full'" data-handoff="blocks-layout">
+        <CroutonLayoutRenderer :node="tree.root" :interactive="!pageRender" />
       </div>
     </template>
   </UDashboardPanel>

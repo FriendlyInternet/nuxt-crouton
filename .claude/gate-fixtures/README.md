@@ -17,7 +17,7 @@ points each gate's subagent directly at its fixture instead of a PR diff.
 
 ## Diff-scope exclusion (so these never self-flag ordinary PRs)
 
-Each real gate workflow (`frontend-review.yml`, `a11y.yml`, `red-team.yml`)
+Each real gate workflow (`review.yml` jobs)
 excludes this directory from its `paths` trigger with a leading `!` entry —
 `'!.claude/gate-fixtures/**'` — so committing/touching a fixture does not
 itself trigger the real per-PR gate. The **smoke** workflow scans the fixture
@@ -55,3 +55,8 @@ persist it, and the smoke step should treat "the fixture wasn't clearly
 flagged" as a failure, not a silent pass. Do this by hand when validating a
 change to the permission grant; it is not run automatically on every PR
 (that would require deliberately breaking a gate in CI).
+
+## Build reviewer fixtures (#3071)
+
+`build-review/<case>/` holds a ticket, the reviewer's verdict and the expected decision for replays of
+#2966, #2935, #3005 (all `no-go`) and #3007 (`go`). `scripts/lib/build-verdict.test.mjs` runs the parser over them.

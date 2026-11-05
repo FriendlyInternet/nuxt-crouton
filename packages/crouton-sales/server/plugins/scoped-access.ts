@@ -25,7 +25,7 @@
  */
 import { eq, and } from 'drizzle-orm'
 import { upsertScopedGrant, verifyScopedGrantByResource } from '@fyit/crouton-auth/server/utils/scoped-access'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { salesEvents } from '../../collections/events/server/database/schema'
 
 interface BeforeRedeemContext {
   organizationId: string

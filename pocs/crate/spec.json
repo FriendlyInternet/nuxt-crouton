@@ -1,0 +1,152 @@
+[
+  {
+    "id": "pile-is-tag",
+    "behaviour": "A pile is a comment tag, and filing goes up the tree",
+    "when": "tap a pile that sits inside other piles (e.g. Latin & World › Arabic › Post-Shaabi)",
+    "expect": "the track gets the pile's tag AND every ancestor's tag; pile counts include tracks in any pile inside it; the NEW marker is dropped",
+    "hook": "",
+    "howToTest": "1. open Latin & World › Arabic  2. tap Post-Shaabi  3. the In: row shows the full path; Latin & World's count went up by one",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "tap-keeps-track",
+    "behaviour": "Tapping a pile files the track and keeps it on the deck",
+    "when": "tap a pile while a track is on the card",
+    "expect": "the pile turns green with a tick, the same track stays on the card so it can go into more piles; tapping a ticked pile takes it out (and out of everything inside it)",
+    "hook": "",
+    "howToTest": "1. tap House → green ✓, card unchanged  2. tap Disco → both ticked  3. tap House again → House un-ticked",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "start-at-30",
+    "behaviour": "Playback starts about 30% in",
+    "when": "press play, or Next",
+    "expect": "the track starts at ~30% of its length (intros rarely tell the genre); Next autoplays",
+    "hook": "",
+    "howToTest": "1. press ▶ → the time reads roughly a third of the length  2. tap Next → the next track starts playing by itself",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)",
+    "consideredRejected": [
+      "WaveSurfer (crouton-audio) as the player → ❌ downloads the whole file before playing: no instant start, no autoplay inside an iOS tap, ~2× mobile data"
+    ]
+  },
+  {
+    "id": "in-row",
+    "behaviour": "An In: row shows where the track is",
+    "when": "look at the card",
+    "expect": "every deepest pile the track is in is shown as a full path with ×; non-pile tags (PMCP, Wedding…) show as grey chips",
+    "hook": "",
+    "howToTest": "1. file a track into two piles → both appear as paths  2. tap × on one → it's removed",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "next-continues",
+    "behaviour": "Next continues from where the track was",
+    "when": "file the current track (it leaves the inbox) and tap Next",
+    "expect": "the deck moves to the track that now sits where the filed one was — not back to the top",
+    "hook": "",
+    "howToTest": "1. pick the 5th inbox track from the list  2. file it  3. Next → the track that was 6th",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "undo-survives-reload",
+    "behaviour": "Undo works after a reload",
+    "when": "make a change, reload the page, tap ↶ in the header",
+    "expect": "the last change is reverted; history lives on the server, grouped per tap",
+    "hook": "",
+    "howToTest": "1. file a track  2. reload  3. tap ↶ → it's out of the pile again",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)",
+    "consideredRejected": [
+      "in-memory undo stack → ❌ prototype showed 'nothing to undo' after a reload",
+      "crouton-events audit trail → ❌ best-effort async logging from the browser, no grouping, no undo"
+    ]
+  },
+  {
+    "id": "levels",
+    "behaviour": "Open a pile to see what's inside",
+    "when": "tap › on a pile",
+    "expect": "its sub-piles are shown; the header list holds tracks in that pile not yet in any sub-pile; breadcrumb / back arrow go up",
+    "hook": "",
+    "howToTest": "1. tap › on House → its sub-piles  2. header shows 'Loose in House · N'  3. back arrow → top",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "search-all-from-top",
+    "behaviour": "Search from the top finds every track",
+    "when": "open the list at the top level and type",
+    "expect": "matches come from the whole library, so filed tracks can be found and re-filed; inside a pile it searches that pile's list",
+    "hook": "",
+    "howToTest": "1. at the top, open the list, type an artist you've already tagged → it's found  2. pick it → it's on the deck",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "phone-first-layout",
+    "behaviour": "Phone-first, stock Nuxt UI",
+    "when": "open on a phone",
+    "expect": "piles are one column of compact rows (a grid on wide screens); nothing scrolls sideways at 375px; built from stock Nuxt UI components",
+    "hook": "",
+    "howToTest": "1. open on the iPhone → one column, no sideways scroll",
+    "status": "settled",
+    "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "hint-words",
+    "behaviour": "Genre words from Discogs and Bandcamp, labelled by where they come from",
+    "when": "a track with a cached lookup is on the deck",
+    "expect": "each source shows its words: 'Discogs (<album>)' = the release's styles, 'Bandcamp (artist)' = the artist's tags; the source name links to the matched page; words that are already piles show in green",
+    "hook": "",
+    "howToTest": "1. pick 3Phaz – Sharayet  2. see Discogs (Ends Meet): Grime · Shaabi · … and Bandcamp: Post-Shaabi  3. Grime/Experimental/Post-Shaabi are green",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)",
+    "consideredRejected": [
+      "suggestions from the owner's own metadata (artist/genre/decade) → ❌ near-random for new artists — exactly the inbox case ('not even close')"
+    ]
+  },
+  {
+    "id": "tap-word",
+    "behaviour": "Every genre word is tappable",
+    "when": "tap a genre word on the card",
+    "expect": "a word that's a pile toggles the track in it; any other word opens 'New pile' prefilled with the word and a guessed parent",
+    "hook": "",
+    "howToTest": "1. tap Grime → filed into Hiphop › Grime  2. tap Shaabi → New pile, Inside: Latin & World › Arabic",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "suggestions",
+    "behaviour": "Up to 4 ✦ suggestions file with one tap",
+    "when": "hints score a pile ≥ 0.3 that the track isn't in",
+    "expect": "up to 4 ✦ chips with the pile's full path; one tap files into that exact pile from any level",
+    "hook": "",
+    "howToTest": "1. Sharayet → ✦ Hiphop › Grime, ✦ Experimental  2. tap one → ticked, card stays",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "pile-glow",
+    "behaviour": "Matching piles glow",
+    "when": "piles are on screen while a track with hints is on the deck",
+    "expect": "a pile glows when it or anything inside it matches (strong ≥0.6 in primary, weak ≥0.3 dimmed) with '✦ via <word>'",
+    "hook": "",
+    "howToTest": "1. Sharayet at top level → Hiphop shows '✦ via Grime'",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "new-pile",
+    "behaviour": "Make a new pile anywhere",
+    "when": "tap '+ New pile' at the end of a pile list (or a genre word with ＋)",
+    "expect": "a dialog asks for a name, where it goes (any pile or top level, default: the current level) and whether to put the current track in it (on by default)",
+    "hook": "",
+    "howToTest": "1. inside House tap + New pile → Inside defaults to House  2. Create with the toggle on → the track is in the new pile",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  }
+]

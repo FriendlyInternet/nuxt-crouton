@@ -37,11 +37,12 @@ export function useCurrentLocation() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const { reverseGeocode } = useGeocode()
+  const { t } = useT()
 
   const getCoords = (opts: Required<CurrentLocationOptions>): Promise<[number, number]> => {
     return new Promise((resolve, reject) => {
       if (!import.meta.client || typeof navigator === 'undefined' || !navigator.geolocation) {
-        reject(new Error('Geolocation is not available in this environment'))
+        reject(new Error(t('maps.location.notSupported')))
         return
       }
       navigator.geolocation.getCurrentPosition(
@@ -49,11 +50,11 @@ export function useCurrentLocation() {
         (err) => {
           // Map GeolocationPositionError codes to readable messages
           const messages: Record<number, string> = {
-            1: 'Location permission denied',
-            2: 'Location unavailable',
-            3: 'Location request timed out'
+            1: t('maps.location.permissionDenied'),
+            2: t('maps.location.unavailable'),
+            3: t('maps.location.timedOut')
           }
-          reject(new Error(messages[err.code] ?? err.message ?? 'Geolocation failed'))
+          reject(new Error(messages[err.code] ?? err.message ?? t('maps.location.failed')))
         },
         opts
       )
@@ -75,13 +76,13 @@ export function useCurrentLocation() {
       const coords = await getCoords(opts)
       const result = await reverseGeocode(coords)
       if (!result) {
-        error.value = 'Could not resolve address for your location'
+        error.value = t('maps.location.noAddress')
         return null
       }
       return result
     }
     catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to get current location'
+      error.value = e instanceof Error ? e.message : t('maps.location.couldNotGet')
       console.error('[nuxt-crouton-maps] useCurrentLocation error:', e)
       return null
     }

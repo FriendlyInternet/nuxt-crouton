@@ -125,6 +125,7 @@
           "active": "{count} active",
           "allCaughtUp": "Nothing to send out — everything has gone out.",
           "bump": "Sent out",
+          "tapToConfirm": "Tap to confirm",
           "staff": "staff",
           "eventNotFound": "Event not found",
           "stale": "Not updating",
@@ -191,15 +192,26 @@
       "live": "Live",
       "stale": "Stale",
       "waiting": "Connecting",
+      "noTill": "No till connected yet",
       "unavailable": "Status unavailable",
       "justNow": "just now",
       "secondsAgo": "{n}s ago",
       "minutesAgo": "{n}m ago",
       "hoursAgo": "{n}h ago",
+      "offlineSince": "Offline since {ago}",
       "syncedAgo": "synced {ago}",
       "staleDetail": "last synced {ago} — the till may be offline",
       "waitingDetail": "waiting for the first sync from the till",
-      "unavailableDetail": "couldn't reach the sync status"
+      "unavailableDetail": "couldn't reach the sync status",
+      "tillsSynced": "{n} tills syncing",
+      "never": "never",
+      "lastPush": "Last push",
+      "lastPull": "Last pull",
+      "lostEdits": "Replaced till changes",
+      "noLostEdits": "No till changes were replaced.",
+      "cloudWon": "The online version was kept",
+      "title": "Sync",
+      "explain": "The till remembers when you change something, even offline. When it reconnects, the latest change wins. During a live event the till always goes first. Till changes that were replaced this way are listed below."
     },
     "dashboard": {
       "revenue": "Revenue",
@@ -214,7 +226,8 @@
         "outstanding": "Still out",
         "allLocations": "All",
         "stillOut": "{count} still out",
-        "directHandover": "This location hands over directly — nothing can be outstanding here"
+        "directHandover": "This location hands over directly — nothing can be outstanding here",
+        "total": "Total"
       }
     },
     "common": {
@@ -240,8 +253,6 @@
       "makeOrder": "Place an order",
       "openKassa": "Open register",
       "noEventPicked": "No event picked",
-      "editBlock": "Edit block",
-      "deleteBlock": "Delete block",
       "salesChart": "Sales Chart",
       "noChartPicked": "No chart picked",
       "allEvents": "All events",
@@ -259,6 +270,9 @@
       "noHelperPinTitle": "No helper PIN set for this event",
       "noHelperPinDescription": "On a scoped page this block is unlocked with the event’s helper PIN — without one, volunteers cannot log in. Set the PIN in the event’s settings.",
       "product": "Product",
+      "category": "Category",
+      "price": "Price",
+      "noCategory": "No category",
       "total": "Total",
       "kitchenDisplay": "Kitchen Display",
       "orders": "Orders",
@@ -375,7 +389,6 @@
       "eventNotFound": "Event not found",
       "selectEvent": "Select event...",
       "duplicate": "Duplicate",
-      "openPos": "Open POS",
       "settings": "Settings"
     },
     "form": {
@@ -488,12 +501,37 @@
       "testQueuedDesc": "A test print job has been sent to the printer.",
       "testFailed": "Failed to send test print."
     },
+    "devices": {
+      "title": "Tills",
+      "pair": "Link a till",
+      "empty": "No tills linked yet",
+      "codeTitle": "Link a new till",
+      "codeHelp": "Type this code when installing the till. It works once.",
+      "expires": "Expires in {time}",
+      "expired": "Code expired",
+      "copy": "Copy",
+      "copied": "Copied",
+      "installLabel": "Install command",
+      "till": "Till",
+      "router": "Print router",
+      "linkedSince": "Linked {date}",
+      "unlink": "Unlink",
+      "unlinkTitle": "Unlink this device?",
+      "unlinkBody": "{name} will stop syncing. You can link it again with a new code.",
+      "cancel": "Cancel",
+      "unlinked": "Device unlinked",
+      "unlinkFailed": "Could not unlink the device",
+      "pairFailed": "Could not create a code",
+      "loadFailed": "Could not load the devices",
+      "close": "Close"
+    },
     "sidebar": {
       "events": "Events",
       "products": "Products",
       "categories": "Categories",
       "locations": "Locations",
       "printers": "Printers",
+      "devices": "Tills",
       "helpers": "Helpers",
       "clients": "Clients"
     },
@@ -503,6 +541,8 @@
       "noOrders": "No orders yet",
       "noOrdersFiltered": "No orders match these filters",
       "allPrinters": "All printers",
+      "allProducts": "All products",
+      "allCategories": "All categories",
       "filters": "Filters",
       "resetFilters": "Reset filters",
       "allClients": "All clients",
@@ -604,6 +644,7 @@
         "settingsStat": "printers"
       },
       "outstanding": "{count} in progress",
+      "outstandingActive": "{count} in progress (filtered)",
       "outstandingNone": "Nothing in progress",
       "outstandingFilter": "Show only these",
       "outstandingFilterClear": "Show all orders"

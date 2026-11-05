@@ -1,14 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { generateSchema } from '../../../lib/generators/database-schema.ts'
+import { generateSchema as rawGenerateSchema } from '../../../lib/generators/database-schema.ts'
+import { getTypeMapping } from '../../../lib/utils/manifest-loader.ts'
+import coreManifest from '../../../../crouton-core/crouton.manifest.ts'
+import editorManifest from '../../../../crouton-editor/crouton.manifest.ts'
 import {
   schemaData,
   schemaWithHierarchyData,
   schemaWithAllTypesData,
   schemaWithSortableData,
   minimalConfig,
-  noMetadataConfig,
   translationsConfig
 } from '../../fixtures/sample-data.mjs'
+
+// loadFields attaches the manifest's `sqlite` descriptor to every field; the hand-built
+// fixture fields here get it the same way, from the real manifests.
+const typeMapping = getTypeMapping([coreManifest, editorManifest] as any)
+function withSqlite(data: Record<string, any>) {
+  return {
+    ...data,
+    fields: (data.fields ?? []).map((f: any) => ({ ...f, sqlite: f.sqlite ?? typeMapping[f.type]?.sqlite }))
+  }
+}
+const generateSchema = (data: Record<string, any>, dialect: string, config: any = null) =>
+  rawGenerateSchema(withSqlite(data), dialect, config)
 
 // Type helper to work around .mjs module inference (config = null default)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +39,32 @@ afterAll(() => {
 })
 
 describe('generateSchema', () => {
+  describe('date column defaults', () => {
+    const base = (meta: Record<string, any>) => ({
+      ...schemaData,
+      fields: [{ name: 'publishedAt', type: 'date', meta }]
+    })
+    for (const dialect of ['sqlite', 'pg']) {
+      it(`${dialect}: no $default on a user date column`, () => {
+        const result = generateSchema(base({}), dialect, minimalConfig as AnyConfig)
+        const line = result.split('\n').find(l => l.includes('publishedAt:'))!
+        expect(line).toBeDefined()
+        expect(line).not.toContain('$default')
+      })
+
+      it(`${dialect}: meta.default 'now' adds new Date()`, () => {
+        const result = generateSchema(base({ default: 'now' }), dialect, minimalConfig as AnyConfig)
+        expect(result).toContain('publishedAt')
+        expect(result).toMatch(/publishedAt:.*\.\$default\(\(\) => new Date\(\)\)/)
+      })
+
+      it(`${dialect}: meta.default literal is wrapped in new Date()`, () => {
+        const result = generateSchema(base({ default: '2025-01-01' }), dialect, minimalConfig as AnyConfig)
+        expect(result).toContain('.$default(() => new Date("2025-01-01"))')
+      })
+    }
+  })
+
   describe('SQLite dialect', () => {
     it('generates correct schema for basic collection', () => {
       const result = generateSchema(schemaData, 'sqlite', minimalConfig as AnyConfig)
@@ -34,7 +74,9 @@ describe('generateSchema', () => {
     it('includes correct imports for SQLite', () => {
       const result = generateSchema(schemaData, 'sqlite', minimalConfig as AnyConfig)
       expect(result).toContain("import { nanoid } from 'nanoid'")
-      expect(result).toContain("import { sqliteTable, text, integer, real, customType } from 'drizzle-orm/sqlite-core'")
+      expect(result).toContain("import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'")
+      // only imports what the schema uses — no unused `real` / `jsonColumn`
+      expect(result).not.toContain('jsonColumn')
     })
 
     it('generates nanoid for primary key', () => {
@@ -54,12 +96,6 @@ describe('generateSchema', () => {
       expect(result).toContain("updatedAt: integer('updatedAt', { mode: 'timestamp' })")
       expect(result).toContain("createdBy: text('createdBy').notNull()")
       expect(result).toContain("updatedBy: text('updatedBy').notNull()")
-    })
-
-    it('excludes metadata fields when disabled', () => {
-      const result = generateSchema(schemaData, 'sqlite', noMetadataConfig as AnyConfig)
-      expect(result).not.toContain("createdAt:")
-      expect(result).not.toContain("updatedAt:")
     })
 
     describe('field type mappings', () => {
@@ -126,70 +162,6 @@ describe('generateSchema', () => {
     })
   })
 
-  describe('PostgreSQL dialect', () => {
-    it('generates correct schema for basic collection', () => {
-      const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toMatchSnapshot()
-    })
-
-    it('includes correct imports for PostgreSQL', () => {
-      const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain("import { pgTable, varchar, text, integer, numeric, boolean, timestamp, jsonb, uuid } from 'drizzle-orm/pg-core'")
-    })
-
-    it('generates uuid for primary key', () => {
-      const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain("id: uuid('id').primaryKey().defaultRandom()")
-    })
-
-    describe('field type mappings', () => {
-      it('maps boolean to boolean', () => {
-        const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-        expect(result).toContain("active: boolean('active')")
-      })
-
-      it('maps decimal to numeric', () => {
-        const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-        expect(result).toContain("price: numeric('price')")
-      })
-
-      it('maps date to timestamp with timezone', () => {
-        const result = generateSchema(schemaWithAllTypesData, 'pg', minimalConfig as AnyConfig)
-        expect(result).toContain("timestamp('publishedAt', { withTimezone: true })")
-      })
-
-      it('maps json/repeater/array to jsonb', () => {
-        const result = generateSchema(schemaWithAllTypesData, 'pg', minimalConfig as AnyConfig)
-        expect(result).toContain("metadata: jsonb('metadata')")
-        expect(result).toContain("items: jsonb('items')")
-        expect(result).toContain("tags: jsonb('tags')")
-      })
-
-      it('maps all field types correctly', () => {
-        const result = generateSchema(schemaWithAllTypesData, 'pg', minimalConfig as AnyConfig)
-        expect(result).toMatchSnapshot()
-      })
-    })
-
-    it('includes hierarchy fields when enabled', () => {
-      const result = generateSchema(schemaWithHierarchyData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain("parentId: text('parentId')")
-      expect(result).toContain("path: text('path').notNull().default('/')")
-      expect(result).toContain("depth: integer('depth').notNull().default(0)")
-      expect(result).toContain("order: integer('order').notNull().default(0)")
-    })
-
-    it('generates correct export name', () => {
-      const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain('export const shopProducts = pgTable')
-    })
-
-    it('generates correct table name in snake_case', () => {
-      const result = generateSchema(schemaData, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain("pgTable('shop_products'")
-    })
-  })
-
   describe('constraint handling', () => {
     it('handles required fields with notNull', () => {
       const result = generateSchema(schemaData, 'sqlite', minimalConfig as AnyConfig)
@@ -208,15 +180,45 @@ describe('generateSchema', () => {
       expect(result).toContain("uniqueIndex('shop_products_team_email_idx').on(table.teamId, table.email)")
     })
 
-    it('handles maxLength for PostgreSQL varchar', () => {
-      const dataWithMaxLength = {
-        ...schemaData,
-        fields: [
-          { name: 'code', type: 'string', meta: { maxLength: 10 } }
-        ]
-      }
-      const result = generateSchema(dataWithMaxLength, 'pg', minimalConfig as AnyConfig)
-      expect(result).toContain("code: varchar('code', { length: 10 })")
+  })
+})
+
+describe('field types emit from the manifest sqlite descriptor', () => {
+  const one = (type: string, meta: Record<string, any> = {}) =>
+    generateSchema({ ...schemaData, fields: [{ name: 'f', type, meta }] }, 'sqlite', minimalConfig as AnyConfig)
+      .split('\n').find(l => l.includes('  f:'))!
+
+  it('every manifest type has a sqlite entry (guards new types)', () => {
+    for (const [name, def] of Object.entries(typeMapping)) {
+      expect(def.sqlite, name).toBeDefined()
+    }
+  })
+
+  for (const [type, def] of Object.entries(typeMapping)) {
+    it(`${type} emits the column its sqlite descriptor names`, () => {
+      const line = one(type)
+      const { column, mode } = def.sqlite
+      if (column === 'json') expect(line).toContain("jsonColumn('f')")
+      else if (mode) expect(line).toContain(`${column}('f', { mode: '${mode}' })`)
+      else expect(line).toContain(`${column}('f')`)
     })
+  }
+
+  it('dependsOn and slotButtonGroup string fields are stored as json', () => {
+    expect(one('string', { dependsOn: 'x' })).toContain("jsonColumn('f')")
+    expect(one('string', { displayAs: 'slotButtonGroup' })).toContain("jsonColumn('f')")
+  })
+
+  it('keeps boolean and date defaults', () => {
+    expect(one('boolean', { default: true })).toContain('.$default(() => true)')
+    expect(one('boolean')).toContain('.$default(() => false)')
+    expect(one('date')).not.toContain('$default')
+    expect(one('date', { default: 'now' })).toContain('new Date()')
+  })
+
+  it('json defaults: {} for json, null for array/repeater', () => {
+    expect(one('json')).toContain('({})')
+    expect(one('array')).toContain('(null)')
+    expect(one('repeater')).toContain('(null)')
   })
 })

@@ -8,6 +8,7 @@
       "requiredField": "name"
     }
   ],
+  "collab": { "collectionKey": "mainItems", "field": "name" },
   "surfaces": [
     {
       "name": "crouton-collab status mounts single-client",

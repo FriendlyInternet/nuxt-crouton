@@ -1,17 +1,81 @@
 {
+  "collab": true,
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton",
-  "watchPaths": [
-    "apps/velo/**",
-    "packages/crouton/**",
-    "packages/crouton-core/**",
-    "packages/crouton-auth/**",
-    "packages/crouton-i18n/**",
-    "packages/crouton-assets/**",
-    "packages/crouton-bookings/**",
-    "packages/crouton-email/**",
-    "packages/crouton-pages/**",
-    "pnpm-lock.yaml"
-  ]
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab",
+  "smoke": {
+    "crud": {
+      "create": {
+        "path": "/api/teams/{teamId}/pages-pages",
+        "method": "POST",
+        "body": {
+          "pageType": "pages:regular",
+          "status": "draft",
+          "visibility": "public",
+          "title": "smoke-{rand}",
+          "slug": "smoke-{rand}",
+          "translations": {
+            "fr": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            },
+            "en": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            },
+            "nl": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            }
+          }
+        }
+      },
+      "idFrom": "id",
+      "update": {
+        "path": "/api/teams/{teamId}/pages-pages/{id}",
+        "method": "PATCH",
+        "body": {
+          "translations": {
+            "fr": {
+              "title": "smoke-{rand}-b"
+            },
+            "en": {
+              "title": "smoke-{rand}-b"
+            },
+            "nl": {
+              "title": "smoke-{rand}-b"
+            }
+          }
+        }
+      },
+      "read": {
+        "path": "/api/teams/{teamId}/pages-pages?ids={id}",
+        "expectIncludes": "smoke-{rand}-b"
+      },
+      "delete": {
+        "path": "/api/teams/{teamId}/pages-pages/{id}",
+        "method": "DELETE"
+      }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages-pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
+        "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
+        "expectIncludes": "token"
+      }
+    ]
+  }
 }

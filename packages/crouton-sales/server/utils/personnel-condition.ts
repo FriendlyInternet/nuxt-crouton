@@ -2,9 +2,9 @@
  * The staff-order rule, as a condition over an injected column.
  *
  * Split out of `personnel-filter.ts` for one reason: that module imports
- * `salesOrders` from the consuming app's generated layer (`~~/layers/sales/...`)
- * at module scope, so anything importing it is unresolvable from a package unit
- * test — and from any query that receives its tables as parameters (#1867).
+ * `salesOrders` (Nuxt-bound `collections/orders`) at module scope, so anything
+ * importing it can't run in a plain unit test — nor in a query that receives its
+ * tables as parameters (#1867).
  *
  * The rule itself doesn't need the table, only the column, so it lives here and
  * `personnel-filter.ts` is now the thin binding that supplies `salesOrders`.

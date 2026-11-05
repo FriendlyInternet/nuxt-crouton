@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy, isGitIgnored,
+  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason,
 } from './apply-decompose-plan.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
@@ -136,6 +136,18 @@ test('a split plan → create+link+trigger-label per child, block at depth+1', (
   assert.deepEqual(triggers, ['work-this', 'delegate-pi'])
 })
 
+test('a split labels the TARGET `epic` first, with a plain add (no forced event) — #2501', () => {
+  const acts = planToActions({ leaf: false, children: [CHILD()] }, CTX)
+  assert.deepEqual(acts[0], { type: 'ensure-label', issue: CTX.target, label: 'epic' })
+  assert.equal(acts.filter(a => a.type === 'ensure-label').length, 1)
+})
+
+test('a leaf plan and a signoff hold do NOT label the target `epic`', () => {
+  for (const plan of [{ leaf: true, children: [] }, parsePlan({ signoff: { summary: 's', questions: ['q'] } })]) {
+    assert.equal(planToActions(plan, CTX).some(a => a.type === 'ensure-label'), false)
+  }
+})
+
 test('depth cap forces work-this even for a needsSplit child at MAX_DEPTH', () => {
   const acts = planToActions({ leaf: false, children: [CHILD({ needsSplit: true })] }, { ...CTX, depth: MAX_DEPTH - 1 })
   // childDepth = MAX_DEPTH → labelForChild forces work-this
@@ -155,7 +167,7 @@ test('runActions creates, links, and labels each child in order (mock exec)', ()
   let next = 5000
   const exec = (file, args) => {
     calls.push([file, ...args])
-    if (args[0] === 'issue' && args[1] === 'create') return `https://github.com/o/r/issues/${++next}`
+    if (args.includes('POST') && args.includes('repos/o/r/issues')) return String(++next)         // REST create → number
     if (args[0] === 'api' && String(args[1]).endsWith(String(next))) return String(90000 + next) // REST id
     return ''
   }
@@ -163,11 +175,14 @@ test('runActions creates, links, and labels each child in order (mock exec)', ()
   const summary = runActions(acts, { repo: 'o/r', exec, log: () => {}, writeBody: (t, b) => `/tmp/${t}` })
   assert.equal(summary.created.length, 2)
   assert.equal(summary.created[0].number, 5001)
-  // sequence for child 0: create → api(get id) → api(POST sub_issues) → issue edit --add-label
-  const kinds = calls.map(c => `${c[1]} ${c[2] || ''}`.trim())
-  assert.ok(kinds.includes('issue create'))
-  assert.ok(kinds.some(k => k.startsWith('api --method')))       // the link POST
-  assert.ok(kinds.includes('issue edit'))                        // the trigger label
+  // sequence for child 0: create → api(get id) → api(POST sub_issues) → label POST — all REST (#2708)
+  assert.ok(calls.every(c => c[1] === 'api'), 'every gh call is REST (`gh api`), never GraphQL-backed `gh issue`')
+  assert.ok(calls.some(c => c.includes('repos/o/r/issues') && c.includes('POST')))   // the create
+  assert.ok(calls.some(c => c.some(x => String(x).endsWith('/sub_issues'))))         // the link POST
+  assert.ok(calls.some(c => c.some(x => String(x).endsWith('/labels'))))             // the trigger label
+  // #2501: the very first gh call stamps the TARGET `epic` — a plain add, no remove first.
+  assert.deepEqual(calls[0], ['gh', 'api', '--method', 'POST', 'repos/o/r/issues/1706/labels', '-f', 'labels[]=epic'])
+  assert.ok(!calls.some(c => c.includes('DELETE') && c.some(x => String(x).endsWith('/labels/epic'))))
   // NO call ever goes through a shell — args are arrays. Assert no arg contains a heredoc/`$(`.
   assert.ok(!calls.flat().some(a => typeof a === 'string' && a.includes('$(')))
 })
@@ -185,10 +200,10 @@ test('runActions on a signoff hold comments the forks + blocks the epic, never c
   assert.equal(summary.created.length, 0)
   // posted a comment on the target epic + added status:blocked
   const kinds = calls.map(c => c.slice(1, 4).join(' '))
-  assert.ok(kinds.some(k => k.startsWith('issue comment 1706')), 'comments on the epic')
-  assert.ok(calls.some(c => c.includes('--add-label') && c.includes('status:blocked')), 'adds status:blocked')
+  assert.ok(calls.some(c => c.includes('repos/o/r/issues/1706/comments')), 'comments on the epic')
+  assert.ok(calls.some(c => c.includes('labels[]=status:blocked')), 'adds status:blocked')
   // NEVER creates a worker child for a design decision
-  assert.ok(!kinds.some(k => k.startsWith('issue create')), 'no children created')
+  assert.ok(!calls.some(c => c.includes('repos/o/r/issues')), 'no children created')
   // the comment carries the forks + the hold instruction
   assert.match(commentBody, /equal vs weighted\?/)
   assert.match(commentBody, /matrix vs list\?/)
@@ -205,9 +220,10 @@ test('runActions on a leaf edits the target body and labels it (mock exec)', () 
   assert.match(written, /existing body/)
   assert.match(written, /<!-- pipeline: epic=1706 depth=0 epic_branch=/)
   // #1764: work-this is applied as remove-then-add so a stale label still fires a fresh event
-  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('work-this'))
-  assert.ok(labelCalls.some(c => c.includes('--remove-label')), 'must remove work-this first')
-  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'then re-add work-this')
+  const has = c => c.some(x => String(x).includes('work-this'))
+  const labelCalls = calls.filter(c => Array.isArray(c) && has(c))
+  assert.ok(labelCalls.some(c => c.includes('DELETE')), 'must remove work-this first')
+  assert.ok(labelCalls.some(c => c.includes('POST')), 'then re-add work-this')
 })
 
 // ── #1745: a hold is an ASK, so it must NOTIFY ────────────────────────────────────────
@@ -228,8 +244,8 @@ test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', 
   assert.match(written, /14, 30 or 90 days\?/)
   assert.match(written, /delete or warn\?/)
   // and it must actually hold, or the artifact-gate sees no sign-off and calls the run a no-op
-  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:blocked'))
-  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:blocked')
+  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('labels[]=status:blocked'))
+  assert.ok(labelCalls.length, 'must apply status:blocked')
 })
 
 // ── #1750: sibling ordering — dependent leaves must not all fire at once ─────────────
@@ -320,4 +336,20 @@ test('the real repo commits the sign-off artifact paths and still ignores screen
     assert.equal(isGitIgnored(p, { exec: realExec }), false, `${p} must be committable`)
   }
   assert.equal(isGitIgnored('screenshots/x.png', { exec: realExec }), true, 'screenshots stay ignored')
+})
+
+test('an approved package with no label in the taxonomy fails loud (#2778)', async () => {
+  const { parsePlan, planToActions } = await import('./apply-decompose-plan.mjs')
+  const plan = parsePlan({ leaf: false, packagesApproved: { why: 'x', packages: ['nope'] }, children: [{ title: 'A', body: 'b' }] })
+  assert.throws(() => planToActions(plan, { target: 1, epic: 1, knownLabels: ['type:feat'] }), /pkg:nope/)
+  const ok = parsePlan({ leaf: false, packagesApproved: { why: 'x', packages: ['a'] }, children: [{ title: 'A', body: 'b' }] })
+  const create = planToActions(ok, { target: 1, epic: 1, knownLabels: ['pkg:a'] }).find(a => a.type === 'create')
+  assert.deepEqual(create.labels, ['pkg:a'])
+})
+
+test('missingMockupReason: silent for non-UI holds, loud when a mockup was promised but absent (#2809)', () => {
+  assert.equal(missingMockupReason({ summary: 'data model fork', questions: ['equal vs weighted?'] }, []), '')
+  assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
+  assert.match(missingMockupReason({ summary: 'x', questions: [], ui: '<p/>' }, [], 'boom'), /boom/)
+  assert.equal(missingMockupReason({ summary: 'mockup', questions: [], ui: '<p/>' }, [{ label: 'UI mockup', path: 'a.png' }]), '')
 })

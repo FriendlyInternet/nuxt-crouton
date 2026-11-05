@@ -16,9 +16,9 @@ import { eq, and } from 'drizzle-orm'
 import type { ReceiptData, ReceiptItem, ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
 import { aggregateClientTab } from '../../../../../../../../utils/client-tab'
 import { requireTeamEvent } from '../../../../../../../../utils/team-event'
-import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
-import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
-import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
+import { salesClients } from '../../../../../../../../../collections/clients/server/database/schema'
+import { salesPrinters } from '../../../../../../../../../collections/printers/server/database/schema'
+import { salesEventsettings } from '../../../../../../../../../collections/eventsettings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team, user, db, eventId, salesEvent } = await requireTeamEvent(event)

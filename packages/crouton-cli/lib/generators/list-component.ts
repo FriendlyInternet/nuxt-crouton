@@ -1,5 +1,6 @@
 // Generator for List.vue component
 import { toCase } from '../utils/helpers.ts'
+import { resolveRefCollectionKey } from '../utils/ref-collection.ts'
 
 /**
  * Generate AI context header for List.vue components
@@ -14,7 +15,6 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
   @crouton-generated
   @collection ${plural}
   @layer ${layer}
-  @generated ${new Date().toISOString().split('T')[0]}
 
   ## AI Context
   - List component for ${plural} collection
@@ -37,7 +37,7 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
 }
 
 export function generateListComponent(data: Record<string, any>, config: Record<string, any> = {}): string {
-  const { plural, camelCasePlural, pascalCasePlural, layerPascalCase, layerCamelCase, layer, fields } = data
+  const { plural, camelCasePlural, pascalCasePlural, layerPascalCase, layerCamelCase, layer, fields, collectionLayerMap } = data
   const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
   // Use layerCamelCase for proper camelCase collection names (e.g., "knowledge-base" -> "knowledgeBase")
   const prefixedCamelCasePlural = `${layerCamelCase}${pascalCasePlural}`
@@ -113,9 +113,8 @@ export function generateListComponent(data: Record<string, any>, config: Record<
         // These are managed by connector packages (e.g., @fyit/crouton-supersaas)
         resolvedCollection = field.refTarget
       } else {
-        // Local layer reference: add layer prefix
-        const refCases = toCase(field.refTarget)
-        resolvedCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
+        // The TARGET's layer (cross-layer or package-owned, #2311), falling back to this one
+        resolvedCollection = resolveRefCollectionKey(field.refTarget, layerCamelCase, collectionLayerMap)
       }
 
       // Check if this is an array-type reference (multi-select)
@@ -214,15 +213,14 @@ export function generateListComponent(data: Record<string, any>, config: Record<
 <script setup lang="ts">
 import use${prefixedPascalCasePlural} from '../composables/use${prefixedPascalCasePlural}'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   layout?: any
 }>(), {
   layout: 'table'
 })
 ${hasTranslations
   ? `
-const { t } = useEntityTranslations()
-const { locale } = useI18n()`
+const { t } = useEntityTranslations()`
   : ''}
 const { columns } = use${prefixedPascalCasePlural}()
 

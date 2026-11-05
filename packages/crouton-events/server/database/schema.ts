@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 
 export const croutonOperations = sqliteTable('crouton_operations', {
@@ -29,6 +30,6 @@ export const croutonEvents = sqliteTable('crouton_events', {
   teamId: text('team_id').notNull(),
   userId: text('user_id').notNull(),
   userName: text('user_name').notNull().default(''),
-  changes: text('changes', { mode: 'json' }).$type<EventChange[]>().notNull().default('[]'),
+  changes: text('changes', { mode: 'json' }).$type<EventChange[]>().notNull().default(sql`'[]'`),
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>()
 })

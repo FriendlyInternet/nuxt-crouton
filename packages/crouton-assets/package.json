@@ -4,6 +4,12 @@
   "description": "Asset management layer extending nuxt-crouton for centralized media library",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "exports": {
+    ".": "./nuxt.config.ts",
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -13,6 +19,9 @@
     "app",
     "server",
     "collections",
+    "i18n",
+    "assets-schema.json",
+    "crouton.manifest.ts",
     "nuxt.config.ts",
     "README.md"
   ],

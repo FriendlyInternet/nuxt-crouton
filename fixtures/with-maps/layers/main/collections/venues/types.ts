@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection venues
  * @layer main
- * @generated 2026-06-21
  *
  * ## AI Context
  * - Main interface: MainVenue
@@ -41,15 +40,21 @@ export interface MainVenue {
 }
 
 export type MainVenueFormData = z.infer<typeof mainVenueSchema>
+// Optional (undefined-including) props also accept null on the WRITE path: the
+// server body schema validates non-required fields as .nullish() (#1403 — a
+// nullable column round-trips null, and null is how a client clears a field),
+// so the create input must admit the validated body. The read interface above
+// deliberately stays narrow (form bindings/consumers never want null).
+type NullableOptionals<T> = { [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K] }
 // New* allows the server-set fields (id, createdBy, updatedBy) as optional — the
 // generated POST endpoint provides them; other callers (e.g. seed) may omit them.
-export type NewMainVenue = Omit<MainVenue, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id?: string; createdBy?: string; updatedBy?: string }
+export type NewMainVenue = NullableOptionals<Omit<MainVenue, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>> & { id?: string; createdBy?: string; updatedBy?: string }
 
 // Props type for the Form component
 export interface MainVenueFormProps {
   items: string[] // Array of IDs for delete action
   activeItem: MainVenue | Record<string, never> // MainVenue for update, empty object for create
   collection: string
-  loading: string
+  loading?: string // optional: the form reads useCrouton().loading; a bare layout block passes none
   action: 'create' | 'update' | 'delete'
 }

@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection venues
  * @layer main
- * @generated 2026-06-21
  *
  * ## AI Context
  * - Composable: useMainVenues
@@ -47,7 +46,6 @@ const _mainVenuesConfig = {
   name: 'mainVenues',
   layer: 'main',
   apiPath: 'main-venues',
-  componentName: 'MainVenuesForm',
   defaultValues: {
     name: '',
     street: '',

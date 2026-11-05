@@ -17,7 +17,7 @@ The chronicle of every major incident in this repo, so a fresh session cites pre
 | An epic just closed — you need the *retro mechanics* (what-went-well comment, minting `workflow` issues) | `postmortem` skill |
 | A symptom → root-cause lookup for a *current* error message, and each incident's fix mechanics | `crouton-diagnostics-index` (fast lookup; this skill carries the story behind those entries) |
 | Which gate fires on your change, approval semantics | `crouton-change-control` |
-| The live #983/#992 graduation rebuild itself | issue #983 + the `graduate` skill (point-in-time snapshot: `writeups/briefings/crouton-builder-graduation-campaign-20260702.md`) |
+| The #983/#992 graduation rebuild (closed) | issue #983 + the `graduate` skill (point-in-time snapshot: `writeups/_archive/briefings/crouton-builder-graduation-campaign-20260702.md`) |
 | The architectural WHY behind an invariant | `crouton-architecture-contract` |
 
 Jargon used below: **crouton** = this repo's schema-JSON → generated CRUD system (the `packages/*` layer — mostly `@fyit/crouton-*` Nuxt layers, plus the CLI/MCP/module exceptions; see `crouton-architecture-contract` §1); **POC** = an incubating app under `pocs/`; **graduation** = rebuilding a proven POC as a real crouton app/package (`graduate` skill); **fixture** = a throwaway generated app under `fixtures/` that the e2e smoke boots; **NuxtHub** = the storage abstraction mapping `hub:{db}` to Cloudflare D1.
@@ -74,7 +74,7 @@ Each row: what broke → why → the evidence trail → where it stands → the 
 - **#504 the 967-line stale CLAUDE.md clone** (pre-shallow) — `docs/CLAUDE.md` had drifted into a stale copy of the old root, still ordering a removed "code word" ritual and Pages deploys. "Detection, not the fix, was the hard part." → the never-restate/index-and-defer rule this very library obeys. (Removal commit `763b548` — unverified locally, pre-shallow.)
 - **#1056 teardown false-failure** — re-running teardown on already-deleted Cloudflare resources reported red: the error classifier read `err.message` while stderr was **inherited, not piped**, and missed CF's real phrasings (`code: 10007`, "Couldn't find DB"). Fix `15da00b` ✓: shared `isAlreadyGone()` in `scripts/lib/wrangler-d1.mjs` ✓ + a node --test regression. Had earlier bitten #686's retirement of three-demo/thinkgraph.
 
-Related archaeology trap: retired code lives in `retired/pocs/` ✓ (`blog`, `three-demo`, `thinkgraph*` — `1ad09fe` ✓, #1043), but `thinkgraph` **also** exists in the older undocumented `_archive/` ✓ (with `atelier`, `crouton-designer`) — a duplication trap when grepping "where did X go". `_archive/` predates the `retired/` convention and is documented nowhere in root CLAUDE.md.
+Related archaeology trap: retired code lived in `retired/` (`blog`, `three-demo`, `thinkgraph*`, `triage` — `1ad09fe` ✓, #1043) until it was deleted outright in #2291; recover it from git history (`git show 49691dba2:retired/...`). Also `thinkgraph` **also** exists in the older undocumented `_archive/` ✓ (its old builder-package copies were removed in #2279) — a duplication trap when grepping "where did X go". `_archive/` predates the `retired/` convention and is documented nowhere in root CLAUDE.md.
 
 ## D) Cross-cutting lessons (what the harness now enforces)
 

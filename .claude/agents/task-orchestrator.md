@@ -34,7 +34,7 @@ off** in steps 2 & 8 — the slicing, the epic branch, the foundation checkpoint
 
 - **Unset / not `event-driven` → IN-PROCESS (default, claude harness):** spawn a `task-decomposer`
   per child via the `Agent` tool and wait (steps 2 & 8 as written).
-- **`event-driven` → PLAN, don't spawn (pi harness, #1696):** pi-claude-cli can't drive an
+- **`event-driven` → PLAN, don't spawn (pi harness, #1696):** the pi harness (claude-bridge provider) can't drive an
   in-process `Agent` tree, so the pidev workflow doesn't use this orchestrator/decomposer to *act* —
   it has pi **write `decompose-plan.json`** (pure reasoning) which a deterministic apply step
   (`scripts/apply-decompose-plan.mjs`) turns into created + linked + labeled children

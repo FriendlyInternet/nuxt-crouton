@@ -24,6 +24,8 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const { t } = useT()
+
 const styleUrl = computed(() => getMapStyle(props.attrs.style || 'liberty'))
 
 // Parse numeric values (may come as strings from select schema)
@@ -59,8 +61,8 @@ const hasLocation = computed(() => lat.value !== 0 || lng.value !== 0)
       v-if="!hasLocation"
       color="neutral"
       icon="i-lucide-map-pin"
-      title="No location set"
-      description="Edit this block to enter latitude and longitude coordinates."
+      :title="t('maps.block.noLocation')"
+      :description="t('maps.block.noLocationDescription')"
     />
 
     <!-- Render map -->

@@ -123,7 +123,6 @@ Show `git log --oneline -N` (where N = number of commits made) to confirm what w
 - `crouton-assets` — Assets layer
 - `crouton-devtools` — Devtools
 - `crouton-auth` — Auth layer
-- `crouton-triage` — Triage layer
 - `crouton-pages` — Pages layer
 - `crouton-bookings` — Bookings layer
 - `docs` — Documentation app

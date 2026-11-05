@@ -1,4 +1,5 @@
 name: Fix CI on failure
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}"
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the
@@ -6,7 +7,8 @@ name: Fix CI on failure
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
-#   - Scope: only head branches `claude/issue-*` (pipeline PRs). Human PRs are never touched.
+#   - Scope: only pipeline head branches `work-*` (pi worker,
+#     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
@@ -32,23 +34,29 @@ on:
     # fires, which is the exact bug #2089 is about.
     workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
+  # #3105: started by the owner's `ok` on a RED epic → main PR (on-comment.yml approve-epic). The
+  # workflow_run path above never sees an `epic/*` head, so this is the only way in for one. The
+  # gate step requires the PR open and the owner's ok still standing.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to fix (a work-* PR, or an epic/* PR into main with a standing owner ok)."
+        required: true
+        type: string
 
 permissions: {}
 
 jobs:
   fixbot:
-    # Pipeline branches only — human PRs are never auto-edited. BOTH prefixes: `claude/issue-*`
-    # is the claude lane, `work-*` is the pi worker. This listed only the former, and since
-    # AGENT_HARNESS=pi made pi the live lane the condition could not be true for any PR: 1718
-    # runs, 100 of the last 100 `skipped`, zero that ever acted (#2089). A false job `if`
-    # reports `skipped`, which is indistinguishable from "nothing to do", so it was never red
-    # and nobody noticed. `pipeline-pr-status.yml` learned the same lesson in #1815; this
-    # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
+    # Pipeline branches only — human PRs are never auto-edited. `work-*` is the pi worker;
+    # the old `claude/issue-*` lane was dropped (#2892). A false job `if` reports `skipped`,
+    # indistinguishable from "nothing to do" (#2089) — the definition lives once, in
+    # scripts/lib/pipeline-branch.mjs.
     if: >
-      github.event.workflow_run.conclusion == 'failure' &&
-      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
        startsWith(github.event.workflow_run.head_branch, 'work-'))
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
     # OVERRIDES a workflow-level block, so id-token: write has to be here or
@@ -58,54 +66,109 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+      # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
+      actions: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
+      # Default branch first (#3105): the gate imports trusted pure helpers (ownerMergeGo,
+      # decideFixBotDispatch) from here, never from the PR head. The head is checked out later.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
       # ── Gate: resolve the PR, enforce the attempt cap, bump the counter ──────────
       - id: gate
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
-            const MAX = 3
             const { owner, repo } = context.repo
-            const run = context.payload.workflow_run
+            const manual = context.eventName === 'workflow_dispatch'
+            let run = context.payload.workflow_run
             // Readable-on-mobile (epic #1336): messages lead with the problem + fix; this
             // provenance/mechanism + run link is the footer.
             const FOOTER = (url) => `\n\n<sub>🤖 Claude Code · fix-bot (#338) · <a href="${url}">failing run</a></sub>`
 
-            // Resolve the open PR for this head branch.
-            let pr = (run.pull_requests || [])[0]
-            if (!pr) {
-              const list = await github.rest.pulls.list({ owner, repo, head: `${owner}:${run.head_branch}`, state: 'open' })
-              pr = list.data[0]
+            // Resolve the open PR for this head branch (or, when started by hand, the PR number given).
+            let pr
+            if (manual) {
+              pr = { number: Number(context.payload.inputs.pr) }
+            } else {
+              pr = (run.pull_requests || [])[0]
+              if (!pr) {
+                const list = await github.rest.pulls.list({ owner, repo, head: `${owner}:${run.head_branch}`, state: 'open' })
+                pr = list.data[0]
+              }
             }
             if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('proceed', 'false'); return }
 
             const full = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data
-            if (full.state !== 'open' || !full.head.ref.startsWith('claude/issue-')) {
-              core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
+            // #2157: the job `if` above was widened to both lanes (#2089), but THIS inner
+            // re-check once accepted only the old claude prefix — so every `work-*` PR (the pi
+            // worker, which AGENT_HARNESS=pi makes the LIVE lane) bailed here and the fix-bot
+            // never acted on a real PR. Same #2089 bug, one spot the fix missed. The two-prefix
+            // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
+            // the job `if` (a github-script gate can't import without a checkout, and this runs
+            // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
+            // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
+            // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
+            const { fixBotWillTry, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            let go
+            if (/^epic\//.test(full.head.ref)) {
+              const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
+              const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 })
+              for (const k of commits) {
+                if ((k.parents || []).length > 1) continue
+                const c = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
+                k.files = (c.data.files || []).map(f => f.filename)
+              }
+              go = ownerMergeGo({ comments, commits, owner: process.env.OWNER_LOGIN || 'pmcp' })
             }
             const labels = (full.labels || []).map(l => l.name)
-            // Already escalated — don't pile on while a human is in the loop.
-            if (labels.includes('status:blocked')) {
-              core.info('PR already blocked — standing down.'); core.setOutput('proceed', 'false'); return
+            // Started by hand: there is no workflow_run payload, so find the failing CI/E2E run for
+            // this head (a WORKFLOW run id — a check-run id would make `gh run view` fail silently).
+            let failed = null
+            if (manual) {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                { owner, repo, head_sha: full.head.sha, per_page: 100 })
+              failed = pickFailedRun(runs)
+              if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
             }
+            // #3373: the single "will the bot try?" decision (shared with status.yml's red ping).
+            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels,
+              failures: run ? [{ workflow: run.name, conclusion: run.conclusion }] : [] })
+            if (d.who === 'none') {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
+                '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
+                `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
+              core.setOutput('proceed', 'false'); return
+            }
+            if (d.who === 'owner') {
+              core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('proceed', 'false'); return
+            }
+            const attemptLabel = d.attemptLabel
+            const attempts = d.attempts
 
             // Attempt count lives in a `ci-fix-attempts:N` label on the PR (also read by #337).
-            const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
-            const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            const m = /^claude\/issue-(\d+)-/.exec(full.head.ref)
+            // The pi worker's `work-<n>` branch.
+            const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
-            if (attempts >= MAX) {
+            if (d.who === 'gave-up') {
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
-                `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
+                '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
                 `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
                 FOOTER(run.html_url) })
               if (issueNumber) {
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
                 await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-                  `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
+                  '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
                   `**Fix:** take a look, then reply here and the pipeline resumes.` +
                   FOOTER(run.html_url) })
               }
@@ -117,12 +180,36 @@ jobs:
             const next = attempts + 1
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [`ci-fix-attempts:${next}`] })
 
+            // #2163 (the #2157 packages/ follow-up): normally the fix-bot's prompt STOPS at a
+            // packages/ change (the shared-code HARD GATE). But when the linked issue is a `pkg:*`
+            // issue, the owner already approved shared-code work by dispatching it — so the bot MAY
+            // fix packages/ (the PR still holds for a human merge behind the packages guard, #339).
+            // Resolve the package name(s) from the ISSUE's labels so the prompt can unlock exactly
+            // those and no others.
+            let packagesAllowed = 'false', pkgNames = ''
+            // An epic head is never a `pkg:*` leaf: packages/ stays off-limits for it.
+            if (issueNumber && !/^epic\//.test(full.head.ref)) {
+              try {
+                const iss = (await github.rest.issues.get({ owner, repo, issue_number: issueNumber })).data
+                const pkgs = (iss.labels || [])
+                  .map(l => (typeof l === 'string' ? l : l.name))
+                  .filter(n => /^pkg:/.test(n)).map(n => n.slice(4))
+                if (pkgs.length) { packagesAllowed = 'true'; pkgNames = pkgs.join(' ') }
+              } catch (e) { core.warning(`pkg-label check #${issueNumber}: ${e.message}`) }
+            }
+
             core.setOutput('proceed', 'true')
             core.setOutput('pr_number', String(pr.number))
             core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
             core.setOutput('head_branch', full.head.ref)
+            core.setOutput('base_ref', full.base.ref)
             core.setOutput('attempt', String(next))
-            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}).`)
+            core.setOutput('run_id', String(run.id))
+            core.setOutput('run_name', run.name)
+            core.setOutput('run_url', run.html_url)
+            core.setOutput('packages_allowed', packagesAllowed)
+            core.setOutput('packages_names', pkgNames)
+            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a
@@ -131,55 +218,266 @@ jobs:
       # synchronize` → CI re-runs → workflow_run gives the fix-bot its next attempt (bounded
       # by the ci-fix-attempts cap). Same reason automerge/resume/schedule-waves use it (#626).
       - if: steps.gate.outputs.proceed == 'true'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
       - if: steps.gate.outputs.proceed == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.gate.outputs.head_branch }}
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
+
+      # #2719: remember where the branch stood BEFORE the fix, so the guard below can diff the
+      # fix against it. The fixer commits but does not push — this workflow pushes (or refuses).
+      - name: Record pre-fix head
+        if: steps.gate.outputs.proceed == 'true'
+        id: prefix
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        if: steps.gate.outputs.proceed == 'true'
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
 
       # ── The fix attempt ─────────────────────────────────────────────────────────
       # AUTH: headless/unattended → MUST use an API key (never a subscription OAuth token;
       # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - if: steps.gate.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
+          # Pipeline PRs are pushed by the harness bot, and the action refuses a bot-initiated
+          # run unless the bot is allow-listed — without this the fixer never ran on any
+          # pipeline PR (#2447; same guard as decompose-on-issue.yml).
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          # bypassPermissions REQUIRED (#834/#2165): headless CI denies un-allowlisted tools, so
+          # WITHOUT this the fix-bot's every pnpm/git/gh command is permission-denied — it burns all
+          # its turns on denials and crashes with max_turns, never reaching the fix (the first real
+          # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
+          # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)' 'Bash(git commit:*)'"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
             ${{ steps.gate.outputs.attempt }} of 3 for PR #${{ steps.gate.outputs.pr_number }}
             (branch `${{ steps.gate.outputs.head_branch }}`, linked issue #${{ steps.gate.outputs.issue_number }}).
 
-            The failing workflow was "${{ github.event.workflow_run.name }}":
-            ${{ github.event.workflow_run.html_url }}
+            The failing workflow was "${{ steps.gate.outputs.run_name }}":
+            ${{ steps.gate.outputs.run_url }}
 
             Do this, and ONLY this:
             1. Reproduce the failure locally — run the relevant command (e.g. `pnpm -r --filter './apps/*' typecheck`,
                `pnpm lint`, or the failing test/e2e) to see the actual error. Read the failing job's logs if you need to.
             2. Diagnose the root cause and make the MINIMAL fix on this branch. Keep it tightly
                scoped to the failure — do not refactor, do not touch unrelated files.
-            3. HARD GATE — shared code: do NOT modify anything under `packages/`. If the only correct
-               fix would require a `packages/` change, STOP: do not commit. Instead comment on issue
-               #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
-               `status:blocked` label to that issue, and end your run.
+               NEVER make CI green by DELETING the worker's new code (#2719). If a symbol/menu
+               group/key/route is referenced but undefined, IMPLEMENT the missing piece, taking the
+               intent from the linked issue (`gh issue view ${{ steps.gate.outputs.issue_number }}`)
+               and the latest owner/orchestrator comments on the PR and issue — not just the log. If
+               you cannot implement it confidently, do not commit and do NOT write the message file; comment on the issue, @mention
+               @pmcp, apply `status:blocked`, and stop. A deterministic check after you rejects any
+               commit that removes lines the worker added (blank lines and imports excepted).
+            3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
+               - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
+               - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
+                 correct fix would require one, STOP: do not commit and do NOT write the message file. Instead comment on issue
+                 #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
+                 `status:blocked` label to that issue, and end your run.
+               - If packages_allowed is `true`: this is a `pkg:*` issue — the owner already approved
+                 shared-code work by dispatching it, so you MAY edit ONLY the listed package(s). Before
+                 your first edit under `packages/`, unlock the gate for exactly those packages, one per
+                 line: `for p in ${{ steps.gate.outputs.packages_names }}; do echo "$p" >> .claude/.package-edit-approved; done`.
+                 Keep the change minimal and scoped to the failure; do NOT touch any other package. The
+                 PR still holds for a human to merge (the shared-code merge guard), so you are producing
+                 the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
             4. Verify green: re-run the command from step 1 and confirm it passes.
-            5. Commit with the /commit skill (reference the issue) and push to this branch. CI re-runs
-               automatically; if it still fails, the fix-bot will get another attempt (up to the cap).
+            5. Do NOT run `git commit` or `git push`. Stage ONLY the files you changed (`git add <files>`)
+               and write your commit message (conventional, reference the issue) to
+               `$RUNNER_TEMP/ci-fix-message`. The workflow makes the one commit from that message
+               and pushes it; no message file means nothing is committed. CI then re-runs automatically; if it still fails,
+               the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
-            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop.
+            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop. Do NOT write the message file.
+
+      # #3104: the ONE commit is made here, not by the agent. The script is read from the default
+      # branch (trusted — the PR branch can't alter it) and commits what the agent staged with the
+      # agent's message + `CI-Fix: true`, under the fix-bot identity. No message file -> no commit.
+      - name: Commit the staged fix
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "$DEFAULT_BRANCH"
+          git show "origin/$DEFAULT_BRANCH:scripts/commit-ci-fix.sh" > "$RUNNER_TEMP/commit-ci-fix.sh"
+          bash "$RUNNER_TEMP/commit-ci-fix.sh" "$RUNNER_TEMP/ci-fix-message"
+
+      # ── Guard (#2719): refuse a "fix" that deletes the worker's own new code ────────────
+      # Compare the fix commit(s) with what the PR's worker commits added. If the fix removes any
+      # of those lines (blank lines/imports aside) it is not pushed: the branch is reset, the PR
+      # gets the lines listed, and the pi worker is re-run with the CI failure as feedback (the
+      # revise path, #2446). Otherwise the fix is pushed as before. Attempt cap and packages/ rules
+      # are untouched.
+      - name: Guard and push the fix
+        if: steps.gate.outputs.proceed == 'true'
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRE: ${{ steps.prefix.outputs.sha }}
+          BASE: ${{ steps.gate.outputs.base_ref }}
+          BRANCH: ${{ steps.gate.outputs.head_branch }}
+          PR: ${{ steps.gate.outputs.pr_number }}
+          ISSUE: ${{ steps.gate.outputs.issue_number }}
+          RUN_URL: ${{ steps.gate.outputs.run_url }}
+          RUN_ID: ${{ steps.gate.outputs.run_id }}
+          RUN_NAME: ${{ steps.gate.outputs.run_name }}
+        run: |
+          set -euo pipefail
+          HEAD_NOW="$(git rev-parse HEAD)"
+          # Belt and braces: `git push` is disallowed for the agent, but if it pushed anyway the
+          # remote head has moved past $PRE. Judge those commits too; if refused, revert them.
+          git fetch -q origin "$BRANCH"
+          REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
+          PUSHED=0
+          if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
+          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then
+            echo "No fix commit — nothing to push."
+            # #3373: the first-failure ping no longer mentions the owner while the bot is on it, so a
+            # silent no-fix exit would reach nobody. Ping once unless the agent already blocked the issue.
+            if [ -n "${ISSUE:-}" ] && ! gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx 'status:blocked'; then
+              gh pr comment "$PR" --body "<!-- pipeline-note -->
+          🔴 **@pmcp — auto-fix stopped without a fix; \`$RUN_NAME\` is still failing.**
+
+          **Fix:** take a look, then push a fix or reply to resume." || true
+              gh issue edit "$ISSUE" --add-label "status:blocked" || true
+            fi
+            exit 0
+          fi
+          git fetch -q origin "$BASE"
+          git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
+          git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
+          if [ "$PUSHED" = 1 ]; then git diff "$PRE" "$REMOTE_NOW" >> "$RUNNER_TEMP/fix.diff"; fi
+          node -e '
+            const fs = require("fs")
+            import("./scripts/lib/fix-removes-worker-code.mjs").then(({ findRemovedWorkerLines }) => {
+              const r = findRemovedWorkerLines(fs.readFileSync(process.argv[1], "utf8"), fs.readFileSync(process.argv[2], "utf8"))
+              fs.writeFileSync(process.argv[3], JSON.stringify(r))
+              process.exit(r.refuse ? 3 : 0)
+            })
+          ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
+          if [ "$ok" = 1 ]; then
+            if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
+            exit 0
+          fi
+
+          echo "refused=true" >> "$GITHUB_OUTPUT"
+          git reset -q --hard "$PRE"
+          # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
+          # Undo only the fix-bot's own commits; a worker revision pushed meanwhile must survive (#2978).
+          if [ "$PUSHED" = 1 ] && ! bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH" "$HEAD_NOW"; then
+            UNDONE_NOTE="<!-- pipeline-note -->"$'\n'"> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
+            UNDONE_NOTE="$UNDONE_NOTE"$'\n\n'"⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
+            gh pr comment "$PR" --body "$UNDONE_NOTE"
+          fi
+          LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
+          ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
+          {
+            echo "<!-- pipeline-note -->"
+            echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
+            echo
+            echo "🔧 **Auto-fix not pushed: it would delete code this PR was asked to add.** Handing back to the worker to implement the missing piece instead."
+            echo
+            echo "**Lines the fix would remove:**"
+            echo "$LINES"
+            echo
+            echo "<details><summary>CI failure (\`$RUN_NAME\`) the worker should fix</summary>"
+            echo
+            echo '```'
+            echo "$ERR"
+            echo '```'
+            echo "[failing run]($RUN_URL)"
+            echo "</details>"
+            echo
+            echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
+          } > "$RUNNER_TEMP/handback.md"
+          PRC_URL="$(gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md")"
+          if [ -n "$ISSUE" ]; then
+            # Comment POST + dispatch are ONE protected hand-off step (#3306): a limit / 5xx saves it for the sweep,
+            # which falls back to the PR comment just posted (an issue-comment id, readable the same way).
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg b "$BRANCH" --arg f "$RUNNER_TEMP/handback.md" --arg p "${PRC_URL##*issuecomment-}" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),branch:$b},postBodyFile:$f,fallbackFeedback:$p}')"
+          fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
         if: always()
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [fixbot]
+    if: ${{ always() && needs.fixbot.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: fix-ci-on-failure.yml
+          PR: "${{ inputs.pr }}"
+          BRANCH: "${{ github.event.workflow_run.head_branch }}"
+          STAGE: fix-ci
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.fixbot.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

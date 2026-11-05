@@ -43,7 +43,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 // ThemeCompactPicker is globally registered by crouton-themes when active.
 // resolveComponent returns the string name when not found — we check for that.
-// UserMenu reads theme items directly from shared state set by the themes plugin.
 const themeCompactPicker = resolveComponent('ThemeCompactPicker')
 const hasThemePicker = typeof themeCompactPicker !== 'string'
 
@@ -131,12 +130,12 @@ const defaultNavItems = computed<NavigationMenuItem[][]>(() => {
         to: `${baseUrl}/members`
       },
       {
-        label: t('teams.invitationsShort') || t('teams.invitations') || 'Invitations',
+        label: t('teams.invitations'),
         icon: 'i-lucide-mail',
         to: `${baseUrl}/invitations`
       },
       {
-        label: 'Email Templates',
+        label: t('teams.emailTemplates'),
         icon: 'i-lucide-mail-open',
         to: `${baseUrl}/team/email-templates`
       }
@@ -251,12 +250,9 @@ const navItems = computed(() => props.navigationItems ?? defaultNavItems.value)
         v-if="hasThemePicker && !collapsed && canSwitchTheme"
         class="px-3 pt-2 pb-1 flex items-center gap-2"
       >
-        <span class="text-xs text-muted">Theme</span>
+        <span class="text-xs text-muted">{{ t('account.theme') }}</span>
         <component :is="themeCompactPicker" size="xs" />
       </div>
-
-      <!-- User Menu — theme items are read directly from shared state inside UserMenu -->
-      <SidebarUserMenu :collapsed="collapsed" />
     </template>
   </UDashboardSidebar>
 </template>

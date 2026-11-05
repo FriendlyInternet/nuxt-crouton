@@ -2,7 +2,7 @@
  * useUserMenuItems
  *
  * Shared composable that builds the user dropdown menu items.
- * Used by both SidebarUserMenu (auth sidebar) and CroutonPagesNav (public nav)
+ * Used by both CroutonUserPill and CroutonPagesNav (public nav)
  * so theme items, language switching, dark mode, and logout are always in sync.
  *
  * Reads theme items from the shared useState key populated by the
@@ -68,46 +68,47 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
   async function handleLogout() {
     try {
       await logout()
-      notify.success(t('auth.signOut') || 'Signed out', { description: t('success.saved') || 'You have been signed out successfully.' })
+      notify.success(t('auth.signedOut'), { description: t('auth.signedOutDescription') })
       await router.push('/auth/login')
     } catch (error: unknown) {
-      notify.error(t('errors.generic') || 'Error', { description: error instanceof Error ? error.message : 'Failed to sign out' })
+      notify.error(t('common.error'), { description: error instanceof Error ? error.message : t('auth.failedToSignOut') })
     }
   }
 
-  const dropdownItems = computed<DropdownMenuItem[][]>(() => {
-    const preferenceGroup: DropdownMenuItem[] = [
-      // Language submenu — only when the app has more than one locale
-      ...(locales.value.length > 1
-        ? [{
-            label: t('forms.language') || 'Language',
-            icon: 'i-lucide-globe',
-            children: languageItems.value
-          }]
-        : []),
-      {
-        label: 'Dark Mode',
-        icon: isDark.value ? 'i-lucide-moon' : 'i-lucide-sun',
-        type: 'checkbox',
-        checked: isDark.value,
-        onUpdateChecked: (checked: boolean) => {
-          isDark.value = checked
-        },
-        onSelect: (e: Event) => {
-          e.preventDefault()
-        }
+  // Language / dark mode / theme — shared with the signed-out pill menu
+  const preferenceItems = computed<DropdownMenuItem[]>(() => [
+    // Language submenu — only when the app has more than one locale
+    ...(locales.value.length > 1
+      ? [{
+          label: t('forms.language'),
+          icon: 'i-lucide-globe',
+          children: languageItems.value
+        }]
+      : []),
+    {
+      label: t('account.darkMode'),
+      icon: isDark.value ? 'i-lucide-moon' : 'i-lucide-sun',
+      type: 'checkbox',
+      checked: isDark.value,
+      onUpdateChecked: (checked: boolean) => {
+        isDark.value = checked
       },
-      // Theme switcher — only when themes layer is active and user is allowed
-      ...(canSwitchTheme.value ? themePreferenceItems.value : [])
-    ]
+      onSelect: (e: Event) => {
+        e.preventDefault()
+      }
+    },
+    // Theme switcher — only when themes layer is active and user is allowed
+    ...(canSwitchTheme.value ? themePreferenceItems.value : [])
+  ] as DropdownMenuItem[])
 
+  const dropdownItems = computed<DropdownMenuItem[][]>(() => {
     return [
       [
         {
-          label: user.value?.name || 'User',
+          label: user.value?.name || t('account.user'),
           avatar: {
             src: user.value?.image ?? undefined,
-            alt: user.value?.name ?? 'User',
+            alt: user.value?.name ?? t('account.user'),
             text: userInitials.value
           },
           type: 'label'
@@ -115,7 +116,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
       ],
       [
         {
-          label: t('navigation.accountSettings') || 'Account Settings',
+          label: t('navigation.accountSettings'),
           icon: 'i-lucide-user',
           ...(accountModal
             ? {
@@ -127,10 +128,10 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
           )
         }
       ],
-      preferenceGroup,
+      preferenceItems.value,
       [
         {
-          label: t('auth.signOut') || 'Sign Out',
+          label: t('auth.signOut'),
           icon: 'i-lucide-log-out',
           color: 'error',
           onSelect: handleLogout
@@ -143,6 +144,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
     user,
     loading,
     userInitials,
-    dropdownItems
+    dropdownItems,
+    preferenceItems
   }
 }

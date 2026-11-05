@@ -64,9 +64,9 @@ describe('API Endpoint Generators', () => {
       }
     })
 
-    it('handles translations when configured', () => {
+    it('does not emit an unused locale variable when translations are configured', () => {
       const result = generateGetEndpoint(apiEndpointData, translationsConfig as AnyConfig)
-      expect(result).toContain("const locale = String(query.locale || 'en')")
+      expect(result).not.toContain('const locale')
     })
   })
 

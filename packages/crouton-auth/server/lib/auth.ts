@@ -36,9 +36,6 @@ import type {
   OAuthProviderConfig
 } from '../../types/config'
 
-// Re-export type helpers for use in this module
-export { isMethodEnabled, getMethodConfig } from '../../types/config'
-
 // Type declarations for browser APIs used in WebAuthn helper functions
 // These helpers are intended for client-side use only
 declare const window: Window | undefined
@@ -632,7 +629,14 @@ function buildPlugins(
     // Admin plugin - user management (ban, impersonate, revoke sessions, etc.)
     admin({
       defaultRole: 'user',
-      adminRoles: ['admin']
+      adminRoles: ['admin'],
+      // Our columns predate the plugin's names (crouton-admin reads them directly).
+      // better-auth 1.7 validates the schema on every request and 500s on a
+      // missing field, so map its fields onto ours instead of migrating (#2223).
+      schema: {
+        user: { fields: { banReason: 'bannedReason', banExpires: 'bannedUntil' } },
+        session: { fields: { impersonatedBy: 'impersonatingFrom' } }
+      }
     }),
 
     // Password breach checking via Have I Been Pwned API
@@ -1498,32 +1502,6 @@ export function isWebAuthnSupported(): boolean {
   )
 }
 
-/**
- * Check if conditional UI (autofill) is available
- *
- * Conditional UI allows passkey authentication through browser autofill.
- * Not all browsers support this feature.
- *
- * @returns Promise resolving to true if conditional UI is available
- */
-export async function isConditionalUIAvailable(): Promise<boolean> {
-  if (!isWebAuthnSupported()) {
-    return false
-  }
-
-  // Check for conditional mediation support
-  // PublicKeyCredential is guaranteed to be defined after isWebAuthnSupported check
-  if (!PublicKeyCredential || typeof PublicKeyCredential.isConditionalMediationAvailable !== 'function') {
-    return false
-  }
-
-  try {
-    return await PublicKeyCredential.isConditionalMediationAvailable()
-  } catch {
-    return false
-  }
-}
-
 // ============================================================================
 // Auth Instance Management
 // ============================================================================
@@ -1531,7 +1509,13 @@ export async function isConditionalUIAvailable(): Promise<boolean> {
 /**
  * Type for the created auth instance
  */
-export type AuthInstance = ReturnType<typeof createAuth>
+type CreatedAuth = ReturnType<typeof createAuth>
+// buildPlugins() returns any[] (plugins are added conditionally), which erases plugin endpoints
+// from the inferred api type. Re-add the magic-link ones as Partial: they exist only when
+// `methods.magicLink` is on, so callers must check before calling.
+export type AuthInstance = Omit<CreatedAuth, 'api'> & {
+  api: CreatedAuth['api'] & Partial<ReturnType<typeof magicLink>['endpoints']>
+}
 
 /**
  * Server-side auth instance holder

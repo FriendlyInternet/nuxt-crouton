@@ -78,14 +78,11 @@ node scripts/eval-ledger/scoreboard.mjs --json     # raw rollup
 node scripts/eval-ledger/scoreboard.mjs --html     # standalone HTML view
 ```
 
-## Periodic scoreboard post (WS6b.2 · #884)
+## Periodic scoreboard post (retired, #2892)
 
-`.github/workflows/eval-scoreboard.yml` renders the scoreboard and upserts it onto one standing
-issue (**📊 Model routing scoreboard**). Deterministic — no LLM, no secrets beyond the built-in
-`GITHUB_TOKEN`; it reads the committed ledger and renders. Cadence is **config-as-data** in
-`.github/digests.yml` (`eval-scoreboard: weekly:mon`); the cron fires daily and `schedule.mjs`
-gates it to the send day, exactly like `housekeeping`. A manual `workflow_dispatch` always sends.
-Change the cadence in `digests.yml`, never the workflow cron.
+The weekly `eval-scoreboard.yml` job that posted this scoreboard to a standing issue was
+deleted: the ledger's last row is from July 2026 and nothing read the post. Render on demand
+with the commands above.
 
 ## Capturing a pi.dev run (#1203)
 
@@ -109,5 +106,41 @@ and provider-qualifies the model. It runs where the session file lives (the mac-
   bad model can't hurt `main`). Feed it with `from-pi-session.mjs` (#1203) against the run's
   session jsonl; a real datapoint (2026-07-07 a11y-pidev, $0.365) is already seeded.
 - **task-worker / decompose** capture (appending a row from those flows) is the remaining piece —
-  the periodic scoreboard post itself ships here (`eval-scoreboard.yml`).
+  the periodic scoreboard post was retired (#2892).
 - **Golden-task eval** rows (`flow: golden-*`, on fixtures, never `main`) ship in `scripts/eval-golden/` (#885) — 3 deterministic probes (reports-only / small-crud / scaffold) that append here via the same `append.mjs`.
+
+## Per-run record (#3251) — did this agent run produce anything?
+
+One record per workflow **run** (not per agent session), written by the final `record-outcome` job of
+`work-issue-pidev`, `decompose-on-issue-pidev`, `plan-review`, `build-review`, `ticket-review`,
+`fix-ci-on-failure` and the interpret chain of `on-comment`. The job `needs:` every other job and
+runs with `if: always()`, so failed and cancelled runs are recorded too. A ledger failure never fails
+the run (`continue-on-error` + the script always exits 0).
+
+- **Storage:** orphan branch `pipeline-data`, one file per run: `records/<yyyy-mm-dd>/<run_id>-<attempt>.json`
+  (contents API; distinct paths cannot conflict, 409/422 retried 3×). Nothing lands on main or epic branches.
+- **What counts as output:** an agent-written comment, a review verdict, or a commit on the work branch
+  inside the run's window. None → `produced: ["nothing"]` (never skipped).
+- **What does not:** the workflow's own notes. Every one carries the hidden marker
+  `<!-- pipeline-note -->` at its post site; `scripts/lib/pipeline-note-lint.test.mjs` fails CI for a
+  new post site without it (allowlist = verdict comments, the interpreter's own comment, body files that
+  start with the marker). Classification is a marker check, never header text.
+- **Overlap:** agent comments carry no run id, so two runs of the same workflow on the same issue/PR with
+  intersecting windows are `attribution: "shared"` (listing each other in `overlap[]`); a comment that
+  embeds `/actions/runs/<id>` is credited exactly to that run. Overlap is computed against records already
+  written, so the second run to finish sees the first.
+- **API usage:** `api_calls` = `GET /rate_limit` remaining at start minus at end (App token). `null` with
+  `api_calls_reason` when the hourly window rolled over (`reset-window-changed`) or a read failed.
+  Approximate — concurrent runs share the allowance. The start read is a step inside the agent job; the
+  interpret chain of `on-comment` has none, so those rows are `null` / `start-read-failed`.
+  `token` is `app` or `github_token`.
+- **Stage:** `plan | work | revise` for `work-issue-pidev` (a conflict-resolver run is a revise run),
+  otherwise the workflow's own stage name.
+
+| File | Role |
+|---|---|
+| `record-run.mjs` | build + write the record (thin I/O; exits 0) |
+| `gather-runs.mjs` | weekly table: the week's runs joined with records → produced / nothing / shared / unknown / **missing record**, median `api_calls` |
+| `backfill.mjs` | one-off `--from 2026-10-22 --to 2026-11-02`; idempotent; `source:"backfill"`, `rule:"legacy"`, `api_calls: null` (`backfill`); unreadable log → `unknown`; `nothing` rows keep the run URL in `ref` |
+| `../lib/run-outcome.mjs` | pure rules: `classify`, `joinRuns`, `summarizeRuns` |
+| `../lib/rate-limit.mjs` | `readRateLimit` / `diffRateLimit` (shared with the #3287 rate-limit helpers) |

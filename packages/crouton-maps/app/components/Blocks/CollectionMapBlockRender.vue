@@ -25,6 +25,8 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const { t } = useT()
+
 // Get collection config to verify it exists
 const { getConfig } = useCollections()
 const collectionConfig = computed(() => {
@@ -207,8 +209,8 @@ watch(markers, () => {
       v-if="!attrs.collection"
       color="neutral"
       icon="i-lucide-database"
-      title="No collection selected"
-      description="Edit this block to select a collection."
+      :title="t('maps.collectionBlock.noCollection')"
+      :description="t('maps.collectionBlock.noCollectionDescription')"
     />
 
     <!-- Collection not found -->
@@ -216,7 +218,7 @@ watch(markers, () => {
       v-else-if="!collectionConfig"
       color="warning"
       icon="i-lucide-alert-triangle"
-      :title="`Collection &quot;${attrs.collection}&quot; not found`"
+      :title="t('maps.collectionBlock.notFound', { collection: attrs.collection })"
     />
 
     <!-- Loading state -->
@@ -233,8 +235,8 @@ watch(markers, () => {
       v-else-if="!coordinateField"
       color="neutral"
       icon="i-lucide-map-pin-off"
-      title="No coordinate data found"
-      description="This collection doesn't appear to have location fields. Set the coordinate field name in block properties."
+      :title="t('maps.collectionBlock.noCoordinates')"
+      :description="t('maps.collectionBlock.noCoordinatesDescription')"
     />
 
     <!-- No items with valid coordinates -->
@@ -242,8 +244,8 @@ watch(markers, () => {
       v-else-if="markers.length === 0"
       color="neutral"
       icon="i-lucide-map-pin"
-      title="No map markers"
-      description="No items in this collection have valid coordinate data."
+      :title="t('maps.collectionBlock.noMarkers')"
+      :description="t('maps.collectionBlock.noMarkersDescription')"
     />
 
     <!-- Render map with markers -->

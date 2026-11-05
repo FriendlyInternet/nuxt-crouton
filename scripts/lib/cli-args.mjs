@@ -1,5 +1,5 @@
 // cli-args.mjs — the tiny no-deps `--flag [value]` parser shared by the harness
-// scripts (eval-ledger, pi-box). Extracted from its three clones (#1238).
+// scripts (eval-ledger; formerly pi-box, retired in #2275). Extracted from its three clones (#1238).
 //
 // Semantics: `--key value` → { key: 'value' }; a bare `--key` (or one whose next
 // token is another flag) → { key: true }. Non-flag tokens are skipped. Keys listed

@@ -29,31 +29,16 @@ function tryUseSession() {
   }
 }
 
-function tryUseUserMenuItems() {
-  try {
-    return useUserMenuItems({ useModal: true })
-  } catch {
-    return null
-  }
-}
-
 const teamComposable = tryUseTeam()
 const sessionComposable = tryUseSession()
-const userMenu = tryUseUserMenuItems()
 
 const teams = computed(() => teamComposable?.teams?.value ?? [])
 const canCreateTeam = computed(() => teamComposable?.canCreateTeam?.value ?? false)
 const isPending = computed(() => sessionComposable?.isPending?.value ?? false)
-const userInitials = computed(() => userMenu?.userInitials?.value ?? '?')
-const userDropdownItems = computed(() => userMenu?.dropdownItems?.value ?? [])
 
 const showCreateTeamModal = ref(false)
 
 const { t } = useI18n()
-const colorMode = useColorMode()
-const toggleColorMode = () => {
-  colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-}
 
 function handleTeamCreated(team: { slug: string }) {
   showCreateTeamModal.value = false
@@ -63,54 +48,10 @@ function handleTeamCreated(team: { slug: string }) {
 
 <template>
   <div class="min-h-screen flex items-center justify-center bg-(--ui-bg) p-4">
-    <!-- Top-right utility pill (matches public layout nav) -->
-    <div class="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 flex items-center gap-1 bg-(--ui-bg-muted)/80 backdrop-blur-sm rounded-full border border-(--ui-border) shadow-lg px-2 py-1">
-      <ClientOnly>
-        <!-- Authenticated: Avatar dropdown -->
-        <UDropdownMenu
-          v-if="loggedIn"
-          :items="userDropdownItems"
-          :content="{ align: 'end', side: 'bottom' }"
-          :ui="{ content: 'w-56' }"
-        >
-          <UButton
-            variant="ghost"
-            color="neutral"
-            size="sm"
-            class="rounded-full"
-          >
-            <template #leading>
-              <UAvatar
-                :src="user?.image ?? undefined"
-                :alt="user?.name ?? 'User'"
-                :text="userInitials"
-                size="2xs"
-              />
-            </template>
-          </UButton>
-        </UDropdownMenu>
-
-        <USeparator
-          v-if="loggedIn"
-          orientation="vertical"
-          class="h-5 mx-1"
-        />
-      </ClientOnly>
-
-      <!-- Language Switcher -->
-      <CroutonI18nLanguageSwitcher class="w-auto" />
-
-      <!-- Dark/Light Mode Toggle -->
-      <ClientOnly>
-        <UButton
-          :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          @click="toggleColorMode"
-        />
-      </ClientOnly>
-    </div>
+    <!-- Account / language / dark mode live in the bottom-left user pill -->
+    <ClientOnly>
+      <CroutonUserPill placement="fixed" use-modal :show-status="false" />
+    </ClientOnly>
 
     <div class="max-w-2xl w-full space-y-8">
       <!-- Header -->

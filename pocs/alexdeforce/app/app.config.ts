@@ -2,13 +2,11 @@ import { contentArticlesConfig } from '../layers/content/collections/articles/ap
 
 import {contentAgendasConfig} from '../layers/content/collections/agendas/app/composables/useContentAgendas';
 
-import {pagesPagesConfig} from '../layers/pages/collections/pages/app/composables/usePagesPages';
 
 import {translationsUiConfig} from '@fyit/crouton-i18n/app/composables/useTranslationsUi';
 
 import {contentTagsConfig} from '../layers/content/collections/tags/app/composables/useContentTags';
 
-import {croutonAssetsConfig} from '../layers/crouton/collections/assets/app/composables/useCroutonAssets';
 
 import {contentCategoriesConfig} from '../layers/content/collections/categories/app/composables/useContentCategories';
 
@@ -16,10 +14,8 @@ export default defineAppConfig({
   croutonCollections: {
     contentArticles: contentArticlesConfig,
     contentAgendas: contentAgendasConfig,
-    pagesPages: pagesPagesConfig,
     translationsUi: translationsUiConfig,
     contentTags: contentTagsConfig,
-    croutonAssets: croutonAssetsConfig,
     contentCategories: contentCategoriesConfig
   }
 })

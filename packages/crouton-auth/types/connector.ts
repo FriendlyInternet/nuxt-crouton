@@ -13,7 +13,7 @@
 import type { H3Event } from 'h3'
 
 // ============================================================================
-// Core Types (compatible with nuxt-crouton's #crouton/team-auth expectations)
+// Core Types (what nuxt-crouton's generated handlers expect from team auth)
 // ============================================================================
 
 export interface Team {
@@ -144,7 +144,7 @@ export interface BetterAuthConnector {
 
   /**
    * Resolve team and check membership
-   * Compatible with nuxt-crouton's #crouton/team-auth
+   * Compatible with nuxt-crouton's generated team-scoped handlers
    */
   resolveTeamAndCheckMembership: (event: H3Event) => Promise<TeamAuthResult>
 }

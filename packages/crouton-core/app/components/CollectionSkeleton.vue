@@ -20,6 +20,8 @@ const props = withDefaults(defineProps<{
 })
 
 // Grid/card layouts share a card-grid skeleton; everything else falls back to rows.
+const { t } = useT()
+
 const isGrid = computed(() => props.layout === 'grid' || props.layout === 'cards')
 </script>
 
@@ -28,7 +30,7 @@ const isGrid = computed(() => props.layout === 'grid' || props.layout === 'cards
     class="h-full w-full p-4"
     role="status"
     aria-busy="true"
-    :aria-label="'Loading'"
+    :aria-label="t('common.loading')"
   >
     <!-- Toolbar (search + actions) to match the real table header height -->
     <div class="flex items-center gap-2 mb-4">

@@ -37,7 +37,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | `types/config.ts` | `CroutonAuthConfig` configuration type |
 | `types/connector.ts` | `BetterAuthConnector` interface |
 | `app/utils/security.ts` | Client-side security utilities (public API for consumer apps) |
-| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; optional staff user/account/member behind `--with-staff` |
+| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; creates no login (#2357, #2365) |
 
 ## Public Utilities
 
@@ -94,7 +94,10 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 - `EmailLogs` — Auth email log viewer with stats, filtering, and error details
 
 ### Sidebar Components
-- `AuthSidebar`, `TeamSection`, `UserMenu`
+- `AuthSidebar`, `TeamSection`
+
+### Pill
+- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
 
 ## Server Utilities
 
@@ -301,7 +304,7 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
    export * from '@crouton/auth/server/database/schema/auth'
    ```
 
-**Note**: The collection generator uses `@crouton/auth/server` directly (not the `#crouton/team-auth` alias).
+**Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
 ## Rate Limiting (Recommended)
 
@@ -522,15 +525,17 @@ Consuming apps must regenerate migrations (`npx nuxt db generate`) after upgradi
 Ships a `SeedProvider` (id `auth`, no deps, runs first) for the composable
 seeding system (epic #82, contract in `@fyit/crouton-core/shared/seed`). It
 upserts the team `organization` (id `seed:org:<slug>`, slug e.g. `test1`) that
-every domain provider hangs off. With `--with-staff` it also seeds a known staff
-login — `user` + credential `account` (password hashed via `better-auth/crypto`'s
-`hashPassword`, the scrypt envelope login verifies against) + owner `member`.
-Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
+every domain provider hangs off. Idempotent (stable ids). Run via an app's
+`crouton-seed` / `db:seed:*` scripts.
+
+**It creates no login** (#2357, #2365). People and smoke tests get in through the per-app
+review login, which the deploy creates itself (password from a secret, sign-in link
+emailed to the owner). Never write a password into a seed: this repo is public.
 
 ## Dependencies
 
 - **Extends**: None (standalone module/layer)
-- **Used by**: `@fyit/crouton` and all crouton packages (canonical team auth)
+- **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
 - **Core deps**: better-auth, @better-auth/passkey
 - **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
 
@@ -545,7 +550,7 @@ pnpm test:integration  # Integration tests only
 ## Naming Conventions
 
 ```
-Component: AuthLoginForm, TeamSwitcher, AccountSettings
+Component: AuthLoginForm, TeamSwitcher, AccountSettings, CroutonUserPill
 Composable: useAuth, useTeam, useSession
 API: /api/auth/[...all] (Better Auth handles routing)
 Middleware: auth, guest, team-context

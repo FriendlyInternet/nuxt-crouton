@@ -532,11 +532,11 @@ export const logoBlockDefinition: BlockDefinition<LogoBlockAttrs> = {
     align: 'center',
     size: 'md',
     items: [
-      { value: 'i-simple-icons-github' },
-      { value: 'i-simple-icons-discord' },
-      { value: 'i-simple-icons-x' },
-      { value: 'i-simple-icons-linkedin' },
-      { value: 'i-simple-icons-facebook' }
+      { value: 'i-lucide-github' },
+      { value: 'i-lucide-x' },
+      { value: 'i-lucide-linkedin' },
+      { value: 'i-lucide-facebook' },
+      { value: 'i-lucide-instagram' }
     ]
   },
   schema: [

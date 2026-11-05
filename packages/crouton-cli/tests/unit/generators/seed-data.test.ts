@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { generateSeedFile } from '../../../lib/generators/seed-data.ts'
+import { withManifest } from '../../helpers/manifest-fields.ts'
 import {
-  seedData,
+  seedData as rawSeedData,
   seedWithHierarchyData,
   seedWithForeignKeyData
 } from '../../fixtures/sample-data.mjs'
+
+const seedData = { ...rawSeedData, fields: withManifest(rawSeedData.fields) }
 
 // Mock date to prevent snapshot failures due to timestamps
 beforeAll(() => {

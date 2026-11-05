@@ -62,8 +62,8 @@ happen by accident or as a side effect of an agent flow.
 ## After
 
 - Verify `<app>.friendlyinter.net` is live and the remote migration applied.
-- Production is **never demo-seeded** — the seed's known admin (`--with-staff`) is a
-  staging/local-only login and must never run against the prod DB.
+- Production is **never demo-seeded** — the demo team and the deploy's review login are
+  staging/local-only and must never reach the prod DB.
 
 ## Shared mechanics
 

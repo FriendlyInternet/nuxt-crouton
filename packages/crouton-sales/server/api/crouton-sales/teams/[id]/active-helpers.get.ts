@@ -1,7 +1,7 @@
 import { eq, and, gt, inArray } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { scopedAccessToken } from '@fyit/crouton-auth/server/database/schema/auth'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { salesEvents } from '../../../../../collections/events/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)

@@ -1,0 +1,14 @@
+{
+  "calendar": {
+    "week": {
+      "previousWeek": "Semaine précédente",
+      "nextWeek": "Semaine suivante",
+      "today": "Aller à aujourd'hui"
+    },
+    "month": {
+      "previousMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "today": "Aller à aujourd'hui"
+    }
+  }
+}

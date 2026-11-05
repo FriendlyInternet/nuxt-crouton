@@ -22,6 +22,7 @@
 import type { Team, MemberRole, Member, MemberWithUser } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { mapOrganizationToTeam } from '../../shared/utils/auth'
+import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 
 export interface CreateTeamData {
   name: string
@@ -260,12 +261,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to switch team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_SWITCH_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to switch team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -283,12 +284,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to switch team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_SWITCH_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to switch team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -313,7 +314,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to create team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_CREATE_FAILED, result.error.message)
       }
 
       if (!result.data) {
@@ -330,7 +331,7 @@ export function useTeam() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to create team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -358,7 +359,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to update team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_UPDATE_FAILED, result.error.message)
       }
 
       if (!result.data) {
@@ -369,7 +370,7 @@ export function useTeam() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to update team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -395,12 +396,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to delete team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_DELETE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to delete team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -459,12 +460,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to invite member')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_INVITE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to invite member')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -491,7 +492,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to remove member')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_REMOVE_MEMBER_FAILED, result.error.message)
       }
 
       // Refresh members list
@@ -499,7 +500,7 @@ export function useTeam() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to remove member')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -527,7 +528,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to update role')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_UPDATE_ROLE_FAILED, result.error.message)
       }
 
       // Refresh members list
@@ -535,7 +536,7 @@ export function useTeam() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to update role')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -568,12 +569,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to leave team')
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_LEAVE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to leave team')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -619,12 +620,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to cancel invitation')
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_CANCEL_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to cancel invitation')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -642,12 +643,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to accept invitation')
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_ACCEPT_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to accept invitation')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -665,12 +666,12 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Failed to reject invitation')
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_REJECT_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to reject invitation')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }
@@ -689,7 +690,7 @@ export function useTeam() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to resend invitation')
       error.value = message
-      throw new Error(message)
+      throw e instanceof AuthError ? e : new Error(message)
     } finally {
       loading.value = false
     }

@@ -1,0 +1,408 @@
+<script setup lang="ts">
+import type { CratePile, CrateTrack, TopTray } from '~/composables/useCrate'
+import { isChecked } from '~/composables/useCrate'
+import type { HintWord } from '~/composables/useCrateHints'
+
+definePageMeta({ layout: false, middleware: ['auth'] })
+useHead({ title: 'Crate', meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }] })
+
+const crate = useCrate()
+const toast = useToast()
+const { status, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
+
+// ── Level (which pile we're inside) ───────────────────────────────────────
+const levelId = ref<string | null>(null)
+const level = computed(() => crate.piles.value.find(p => p.id === levelId.value) ?? null)
+const shownPiles = computed(() => children(levelId.value))
+const trail = computed(() => level.value ? [...ancestors(level.value), level.value] : [])
+// Top level shows the inbox, or every track not yet checked in crate (#2237) — remembered per device.
+const topTray = useLocalStorage<TopTray>('crate:top-tray', 'inbox')
+const trayTracks = computed(() => tray(level.value, topTray.value))
+const main = ref<HTMLElement>()
+function goUp() {
+  const parentId = level.value?.parentId
+  openLevel(parentId ? crate.piles.value.find(p => p.id === parentId) ?? null : null)
+}
+function openLevel(pile: CratePile | null) {
+  pin() // the deck keeps its track while you look around other piles
+  levelId.value = pile?.id ?? null
+  main.value?.scrollTo({ top: 0 })
+}
+
+// ── The deck holds its track by id: filing it removes it from the tray, but it stays put ──
+const currentId = ref<string | null>(null)
+const trayIndex = ref(0) // where the current track sat in the tray, so Next continues from there
+// Until a track is picked, the deck shows the first one in the tray.
+const current = computed<CrateTrack | null>(() => currentId.value
+  ? tracks.value.find(t => t.id === currentId.value) ?? null
+  : trayTracks.value[0] ?? null)
+/** Pin the shown track before acting on it or navigating, so the deck never swaps by itself. */
+function pin() {
+  if (!currentId.value && current.value) currentId.value = current.value.id
+}
+function togglePile(pile: CratePile) {
+  if (!current.value) return
+  pin()
+  toggle(current.value, pile)
+}
+
+// Card swiped down: the pile list takes the screen and a tap opens a pile instead of filing.
+const deckCollapsed = ref(false)
+const deck = ref<{ playSrc: (url: string) => void, pause: () => void, toggle: () => void, skip: (seconds: number) => void }>()
+
+// ── Listen to a pile (#2221) ──────────────────────────────────────────────
+const listener = ref<{ show: (p: CratePile, tracks: CrateTrack[]) => void, start: () => void }>()
+/** Open the listening sheet for `pile` (the current level by default). */
+function openListen(pile: CratePile | null = level.value) {
+  if (!pile) return
+  const playable = tracks.value.filter(t => t.hasAudio && t.id !== current.value?.id && isIn(t, pile))
+  if (!playable.length) return toast.add({ title: `Nothing to play in ${pile.name} yet` })
+  listener.value?.show(pile, playable)
+}
+/** Header 🎧: open + play at once — it's a tap, so iOS lets it start. */
+function listen() {
+  openListen()
+  listener.value?.start()
+}
+
+// Previous = the tracks you actually came through (a filed one has left the tray, but you
+// can still swipe back to it); with no history yet, the one above it in the tray.
+const history = ref<string[]>([])
+const prevTrack = computed(() => {
+  const id = history.value.at(-1)
+  if (id) return tracks.value.find(t => t.id === id) ?? null
+  const at = trayTracks.value.findIndex(t => t.id === current.value?.id)
+  return at > 0 ? trayTracks.value[at - 1]! : null
+})
+const nextTrack = computed(() => {
+  const list = trayTracks.value
+  const at = list.findIndex(t => t.id === current.value?.id)
+  // Still in the tray → the one after it; filed away → whatever now sits where it was.
+  const target = list[at >= 0 ? at + 1 : trayIndex.value]
+  return target && target.id !== current.value?.id ? target : null
+})
+
+function show(track: CrateTrack | undefined, autoplay: boolean, remember = true) {
+  if (!track) return
+  if (remember && current.value && current.value.id !== track.id) history.value = [...history.value.slice(-49), current.value.id]
+  currentId.value = track.id
+  const at = trayTracks.value.findIndex(t => t.id === track.id)
+  if (at >= 0) trayIndex.value = at
+  if (autoplay && track.hasAudio) deck.value?.playSrc(audioUrl(track))
+}
+/** ✓ Done: mark the shown track as checked in crate, then move on like Next. */
+async function done() {
+  pin()
+  if (current.value) await crate.markChecked(current.value)
+  next()
+}
+function next() {
+  pin()
+  show(nextTrack.value ?? undefined, true)
+}
+function previous() {
+  pin()
+  const target = prevTrack.value
+  if (history.value.at(-1) === target?.id) history.value = history.value.slice(0, -1)
+  show(target ?? undefined, true, false)
+}
+
+// ── Genre hints + new piles (#2212) ───────────────────────────────────────
+const hints = useCrateHints(crate, current)
+const newPile = ref<{ start: (prefill?: { name?: string, parentId?: string | null }) => void }>()
+const newPileOpen = ref(false)
+function onWord(w: HintWord) {
+  const pile = w.pileId ? crate.piles.value.find(p => p.id === w.pileId) : undefined
+  if (pile) togglePile(pile)
+  else newPile.value?.start({ name: w.word, parentId: w.parentId })
+}
+function fileSuggestion(pile: CratePile) {
+  if (!current.value) return
+  pin()
+  crate.fileInto(current.value, pile)
+}
+async function onCreate(name: string, parentId: string | null, fileTrack: boolean) {
+  if (fileTrack) pin()
+  await crate.createPile(name, parentId, fileTrack ? current.value : null)
+}
+
+// ── Edit mode (#2211) ─────────────────────────────────────────────────────
+const editing = ref(false)
+const editor = ref<{ start: (p: CratePile) => void }>()
+function onRow(pile: CratePile) {
+  if (editing.value) editor.value?.start(pile)
+  else onPileToggle(pile)
+}
+watch(() => crate.piles.value.some(p => p.id === levelId.value), (exists) => {
+  // The level we're inside was removed (or undone away): go back to the top.
+  if (levelId.value && !exists) levelId.value = null
+})
+
+// ── Drag onto a pile (#2210) ──────────────────────────────────────────────
+// Dragging may spring-load deeper levels; after the drop we return to where the drag started.
+let dragFrom: string | null = null
+const drag = useCrateDrag({
+  drop(pileId) {
+    const pile = crate.piles.value.find(p => p.id === pileId)
+    if (pile && current.value && !isIn(current.value, pile)) crate.fileInto(current.value, pile)
+  },
+  spring(target) {
+    if (target.kind === 'up') goUp()
+    else openLevel(crate.piles.value.find(p => p.id === target.id) ?? null)
+  },
+  end() {
+    if (levelId.value !== dragFrom) openLevel(crate.piles.value.find(p => p.id === dragFrom) ?? null)
+  }
+})
+function pressCard(e: PointerEvent) {
+  if (!current.value || editing.value) return
+  pin()
+  dragFrom = levelId.value
+  drag.press(e)
+}
+const dropPileId = computed(() => drag.over.value?.kind === 'pile' ? drag.over.value.id : null)
+const springOf = (pile: CratePile) => dropPileId.value === pile.id ? drag.progress.value : 0
+const hasSubPiles = (pile: CratePile) => children(pile.id).length > 0
+const ghost = computed(() => drag.dragging.value ? current.value : null)
+
+// "↑ Not <pile>": inside a pile, take the track out of it.
+const notIn = computed(() => level.value && current.value && isIn(current.value, level.value) ? level.value : null)
+function notInLevel(pile: CratePile) {
+  pin()
+  if (current.value) takeOutOf(current.value, pile)
+}
+
+// ── Desktop keyboard (#2210) ──────────────────────────────────────────────
+const anyOverlay = computed(() => listOpen.value || newPileOpen.value)
+useEventListener(import.meta.client ? window : undefined, 'keydown', (e: KeyboardEvent) => {
+  const el = e.target as HTMLElement | null
+  if (el?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="dialog"]')) return
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault()
+    return crate.undo()
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey || anyOverlay.value || drag.dragging.value) return
+  const n = Number(e.key)
+  if (n >= 1 && n <= 9 && !editing.value) {
+    const pile = shownPiles.value[n - 1]
+    if (pile) togglePile(pile)
+    return
+  }
+  const actions: Record<string, () => void> = {
+    ' ': () => deck.value?.toggle(),
+    'ArrowUp': previous,
+    'ArrowDown': next,
+    'ArrowLeft': () => deck.value?.skip(-15),
+    'ArrowRight': () => deck.value?.skip(15),
+    'Enter': next,
+    'Escape': () => { if (level.value) goUp() },
+    '/': () => { listOpen.value = true }
+  }
+  const act = actions[e.key]
+  if (!act) return
+  e.preventDefault()
+  act()
+})
+
+const inPiles = computed(() => current.value ? leafPiles(current.value) : [])
+const deckOther = computed(() => current.value ? otherTags(current.value) : [])
+
+// ── Track list ────────────────────────────────────────────────────────────
+const listOpen = ref(false)
+function removeFromDeck(pile: CratePile) {
+  pin()
+  if (current.value) takeOutOf(current.value, pile)
+}
+function pick(track: CrateTrack) {
+  listOpen.value = false
+  show(track, true)
+}
+const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : { inbox: 'Inbox', unchecked: 'To check', uploads: 'Uploads' }[topTray.value])
+
+// ── Your uploads (#2237): rename or delete the track on the deck ──
+const editOpen = ref(false)
+async function saveUpload(artist: string, name: string) {
+  if (current.value && await crate.renameUpload(current.value, artist, name)) editOpen.value = false
+}
+async function removeUpload() {
+  const track = current.value
+  if (!track) return
+  pin()
+  if (!await crate.deleteUpload(track)) return
+  editOpen.value = false
+  currentId.value = null // the deck falls back to the first track in the tray
+}
+
+// ── Add new tracks (#2237): upload → inbox; the deck jumps to the first new one ──
+const { upload, progress: uploadProgress } = useCrateUpload(crate)
+const fileInput = ref<HTMLInputElement>()
+async function onFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const added = await upload([...(input.files ?? [])])
+  input.value = ''
+  if (added.length) {
+    openLevel(null)
+    show(tracks.value.find(t => t.id === added[0]!.id), false)
+  }
+}
+// ── Template helpers: keep the template flat (fallow template complexity) ──
+const deckSrc = computed(() => current.value?.hasAudio ? audioUrl(current.value) : null)
+const deckChecked = computed(() => !!current.value && isChecked(current.value))
+const searchPool = computed(() => level.value ? null : tracks.value)
+function pileTicked(pile: CratePile) {
+  return !!current.value && isIn(current.value, pile)
+}
+function pileGlow(pile: CratePile) {
+  return deckCollapsed.value ? null : hints.glow(pile)
+}
+function onPileToggle(pile: CratePile) {
+  if (deckCollapsed.value) openLevel(pile)
+  else togglePile(pile)
+}
+function isInPileId(id: string) {
+  const pile = crate.piles.value.find(p => p.id === id)
+  return !!current.value && !!pile && isIn(current.value, pile)
+}
+function startNewPile() {
+  newPile.value?.start({ parentId: levelId.value })
+}
+</script>
+
+<template>
+  <div class="flex h-dvh flex-col overflow-x-hidden bg-default text-default">
+    <CrateHeader
+      :trail="trail"
+      :tray-label="trayLabel"
+      :tray-count="trayTracks.length"
+      :uploading="uploadProgress"
+      @open="openLevel"
+      @up="goUp"
+      @undo="crate.undo()"
+      @list="listOpen = true"
+      @listen="listen"
+      @upload="fileInput?.click()"
+      :editing="editing"
+      :drop-key="drag.overKey.value"
+      @edit="editing = !editing"
+    />
+    <input ref="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.aif,.aiff,.wav,.flac,.ogg" multiple class="hidden" @change="onFiles">
+    <UProgress
+      v-if="uploadProgress"
+      :model-value="uploadProgress.total ? uploadProgress.done : null"
+      :max="uploadProgress.total || 1"
+      size="xs"
+      :aria-label="`Uploading ${uploadProgress.name}`"
+    />
+
+    <main ref="main" class="flex-1 overflow-y-auto p-2">
+      <div v-if="status === 'error'" class="py-10 text-center text-error">
+        Couldn’t load your library. <UButton variant="link" label="Retry" @click="crate.refresh()" />
+      </div>
+      <div v-else-if="status !== 'success' && !crate.piles.value.length" class="py-10 text-center text-muted">Loading your library…</div>
+      <UCard v-else variant="soft" :ui="{ body: 'p-0 sm:p-0' }">
+        <div class="divide-y divide-default/60 md:grid md:grid-cols-2 md:divide-y-0 lg:grid-cols-3">
+          <CratePileRow
+            v-for="pile in shownPiles"
+            :key="pile.id"
+            :pile="pile"
+            :count="counts.get(pile.id) ?? 0"
+            :ticked="pileTicked(pile)"
+            :disabled="!current && !deckCollapsed"
+            :glow="pileGlow(pile)"
+            :editing="editing"
+            :springs="hasSubPiles(pile)"
+            :drop-over="dropPileId === pile.id"
+            :spring="springOf(pile)"
+            @toggle="onRow(pile)"
+            @open="openLevel(pile)"
+          />
+          <UButton
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-plus"
+            label="New pile"
+            class="w-full rounded-none px-3 py-2 text-muted"
+            @click="startNewPile"
+          />
+        </div>
+      </UCard>
+    </main>
+
+    <CrateDeck
+      ref="deck"
+      v-model:collapsed="deckCollapsed"
+      :track="current"
+      :prev-track="prevTrack"
+      :next-track="nextTrack"
+      :src="deckSrc"
+      :in-piles="inPiles"
+      :other-tags="deckOther"
+      :path-label="pathLabel"
+      :can-next="inPiles.length > 0"
+      :checked="deckChecked"
+      :not-in="notIn"
+      @next="next"
+      @previous="previous"
+      @done="done"
+      @edit="editOpen = true"
+      @remove="removeFromDeck"
+      @press="pressCard"
+      @not="notInLevel"
+    >
+      <template #hints>
+        <CrateHints
+          :sources="hints.sources.value"
+          :suggestions="hints.suggestions.value"
+          :path-label="pathLabel"
+          :is-in-pile="isInPileId"
+          :empty="hints.empty.value"
+          @word="onWord"
+          @file="fileSuggestion"
+          @hold="openListen"
+          @listen="listener?.start()"
+          @new="startNewPile"
+        />
+      </template>
+    </CrateDeck>
+
+    <!-- The dragged track follows the finger; pointer-events-none so elementFromPoint sees what's under it. -->
+    <div
+      v-if="ghost"
+      class="pointer-events-none fixed z-50 max-w-60 -translate-x-1/2 -translate-y-[130%] truncate rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-inverted shadow-lg"
+      :style="{ left: `${drag.x.value}px`, top: `${drag.y.value}px` }"
+    >
+      {{ ghost.name }}
+    </div>
+
+    <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
+
+    <CrateUploadEdit v-model:open="editOpen" :track="current" @save="saveUpload" @delete="removeUpload" />
+
+    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" :tags="crate.loneTags.value" @create="onCreate" />
+
+    <CrateEditPile
+      ref="editor"
+      :piles="crate.piles.value"
+      :path-label="pathLabel"
+      :descendants="descendants"
+      :children="children"
+      :count="(p) => counts.get(p.id) ?? 0"
+      @rename="(p, name) => crate.editPile(p, { op: 'rename', name })"
+      @move="(p, parentId) => crate.editPile(p, { op: 'move', parentId })"
+      @up="(p) => crate.editPile(p, { op: 'up' })"
+      @shift="(p, dir) => crate.editPile(p, { op: 'shift', dir })"
+      @remove="(p) => crate.editPile(p, { op: 'remove' })"
+    />
+
+    <CrateTrackList
+      v-model:open="listOpen"
+      :title="trayLabel"
+      :tray="trayTracks"
+      v-model:top-tray="topTray"
+      :at-top="!level"
+      :search-pool="searchPool"
+      :current-id="currentId"
+      @pick="pick"
+    />
+  </div>
+</template>

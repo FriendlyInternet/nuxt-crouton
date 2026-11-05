@@ -25,9 +25,13 @@ export function resolveTranslatedField(
  * Resolve slot IDs to human-readable labels using the location's slots config.
  * Falls back to the raw ID if no matching slot is found.
  */
+/** The built-in full-day slot's name per locale (mirrors i18n `bookings.allDay`). */
+const FULL_DAY_LABELS: Record<string, string> = { en: 'All day', nl: 'Hele dag', fr: 'Toute la journée' }
+
 export function resolveSlotLabels(
   slotIds: string[] | null,
-  locationSlots: Array<{ id: string; label?: string }> | null | undefined
+  locationSlots: Array<{ id: string; label?: string }> | null | undefined,
+  locale: string = 'en'
 ): string {
   if (!slotIds || slotIds.length === 0) return 'Not specified'
 
@@ -37,7 +41,7 @@ export function resolveSlotLabels(
 
   return slotIds
     .map(id => {
-      if (id === 'all-day') return 'All Day'
+      if (id === 'all-day') return FULL_DAY_LABELS[locale] ?? FULL_DAY_LABELS.en!
       return slotMap.get(id) || id
     })
     .join(', ')

@@ -68,7 +68,7 @@ const handleConfirm = async () => {
         v-if="objectUrl"
         ref="imageRef"
         :src="objectUrl"
-        alt="Crop preview"
+        :alt="t('image.cropPreview')"
         class="block"
       >
     </div>

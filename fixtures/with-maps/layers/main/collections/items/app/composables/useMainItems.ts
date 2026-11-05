@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection items
  * @layer main
- * @generated 2026-06-21
  *
  * ## AI Context
  * - Composable: useMainItems
@@ -41,7 +40,6 @@ const _mainItemsConfig = {
   name: 'mainItems',
   layer: 'main',
   apiPath: 'main-items',
-  componentName: 'MainItemsForm',
   defaultValues: {
     name: '',
     done: false

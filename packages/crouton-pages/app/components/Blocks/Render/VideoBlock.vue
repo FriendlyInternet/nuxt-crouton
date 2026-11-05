@@ -16,6 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const widthClass = computed(() => {
   switch (props.attrs.width) {
@@ -56,8 +57,8 @@ const bunnySrc = computed(() => {
       v-if="!attrs.src"
       color="neutral"
       icon="i-lucide-video"
-      title="No video configured"
-      description="Edit this block to add a video."
+      :title="t('pages.blockRender.noVideoTitle')"
+      :description="t('pages.blockRender.noVideoDescription')"
     />
 
     <!-- Bunny Stream iframe -->

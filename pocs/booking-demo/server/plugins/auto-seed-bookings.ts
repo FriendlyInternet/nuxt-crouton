@@ -22,9 +22,9 @@
  * try/catch so a seed failure never breaks team creation.
  */
 import { defineNitroPlugin } from 'nitropack/runtime'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
-import { bookingsSettings } from '~~/layers/bookings/collections/settings/server/database/schema'
+import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
+import { bookingsLocations } from '@fyit/crouton-bookings/collections/locations/server/database/schema'
+import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/server/database/schema'
 
 const STATUSES = [
   { id: 'confirmed', value: 'confirmed', label: 'Confirmed' },

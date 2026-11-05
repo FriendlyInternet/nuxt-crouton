@@ -9,7 +9,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   modelValue: '#FFFFFF',
   size: 'md',
-  placeholder: 'Pick a color'
+  placeholder: undefined
 })
 
 const emit = defineEmits<{
@@ -26,6 +26,8 @@ const TAILWIND_PRESETS = [
 const presetColors = computed(() => props.presets ?? TAILWIND_PRESETS)
 
 const open = ref(false)
+const { t } = useT()
+
 const showCustom = ref(false)
 
 const color = computed({
@@ -78,7 +80,7 @@ const hasValue = computed(() => !!props.modelValue && props.modelValue !== '')
         />
       </template>
       <span class="font-mono text-sm" :class="{ 'text-muted': !hasValue }">
-        {{ hasValue ? color : placeholder }}
+        {{ hasValue ? color : (placeholder ?? t('colorPicker.placeholder')) }}
       </span>
       <template v-if="hasValue" #trailing>
         <UButton
@@ -120,7 +122,7 @@ const hasValue = computed(() => !!props.modelValue && props.modelValue !== '')
           class="w-full justify-start mb-2 text-sm text-muted hover:text-highlighted"
           @click="showCustom = !showCustom"
         >
-          Custom color
+          {{ t('colorPicker.custom') }}
         </UButton>
 
         <!-- Custom picker -->

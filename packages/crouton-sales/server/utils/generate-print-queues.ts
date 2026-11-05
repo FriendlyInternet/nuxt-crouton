@@ -60,11 +60,11 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
   const transportRow = await getPrintTransport(db, eventId)
   if (transportRow?.transport === PRINT_TRANSPORT.NONE) return []
 
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
-  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
-  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
-  const { salesPrinters } = await import('~~/layers/sales/collections/printers/server/database/schema')
-  const { salesEventsettings } = await import('~~/layers/sales/collections/eventsettings/server/database/schema')
+  const { salesOrderitems } = await import('../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../collections/locations/server/database/schema')
+  const { salesPrinters } = await import('../../collections/printers/server/database/schema')
+  const { salesEventsettings } = await import('../../collections/eventsettings/server/database/schema')
 
   const printers = await db.select().from(salesPrinters).where(eq(salesPrinters.eventId, eventId))
   if (printers.length === 0) return []

@@ -6,8 +6,8 @@
  * the shared layout filter store, then renders `CroutonBookingsList`.
  *
  * Atomicity note (#924 gap report): the native Panel also feeds List a bundle of
- * interaction state (selected-dates highlight, hovered-booking-id, creating-at-
- * date, scroll-to-date) driven by the sibling Calendar. Across separate panes the
+ * interaction state (selected-date highlight, hovered-booking-id, creating-at-
+ * date, scroll-target) driven by the sibling Calendar. Across separate panes the
  * layout tree can't carry that, so those cross-surface niceties are inert here —
  * the list still lists + filters, which is the block's atomic job.
  */

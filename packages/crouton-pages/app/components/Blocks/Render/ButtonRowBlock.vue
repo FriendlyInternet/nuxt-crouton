@@ -16,6 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 // Resolves a button's pageId to its canonical (nested, localized) URL.
 const { resolve: resolvePageUrl } = usePageLink()
@@ -53,8 +54,8 @@ const alignClass = computed(() => {
       v-if="buttons.length === 0"
       color="neutral"
       icon="i-lucide-mouse-pointer-click"
-      title="No buttons configured"
-      description="Edit this block to add buttons."
+      :title="t('pages.blockRender.noButtonsTitle')"
+      :description="t('pages.blockRender.noButtonsDescription')"
     />
 
     <!-- Render button row -->
@@ -67,12 +68,12 @@ const alignClass = computed(() => {
         <!-- Download button -->
         <a
           v-if="btn.download && btn.file"
-          :href="btn.file"
+          :href="safeUrl(btn.file)"
           download
           class="inline-flex items-center gap-2"
         >
           <UButton
-            :label="btn.label || 'Download'"
+            :label="btn.label || t('pages.blockRender.download')"
             :color="btn.color || 'primary'"
             :variant="btn.variant || 'solid'"
             :icon="btn.icon || 'i-lucide-download'"
@@ -83,8 +84,8 @@ const alignClass = computed(() => {
         <!-- Link button -->
         <UButton
           v-else
-          :label="btn.label || 'Button'"
-          :to="resolveHref(btn)"
+          :label="btn.label || t('pages.blockRender.button')"
+          :to="safeUrl(resolveHref(btn))"
           :target="btn.external ? '_blank' : undefined"
           :color="btn.color || 'primary'"
           :variant="btn.variant || 'solid'"

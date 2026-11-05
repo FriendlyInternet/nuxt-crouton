@@ -88,8 +88,10 @@ export function analyze(records, usageRecords = []) {
   }
 
   // Deltas vs the previous point (only meaningful with ≥2 points AND the same
-  // tokenizer — comparing a heuristic point to an API point is apples/oranges).
-  if (prev && prev.tokenizer === latest.tokenizer) {
+  // ruler: same tokenizer — a heuristic point vs an API point is apples/oranges —
+  // AND the same record schema — schema 3 started counting CLAUDE.md's @imports
+  // (#2387), a +26% step that is a measurement change, not growth).
+  if (prev && prev.tokenizer === latest.tokenizer && (prev.schema ?? 2) === (latest.schema ?? 2)) {
     const dTok = (tok(latest) ?? 0) - (tok(prev) ?? 0)
     const pct = tok(prev) ? (dTok / tok(prev)) * 100 : 0
     if (dTok >= ADVISOR.growthTokens || pct >= ADVISOR.growthPct) {

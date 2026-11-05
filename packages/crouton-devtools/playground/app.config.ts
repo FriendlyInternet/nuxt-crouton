@@ -5,7 +5,6 @@ export default defineAppConfig({
       name: 'tasks',
       layer: 'internal',
       apiPath: '/api/crouton-collection/tasks',
-      componentName: 'TasksForm',
       meta: {
         label: 'Tasks',
         description: 'Task management collection',
@@ -24,7 +23,6 @@ export default defineAppConfig({
       name: 'projects',
       layer: 'internal',
       apiPath: '/api/crouton-collection/projects',
-      componentName: 'ProjectsForm',
       meta: {
         label: 'Projects',
         description: 'Project management collection'
@@ -41,7 +39,6 @@ export default defineAppConfig({
       name: 'users',
       layer: 'external',
       apiPath: '/api/crouton-collection/users',
-      componentName: null,
       meta: {
         label: 'Users',
         description: 'External user management (read-only)'
@@ -61,7 +58,6 @@ export default defineAppConfig({
       name: 'notes',
       layer: 'internal',
       apiPath: '/api/crouton-collection/notes',
-      componentName: 'NotesForm',
       meta: {
         label: 'Notes',
         description: 'Quick notes and memos'

@@ -3,8 +3,7 @@ import { generateTypes } from '../../../lib/generators/types.ts'
 import {
   basicTypesData,
   minimalConfig,
-  translationsConfig,
-  noMetadataConfig
+  translationsConfig
 } from '../../fixtures/sample-data.mjs'
 
 // Type helper to work around .mjs module inference (config = null default)
@@ -54,12 +53,6 @@ describe('generateTypes', () => {
     expect(result).toContain('updatedAt: Date')
     expect(result).toContain('createdBy: string')
     expect(result).toContain('updatedBy: string')
-  })
-
-  it('excludes metadata fields when disabled', () => {
-    const result = generateTypes(basicTypesData, noMetadataConfig as AnyConfig)
-    expect(result).not.toContain('createdAt: Date')
-    expect(result).not.toContain('updatedAt: Date')
   })
 
   it('includes optimistic update fields', () => {

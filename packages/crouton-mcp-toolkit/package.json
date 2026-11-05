@@ -37,7 +37,7 @@
   "devDependencies": {
     "@nuxt/kit": "^3.14.0",
     "@nuxt/schema": "^3.14.0",
-    "@nuxtjs/mcp-toolkit": "^0.6.0",
+    "@nuxtjs/mcp-toolkit": "^0.24.2",
     "nuxt": "catalog:",
     "typescript": "catalog:",
     "unbuild": "^2.0.0",
@@ -45,7 +45,7 @@
     "zod": "^3.24.0"
   },
   "peerDependencies": {
-    "@nuxtjs/mcp-toolkit": "^0.6.0",
+    "@nuxtjs/mcp-toolkit": "^0.24.2",
     "nuxt": "^3.14.0 || ^4.0.0"
   },
   "engines": {

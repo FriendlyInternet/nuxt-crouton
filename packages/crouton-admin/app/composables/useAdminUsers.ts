@@ -32,6 +32,7 @@ import type {
 } from '../../types/admin'
 
 export function useAdminUsers() {
+  const { t } = useT()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -79,7 +80,7 @@ export function useAdminUsers() {
       totalPages.value = response.totalPages
 
       return response
-    }, 'Failed to fetch users')
+    }, t('superAdmin.users.failedToLoadUsers'))
   }
 
   /**
@@ -88,7 +89,7 @@ export function useAdminUsers() {
   async function getUser(userId: string): Promise<AdminUserDetail> {
     return withLoading(
       () => $fetch<AdminUserDetail>(`/api/admin/users/${userId}`),
-      'Failed to fetch user'
+      t('superAdmin.users.failedToLoadUser')
     )
   }
 
@@ -98,7 +99,7 @@ export function useAdminUsers() {
   async function createUser(data: CreateUserPayload): Promise<AdminUser> {
     return withLoading(
       () => $fetch<AdminUser>('/api/admin/users/create', { method: 'POST', body: data }),
-      'Failed to create user'
+      t('superAdmin.users.failedToCreate')
     )
   }
 
@@ -124,7 +125,7 @@ export function useAdminUsers() {
       }
 
       return response
-    }, 'Failed to ban user')
+    }, t('superAdmin.users.failedToBan'))
   }
 
   /**
@@ -149,7 +150,7 @@ export function useAdminUsers() {
       }
 
       return response
-    }, 'Failed to unban user')
+    }, t('superAdmin.users.failedToUnban'))
   }
 
   /**
@@ -170,7 +171,7 @@ export function useAdminUsers() {
       }
 
       return response
-    }, 'Failed to delete user')
+    }, t('superAdmin.users.failedToDelete'))
   }
 
   return {

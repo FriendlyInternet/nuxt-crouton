@@ -1,0 +1,3 @@
+Please rename `foo` to %s and keep {{issue}} literal.
+Second line.
+

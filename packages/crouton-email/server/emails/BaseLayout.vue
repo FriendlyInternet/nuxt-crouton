@@ -9,7 +9,7 @@ import {
   EImg,
   EText,
   EHr
-} from 'vue-email'
+} from './primitives'
 // Brand identity SSOT — shared with the digest renderers. See brand/email-brand.mjs.
 import { BRAND_NAME, FONT_SANS, LOGO_URL, PRIMARY_COLOR } from '../../brand/email-brand.mjs'
 

@@ -16,8 +16,7 @@ pnpm add @fyit/crouton-bookings
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',
+    '@fyit/crouton-core',  // bundles crouton-auth
     '@fyit/crouton-bookings',
     './layers/bookings' // Your generated layer
   ],
@@ -74,7 +73,6 @@ npx nuxt db:migrate
 All components are prefixed with `CroutonBooking`:
 
 ### Customer-Facing
-- `CroutonBookingWeekStrip` - Week date navigation
 - `CroutonBookingDateBadge` - Date display badge
 - `CroutonBookingBookingSidebarPanel` - Main booking sidebar
 - `CroutonBookingBookingSidebarForm` - Booking form

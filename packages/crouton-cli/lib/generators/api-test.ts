@@ -17,7 +17,7 @@
 // is driven with a plain fake H3 event. The e2e fixture smoke still owns the real
 // boot + CRUD; this is the unit-level complement.
 //
-// On by default; suppressed by `--no-tests` (same gate as the schema-smoke). The
+// Opt-in via `--tests` (same gate as the schema-smoke; off by default, #2286). The
 // assertions are engineered to be schema-shape-independent (mock/control-flow
 // driven); the only body-shape-dependent case (invalid-body → rejected) is
 // emitted only when an invalid sample is derivable, degrading gracefully.
@@ -37,8 +37,10 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
 /**
  * Generate the source of a `<Collection>.api.test.ts` handler test.
  * Returns the file content as a string (the orchestrator decides whether to
- * write it, honouring `--no-tests`).
+ * write it, honouring `--tests`).
  */
+import { resolveAccess } from './api-endpoints.ts'
+
 export function generateApiTest(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { layer, plural, singular, camelCase, pascalCase, pascalCasePlural, layerPascalCase, originalCollectionName } = data
 
@@ -47,6 +49,12 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
   const apiPath = apiPathFor(layer, plural, originalCollectionName || singular || plural)
   const idParam = `${camelCase}Id`                   // productId        — router param + filename
   const routeBase = `./server/api/teams/[id]/${apiPath}`
+
+  // Declared access (#3148): role-guarded handlers call requireTeamRole, so the
+  // mocked auth module must expose it too. No access → output unchanged.
+  const access = resolveAccess(data)
+  const usesRoleGuard = access.create === 'admin' || access.reorder === 'admin'
+  const listOwn = access.list === 'own'
 
   const hierarchy = data.hierarchy?.enabled === true
   const sortable = !hierarchy && data.sortable?.enabled === true
@@ -115,7 +123,19 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
       expect(getAll${P}).toHaveBeenCalled()
       // first positional arg is always the resolved team id (FK filters ride in opts)
       expect((getAll${P} as any).mock.calls[0][0]).toBe(TEAM.id)
+    })${listOwn ? `
+
+    it('scopes a member to their own rows (list: own)', async () => {
+      ;(getAll${P} as any).mockResolvedValue([])
+      await getHandler({ __query: {} } as any)
+      expect((getAll${P} as any).mock.calls[0][1]).toMatchObject({ ownerId: USER.id })
     })
+
+    it('scopes ?ids= lookups to their own rows (list: own)', async () => {
+      ;(get${P}ByIds as any).mockResolvedValue([])
+      await getHandler({ __query: { ids: 'a,b' } } as any)
+      expect((get${P}ByIds as any).mock.calls[0][2]).toBe(USER.id)
+    })` : ''}
   })`
 
   const postBlock = `
@@ -237,7 +257,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
  * schema-smoke can't — team-scoping (unauthenticated → rejected; queries called
  * with the resolved team id) and error paths (invalid body → rejected, missing
  * id → 400, not-found → 404). Runtime-free: no Nuxt/DB, no network.
- * Regenerate with --force; suppress with --no-tests.
+ * Regenerate with --force --tests.
  */
 `
 
@@ -259,13 +279,13 @@ vi.hoisted(() => {
 })
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
-  resolveTeamAndCheckMembership: vi.fn(),
+  resolveTeamAndCheckMembership: vi.fn(),${usesRoleGuard ? '\n  requireTeamRole: vi.fn(),' : ''}
 }))
 vi.mock('./server/database/queries', () => ({
   ${queryExports.join(',\n  ')},
 }))
 
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { resolveTeamAndCheckMembership${usesRoleGuard ? ', requireTeamRole' : ''} } from '@fyit/crouton-auth/server/utils/team'
 import {
   ${queryImports.join(',\n  ')},
 } from './server/database/queries'
@@ -276,8 +296,18 @@ const USER = { id: 'user_1' }
 const MEMBERSHIP = { role: 'member' }
 const VALID_BODY = ${validBodyLiteral}${invalidConst}
 
-const authed = () => (resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
-const unauth = () => (resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+${usesRoleGuard
+    ? `const authed = () => {
+  ;(resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
+  // role-guarded handlers: the test caller is an admin
+  ;(requireTeamRole as any).mockResolvedValue({ team: TEAM, user: USER, membership: { role: 'admin' } })
+}
+const unauth = () => {
+  ;(resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+  ;(requireTeamRole as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+}`
+    : `const authed = () => (resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
+const unauth = () => (resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))`}
 
 beforeEach(() => {
   vi.clearAllMocks()

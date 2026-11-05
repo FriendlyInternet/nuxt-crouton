@@ -2,7 +2,7 @@
 // Maps short aliases to full package information
 // Source of truth: crouton.manifest.ts files (via manifest-loader)
 
-import { loadModuleRegistryMap } from './utils/manifest-bridge.ts'
+import { loadModuleRegistryMap } from './utils/manifest-loader.ts'
 
 // Lazily loaded registry (populated on first access)
 let _modules: Record<string, Record<string, any>> | null = null

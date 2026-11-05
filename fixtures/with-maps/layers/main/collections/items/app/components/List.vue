@@ -2,7 +2,6 @@
   @crouton-generated
   @collection items
   @layer main
-  @generated 2026-06-21
 
   ## AI Context
   - List component for items collection
@@ -45,7 +44,7 @@
 <script setup lang="ts">
 import useMainItems from '../composables/useMainItems'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   layout?: any
 }>(), {
   layout: 'table'

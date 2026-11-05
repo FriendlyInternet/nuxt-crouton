@@ -37,6 +37,9 @@ const props = withDefaults(defineProps<{
   pollMs?: number
   /** Personnel (staff) order filter: exclude / only / all (default all). */
   personnel?: 'all' | 'exclude' | 'only'
+  /** Product / category filter (#2147) — ephemeral, from the Data pane filter panel. */
+  productIds?: string[]
+  categoryIds?: string[]
 }>(), {
   pollMs: 15000
 })
@@ -52,7 +55,14 @@ async function fetchTotals() {
   try {
     const res = await $fetch<{ items: Row[] }>(
       `/api/crouton-sales/teams/${props.teamParam}/charts/per-product-totals`,
-      { query: { eventId: props.eventId, personnel: props.personnel } }
+      {
+        query: {
+          eventId: props.eventId,
+          personnel: props.personnel,
+          productIds: props.productIds,
+          categoryIds: props.categoryIds
+        }
+      }
     )
     rows.value = res.items ?? []
   } catch {
@@ -94,6 +104,11 @@ const visibleRows = computed(() =>
 
 const totalOutstanding = computed(() =>
   visibleRows.value.reduce((s, r) => s + (r.outstanding ?? 0), 0)
+)
+
+/** Sum of Verkocht for the rows currently visible (respects the location filter). */
+const totalSold = computed(() =>
+  visibleRows.value.reduce((s, r) => s + r.sold, 0)
 )
 
 /**
@@ -195,6 +210,12 @@ watch(() => props.personnel, () => fetchTotals())
           >{{ r.outstandingText }}</span>
         </li>
       </ul>
+
+      <div class="flex items-center gap-3 pt-2 mt-1 border-t border-default text-sm font-semibold">
+        <span class="flex-1">{{ t('sales.dashboard.perProduct.total') }}</span>
+        <span class="w-12 shrink-0 text-right tabular-nums">{{ totalSold }}</span>
+        <span class="w-12 shrink-0 text-right tabular-nums">{{ totalOutstanding }}</span>
+      </div>
     </template>
   </div>
 </template>

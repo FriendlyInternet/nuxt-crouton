@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId, personnel } = getQuery(event)
+  const { eventId, personnel, productIds, categoryIds } = getQuery(event)
   if (!eventId) {
     // Unlike the other chart endpoints this is event-scoped by nature: a
     // backlog is a property of one running event, and summing "still to
@@ -30,11 +30,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'eventId is required' })
   }
 
-  const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
-  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
-  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
-  const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
+  const { salesOrders } = await import('../../../../../../collections/orders/server/database/schema')
+  const { salesOrderitems } = await import('../../../../../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../../../../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../../../../../collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('../../../../../../collections/kdsbumps/server/database/schema')
 
   const items = await buildPerProductTotals(
     db,
@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
       locations: salesLocations,
       kdsbumps: salesKdsbumps
     },
-    { teamId: team.id, eventId: String(eventId), personnel }
+    { teamId: team.id, eventId: String(eventId), personnel, productIds, categoryIds }
   )
 
   return { items }

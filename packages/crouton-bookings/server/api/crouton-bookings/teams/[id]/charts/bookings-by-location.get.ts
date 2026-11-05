@@ -7,8 +7,8 @@
  */
 import { count, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
+import { bookingsBookings } from '../../../../../../collections/bookings/server/database/schema'
+import { bookingsLocations } from '../../../../../../collections/locations/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)

@@ -15,9 +15,15 @@ vi.stubGlobal('$fetch', mockFetch)
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('readonly', readonly)
 
-// Mock collections registry
-vi.stubGlobal('useCollections', () => ({
-  getConfig: (name: string) => ({ apiPath: name === 'croutonAssets' ? 'assets' : name })
+// Mock collection mutation: posts like the real one and records the refresh
+const mockInvalidate = vi.fn()
+vi.stubGlobal('useCollectionMutation', (name: string) => ({
+  create: async (data: any) => {
+    const apiPath = name === 'croutonAssets' ? 'assets' : name
+    const result = await mockFetch(`/api/teams/${mockTeamId}/${apiPath}`, { method: 'POST', body: data })
+    mockInvalidate(name)
+    return result
+  }
 }))
 
 // Import composable after mocking
@@ -107,6 +113,17 @@ describe('useAssetUpload', () => {
           alt: 'Test image'
         })
       })
+    })
+
+    it('refreshes the collection after creating the record', async () => {
+      mockFetch
+        .mockResolvedValueOnce(mockUploadResponse)
+        .mockResolvedValueOnce(mockAssetResponse)
+
+      const { uploadAsset } = useAssetUpload()
+      await uploadAsset(mockFile)
+
+      expect(mockInvalidate).toHaveBeenCalledWith('croutonAssets')
     })
 
     it('uses custom filename from metadata', async () => {

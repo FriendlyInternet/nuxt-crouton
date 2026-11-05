@@ -25,7 +25,7 @@ The drift-corrected lookup tables for the generation domain: what a schema file 
 - **Collection** — one CRUD entity (e.g. `products`): a generated, self-contained nested Nuxt layer with form, list, composable, team-scoped API, Drizzle schema. Always team-scoped (every row has `teamId`).
 - **Layer** — here: the domain folder `layers/<layer>/` grouping collections (e.g. `shop`). (Distinct from Nuxt-layer-as-package; see `crouton-architecture-contract`.)
 - **fieldsFile** — the JSON file defining a collection's fields (§1). The input to everything.
-- **`crouton.config.js`** — unified config at the app root: collections + targets + dialect for the CLI, `features` flags for the `@fyit/crouton` module. Full key reference: `packages/crouton-cli/CLAUDE.md` "Config File Format".
+- **`crouton.config.js`** — unified config at the app root: collections + targets + dialect for the CLI; `features` is generation input only — a package is switched on by `extends` in `nuxt.config.ts`, not by `features` (#2286). Full key reference: `packages/crouton-cli/CLAUDE.md` "Config File Format".
 - **Manifest (`crouton.manifest.ts`)** — per-package declaration of field types, reserved names, detection patterns. The **source of truth for field types** (§2).
 - **The CLI** — `packages/crouton-cli`, bins `crouton` (= `crouton-generate`) and `crouton-seed` (verified `package.json` bin map). In an app with `@fyit/crouton-cli` as devDep: `pnpm exec crouton <cmd>`.
 
@@ -124,8 +124,8 @@ Verified against `writeScaffold` (`lib/generate-collection.ts:880-1155`) and on-
 Per collection, under `layers/{layer}/collections/{plural}/`:
 
 ```
-app/components/_Form.vue            # NOTE THE UNDERSCORE — see below. Skipped when
-                                    #   formComponent is set (config or auto-detected)
+app/components/_Form.vue            # NOTE THE UNDERSCORE — see below.
+                                    #   (registers as <Layer><Plural>Form)
 app/components/List.vue
 app/components/{FieldPascal}/{Input,Select,CardMini}.vue   # one dir per repeater field
 app/composables/use{Layer}{Plurals}.ts   # Zod schema + columns + collection config
@@ -137,12 +137,12 @@ server/database/schema.ts           # Drizzle (+ translations JSON column when t
 server/database/queries.ts          # getAll* with FK-filter + opt-in pagination overloads
 server/database/seed.ts             # only with seed flag (drizzle-seed + Faker)
 seed.json                           # always, except hierarchy collections (#298) — editable sample rows
-{Layer}{Plurals}.test.ts            # Zod schema-smoke (#785) — skipped by --no-tests / tests:false
+{Layer}{Plurals}.test.ts            # Zod schema-smoke (#785) — only with --tests / tests:true (off by default, #2286)
 {Layer}{Plurals}.api.test.ts        # mocked route-handler test (#791), carries // @ts-nocheck — same gate
 types.ts   nuxt.config.ts   README.md
 ```
 
-**The `_Form.vue` underscore:** the actual filename is `_Form.vue` (`generate-collection.ts:912`) even though the dry-run output prints `Form.vue` (`:825`) and both the `crouton` skill and crouton-cli/CLAUDE.md draw `Form.vue`. It still registers as `{Layer}{Plurals}Form` — the composable's `componentName` field carries the name (verified `fixtures/minimal/.../useMainItems.ts:44`: `componentName: 'MainItemsForm'`).
+**The `_Form.vue` underscore:** the actual filename is `_Form.vue` (`generate-collection.ts:912`) even though the dry-run output prints `Form.vue` (`:825`) and both the `crouton` skill and crouton-cli/CLAUDE.md draw `Form.vue`. It registers as `{Layer}{Plurals}Form` by the layer's component prefix; there is no `componentName` field. To replace a form or list, add that name in the app's `app/components` (docs `5.customization/2.eject.md`).
 
 Side effects beyond the collection dir (config-mode run, same file `:1091-1152` + `runPostGeneration` `:1165-1293`):
 
@@ -202,7 +202,7 @@ Also: `crouton rollback-bulk --layer=<layer>` / `--config=<path>` (whole layer /
 
 **Regeneration**: re-running `crouton config` / `crouton <layer> <collection>` **overwrites every generated file unconditionally** — `writeScaffold` has no file-existence guard (`fsp.writeFile` loop at `generate-collection.ts:1074-1078`; code-derived, not reproduced end-to-end). Two consequences:
 - The generated file headers saying "regeneration requires --force flag" are stale; `--force` actually means (a) proceed despite missing package dependencies (`:747-754`) and (b) override schema-index export conflicts (`:373-384`).
-- **Hand edits inside generated files are lost on regeneration — including the "editable" `seed.json`** (it is in the unconditional write list, `:1042-1049`). Edit `seed.json` only if you won't regenerate, or re-apply edits after. If you customize a Form, prefer `formComponent:` (skips `_Form.vue` generation entirely) over editing the generated one.
+- **Hand edits inside generated files are lost on regeneration — including the "editable" `seed.json`** (it is in the unconditional write list, `:1042-1049`). Edit `seed.json` only if you won't regenerate, or re-apply edits after. If you customize a Form, put your own `<Layer><Plural>Form.vue` in the app's `app/components` (it wins) rather than editing the generated one.
 
 ## 9. Doc drift in this domain
 

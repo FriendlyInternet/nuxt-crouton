@@ -116,3 +116,30 @@ test('a partial update does not clobber a recorded dispatch', () => {
   assert.equal(parsePipelineBlock(updated).dispatch, 'work-this', 'survives an unrelated update')
   assert.equal(parsePipelineBlock(updated).depth, 1)
 })
+
+// #2444 — an issue that QUOTES the block (in its prose, as documentation) must not be read as
+// carrying one: the worker got epic_branch=… and its finish step died on `origin/…`.
+test('a block shown in a code span or fence is an example, not the issue\'s context', () => {
+  const quoted = 'Each child needs the hidden `<!-- pipeline: epic=N depth=1 epic_branch=… -->` block.'
+  assert.deepEqual(parsePipelineBlock(quoted), { epic: null, depth: null, epic_branch: null, dispatch: null })
+  const fenced = 'Format:\n```\n<!-- pipeline: epic=1 epic_branch=epic/1-x -->\n```\n'
+  assert.equal(parsePipelineBlock(fenced).epic_branch, null)
+})
+
+test('the real block is found after a quoted example, and write leaves the example alone', () => {
+  const body = 'Uses `<!-- pipeline: epic=N epic_branch=… -->`.\n\n<!-- pipeline: epic=7 depth=1 epic_branch=epic/7-x -->'
+  assert.equal(parsePipelineBlock(body).epic_branch, 'epic/7-x')
+  const out = writePipelineBlock(body, { depth: 2 })
+  assert.ok(out.includes('`<!-- pipeline: epic=N epic_branch=… -->`'), 'example untouched')
+  assert.ok(out.endsWith('<!-- pipeline: epic=7 depth=2 epic_branch=epic/7-x -->'))
+  // A body with ONLY a quoted example gets a real block appended, not the example rewritten.
+  const only = 'Uses `<!-- pipeline: epic=N -->`.'
+  assert.equal(writePipelineBlock(only, { epic: 3 }), `${only}\n\n<!-- pipeline: epic=3 -->`)
+})
+
+test('a placeholder branch value reads as absent', () => {
+  for (const v of ['…', '<slug>', '...x', '']) {
+    assert.equal(parsePipelineBlock(`<!-- pipeline: epic=1 epic_branch=${v} -->`).epic_branch, null, v)
+  }
+  assert.equal(parsePipelineBlock('<!-- pipeline: epic_branch=epic/12-a.b_c -->').epic_branch, 'epic/12-a.b_c')
+})

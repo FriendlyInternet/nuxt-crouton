@@ -1,22 +1,18 @@
 name: Decompose on issue (pi.dev variant)
 
+# #3210: runs carry the issue number.
+run-name: "#${{ inputs.issue || github.event.issue.number }} · decompose"
+
 # WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
 # `decompose-on-issue.yml` with ONE thing swapped: the agent step
 # (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
 # (the current setting) THIS flow — not the claude one — works our `delegate` issues.
 #
-# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
-# prose ever disagrees with them, they win and this comment is the thing that's wrong):
-#   • `delegate` label — added after creation, OR already present at creation. Only
-#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
-#     and this flow yields (#1077 WS7 — one variable flips the harness back).
-#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
-#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
-#   • `workflow_dispatch` — an explicit run on any issue number.
-#
-#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
-#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
-#   applied fires nothing. Add those two as a separate step after the issue exists.
+# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative):
+#   • `workflow_dispatch` — the router in work-issue-pidev.yml sends an `epic` issue here when a
+#     human applies `work-this` (#3208). You can also dispatch any issue number by hand.
+#   • `delegate` / `delegate-pi` label — INTERNAL hand-offs only: they start a run only when applied
+#     by nuxt-harness[bot]; a human adding one starts nothing.
 #
 # HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
 # every one of those locks has since been removed. Do NOT reintroduce that framing:
@@ -53,9 +49,9 @@ name: Decompose on issue (pi.dev variant)
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
-# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
+# (or `delegate`) label to an issue (mirrors the claude `delegate` flow). People apply only
+# `work-this` (#3208); a human adding `delegate*` starts nothing. On success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
@@ -72,39 +68,45 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "claude-sonnet-5"
+        default: ""
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "pi-claude-cli"
+        default: "claude-bridge"
         type: choice
-        options: ["pi-claude-cli", "zai", "anthropic"]
-  # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
-  # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
-  # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
-  # `opened` added for the WS7 flip (#1077): when AGENT_HARNESS=pi, an issue *created with* the
-  # plain `delegate` label must land here (the claude flow handles that shape and now yields).
+        options: ["claude-bridge", "zai", "anthropic"]
+  # We fire on EVERY labeled event but the job `if` gates to the exact delegate / delegate-pi labels
+  # applied by the pipeline app (nuxt-harness[bot]), so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
   issues:
-    types: [labeled, opened]
+    types: [labeled]
 
 jobs:
   decompose-pi:
-    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` label freshly applied
-    # to an issue (#1017), OR — when the WS7 flip is ON (vars.AGENT_HARNESS == 'pi', #1077) —
-    # the same plain-`delegate` shapes the claude flow handles (which then yields via its own
-    # guard). The specific-label checks are what stop a re-fire loop when the worker adds its
+    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` / `delegate` label freshly
+    # applied BY THE PIPELINE APP (#1017; never by a person). The specific-label checks are what stop a re-fire loop when the worker adds its
     # own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
+    # #3208: `work-this` is the ONE label a human applies. Its router (work-issue-pidev.yml) sends a
+    # big issue here by `workflow_dispatch`. The `delegate*` labels are INTERNAL hand-offs only
+    # (the decomposer's own needsSplit children, wave release, comment re-dispatch): they start a run
+    # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-pi') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
-      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
+        contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
+    # One decompose at a time per issue (#2645). An issue created WITH a label fires only
+    # `labeled` (`opened` is no longer a trigger), yet two labeled events can still start two runs
+    # in the same second and both applied a plan
+    # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
+    # "Resume an already-decomposed tree" (#2048), sees the first run's children and
+    # dispatches them instead of planning again.
+    concurrency:
+      group: decompose-${{ inputs.issue || github.event.issue.number }}
+      cancel-in-progress: false
     # WS3 (#1696): this whole workflow IS the event-driven pi decompose flow, so the mode is a
     # JOB-level constant — the pi step reads $PIPELINE_MODE (plan-only prompt) and the apply step
     # gates on env.PIPELINE_MODE. (The claude flow lives in decompose-on-issue.yml and never sets it.)
@@ -116,18 +118,32 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
@@ -158,7 +174,7 @@ jobs:
       # Contract: scripts/pipeline-loop-guard.test.mjs.
       - name: Gather claim facts
         id: claim-facts
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -190,7 +206,7 @@ jobs:
       # this step is I/O only. Contract: scripts/resume-decomposed.test.mjs.
       - name: Gather sub-issues
         id: subs
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -223,7 +239,7 @@ jobs:
 
       - name: Dispatch the open children
         if: ${{ steps.resume.outputs.resume == '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DISPATCH: ${{ steps.resume.outputs.dispatch }}
           REASON: ${{ steps.resume.outputs.reason }}
@@ -239,27 +255,30 @@ jobs:
               // Fire a FRESH `labeled` event — the workers trigger on the label being ADDED,
               // never on it merely being present, so a re-dispatch must remove it first.
               try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: number, name: label }) } catch (e) {}
-              await github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] })
+              // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
+              const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+              await handoffGuard({ kind: 'label', issue: number, label },
+                () => github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] }))
               done.push(`#${number} → \`${label}\``)
             }
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-              `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
+              '<!-- pipeline-note -->\n' + `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
               + (done.length ? `Dispatched: ${done.join(' · ')}\n\n` : `Nothing dispatchable right now — every open child is waiting on a sibling.\n\n`)
               + `_${process.env.REASON}_\n\n`
-              + `<sub>🤖 pi.dev harness (CI · mac-mini) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
+              + `<sub>🤖 pi.dev harness (CI) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
             core.info(`Resumed #${issue_number}: ${done.join(', ') || '(all blocked)'}`)
 
       # Everything below is the CLASSIFY path — skipped entirely once the tree was
       # resumed (#2048), so a decomposed epic costs a few API calls instead of an
       # install, a package warm and an eleven-minute pi run that cannot succeed.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           node-version: 22
@@ -267,6 +286,23 @@ jobs:
       - name: Install
         if: ${{ steps.resume.outputs.resume != '1' }}
         run: pnpm install --frozen-lockfile
+
+      # A design sign-off hold renders its UI mockup / schema table to PNG with Playwright
+      # (.claude/skills/ui-proposal/render.mjs). Without a browser every render failed with
+      # "Could not launch Chromium" and the hold posted no image (#2809, seen on #2804).
+      - name: Ensure Playwright browser (design sign-off renders)
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        run: npx playwright install chromium 2>&1 | tail -2 || true
+
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
+      # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
+      # proves the token answers + the provider registers BEFORE the pi run — a dead token must fail here in seconds, not
+      # surface 30 minutes later as an empty plan.
+      - name: Set up pi + Claude CLI (subscription)
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
@@ -280,26 +316,37 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
+      # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
+      # No fallback literal: it had to be bumped by hand on every model change and would
+      # silently run a stale model; a broken config now fails this step loudly instead.
+      - id: model
+        run: |
+          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — default=$DEFAULT (from .claude/pipeline-models.json)"
+
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
-      # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
-      # funded metered key (NOT a subscription — subscription OAuth must not back CI).
+      # the worker PR) act as the Harness App and cascade.
       - id: pi
         if: ${{ steps.resume.outputs.resume != '1' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
-          # but now by MODEL (sonnet → opus) on the same subscription provider — no metered
-          # lane. NO ANTHROPIC_API_KEY: pi-claude-cli uses the mini's `claude` login.
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275):
+          # CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y) authenticates the Claude Code child that
+          # claude-bridge spawns; the CLI is installed + preflighted by setup-pi (#2119).
+          # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
+          # hardcoded literal — switch a model there, not here.
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # PIPELINE_MODE=event-driven is inherited from the JOB-level env (above). The pi prompt
           # branches on it to the PLAN-ONLY directive (#1696); the apply step gates on it too.
         run: |
           set -uo pipefail
-          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
           # The Harness App identity for any commits pi makes (so they're attributable
           # and not a masquerading human — the #862 lesson).
           git config user.name  "nuxt-harness[bot]"
@@ -313,7 +360,6 @@ jobs:
           # so the two flows can't drift (they were byte-identical hand-maintained copies before).
           # That file is PURE PROSE by contract: no frontmatter/headers — it is injected raw.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
-          cat .claude/agents/pi-operating-contract.md > "$PROMPT_FILE"
           # ── The task, by mode (#1696) — pi PLANS, code APPLIES ────────────────────────
           # EVENT-DRIVEN: two failure modes killed the earlier attempts. (1) `/task-decompose` hands
           # off by SPAWNING an Agent tree pi can't drive → the #1381/#1706 3-min no-op. (2) Having pi
@@ -324,21 +370,13 @@ jobs:
           # into real issues. pi cannot fabricate what code creates. The claude flow
           # (decompose-on-issue.yml) still spawns in-process and is untouched.
           if [ "${PIPELINE_MODE:-}" = "event-driven" ]; then
-            cat >> "$PROMPT_FILE" <<'PI_ED'
-          EVENT-DRIVEN DECOMPOSE — PLAN ONLY. You are the task-decomposer. Do NOT run `/task-decompose`, do NOT spawn any subagent, and do NOT run any `gh`, `git`, or issue-mutating command. Your ONLY output is a plan file that a deterministic step will apply. Concretely:
-          1. READ the target issue (use `gh issue view` to read only — reading is fine, mutating is not).
-          2. Apply the LEAF TEST: single coherent change, bounded file set, clear/testable acceptance, one focused run. AN ISSUE THAT ALREADY HAS OPEN SUB-ISSUES IS NEVER A LEAF (#2048) — its children ARE the decomposition, and `gh issue view` does NOT list them, so check explicitly before you judge. (A deterministic step normally intercepts this case before you are invoked; if you are seeing it anyway, that step failed open — emit a split plan for the remaining open children rather than {"leaf": true}.)
-          3. Using your file-writing tool (NOT a shell heredoc — bodies contain emoji/backticks and shell quoting breaks, #1001), write a file named exactly `decompose-plan.json` in the current working directory, as valid JSON — ONE of these three shapes:
-             - Single leaf: {"leaf": true}
-             - Split: {"leaf": false, "children": [ {"title": "...", "body": "...markdown with ## 👤 For humans / ## 🤖 For agents / ## 🧪 How to test...", "labels": ["type:...","<component>"], "needsSplit": false, "blockedBy": []}, ... ]} — 2 to 6 children, one coherent concern each. Set needsSplit=true for a child that itself still needs decomposing, false for a ready leaf. Exactly one `type:*` label plus a real component label per child (unknown labels are dropped). Do NOT put a pipeline block or Dedup line in the body.
-             - ORDERING between children (#1750): `blockedBy` lists the SIBLING INDICES (0-based positions in this same children array — NOT issue numbers, which do not exist yet) that a child must wait for. Use it whenever a child cannot be built until another lands: it needs the other's code to exist, its schema, its migration, its API. Only children with `blockedBy: []` are dispatched on the first pass; the rest are created and linked, and each is dispatched automatically when its last blocker closes. Getting this right is what stops several agents building against preconditions that do not exist yet on a serial runner (the #1713 case: three leaves dispatched in five seconds, two of which could not succeed). Be honest in BOTH directions — do NOT invent a dependency between genuinely independent children, because that needlessly serialises work that should run in parallel. A self-reference, an out-of-range index, or a dependency cycle is a hard plan error.
-             - ALREADY-APPROVED CHECK FIRST (#1828): if this epic ALREADY carries a "🎨 Design sign-off needed before building" comment from a prior run AND the owner has since replied approving it (`lgtm`/`approve`) or answering the forks, the design is DECIDED — do NOT hold again (re-holding an answered epic is the bug). Emit a SPLIT plan whose children BUILD the app on the approved schema + the owner's answers (scaffold/generate, implement each collection, the chosen views). Read the whole comment thread to recover the decided design before splitting.
-             - DESIGN SIGN-OFF HOLD (#1821): otherwise, if the epic needs a human DESIGN DECISION before any code — a genuinely ambiguous data model or UI layout, or a fork with no defensible default (e.g. which split strategy, which balance view) — and there is NO prior hold+approval — do NOT create "decide & sign off" children (a code worker cannot build a decision and will deadlock). Instead HOLD: {"signoff": {"summary": "one short paragraph: why we're holding", "questions": ["the real fork to decide", "..."], "schema": {"collection": "name", "fields": { <crouton fieldsFile JSON: fieldName → {type, ...}> }}, "diagram": { <optional ticket-excalidraw graph.json: nodes+edges> }, "ui": "<optional self-contained HTML mockup>"}}. Propose your BEST-GUESS schema/UI so the human reacts to something concrete, and list the genuine forks as `questions`. The apply step renders these (a schema field-table, a diagram, a UI mockup screenshot), posts them on the epic, and holds `status:blocked`; the owner's `lgtm` reply resumes into build children. Include `schema` whenever the data model is the ambiguity; `diagram`/`ui` are optional. Only hold when the ambiguity is real — a well-specified epic just splits.
-          4. After writing decompose-plan.json, STOP. Do not create issues, branches, PRs, or labels yourself — the apply step does all of that from your plan. Writing a correct decompose-plan.json (split, leaf, OR signoff hold) IS your entire deliverable — a design sign-off hold is a complete, successful outcome, not a failure.
-          PI_ED
-            printf 'The target issue is #%s. Read it and write decompose-plan.json now.\n' "$ISSUE" >> "$PROMPT_FILE"
+            # Persona: .claude/agents/pi-decomposer.md (+ contract + shared dedup rule in
+            # _pipeline-rules.md), rendered by scripts/pipeline-prompt.mjs (#2431).
+            node scripts/pipeline-prompt.mjs pi-decomposer --var "issue=$ISSUE" > "$PROMPT_FILE"
           else
+            cat .claude/agents/pi-operating-contract.md > "$PROMPT_FILE"
             printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"
+            cat .claude/agents/_pipeline-rules.md >> "$PROMPT_FILE"
           fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
@@ -356,9 +394,12 @@ jobs:
           # DEDUP (#297) — the decomposer is the only pi lane that creates issues, so the
           # create-time dedup gate belongs here and nowhere else. The interactive path is
           # enforced by a PreToolUse hook, which cannot reach a CI run.
-          printf 'BEFORE creating any sub-issue: search open AND recently-closed issues for the same work (gh issue list --search). If one already covers it, REUSE it — link it as the child instead of minting a duplicate. Ephemeral runs cannot remember what they filed last time, so the duplicate is the default failure here, not the exception. Every issue body you create MUST carry a "Dedup-checked: <what you searched, what you found>" line.\n' >> "$PROMPT_FILE"
-          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
-            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+          # --session-dir: a PER-RUN folder so the telemetry step reads only this run's session
+          # (and its helpers' subagent-artifacts), never a shared runner's other runs (#3158).
+          PI_SESSION_DIR="$RUNNER_TEMP/pi-session"
+          mkdir -p "$PI_SESSION_DIR"
+          pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+            < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)
@@ -439,7 +480,7 @@ jobs:
                 && git checkout -B "$EPIC_BRANCH" FETCH_HEAD 2>/dev/null \
                 || git checkout -B "$EPIC_BRANCH" 2>/dev/null
               # -f: the rendered PNGs live under writeups/schema-reviews (and ui-mockups), which the
-              # global `*.png` .gitignore rule covers (only writeups/diagrams + ui-proposals are
+              # global `*.png` .gitignore rule covers (only writeups/diagrams is
               # allowlisted). These are an explicit, known-safe sign-off artifact list, so force past
               # the ignore — without -f `git add` silently skips the PNG and the comment's image 404s.
               for f in $ARTIFACTS; do [ -f "$f" ] && git add -f -- "$f"; done
@@ -465,7 +506,7 @@ jobs:
       # silence after comment-dispatch's "🟢 On it" is its own mystery — just a calm one.
       - name: Not picked up — the issue is already claimed
         if: ${{ always() && steps.claim.outcome == 'failure' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
@@ -475,27 +516,30 @@ jobs:
             const reason = process.env.CLAIM_REASON || 'another run already holds this issue'
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await github.rest.issues.createComment({ ...context.repo, issue_number, body:
-              `⏸️ **Not picked up — ${reason}.**\n\n`
+              '<!-- pipeline-note -->\n' + `⏸️ **Not picked up — ${reason}.**\n\n`
               + `Nothing is broken and nothing was lost: the run stopped before starting so two runs `
               + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
-              + `<sub>🤖 pi.dev harness (CI · mac-mini) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
+              + `<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
 
       - name: Artifact-gate — fail if the agent produced nothing
         # Also skipped on a resumed tree (#2048): that path reports its own
         # deliverable, and its comment lands BEFORE t0 so the since-t0 scan
         # would never see it and would false-fail a successful run.
         if: ${{ always() && steps.claim.outcome != 'failure' && steps.resume.outputs.resume != '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
+          RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
-            const since = '${{ steps.t0.outputs.ts }}'
-            const sinceMs = new Date(since).getTime()
+            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
+            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
+            const since = rs.since
+            const sinceMs = rs.sinceMs
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number, since,
@@ -589,7 +633,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -632,7 +676,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -717,13 +761,13 @@ jobs:
             // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
             // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const foot = `\n\n<sub>🤖 pi.dev harness (CI · mac-mini) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
             const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
             const body = why
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
               : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${foot}`
 
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
@@ -740,31 +784,71 @@ jobs:
         run: |
           set +e
           mkdir -p pi-telemetry-out
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
-          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
-          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
-          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
-          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
-          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
-            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$TELE_DIR" ]; then
-            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          fi
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
-            echo "pi telemetry dir: $TELE_DIR"
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
-            echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
-            cat pi-telemetry-out/ledger-rows.jsonl || true
+          # Read ONLY this run's per-run session folder (#3158); mirror the repo layout so the
+          # adapter's ../../../scripts/lib import resolves from a copied location.
+          SESSION_DIR="$RUNNER_TEMP/pi-session"
+          rm -rf "$RUNNER_TEMP/.claude/skills/loop-station" "$RUNNER_TEMP/scripts/lib"
+          mkdir -p "$RUNNER_TEMP/.claude/skills" "$RUNNER_TEMP/scripts"
+          cp -r .claude/skills/loop-station "$RUNNER_TEMP/.claude/skills/loop-station"
+          cp -r scripts/lib "$RUNNER_TEMP/scripts/lib"
+          PT="$RUNNER_TEMP/.claude/skills/loop-station/pi-telemetry.mjs"
+          if node "$PT" "$SESSION_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+            echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines"
           else
-            echo "no pi subagent telemetry found — a decompose-only run (sub-issues, no worker) writes none. Skipping."
+            rm -f pi-telemetry-out/pi-trace.jsonl
+            echo "::notice title=pi telemetry::no trace — no billable turns, subagents or skill loads"
           fi
+          node "$PT" "$SESSION_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+          cat pi-telemetry-out/ledger-rows.jsonl || true
 
       - name: Upload pi telemetry artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/
           if-no-files-found: ignore
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [decompose-pi]
+    if: ${{ always() && needs.decompose-pi.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: decompose-on-issue-pidev.yml
+          ISSUE: "${{ inputs.issue || github.event.issue.number }}"
+          STAGE: decompose
+          MODEL_TIER: default
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.decompose-pi.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Team Create Form Component
  *
@@ -118,7 +119,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     state.slug = ''
     autoSlug.value = true
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToCreateTeam')
+    const message = localizeError(e, t)
     notify.error(t('errors.generic'), { description: message })
   } finally {
     internalLoading.value = false
@@ -154,7 +155,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     >
       <UInput
         v-model="state.name"
-        placeholder="My Team"
+        :placeholder="t('teams.teamNamePlaceholder')"
         icon="i-lucide-building-2"
         :disabled="isLoading"
       />
@@ -172,7 +173,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
       </template>
       <UInput
         v-model="state.slug"
-        placeholder="my-team"
+        :placeholder="t('teams.slugPlaceholder')"
         icon="i-lucide-link"
         :disabled="isLoading"
         @input="onSlugInput"

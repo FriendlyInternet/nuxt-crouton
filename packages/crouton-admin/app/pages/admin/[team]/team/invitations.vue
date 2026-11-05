@@ -10,7 +10,7 @@
 </script>
 
 <template>
-  <div class="p-6">
+  <div class="p-4 sm:p-6">
     <!-- Pending Invitations List -->
     <TeamInvitations :show-team-invitations="true" />
   </div>
