@@ -160,6 +160,40 @@ async function promptForConfiguration(
 }
 
 /**
+ * The package declares the key it reads; only guess when it does not (#3398).
+ */
+function resolveRuntimeConfigKey(featureKey: string, manifest?: Manifest): { rtKey: string; warnings: string[] } {
+  if (manifest?.runtimeConfigKey) return { rtKey: manifest.runtimeConfigKey, warnings: [] }
+  const rtKey = toRuntimeConfigKey(featureKey)
+  const msg = `[crouton] ${manifest?.id ?? featureKey} declares configuration but no runtimeConfigKey — writing runtimeConfig.${rtKey}; declare runtimeConfigKey in its crouton.manifest.ts`
+  console.warn(msg)
+  return { rtKey, warnings: [msg] }
+}
+
+/**
+ * Each setting goes where the package reads it (default: both sides).
+ */
+function placeRuntimeConfig(
+  rtKey: string,
+  inner: Record<string, unknown>,
+  manifest?: Manifest,
+): { server: Record<string, unknown>; public: Record<string, unknown> } {
+  const server: Record<string, unknown> = {}
+  const pub: Record<string, unknown> = {}
+  for (const [dotPath, option] of Object.entries(manifest?.configuration ?? {})) {
+    const value = getNestedValue(inner, dotPath)
+    if (value === undefined) continue
+    const placement = option.runtimeConfig ?? 'both'
+    if (placement !== 'public') setNestedValue(server, dotPath, value)
+    if (placement !== 'server') setNestedValue(pub, dotPath, value)
+  }
+  return {
+    server: Object.keys(server).length ? { [rtKey]: server } : {},
+    public: Object.keys(pub).length ? { [rtKey]: pub } : {},
+  }
+}
+
+/**
  * Build runtimeConfig and .env hints from a prompted config object.
  */
 export function buildRuntimeAndEnvHints(
@@ -171,30 +205,8 @@ export function buildRuntimeAndEnvHints(
 
   if (!inner) return {}
 
-  // The package declares the key it reads; only guess when it does not (#3398)
-  const warnings: string[] = []
-  let rtKey = manifest?.runtimeConfigKey
-  if (!rtKey) {
-    rtKey = toRuntimeConfigKey(featureKey)
-    const msg = `[crouton] ${manifest?.id ?? featureKey} declares configuration but no runtimeConfigKey — writing runtimeConfig.${rtKey}; declare runtimeConfigKey in its crouton.manifest.ts`
-    warnings.push(msg)
-    console.warn(msg)
-  }
-
-  // Each setting goes where the package reads it (default: both sides)
-  const server: Record<string, unknown> = {}
-  const pub: Record<string, unknown> = {}
-  for (const [dotPath, option] of Object.entries(manifest?.configuration ?? {})) {
-    const value = getNestedValue(inner, dotPath)
-    if (value === undefined) continue
-    const placement = option.runtimeConfig ?? 'both'
-    if (placement !== 'public') setNestedValue(server, dotPath, value)
-    if (placement !== 'server') setNestedValue(pub, dotPath, value)
-  }
-  const runtimeConfig = {
-    server: Object.keys(server).length ? { [rtKey]: server } : {},
-    public: Object.keys(pub).length ? { [rtKey]: pub } : {},
-  }
+  const { rtKey, warnings } = resolveRuntimeConfigKey(featureKey, manifest)
+  const runtimeConfig = placeRuntimeConfig(rtKey, inner, manifest)
 
   const envHints: string[] = []
 
