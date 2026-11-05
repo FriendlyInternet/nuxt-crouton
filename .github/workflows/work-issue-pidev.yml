@@ -470,6 +470,8 @@ jobs:
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
           # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
           cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
+          # Revise outcome (#3432): counts a PR-description edit as a revision.
+          cp scripts/lib/revise-outcome.mjs "$RUNNER_TEMP/revise-outcome.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -520,6 +522,9 @@ jobs:
           git checkout -f -B "${REV_BRANCH}" "origin/${REV_BRANCH}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
+          # PR description fingerprint BEFORE pi runs (#3432); the finish step compares.
+          REV_BODY_KEY="$(gh pr list --head "${REV_BRANCH}" --state open --json body -q '.[0].body // ""' | node "$RUNNER_TEMP/revise-outcome.mjs" key || true)"
+          echo "rev_body_key=${REV_BODY_KEY}" >> "$GITHUB_OUTPUT"
           # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
           # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
           # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
@@ -874,6 +879,7 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          REV_BODY_KEY: ${{ steps.revise.outputs.rev_body_key }}
           # #2757: the approved plan this build implements (linked from the PR body).
           APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
@@ -1079,7 +1085,23 @@ jobs:
               echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
-              if [ "${REPLIED:-0}" -gt 0 ]; then
+              # A PR-description edit is a revision too (#3432): fingerprint the body now vs before pi ran.
+              BODY_NOW="$(gh pr view "${RPR:-0}" --json body -q .body 2>/dev/null | node "$RUNNER_TEMP/revise-outcome.mjs" key 2>/dev/null || true)"
+              BODY_CHANGED=false
+              [ -n "${REV_BODY_KEY:-}" ] && [ -n "$BODY_NOW" ] && [ "$BODY_NOW" != "$REV_BODY_KEY" ] && BODY_CHANGED=true
+              LAST_V="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -o 'build-review-verdict:[a-z-]*' | tail -1 | sed 's/.*://' || true)"
+              ROUND_N="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -c '<!-- build-review-verdict:no-go -->' || true)"
+              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "{\"bodyChanged\":${BODY_CHANGED},\"replied\":$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false),\"verdict\":\"${LAST_V}\",\"round\":${ROUND_N:-0}}")"
+              NOTE="$(echo "$OUT" | jq -r .note)"; REREVIEW="$(echo "$OUT" | jq -r .rereview)"
+              if [ "$NOTE" = "body" ]; then
+                echo "revise: PR description updated (#3432)"
+                echo "revised=1" >> "$GITHUB_OUTPUT"
+                if [ "$REREVIEW" = "true" ]; then TAIL="a second build review runs on the same commit."; else TAIL="nothing else to review."; fi
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3432)_\n\n📝 **PR description updated from [your comment](%s)** — no code change; %s' "$FEEDBACK_FROM" "$TAIL")" 2>&1 | tail -1 || true
+                if [ "$REREVIEW" = "true" ]; then
+                  node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$RPR" '{issue:$i,workflow:"build-review.yml",inputs:{pr:($i|tostring),reason:"body"}}')" || echo "::warning::could not dispatch the body re-review (#3432)"
+                fi
+              elif [ "$NOTE" = "reply" ]; then
                 echo "revise: answered on the PR without a code change"
                 echo "revised=1" >> "$GITHUB_OUTPUT"
               else
