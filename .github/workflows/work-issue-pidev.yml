@@ -1473,6 +1473,7 @@ jobs:
         if: ${{ always() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          AGENT_RUNNER_LABEL: ${{ vars.AGENT_RUNNER || 'github-hosted' }}  # passed via env so the script below has no expressions (GitHub's 21000-char expression limit)
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           # #1764: '1' only when the deterministic finish step could NOT persist pi's edits
@@ -1606,7 +1607,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -1649,7 +1650,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -1783,7 +1784,7 @@ jobs:
             // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
             // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${process.env.AGENT_RUNNER_LABEL}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
             // #2464: quote pi's own last words — often the whole explanation ("nothing left to do").
             let piSaid = ''
             try {
