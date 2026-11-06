@@ -31,11 +31,24 @@ export async function listToTest(event: H3Event): Promise<ToTestResult> {
   const items: Array<ToTestItem & { stagingUrl: string | null, mergedAt?: string | null }> = []
   const errors: string[] = []
 
+  let pullsCache: Awaited<ReturnType<typeof ghFetch<GhPull[]>>> | null = null
+  const getPulls = async () => pullsCache ??= await ghFetch<GhPull[]>(event, `/repos/${REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=30`)
+
   const epics = await ghFetch<GhIssue[]>(event, `/repos/${REPO}/issues?labels=status:to-test&state=all&per_page=50`)
   if (epics.error) errors.push(epics.error)
   for (const i of (epics.data ?? []).filter(x => !x.pull_request)) {
     const section = extractHowToTest(i.body)
-    const app = appFromLabels(i.labels)
+    let app = appFromLabels(i.labels)
+    if (!app) {
+      // Fallback: the files of a merged PR that references this epic.
+      const ref = new RegExp(`#${i.number}(?!\\d)`)
+      const linked = ((await getPulls()).data ?? []).filter(x => x.merged_at && x.body && ref.test(x.body))
+      for (const p of linked) {
+        const files = await ghFetch<Array<{ filename: string }>>(event, `/repos/${REPO}/pulls/${p.number}/files?per_page=100`)
+        app = appFromFiles((files.data ?? []).map(f => f.filename))
+        if (app) break
+      }
+    }
     const url = await stagingUrl(event, app)
     const steps = extractSteps(section)
     items.push({
@@ -44,7 +57,7 @@ export async function listToTest(event: H3Event): Promise<ToTestResult> {
     })
   }
 
-  const pulls = await ghFetch<GhPull[]>(event, `/repos/${REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=30`)
+  const pulls = await getPulls()
   if (pulls.error) errors.push(pulls.error)
   for (const p of (pulls.data ?? []).filter(x => x.merged_at)) {
     const section = extractHowToTest(p.body)
