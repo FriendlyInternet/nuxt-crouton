@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, readFileSync as rd } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,7 +15,7 @@ const script = m[1].split('\n').map(l => l.slice(10)).join('\n')
 
 const git = (cwd, ...a) => execFileSync('git', a, { cwd, stdio: 'pipe', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } })
 
-function run(baseRef, changed) {
+function run(baseRef, changed, { event = 'pull_request', envBase = baseRef, raw = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'e2e-skip-'))
   const origin = join(root, 'origin'); const work = join(root, 'work')
   mkdirSync(origin); git(origin, 'init', '-q', '-b', baseRef)
@@ -26,7 +26,9 @@ function run(baseRef, changed) {
   git(work, 'add', '.'); git(work, 'commit', '-qm', 'change')
   const out = join(root, 'out')
   writeFileSync(out, '')
-  execFileSync('bash', ['-c', script], { cwd: work, stdio: 'pipe', env: { ...process.env, EVENT: 'pull_request', BASE_REF: baseRef, GITHUB_OUTPUT: out } })
+  const res = spawnSync('bash', ['-c', script], { cwd: work, encoding: 'utf8', env: { ...process.env, EVENT: event, BASE_REF: envBase, GITHUB_OUTPUT: out } })
+  if (raw) return res
+  assert.equal(res.status, 0, res.stdout + res.stderr)
   return Object.fromEntries(rd(out, 'utf8').trim().split('\n').filter(Boolean).map(l => l.split('=')))
 }
 
@@ -44,4 +46,16 @@ test('PR into main touching packages runs (flip check: not skipped)', () => {
 })
 test('PR into main touching only docs skips', () => {
   assert.equal(run('main', ['docs/a.md']).relevant, 'false')
+})
+test('base branch fetch fails → exit 1 with ::error::', () => {
+  const r = run('main', ['docs/a.md'], { envBase: 'no-such-branch', raw: true })
+  assert.equal(r.status, 1)
+  assert.match(r.stdout + r.stderr, /::error::Could not fetch the PR base branch/)
+})
+test('push event → relevant=true', () => {
+  assert.equal(run('main', ['docs/a.md'], { event: 'push' }).relevant, 'true')
+})
+test('extracted filter script is non-empty and mentions epic/*', () => {
+  assert.ok(script.trim().length > 0)
+  assert.ok(script.includes('epic/*'))
 })
