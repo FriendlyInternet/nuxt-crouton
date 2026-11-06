@@ -968,10 +968,8 @@ jobs:
           # Attach the review login to the SEEDED demo team (#832) so the advertised
           # login lands in the team the content seed populated (test1 → seed:org:test1),
           # not an empty fresh org. Staging-only step → production is untouched.
-          # #1369: DON'T mask the seed with `|| true` and then advertise the creds anyway — that
-          # printed a working-looking login for a user that was never created (the seed POSTed to a
-          # dead URL → failed silently → 401 on login). Only surface the creds when the seed actually
-          # succeeded; otherwise emit a loud warning and NO login (a broken preview must look broken).
+          # #1369: never advertise creds for a seed that failed (no `|| true`); warn loudly and
+          # emit NO login — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
                --seed-team test1 --db "$SEED_DB"; then
@@ -998,11 +996,7 @@ jobs:
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
-            SEED_PR_NUM="${{ github.event.pull_request.number }}"
-            if [ -n "$SEED_PR_NUM" ]; then
-              echo "::error::Review-login seed failed on PR preview for ${APP} — failing instead of posting a dead sign-in link (#3474)."
-              exit 1
-            fi
+            [ -z "${{ github.event.pull_request.number }}" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
           fi
 
       # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
