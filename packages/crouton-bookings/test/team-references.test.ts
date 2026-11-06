@@ -41,6 +41,7 @@ g.getRouterParams = () => ({ bookingId: 'b1', emaillogId: 'l1' })
 
 let body: any
 g.readBody = async () => body
+g.readValidatedBody = async (_e: any, parse: (b: unknown) => unknown) => parse(body)
 
 const dir = '../collections'
 const loadPost = async () => (await import(`${dir}/bookings/server/api/teams/[id]/bookings-bookings/index.post.ts`)).default
@@ -57,13 +58,13 @@ beforeEach(() => {
 describe('bookings routes check references against the team (#3378)', () => {
   it('booking with own team location is created', async () => {
     h.rows = [{ id: 'loc1' }]
-    body = { location: 'loc1', slot: 's' }
+    body = { location: 'loc1', date: '2026-11-10T00:00:00.000Z', slot: ['s'], quantity: 1, status: 'pending' }
     await (await loadPost())({})
     expect(h.create).toHaveBeenCalledTimes(1)
   })
 
   it("booking with another team's location → 400, nothing created", async () => {
-    body = { location: 'other' }
+    body = { location: 'other', date: '2026-11-10T00:00:00.000Z', slot: ['s'], quantity: 1, status: 'pending' }
     await expect((await loadPost())({})).rejects.toMatchObject({ status: 400, statusText: 'Invalid reference: location' })
     expect(h.create).not.toHaveBeenCalled()
   })
@@ -76,7 +77,7 @@ describe('bookings routes check references against the team (#3378)', () => {
   })
 
   it("emaillog with another team's bookingId → 400", async () => {
-    body = { bookingId: 'other' }
+    body = { bookingId: 'other', recipientEmail: 'a@b.c', triggerType: 'x', status: 'sent' }
     await expect((await loadLogPost())({})).rejects.toMatchObject({ status: 400, statusText: 'Invalid reference: bookingId' })
     expect(h.create).not.toHaveBeenCalled()
   })
