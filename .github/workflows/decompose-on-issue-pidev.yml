@@ -78,10 +78,7 @@ on:
         default: "claude-bridge"
         type: choice
         options: ["claude-bridge", "zai", "anthropic"]
-  # We fire on EVERY labeled event but the job `if` gates to the exact delegate / delegate-pi labels
-  # applied by the pipeline app (nuxt-harness[bot]), so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
-  issues:
-    types: [labeled]
+  # Dispatch-only (#3312): label-router.yml turns `work-this` (epic) / `delegate*` into a dispatch.
 
 jobs:
   decompose-pi:
@@ -92,10 +89,7 @@ jobs:
     # big issue here by `workflow_dispatch`. The `delegate*` labels are INTERNAL hand-offs only
     # (the decomposer's own needsSplit children, wave release, comment re-dispatch): they start a run
     # only when the Harness App (nuxt-harness[bot]) applies them, so a human adding one starts nothing.
-    if: |
-      (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.actor == 'nuxt-harness[bot]' &&
-        contains(fromJSON('["delegate-pi","delegate"]'), github.event.label.name))
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi') }}
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # One decompose at a time per issue (#2645). An issue created WITH a label fires only

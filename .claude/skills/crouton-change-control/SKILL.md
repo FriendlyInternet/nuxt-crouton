@@ -207,7 +207,7 @@ follows this rule and says so in its done comment.
 data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
 (#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
-`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+`plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
 differs, links the plan in its PR body and appends a row to
 `writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only

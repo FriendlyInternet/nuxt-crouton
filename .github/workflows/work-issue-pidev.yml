@@ -93,88 +93,13 @@ on:
   # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
   # event but the job `if` gates to the EXACT `work-this` label, so a worker later adding
   # `status:in-progress` does NOT re-fire this workflow (the #535 lesson).
-  issues:
-    types: [labeled]
 
 jobs:
-  # ── ROUTE (#2757, epic #2754) — plan first, or build directly? ─────────────────────────
-  # A `work-this` LABEL event on a bug / packages/ change / auth-sync-team code starts in PLAN
-  # mode: this job dispatches this workflow with mode=plan and tells `work-pi` to stand down.
-  # The plan reviewer (plan-review.yml, #2756) then labels `plan:approved` and plan-approved.yml
-  # dispatches the build. Chores and app-only tweaks, a manual dispatch, a revise round and an
-  # issue already carrying `plan:approved` all go straight to `work-pi`. The rules are
-  # .claude/plan-routing.json (labels `plan-first` / `no-plan` override).
-  route:
-    name: Route (plan first or build)
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: read
-    outputs:
-      build: ${{ steps.route.outputs.build }}
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          node-version: 22
-      - id: route
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          EVENT: ${{ github.event_name }}
-          ISSUE: ${{ github.event.issue.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # A dispatch (manual, revise, plan, build-from-plan) always runs as asked.
-          if [ "$EVENT" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          gh issue view "$ISSUE" --repo "$REPO" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/route-issue.txt"
-          LABELS="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
-          if echo ",$LABELS," | grep -q ',plan:approved,'; then
-            echo "issue #$ISSUE already carries plan:approved → build"
-            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
-          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
-            echo "issue #$ISSUE is an epic → splitter"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"decompose-on-issue-pidev.yml",inputs:{issue:($i|tostring),harness:"pi"}}')"
-            exit 0
-          fi
-          R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
-          echo "route: $R"
-          MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
-          if [ "$MODE" = "plan" ]; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),mode:"plan"}}')"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
+  # Routing (epic → splitter, plan-first, or build) now lives in label-router.yml (#3312); this
+  # workflow is dispatch-only and every run builds (or plans, per `mode`).
   work-pi:
-    needs: route
-    # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
-    # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
-    # labels (status:in-progress) mid-run (#535). Anything else → no run.
-    if: |
-      needs.route.outputs.build == 'true' && (
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this'))
+    # Dispatch-only (#3312): label-router.yml turns a `work-this` label into a dispatch.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
     # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
@@ -675,7 +600,7 @@ jobs:
             fi
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
-            # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
+            # #2757: BUILD FROM AN APPROVED PLAN — label-router.yml passes the plan comment id.
             # The worker implements exactly that plan, and records the plan-review ledger row.
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
@@ -1911,7 +1836,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [route, work-pi]
+    needs: [work-pi]
     if: ${{ always() && needs.work-pi.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
