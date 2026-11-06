@@ -26,13 +26,23 @@ export async function runReads(reads, { http, getTeamId, log = () => {} }) {
   for (const r of reads) {
     const path = fillPlaceholders(r.path, vars)
     try {
-      const { res, text } = await http('GET', path, undefined, { auth: true })
+      const { res, text } = await getWithRetry(http, path)
       const failure = checkRead(r, path, res, text, vars)
       if (failure) failures.push(failure)
       else log(`✓ reads ${path} → ${res.status}`)
     } catch (e) { failures.push(`reads ${path}: ${e.message}`) }
   }
   return failures
+}
+
+/** A GET is idempotent: retry a thrown network error (a fresh PR Worker drops the odd socket) before failing. */
+async function getWithRetry(http, path, attempts = 3) {
+  for (let i = 1; ; i++) {
+    try { return await http('GET', path, undefined, { auth: true }) } catch (e) {
+      if (i >= attempts) throw e
+      await new Promise(r => setTimeout(r, 500 * i))
+    }
+  }
 }
 
 /** One response against its entry: a failure message, or null when it passes. */
