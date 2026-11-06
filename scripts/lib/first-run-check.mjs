@@ -47,27 +47,38 @@ export function classifyFirstRun({ messages = [], files = [] } = {}) {
 
 // Names of the red check-runs that are first-run failures for this PR (#3470). I/O wrapper around
 // parseFirstRunError/classifyFirstRun; the workflow passes its octokit so no logic sits inline.
+async function readSource({ github, owner, repo }, path, ref) {
+  try {
+    const d = (await github.rest.repos.getContent({ owner, repo, path, ref })).data
+    return Buffer.from(d.content || '', 'base64').toString('utf8')
+  } catch (e) { if (e.status === 404) return null; throw e }
+}
+
+// JS files the PR touches, with their content on the PR head and on the default branch.
+async function changedJsFiles(c, pr, defaultBranch) {
+  const { github, owner, repo } = c
+  const cmp = (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${defaultBranch}...${pr.head.sha}` })).data
+  const files = []
+  for (const f of (cmp.files || []).filter(f => /\.(mjs|js|cjs)$/.test(f.filename))) {
+    files.push({ path: f.filename, head: f.status === 'removed' ? null : await readSource(c, f.filename, pr.head.sha), main: await readSource(c, f.filename, defaultBranch) })
+  }
+  return files
+}
+
+async function failureMessages({ github, owner, repo }, run) {
+  const anns = await github.paginate(github.rest.checks.listAnnotations, { owner, repo, check_run_id: run.id, per_page: 50 })
+  return anns.filter(a => a.annotation_level === 'failure').map(a => a.message || '')
+}
+
 export async function firstRunNames({ github, core, owner, repo, pr, redRuns, defaultBranch }) {
+  const c = { github, owner, repo }
   const names = []
   let files = null
-  const src = async (path, ref) => {
-    try {
-      const d = (await github.rest.repos.getContent({ owner, repo, path, ref })).data
-      return Buffer.from(d.content || '', 'base64').toString('utf8')
-    } catch (e) { if (e.status === 404) return null; throw e }
-  }
   for (const run of redRuns) {
     try {
-      const anns = await github.paginate(github.rest.checks.listAnnotations, { owner, repo, check_run_id: run.id, per_page: 50 })
-      const messages = anns.filter(a => a.annotation_level === 'failure').map(a => a.message || '')
+      const messages = await failureMessages(c, run)
       if (!messages.length || !messages.every(m => parseFirstRunError(m))) continue
-      if (!files) {
-        const cmp = (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${defaultBranch}...${pr.head.sha}` })).data
-        files = []
-        for (const f of (cmp.files || []).filter(f => /\.(mjs|js|cjs)$/.test(f.filename))) {
-          files.push({ path: f.filename, head: f.status === 'removed' ? null : await src(f.filename, pr.head.sha), main: await src(f.filename, defaultBranch) })
-        }
-      }
+      files ??= await changedJsFiles(c, pr, defaultBranch)
       if (classifyFirstRun({ messages, files }).firstRun) names.push(run.name)
     } catch (e) { core.warning(`first-run classify ${run.name}: ${e.message}`) }
   }
