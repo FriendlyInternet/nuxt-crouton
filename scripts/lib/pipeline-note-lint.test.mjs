@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.github', 'workflows')
-const FILES = ['work-issue-pidev', 'decompose-on-issue-pidev', 'plan-review', 'build-review', 'ticket-review', 'fix-ci-on-failure', 'on-comment']
+const FILES = ['work-issue-pidev', 'decompose-on-issue-pidev', 'build-review', 'ticket-review', 'fix-ci-on-failure', 'on-comment']
 const SITE = /gh (?:issue|pr) comment|createComment|issues\/[^\s"]*\/comments"[^\n]*--method POST/
 const MARK = 'pipeline-note'
 const WINDOW = 8
