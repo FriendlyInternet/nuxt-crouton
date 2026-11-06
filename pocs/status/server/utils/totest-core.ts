@@ -96,3 +96,13 @@ export function extractTargetPath(steps: string[], stagingUrl?: string | null): 
 export function isGithubOnly(steps: string[]): boolean {
   return steps.length > 0 && steps.every(s => /\b(on|in) (this|the) (pr|pull request|issue)\b|\bgithub\b|\bthe (pr|pull request) (comment|body|description)\b/i.test(s))
 }
+
+/** App slug from an issue's `app:<x>` / `poc:<x>` label, else null. */
+export function appFromLabels(labels: Array<string | { name?: string }> | null | undefined): string | null {
+  for (const l of labels ?? []) {
+    const name = typeof l === 'string' ? l : l.name
+    const m = name?.match(/^(?:app|poc):([a-z0-9-]+)$/)
+    if (m) return m[1]!
+  }
+  return null
+}

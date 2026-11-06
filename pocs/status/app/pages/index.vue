@@ -14,7 +14,7 @@ interface ToTestItem {
   mergedAt?: string | null
 }
 interface AppRow {
-  app: string
+  app: string | null
   stagingUrl: string | null
   hasSignIn: boolean
   previews: Array<{ pr: number, title: string, updatedAt: string, url: string }>
@@ -36,15 +36,13 @@ const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
 
-const loginHref = (app: string, i: ToTestItem) => loginHrefFor({ ...i, app })
+const loginHref = (app: string | null, i: ToTestItem) => loginHrefFor({ ...i, app })
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
 const appCards = computed(() => {
-  const todo = (app: string) => items.value.filter(i => i.app === app)
-  return (appsRes.value?.data ?? [])
-    .map(a => ({ ...a, toTest: todo(a.app) }))
-    .sort((a, b) => b.toTest.length - a.toTest.length || a.app.localeCompare(b.app))
+  const todo = (app: string | null) => items.value.filter(i => i.app === app)
+  return sortAppCards((appsRes.value?.data ?? []).map(a => ({ ...a, toTest: todo(a.app) })))
 })
 
 // --- To test ---
@@ -93,10 +91,10 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
           <p v-if="appsStatus === 'pending'" class="text-muted">Loading…</p>
           <p v-else-if="!appCards.length" class="text-muted">No apps found.</p>
 
-          <UCard v-for="a in appCards" :key="a.app">
+          <UCard v-for="a in appCards" :key="a.app ?? 'general'">
             <template #header>
               <div class="flex items-center gap-2">
-                <h2 class="text-lg font-semibold">{{ a.app }}</h2>
+                <h2 class="text-lg font-semibold">{{ a.app ?? 'General' }}</h2>
                 <UBadge v-if="a.toTest.length" color="warning" variant="subtle">{{ a.toTest.length }} to test</UBadge>
               </div>
             </template>
