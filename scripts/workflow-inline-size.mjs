@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 export const LIMIT = 40
 const BASELINE = fileURLToPath(new URL('./workflow-inline-size.baseline.json', import.meta.url))
-const HEADER = /^(\s*)(?:- )?(run|script):\s*[|>][-+0-9]*\s*$/
+const HEADER = /^(\s*)(?:- )?(run|script):\s*[|>][-+0-9]*\s*(?:#.*)?$/
 const indentOf = (l) => l.length - l.trimStart().length
 
 const stripQuotes = (v) => v.replace(/^['"]|['"]$/g, '')
