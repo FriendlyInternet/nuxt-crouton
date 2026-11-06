@@ -1,6 +1,13 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 
+// One-tap staging sign-in per role (#3421).
+const STAGING_ROLES = [
+  { role: 'member', label: 'Member' },
+  { role: 'admin', label: 'Admin' },
+  { role: 'superadmin', label: 'Super admin' }
+]
+
 interface ToTestItem {
   kind: 'epic' | 'pr'
   number: number
@@ -122,7 +129,18 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                 <p v-if="!a.stagingUrl" class="text-sm text-muted">No staging URL configured.</p>
                 <template v-else>
                   <a :href="a.stagingUrl" target="_blank" rel="noopener" class="block break-all text-sm text-primary">{{ a.stagingUrl }}</a>
-                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=main`" target="_blank" />
+                  <div v-if="a.hasSignIn" class="flex gap-2">
+                    <UButton
+                      v-for="r in STAGING_ROLES"
+                      :key="r.role"
+                      size="sm"
+                      class="flex-1 justify-center"
+                      :label="r.label"
+                      :href="`/api/status/login/${a.app}?key=main&role=${r.role}`"
+                      target="_blank"
+                    />
+                  </div>
+                  <UButton v-else block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=main`" target="_blank" />
                 </template>
               </div>
 

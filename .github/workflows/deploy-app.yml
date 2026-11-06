@@ -999,6 +999,8 @@ jobs:
             PR_NUM="${{ github.event.pull_request.number }}"
             [ -z "$PR_NUM" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
           fi
+          # Member + super-admin logins next to the admin one (#3421): best-effort, never fails the deploy.
+          KEY="$KEY" SEED_DB="$SEED_DB" node scripts/seed-review-roles.mjs
 
       # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
       # The screenshot used to be captured inline here (#2173), so a miss could only be retried

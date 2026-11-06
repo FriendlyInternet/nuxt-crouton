@@ -54,6 +54,7 @@ function parseArgs(argv) {
     else if (a === '--seed-team') out.seedTeam = argv[++i]
     else if (a === '--db') out.db = argv[++i]
     else if (a === '--sqlite') out.sqlite = argv[++i]
+    else if (a === '--role') out.role = argv[++i]
   }
   return out
 }
@@ -186,6 +187,35 @@ export function markReviewerVerifiedSql(email) {
     `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
 }
 
+/** The review-login roles (#3421). Keep in sync with pocs/status/server/utils/review-login.ts. */
+export const REVIEW_ROLES = ['member', 'admin', 'superadmin']
+
+/** Team role the seeded membership gets: only `member` is demoted; admin + superadmin own the team. */
+export function teamRoleFor(role) {
+  return role === 'member' ? 'member' : 'owner'
+}
+
+/** Set (or clear) the site-admin flag on the review user. Run for every role so it is always explicit. */
+export function superAdminSql(email, on) {
+  return `UPDATE "user" SET "superAdmin" = ${on ? 1 : 0} WHERE lower("email") = ${sqlStr(String(email).toLowerCase())};`
+}
+
+/** Idempotent seeded-team membership upsert: re-running with a new role updates the same row. */
+export function memberUpsertSql({ memberId, userId, orgId, role, createdAt }) {
+  return `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
+    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},${sqlStr(teamRoleFor(role))},${createdAt}) ` +
+    `ON CONFLICT("id") DO UPDATE SET ` +
+    `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+}
+
+/**
+ * Only the admin login may fall back to its own fresh team when the seeded-team attach
+ * fails — there it would be that team's OWNER, which is the wrong role for member/superadmin.
+ */
+export function mayCreateFreshTeam(role) {
+  return role === 'admin'
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -216,8 +246,13 @@ function cookieHeader(jar) {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const { url, email, password } = args
+  const role = args.role ?? 'admin'
+  if (!REVIEW_ROLES.includes(role)) {
+    console.error(`Unknown --role "${role}" (expected ${REVIEW_ROLES.join('|')}).`)
+    process.exit(2)
+  }
   if (!url || !email || !password) {
-    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>)]')
+    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--role member|admin|superadmin] [--seed-team <slug> (--db <d1> | --sqlite <path>)]')
     process.exit(2)
   }
 
@@ -338,11 +373,7 @@ async function main() {
     const createdAt = Math.floor(Date.now() / 1000)
     // Idempotent member upsert (conflict on the deterministic id → no dupes on
     // redeploy; createdAt preserved). Mirrors crouton-auth/seed's `member` shape.
-    const sql =
-      `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-      `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${createdAt}) ` +
-      `ON CONFLICT("id") DO UPDATE SET ` +
-      `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+    const sql = memberUpsertSql({ memberId, userId, orgId, role, createdAt })
     try {
       execSeedSql(args, sql)
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
@@ -367,9 +398,18 @@ async function main() {
       }
     } catch (e) {
       warn(`seeded-team attach failed: ${e?.message || e} — falling back to a fresh review team.`)
+      if (!mayCreateFreshTeam(role)) {
+        warn(`${role} login must not own a fresh team — NOT advertising it.`)
+        process.exit(1)
+      }
     }
   } else if (args.seedTeam && (args.db || args.sqlite) && !userId) {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
+  }
+
+  if (!mayCreateFreshTeam(role) && !hasActiveOrg) {
+    warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
+    process.exit(1)
   }
 
   // 3b. No active org yet → create a fresh one so the reviewer lands inside the
@@ -401,6 +441,8 @@ async function main() {
     try {
       execSeedSql(args, markReviewerVerifiedSql(email))
       info(`marked ${email} verified.`)
+      execSeedSql(args, superAdminSql(email, role === 'superadmin'))
+      info(`site-admin flag set for the ${role} login.`)
     } catch (e) {
       warn(`could not mark ${email} verified: ${e?.message || e} — feedback pins will be refused.`)
     }

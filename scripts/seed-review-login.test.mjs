@@ -192,3 +192,56 @@ test('#3474 retry delays', () => {
   assert.equal(retryDelays({}), SIGNUP_RETRY_DELAYS_MS)
   assert.equal(retryDelays({ SEED_SIGNUP_RETRY_DELAYS_MS: 'x' }), SIGNUP_RETRY_DELAYS_MS)
 })
+
+// ── Review-login roles (#3421) ────────────────────────────────────────────────
+import { teamRoleFor, superAdminSql, memberUpsertSql, mayCreateFreshTeam } from './seed-review-login.mjs'
+
+function rdb() {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1','review+velo-main-superadmin@example.com',0),('u2','other@example.com',0);
+  `)
+  return d
+}
+const sa = (d, id) => d.prepare('SELECT "superAdmin" v FROM "user" WHERE "id"=?').get(id).v
+
+test('#3421 teamRoleFor: member is demoted, admin + superadmin own the team', () => {
+  assert.equal(teamRoleFor('member'), 'member')
+  assert.equal(teamRoleFor('admin'), 'owner')
+  assert.equal(teamRoleFor('superadmin'), 'owner')
+})
+
+test('#3421 superAdminSql sets/clears only the matching user (case-insensitive)', () => {
+  const d = rdb()
+  d.exec(superAdminSql('Review+velo-main-superadmin@example.com', true))
+  assert.equal(sa(d, 'u1'), 1)
+  assert.equal(sa(d, 'u2'), 0)
+  d.exec(superAdminSql('review+velo-main-superadmin@example.com', false))
+  assert.equal(sa(d, 'u1'), 0)
+})
+
+test('#3421 superAdminSql: a quote in the email cannot break out', () => {
+  const d = rdb()
+  d.exec(superAdminSql(`x' OR '1'='1`, true))
+  assert.equal(sa(d, 'u1'), 0)
+  assert.equal(sa(d, 'u2'), 0)
+})
+
+test('#3421 a member login is stored as member, never owner; re-run with a new role updates the same row', () => {
+  const d = rdb()
+  const base = { memberId: 'm1', userId: 'u1', orgId: 'seed:org:test1', createdAt: 1 }
+  d.exec(memberUpsertSql({ ...base, role: 'member' }))
+  const role = () => d.prepare('SELECT "role" r FROM "member" WHERE "id"=?').get('m1').r
+  assert.equal(role(), 'member')
+  d.exec(memberUpsertSql({ ...base, role: 'superadmin' }))
+  assert.equal(role(), 'owner')
+  assert.equal(d.prepare('SELECT count(*) c FROM "member"').get().c, 1)
+})
+
+test('#3421 only the admin login may fall back to its own fresh team (it would own it)', () => {
+  assert.equal(mayCreateFreshTeam('admin'), true)
+  assert.equal(mayCreateFreshTeam('member'), false)
+  assert.equal(mayCreateFreshTeam('superadmin'), false)
+})

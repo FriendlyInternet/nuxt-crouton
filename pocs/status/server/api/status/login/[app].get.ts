@@ -1,5 +1,5 @@
 import { appTargetFor } from '../../../utils/app-urls'
-import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
+import { parseReviewRole, reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
 import { loginPlan } from '../../../utils/live-apps-core'
@@ -16,7 +16,15 @@ export default defineEventHandler(async (event) => {
   if (!email) {
     // Signed out: send to sign-in and come back here afterwards (path is built from a validated slug).
     const slug = String(getRouterParam(event, 'app') ?? '')
-    const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}` : '/'
+    // key/role are re-validated here so a signed-out tap comes back as the same role.
+    const q = getQuery(event)
+    const bKey = /^(main|pr\d+)$/.test(String(q.key ?? '')) ? String(q.key) : ''
+    const bRole = parseReviewRole(q.role)
+    const params = new URLSearchParams()
+    if (bKey) params.set('key', bKey)
+    if (bRole && q.role) params.set('role', bRole)
+    const qs = params.toString()
+    const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}${qs ? `?${qs}` : ''}` : '/'
     return sendRedirect(event, `/signin?redirect=${encodeURIComponent(back)}`, 302)
   }
   if (!owner || email !== owner) {
@@ -26,6 +34,10 @@ export default defineEventHandler(async (event) => {
   const app = String(getRouterParam(event, 'app') ?? '')
   const key = String(getQuery(event).key ?? 'main')
   if (!/^[a-z0-9-]+$/.test(app) || !/^(main|pr\d+)$/.test(key)) {
+    throw createError({ statusCode: 400, statusMessage: 'Bad request' })
+  }
+  const role = parseReviewRole(getQuery(event).role)
+  if (!role) {
     throw createError({ statusCode: 400, statusMessage: 'Bad request' })
   }
   const toRaw = getQuery(event).to
@@ -56,5 +68,5 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base, 302)
   }
 
-  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to, walk), 302)
+  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to, walk, role), 302)
 })
