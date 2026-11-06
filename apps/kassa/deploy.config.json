@@ -49,6 +49,10 @@
       },
       {
         "path": "/admin/test1/sales/devices"
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
       }
     ]
   }
