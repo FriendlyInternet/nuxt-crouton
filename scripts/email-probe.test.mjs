@@ -163,3 +163,52 @@ test('#3497 send end-to-end', async () => {
   assert.equal(four.code, 1)
   assert.equal(four.hits, 1)
 })
+
+// #3505 — a probed app must have a real sender, else crouton-email falls back to example.com.
+import { senderVerdict, secretNamesOf } from './email-probe.mjs'
+import { readdirSync, existsSync } from 'node:fs'
+
+test('#3505 senderVerdict', () => {
+  const v = (src, secretNames = []) => senderVerdict({ app: 'x', nuxtConfigSource: src, secretNames })
+  const bad = { ok: false, reason: 'no sender address configured for x' }
+  assert.deepEqual(v("runtimeConfig:{ email:{ from:'noreply@messages.friendlyinter.net' } }"), { ok: true })
+  assert.deepEqual(v('runtimeConfig:{ foo: 1 }'), bad)
+  assert.deepEqual(v("email:{ from:'noreply@example.com' }"), bad)
+  assert.deepEqual(v("email:{ from:'a@mail.example.com' }"), bad)
+  assert.deepEqual(v("email:{ from:'' }"), bad)
+  assert.deepEqual(v("email:{ fromName:'Acme' }"), bad)
+  assert.deepEqual(v("email:{ fromName:'Acme' }", ['NUXT_EMAIL_FROM']), { ok: true })
+  assert.deepEqual(v("email:{ from:'x@notexample.com' }"), { ok: true })
+})
+
+test('#3505 every probed email app has a sender', () => {
+  const root = new URL('../', import.meta.url).pathname
+  let n = 0
+  for (const dir of ['apps', 'pocs']) {
+    for (const app of readdirSync(`${root}${dir}`)) {
+      const cfg = `${root}${dir}/${app}/deploy.config.json`
+      if (!existsSync(cfg) || !isEmailApp(JSON.parse(readFileSync(cfg, 'utf8')))) continue
+      n++
+      const src = readFileSync(`${root}${dir}/${app}/nuxt.config.ts`, 'utf8')
+      const r = senderVerdict({ app, nuxtConfigSource: src, secretNames: ['NUXT_EMAIL_FROM'] })
+      const own = senderVerdict({ app, nuxtConfigSource: src, secretNames: [] })
+      // status gets its sender from the Worker secret; every other app must set it in config
+      assert.equal(r.ok, true, `${app}: ${r.reason}`)
+      if (app !== 'status') assert.equal(own.ok, true, `${app}: ${own.reason}`)
+    }
+  }
+  assert.ok(n >= 4)
+})
+
+test('#3505 sender check runs before any send', () => {
+  const b = stepBlock('Probe email send')
+  const s = b.indexOf('email-probe.mjs" sender')
+  const r = b.indexOf('email-probe.mjs" requests')
+  assert.ok(s > 0 && r > s)
+})
+
+test('secretNamesOf', () => {
+  assert.deepEqual(secretNamesOf('[{"name":"A"},{"name":"B"}]'), ['A', 'B'])
+  assert.deepEqual(secretNamesOf(''), [])
+  assert.deepEqual(secretNamesOf('not json'), [])
+})
