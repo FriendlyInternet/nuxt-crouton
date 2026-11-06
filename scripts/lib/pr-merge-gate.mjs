@@ -1,6 +1,9 @@
-// The merge decision for a PR the automerge workflow is about to merge (#3103) — the ONE place that
-// owns the whole rule: who said yes, any red check, CI Gate, mergeable. The workflow gathers the
-// facts (checks, comments, commits) and acts on the answer; it holds no merge rule of its own.
+import { decideSharedCodeHold } from '../shared-code-hold.mjs'
+// The leaf merge rules for a PR the automerge workflow is about to merge (#3103) live in THIS FILE, not in one
+// function (#3491, owner 6 Nov 18:38): skipBeforeReads() runs before any reads (draft, base shape, pipeline
+// author); decideLeafMerge() decides who said yes, any red check, CI Gate, mergeable; applySharedCodeHold()
+// adds the packages/ + workflows hold; shadowCheck() shapes the answer for #3492's check-run. The workflow
+// gathers the facts and acts on the answers; nothing calls the #3491 functions yet (#3492 wires them).
 //
 //   (#3467) A merge commit after the owner's `ok` keeps the ok but may have resolved conflicts, so the PR
 //   also waits for a build-review `go` on the CURRENT head (`headReview.kind === 'other'`); on an epic base
@@ -57,4 +60,31 @@ export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold =
   const ok = (r) => ({ merge: true, code: 'merge', reason: firstRun.length ? `${r}; first-run check ${names} ignored after owner ok` : r, ...(firstRun.length ? { firstRun } : {}) })
   const ctx = { labels, go, ownerHold, headReview, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
   return baseRef === 'main' ? mainDecision(ctx) : epicDecision(ctx)
+}
+
+// #3491: the pre-read skips of automerge-epic-subpr.yml L248-254, in the same order.
+export function skipBeforeReads({ draft, authorIsPipeline, baseRef, headRef }) {
+  const base = String(baseRef), head = String(headRef)
+  if (draft) return { skip: true, code: 'draft' }
+  const epicToMain = base === 'main' && head.startsWith('epic/')
+  const leafToMain = base === 'main' && head.startsWith('work-')
+  if (!base.startsWith('epic/') && !epicToMain && !leafToMain) return { skip: true, code: 'not-epic-base' }
+  if (authorIsPipeline !== true) return { skip: true, code: 'not-pipeline' }
+  return { skip: false }
+}
+
+// #3491: the shared-code hold of L359-369. It only ever turns a `merge` into a hold.
+export function applySharedCodeHold(gate, { baseRef, labels = [], files = [], go }) {
+  if (!gate?.merge) return gate
+  const s = decideSharedCodeHold({ baseRef, labels, files })
+  if (s.action === 'hold' && !go?.go) return { ...hold('shared-code', s.reason), held: s.held, hasPkgs: s.hasPkgs, hasWf: s.hasWf }
+  return gate
+}
+
+// #3491: the payload for #3492's information-only check-run.
+export function shadowCheck(answer) {
+  const merge = answer?.merge === true
+  const code = merge ? 'merge' : String(answer?.code || 'unknown')
+  return { name: 'Merge decision (shadow)', conclusion: merge ? 'success' : 'neutral',
+    output: { title: code, summary: merge ? `would merge — ${answer.reason || code}` : `would hold: ${code}${answer?.reason ? ` — ${answer.reason}` : ''}` } }
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, shadowCheck } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -193,4 +193,77 @@ test('first-run B. no owner ok → held, even for build:approved on an epic base
 })
 test('first-run C. a real red still wins over first-run', () => {
   assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
+})
+
+// ---- #3491: skipBeforeReads / applySharedCodeHold / shadowCheck ----
+const pre = (o = {}) => skipBeforeReads({ draft: false, authorIsPipeline: true, baseRef: 'epic/1-x', headRef: 'work-1', ...o })
+test('D3 #2051/#2054: draft sign-off PR → skip draft', () => {
+  assert.deepEqual(pre({ draft: true }), { skip: true, code: 'draft' })
+  assert.equal(pre({ draft: true, authorIsPipeline: false }).code, 'draft')
+})
+test('D4 #3423: owner-authored PR → skip not-pipeline', () => {
+  assert.deepEqual(pre({ authorIsPipeline: false }), { skip: true, code: 'not-pipeline' })
+  assert.equal(pre({ authorIsPipeline: undefined }).code, 'not-pipeline')
+})
+test('D3/D4 epic → main: the same two skips', () => {
+  const o = { baseRef: 'main', headRef: 'epic/1-x' }
+  assert.equal(pre({ ...o, draft: true }).code, 'draft')
+  assert.equal(pre({ ...o, authorIsPipeline: false }).code, 'not-pipeline')
+})
+test('D3/D4 work-* → main: the same two skips', () => {
+  const o = { baseRef: 'main', headRef: 'work-1' }
+  assert.equal(pre({ ...o, draft: true }).code, 'draft')
+  assert.equal(pre({ ...o, authorIsPipeline: false }).code, 'not-pipeline')
+})
+test('not-epic-base: a base that is not epic/*, and not a main leaf/epic PR, → skip not-epic-base', () => {
+  assert.equal(pre({ baseRef: 'main', headRef: 'feature/x' }).code, 'not-epic-base')
+  assert.equal(pre({ baseRef: 'release/1', headRef: 'work-1' }).code, 'not-epic-base')
+})
+test('pipeline PRs of each kind → { skip: false }', () => {
+  assert.deepEqual(pre(), { skip: false })
+  assert.deepEqual(pre({ baseRef: 'main', headRef: 'work-1' }), { skip: false })
+  assert.deepEqual(pre({ baseRef: 'main', headRef: 'epic/1-x' }), { skip: false })
+})
+const mergeGate = { merge: true, code: 'merge', reason: 'reviewed' }
+const sh = (o = {}) => applySharedCodeHold(mergeGate, { baseRef: 'epic/1-x', labels: [], files: ['packages/a/x.ts', 'scripts/b.mjs'], go: { go: false }, ...o })
+test('D1 #339/#350: packages/ file, no build:approved, no owner ok → shared-code with the file in held', () => {
+  const r = sh()
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'shared-code')
+  assert.deepEqual(r.held, ['packages/a/x.ts'])
+  assert.equal(r.hasPkgs, true)
+  assert.equal(r.hasWf, false)
+})
+test('D1 #2777: packages/ with build:approved → gate unchanged', () => {
+  assert.equal(sh({ labels: ['build:approved'] }), mergeGate)
+})
+test('D2 #2442: .github/workflows/ with build:approved, no owner ok → shared-code', () => {
+  const r = sh({ labels: ['build:approved'], files: ['.github/workflows/a.yml'] })
+  assert.equal(r.code, 'shared-code')
+  assert.equal(r.hasWf, true)
+})
+test('owner ok: any shared-code file with go.go → gate unchanged', () => {
+  assert.equal(sh({ go: { go: true } }), mergeGate)
+  assert.equal(sh({ go: { go: true }, files: ['.github/workflows/a.yml'], labels: ['build:approved'] }), mergeGate)
+})
+test('a hold gate passes through, and a main base never holds', () => {
+  const g = { merge: false, code: 'no-review' }
+  assert.equal(sh({}, g) && applySharedCodeHold(g, { baseRef: 'epic/1-x', files: ['packages/a/x.ts'] }), g)
+  assert.equal(sh({ baseRef: 'main' }), mergeGate)
+})
+test('shadowCheck: merge → success', () => {
+  const r = shadowCheck(mergeGate)
+  assert.equal(r.name, 'Merge decision (shadow)')
+  assert.equal(r.conclusion, 'success')
+  assert.equal(r.output.title, 'merge')
+})
+test('shadowCheck: each hold code → neutral with that code', () => {
+  const answers = ['no-review', 'head-unreviewed', 'red', 'ci-pending', 'unmergeable', 'shared-code'].map((code) => ({ merge: false, code, reason: 'r' }))
+  answers.push(pre({ draft: true }), pre({ authorIsPipeline: false }), pre({ baseRef: 'main', headRef: 'x' }))
+  for (const a of answers) {
+    const r = shadowCheck(a)
+    assert.equal(r.conclusion, 'neutral')
+    assert.equal(r.output.title, a.code)
+    assert.ok(r.output.summary.includes(a.code))
+  }
 })
