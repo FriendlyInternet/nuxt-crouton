@@ -76,6 +76,8 @@ The interactive flow (feature branch → `/commit` → PR `Closes #NN` → merge
 
 Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs auto-merge there when green (`automerge-epic-subpr.yml`, merge commit); gate PRs wait for §2. **The pipeline stops at the epic branch — nothing reaches `main` on its own**: the epic→`main` PR is a human act (the #686 lesson, from that epic's postmortem — cited, not reproduced). It also never deploys production (§5).
 
+When `main` turns green after being red, bring a waiting epic PR up to date with `gh api -X PUT repos/{o}/{r}/pulls/{n}/update-branch`. `rerun-failed-jobs` re-tests the stale merge ref and stays red (#3011, #3018).
+
 ## 5. The non-negotiables (rule → incident behind it)
 
 | Rule | Enforced by | Incident / evidence |

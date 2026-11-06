@@ -22,6 +22,7 @@ import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
 import { isAgentComment } from '../../../scripts/approval.mjs'
+import { staleWorkThisLabels as collectStaleWorkThis } from '../../../scripts/lib/stale-work-this-gather.mjs'
 import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
@@ -355,6 +356,9 @@ async function stuckPRs(openPRs) {
   }
 }
 
+// ── Forgotten work-this labels (#3018) ───────────────────────────────────────
+const staleWorkThisLabels = () => collectStaleWorkThis({ gh, owner: OWNER, name: NAME })
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -464,7 +468,8 @@ async function gather() {
     orphanedInProgress,
     idlePRs,
     epicPrsNoCi,
-    okedPrsConflicting
+    okedPrsConflicting,
+    staleWorkThis: await staleWorkThisLabels()
   }
 }
 
