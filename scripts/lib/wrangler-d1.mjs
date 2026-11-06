@@ -84,6 +84,12 @@ export function isAlreadyGone(msg) {
   return /not found|does not exist|couldn'?t find|could not find|no such|\b10007\b/i.test(String(msg ?? ''))
 }
 
+/** True for the app's own tables — not SQLite's (`sqlite_*`) or Cloudflare's (`_cf_*`) internals. Prefix check in JS: in SQL LIKE, `_` is a wildcard. */
+export function isUserTable(name) {
+  const n = String(name ?? '')
+  return !n.startsWith('sqlite_') && !n.startsWith('_cf_')
+}
+
 /** Run a remote SELECT and return the first result set's rows (wrangler --json shape). */
 export function queryD1Json(dbName, sql, { cwd } = {}) {
   const out = runWrangler(['d1', 'execute', dbName, '--remote', '--json', '--command', sql], { cwd, capture: true })
