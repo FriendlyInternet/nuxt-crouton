@@ -17,6 +17,8 @@ on:
 permissions:
   contents: read
   issues: write
+  pull-requests: read   # mergeable_state + PR comments/commits (#3317)
+  checks: read          # `CI Gate` check-run lookup on epic PR heads (#3317)
 
 concurrency:
   group: housekeeping
@@ -53,6 +55,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REPO: ${{ github.repository }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         run: node .claude/skills/housekeeping/gather.mjs > housekeeping.data.json
 
       - name: Render Markdown
