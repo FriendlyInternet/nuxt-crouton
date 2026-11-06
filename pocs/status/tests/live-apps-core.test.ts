@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -125,5 +125,31 @@ describe('apps without a staging address', () => {
     const html = noStagingHtml('spike')
     expect(html).toContain('only has PR test builds')
     expect(html).not.toContain('deploy.config.json')
+  })
+})
+
+describe('loginPlan', () => {
+  const open = { gone: false as const, url: 'https://pr3188.example.dev' }
+  it('PR key for an app not on main signs in on the PR preview', () => {
+    expect(loginPlan(null, 'devframe-spike', 'pr3188', true, open)).toEqual({ kind: 'redirect', base: 'https://pr3188.example.dev', signIn: true })
+  })
+  it('PR key with an empty staging address still signs in on the preview', () => {
+    expect(loginPlan({ stagingUrl: '', hasSignIn: true }, 'spike', 'pr3188', true, open)).toEqual({ kind: 'redirect', base: 'https://pr3188.example.dev', signIn: true })
+  })
+  it('main with an empty staging address is a 404 page', () => {
+    const p = loginPlan({ stagingUrl: '', hasSignIn: true }, 'spike', 'main', true)
+    expect(p).toMatchObject({ kind: 'page', status: 404 })
+  })
+  it('main for an unknown app is a not-on-main 404', () => {
+    expect(loginPlan(null, 'x', 'main', true)).toMatchObject({ kind: 'page', status: 404 })
+  })
+  it('main with an address is unchanged; opt-out or no secret skips sign-in', () => {
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: true }, 'a', 'main', true)).toEqual({ kind: 'redirect', base: 'https://s', signIn: true })
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: false }, 'a', 'main', true)).toMatchObject({ signIn: false })
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: true }, 'a', 'main', false)).toMatchObject({ signIn: false })
+  })
+  it('gone / none PR previews map to 410 / 404', () => {
+    expect(loginPlan(null, 'a', 'pr1', true, { gone: true, pr: 1 })).toMatchObject({ status: 410 })
+    expect(loginPlan(null, 'a', 'pr1', true, { gone: 'none', pr: 1 })).toMatchObject({ status: 404 })
   })
 })

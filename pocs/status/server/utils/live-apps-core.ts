@@ -43,6 +43,38 @@ export function noStagingHtml(app: string): string {
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>No staging address</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>No staging address</h1><p><strong>${esc(app)}</strong> has no staging address — it only has PR test builds. Open it from the PR's preview link.</p></body>`
 }
 
+/** 404 page for the `main` sign-in of an app that is not on main yet (only its PR previews exist). */
+export function notOnMainHtml(app: string): string {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not on main yet</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Not on main yet</h1><p><strong>${esc(app)}</strong> is not on main yet. Open it from a PR's preview link.</p></body>`
+}
+
+export interface LoginTarget { stagingUrl: string, hasSignIn: boolean }
+export type LoginPlan =
+  | { kind: 'page', status: number, html: string }
+  | { kind: 'redirect', base: string, signIn: boolean }
+
+/**
+ * Decides what the sign-in route does. A PR key uses the PR preview as its base, and an app missing
+ * from the list (not on main yet) defaults to sign-in ON; only `main` needs a staging address.
+ * `decision` is the resolved PR preview (required for `pr<N>` keys).
+ */
+export function loginPlan(
+  target: LoginTarget | null, app: string, key: string, hasSecret: boolean, decision?: PreviewDecision,
+): LoginPlan {
+  const t = target ?? { stagingUrl: '', hasSignIn: true }
+  let base = t.stagingUrl
+  if (key === 'main') {
+    if (!target) return { kind: 'page', status: 404, html: notOnMainHtml(app) }
+    if (!t.stagingUrl) return { kind: 'page', status: 404, html: noStagingHtml(app) }
+  } else {
+    if (!decision) throw new Error('decision required for a PR key')
+    if (decision.gone === 'none') return { kind: 'page', status: 404, html: previewNoneHtml(decision.pr, app, t.stagingUrl) }
+    if (decision.gone) return { kind: 'page', status: 410, html: previewGoneHtml(decision.pr, app, t.stagingUrl) }
+    base = decision.url
+  }
+  return { kind: 'redirect', base, signIn: t.hasSignIn && hasSecret }
+}
+
 /** Readable replacement for a 404 when the PR was merged/closed and its test build is torn down. */
 export function previewGoneHtml(pr: number, app: string, stagingUrl: string): string {
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} is gone</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} was merged or closed</h1><p>Its test build for <strong>${esc(app)}</strong> is gone.</p>${stagingLink(app, stagingUrl, '<p>', '</p>')}</body>`
