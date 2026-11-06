@@ -2,7 +2,7 @@
 //
 // A reply on such an issue must re-run the planner with the reply as feedback. It used to reach the
 // generic resume responder, which posted "still iterating" and nothing else. Detection mirrors how
-// plan-review.yml decides to hold: two or more `plan-review-verdict:no-go` comments plus
+// the plan-review job (on-comment.yml) decides to hold: two or more `plan-review-verdict:no-go` comments plus
 // `status:blocked`. A later `go` / `needs-owner` verdict, a verdict posted by a person, a
 // `plan:approved` label, or an approval reply (`ok`) does not count — approval is not a re-plan.
 

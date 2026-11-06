@@ -19,6 +19,8 @@ name: On comment
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
+#   (bot plan)      plan-review              plan-review.yml (#3313; the bot-posted plan comment is the one
+#                                            comment `route` ignores, so this job gates itself)
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
@@ -613,9 +615,9 @@ jobs:
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
-      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
+      # An issue held after the plan reviewer rejected twice (plan-review job below) is not a gate PR or a
       # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
-      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
+      # Detect the hold the way the plan-review job makes it (two no-go verdicts, newest a no-go; the job
       # guard already requires status:blocked) and re-run the planner with the reply as feedback.
       # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
       - name: Re-plan a held plan from the reply
@@ -1531,6 +1533,245 @@ jobs:
           MODEL_TIER: default
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.rl-start.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs
+
+  # ── Plan review (#2756), folded in from plan-review.yml (#3313) ─────────────────────────
+  plan-review:
+    # Only a bot-posted plan on a plain issue (not a PR) — a human cannot start an expensive run
+    # by pasting the marker.
+    # Folded in from plan-review.yml (#3313): the plan comment is bot-posted, so it is the one
+    # comment `route`/`rl-start` ignore; this job is its own entry point and runs alone.
+    concurrency:
+      group: plan-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    if: >-
+      ${{ !github.event.issue.pull_request
+      && github.event.comment.user.login == 'nuxt-harness[bot]'
+      && startsWith(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
+      # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
+      # write token above stays on the trusted steps only.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: ro-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+          permission-actions: read
+          permission-checks: read
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # Does the review model run on the pipeline's provider at all? One tiny call. If not, fail
+      # LOUDLY and tell the issue — never fall back to another model (#2756).
+      - name: Preflight — the review model runs on claude-bridge
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -uo pipefail
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — plan review NOT run, no fallback to another model (#2756)"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            exit 1
+          fi
+          echo "preflight: $MODEL answers on claude-bridge"
+
+      - name: Gather the issue and the plan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PLAN_ID: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/plan-review"; mkdir -p "$D"
+          gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
+          gh api "repos/${{ github.repository }}/issues/comments/${PLAN_ID}" --jq .body > "$D/plan.md"
+          # Prior review rounds: each sent-back verdict carries a hidden verdict line.
+          PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- plan-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+          echo "$PRIOR" > "$D/prior"
+          echo "prior sent-back rounds: $PRIOR"
+
+      # Prove once that the reviewer token cannot write: a no-op PATCH must fail (non-zero exit). On
+      # success the reviewer never runs.
+      - name: Probe — the reviewer token is read-only
+        env:
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
+          PROBE_ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -uo pipefail
+          # Decide on gh's exit code only (the step runs under `bash -e`; `|| rc=$?` keeps it alive).
+          rc=0
+          ERR="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1 >/dev/null)" || rc=$?
+          echo "$ERR" | tail -n 3
+          if [ "$rc" -ne 0 ]; then
+            echo "probe: reviewer token cannot write (expected)"
+          else
+            echo "::error::reviewer token can write — review NOT run"
+            exit 1
+          fi
+
+      # ── The reviewer: READ-ONLY GitHub token (ro-token) ──────────────────────
+      - id: pi
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/plan-reviewer.md \
+            | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
+                  -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Post the verdict
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ steps.model.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_ID: ${{ github.event.comment.id }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
+          if [ ! -s "$D/verdict.md" ]; then
+            echo "::error::the reviewer wrote no verdict file"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          if ! DECISION="$(node scripts/lib/plan-verdict.mjs "$D/plan.md" "$D/verdict.md")"; then
+            echo "::error::malformed verdict: $DECISION"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review verdict was malformed** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
+          node scripts/lib/plan-verdict.mjs render "$D/plan.md" "$D/verdict.md" "$ROUND" "$MODEL" > "$D/comment.md"
+          # remove-then-add: re-adding a label the issue already carries fires no event.
+          gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
+          REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
+          echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
+          case "$VERDICT" in
+            go)
+              node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$ISSUE" '{issue:$i,label:"plan:approved"}')"
+              ;;
+            needs-owner)
+              gh issue edit "$ISSUE" --add-label "status:blocked"
+              ;;
+            no-go)
+              ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold
+              if [ "$ROUTE" = hold ]; then
+                gh issue edit "$ISSUE" --add-label "status:blocked"
+              else
+                # The read + the dispatch are ONE hand-off: a limit / 5xx on either is saved and replayed (#3306).
+                node scripts/handoff-exec.mjs replan "$(jq -nc --argjson i "$ISSUE" '{issue:$i}')"
+              fi
+              ;;
+          esac
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-plan-review:
+    name: Record run outcome
+    needs: [plan-review]
+    if: ${{ always() && needs.plan-review.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: on-comment.yml
+          ISSUE: "${{ github.event.issue.number }}"
+          STAGE: plan-review
+          MODEL_TIER: review
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.plan-review.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           DATA_TOKEN: ${{ steps.app-token.outputs.token }}
