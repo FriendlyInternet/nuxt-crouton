@@ -849,21 +849,27 @@ jobs:
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
+          PROBE="$GITHUB_WORKSPACE/scripts/email-probe.mjs"
+          FAILED=""
           if [ "$MODE" = "magic-link" ]; then
             BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
-              -H 'Content-Type: application/json' -d "$BODY" || true)
-            echo "magic-link request → HTTP $CODE"
+            OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/sign-in/magic-link" "$BODY") || FAILED=$(echo "$OUT" | tail -1)
+            echo "$OUT"
           else
             PW=$(openssl rand -hex 12)
             SU=$(jq -n --arg e "$PROBE_EMAIL" --arg p "$PW" --arg n "email-probe" '{email:$e, password:$p, name:$n}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-up/email" \
-              -H 'Content-Type: application/json' -d "$SU" || true)
-            echo "sign-up → HTTP $CODE (200 new, 422 already exists — both fine)"
-            RB=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, redirectTo:"/"}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/request-password-reset" \
-              -H 'Content-Type: application/json' -d "$RB" || true)
-            echo "request-password-reset → HTTP $CODE"
+            OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/sign-up/email" "$SU") || FAILED=$(echo "$OUT" | tail -1)
+            echo "$OUT"
+            if [ -z "$FAILED" ]; then
+              RB=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, redirectTo:"/"}')
+              OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/request-password-reset" "$RB") || FAILED=$(echo "$OUT" | tail -1)
+              echo "$OUT"
+            fi
+          fi
+          if [ -n "$FAILED" ]; then
+            echo "::error::email probe: request failed: $FAILED"
+            echo "✗ email probe (${APP}): request failed: ${FAILED}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           REASON="no send recorded"
           for _ in 1 2 3 4 5 6; do
