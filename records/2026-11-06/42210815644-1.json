@@ -1,0 +1,38 @@
+{
+  "ts": "2026-11-06T11:34:25.451Z",
+  "flow": "plan-review.yml",
+  "skill": null,
+  "harness": "pi",
+  "model": "claude-opus-5-5",
+  "cost_usd": null,
+  "turns": null,
+  "wall_s": null,
+  "artifact_gate": "na",
+  "ci": "na",
+  "outcome": "pending",
+  "human": null,
+  "fix_rounds": null,
+  "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/42210815644",
+  "notes": null,
+  "issue": 3453,
+  "stage": "plan-review",
+  "run_id": "42210815644",
+  "attempt": "1",
+  "workflow": "plan-review.yml",
+  "started_at": "2026-11-06T11:30:56Z",
+  "ended_at": "2026-11-06T11:34:25.451Z",
+  "conclusion": "success",
+  "attribution": "exact",
+  "source": "live",
+  "rule": "marker",
+  "api_calls_reason": "reset-window-changed",
+  "token": "app",
+  "produced": [
+    "verdict"
+  ],
+  "produced_ids": [
+    6683868171
+  ],
+  "overlap": [],
+  "api_calls": null
+}
