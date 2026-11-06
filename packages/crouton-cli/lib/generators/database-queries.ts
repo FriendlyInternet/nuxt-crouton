@@ -1,6 +1,7 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -841,12 +842,25 @@ export function generateQueries(
     own
   }
 
+  // Team-scoped reference check (#3378) — only emitted when the collection has such refs
+  const teamRefFields = collectTeamRefFields(data)
+  const assertRefsQuery = teamRefFields.length === 0
+    ? ''
+    : `
+
+export async function assert${prefixedPascalCase}References(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.${getTargetLayerCamelCase(f.refTarget)}${pascal(f.refTarget)}, value: data.${f.name} },`).join('\n')}
+  ])
+}`
+
   return buildFileHeader(ctx)
     + buildGetAllQuery(ctx)
     + buildGetByIdsQuery(ctx)
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + assertRefsQuery
     + treeQueries
     + sortableQueries
 }

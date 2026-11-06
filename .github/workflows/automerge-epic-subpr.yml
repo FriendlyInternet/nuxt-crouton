@@ -169,9 +169,22 @@ jobs:
             const REQUIRED_CHECK = 'CI Gate'
 
             // Any RED check for this SHA? (failed check-run or failed commit status.)
+            // #3429: GitHub can leave a finished run `in_progress` with a conclusion — load the
+            // tested helper, fall back to the inline rule if it is not on the default branch yet.
+            let isDone = r => r.status === 'completed'
+            let requiredCheckStateFn = null
+            let liveCheckRuns = runs => runs // #2950: identity until the helper loads
+            try {
+              const m = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+              isDone = m.isDone ?? isDone
+              requiredCheckStateFn = m.requiredCheckState ?? requiredCheckStateFn
+              liveCheckRuns = m.liveCheckRuns ?? liveCheckRuns
+            } catch (e) {
+              core.warning(`scripts/lib/required-check-state.mjs not loadable (${e.code || e.message}); using the status-only rule.`)
+            }
             async function isRed(ref, runs) {
               const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
-              if (runs.some(r => r.status === 'completed' && RED.includes(r.conclusion))) return true
+              if (runs.some(r => isDone(r) && RED.includes(r.conclusion))) return true
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) return true
@@ -183,6 +196,7 @@ jobs:
             // 'success' | 'pending' | 'missing' so the caller can log why it declined.
             // Missing ≠ passing — that conflation is exactly what #1668 exploited.
             async function requiredCheckState(runs) {
+              if (requiredCheckStateFn) return requiredCheckStateFn(runs, REQUIRED_CHECK)
               const mine = runs.filter(r => r.name === REQUIRED_CHECK)
               if (!mine.length) return 'missing'
               // Newest attempt wins — a re-run supersedes an earlier verdict.
@@ -285,7 +299,13 @@ jobs:
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
               // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
-              const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+              // #2950: drop check-runs of a CI run a newer run on this commit replaced (a cancelled
+              // first run leaves reds that no later run overwrites). Same rule feeds every reader.
+              let wfRuns = []
+              try {
+                wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+              } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
+              const checkRuns = liveCheckRuns(await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }), wfRuns)
               const red = await isRed(pr.head.sha, checkRuns)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
@@ -344,7 +364,7 @@ jobs:
                 const d = decideEpicMerge({ pr, checkRuns, go })
                 gate = { merge: d.action === 'merge', reason: d.reason }
               } else {
-                // #3173: a work-* PR on an epic branch that the reviewer rejected twice is held for the owner,
+                // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
                 // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
                 // New modules load from the default-branch checkout in try/catch: absent → plain label rule.
                 let reviewSt = { kind: 'other' }
@@ -358,10 +378,10 @@ jobs:
                     core.warning(`#${pull_number} final-hold state unavailable (${e.code || e.message}) — label rule only.`)
                   }
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, finalHold: reviewSt.kind === 'final' ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
-                  const okBeforeFinal = reviewSt.kind === 'final' && !(new Date(go.approvedAt) > new Date(reviewSt.at))
+                  const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
                   const reply = chooseOkReply({ state: reviewSt, ownerOk: true, okBeforeFinal })
                   if (reply) {
                     const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
