@@ -51,11 +51,13 @@
 {"issue":3347,"planRounds":4,"verdict":"go","fixRounds":0}
 {"issue":3368,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3361,"planRounds":2,"verdict":"go","fixRounds":0}
+{"issue":3382,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3375,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3373,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3378,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3387,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3388,"planRounds":1,"verdict":"go","fixRounds":0}
+{"issue":3385,"planRounds":5,"verdict":"go","fixRounds":0}
 {"issue":3418,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3422,"planRounds":2,"verdict":"go","fixRounds":0}
 {"issue":3429,"planRounds":1,"verdict":"go","fixRounds":0}
@@ -63,3 +65,5 @@
 {"issue":3437,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3432,"planRounds":1,"verdict":"go","fixRounds":0}
 {"issue":3036,"planRounds":2,"verdict":"go","fixRounds":0}
+{"issue":3085,"planRounds":2,"verdict":"go","fixRounds":0}
+{"issue":2950,"planRounds":2,"verdict":"go","fixRounds":0}
