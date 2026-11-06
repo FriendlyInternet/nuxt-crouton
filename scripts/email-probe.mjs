@@ -82,6 +82,11 @@ export function retryDelays(env = {}) {
 }
 
 /** 'ok' | 'retry' | 'give-up' for one request attempt (attempt is 1-based). */
+/** #3514 — Node fetch sends sec-fetch-mode, so better-auth demands an Origin. */
+export function probeHeaders(url) {
+  return { 'Content-Type': 'application/json', Origin: new URL(url).origin }
+}
+
 export function requestDecision({ status, threw, attempt, maxAttempts }) {
   const more = attempt < maxAttempts
   if (threw) return more ? 'retry' : 'give-up'
@@ -102,7 +107,7 @@ async function send(url, body) {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: probeHeaders(url),
         body,
         signal: AbortSignal.timeout(30000),
       })
