@@ -2,6 +2,9 @@
 // owns the whole rule: who said yes, any red check, CI Gate, mergeable. The workflow gathers the
 // facts (checks, comments, commits) and acts on the answer; it holds no merge rule of its own.
 //
+//   (#3467) A merge commit after the owner's `ok` keeps the ok but may have resolved conflicts, so the PR
+//   also waits for a build-review `go` on the CURRENT head (`headReview.kind === 'other'`); on an epic base
+//   `build:approved` only counts when the head itself was reviewed `go` (the label outlives a new push).
 //   work-* → main  : the owner's `ok` IS the review (the reviewer only labels epic-based PRs, so a
 //                    `build:approved` requirement could never be met and `ok` merged nothing)
 //   epic/* → main  : not decided here — scripts/epic-merge-decision.mjs owns it (#3105)
@@ -25,14 +28,23 @@ const preflight = ({ baseRef, head, red, ciGate, mergeableState }) => {
   return null
 }
 
-export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, red = false, ciGate, mergeableState }) {
+export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, ciGate, mergeableState }) {
   const head = String(headRef)
   const blocked = preflight({ baseRef, head, red, ciGate, mergeableState })
   if (blocked) return blocked
+  const reviewedGo = headReview?.kind === 'other'
+  const short = String(headSha || '').slice(0, 8)
   if (baseRef === 'main') {
-    return go?.go ? { merge: true, code: 'merge', reason: 'owner ok' } : hold('no-ok', "waits for the owner's ok")
+    if (!go?.go) return hold('no-ok', "waits for the owner's ok")
+    if (go.mergeSince && !reviewedGo && !okAfter(go, ownerHold)) {
+      return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
+    }
+    return { merge: true, code: 'merge', reason: 'owner ok' }
   }
   const approved = labels.includes('build:approved')
+  if (approved && !reviewedGo && !okAfter(go, ownerHold)) {
+    return hold('head-unreviewed', `build:approved is for an older commit — waits for the build review of ${short}`)
+  }
   if (approved) return { merge: true, code: 'merge', reason: 'reviewed' }
   if (okAfter(go, ownerHold)) return { merge: true, code: 'merge', reason: ownerHold.kind === 'needs-owner' ? 'owner ok after needs-owner' : 'owner ok after final hold' }
   return hold('no-review', "no 'build:approved' yet")
