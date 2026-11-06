@@ -122,7 +122,7 @@ async function send(url, body) {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Origin: new URL(url).origin },
         body,
         signal: AbortSignal.timeout(30000),
       })
