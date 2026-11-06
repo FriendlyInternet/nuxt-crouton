@@ -35,37 +35,39 @@ export async function publishMergeDecision({ github, owner, repo, pr, rawRuns, a
 export function makeMergeIo({ github, core, owner, repo, env }) {
     // #2904: two merges into the same base seconds apart — the second gets HTTP 405
     // "Base branch was modified". Retry that (only that) a few times; any other error is final.
+    // #3210 — tick "Merged" on the ticket's flow checklist (cosmetic; default-branch script).
+    // v1 PRs are ticked by on-pr-close.yml instead (#3501), whoever merges them.
+    async function tickMerged(pr) {
+      try {
+        const { issueFromPrBody } = await import('../flow-checklist.mjs')
+        const closes = issueFromPrBody(pr.body || '')
+        if (closes) execFileSync('node',
+          ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
+          { env: { ...env, GH_TOKEN: env.FLOW_TOKEN, GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
+      } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
+    }
+
+    const isBaseMoved = (e) => e.status === 405 && /base branch was modified/i.test(e.message || '')
+
     async function mergeWithRetry(pr, pull_number, tick = true) {
-      let merged = false
-      for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
-          merged = true
-          core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
-          // #3210 — tick "Merged" on the ticket's flow checklist (cosmetic; default-branch script).
-          // v1 PRs are ticked by on-pr-close.yml instead (#3501), whoever merges them.
-          if (tick) {
-            try {
-              const { issueFromPrBody } = await import('../flow-checklist.mjs')
-              const closes = issueFromPrBody(pr.body || '')
-              if (closes) execFileSync('node',
-                ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
-                { env: { ...env, GH_TOKEN: env.FLOW_TOKEN, GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
-            } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
-          }
         } catch (e) {
-          const baseMoved = e.status === 405 && /base branch was modified/i.test(e.message || '')
-          if (baseMoved && attempt < 3) {
+          if (isBaseMoved(e) && attempt < 3) {
             core.info(`merge #${pull_number}: base moved, retry ${attempt}/2 in 5s`)
             await new Promise(r => setTimeout(r, 5000))
             continue
           }
           if (isRateLimit(e)) throw e
           core.warning(`merge #${pull_number} failed: ${e.message}`)
-          break
+          return false
         }
+        core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
+        if (tick) await tickMerged(pr)
+        return true
       }
-      return merged
+      return false
     }
 
     // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
