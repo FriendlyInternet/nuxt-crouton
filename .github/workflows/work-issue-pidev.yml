@@ -296,14 +296,24 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           FEEDBACK: ${{ inputs.feedback }}
         run: |
-          EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
-          ISSUE_EPIC="$EPIC_BRANCH"
-          # Revising an epic → main PR (#2875): its base is main, whatever the issue block says.
-          REV_BRANCH="${{ inputs.branch }}"; [ -n "$REV_BRANCH" ] && EPIC_BRANCH=""
+          # #3504: the ticket block wins; with none, the nearest OPEN parent epic that has a branch.
+          REV_BRANCH="${{ inputs.branch }}"
+          if [ -n "$REV_BRANCH" ]; then
+            EPIC_BRANCH=""
+            ISSUE_EPIC="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_NUM="$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")"
+            EB_SRC="revise"
+          else
+            EB="$(node scripts/epic-base.mjs "${{ inputs.issue || github.event.issue.number }}" < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_BRANCH="$(echo "$EB" | sed -n 's/^epic_branch=//p')"
+            EPIC_NUM="$(echo "$EB" | sed -n 's/^epic=//p')"
+            EB_SRC="$(echo "$EB" | sed -n 's/^source=//p')"
+            ISSUE_EPIC="$EPIC_BRANCH"
+          fi
           echo "rev_branch=${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}" >> "$GITHUB_OUTPUT"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
-          echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}' (source=${EB_SRC})"
+          echo "epic=${EPIC_NUM}" >> "$GITHUB_OUTPUT"
           # #3072: one base for the revise / conflict / finish steps — the PR's own base, never
           # inferred from inputs.branch (a leaf PR into an epic used to fall back to main).
           HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
@@ -762,12 +772,12 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
-          VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")"; RC=$?
+          RC=0; VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")" || RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
             gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
-            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+            echo "ok=0" >> "$GITHUB_OUTPUT"; echo "explained=1" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
           # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
@@ -1261,11 +1271,10 @@ jobs:
             fi
             HOLD_NOTE=""
             # Trailing HTML comment on BOTH branches is a MACHINE marker, not owner-facing prose:
-            # deploy-detect.mjs (#2140) greps the PR body for it to opt this PR into a real
-            # staging preview (the #2020 isolated per-PR Worker) instead of the PR-restricted
-            # apps/<app>/** matching #1297 uses for everything else. It belongs on both branches
-            # below — the live preview is independent of whether the local screenshot capture
-            # (#2057) happened to succeed this run. Keep in sync with UI_SIGNOFF_MARKER there.
+            # capture-review-surfaces.mjs greps the PR body for it (HOLD_MARKER). It belongs on
+            # both branches below — the live preview is independent of whether the local
+            # screenshot capture (#2057) happened to succeed this run. Keep in sync with
+            # HOLD_MARKER there.
             if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
               HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `ok` to release it, or `not ok: what is wrong`. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
             elif [ "$UI_TOUCHED" = "1" ]; then
@@ -1476,6 +1485,7 @@ jobs:
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          PLAN_EXPLAINED: ${{ steps.plan.outputs.explained }} # #3028
           RUN_START: ${{ steps.t0.outputs.ts }}
           # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
           # paging "produced nothing" on the ticket too would be a false alarm.
