@@ -20,7 +20,7 @@ on:
 
 permissions:
   contents: write # commit the new history.jsonl line back to main
-  actions: write  # dispatch deploy-pocs so the page rebuilds with the new data
+  pull-requests: write
 
 concurrency:
   group: loop-station-inventory
@@ -31,10 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Push with the Harness App, not GITHUB_TOKEN (#1133). The `main` ruleset requires
-      # a PR, and GitHub Actions cannot be a ruleset bypass actor (422: "must be part of
-      # the ruleset source or owner organization") — only an installed App can, and
-      # `nuxt-harness` is on the bypass list. A GITHUB_TOKEN push would be rejected.
+      # The data lands via an auto-merge PR (#3490); the App no longer bypasses the `main`
+      # ruleset. The App token (not GITHUB_TOKEN) opens the PR so CI Gate / E2E Gate fire.
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
@@ -68,31 +66,25 @@ jobs:
           LOOP_STATION_COMMIT: ${{ github.sha }}
         run: node .claude/skills/loop-station/gather.mjs > loop-station.record.json
 
+      - name: Branch for the data PR (#3490)
+        run: |
+          git config user.name "nuxt-harness[bot]"
+          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
+          bash scripts/data-pr.sh start loop-station-history
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Append to history (idempotent per commit)
         id: append
         run: |
           APPENDED=$(node .claude/skills/loop-station/append-history.mjs < loop-station.record.json)
           echo "appended=${APPENDED}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit the new data point
-        if: steps.append.outputs.appended == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add writeups/loop-station/history.jsonl
-          git commit -m "chore(loop-station): record context-budget inventory [skip ci]"
-          # Rebase onto any concurrent main movement, then push.
-          for i in 1 2 3 4; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
-          done
-          exit 1
-
-      - name: Redeploy the loop-station page with the new data
+      - name: Open auto-merge data PR
         if: steps.append.outputs.appended == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash scripts/data-pr.sh publish loop-station-history "chore(loop-station): record context-budget inventory" writeups/loop-station/history.jsonl
 
       - name: Upload record artifact
         if: always()

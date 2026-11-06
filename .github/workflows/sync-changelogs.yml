@@ -21,8 +21,8 @@ jobs:
         working-directory: docs
 
     steps:
-      # Push with the Harness App, not GITHUB_TOKEN — this job commits to `main`, which
-      # the ruleset rejects for a GITHUB_TOKEN push (#1133). See loop-station-inventory.yml.
+      # Data lands via an auto-merge PR opened with the App token (#3490) — no direct push to
+      # `main`. See loop-station-inventory.yml.
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
@@ -53,6 +53,14 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
         working-directory: .
 
+      - name: Branch for the data PR (#3490)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "nuxt-harness[bot]"
+          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
+          bash ../scripts/data-pr.sh start changelog
+
       - name: Run changelog sync
         run: npx tsx scripts/sync-changelogs.ts
         env:
@@ -64,19 +72,8 @@ jobs:
         run: |
           git diff --quiet data/changelog-releases.json || echo "changed=true" >> $GITHUB_OUTPUT
 
-      - name: Commit and push
+      - name: Open auto-merge data PR
         if: steps.changes.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/changelog-releases.json
-          git commit -m "chore(docs): sync changelog releases [skip ci]"
-          # Rebase onto any concurrent main movement, then push — same loop the
-          # loop-station jobs use. A bare `git push` loses the race whenever a PR
-          # merges during the run ("! [rejected] main -> main (fetch first)", #1943);
-          # this job rewrites the whole data file, so a race is likely, not rare.
-          for i in 1 2 3 4; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
-          done
-          exit 1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash ../scripts/data-pr.sh publish changelog "chore(docs): sync changelog releases" data/changelog-releases.json

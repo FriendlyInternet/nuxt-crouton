@@ -35,10 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # commit the new usage.jsonl line back to main
-      actions: write  # list + download trace artifacts; dispatch deploy-pocs
+      contents: write # open an auto-merge data PR for usage.jsonl (#3490)
+      actions: write  # list + download trace artifacts
     steps:
-      # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
+      # Data lands via an auto-merge PR opened with the App token (#3490) — see loop-station-inventory.yml.
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
@@ -94,31 +94,25 @@ jobs:
           node .claude/skills/loop-station/aggregate-usage.mjs --window 7 $FILES > usage.record.json
           cat usage.record.json
 
+      - name: Branch for the data PR (#3490)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "nuxt-harness[bot]"
+          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
+          bash scripts/data-pr.sh start loop-station-usage
+
       - name: Append to usage.jsonl (idempotent per ISO week)
         id: append
         run: |
           APPENDED=$(node .claude/skills/loop-station/append-usage.mjs < usage.record.json)
           echo "appended=${APPENDED}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit the new data point
-        if: steps.append.outputs.appended == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add writeups/loop-station/usage.jsonl
-          git commit -m "chore(loop-station): record weekly usage rollup [skip ci]"
-          # Rebase onto any concurrent main movement, then push.
-          for i in 1 2 3 4; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
-          done
-          exit 1
-
-      - name: Redeploy the loop-station page with the new data
+      - name: Open auto-merge data PR
         if: steps.append.outputs.appended == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash scripts/data-pr.sh publish loop-station-usage "chore(loop-station): record weekly usage rollup" writeups/loop-station/usage.jsonl
 
       - name: Upload record artifact
         if: always()
@@ -134,11 +128,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # commit new findings.jsonl lines back to main
-      actions: write  # list + download candidate artifacts; dispatch deploy-pocs
+      contents: write # open an auto-merge data PR for findings.jsonl (#3490)
+      actions: write  # list + download candidate artifacts
       pull-requests: read # resolve each candidate PR's merge state
     steps:
-      # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
+      # Data lands via an auto-merge PR opened with the App token (#3490) — see loop-station-inventory.yml.
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
@@ -200,6 +194,14 @@ jobs:
           done
           cat states.json
 
+      - name: Branch for the data PR (#3490)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "nuxt-harness[bot]"
+          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
+          bash scripts/data-pr.sh start loop-station-findings
+
       - name: Ingest candidates (merged → confirmed, closed → drop, open → skip)
         run: |
           FILES=$(find candidates -name '*.json' 2>/dev/null || true)
@@ -209,31 +211,10 @@ jobs:
       - name: Reconcile escaped defects from the eval-ledger
         run: node scripts/eval-ledger/reconcile-findings.mjs
 
-      - name: Commit new findings (if any)
-        id: commit
-        run: |
-          if git diff --quiet -- writeups/loop-station/findings.jsonl; then
-            echo "no new findings — nothing to commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add writeups/loop-station/findings.jsonl
-          git commit -m "chore(loop-station): record accountability findings [skip ci]"
-          for i in 1 2 3 4; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              echo "committed=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
-          done
-          exit 1
-
-      - name: Redeploy the loop-station page with the new data
-        if: steps.commit.outputs.committed == 'true'
+      - name: Open auto-merge data PR
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash scripts/data-pr.sh publish loop-station-findings "chore(loop-station): record accountability findings" writeups/loop-station/findings.jsonl
 
   advisor:
     needs: findings
