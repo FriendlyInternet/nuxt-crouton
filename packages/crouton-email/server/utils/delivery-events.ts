@@ -12,7 +12,7 @@ export type EmailDeliveryState = 'delivered' | 'bounced' | 'delayed' | 'complain
 export interface EmailDeliveryEvent {
   /** The provider's message id. */
   providerId: string
-  /** First recipient address; the log row is matched on this. */
+  /** First recipient address (informational; rows are matched by providerId). */
   to?: string
   state: EmailDeliveryState
   /** Short human-readable reason (bounce type etc.), if the provider gave one. */

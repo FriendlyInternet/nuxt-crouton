@@ -36,6 +36,8 @@ export interface CroutonAuthEmailResultPayload {
   type: 'verification' | 'password-reset' | 'invitation' | 'magic-link'
   ok: boolean
   error?: string
+  /** Provider message id of the sent email (#3419). */
+  providerId?: string
 }
 
 export type CroutonAuthEmailPayload = {

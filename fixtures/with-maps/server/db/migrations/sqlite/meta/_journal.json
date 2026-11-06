@@ -8,6 +8,13 @@
       "when": 1782045655182,
       "tag": "0000_slippery_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793955340409,
+      "tag": "0001_email_log_provider_id",
+      "breakpoints": true
     }
   ]
 }
