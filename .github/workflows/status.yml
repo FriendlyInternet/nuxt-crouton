@@ -14,8 +14,9 @@ name: Status
 # marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
 # firing just refreshes the same two comments (no spam).
 #
-# Scope: only PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
-# the dead `claude/issue-*` pipeline branch was dropped in #2891). Human PRs are never touched. Uses
+# Scope: PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
+# the dead `claude/issue-*` pipeline branch was dropped in #2891) — plus `epic/N-*` → `main` PRs,
+# which get ONLY the red-CI failure note when a gate is red (#3006). Other human PRs are never touched. Uses
 # GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
 # so no App token is required).
 
@@ -115,8 +116,21 @@ jobs:
             async function ciState(ref) {
               let success = 0, pending = 0, failure = 0, cancelled = 0
               const failing = [] // #1909 — the ping must say WHICH checks, not just how many
-              const runs = await github.paginate(github.rest.checks.listForRef,
+              let runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
+              // #2950: ignore check-runs of a CI run a newer run on this commit replaced.
+              const { liveCheckRuns, needsLiveFilter } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+              let wfRuns = null
+              // #3453: only read workflow runs when a finished red/cancelled check-run exists.
+              const readWf = needsLiveFilter(runs)
+              if (readWf) {
+                try {
+                  wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                    { owner, repo, head_sha: ref, per_page: 100 })
+                  runs = liveCheckRuns(runs, wfRuns)
+                } catch (e) { core.warning(`live check-runs for ${ref}: ${e.message}`) }
+              }
+              core.info(`workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
@@ -141,7 +155,7 @@ jobs:
               else if (pending > 0) { icon = '⏳'; word = 'running' }
               else if (cancelled > 0) { icon = '⏹️'; word = 'incomplete' } // bumped, not broken — no ping
               else { icon = '✅'; word = 'passing' }
-              return { icon, word, success, pending, failure, cancelled, total, failing }
+              return { icon, word, success, pending, failure, cancelled, total, failing, wfRuns }
             }
 
             // One sticky status note on the pipeline PR.
@@ -191,9 +205,12 @@ jobs:
               // and sends the reader to a log that only says "not every job succeeded". Drop it
               // whenever something else is red — but keep it when it is the ONLY red check, since
               // that means something genuinely different (a needed job cancelled or stuck).
-              const ROLLUPS = new Set(['CI Gate', 'E2E Gate']) // every aggregate gate (#2710)
+              const { causesOf, redNoteAction, statusScope } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
               const all = st.failing || []
-              const causes = all.length > 1 ? all.filter(f => !ROLLUPS.has(f.name)) : all
+              const act = redNoteAction({ scope: statusScope({ head: pr.head.ref, base: pr.base.ref }), failing: all, existingForSha: !!existing })
+              if (act === 'skip') return
+              const rest = causesOf(all)
+              const causes = rest.length ? rest : all // #2950: never "0 failing checks"
               const names = causes.slice(0, 5)
               const more = causes.length - names.length
               const list = names.length
@@ -235,8 +252,8 @@ jobs:
               // id. Fenced, so no @mention in a log can ping. Any failure to fetch is skipped.
               let tails = ''
               let budget = 20000
+              const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
               try {
-                const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
                 for (const f of names.slice(0, 3)) {
                   if (!f.id || budget <= 0) continue
                   try {
@@ -255,9 +272,9 @@ jobs:
               // #3373: mention the owner ONLY when the fix-bot will not handle this failure. The
               // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
               let dec
+              const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
               try {
-                const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
-                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                const runs = st.wfRuns ?? await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                   { owner, repo, head_sha: pr.head.sha, per_page: 100 })
                 const bySuite = new Map(runs.map(r => [r.check_suite_id, r]))
                 const failures = causes.map(f => {
@@ -273,7 +290,7 @@ jobs:
               }
               const { redPingHeading } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
               const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, owner: OWNER, reason: dec.reason,
-                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref })
+                attempts: dec.attempts, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
               const body =
                 `${marker}\n` +
                 `${hd.heading}${why}${tails}\n\n` +
@@ -325,8 +342,8 @@ jobs:
               const files = await github.paginate(github.rest.pulls.listFiles,
                 { owner, repo, pull_number: prNumber, per_page: 100 })
               let isVisual = true
+              const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
               try {
-                const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
                 const pr = (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data
                 const cmp = await github.rest.repos.compareCommits(
                   { owner, repo, base: pr.base.sha, head: pr.head.sha, per_page: 1 })
@@ -343,8 +360,8 @@ jobs:
               }
               // One rule (#3351): a bot comment tagged review-capture that embeds a raw image.
               let hasEvidence = false
+              const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
               try {
-                const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
                 hasEvidence = hasCaptureEvidence(await github.paginate(github.rest.issues.listComments,
                   { owner, repo, issue_number: prNumber, per_page: 100 }))
               } catch (e) {
@@ -418,8 +435,15 @@ jobs:
                 else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
                 else {
                   const pr = await childPr(s.number)
-                  if (pr && pr.merged_at) { icon = '✅'; note = `PR #${pr.number} merged` }
-                  else if (pr && pr.state === 'open') { icon = '🔨'; note = `PR #${pr.number}` }
+                  if (pr && pr.state === 'open') {
+                    const { rollupChildNote } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+                    const cst = await ciState(pr.head.sha)
+                    ;({ icon, note } = rollupChildNote({ pr, failing: cst.failure ? cst.failing : [] }))
+                  } else {
+                    const { rollupChildNote } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+                    const r = rollupChildNote({ pr })
+                    if (r) ({ icon, note } = r)
+                  }
                 }
                 lines.push(`- ${icon} #${s.number} ${s.title}${note ? ` — ${note}` : ''}`)
               }
@@ -524,8 +548,14 @@ jobs:
               if (pr.state !== 'open') continue
               // Pipeline-authored branches: the pi pipeline (`work-*`; `claude/issue-*` dropped in #2891). The pi branches were silently skipped before #1815, so no pi
               // worker PR ever got a status note — the main reason the owner saw no signal at all.
-              const isPipeline = pr.head.ref.startsWith('work-')
-              if (!isPipeline) {
+              const { statusScope } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/red-note.mjs`)
+              const scope = statusScope({ head: pr.head.ref, base: pr.base.ref })
+              if (scope === 'epic') {
+                // epic → main (#3006): failure note only when a gate is red; no sticky, no rollup.
+                await pingOnRed(pr, await ciState(pr.head.sha))
+                core.info(`Checked red note for epic PR #${pull_number}.`); continue
+              }
+              if (scope !== 'leaf') {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }
               await updatePr(pr)

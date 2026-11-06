@@ -36,7 +36,7 @@ test('5. owner ok but blocked/dirty → no merge, reason names it', () => {
   }
 })
 test('6. epic-based PR needs build:approved, even with go', () => {
-  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, red: false, ciGate: 'success', mergeableState: 'clean' })
+  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, headReview: { kind: 'other' }, red: false, ciGate: 'success', mergeableState: 'clean' })
   assert.equal(e([]).merge, false)
   assert.equal(e(['build:approved']).merge, true)
 })
@@ -77,7 +77,7 @@ const rv = (sha, at, final = true) => ({ user: { login: 'app[bot]', type: 'Bot' 
 const epicLeaf = (comments, headSha, o = {}, commits = []) => {
   const go = goFor(comments, commits)
   const st = reviewState({ comments, headSha, bots })
-  return decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go, finalHold: st.kind === 'final' ? st : null, red: false, ciGate: 'success', mergeableState: 'clean', ...o })
+  return decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go, ownerHold: ['final', 'needs-owner'].includes(st.kind) ? st : null, red: false, ciGate: 'success', mergeableState: 'clean', ...o })
 }
 test('3173: final hold, then owner ok, green → merge', () => {
   const d = epicLeaf([rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa')
@@ -104,10 +104,77 @@ test('3173: round-1 (not final) + ok → no merge', () => {
 })
 test('3173: work-* → main with owner ok, no verdict, no label → unchanged (merges)', () => {
   assert.equal(leaf().merge, true)
-  assert.equal(decideLeafMerge({ baseRef: 'main', headRef: 'work-1', labels: [], go: { go: false }, finalHold: { at: '2026-11-01T10:00:00Z' }, red: false, ciGate: 'success', mergeableState: 'clean' }).merge, false)
+  assert.equal(decideLeafMerge({ baseRef: 'main', headRef: 'work-1', labels: [], go: { go: false }, ownerHold: { at: '2026-11-01T10:00:00Z' }, red: false, ciGate: 'success', mergeableState: 'clean' }).merge, false)
 })
 test('3173: final hold, owner ok, then a later non-merge commit → no merge (epic path)', () => {
   const cs = [rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')]
   assert.equal(epicLeaf(cs, 'aaa', {}, []).merge, true)
   assert.equal(epicLeaf(cs, 'aaa', {}, [k('2026-11-01T12:00:00Z')]).merge, false)
+})
+
+// ---- #3428: the owner's ok after a needs-owner verdict merges ----
+const needsOwner = (sha, at) => ({ user: { login: 'app[bot]', type: 'Bot' }, created_at: at,
+  body: `<!-- build-review-sha:${sha} -->\n<!-- build-review-verdict:needs-owner -->\n\n🔀 **Needs your call**\n` })
+test('3428: needs-owner verdict, then owner ok, green → merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa')
+  assert.equal(d.merge, true)
+  assert.equal(d.reason, 'owner ok after needs-owner')
+})
+test('3428: ok BEFORE the needs-owner verdict → no merge', () => {
+  const d = epicLeaf([c('ok', '2026-11-01T09:00:00Z'), needsOwner('aaa', '2026-11-01T10:00:00Z')], 'aaa')
+  assert.equal(d.merge, false)
+  assert.equal(d.code, 'no-review')
+})
+test('3428: needs-owner on an older SHA, head moved → no merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb')
+  assert.equal(d.merge, false)
+})
+test('3428: needs-owner + ok but a check is red → no merge', () => {
+  const d = epicLeaf([needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa', { red: true })
+  assert.equal(d.code, 'red')
+})
+test('3428: go verdict, no build:approved label, owner ok → no merge', () => {
+  const goReview = { user: { login: 'app[bot]', type: 'Bot' }, created_at: '2026-11-01T10:00:00Z',
+    body: '<!-- build-review-sha:aaa -->\n<!-- build-review-verdict:go -->\n\n✅ **Build looks good**\n' }
+  const d = epicLeaf([goReview, c('ok', '2026-11-01T11:00:00Z')], 'aaa')
+  assert.equal(d.merge, false)
+})
+
+// #3467 — a merge commit after the owner's ok keeps the ok but waits for a build review of the new head.
+// The API can't tell a clean merge from a conflict-resolving one, so both wait: the cost is one automatic review.
+const km = (date) => ({ parents: [{}, {}], commit: { committer: { date } }, files: ['a.ts'] })
+const SHA = '04bfeaa0aaaaaaaa'
+const mergedGo = () => goFor([c('ok', '2026-11-06T09:51:19Z')], [k('2026-11-06T09:12:00Z'), km('2026-11-06T11:13:00Z')])
+
+test('#3467 merge commit after ok, head unreviewed → head-unreviewed naming the SHA', () => {
+  const go = mergedGo()
+  assert.equal(go.go, true)
+  assert.equal(go.mergeSince, true)
+  const r = leaf({ go, headSha: SHA, headReview: { kind: 'pending' } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'head-unreviewed')
+  assert.match(r.reason, /04bfeaa0/)
+})
+test('#3467 same, after a go on the new head → merge with no fresh ok', () => {
+  assert.equal(leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'other' } }).merge, true)
+})
+test('#3467 no-go on the merged head → no merge', () => {
+  const r = leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'round1' } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'head-unreviewed')
+})
+test('#3467 owner ok after a final hold on the merged head → merge', () => {
+  const go = { go: true, mergeSince: true, approvedAt: '2026-11-06T12:00:00Z' }
+  assert.equal(leaf({ go, headSha: SHA, headReview: { kind: 'final' }, ownerHold: { kind: 'final', at: '2026-11-06T11:30:00Z' } }).merge, true)
+})
+test('#3467 ok given after the merge commit → merge without a review', () => {
+  const go = goFor([c('ok', '2026-11-06T12:00:00Z')], [km('2026-11-06T11:13:00Z')])
+  assert.equal(go.mergeSince, false)
+  assert.equal(leaf({ go, headSha: SHA }).merge, true)
+})
+test('#3467 epic base: build:approved needs the head reviewed go', () => {
+  const e = (headReview) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], go: okGo, headSha: SHA, headReview, red: false, ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(e({ kind: 'pending' }).merge, false)
+  assert.equal(e({ kind: 'pending' }).code, 'head-unreviewed')
+  assert.equal(e({ kind: 'other' }).merge, true)
 })

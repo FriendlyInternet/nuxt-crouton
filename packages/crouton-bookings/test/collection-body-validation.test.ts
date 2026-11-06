@@ -2,17 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   member: { team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } },
+  assertRef: vi.fn(async (..._a: any[]) => undefined),
   create: vi.fn(async (d: any) => d),
   update: vi.fn(async (..._a: any[]) => ({})),
   existing: vi.fn(async (..._a: any[]) => [] as any[])
 }))
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member }))
-vi.mock('../collections/bookings/server/database/queries', () => ({ createBookingsBooking: hoisted.create, updateBookingsBooking: hoisted.update }))
+vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: hoisted.assertRef, createBookingsBooking: hoisted.create, updateBookingsBooking: hoisted.update }))
 vi.mock('../collections/locations/server/database/queries', () => ({ updateBookingsLocation: hoisted.update, getBookingsLocationsByIds: hoisted.existing, createBookingsLocation: hoisted.create }))
 vi.mock('../collections/settings/server/database/queries', () => ({ createBookingsSetting: hoisted.create, updateBookingsSetting: hoisted.update }))
-vi.mock('../collections/emailtemplates/server/database/queries', () => ({ createBookingsEmailtemplate: hoisted.create, updateBookingsEmailtemplate: hoisted.update, getBookingsEmailtemplatesByIds: hoisted.existing }))
-vi.mock('../collections/emaillogs/server/database/queries', () => ({ createBookingsEmaillog: hoisted.create, updateBookingsEmaillog: hoisted.update }))
+vi.mock('../collections/emailtemplates/server/database/queries', () => ({ assertBookingsEmailtemplateReferences: hoisted.assertRef, createBookingsEmailtemplate: hoisted.create, updateBookingsEmailtemplate: hoisted.update, getBookingsEmailtemplatesByIds: hoisted.existing }))
+vi.mock('../collections/emaillogs/server/database/queries', () => ({ assertBookingsEmaillogReferences: hoisted.assertRef, createBookingsEmaillog: hoisted.create, updateBookingsEmaillog: hoisted.update }))
 
 let body: unknown
 let params: Record<string, string> = {}

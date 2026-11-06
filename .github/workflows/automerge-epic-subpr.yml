@@ -136,7 +136,8 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - id: merge
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
           FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -149,13 +150,13 @@ jobs:
            try {
             const { owner, repo } = context.repo
             // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
-            // Bootstrap-safe: if the helper is not on the default branch yet, fall back to the job-level `if:` alone.
-            let shouldRunOnEvent = () => true
-            try {
-              ({ shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`))
-            } catch (e) {
-              core.warning(`scripts/lib/automerge-trigger.mjs not loadable (${e.code || e.message}); relying on the job-level label filter.`)
-            }
+            // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
+            const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
+            const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+            const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
+            const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
+            const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
             if (!shouldRunOnEvent(context.eventName, context.payload)) {
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
               return
@@ -168,9 +169,10 @@ jobs:
             const REQUIRED_CHECK = 'CI Gate'
 
             // Any RED check for this SHA? (failed check-run or failed commit status.)
+            // #3429: GitHub can leave a finished run `in_progress` with a conclusion — isDone handles it.
             async function isRed(ref, runs) {
-              const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
-              if (runs.some(r => r.status === 'completed' && RED.includes(r.conclusion))) return true
+              const RED = RED_CONCLUSIONS
+              if (runs.some(r => isDone(r) && RED.includes(r.conclusion))) return true
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) return true
@@ -182,13 +184,7 @@ jobs:
             // 'success' | 'pending' | 'missing' so the caller can log why it declined.
             // Missing ≠ passing — that conflation is exactly what #1668 exploited.
             async function requiredCheckState(runs) {
-              const mine = runs.filter(r => r.name === REQUIRED_CHECK)
-              if (!mine.length) return 'missing'
-              // Newest attempt wins — a re-run supersedes an earlier verdict.
-              mine.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))
-              const latest = mine[0]
-              if (latest.status !== 'completed') return 'pending'
-              return latest.conclusion === 'success' ? 'success' : 'pending'
+              return requiredCheckStateFn(runs, REQUIRED_CHECK)
             }
 
             // Resolve candidate PR numbers from whatever event fired.
@@ -231,6 +227,7 @@ jobs:
                 assoc.forEach(p => candidates.add(p.number))
               }
             }
+            core.setOutput('candidates', JSON.stringify([...candidates]))   // #3385: the sweep below reads only these
             if (!candidates.size) { core.info('No candidate PRs — nothing to do.'); return }
 
             for (const pull_number of candidates) {
@@ -283,7 +280,19 @@ jobs:
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
               // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
-              const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+              // #2950: drop check-runs of a CI run a newer run on this commit replaced (a cancelled
+              // first run leaves reds that no later run overwrites). Same rule feeds every reader.
+              // #3453: the workflow-runs read only matters when a finished red/cancelled check exists.
+              const rawRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
+              let wfRuns = []
+              const readWf = needsLiveFilter(rawRuns)
+              if (readWf) {
+                try {
+                  wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+                } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
+              }
+              core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
+              const checkRuns = liveCheckRuns(rawRuns, wfRuns)
               const red = await isRed(pr.head.sha, checkRuns)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
@@ -318,48 +327,25 @@ jobs:
               // (owner `ok` for anything → main, `build:approved` for epic-based PRs), any red check,
               // CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
               // Loaded from the default-branch checkout above — never the PR head, so a PR cannot edit the
-              // rule that judges it. Until this file lands on the default branch (bootstrap) it is absent:
-              // fail SAFE — hold the PR for a human instead of crashing the job or merging without the rule.
-              let decideLeafMerge
-              try {
-                ({ decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`))
-              } catch (e) {
-                core.warning(`#${pull_number} not merging — scripts/lib/pr-merge-gate.mjs is not on ${context.payload.repository?.default_branch || 'the default branch'} yet (${e.code || e.message}); held until it lands.`)
-                continue
-              }
+              // rule that judges it.
               let gate
               if (epicToMain) {
                 // epic → main (#3105): the SAME decision the owner's `ok` runs (decideEpicMerge) — both
                 // aggregate gates green AND a standing ok. A green that lands after the ok merges here,
                 // with no GitHub auto-merge (which would never consult the ok).
-                let decideEpicMerge
-                try {
-                  ({ decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`))
-                } catch (e) {
-                  core.warning(`#${pull_number} not merging — scripts/epic-merge-decision.mjs is not on the default branch (${e.code || e.message}).`)
-                  continue
-                }
                 const d = decideEpicMerge({ pr, checkRuns, go })
                 gate = { merge: d.action === 'merge', reason: d.reason }
               } else {
-                // #3173: a work-* PR on an epic branch that the reviewer rejected twice is held for the owner,
+                // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
                 // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
-                // New modules load from the default-branch checkout in try/catch: absent → plain label rule.
-                let reviewSt = { kind: 'other' }
-                let chooseOkReply = () => null
-                if (pr.base.ref.startsWith('epic/') && pr.head.ref.startsWith('work-')) {
-                  try {
-                    const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
-                    ;({ chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`))
-                    reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
-                  } catch (e) {
-                    core.warning(`#${pull_number} final-hold state unavailable (${e.code || e.message}) — label rule only.`)
-                  }
+                let reviewSt = { kind: 'pending' }
+                if (pr.head.ref.startsWith('work-')) {
+                  reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, finalHold: reviewSt.kind === 'final' ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
-                  const okBeforeFinal = reviewSt.kind === 'final' && !(new Date(go.approvedAt) > new Date(reviewSt.at))
+                  const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
                   const reply = chooseOkReply({ state: reviewSt, ownerOk: true, okBeforeFinal })
                   if (reply) {
                     const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
@@ -474,42 +460,87 @@ jobs:
       # Build-review safety net (#3218): a green pipeline PR with no review gets ONE dispatch per head SHA.
       # Dispatches with the App token minted above — no `actions: write` here, because on-comment.yml
       # calls this file and a called workflow cannot ask for more than its caller grants.
+      # Event runs check only their own PR(s), unless the last full sweep is over 60 min old, then every PR.
+      # The hourly sweep and a bare dispatch always check every PR (#3385).
+      - name: Restore last full build-review sweep time
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build-review-sweep
+          key: build-review-full-sweep-${{ github.run_id }}
+          restore-keys: build-review-full-sweep-
       - name: Sweep — dispatch build review for green PRs that never got one
+        id: sweep
         if: ${{ !cancelled() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CANDIDATES: ${{ steps.merge.outputs.candidates }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo
-            // Bootstrap-safe: PR runs execute the default branch's checkout, where this script may not exist yet.
-            let needsReview
-            try {
-              ({ needsReview } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/build-review-sweep.mjs`))
-            } catch (e) {
-              core.warning(`build review sweep skipped — scripts/build-review-sweep.mjs is not on the checked-out branch yet (${e.code || e.message})`)
-              return
+            const { needsReview, sweepScope, sweepAll } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/build-review-sweep.mjs`)
+            const fs = require('fs')
+            const stampDir = `${process.env.GITHUB_WORKSPACE}/.build-review-sweep`
+            const stampFile = `${stampDir}/last-full`
+            let lastFullSweepAt
+            try { lastFullSweepAt = fs.readFileSync(stampFile, 'utf8').trim() || undefined } catch { lastFullSweepAt = undefined }
+            const scope = sweepScope({ eventName: context.eventName, inputsPr: context.payload.inputs?.pr, candidates: process.env.CANDIDATES, lastFullSweepAt })
+            const isWork = x => !x.draft && /^work-\d+$/.test(x.head.ref)
+            const checkOne = async (p) => {
+              const sha = p.head.sha
+              const checks = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, per_page: 100 })
+              const pr = { headRefName: p.head.ref, baseRefName: p.base.ref, headRefOid: sha, state: 'OPEN', isDraft: p.draft, author: { login: p.user.login } }
+              // Cheap early exit: with no comments, needsReview is true only when the gate is green and old enough.
+              if (!needsReview({ pr, checks, comments: [] })) return
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: p.number, per_page: 100 })
+              const commit = (await github.rest.repos.getCommit({ owner, repo, ref: sha })).data
+              if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) return
+              // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
+              await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
+                body: `<!-- build-review-sweep:${sha} -->\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
+              const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+              await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
+                () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
+              core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
             }
             // #3361: a limit / 5xx here ends green with a warning; anything else still goes red.
             try {
-              const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
-              for (const p of open.filter(x => !x.draft && /^work-\d+$/.test(x.head.ref)).slice(0, 50)) {
-                try {
-                  const sha = p.head.sha
-                  const checks = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, per_page: 100 })
-                  const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: p.number, per_page: 100 })
-                  const commit = (await github.rest.repos.getCommit({ owner, repo, ref: sha })).data
-                  const pr = { headRefName: p.head.ref, baseRefName: p.base.ref, headRefOid: sha, state: 'OPEN', isDraft: p.draft, author: { login: p.user.login } }
-                  if (!needsReview({ pr, checks, comments, headCommitDate: commit.commit.committer.date })) continue
-                  // Marker first: if the dispatch then fails we skip rather than risk a second review (at most once per SHA).
-                  await github.rest.issues.createComment({ owner, repo, issue_number: p.number,
-                    body: `<!-- build-review-sweep:${sha} -->\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review safety net (#3218)_\n\n✅ CI is green on \`${sha.slice(0, 8)}\` but no build review ran — dispatching it now.` })
-                  const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
-                  await handoffGuard({ kind: 'dispatch', issue: p.number, workflow: 'build-review.yml', inputs: { pr: String(p.number) } },
-                    () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'build-review.yml', ref: 'main', inputs: { pr: String(p.number) } }))
-                  core.info(`#${p.number}: dispatched build review for ${sha.slice(0, 8)}`)
-                } catch (e) { core.warning(`build-review sweep #${p.number}: ${e.message}`) }
+              if (scope.all) {
+                const why = context.eventName === 'schedule' ? 'schedule'
+                  : (context.eventName === 'workflow_dispatch' && !context.payload.inputs?.pr) ? 'dispatch'
+                  : `last full sweep ${lastFullSweepAt || 'none'}`
+                core.info(`build review sweep: all open PRs (${why})`)
+                const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
+                const list = open.filter(isWork).slice(0, 50)
+                const { stampAt, failed } = await sweepAll(list, checkOne, { warn: core.warning })
+                if (stampAt) {
+                  fs.mkdirSync(stampDir, { recursive: true })
+                  fs.writeFileSync(stampFile, stampAt)
+                  core.setOutput('full', 'true')
+                } else {
+                  core.info(`build review sweep: ${failed} PR read(s) failed — last full sweep time left at ${lastFullSweepAt || 'none'}, so the next event sweeps all PRs again`)
+                }
+              } else {
+                if (!scope.prs.length) { core.info('build review sweep: no candidate PRs on this event'); return }
+                core.info(`build review sweep: ${scope.prs.map(n => '#' + n).join(', ')} (event; last full sweep ${lastFullSweepAt})`)
+                for (const n of scope.prs.slice(0, 50)) {
+                  try {
+                    const p = (await github.rest.pulls.get({ owner, repo, pull_number: n })).data
+                    if (p.state !== 'open' || !isWork(p)) continue
+                    await checkOne(p)
+                  } catch (e) { core.warning(`build-review sweep #${n}: ${e.message}`) }
+                }
               }
             } catch (e) {
               const { deferOrThrow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/rate-limit.mjs`)
               deferOrThrow(e, core.warning)
             }
+      - name: Save last full build-review sweep time
+        if: ${{ !cancelled() && steps.sweep.outputs.full == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build-review-sweep
+          key: build-review-full-sweep-${{ github.run_id }}-${{ github.run_attempt }}

@@ -1,7 +1,7 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { z } from 'zod'
-import { updateBookingsBooking } from '../../../../database/queries'
+import { updateBookingsBooking, assertBookingsBookingReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 
 // Hand-added body validation (#3377)
@@ -22,6 +22,8 @@ export default defineEventHandler(async (event) => {
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
+
+  await assertBookingsBookingReferences(team.id, body)
 
   return await updateBookingsBooking(bookingId, team.id, user.id, {
     location: body.location,

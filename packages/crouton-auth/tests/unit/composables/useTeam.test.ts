@@ -107,10 +107,11 @@ vi.stubGlobal('useState', (key: string, init?: () => unknown) => {
 })
 
 // Mock useAuthConfig
+let mockAllowCreate: boolean | 'superAdmin' = true
 vi.stubGlobal('useAuthConfig', () => ({
   mode: 'multi-tenant' as const,
   teams: {
-    allowCreate: true,
+    allowCreate: mockAllowCreate,
     limit: 5
   }
 }))
@@ -155,6 +156,7 @@ describe('useTeam', () => {
     mockActiveOrgData.value = null
     mockSessionActiveOrg.value = null
     mockSessionUser.value = null
+    mockAllowCreate = true
 
     // Clear useState values between tests
     Object.keys(mockUseStateValues).forEach(key => {
@@ -293,6 +295,27 @@ describe('useTeam', () => {
 
       const { canCreateTeam } = useTeam()
       expect(canCreateTeam.value).toBe(true)
+    })
+
+    describe("allowCreate: 'superAdmin'", () => {
+      beforeEach(() => {
+        mockAllowCreate = 'superAdmin'
+      })
+
+      it('denies a stranger', () => {
+        mockSessionUser.value = { id: 'u1', email: 'a@b.c' }
+        expect(useTeam().canCreateTeam.value).toBe(false)
+      })
+
+      it('allows an admin-role user', () => {
+        mockSessionUser.value = { id: 'u1', email: 'a@b.c', role: 'admin' } as never
+        expect(useTeam().canCreateTeam.value).toBe(true)
+      })
+
+      it('allows a superAdmin user', () => {
+        mockSessionUser.value = { id: 'u1', email: 'a@b.c', superAdmin: true } as never
+        expect(useTeam().canCreateTeam.value).toBe(true)
+      })
     })
 
     // TODO: Better Auth nanostore mock complexity
