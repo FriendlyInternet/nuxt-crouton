@@ -118,12 +118,18 @@ jobs:
               let runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
               // #2950: ignore check-runs of a CI run a newer run on this commit replaced.
-              const { liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-              try {
-                const wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
-                  { owner, repo, head_sha: ref, per_page: 100 })
-                runs = liveCheckRuns(runs, wfRuns)
-              } catch (e) { core.warning(`live check-runs for ${ref}: ${e.message}`) }
+              const { liveCheckRuns, needsLiveFilter } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+              let wfRuns = null
+              // #3453: only read workflow runs when a finished red/cancelled check-run exists.
+              const readWf = needsLiveFilter(runs)
+              if (readWf) {
+                try {
+                  wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                    { owner, repo, head_sha: ref, per_page: 100 })
+                  runs = liveCheckRuns(runs, wfRuns)
+                } catch (e) { core.warning(`live check-runs for ${ref}: ${e.message}`) }
+              }
+              core.info(`workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
@@ -148,7 +154,7 @@ jobs:
               else if (pending > 0) { icon = '⏳'; word = 'running' }
               else if (cancelled > 0) { icon = '⏹️'; word = 'incomplete' } // bumped, not broken — no ping
               else { icon = '✅'; word = 'passing' }
-              return { icon, word, success, pending, failure, cancelled, total, failing }
+              return { icon, word, success, pending, failure, cancelled, total, failing, wfRuns }
             }
 
             // One sticky status note on the pipeline PR.
@@ -265,7 +271,7 @@ jobs:
               let dec
               const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
               try {
-                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                const runs = st.wfRuns ?? await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                   { owner, repo, head_sha: pr.head.sha, per_page: 100 })
                 const bySuite = new Map(runs.map(r => [r.check_suite_id, r]))
                 const failures = causes.map(f => {
