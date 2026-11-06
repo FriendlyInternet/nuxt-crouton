@@ -153,11 +153,11 @@ jobs:
             // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
-            const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+            const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
             const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
-            const { classifyFirstRun, parseFirstRunError } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)
+            const { firstRunNames } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)
             const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
             if (!shouldRunOnEvent(context.eventName, context.payload)) {
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
@@ -173,44 +173,13 @@ jobs:
             // Any RED check for this SHA? (failed check-run or failed commit status.)
             // #3429: GitHub can leave a finished run `in_progress` with a conclusion — isDone handles it.
             async function isRed(ref, runs) {
-              const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
-              const redRuns = runs.filter(r => isDone(r) && RED.includes(r.conclusion))
+              const redRuns = runs.filter(r => isDone(r) && RED_CONCLUSIONS.includes(r.conclusion))
               let statusRed = false
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) statusRed = true
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
               return { statusRed, redRuns }
-            }
-
-            // #3470: a red check that fails only because the PR adds the code it loads from main.
-            async function firstRunNames(pr, redRuns) {
-              const names = []
-              let files = null
-              for (const run of redRuns) {
-                try {
-                  const anns = await github.paginate(github.rest.checks.listAnnotations, { owner, repo, check_run_id: run.id, per_page: 50 })
-                  const messages = anns.filter(a => a.annotation_level === 'failure').map(a => a.message || '')
-                  if (!messages.length || !messages.every(m => parseFirstRunError(m))) continue
-                  if (!files) {
-                    const cmp = (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${process.env.DEFAULT_BRANCH}...${pr.head.sha}` })).data
-                    const src = async (path, ref) => {
-                      try {
-                        const d = (await github.rest.repos.getContent({ owner, repo, path, ref })).data
-                        return Buffer.from(d.content || '', 'base64').toString('utf8')
-                      } catch (e) { if (e.status === 404) return null; throw e }
-                    }
-                    files = []
-                    for (const f of (cmp.files || []).filter(f => /\.(mjs|js|cjs)$/.test(f.filename))) {
-                      files.push({ path: f.filename,
-                        head: f.status === 'removed' ? null : await src(f.filename, pr.head.sha),
-                        main: await src(f.filename, process.env.DEFAULT_BRANCH) })
-                    }
-                  }
-                  if (classifyFirstRun({ messages, files }).firstRun) names.push(run.name)
-                } catch (e) { core.warning(`first-run classify ${run.name}: ${e.message}`) }
-              }
-              return names
             }
 
             // Has REQUIRED_CHECK completed successfully for this SHA? Returns one of
@@ -315,13 +284,20 @@ jobs:
               // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
               // #2950: drop check-runs of a CI run a newer run on this commit replaced (a cancelled
               // first run leaves reds that no later run overwrites). Same rule feeds every reader.
+              // #3453: the workflow-runs read only matters when a finished red/cancelled check exists.
+              const rawRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
               let wfRuns = []
-              try {
-                wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
-              } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
-              const checkRuns = liveCheckRuns(await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }), wfRuns)
+              const readWf = needsLiveFilter(rawRuns)
+              if (readWf) {
+                try {
+                  wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+                } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
+              }
+              core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
+              const checkRuns = liveCheckRuns(rawRuns, wfRuns)
               const { statusRed, redRuns } = await isRed(pr.head.sha, checkRuns)
-              const firstRun = redRuns.length ? await firstRunNames(pr, redRuns) : []
+              // #3470: a red check that fails only because the PR adds the code it loads from main.
+              const firstRun = redRuns.length ? await firstRunNames({ github, core, owner, repo, pr, redRuns, defaultBranch: process.env.DEFAULT_BRANCH }) : []
               const red = statusRed || redRuns.some(r => !firstRun.includes(r.name))
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
@@ -367,11 +343,11 @@ jobs:
               } else {
                 // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
                 // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
-                let reviewSt = { kind: 'other' }
-                if (pr.base.ref.startsWith('epic/') && pr.head.ref.startsWith('work-')) {
+                let reviewSt = { kind: 'pending' }
+                if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
                   const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
@@ -432,16 +408,7 @@ jobs:
 
               // #2904: two merges into the same base seconds apart — the second gets HTTP 405
               // "Base branch was modified". Retry that (only that) a few times; any other error is final.
-              if (gate.firstRun?.length) {
-                for (const n of gate.firstRun) core.info(`#${pull_number} first-run check ${n} ignored after owner ok`)
-                const frMarker = `<!-- first-run-ignored:${pr.head.sha} -->`
-                try {
-                  if (!prComments.some(c => (c.body || '').includes(frMarker))) {
-                    await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                      body: `${frMarker}\n<!-- pipeline-note -->\nℹ️ Merged over first-run check(s) ${gate.firstRun.join(', ')}: they fail only because this PR adds the code they load; they run green on main after merge (#3470).` })
-                  }
-                } catch (e) { core.warning(`first-run note #${pull_number}: ${e.message}`) }
-              }
+              for (const n of gate.firstRun || []) core.info(`#${pull_number} first-run check ${n} ignored after owner ok`)
               let merged = false
               for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
                 try {
