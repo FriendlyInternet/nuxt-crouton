@@ -296,14 +296,24 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           FEEDBACK: ${{ inputs.feedback }}
         run: |
-          EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
-          ISSUE_EPIC="$EPIC_BRANCH"
-          # Revising an epic → main PR (#2875): its base is main, whatever the issue block says.
-          REV_BRANCH="${{ inputs.branch }}"; [ -n "$REV_BRANCH" ] && EPIC_BRANCH=""
+          # #3504: the ticket block wins; with none, the nearest OPEN parent epic that has a branch.
+          REV_BRANCH="${{ inputs.branch }}"
+          if [ -n "$REV_BRANCH" ]; then
+            EPIC_BRANCH=""
+            ISSUE_EPIC="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_NUM="$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")"
+            EB_SRC="revise"
+          else
+            EB="$(node scripts/epic-base.mjs "${{ inputs.issue || github.event.issue.number }}" < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_BRANCH="$(echo "$EB" | sed -n 's/^epic_branch=//p')"
+            EPIC_NUM="$(echo "$EB" | sed -n 's/^epic=//p')"
+            EB_SRC="$(echo "$EB" | sed -n 's/^source=//p')"
+            ISSUE_EPIC="$EPIC_BRANCH"
+          fi
           echo "rev_branch=${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}" >> "$GITHUB_OUTPUT"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
-          echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}' (source=${EB_SRC})"
+          echo "epic=${EPIC_NUM}" >> "$GITHUB_OUTPUT"
           # #3072: one base for the revise / conflict / finish steps — the PR's own base, never
           # inferred from inputs.branch (a leaf PR into an epic used to fall back to main).
           HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
