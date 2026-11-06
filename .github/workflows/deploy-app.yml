@@ -849,6 +849,12 @@ jobs:
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
+          SECRETS=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+          if ! S=$(echo "$SECRETS" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" sender "$APP" .); then
+            echo "::error::email probe failed: $S"
+            echo "✗ email probe (${APP}): $S" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
             echo "$OUT"
             echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"
