@@ -1,0 +1,23 @@
+name: Loop-station refresh
+# Rebuild the loop-station page once data PRs (#3490) have landed on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - writeups/loop-station/history.jsonl
+      - writeups/loop-station/usage.jsonl
+      - writeups/loop-station/findings.jsonl
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Redeploy the loop-station page with the new data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true
