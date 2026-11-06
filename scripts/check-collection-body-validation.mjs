@@ -23,22 +23,24 @@ export function isCheckedRoute(path) {
 }
 
 /** files: { repoRelativePosixPath: contents | null }  (null = file is gone) */
+function routeProblem(path, src, allow) {
+  const validates = src.includes('readValidatedBody(')
+  if (path in allow) return validates ? `${path}: allow-listed but now validates its body — remove it from ALLOW` : null
+  return validates ? null : `${path}: reads the body without readValidatedBody(...)`
+}
+
+function goneAllowProblems(files, allow) {
+  return Object.keys(allow)
+    .filter(path => files[path] == null)
+    .map(path => `${path}: allow-listed but the file is gone — remove it from ALLOW`)
+}
+
 export function findViolations(files, allow = ALLOW) {
-  const out = []
-  for (const [path, src] of Object.entries(files)) {
-    if (src === null) continue
-    if (!isCheckedRoute(path)) continue
-    const validates = src.includes('readValidatedBody(')
-    if (path in allow) {
-      if (validates) out.push(`${path}: allow-listed but now validates its body — remove it from ALLOW`)
-      continue
-    }
-    if (!validates) out.push(`${path}: reads the body without readValidatedBody(...)`)
-  }
-  for (const path of Object.keys(allow)) {
-    if (files[path] === undefined || files[path] === null) out.push(`${path}: allow-listed but the file is gone — remove it from ALLOW`)
-  }
-  return out
+  const out = Object.entries(files)
+    .filter(([path, src]) => src !== null && isCheckedRoute(path))
+    .map(([path, src]) => routeProblem(path, src, allow))
+    .filter(Boolean)
+  return [...out, ...goneAllowProblems(files, allow)]
 }
 
 export function walk(dir, acc = []) {
