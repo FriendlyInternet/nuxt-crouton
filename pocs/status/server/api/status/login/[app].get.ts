@@ -1,30 +1,49 @@
-import type { H3Event } from 'h3'
 import { appTargetFor } from '../../../utils/app-urls'
 import { parseReviewRole, reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
 import { loginPlan } from '../../../utils/live-apps-core'
 
-// Signed out: where to come back to after sign-in (path is built from a validated slug).
-// key/role are re-validated here so a signed-out tap comes back as the same role.
-function signedOutBack(event: H3Event): string {
-  const slug = String(getRouterParam(event, 'app') ?? '')
-  if (!/^[a-z0-9-]+$/.test(slug)) return '/'
-  const q = getQuery(event)
-  const params = new URLSearchParams()
-  if (/^(main|pr\d+)$/.test(String(q.key ?? ''))) params.set('key', String(q.key))
-  const role = parseReviewRole(q.role)
-  if (role && q.role) params.set('role', role)
-  const qs = params.toString()
-  return `/api/status/login/${slug}${qs ? `?${qs}` : ''}`
-}
+// Owner-only one-tap sign-in to an app's staging review login. The URL carries the
+// password, so it is never logged or rendered into HTML — only a 302 Location.
+export default defineEventHandler(async (event) => {
+  setHeader(event, 'Cache-Control', 'no-store')
 
-/** Validated app/key/role/to from the query, or null if any is malformed. */
-function parseLoginRequest(event: H3Event) {
-  const q = getQuery(event)
-  const req = parseLoginRequest(event)
-  if (!req) throw createError({ statusCode: 400, statusMessage: 'Bad request' })
-  const { app, key, role, to } = req
+  const cfg = useRuntimeConfig(event)
+  const owner = String(cfg.statusOwnerEmail || '').trim().toLowerCase()
+  const session = await useServerAuth(event).api.getSession({ headers: event.headers }).catch(() => null)
+  const email = String(session?.user?.email ?? '').trim().toLowerCase()
+  if (!email) {
+    // Signed out: send to sign-in and come back here afterwards (path is built from a validated slug).
+    const slug = String(getRouterParam(event, 'app') ?? '')
+    // key/role are re-validated here so a signed-out tap comes back as the same role.
+    const q = getQuery(event)
+    const params = new URLSearchParams()
+    if (/^(main|pr\d+)$/.test(String(q.key ?? ''))) params.set('key', String(q.key))
+    const bRole = parseReviewRole(q.role)
+    if (bRole && q.role) params.set('role', bRole)
+    const qs = params.toString()
+    const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}${qs ? `?${qs}` : ''}` : '/'
+    return sendRedirect(event, `/signin?redirect=${encodeURIComponent(back)}`, 302)
+  }
+  if (!owner || email !== owner) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+
+  const app = String(getRouterParam(event, 'app') ?? '')
+  const key = String(getQuery(event).key ?? 'main')
+  if (!/^[a-z0-9-]+$/.test(app) || !/^(main|pr\d+)$/.test(key)) {
+    throw createError({ statusCode: 400, statusMessage: 'Bad request' })
+  }
+  const role = parseReviewRole(getQuery(event).role)
+  if (!role) {
+    throw createError({ statusCode: 400, statusMessage: 'Bad request' })
+  }
+  const toRaw = getQuery(event).to
+  const to = toRaw === undefined || toRaw === '' ? '' : String(toRaw)
+  if (to && !isSafePath(to)) {
+    throw createError({ statusCode: 400, statusMessage: 'Bad request' })
+  }
   // Live list from GitHub; the build-time list is only a fallback if GitHub is unreachable.
   const live = await listLiveApps(event)
   const liveApp = live.data.find(a => a.app === app)

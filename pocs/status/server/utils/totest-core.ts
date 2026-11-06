@@ -70,19 +70,6 @@ export function isSafePath(to: unknown): to is string {
     && !/[\\\u0000-\u001f\u007f]/.test(to)
 }
 
-/** Path from one regex match: a bare path, or a same-host URL's path; null if foreign/invalid. */
-function matchedPath(m: RegExpMatchArray, host: string): string | null {
-  let path = m[2]
-  if (m[1]) {
-    try {
-      const u = new URL(m[1])
-      if (!host || u.host !== host) return null
-      path = u.pathname + u.search + u.hash
-    } catch { return null }
-  }
-  return (path ?? '').replace(/[.,;:]+$/, '')
-}
-
 /** First app path (`/admin/x?y=1`) or same-host URL found in the steps, else ''. */
 export function extractTargetPath(steps: string[], stagingUrl?: string | null): string {
   let host = ''
@@ -90,8 +77,16 @@ export function extractTargetPath(steps: string[], stagingUrl?: string | null): 
   for (const s of steps) {
     const re = /(https?:\/\/[^\s`'"<>)]+)|(?:^|[\s`'"(])(\/[A-Za-z0-9_\-.~%/?=&#:@+,]*)/g
     for (const m of s.matchAll(re)) {
-      const path = matchedPath(m, host)
-      if (path && path.length > 1 && isSafePath(path)) return path
+      let path = m[2]
+      if (m[1]) {
+        try {
+          const u = new URL(m[1])
+          if (!host || u.host !== host) continue
+          path = u.pathname + u.search + u.hash
+        } catch { continue }
+      }
+      path = (path ?? '').replace(/[.,;:]+$/, '')
+      if (path.length > 1 && isSafePath(path)) return path
     }
   }
   return ''
