@@ -34,9 +34,9 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · decompose"
 #
 # WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
-#   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
-#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
-#     `workflow_dispatch`, where the actor is the human dispatcher.
+#   • Piece 2 — retired here (#3312): the guard now lives in label-router.yml — its `if` admits
+#     only `nuxt-harness[bot]` for delegate/plan:approved, and `work-this` runs
+#     `pipeline-loop-guard.mjs bot-guard`; this workflow is dispatch-only.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
@@ -147,18 +147,6 @@ jobs:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
 
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
-      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      # This matters MORE now (#1685 WS3): the decomposer itself applies `delegate-pi`/`work-this`
-      # via the App token, so those cascading label-adds re-enter this flow as `nuxt-harness[bot]` —
-      # allowed — while every other bot actor is still refused. The decision is the pure, unit-tested
-      # `botActorAllowed` (WS4); this step is I/O only, so the SHIPPED guard IS the tested function.
-      # Contract: scripts/pipeline-loop-guard.test.mjs. (After checkout so the script is available.)
       # ── CLAIM GUARD (#1890) — is someone already on this issue? ──────────────────────
       # Five workflows stamped `status:in-progress` and NOTHING read it, so two runners could
       # build the same issue: #1478 started 8 min after #1473 closed its issue, and #1889 opened

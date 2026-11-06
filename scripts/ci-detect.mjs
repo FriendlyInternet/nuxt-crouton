@@ -16,7 +16,7 @@
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
  *   workflows     'true' when .github/(workflows|actions) changed
  *
- *   EVENT=pull_request BASE_REF=main FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
+ *   EVENT=pull_request FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
  */
 import { readdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'

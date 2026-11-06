@@ -29,8 +29,9 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #
 # WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
-#   • Piece 2 — BOT-ACTOR GUARD: retired (#3312) — label-router.yml's `if` (actor ==
-#     `nuxt-harness[bot]`) now carries it; this workflow is dispatch-only.
+#   • Piece 2 — retired here (#3312): the guard now lives in label-router.yml — its `if` admits
+#     only `nuxt-harness[bot]` for delegate/plan:approved, and `work-this` runs
+#     `pipeline-loop-guard.mjs bot-guard`; this workflow is dispatch-only.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
