@@ -88,20 +88,25 @@ export function inlineBlocks(text, file) {
   return blocks
 }
 
+const NEW_MSG = (b, limit) => `${b.key}: new inline block of ${b.lines} lines (limit ${limit}) — move the logic into scripts/ with a test`
+const GREW_MSG = (b, from) => `${b.key}: grew from ${from} to ${b.lines} lines — move logic out, or raise the baseline on purpose (--update)`
+const stale = (b, allowed) => (allowed !== undefined && b.lines < allowed ? { stale: `${b.key}: shrunk from ${allowed} to ${b.lines} — lower the baseline` } : {})
+
+/** Base mode: only growth relative to the PR's base (or a brand-new oversized block) fails. */
+function judgeVsBase(b, allowed, limit, atBase) {
+  if (atBase !== undefined && b.lines <= atBase) return {}
+  if (b.lines <= limit || (allowed !== undefined && b.lines <= allowed)) return stale(b, allowed)
+  return { fail: atBase !== undefined ? GREW_MSG(b, atBase) : NEW_MSG(b, limit) }
+}
+
 /** Verdict for one block. `atBase` = its size on the PR's base (undefined: no base mode / new block). */
 function judge(b, allowed, limit, atBase, baseMode) {
-  if (baseMode) {
-    if (atBase !== undefined && b.lines <= atBase) return {}
-    if (b.lines <= limit || (allowed !== undefined && b.lines <= allowed)) return allowed !== undefined && b.lines < allowed ? { stale: `${b.key}: shrunk from ${allowed} to ${b.lines} — lower the baseline` } : {}
-    const how = atBase !== undefined ? `grew from ${atBase} to ${b.lines} lines — move logic out, or raise the baseline on purpose (--update)` : `new inline block of ${b.lines} lines (limit ${limit}) — move the logic into scripts/ with a test`
-    return { fail: `${b.key}: ${how}` }
-  }
+  if (baseMode) return judgeVsBase(b, allowed, limit, atBase)
   if (allowed === undefined) {
-    return b.lines > limit ? { fail: `${b.key}: new inline block of ${b.lines} lines (limit ${limit}) — move the logic into scripts/ with a test` } : {}
+    return b.lines > limit ? { fail: NEW_MSG(b, limit) } : {}
   }
-  if (b.lines > allowed) return { fail: `${b.key}: grew from ${allowed} to ${b.lines} lines — move logic out, or raise the baseline on purpose (--update)` }
-  if (b.lines < allowed) return { stale: `${b.key}: shrunk from ${allowed} to ${b.lines} — lower the baseline` }
-  return {}
+  if (b.lines > allowed) return { fail: GREW_MSG(b, allowed) }
+  return stale(b, allowed)
 }
 
 /** Compare blocks to the baseline (and, in base mode, to the PR's base). failures are fatal; stale advisory. */
