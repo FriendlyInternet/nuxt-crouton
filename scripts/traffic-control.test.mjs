@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTraffic, releaseWaiting, scopeLabels } from './traffic-control.mjs'
+import { applyWait, WAIT_MARKER, decideTraffic, releaseWaiting, scopeLabels } from './traffic-control.mjs'
 
 test('no other work → proceed', () => {
   const v = decideTraffic({ issue: 2, labels: ['pkg:crouton-bookings'], others: [] })
@@ -80,7 +80,7 @@ test('releaseWaiting releases only the lowest number per scope', async () => {
   const mk = (number, l) => ({ number, labels: l.map((name) => ({ name })) })
   const waiting = [mk(8, ['status:blocked', 'pkg:b']), mk(5, ['status:blocked', 'pkg:b']), mk(7, ['status:blocked', 'pkg:c'])]
   const added = []
-  const github = { paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? waiting : []) : [{ body: '<!-- traffic-wait -->' }]),
+  const github = { paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked,traffic:waiting' ? waiting : []) : [{ body: '<!-- traffic-wait -->' }]),
     rest: { issues: { listForRepo: 'list', listComments: 'comments',
       removeLabel: async () => {}, addLabels: async (o) => added.push(o.issue_number) },
       pulls: { list: async () => ({ data: [] }) } } }
@@ -134,7 +134,7 @@ test('releaseWaiting releases a parked ticket whose body has Unblocks:', async (
   const blocker = { number: 10, labels: [{ name: 'app:velo' }] }
   const added = []
   const github = {
-    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [blocker]) : [{ body: '<!-- traffic-wait -->' }]),
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked,traffic:waiting' ? [parked] : [blocker]) : [{ body: '<!-- traffic-wait -->' }]),
     rest: { issues: { listForRepo: 'list', listComments: 'comments',
       removeLabel: async () => {}, addLabels: async (o) => added.push(o.issue_number) },
       pulls: { list: async (o) => ({ data: o.head.endsWith('work-10') ? [{ number: 99 }] : [] }) } } }
@@ -148,7 +148,7 @@ function releaseHarness({ comments, events, ownPr }) {
   const calls = []
   const store = { comments: comments.map((c, i) => ({ id: i + 1, ...c })) }
   const github = {
-    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? [parked] : [])
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked,traffic:waiting' ? [parked] : [])
       : fn === 'events' ? events : store.comments),
     rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
       removeLabel: async (o) => calls.push(`rm ${o.name}`), addLabels: async (o) => calls.push(`add ${o.labels}`),
@@ -194,7 +194,7 @@ function removalHarness(failFor) {
   const parked = [mk(41, 'pkg:a'), mk(42, 'pkg:b'), mk(43, 'pkg:a')]
   const calls = []
   const github = {
-    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked' ? parked : [])
+    paginate: async (fn, o) => (fn === 'list' ? (o.labels === 'status:blocked,traffic:waiting' ? parked : [])
       : fn === 'events' ? [] : [{ id: 1, body: '<!-- traffic-wait -->', created_at: '2026-11-02T16:18:01Z' }]),
     rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
       removeLabel: async (o) => {
@@ -225,4 +225,63 @@ test('work-this removal: 404 ignored, 500 rejects', async () => {
   assert.deepEqual(await ok.run(), [41, 42])
   const bad = removalHarness((o) => (o.name === 'work-this' ? 500 : 0))
   await assert.rejects(bad.run())
+})
+
+// ── (#3386) the walk lists only tickets traffic parked ──────────────────────────
+test('genuine park: both labels come off, in order, before work-this is re-added', async () => {
+  const h = releaseHarness({ comments: [wait('2026-11-02T16:18:01Z')], events: [blocked('2026-11-02T16:18:00Z')], ownPr: false })
+  await h.run()
+  assert.deepEqual(h.calls, ['rm status:blocked', 'rm traffic:waiting', 'rm work-this', 'add work-this'])
+})
+
+test('peer already released (status:blocked 404) → traffic:waiting not touched', async () => {
+  const h = removalHarness((o) => (o.issue_number === 41 && o.name === 'status:blocked' ? 404 : 0))
+  await h.run()
+  assert.ok(!h.calls.includes('rm 41 traffic:waiting'))
+})
+
+test('applyWait sends status:blocked and traffic:waiting in ONE addLabels call', async () => {
+  const log = []
+  const github = { rest: { issues: {
+    addLabels: async (o) => log.push(['add', o.labels]),
+    removeLabel: async (o) => log.push(['rm', o.name]),
+    createComment: async (o) => log.push(['comment', o.body]) } } }
+  await applyWait({ github, context: { repo: { owner: 'o', repo: 'r' } }, issueNumber: 1, verdict: { reason: 'r' } })
+  assert.deepEqual(log.slice(0, 2), [['add', ['status:blocked', 'traffic:waiting']], ['rm', 'work-this']])
+  assert.equal(log.length, 3)
+  assert.ok(log[2][1].includes(WAIT_MARKER))
+})
+
+test('parked tickets are released; held tickets traffic did not park are never read', async () => {
+  const store = new Map([
+    [60, { labels: new Set(['status:blocked', 'pkg:x']), comments: [{ id: 1, body: 'plain', created_at: '2026-11-02T00:00:00Z' }] }],
+    [61, { labels: new Set(['status:blocked', 'pkg:y']), comments: [{ id: 2, body: WAIT_MARKER, created_at: '2026-11-02T00:00:00Z' }] }],
+    [50, { labels: new Set(['pkg:z', 'work-this']), comments: [] }],
+  ])
+  const reads = []
+  const github = {
+    paginate: async (fn, o) => {
+      if (fn === 'list') {
+        const want = o.labels.split(',')
+        return [...store].filter(([, v]) => want.every((l) => v.labels.has(l)))
+          .map(([number, v]) => ({ number, labels: [...v.labels].map((name) => ({ name })) }))
+      }
+      reads.push(o.issue_number)
+      return fn === 'events' ? [] : store.get(o.issue_number).comments
+    },
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events',
+      addLabels: async (o) => o.labels.forEach((l) => store.get(o.issue_number).labels.add(l)),
+      removeLabel: async (o) => { if (!store.get(o.issue_number).labels.delete(o.name)) throw Object.assign(new Error('x'), { status: 404 }) },
+      createComment: async (o) => store.get(o.issue_number).comments.push({ id: 9, body: o.body, created_at: '2026-11-03T00:00:00Z' }),
+      updateComment: async (o) => { const c = store.get(50).comments.find((x) => x.id === o.comment_id); if (c) c.body = o.body } },
+      pulls: { list: async () => ({ data: [] }) } },
+  }
+  const context = { repo: { owner: 'o', repo: 'r' } }
+  await applyWait({ github, context, issueNumber: 50, verdict: { reason: 'r' } })
+  reads.length = 0
+  assert.deepEqual(await releaseWaiting({ github, context }), [50])
+  const l = store.get(50).labels
+  assert.ok(!l.has('status:blocked') && !l.has('traffic:waiting') && l.has('work-this'))
+  assert.ok(!reads.includes(60) && !reads.includes(61))
+  assert.deepEqual(await releaseWaiting({ github, context }), [])
 })

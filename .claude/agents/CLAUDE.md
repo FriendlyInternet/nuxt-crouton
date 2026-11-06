@@ -52,8 +52,9 @@ data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 (#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
-differs, links the plan in its PR body and appends a row to
-`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+differs, links the plan in its PR body; the run's record step writes the ledger row to the
+`pipeline-data` branch under `plan-ledger/` (`scripts/plan-ledger.mjs --write`, #3457).
+`writeups/reports/plan-review-ledger.jsonl` stays on main as frozen history up to 6 Nov 2026. Chores and app-only
 tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
 
 ## The red-team agent (standalone — not part of the pipeline)

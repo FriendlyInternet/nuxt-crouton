@@ -17,3 +17,5 @@ STAGING BUGS (#2760) — a bug reported on staging (an app URL on `*.pmcp.dev`) 
 REUSE BEFORE YOU WRITE — before adding a helper, composable or util, search for one: `grep -rniE '<verb|noun>' packages/*/app/utils packages/*/app/composables packages/*/server/utils` (plain grep; `rg` is not installed on the runner). Reuse what you find, or name the closest one in your issue comment and say why it does not fit.
 
 DOCS TRAVEL WITH THE CODE — a new component, composable, endpoint or generator feature updates the file the root `CLAUDE.md` "Maintaining AI Documentation" table names, in the same change.
+
+LOGIC LIVES IN scripts/, NOT IN WORKFLOWS (#3452) — a decision (if/else, parsing, matching) goes in a scripts/*.mjs with a node:test file next to it; the workflow step only calls it. A new or grown run:/script: block over 40 lines fails CI (scripts/workflow-inline-size.mjs).
