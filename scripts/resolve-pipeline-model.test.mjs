@@ -74,5 +74,5 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
   assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
   assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
-  assert.match(wf, /handoff-exec\.mjs dispatch[^\n]*work-issue-pidev\.yml[^\n]*mode:"plan"/)
+  assert.match(readFileSync('.github/workflows/label-router.yml', 'utf8'), /dispatch work-issue-pidev\.yml[^\n]*mode:"plan"/)
 })

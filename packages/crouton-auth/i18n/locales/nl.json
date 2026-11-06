@@ -1,5 +1,8 @@
 {
   "onboarding": {
+    "signOut": "Uitloggen",
+    "noTeamTitle": "Je zit nog niet in een team",
+    "noTeamDescription": "Vraag een uitnodiging om lid te worden van een team.",
     "createTeamTitle": "Maak Je Eerste Team",
     "createTeamDescription": "Begin door een werkruimte voor je projecten aan te maken.",
     "settingUpWorkspace": "Je werkruimte wordt klaargezet",
