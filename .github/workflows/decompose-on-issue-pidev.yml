@@ -57,6 +57,11 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · decompose"
 on:
   workflow_dispatch:
     inputs:
+      from_label:
+        description: "Set by label-router.yml (#3312): the run was started by a label, so post the done-note back on the issue."
+        required: false
+        default: ""
+        type: string
       issue:
         description: "Issue number to decompose (e.g. 660)."
         required: true
@@ -154,12 +159,6 @@ jobs:
       # allowed — while every other bot actor is still refused. The decision is the pure, unit-tested
       # `botActorAllowed` (WS4); this step is I/O only, so the SHIPPED guard IS the tested function.
       # Contract: scripts/pipeline-loop-guard.test.mjs. (After checkout so the script is available.)
-      - name: Bot-actor guard
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        env:
-          ACTOR: ${{ github.actor }}
-        run: node scripts/pipeline-loop-guard.mjs bot-guard "$ACTOR"
-
       # ── CLAIM GUARD (#1890) — is someone already on this issue? ──────────────────────
       # Five workflows stamped `status:in-progress` and NOTHING read it, so two runners could
       # build the same issue: #1478 started 8 min after #1473 closed its issue, and #1889 opened
@@ -525,7 +524,7 @@ jobs:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
-          TRIGGER: ${{ github.event_name }}
+          TRIGGER: ${{ inputs.from_label == 'true' && 'issues' || github.event_name }}
           RUN_START: ${{ steps.t0.outputs.ts }}
         with:
           script: |

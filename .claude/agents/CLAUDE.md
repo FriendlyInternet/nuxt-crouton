@@ -47,7 +47,7 @@ a strong signal, not proof; the #865 eval scoreboard is where this gets validate
 
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
-data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
 (#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its

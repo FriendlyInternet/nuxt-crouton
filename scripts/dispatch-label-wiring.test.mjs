@@ -1,7 +1,7 @@
 /** #3208 — `work-this` is the only human dispatch label. node --test scripts/dispatch-label-wiring.test.mjs */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const read = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
 const jobIf = (src, name) => {
@@ -20,7 +20,12 @@ test('work-this added → exactly one router run; the pipeline workflows are dis
   for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
     assert.doesNotMatch(read(f), /\n  issues:\n/, `${f} listens to no issue event`)
   }
-  assert.equal(existsSync(new URL(`../.github/workflows/${'plan-approved'}.yml`, import.meta.url)), false)
+  assert.ok(!readdirSync(new URL('../.github/workflows/', import.meta.url)).some((n) => n.startsWith('plan-approved')))
+  // dispatches keep the label-triggered done-note (TRIGGER === 'issues' in the pipeline workflows)
+  assert.match(y, /from_label:"true"/)
+  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
+    assert.match(read(f), /inputs\.from_label == 'true' && 'issues'/)
+  }
 })
 
 test('a human adding only delegate-pi / plan:approved starts nothing', () => {

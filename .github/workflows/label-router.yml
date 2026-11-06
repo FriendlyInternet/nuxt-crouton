@@ -55,7 +55,8 @@ jobs:
         run: |
           set -euo pipefail
           dispatch() { # <workflow> <inputs-json>
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg w "$1" --argjson inp "$2" '{issue:$i,workflow:$w,inputs:$inp}')"
+            # from_label keeps the label-triggered "done → PR #N" note (#3312).
+            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg w "$1" --argjson inp "$2" '{issue:$i,workflow:$w,inputs:($inp + {from_label:"true"})}')"
           }
           case "$LABEL" in
             plan:approved)
