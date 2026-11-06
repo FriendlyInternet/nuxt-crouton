@@ -51,8 +51,7 @@ test('infra (scripts, lockfile, ci.yml) is full; push to main is all apps', () =
   assert.deepEqual(run(['apps/velo/a.ts'], { event: 'push' }).apps.sort(), ['kassa', 'velo'])
 })
 
-test('docs-only: stage none; epic base detected', () => {
+test('docs-only: stage none', () => {
   const r = run(['docs/x.md'], { baseRef: 'epic/1-x' })
   assert.equal(r.stage, 'none')
-  assert.equal(r.base_is_epic, true)
 })

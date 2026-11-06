@@ -15,7 +15,6 @@
  *   pocs          JSON list of changed pocs/*
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
  *   workflows     'true' when .github/(workflows|actions) changed
- *   base_is_epic  'true' when the PR base branch starts with epic/
  *
  *   EVENT=pull_request BASE_REF=main FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
  */
@@ -64,8 +63,7 @@ export function detect({ files = [], event = '', baseRef = '', apps = [], readPk
     packages: [...packages].sort(),
     pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
-    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f)),
-    base_is_epic: baseRef.startsWith('epic/')
+    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f))
   }
 }
 
