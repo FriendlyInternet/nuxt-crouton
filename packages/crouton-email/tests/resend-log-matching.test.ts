@@ -48,7 +48,7 @@ async function deliver(type: string, emailId: string, to: string) {
   raw = JSON.stringify({ type, data: { email_id: emailId, to: [to] } })
   const ts = String(Math.floor(Date.now() / 1000))
   headers = { 'svix-id': 'msg_1', 'svix-timestamp': ts, 'svix-signature': await sign('msg_1', ts, raw) }
-  await webhook({})
+  await webhook({ method: 'POST' })
 }
 
 const row = (id: string) => sqlite.prepare('select status, error from auth_email_log where id = ?').get(id) as any
@@ -64,7 +64,7 @@ beforeAll(async () => {
   const logger = (await import('../../crouton-auth/server/plugins/auth-email-logger')).default as any
   logger(nitroApp)
   ;((await import('../server/plugins/auth-email-listener')).default as any)(nitroApp)
-  webhook = (await import('../server/api/webhooks/resend.post')).default as any
+  webhook = (await import('../server/api/webhooks/resend')).default as any
 })
 
 beforeEach(() => {

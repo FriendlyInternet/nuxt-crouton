@@ -20,7 +20,7 @@ async function load(withSecret = true) {
   vi.stubGlobal('useNitroApp', () => ({ hooks: { callHook } }))
   vi.stubGlobal('createError', (o: any) => Object.assign(new Error(o.statusMessage), o))
   vi.resetModules()
-  return (await import('../server/api/webhooks/resend.post')).default as (e: any) => Promise<any>
+  return (await import('../server/api/webhooks/resend')).default as (e: any) => Promise<any>
 }
 
 async function signed(payload: unknown) {
@@ -35,14 +35,14 @@ describe('POST /api/webhooks/resend', () => {
   it('emits crouton:email:delivery with state bounced for a bounce', async () => {
     const handler = await load()
     await signed({ type: 'email.bounced', data: { email_id: 'e1', to: ['a@b.co'], bounce: { message: 'mailbox full' } } })
-    expect(await handler({})).toEqual({ ok: true })
+    expect(await handler({ method: 'POST' })).toEqual({ ok: true })
     expect(callHook).toHaveBeenCalledWith('crouton:email:delivery', expect.objectContaining({ to: 'a@b.co', state: 'bounced' }))
   })
 
   it('emits delivered for a normal email', async () => {
     const handler = await load()
     await signed({ type: 'email.delivered', data: { email_id: 'e1', to: ['a@b.co'] } })
-    await handler({})
+    await handler({ method: 'POST' })
     expect(callHook).toHaveBeenCalledWith('crouton:email:delivery', expect.objectContaining({ state: 'delivered' }))
   })
 
@@ -50,12 +50,17 @@ describe('POST /api/webhooks/resend', () => {
     const handler = await load()
     await signed({ type: 'email.bounced', data: { email_id: 'e1', to: ['a@b.co'] } })
     headers['svix-signature'] = 'v1,AAAA'
-    await expect(handler({})).rejects.toMatchObject({ statusCode: 401 })
+    await expect(handler({ method: 'POST' })).rejects.toMatchObject({ statusCode: 401 })
     expect(callHook).not.toHaveBeenCalled()
   })
 
   it('returns 503 when no secret is configured', async () => {
     const handler = await load(false)
-    await expect(handler({})).rejects.toMatchObject({ statusCode: 503 })
+    await expect(handler({ method: 'POST' })).rejects.toMatchObject({ statusCode: 503 })
+  })
+
+  it('answers 405 to a non-POST so a GET smoke can tell mounted from missing', async () => {
+    const handler = await load()
+    await expect(handler({ method: 'GET' })).rejects.toMatchObject({ statusCode: 405 })
   })
 })
