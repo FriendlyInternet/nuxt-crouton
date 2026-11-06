@@ -8,6 +8,8 @@ export interface AppDecision { app: string | null }
 export interface AppCard<D extends AppDecision = AppDecision> {
   /** null = the General card: items with no app. */
   app: string | null
+  /** The app's folder on main (apps/x or pocs/x); null when it has no deploy.config.json. */
+  dir: string | null
   stagingUrl: string | null
   hasSignIn: boolean
   /** Owner-only one-tap sign-in (302s to the staging review login); null when the app has none. */
@@ -18,7 +20,7 @@ export interface AppCard<D extends AppDecision = AppDecision> {
   decisions: D[]
 }
 
-/** One card per live app plus any app named only by an item, and a General (null) card when something has no app. Most to-test first. */
+/** One card per live app plus any app named only by an item, and a General (null) card when something has no app. General last, then most to-test (items + previews) first. */
 export function buildAppCards<D extends AppDecision>(input: {
   apps: LiveApp[]
   previews: Preview[]
@@ -36,6 +38,7 @@ export function buildAppCards<D extends AppDecision>(input: {
     const hasSignIn = !!app && !!live?.hasSignIn && !!live.stagingUrl
     return {
       app,
+      dir: live?.dir ?? null,
       stagingUrl: live?.stagingUrl ?? null,
       hasSignIn,
       signInUrl: hasSignIn ? `/api/status/login/${app}` : null,
@@ -46,8 +49,8 @@ export function buildAppCards<D extends AppDecision>(input: {
     }
   })
   return cards.sort((a, b) =>
-    b.toTest.length - a.toTest.length
-    || (a.app === null ? 1 : 0) - (b.app === null ? 1 : 0)
+    (a.app === null ? 1 : 0) - (b.app === null ? 1 : 0)
+    || (b.toTest.length + b.previews.length) - (a.toTest.length + a.previews.length)
     || (a.app ?? '').localeCompare(b.app ?? '')
   )
 }
