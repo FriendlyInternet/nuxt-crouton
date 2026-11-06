@@ -1,0 +1,51 @@
+# Throwaway check for #3501 — lives only on trial/* branches, never on main.
+# Title tags: [pending-auto] post a pending "Merge decision" + switch auto-merge on (App token)
+#             [approve]      complete "Merge decision" as success
+#             [app-push]     the App pushes a commit straight to the base branch
+name: Trial 3501
+on:
+  pull_request:
+    branches: ['trial/v1-base']
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      - name: Probes
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          log(){ echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          has(){ case "$TITLE" in *"[$1]"*) return 0;; esac; return 1; }
+          log "PR #$PR head $SHA title: $TITLE"
+          if has pending-auto; then
+            gh api -X POST repos/$GH_REPO/check-runs -f name='Merge decision' -f head_sha=$SHA -f status=in_progress -f 'output[title]=waiting: no-review' -f 'output[summary]=trial' --jq '"check: \(.status) app=\(.app.id)"' | tee -a "$GITHUB_STEP_SUMMARY"
+            sleep 5
+            if gh pr merge $PR --auto --merge 2>err.txt; then log "auto-merge: enabled by App"; else log "auto-merge refused: $(cat err.txt)"; fi
+            sleep 20
+            log "after 20s: $(gh pr view $PR --json state,mergeStateStatus,autoMergeRequest --jq '"state=\(.state) merge=\(.mergeStateStatus) auto=\(.autoMergeRequest != null)"')"
+          fi
+          if has approve; then
+            id=$(gh api "repos/$GH_REPO/commits/$SHA/check-runs?check_name=Merge%20decision" --jq '.check_runs[0].id')
+            gh api -X PATCH repos/$GH_REPO/check-runs/$id -f status=completed -f conclusion=success -f 'output[title]=approved' -f 'output[summary]=trial' --jq '"check: \(.conclusion)"' | tee -a "$GITHUB_STEP_SUMMARY"
+            sleep 30
+            log "after 30s: $(gh pr view $PR --json state,mergeStateStatus --jq '"state=\(.state) merge=\(.mergeStateStatus)"')"
+          fi
+          if has app-push; then
+            git config --global user.name nuxt-harness; git config --global user.email nuxt-harness@users.noreply.github.com
+            git clone -q --depth 1 --branch trial/v1-base "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" base
+            cd base && date > docs-trial-3501-push.txt && git add docs-trial-3501-push.txt && git commit -qm "trial #3501: App direct push" 
+            if git push -q origin HEAD:trial/v1-base 2>../perr.txt; then log "App direct push to base: ACCEPTED"; else log "App direct push to base: REFUSED: $(cat ../perr.txt)"; fi
+          fi
