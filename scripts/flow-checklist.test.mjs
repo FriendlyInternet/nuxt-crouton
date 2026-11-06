@@ -50,14 +50,15 @@ test('issueFromPrBody reads the Closes line', () => {
 })
 
 // Wiring: each step is ticked from the workflow that owns its event (#3210).
-const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+// automerge's merge call (and its tick) moved into scripts/lib/v1-merge-io.mjs (#3501).
+const wf = f => readFileSync(new URL(f.endsWith('.mjs') ? `./lib/${f}` : `../.github/workflows/${f}`, import.meta.url), 'utf8')
 for (const [file, step] of [
   ['work-issue-pidev.yml', 'routed'],
   ['work-issue-pidev.yml', 'plan'],
   ['on-comment.yml', 'ok'],
   ['work-issue-pidev.yml', 'pr'],
   ['build-review.yml', 'review'],
-  ['automerge-epic-subpr.yml', 'merged']
+  ['v1-merge-io.mjs', 'merged']
 ]) {
   test(`${file} ticks "${step}"`, () => {
     assert.match(wf(file), new RegExp(`flow-checklist\\.mjs[^\\n]*(\\n[^\\n]*)?[ "']${step}\\b`))
@@ -100,7 +101,8 @@ test('run-name carries the issue number', () => {
 })
 
 test('"Owner ok" is ticked only from a real owner approval, never the plan:approved label (#3210)', () => {
-  const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+  // automerge's merge call (and its tick) moved into scripts/lib/v1-merge-io.mjs (#3501).
+const wf = f => readFileSync(new URL(f.endsWith('.mjs') ? `./lib/${f}` : `../.github/workflows/${f}`, import.meta.url), 'utf8')
   assert.ok(!/flow-checklist\.mjs[^\n]*\bok\b/.test(wf('label-router.yml')), 'label-router.yml must not tick ok')
   const oc = wf('on-comment.yml')
   assert.ok(oc.indexOf("'ok', '--link'") > oc.indexOf('isApproval(body)'), 'ok tick sits after the isApproval check')
