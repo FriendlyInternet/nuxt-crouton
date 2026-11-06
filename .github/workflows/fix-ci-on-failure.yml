@@ -9,7 +9,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}',
 # Guard rails (the whole point — provably no runaway):
 #   - Scope: only pipeline head branches `work-*` (pi worker,
 #     #2157). Human PRs are never touched.
-#   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
+#   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at FIX_BOT_MAX_ATTEMPTS (3, scripts/lib/fix-bot-dispatch.mjs). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
 #     it, the agent stops and blocks instead (same as the auto-merge guard, #339).
@@ -34,6 +34,10 @@ on:
     # fires, which is the exact bug #2089 is about.
     workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
+    # #3305: start only for pipeline head branches (the job `if` below stays as the guard —
+    # workflow_dispatch has no branch). `**` so `work-12/x` isn't dropped; `*` doesn't cross `/`.
+    # Must cover every PIPELINE_BRANCH_PREFIXES entry (scripts/lib/pipeline-branch.test.mjs).
+    branches: ['work-**']
   # #3105: started by the owner's `ok` on a RED epic → main PR (on-comment.yml approve-epic). The
   # workflow_run path above never sees an `epic/*` head, so this is the only way in for one. The
   # gate step requires the PR open and the owner's ok still standing.
@@ -115,7 +119,7 @@ jobs:
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
             // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
             // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
-            const { fixBotWillTry, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            const { fixBotWillTry, pickFailedRun, FIX_BOT_MAX_ATTEMPTS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
             let go
             if (/^epic\//.test(full.head.ref)) {
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
@@ -209,7 +213,7 @@ jobs:
             core.setOutput('run_url', run.html_url)
             core.setOutput('packages_allowed', packagesAllowed)
             core.setOutput('packages_names', pkgNames)
-            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
+            core.info(`Fix attempt ${next}/${FIX_BOT_MAX_ATTEMPTS} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a

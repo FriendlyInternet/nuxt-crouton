@@ -149,7 +149,7 @@ export function renderComment(d, { round = 1, model = '', okAgain = '' } = {}) {
     'no-go': final
       ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.${okAgain ? `\n${okAgain}` : ''}`
       : `🔴 **Build sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.length} problem(s) found.\n**Worker:** fix these, then push again:\n${reasons}`,
-    'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
+    'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.`,
   }[d.verdict]
   return `${REVIEW_MARKER}\n${final ? `${FINAL_MARKER}\n` : ''}<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }

@@ -177,3 +177,11 @@ export async function deleteBookingsEmaillog(
 
   return { success: true }
 }
+
+// Referenced records must belong to this team (#3378)
+export async function assertBookingsEmaillogReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'bookingId', table: bookingsSchema.bookingsBookings, value: data.bookingId },
+    { field: 'templateId', table: emailtemplatesSchema.bookingsEmailtemplates, value: data.templateId },
+  ])
+}

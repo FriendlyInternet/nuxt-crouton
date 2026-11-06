@@ -5,6 +5,7 @@
 import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
 import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
 
 const updateSchema = z.object({
@@ -55,6 +56,11 @@ export default defineEventHandler(async (event) => {
       statusText: 'Booking not found',
     })
   }
+
+  // A booking may only point at its own team's location (#3378)
+  await assertRefsInTeam(db, team.id, [
+    { field: 'location', table: bookingsLocations, value: parsed.data.location },
+  ])
 
   // Build update data
   const updateData: Record<string, unknown> = {

@@ -14,6 +14,11 @@ export default defineEventHandler(async (event) => {
   const body = isSignUp ? null : await readBody(event).catch(() => null)
   const email = String(body?.email ?? '').trim().toLowerCase()
 
+  // #3418: CI's email probe asks for a sign-in link for Resend's test inbox (never a real
+  // mailbox). Sign-in only; sign-up stays closed. Side effect: clicking that link would create
+  // this one user, but the inbox is only visible in the Resend account owner's dashboard.
+  if (!isSignUp && email === 'delivered+status@resend.dev') return
+
   if (isSignUp || !owner || email !== owner) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
   }
