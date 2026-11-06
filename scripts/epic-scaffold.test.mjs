@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree } from './epic-scaffold.mjs'
+import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree, v1LabelWarning } from './epic-scaffold.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PlanError } from './apply-decompose-plan.mjs'
 

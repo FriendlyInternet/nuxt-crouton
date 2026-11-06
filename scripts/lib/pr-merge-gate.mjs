@@ -71,10 +71,12 @@ export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold =
 }
 
 // #3461: the v1 answer. No red/ciGate/mergeableState: a required check built on this would otherwise wait on itself.
-export function decideV1({ draft, authorIsPipeline, baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, files } = {}) {
+export function decideV1({ draft, authorIsPipeline, baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, files, red = false } = {}) {
   if (!isV1Base(baseRef)) return hold('not-v1-base', `base ${baseRef} is not a v1 epic branch`)
   const s = skipBeforeReads({ draft, authorIsPipeline, baseRef, headRef })
   if (s.code === 'draft') return hold('draft', 'draft sign-off PR — waits until the owner marks it ready')
+  // C2 (#339): a failing check holds the answer — `red` comes from isRed() over the runs minus `Merge decision`
+  if (red) return hold('red', 'has a failing check')
   if (s.code === 'not-pipeline') return { merge: true, code: 'not-pipeline', autoMerge: false, reason: 'not a pipeline PR — merged by hand' }
   if (s.skip) return hold(s.code, `skipped: ${s.code}`)
   const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview })
@@ -102,10 +104,22 @@ export function applySharedCodeHold(gate, { baseRef, labels = [], files = [], go
 }
 
 // #3461: the payload for the required `Merge decision` check-run. A wait is in_progress, never neutral/skipped.
+export const MERGE_DECISION = 'Merge decision'
+
+// the check's own run must never count toward `red` (it would wait on itself)
+export const withoutMergeDecision = (runs = []) => runs.filter((r) => r.name !== MERGE_DECISION)
+
+// turn auto-merge on for any pipeline answer (merge or hold); owner PRs are merged by hand
+export const shouldEnableAuto = ({ answer, autoMergeOn }) => answer?.code !== 'not-pipeline' && !autoMergeOn
+
+// The App bypasses the ruleset, so its own pulls.merge would succeed past a pending check: check it here, never rely on GitHub refusing.
+export const canMergeNow = ({ answer, ciGate, red }) =>
+  answer?.merge === true && answer.code !== 'not-pipeline' && ciGate === 'success' && !red
+
 export function mergeDecisionCheck(answer) {
   if (answer?.merge === true) {
-    return { name: 'Merge decision', status: 'completed', conclusion: 'success', output: { title: 'approved', summary: String(answer.reason || answer.code || 'approved') } }
+    return { name: MERGE_DECISION, status: 'completed', conclusion: 'success', output: { title: 'approved', summary: String(answer.reason || answer.code || 'approved') } }
   }
   const code = String(answer?.code || 'unknown')
-  return { name: 'Merge decision', status: 'in_progress', output: { title: `waiting: ${code}`, summary: String(answer?.reason || code) } }
+  return { name: MERGE_DECISION, status: 'in_progress', output: { title: `waiting: ${code}`, summary: String(answer?.reason || code) } }
 }

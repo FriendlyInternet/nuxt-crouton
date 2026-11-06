@@ -73,6 +73,11 @@ export function parseScaffoldPlan(raw) {
 /** PURE: the branch name for an epic number. */
 export const epicBranch = (n, slug) => `epic/${n}-${slug}`
 
+// #3501: pipeline:v1 is read by the decomposer only; a hand-made epic stays on today's path.
+export const v1LabelWarning = (labels = []) => (labels || []).includes('pipeline:v1')
+  ? "epic-scaffold: pipeline:v1 is ignored for hand-made epics — this epic uses today's path (branch epic/<n>-<slug>); use the decomposer for v1 (#3501)"
+  : ''
+
 /** PURE: child gh actions for an already-numbered epic (depth 0 → children at depth 1). */
 export function scaffoldActions(plan, { epic, knownLabels = [] }) {
   return planToActions(
@@ -148,6 +153,8 @@ function main(argv) {
     console.error(`epic-scaffold: ${e.message}`)
     process.exit(1)
   }
+  const v1Warn = v1LabelWarning(plan.labels)
+  if (v1Warn) console.error(v1Warn)
   const knownLabels = knownLabelsFromFile()
   if (dry) {
     console.log(renderTree(plan, scaffoldActions(plan, { epic: 'N', knownLabels })))
