@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, shadowCheck } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -36,7 +36,7 @@ test('5. owner ok but blocked/dirty → no merge, reason names it', () => {
   }
 })
 test('6. epic-based PR needs build:approved, even with go', () => {
-  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, red: false, ciGate: 'success', mergeableState: 'clean' })
+  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, headReview: { kind: 'other' }, red: false, ciGate: 'success', mergeableState: 'clean' })
   assert.equal(e([]).merge, false)
   assert.equal(e(['build:approved']).merge, true)
 })
@@ -138,4 +138,132 @@ test('3428: go verdict, no build:approved label, owner ok → no merge', () => {
     body: '<!-- build-review-sha:aaa -->\n<!-- build-review-verdict:go -->\n\n✅ **Build looks good**\n' }
   const d = epicLeaf([goReview, c('ok', '2026-11-01T11:00:00Z')], 'aaa')
   assert.equal(d.merge, false)
+})
+
+// #3467 — a merge commit after the owner's ok keeps the ok but waits for a build review of the new head.
+// The API can't tell a clean merge from a conflict-resolving one, so both wait: the cost is one automatic review.
+const km = (date) => ({ parents: [{}, {}], commit: { committer: { date } }, files: ['a.ts'] })
+const SHA = '04bfeaa0aaaaaaaa'
+const mergedGo = () => goFor([c('ok', '2026-11-06T09:51:19Z')], [k('2026-11-06T09:12:00Z'), km('2026-11-06T11:13:00Z')])
+
+test('#3467 merge commit after ok, head unreviewed → head-unreviewed naming the SHA', () => {
+  const go = mergedGo()
+  assert.equal(go.go, true)
+  assert.equal(go.mergeSince, true)
+  const r = leaf({ go, headSha: SHA, headReview: { kind: 'pending' } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'head-unreviewed')
+  assert.match(r.reason, /04bfeaa0/)
+})
+test('#3467 same, after a go on the new head → merge with no fresh ok', () => {
+  assert.equal(leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'other' } }).merge, true)
+})
+test('#3467 no-go on the merged head → no merge', () => {
+  const r = leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'round1' } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'head-unreviewed')
+})
+test('#3467 owner ok after a final hold on the merged head → merge', () => {
+  const go = { go: true, mergeSince: true, approvedAt: '2026-11-06T12:00:00Z' }
+  assert.equal(leaf({ go, headSha: SHA, headReview: { kind: 'final' }, ownerHold: { kind: 'final', at: '2026-11-06T11:30:00Z' } }).merge, true)
+})
+test('#3467 ok given after the merge commit → merge without a review', () => {
+  const go = goFor([c('ok', '2026-11-06T12:00:00Z')], [km('2026-11-06T11:13:00Z')])
+  assert.equal(go.mergeSince, false)
+  assert.equal(leaf({ go, headSha: SHA }).merge, true)
+})
+test('#3467 epic base: build:approved needs the head reviewed go', () => {
+  const e = (headReview) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], go: okGo, headSha: SHA, headReview, red: false, ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(e({ kind: 'pending' }).merge, false)
+  assert.equal(e({ kind: 'pending' }).code, 'head-unreviewed')
+  assert.equal(e({ kind: 'other' }).merge, true)
+})
+
+test('first-run A. owner ok + first-run red → merge, reason names it', () => {
+  const r = leaf({ firstRun: ['pr-comment'] })
+  assert.equal(r.merge, true)
+  assert.match(r.reason, /first-run check pr-comment ignored after owner ok/)
+})
+test('first-run B. no owner ok → held, even for build:approved on an epic base', () => {
+  const r = leaf({ firstRun: ['pr-comment'], go: { go: false } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'first-run-no-ok')
+  const e = leaf({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], firstRun: ['automerge'], go: { go: false } })
+  assert.equal(e.merge, false)
+})
+test('first-run C. a real red still wins over first-run', () => {
+  assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
+})
+
+// ---- #3491: skipBeforeReads / applySharedCodeHold / shadowCheck ----
+const pre = (o = {}) => skipBeforeReads({ draft: false, authorIsPipeline: true, baseRef: 'epic/1-x', headRef: 'work-1', ...o })
+test('D3 #2051/#2054: draft sign-off PR → skip draft', () => {
+  assert.deepEqual(pre({ draft: true }), { skip: true, code: 'draft' })
+  assert.equal(pre({ draft: true, authorIsPipeline: false }).code, 'draft')
+})
+test('D4 #3423: owner-authored PR → skip not-pipeline', () => {
+  assert.deepEqual(pre({ authorIsPipeline: false }), { skip: true, code: 'not-pipeline' })
+  assert.equal(pre({ authorIsPipeline: undefined }).code, 'not-pipeline')
+})
+test('D3/D4 epic → main: the same two skips', () => {
+  const o = { baseRef: 'main', headRef: 'epic/1-x' }
+  assert.equal(pre({ ...o, draft: true }).code, 'draft')
+  assert.equal(pre({ ...o, authorIsPipeline: false }).code, 'not-pipeline')
+})
+test('D3/D4 work-* → main: the same two skips', () => {
+  const o = { baseRef: 'main', headRef: 'work-1' }
+  assert.equal(pre({ ...o, draft: true }).code, 'draft')
+  assert.equal(pre({ ...o, authorIsPipeline: false }).code, 'not-pipeline')
+})
+test('not-epic-base: a base that is not epic/*, and not a main leaf/epic PR, → skip not-epic-base', () => {
+  assert.equal(pre({ baseRef: 'main', headRef: 'feature/x' }).code, 'not-epic-base')
+  assert.equal(pre({ baseRef: 'release/1', headRef: 'work-1' }).code, 'not-epic-base')
+})
+test('pipeline PRs of each kind → { skip: false }', () => {
+  assert.deepEqual(pre(), { skip: false })
+  assert.deepEqual(pre({ baseRef: 'main', headRef: 'work-1' }), { skip: false })
+  assert.deepEqual(pre({ baseRef: 'main', headRef: 'epic/1-x' }), { skip: false })
+})
+const mergeGate = { merge: true, code: 'merge', reason: 'reviewed' }
+const sh = (o = {}) => applySharedCodeHold(mergeGate, { baseRef: 'epic/1-x', labels: [], files: ['packages/a/x.ts', 'scripts/b.mjs'], go: { go: false }, ...o })
+test('D1 #339/#350: packages/ file, no build:approved, no owner ok → shared-code with the file in held', () => {
+  const r = sh()
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'shared-code')
+  assert.deepEqual(r.held, ['packages/a/x.ts'])
+  assert.equal(r.hasPkgs, true)
+  assert.equal(r.hasWf, false)
+})
+test('D1 #2777: packages/ with build:approved → gate unchanged', () => {
+  assert.equal(sh({ labels: ['build:approved'] }), mergeGate)
+})
+test('D2 #2442: .github/workflows/ with build:approved, no owner ok → shared-code', () => {
+  const r = sh({ labels: ['build:approved'], files: ['.github/workflows/a.yml'] })
+  assert.equal(r.code, 'shared-code')
+  assert.equal(r.hasWf, true)
+})
+test('owner ok: any shared-code file with go.go → gate unchanged', () => {
+  assert.equal(sh({ go: { go: true } }), mergeGate)
+  assert.equal(sh({ go: { go: true }, files: ['.github/workflows/a.yml'], labels: ['build:approved'] }), mergeGate)
+})
+test('a hold gate passes through, and a main base never holds', () => {
+  const g = { merge: false, code: 'no-review' }
+  assert.equal(sh({}, g) && applySharedCodeHold(g, { baseRef: 'epic/1-x', files: ['packages/a/x.ts'] }), g)
+  assert.equal(sh({ baseRef: 'main' }), mergeGate)
+})
+test('shadowCheck: merge → success', () => {
+  const r = shadowCheck(mergeGate)
+  assert.equal(r.name, 'Merge decision (shadow)')
+  assert.equal(r.conclusion, 'success')
+  assert.equal(r.output.title, 'merge')
+})
+test('shadowCheck: each hold code → neutral with that code', () => {
+  const answers = ['no-review', 'head-unreviewed', 'red', 'ci-pending', 'unmergeable', 'shared-code'].map((code) => ({ merge: false, code, reason: 'r' }))
+  answers.push(pre({ draft: true }), pre({ authorIsPipeline: false }), pre({ baseRef: 'main', headRef: 'x' }))
+  for (const a of answers) {
+    const r = shadowCheck(a)
+    assert.equal(r.conclusion, 'neutral')
+    assert.equal(r.output.title, a.code)
+    assert.ok(r.output.summary.includes(a.code))
+  }
 })
