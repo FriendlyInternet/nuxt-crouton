@@ -65,7 +65,7 @@ export function verdict(d1Json) {
   }
   const row = Array.isArray(rows) ? rows[0] : undefined
   if (!row) return { ok: false, reason: 'no send recorded' }
-  if (row.status === 'sent') return { ok: true }
+  if (row.status === 'sent' || row.status === 'delivered') return { ok: true }
   if (row.status === 'failed') return { ok: false, reason: row.error || 'failed' }
   return { ok: false, reason: 'never confirmed' }
 }
