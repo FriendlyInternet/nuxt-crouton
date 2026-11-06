@@ -25,7 +25,8 @@ on:
     paths:
       - 'pocs/**'
       # A shared UI piece changed → deploy the gallery so the PR gets a review link (#2462).
-      - 'packages/*/app/components/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-pocs.yml'
       - '.github/workflows/deploy-app.yml'
   workflow_dispatch:
@@ -91,67 +92,13 @@ jobs:
           fetch-depth: 0
       - id: set
         env:
+          WORKSPACE: pocs
           EVENT: ${{ github.event_name }}
           DISPATCH_APP: ${{ github.event.inputs.app }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PUSH_AFTER: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          names=()
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            [ -n "${DISPATCH_APP:-}" ] && names+=("$DISPATCH_APP")
-          elif [ "$EVENT" = "push" ]; then
-            # Merge to main: diff the pushed range. A brand-new/zero `before` falls back to the
-            # tip commit alone. Gallery is PR-only (review links), so it is not added here.
-            if [ -z "${PUSH_BEFORE//0/}" ]; then
-              changed=$(git diff-tree --no-commit-id --name-only -r "$PUSH_AFTER" || true)
-            else
-              changed=$(git diff --name-only "$PUSH_BEFORE" "$PUSH_AFTER" || true)
-            fi
-            while IFS= read -r f; do
-              case "$f" in
-                pocs/*/*) names+=("$(printf '%s' "$f" | cut -d/ -f2)");;
-              esac
-            done <<< "$changed"
-          else
-            changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
-            while IFS= read -r f; do
-              case "$f" in
-                pocs/*/*) names+=("$(printf '%s' "$f" | cut -d/ -f2)");;
-              esac
-            done <<< "$changed"
-            # #2462: a changed shared UI piece (packages/*/app/components/**.vue) has no app of
-            # its own to preview — the gallery shows every piece, so it deploys for this PR and
-            # deploy-app.yml comments a direct link per changed piece.
-            if [ "$(printf '%s\n' "$changed" | node scripts/gallery-links.mjs --touches)" = "true" ]; then
-              names+=("gallery")
-            fi
-          fi
-
-          include='[]'
-          seen=' '
-          for p in "${names[@]:-}"; do
-            [ -z "$p" ] && continue
-            case "$seen" in *" $p "*) continue;; esac
-            seen="$seen$p "
-            cfg="pocs/$p/deploy.config.json"
-            if [ -f "$cfg" ]; then
-              su=$(jq -r '.stagingUrl // ""' "$cfg")
-              lp=$(jq -r '.layerPackages // ""' "$cfg")
-              include=$(printf '%s' "$include" | jq --arg a "$p" --arg su "$su" --arg lp "$lp" \
-                '. + [{app:$a, stagingUrl:$su, layerPackages:$lp}]')
-            else
-              echo "skip: pocs/$p has no deploy.config.json (not opted in)"
-            fi
-          done
-
-          matrix=$(jq -cn --argjson inc "$include" '{include:$inc}')
-          if [ "$(printf '%s' "$include" | jq 'length')" -gt 0 ]; then any=true; else any=false; fi
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "any=$any" >> "$GITHUB_OUTPUT"
-          echo "Detected matrix: $matrix"
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        # One shared rule for apps + POCs (#3475): scripts/deploy-detect.mjs.
+        run: node scripts/deploy-detect.mjs
 
   # One deploy-app.yml call per detected POC. Skipped cleanly when nothing opted-in changed.
   # Skipped entirely for a `mode: version` dispatch — that goes to the `version` job below,
