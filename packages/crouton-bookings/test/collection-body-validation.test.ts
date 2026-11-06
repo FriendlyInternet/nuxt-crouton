@@ -76,6 +76,19 @@ describe('package collection body validation (#3377)', () => {
     expect(hoisted.update.mock.calls[0]![3].translations).toEqual({ en: { title: 'E' }, nl: { city: 'A', title: 'X' } })
   })
 
+  it('locations POST accepts what the packaged form sends once English title is entered', async () => {
+    const { applyEnglishTitle } = await import('../collections/locations/app/utils/applyEnglishTitle')
+    // defaultValues of useBookingsLocations (title starts as '')
+    const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, inventoryMode: false, quantity: 0, maxBookingsPerMonth: 0, translations: {} }
+    body = { ...state }
+    await expect(run(`../${L}/index.post`)).rejects.toThrow()
+    state.translations = { en: { title: 'Studio' } }
+    applyEnglishTitle(state, { field: 'title', value: 'Studio' })
+    body = { ...state }
+    await run(`../${L}/index.post`)
+    expect(hoisted.create.mock.calls[0]![0]).toMatchObject({ title: 'Studio' })
+  })
+
   it('settings POST and emaillogs POST reject invalid bodies', async () => {
     body = { statuses: 'not-an-array' }
     await expect(run(`../${S}/index.post`)).rejects.toThrow()
