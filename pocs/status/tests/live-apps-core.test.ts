@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { appFromFiles } from '../server/utils/totest-core'
 import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, notOnMainHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
@@ -69,6 +70,7 @@ describe('GitHub call budget', () => {
     const apps = await loadLiveApps(get)
     const previews = await loadPreviews(get)
     expect(apps.data).toHaveLength(15)
+    expect(apps.data[0]!.dir).toBe('apps/a0')
     expect(previews.data).toEqual([{ app: 'velo', pr: 12, title: 't', updatedAt: '', url: 'https://velo-pr12.example.workers.dev' }])
     expect(calls.length).toBeLessThanOrEqual(70)
   })
@@ -77,6 +79,22 @@ describe('GitHub call budget', () => {
     const r = await loadLiveApps(get)
     expect(r.data).toEqual([])
     expect(r.error).toContain('GitHub 403')
+  })
+})
+
+describe('last-merged link follows the app-of-a-PR rule', () => {
+  it('loadLiveApps keeps each app folder, and files inside it credit the app', async () => {
+    const get = (async (path: string) => {
+      if (path.includes('/git/trees/')) return { data: { tree: [{ path: 'pocs/status/deploy.config.json', type: 'blob' }, { path: 'apps/velo/deploy.config.json', type: 'blob' }] }, error: null }
+      return { data: { content: btoa('{}') }, error: null }
+    }) as never
+    const { data } = await loadLiveApps(get)
+    expect(data.map(a => [a.app, a.dir])).toEqual([['status', 'pocs/status'], ['velo', 'apps/velo']])
+    for (const a of data) expect(appFromFiles([`${a.dir}/server/x.ts`])).toBe(a.app)
+    // a PR whose title never names the app still lands in the folder history
+    const files = ['pocs/status/deploy.config.json']
+    expect(appFromFiles(files)).toBe('status')
+    expect(files[0]!.startsWith(`${data[0]!.dir}/`)).toBe(true)
   })
 })
 

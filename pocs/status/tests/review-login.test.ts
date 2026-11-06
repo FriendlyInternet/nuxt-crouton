@@ -55,8 +55,11 @@ describe('walk in the login redirect (#2681)', async () => {
     expect(sanitizeWalk('A'.repeat(2049))).toBe('')
     expect(sanitizeWalk(['x'])).toBe('')
   })
+  it('no app means no login link', () => {
+    expect(loginHrefFor({ app: null, number: 1, title: 't', steps: ['a'] })).toBeNull()
+  })
   it('card login link carries both to and walk', () => {
-    const u = new URL(loginHrefFor({ app: 'velo', number: 7, title: 'T', steps: ['one', 'two'], to: '/en/x' }), 'http://h')
+    const u = new URL(loginHrefFor({ app: 'velo', number: 7, title: 'T', steps: ['one', 'two'], to: '/en/x' })!, 'http://h')
     expect(u.searchParams.get('to')).toBe('/en/x')
     expect(u.searchParams.get('walk')).toMatch(/^[A-Za-z0-9_-]+$/)
   })
