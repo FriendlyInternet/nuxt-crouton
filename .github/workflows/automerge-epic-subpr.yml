@@ -524,6 +524,10 @@ jobs:
               core.warning(`build review sweep skipped — scripts/build-review-sweep.mjs is not on the checked-out branch yet (${e.code || e.message})`)
               return
             }
+            if (typeof sweepScope !== 'function' || typeof sweepAll !== 'function') {
+              core.warning('build review sweep skipped — scripts/build-review-sweep.mjs on the checked-out branch predates sweepScope/sweepAll (bootstrap)')
+              return
+            }
             const fs = require('fs')
             const stampDir = `${process.env.GITHUB_WORKSPACE}/.build-review-sweep`
             const stampFile = `${stampDir}/last-full`
