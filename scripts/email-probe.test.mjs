@@ -106,3 +106,59 @@ test('production: pre-deploy accepts bundle or Worker, post-sync confirms Worker
   assert.ok(post.includes("inputs.environment == 'production'") && post.includes('has-key') && post.includes('exit 1'))
   assert.ok(wfText.indexOf('- name: Sync explicit Worker secrets') < wfText.indexOf('- name: Confirm email key on the production Worker'))
 })
+
+import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
+import { requestDecision, retryDelays, PROBE_RETRY_DELAYS_MS } from './email-probe.mjs'
+
+test('#3497 requestDecision', () => {
+  const d = (status, attempt = 1, threw = false) => requestDecision({ status, threw, attempt, maxAttempts: 3 })
+  assert.equal(d(200), 'ok')
+  assert.equal(d(422), 'ok')
+  assert.equal(d(500), 'retry')
+  assert.equal(d(503), 'retry')
+  assert.equal(d(0, 1, true), 'retry')
+  assert.equal(d(500, 3), 'give-up')
+  assert.equal(d(400), 'give-up')
+  assert.equal(d(403), 'give-up')
+})
+
+test('#3497 retry delays', () => {
+  assert.ok(PROBE_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0) <= 60000)
+  assert.deepEqual(retryDelays({ EMAIL_PROBE_RETRY_DELAYS_MS: '0,0' }), [0, 0])
+  assert.deepEqual(retryDelays({ EMAIL_PROBE_RETRY_DELAYS_MS: 'x,1' }), PROBE_RETRY_DELAYS_MS)
+  assert.deepEqual(retryDelays({}), PROBE_RETRY_DELAYS_MS)
+})
+
+async function runSend(statuses) {
+  let hits = 0
+  const server = createServer((req, res) => {
+    req.resume()
+    const code = statuses[Math.min(hits, statuses.length - 1)]
+    hits++
+    res.statusCode = code
+    res.end(`body-${code}`)
+  })
+  await new Promise(r => server.listen(0, r))
+  const url = `http://127.0.0.1:${server.address().port}/x`
+  const child = spawn('node', [new URL('./email-probe.mjs', import.meta.url).pathname, 'send', url, '{}'], {
+    env: { ...process.env, EMAIL_PROBE_RETRY_DELAYS_MS: '0,0,0' },
+  })
+  let out = ''
+  child.stdout.on('data', d => (out += d))
+  const code = await new Promise(r => child.on('close', r))
+  server.close()
+  return { code, hits, out }
+}
+
+test('#3497 send end-to-end', async () => {
+  const ok = await runSend([500, 500, 200])
+  assert.equal(ok.code, 0)
+  assert.equal(ok.hits, 3)
+  const bad = await runSend([500])
+  assert.equal(bad.code, 1)
+  assert.match(bad.out, /body-500/)
+  const four = await runSend([400])
+  assert.equal(four.code, 1)
+  assert.equal(four.hits, 1)
+})
