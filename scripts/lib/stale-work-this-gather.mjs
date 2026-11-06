@@ -5,6 +5,41 @@ import { issuesWithRecentRun, staleWorkThis } from './stale-work-this.mjs'
 
 const labelNames = (it) => (it.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
 
+async function paged(gh, path, max = 10) {
+  const out = []
+  for (let page = 1; page <= max; page++) {
+    const r = await gh(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`)
+    out.push(...r)
+    if (r.length < 100) break
+  }
+  return out
+}
+
+async function labeledAtOf(gh, repo, number) {
+  const events = await paged(gh, `${repo}/issues/${number}/events`, Infinity)
+  let labeledAt = null
+  for (const e of events) {
+    if (e.event === 'labeled' && e.label?.name === 'work-this') labeledAt = e.created_at
+  }
+  return labeledAt
+}
+
+async function toCandidate(gh, repo, owner, i) {
+  const n = labelNames(i)
+  if (!n.includes('work-this') || n.includes('status:blocked')) return null
+  const labeledAt = await labeledAtOf(gh, repo, i.number)
+  if (!labeledAt) return null
+  const prs = await gh(`${repo}/pulls?state=open&head=${owner}:work-${i.number}&per_page=1`)
+  return {
+    number: i.number,
+    title: i.title,
+    html_url: i.html_url,
+    labels: i.labels,
+    labeledAt,
+    openPr: prs.length > 0
+  }
+}
+
 /**
  * @param {{ gh: (path:string)=>Promise<any>, owner: string, name: string,
  *   canariesPath?: string, now?: number }} deps
@@ -18,15 +53,11 @@ export async function staleWorkThisLabels({
   now = Date.now()
 }) {
   try {
+    const repo = `/repos/${owner}/${name}`
     // Own query: the shared openIssues list is one 100-item page and would miss older tickets.
-    const openIssues = []
-    for (let page = 1; page <= 10; page++) {
-      const r = await gh(
-        `/repos/${owner}/${name}/issues?state=open&labels=work-this&per_page=100&page=${page}`
-      )
-      openIssues.push(...r.filter((x) => !x.pull_request))
-      if (r.length < 100) break
-    }
+    const openIssues = (await paged(gh, `${repo}/issues?state=open&labels=work-this`)).filter(
+      (x) => !x.pull_request
+    )
     const canaryIssues = new Set(
       JSON.parse(readFileSync(canariesPath, 'utf8'))
         .canaries.map((c) => c.issue)
@@ -34,33 +65,13 @@ export async function staleWorkThisLabels({
     )
     const since = new Date(now - 60 * 60000).toISOString()
     const runs = await gh(
-      `/repos/${owner}/${name}/actions/workflows/work-issue-pidev.yml/runs?per_page=100&created=${encodeURIComponent('>=' + since)}`
+      `${repo}/actions/workflows/work-issue-pidev.yml/runs?per_page=100&created=${encodeURIComponent('>=' + since)}`
     )
     const recentRunIssues = issuesWithRecentRun(runs.workflow_runs || [])
     const issues = []
     for (const i of openIssues) {
-      const n = labelNames(i)
-      if (!n.includes('work-this') || n.includes('status:blocked')) continue
-      let labeledAt = null
-      for (let page = 1; ; page++) {
-        const ev = await gh(`/repos/${owner}/${name}/issues/${i.number}/events?per_page=100&page=${page}`)
-        for (const e of ev) {
-          if (e.event === 'labeled' && e.label?.name === 'work-this') labeledAt = e.created_at
-        }
-        if (ev.length < 100) break
-      }
-      if (!labeledAt) continue
-      const prs = await gh(
-        `/repos/${owner}/${name}/pulls?state=open&head=${owner}:work-${i.number}&per_page=1`
-      )
-      issues.push({
-        number: i.number,
-        title: i.title,
-        html_url: i.html_url,
-        labels: i.labels,
-        labeledAt,
-        openPr: prs.length > 0
-      })
+      const c = await toCandidate(gh, repo, owner, i)
+      if (c) issues.push(c)
     }
     return staleWorkThis({ issues, recentRunIssues, canaryIssues, now })
   } catch (e) {
