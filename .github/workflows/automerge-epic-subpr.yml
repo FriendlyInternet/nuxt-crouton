@@ -332,11 +332,11 @@ jobs:
               } else {
                 // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
                 // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it).
-                let reviewSt = { kind: 'other' }
-                if (pr.base.ref.startsWith('epic/') && pr.head.ref.startsWith('work-')) {
+                let reviewSt = { kind: 'pending' }
+                if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
                   const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
