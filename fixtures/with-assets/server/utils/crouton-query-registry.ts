@@ -25,17 +25,22 @@
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  access?: () => Promise<any>
 }> = {
   mainGalleries: {
     getAll: () => import('~~/layers/main/collections/galleries/server/database/queries')
       .then(m => m.getAllMainGalleries),
     getByIds: () => import('~~/layers/main/collections/galleries/server/database/queries')
       .then(m => m.getMainGalleriesByIds),
+    access: () => import('~~/layers/main/collections/galleries/server/database/queries')
+      .then((m: any) => m.MainGalleriesAccess),
   },
   mainItems: {
     getAll: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getAllMainItems),
     getByIds: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getMainItemsByIds),
+    access: () => import('~~/layers/main/collections/items/server/database/queries')
+      .then((m: any) => m.MainItemsAccess),
   },
 }
