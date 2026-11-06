@@ -1,13 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 
-// One-tap staging sign-in per role (#3421).
-const STAGING_ROLES = [
-  { role: 'member', label: 'Member' },
-  { role: 'admin', label: 'Admin' },
-  { role: 'superadmin', label: 'Super admin' }
-]
-
 interface ToTestItem {
   kind: 'epic' | 'pr'
   number: number
@@ -70,19 +63,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
               <p class="text-xs font-semibold uppercase text-muted">Staging</p>
               <p v-if="!card.stagingUrl" class="text-sm text-muted">No staging URL configured.</p>
               <a v-else :href="card.stagingUrl" target="_blank" rel="noopener" class="block break-all text-sm text-primary">{{ card.stagingUrl }}</a>
-              <div v-if="card.hasSignIn && card.app !== 'status'" class="flex gap-2">
-                <UButton
-                  v-for="r in STAGING_ROLES"
-                  :key="r.role"
-                  size="sm"
-                  variant="solid"
-                  class="flex-1 justify-center"
-                  :label="r.label"
-                  :href="`${v.signIn}&role=${r.role}`"
-                  target="_blank"
-                />
-              </div>
-              <UButton v-else-if="v.signIn" block icon="i-lucide-log-in" label="Open and sign in" :href="v.signIn" target="_blank" />
+              <StagingSignIn :sign-in="v.signIn" :roles="card.hasSignIn && card.app !== 'status'" />
             </div>
 
             <div v-if="v.count" class="space-y-3">
@@ -93,19 +74,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   <a :href="`${REPO_URL}/pull/${p.pr}`" target="_blank" rel="noopener" class="text-sm text-primary">#{{ p.pr }}</a>
                 </div>
                 <p class="text-xs text-muted">Updated {{ day(p.updatedAt) }}</p>
-                <div v-if="card.hasSignIn && card.app !== 'status' && p.signIn" class="flex gap-2">
-                <UButton
-                  v-for="r in STAGING_ROLES"
-                  :key="r.role"
-                  size="sm"
-                  variant="outline"
-                  class="flex-1 justify-center"
-                  :label="r.label"
-                  :href="`${p.signIn}&role=${r.role}`"
-                  target="_blank"
-                />
-              </div>
-              <UButton v-else-if="p.signIn" block variant="outline" icon="i-lucide-log-in" label="Open and sign in" :href="p.signIn" target="_blank" />
+                <StagingSignIn :sign-in="p.signIn" :roles="card.hasSignIn && card.app !== 'status'" variant="outline" />
                 <ReplyButtons kind="pr" :number="p.pr" />
               </div>
               <div v-for="i in v.toTest" :key="`${i.kind}-${i.number}`" class="space-y-2 rounded-lg border border-default p-3">
