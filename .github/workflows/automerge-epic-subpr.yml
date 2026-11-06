@@ -162,11 +162,11 @@ jobs:
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
             const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-            const { decideLeafMerge, decideV1, mergeDecisionCheck, MERGE_DECISION, withoutMergeDecision, shouldEnableAuto, canMergeNow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideLeafMerge, decideV1, withoutMergeDecision, shouldEnableAuto, canMergeNow } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { isV1Base, v1Enabled } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
+            const { setAutoMerge, publishMergeDecision, makeMergeIo, isRateLimit } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/v1-merge-io.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
-            const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
             if (!shouldRunOnEvent(context.eventName, context.payload)) {
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
               return
@@ -191,89 +191,8 @@ jobs:
             }
 
             // Out of API allowance is not a per-PR failure: let the outer handler defer it.
-            const isRateLimit = (e) => e.status === 429 || String(e.response?.headers?.['x-ratelimit-remaining']) === '0' || /rate limit/i.test(e.message || '')
 
-            // #2904: two merges into the same base seconds apart — the second gets HTTP 405
-            // "Base branch was modified". Retry that (only that) a few times; any other error is final.
-            async function mergeWithRetry(pr, pull_number, tick = true) {
-              let merged = false
-              for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
-                try {
-                  await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
-                  merged = true
-                  core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
-                  // #3210 — tick "Merged" on the ticket's flow checklist (cosmetic; default-branch script).
-                  // v1 PRs are ticked by on-pr-close.yml instead (#3501), whoever merges them.
-                  if (tick) {
-                    try {
-                      const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
-                      const closes = issueFromPrBody(pr.body || '')
-                      if (closes) require('node:child_process').execFileSync('node',
-                        ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
-                        { env: { ...process.env, GH_TOKEN: process.env.FLOW_TOKEN, GITHUB_REPOSITORY: `${owner}/${repo}` }, stdio: 'inherit' })
-                    } catch (e) { core.warning(`flow checklist tick failed (non-fatal): ${e.message}`) }
-                  }
-                } catch (e) {
-                  const baseMoved = e.status === 405 && /base branch was modified/i.test(e.message || '')
-                  if (baseMoved && attempt < 3) {
-                    core.info(`merge #${pull_number}: base moved, retry ${attempt}/2 in 5s`)
-                    await new Promise(r => setTimeout(r, 5000))
-                    continue
-                  }
-                  if (isRateLimit(e)) throw e
-                  core.warning(`merge #${pull_number} failed: ${e.message}`)
-                  break
-                }
-              }
-              return merged
-            }
-
-            // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
-            async function okReplyNote({ pull_number, pr, go, reviewSt, prComments }) {
-              const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
-              const reply = chooseOkReply({ state: reviewSt, ownerOk: true, okBeforeFinal })
-              if (!reply) return
-              const marker = `<!-- build-ok-waiting:${reply.reason}:${pr.head.sha} -->`
-              if (prComments.some(c => (c.body || '').includes(marker))) return
-              await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                body: `${marker}\n<!-- pipeline-note -->\n${reply.text}\n\n<sub>🤖 agent pipeline (CI) · auto-merge (#3173)</sub>` })
-            }
-
-            // Shared-code pause (#339) announcement. `held` is the hold answer: {held, hasPkgs, hasWf}.
-            async function announceSharedHold({ pull_number, pr, held }) {
-              const sharedCode = held.held
-              // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
-              // on an epic branch, and without this guard it re-posted the identical "held for a
-              // human" comment every hour (observed twice, 7 minutes apart, on PR #2148) and
-              // would re-request review just as repeatedly. The label added below (first time
-              // only) is the durable "already held" marker for later sweeps to check.
-              const alreadyHeld = (pr.labels || []).some(l => l.name === 'status:needs-merge')
-              if (alreadyHeld) { core.info(`#${pull_number} already held for shared-code review — not re-announcing.`); return }
-              core.info(`#${pull_number} touches packages/ (${sharedCode.length} file(s)) — holding for a human.`)
-              // `status:needs-merge`, NOT `status:blocked` (#2083). The two holds ask for
-              // different things and used to share a label: a sign-off gate means "I asked
-              // you something and I'm waiting for a reply", this means "nothing to say —
-              // click merge". In a phone list view they were indistinguishable, so three
-              // PRs whose sign-off had been granted hours earlier still read as unanswered
-              // (#2039/#2041/#2044), and this guard's own "held for a human" comment landed
-              // under a label implying an open question.
-              try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
-              // #2520: no review request or @mention here — sub-PRs never notify the owner;
-              // only the epic→main PR and real blocking questions do.
-              const { hasPkgs, hasWf } = held
-              const what = hasPkgs && hasWf ? 'shared code under `packages/` and CI workflows under `.github/workflows/`'
-                : hasWf ? 'CI workflows under `.github/workflows/`' : 'shared code under `packages/`'
-              const why = hasWf
-                ? 'a workflow change never self-merges until you say so (#2442) — review it, then reply `ok` and it merges itself once green.'
-                : 'a change to `packages/` ripples across every consuming app (the `packages/` HARD GATE, #350) and it is not releasable by this path — review it, confirm `pnpm typecheck` across apps, then reply `ok` and it merges itself once green.'
-              const list = sharedCode.slice(0, 10).map(f => `- \`${f}\``).join('\n')
-              const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
-              await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                body: `<!-- pipeline-note -->\n⏸️ **Held for a human — this build PR changes ${what}.**\n\n`
-                  + `**Fix:** ${why}\n\n`
-                  + `<details><summary>held files (${sharedCode.length})</summary>\n\n${list}${more}\n</details>\n\n`
-                  + '<sub>🤖 agent pipeline (CI) · auto-merge shared-code guard (#339)</sub>' })
-            }
+            const { mergeWithRetry, okReplyNote, announceSharedHold } = makeMergeIo({ github, core, owner, repo, env: process.env })
 
             // Has REQUIRED_CHECK completed successfully for this SHA? Returns one of
             // 'success' | 'pending' | 'missing' so the caller can log why it declined.
@@ -347,7 +266,7 @@ jobs:
               if (v1Base && !v1 && pr.auto_merge) {
                 // Off switch: PIPELINE_V1=off turns auto-merge off on every open v1 PR, then today's path runs unchanged.
                 try {
-                  await github.graphql('mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }', { id: pr.node_id })
+                  await setAutoMerge(github, pr, 'disable')
                   core.info(`#${pull_number} v1 off — auto-merge switched off`)
                 } catch (e) {
                   if (isRateLimit(e)) throw e
@@ -458,15 +377,11 @@ jobs:
                   answer = ask(fl.map(f => f.filename))
                 }
                 core.info(`#${pull_number} v1 answer: ${answer.code} — ${answer.reason}`)
-                const payload = mergeDecisionCheck(answer)
-                const mine = rawRuns.filter(r => r.name === MERGE_DECISION && r.app?.slug === process.env.APP_SLUG).sort((a, b) => b.id - a.id)[0]
-                const same = mine && mine.status === payload.status && mine.conclusion === payload.conclusion && mine.output?.title === payload.output.title
-                if (same) core.info(`#${pull_number} '${MERGE_DECISION}' already says '${payload.output.title}'.`)
-                else if (mine && mine.status !== 'completed') await github.rest.checks.update({ owner, repo, check_run_id: mine.id, status: payload.status, conclusion: payload.conclusion, output: payload.output })
-                else await github.rest.checks.create({ owner, repo, head_sha: pr.head.sha, ...payload })   // newest run of a name counts
+                const wrote = await publishMergeDecision({ github, owner, repo, pr, rawRuns, appSlug: process.env.APP_SLUG, answer })
+                core.info(`#${pull_number} 'Merge decision' ${wrote}.`)
                 if (shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) {
                   try {
-                    await github.graphql('mutation($id: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: MERGE }) { clientMutationId } }', { id: pr.node_id })
+                    await setAutoMerge(github, pr, 'enable')
                     core.info(`#${pull_number} v1 auto-merge enabled.`)
                   } catch (e) {
                     if (isRateLimit(e)) throw e

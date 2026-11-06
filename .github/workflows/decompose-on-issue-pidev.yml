@@ -425,11 +425,7 @@ jobs:
             if [ -z "$EPIC_BRANCH" ]; then
               SLUG="$(gh issue view "$ISSUE" --repo "$REPO" --json title -q .title \
                 | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
-              # #3501: the owner's `pipeline:v1` label on the epic opts into the v1 branch shape epic/<n>--v1-<slug>.
-              VERSION=""
-              gh issue view "$ISSUE" --repo "$REPO" --json labels -q '.labels[].name' | grep -qx 'pipeline:v1' && VERSION=v1
-              EPIC_BRANCH="$(node --input-type=module -e "import { epicBranchName } from './scripts/lib/pipeline-version.mjs'; console.log(epicBranchName({ epic: process.argv[1], slug: process.argv[2], version: process.argv[3] }))" "$EPIC" "$SLUG" "$VERSION")"
-              echo "epic branch version: ${VERSION:-today}"
+              EPIC_BRANCH="$(node --input-type=module -e "import { epicBranchName } from './scripts/lib/pipeline-version.mjs'; console.log(epicBranchName({ epic: process.argv[1], slug: process.argv[2], version: process.argv[3] }))" "$EPIC" "$SLUG" "$(gh issue view "$ISSUE" --repo "$REPO" --json labels -q '.labels[].name' | grep -x 'pipeline:v1' | head -1 | sed 's/.*/v1/')")" # #3501: pipeline:v1 label -> epic/<n>--v1-<slug>
               git push origin "origin/main:refs/heads/${EPIC_BRANCH}" && echo "created epic branch ${EPIC_BRANCH}"
             else
               echo "reusing epic branch ${EPIC_BRANCH}"

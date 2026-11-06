@@ -116,3 +116,8 @@ test('packagesApproved {why, packages} labels every child with one pkg:* per pac
 test('packagesApproved object without packages is refused', () => {
   assert.throws(() => parseScaffoldPlan(PLAN({ packagesApproved: { why: 'x', packages: [] } })), PlanError)
 })
+
+test('v1LabelWarning: warns on pipeline:v1, silent otherwise (#3501)', () => {
+  assert.match(v1LabelWarning(['epic', 'pipeline:v1']), /pipeline:v1 is ignored/)
+  assert.equal(v1LabelWarning(['epic']), '')
+})
