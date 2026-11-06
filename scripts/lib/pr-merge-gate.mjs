@@ -30,35 +30,27 @@ const preflight = ({ baseRef, head, red, ciGate, mergeableState }) => {
   return null
 }
 
-// Leaf PR into main: only the owner's ok merges it; a base merge after the ok needs a fresh build review.
-function mainVerdict({ go, ownerHold, headReview, short, done }) {
-  if (!go?.go) return hold('no-ok', "waits for the owner's ok")
-  if (go.mergeSince && headReview?.kind !== 'other' && !okAfter(go, ownerHold)) {
-    return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
-  }
-  return done('owner ok')
-}
-
-// Leaf PR into an epic branch: build:approved (for this head) or an owner ok after a hold merges it.
-function epicVerdict({ labels, go, ownerHold, headReview, short, done }) {
-  const approved = labels.includes('build:approved')
-  if (approved && headReview?.kind !== 'other' && !okAfter(go, ownerHold)) {
-    return hold('head-unreviewed', `build:approved is for an older commit — waits for the build review of ${short}`)
-  }
-  if (approved) return done('reviewed')
-  if (okAfter(go, ownerHold)) return done(ownerHold.kind === 'needs-owner' ? 'owner ok after needs-owner' : 'owner ok after final hold')
-  return null
-}
-
 export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, firstRun = [], ciGate, mergeableState }) {
   const head = String(headRef)
   const blocked = preflight({ baseRef, head, red, ciGate, mergeableState })
   if (blocked) return blocked
   const names = firstRun.join(', ')
   if (firstRun.length && !go?.go) return hold('first-run-no-ok', `first-run check ${names} waits for the owner's ok`)
-  const done = (r) => ({ merge: true, code: 'merge', reason: firstRun.length ? `${r}; first-run check ${names} ignored after owner ok` : r, ...(firstRun.length ? { firstRun } : {}) })
-  const ctx = { baseRef, labels, go, ownerHold, headReview, short: String(headSha || '').slice(0, 8), done }
-  const verdict = baseRef === 'main' ? mainVerdict(ctx) : epicVerdict(ctx)
-  if (verdict) return verdict
+  const ok = (r) => ({ merge: true, code: 'merge', reason: firstRun.length ? `${r}; first-run check ${names} ignored after owner ok` : r, ...(firstRun.length ? { firstRun } : {}) })
+  const reviewedGo = headReview?.kind === 'other'
+  const short = String(headSha || '').slice(0, 8)
+  if (baseRef === 'main') {
+    if (!go?.go) return hold('no-ok', "waits for the owner's ok")
+    if (go.mergeSince && !reviewedGo && !okAfter(go, ownerHold)) {
+      return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
+    }
+    return ok('owner ok')
+  }
+  const approved = labels.includes('build:approved')
+  if (approved && !reviewedGo && !okAfter(go, ownerHold)) {
+    return hold('head-unreviewed', `build:approved is for an older commit — waits for the build review of ${short}`)
+  }
+  if (approved) return ok('reviewed')
+  if (okAfter(go, ownerHold)) return ok(ownerHold.kind === 'needs-owner' ? 'owner ok after needs-owner' : 'owner ok after final hold')
   return hold('no-review', "no 'build:approved' yet")
 }

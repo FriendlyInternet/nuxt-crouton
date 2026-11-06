@@ -45,7 +45,7 @@ export function classifyFirstRun({ messages = [], files = [] } = {}) {
   return { firstRun: true, reason: 'fails only because the PR adds the code it loads' }
 }
 
-// Names of the red check-runs that are first-run failures for this PR (#3470). I/O wrapper around
+// The red check-runs (matched by id — names repeat across workflows) that are first-run failures for this PR (#3470). I/O wrapper around
 // parseFirstRunError/classifyFirstRun; the workflow passes its octokit so no logic sits inline.
 async function readSource({ github, owner, repo }, path, ref) {
   try {
@@ -72,15 +72,25 @@ async function failureMessages({ github, owner, repo }, run) {
 
 export async function firstRunNames({ github, core, owner, repo, pr, redRuns, defaultBranch }) {
   const c = { github, owner, repo }
-  const names = []
+  const found = []
   let files = null
   for (const run of redRuns) {
     try {
       const messages = await failureMessages(c, run)
       if (!messages.length || !messages.every(m => parseFirstRunError(m))) continue
       files ??= await changedJsFiles(c, pr, defaultBranch)
-      if (classifyFirstRun({ messages, files }).firstRun) names.push(run.name)
+      if (classifyFirstRun({ messages, files }).firstRun) found.push(run)
     } catch (e) { core.warning(`first-run classify ${run.name}: ${e.message}`) }
   }
-  return names
+  return found
+}
+
+// One PR note per head commit when a merge went ahead over first-run checks (#3470).
+export async function noteFirstRunIgnored({ github, core, owner, repo, pull_number, sha, names }) {
+  const list = names.join(', '), mark = `<!-- first-run-ignored:${sha} -->`
+  core.info(`#${pull_number} first-run check ${list} ignored after owner ok`)
+  const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+  if (prior.some(c => (c.body || '').includes(mark))) return
+  await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+    body: `<!-- pipeline-note -->\n${mark}\nℹ️ Merged over first-run check(s) ${list} — they fail only because this PR adds the code they load.` })
 }
