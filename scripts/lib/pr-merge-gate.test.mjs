@@ -36,7 +36,7 @@ test('5. owner ok but blocked/dirty → no merge, reason names it', () => {
   }
 })
 test('6. epic-based PR needs build:approved, even with go', () => {
-  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, headReview: { kind: 'other' }, red: false, ciGate: 'success', mergeableState: 'clean' })
+  const e = (labels) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels, go: okGo, red: false, ciGate: 'success', mergeableState: 'clean' })
   assert.equal(e([]).merge, false)
   assert.equal(e(['build:approved']).merge, true)
 })
@@ -140,41 +140,18 @@ test('3428: go verdict, no build:approved label, owner ok → no merge', () => {
   assert.equal(d.merge, false)
 })
 
-// #3467 — a merge commit after the owner's ok keeps the ok but waits for a build review of the new head.
-// The API can't tell a clean merge from a conflict-resolving one, so both wait: the cost is one automatic review.
-const km = (date) => ({ parents: [{}, {}], commit: { committer: { date } }, files: ['a.ts'] })
-const SHA = '04bfeaa0aaaaaaaa'
-const mergedGo = () => goFor([c('ok', '2026-11-06T09:51:19Z')], [k('2026-11-06T09:12:00Z'), km('2026-11-06T11:13:00Z')])
-
-test('#3467 merge commit after ok, head unreviewed → head-unreviewed naming the SHA', () => {
-  const go = mergedGo()
-  assert.equal(go.go, true)
-  assert.equal(go.mergeSince, true)
-  const r = leaf({ go, headSha: SHA, headReview: { kind: 'pending' } })
+test('first-run A. owner ok + first-run red → merge, reason names it', () => {
+  const r = leaf({ firstRun: ['pr-comment'] })
+  assert.equal(r.merge, true)
+  assert.match(r.reason, /first-run check pr-comment ignored after owner ok/)
+})
+test('first-run B. no owner ok → held, even for build:approved on an epic base', () => {
+  const r = leaf({ firstRun: ['pr-comment'], go: { go: false } })
   assert.equal(r.merge, false)
-  assert.equal(r.code, 'head-unreviewed')
-  assert.match(r.reason, /04bfeaa0/)
+  assert.equal(r.code, 'first-run-no-ok')
+  const e = leaf({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], firstRun: ['automerge'], go: { go: false } })
+  assert.equal(e.merge, false)
 })
-test('#3467 same, after a go on the new head → merge with no fresh ok', () => {
-  assert.equal(leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'other' } }).merge, true)
-})
-test('#3467 no-go on the merged head → no merge', () => {
-  const r = leaf({ go: mergedGo(), headSha: SHA, headReview: { kind: 'round1' } })
-  assert.equal(r.merge, false)
-  assert.equal(r.code, 'head-unreviewed')
-})
-test('#3467 owner ok after a final hold on the merged head → merge', () => {
-  const go = { go: true, mergeSince: true, approvedAt: '2026-11-06T12:00:00Z' }
-  assert.equal(leaf({ go, headSha: SHA, headReview: { kind: 'final' }, ownerHold: { kind: 'final', at: '2026-11-06T11:30:00Z' } }).merge, true)
-})
-test('#3467 ok given after the merge commit → merge without a review', () => {
-  const go = goFor([c('ok', '2026-11-06T12:00:00Z')], [km('2026-11-06T11:13:00Z')])
-  assert.equal(go.mergeSince, false)
-  assert.equal(leaf({ go, headSha: SHA }).merge, true)
-})
-test('#3467 epic base: build:approved needs the head reviewed go', () => {
-  const e = (headReview) => decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], go: okGo, headSha: SHA, headReview, red: false, ciGate: 'success', mergeableState: 'clean' })
-  assert.equal(e({ kind: 'pending' }).merge, false)
-  assert.equal(e({ kind: 'pending' }).code, 'head-unreviewed')
-  assert.equal(e({ kind: 'other' }).merge, true)
+test('first-run C. a real red still wins over first-run', () => {
+  assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
 })
