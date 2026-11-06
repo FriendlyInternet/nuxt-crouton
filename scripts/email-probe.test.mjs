@@ -133,8 +133,10 @@ test('#3497 retry delays', () => {
 
 async function runSend(statuses) {
   let hits = 0
+  const origins = []
   const server = createServer((req, res) => {
     req.resume()
+    origins.push(req.headers.origin)
     const code = statuses[Math.min(hits, statuses.length - 1)]
     hits++
     res.statusCode = code
@@ -149,13 +151,14 @@ async function runSend(statuses) {
   child.stdout.on('data', d => (out += d))
   const code = await new Promise(r => child.on('close', r))
   server.close()
-  return { code, hits, out }
+  return { code, hits, out, origins, base: url.replace(/\/x$/, '') }
 }
 
 test('#3497 send end-to-end', async () => {
   const ok = await runSend([500, 500, 200])
   assert.equal(ok.code, 0)
   assert.equal(ok.hits, 3)
+  assert.deepEqual(ok.origins, [ok.base, ok.base, ok.base])
   const bad = await runSend([500])
   assert.equal(bad.code, 1)
   assert.match(bad.out, /body-500/)
