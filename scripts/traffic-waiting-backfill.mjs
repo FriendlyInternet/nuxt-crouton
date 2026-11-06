@@ -7,6 +7,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { handoffGuard } from './handoff-exec.mjs'
 
 const WAIT = '<!-- traffic-wait -->'
 const RELEASED = '<!-- traffic-released -->'
@@ -21,7 +22,7 @@ export function needsWaitingLabel(comments) {
 
 const gh = (...a) => JSON.parse(execFileSync('gh', a, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }) || 'null')
 
-function main() {
+async function main() {
   const apply = process.argv.includes('--apply')
   if (apply) {
     execFileSync('gh', ['label', 'create', LABEL, '--color', 'd93f0b', '--force',
@@ -35,9 +36,12 @@ function main() {
     if (!needsWaitingLabel(comments)) continue
     n++
     console.log(`${apply ? 'labelling' : 'would label'} #${it.number}`)
-    if (apply) execFileSync('gh', ['issue', 'edit', String(it.number), '--add-label', LABEL], { stdio: 'inherit' })
+    if (apply) {
+      await handoffGuard({ kind: 'label', issue: it.number, label: LABEL },
+        () => execFileSync('gh', ['issue', 'edit', String(it.number), '--add-label', LABEL], { stdio: 'inherit' }))
+    }
   }
   console.log(`${n} to label`)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main()
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

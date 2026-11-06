@@ -43,7 +43,6 @@ export const ALLOW = [
   ['weekly.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
-  ['traffic-waiting-backfill.mjs', '--add-label', 'one-off operator backfill of the traffic:waiting state label; not a stage start, re-run by hand if it fails'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
 
