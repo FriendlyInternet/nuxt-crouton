@@ -14,7 +14,7 @@ const TEXT = {
 export function chooseOkReply({ state, ownerOk, okBeforeFinal = false }) {
   if (!ownerOk) return null
   const kind = state?.kind
-  if (kind === 'final') return okBeforeFinal ? { reason: 'ok-again', text: TEXT['ok-again'] } : null
+  if (kind === 'final' || kind === 'needs-owner') return okBeforeFinal ? { reason: 'ok-again', text: TEXT['ok-again'] } : null
   if (kind === 'pending' || kind === 'round1' || kind === 'failed') return { reason: kind, text: TEXT[kind] }
   return null
 }

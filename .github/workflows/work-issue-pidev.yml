@@ -29,9 +29,8 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #
 # WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
-#   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
-#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
-#     `workflow_dispatch`, where the actor is the human dispatcher.
+#   • Piece 2 — BOT-ACTOR GUARD: retired (#3312) — label-router.yml's `if` (actor ==
+#     `nuxt-harness[bot]`) now carries it; this workflow is dispatch-only.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
@@ -45,13 +44,18 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
 # PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard now lives in label-router.yml;
+# on that path on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
   workflow_dispatch:
     inputs:
+      from_label:
+        description: "Set by label-router.yml (#3312): the run was started by a label, so post the done-note back on the issue."
+        required: false
+        default: ""
+        type: string
       issue:
         description: "Leaf issue number to implement (e.g. 660)."
         required: true
@@ -90,91 +94,16 @@ on:
         type: string
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
-  # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
-  # event but the job `if` gates to the EXACT `work-this` label, so a worker later adding
-  # `status:in-progress` does NOT re-fire this workflow (the #535 lesson).
-  issues:
-    types: [labeled]
+  # to a LEAF issue → label-router.yml dispatches this one-shot worker, which implements it and opens
+  # a PR. Only the router listens to `issues: labeled` (#3312), so a worker later adding
+  # `status:in-progress` does NOT re-fire anything (the #535 lesson).
 
 jobs:
-  # ── ROUTE (#2757, epic #2754) — plan first, or build directly? ─────────────────────────
-  # A `work-this` LABEL event on a bug / packages/ change / auth-sync-team code starts in PLAN
-  # mode: this job dispatches this workflow with mode=plan and tells `work-pi` to stand down.
-  # The plan reviewer (plan-review.yml, #2756) then labels `plan:approved` and plan-approved.yml
-  # dispatches the build. Chores and app-only tweaks, a manual dispatch, a revise round and an
-  # issue already carrying `plan:approved` all go straight to `work-pi`. The rules are
-  # .claude/plan-routing.json (labels `plan-first` / `no-plan` override).
-  route:
-    name: Route (plan first or build)
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: read
-    outputs:
-      build: ${{ steps.route.outputs.build }}
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          node-version: 22
-      - id: route
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          EVENT: ${{ github.event_name }}
-          ISSUE: ${{ github.event.issue.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # A dispatch (manual, revise, plan, build-from-plan) always runs as asked.
-          if [ "$EVENT" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          gh issue view "$ISSUE" --repo "$REPO" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/route-issue.txt"
-          LABELS="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
-          if echo ",$LABELS," | grep -q ',plan:approved,'; then
-            echo "issue #$ISSUE already carries plan:approved → build"
-            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
-          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
-            echo "issue #$ISSUE is an epic → splitter"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"decompose-on-issue-pidev.yml",inputs:{issue:($i|tostring),harness:"pi"}}')"
-            exit 0
-          fi
-          R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
-          echo "route: $R"
-          MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
-          if [ "$MODE" = "plan" ]; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),mode:"plan"}}')"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
+  # Routing (epic → splitter, plan-first, or build) now lives in label-router.yml (#3312); this
+  # workflow is dispatch-only and every run builds (or plans, per `mode`).
   work-pi:
-    needs: route
-    # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
-    # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
-    # labels (status:in-progress) mid-run (#535). Anything else → no run.
-    if: |
-      needs.route.outputs.build == 'true' && (
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this'))
+    # Dispatch-only (#3312): label-router.yml turns a `work-this` label into a dispatch.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
     # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
@@ -218,22 +147,6 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
-
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
-      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      # The decision is the pure, unit-tested `botActorAllowed` (WS4 of #1685); this step is I/O
-      # only — so the SHIPPED guard IS the tested function. Contract: scripts/pipeline-loop-guard.test.mjs.
-      # (Placed after checkout so the script is available; the token minted above is unused if we exit.)
-      - name: Bot-actor guard
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        env:
-          ACTOR: ${{ github.actor }}
-        run: node scripts/pipeline-loop-guard.mjs bot-guard "$ACTOR"
 
       # ── CLAIM GUARD (#1890) — is someone already on this issue? ──────────────────────
       # Five workflows stamped `status:in-progress` and NOTHING read it, so two runners could
@@ -470,6 +383,8 @@ jobs:
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
           # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
           cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
+          # Revise outcome (#3432): counts a PR-description edit as a revision.
+          cp scripts/lib/revise-outcome.mjs "$RUNNER_TEMP/revise-outcome.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -520,6 +435,9 @@ jobs:
           git checkout -f -B "${REV_BRANCH}" "origin/${REV_BRANCH}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
+          # PR description fingerprint BEFORE pi runs (#3432); the finish step compares.
+          REV_BODY_KEY="$(gh pr list --head "${REV_BRANCH}" --state open --json body -q '.[0].body // ""' | node "$RUNNER_TEMP/revise-outcome.mjs" key || true)"
+          echo "rev_body_key=${REV_BODY_KEY}" >> "$GITHUB_OUTPUT"
           # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
           # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
           # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
@@ -670,7 +588,7 @@ jobs:
             fi
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
-            # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
+            # #2757: BUILD FROM AN APPROVED PLAN — label-router.yml passes the plan comment id.
             # The worker implements exactly that plan, and records the plan-review ledger row.
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
@@ -874,6 +792,7 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          REV_BODY_KEY: ${{ steps.revise.outputs.rev_body_key }}
           # #2757: the approved plan this build implements (linked from the PR body).
           APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
@@ -1079,7 +998,23 @@ jobs:
               echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
-              if [ "${REPLIED:-0}" -gt 0 ]; then
+              # A PR-description edit is a revision too (#3432): fingerprint the body now vs before pi ran.
+              BODY_NOW="$(gh pr view "${RPR:-0}" --json body -q .body 2>/dev/null | node "$RUNNER_TEMP/revise-outcome.mjs" key 2>/dev/null || true)"
+              BODY_CHANGED=false
+              [ -n "${REV_BODY_KEY:-}" ] && [ -n "$BODY_NOW" ] && [ "$BODY_NOW" != "$REV_BODY_KEY" ] && BODY_CHANGED=true
+              LAST_V="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -o 'build-review-verdict:[a-z-]*' | tail -1 | sed 's/.*://' || true)"
+              ROUND_N="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -c '<!-- build-review-verdict:no-go -->' || true)"
+              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "{\"bodyChanged\":${BODY_CHANGED},\"replied\":$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false),\"verdict\":\"${LAST_V}\",\"round\":${ROUND_N:-0}}")"
+              NOTE="$(echo "$OUT" | jq -r .note)"; REREVIEW="$(echo "$OUT" | jq -r .rereview)"
+              if [ "$NOTE" = "body" ]; then
+                echo "revise: PR description updated (#3432)"
+                echo "revised=1" >> "$GITHUB_OUTPUT"
+                if [ "$REREVIEW" = "true" ]; then TAIL="a second build review runs on the same commit."; else TAIL="nothing else to review."; fi
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3432)_\n\n📝 **PR description updated from [your comment](%s)** — no code change; %s' "$FEEDBACK_FROM" "$TAIL")" 2>&1 | tail -1 || true
+                if [ "$REREVIEW" = "true" ]; then
+                  node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$RPR" '{issue:$i,workflow:"build-review.yml",inputs:{pr:($i|tostring),reason:"body"}}')" || echo "::warning::could not dispatch the body re-review (#3432)"
+                fi
+              elif [ "$NOTE" = "reply" ]; then
                 echo "revise: answered on the PR without a code change"
                 echo "revised=1" >> "$GITHUB_OUTPUT"
               else
@@ -1511,7 +1446,7 @@ jobs:
           # do" from "the harness crashed mid-finish", and defaults to blaming the ISSUE.
           FINISH_OUTCOME: ${{ steps.finish.outcome }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
-          TRIGGER: ${{ github.event_name }}
+          TRIGGER: ${{ inputs.from_label == 'true' && 'issues' || github.event_name }}
           # #2446: a revision stacks on the EXISTING PR, so there is no fresh PR for the checks below
           # to find — they read it as "produced nothing" and paged the owner on a successful run.
           # The finish step already proved the outcome (a pushed commit or a reply) and said so on
@@ -1889,7 +1824,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [route, work-pi]
+    needs: [work-pi]
     if: ${{ always() && needs.work-pi.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
