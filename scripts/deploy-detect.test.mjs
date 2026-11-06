@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA,
-  deriveWatchPaths
+  deriveWatchPaths, loadApps
 } from './deploy-detect.mjs'
 
 // A stand-in for the injected git: declared-resolvable refs + canned diffs.
@@ -78,45 +78,68 @@ test('a workflow-only change matches no app → empty matrix (legitimately, any=
   assert.equal(r.any, false)
 })
 
-// ── computeMatrix: pull_request (rung split #1297) ────────────────────────────
-test('a PR deploys ONLY the app whose own paths changed, ignoring shared-package changes', () => {
+// ── computeMatrix: pull_request (#3475 — same rule as push) ───────────────────
+test('#3475: a PR fans out to consumers of a changed shared package, like a push', () => {
   const r = computeMatrix({
     event: 'pull_request',
-    changedFiles: ['apps/triage/app/x.vue', 'packages/crouton-sales/y.ts'], // sales would match fanfare on a push
+    changedFiles: ['apps/triage/app/x.vue', 'packages/crouton-sales/y.ts'],
     apps: APPS
   })
-  assert.deepEqual(names(r), ['triage']) // NOT fanfare — PRs don't fan out on shared pkgs
+  assert.deepEqual(names(r).sort(), ['fanfare', 'triage'])
 })
 
-// ── computeMatrix: pull_request + UI-sign-off hold (#2140) ────────────────────
-test('#2140: a UI-sign-off-held PR (fullWatchPr) matches the full watchPaths, like a push', () => {
-  const r = computeMatrix({
-    event: 'pull_request',
-    changedFiles: ['packages/crouton-sales/app/x.vue'],
-    apps: APPS,
-    fullWatchPr: true
-  })
-  assert.deepEqual(names(r), ['fanfare'])
-  assert.equal(r.any, true)
-  assert.equal(r.include[0].environment, 'staging') // still staging-only (#318), never production
+test('#3475: pocs + PR + a shared UI piece picks gallery even if its watchPaths do not match', () => {
+  const pocs = [{ app: 'gallery', watchPaths: ['pocs/gallery/**'] }, { app: 'pins', watchPaths: ['pocs/pins/**'] }]
+  const r = computeMatrix({ event: 'pull_request', workspace: 'pocs', changedFiles: ['packages/crouton-x/app/components/Foo.vue'], apps: pocs })
+  assert.deepEqual(names(r), ['gallery'])
 })
 
-test('#2140: without the marker, the same PR still deploys nothing (#1297 unaffected)', () => {
-  const r = computeMatrix({
-    event: 'pull_request',
-    changedFiles: ['packages/crouton-sales/app/x.vue'],
-    apps: APPS,
-    fullWatchPr: false
-  })
-  assert.deepEqual(names(r), [])
+test('#3475: pocs dispatch is always staging', () => {
+  const r = computeMatrix({ event: 'workflow_dispatch', workspace: 'pocs', dispatchApp: 'fanfare', dispatchEnv: 'production', apps: APPS })
+  assert.equal(r.include[0].environment, 'staging')
 })
 
-test('#2140: fullWatchPr does not affect push or workflow_dispatch (pull_request-only knob)', () => {
-  const push = computeMatrix({ event: 'push', changedFiles: ['packages/crouton-sales/x.ts'], apps: APPS, fullWatchPr: true })
-  assert.deepEqual(names(push), ['fanfare']) // same as the non-marker push test above
+test('#3475: pnpm-lock.yaml PR picks every opted-in entry', () => {
+  const r = computeMatrix({ event: 'pull_request', changedFiles: ['pnpm-lock.yaml'], apps: APPS })
+  assert.equal(r.include.length, APPS.length)
+})
 
-  const dispatch = computeMatrix({ event: 'workflow_dispatch', dispatchApp: 'fanfare', dispatchEnv: '', apps: APPS, fullWatchPr: true })
-  assert.equal(dispatch.include[0].environment, 'staging') // unchanged — #318 whitelist still governs
+test('#3475: deriveWatchPaths honours root', () => {
+  assert.deepEqual(deriveWatchPaths({ app: 'x', root: 'pocs' }), ['pocs/x/**', 'pnpm-lock.yaml'])
+})
+
+// ── real repo graph (#3475) ───────────────────────────────────────────────────
+const realApps = loadApps('apps')
+const realPocs = loadApps('pocs')
+const pick = (list, files, event = 'pull_request') =>
+  names(computeMatrix({ event, workspace: list === realPocs ? 'pocs' : 'apps', changedFiles: files, apps: list })).sort()
+
+test('#3475: a crouton-sales-only PR previews kassa and no other app', () => {
+  assert.deepEqual(pick(realApps, ['packages/crouton-sales/app/x.vue']), ['kassa'])
+})
+test('#3475: the same PR previews only POCs that use crouton-sales', () => {
+  assert.deepEqual(pick(realPocs, ['packages/crouton-sales/app/components/x.vue']), ['gallery'])
+})
+test('#3475: a crouton-bookings PR previews only bookings consumers', () => {
+  assert.deepEqual(pick(realApps, ['packages/crouton-bookings/x.ts']), ['velo'])
+  assert.deepEqual(pick(realPocs, ['packages/crouton-bookings/x.ts']), ['booking-demo', 'gallery'])
+})
+test('#3475: an apps/velo-only PR previews velo only', () => {
+  assert.deepEqual(pick(realApps, ['apps/velo/app/x.vue']), ['velo'])
+  assert.deepEqual(pick(realPocs, ['apps/velo/app/x.vue']), [])
+})
+test('#3475: a pocs/pins-only change previews pins only', () => {
+  for (const ev of ['pull_request', 'push']) {
+    assert.deepEqual(pick(realPocs, ['pocs/pins/app/app.vue'], ev), ['pins'])
+    assert.deepEqual(pick(realApps, ['pocs/pins/app/app.vue'], ev), [])
+  }
+})
+test('#3475: every POC watches its own pocs/<name>/** folder', () => {
+  assert.ok(realPocs.length > 0)
+  for (const p of realPocs) {
+    assert.equal(p.watchPaths[0], `pocs/${p.app}/**`)
+    assert.ok(!p.watchPaths.some(w => w.startsWith('apps/')))
+  }
 })
 
 // ── computeMatrix: workflow_dispatch ──────────────────────────────────────────
