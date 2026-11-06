@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isDone, requiredCheckState, liveCheckRuns } from './required-check-state.mjs'
+import { isDone, requiredCheckState, liveCheckRuns, needsLiveFilter } from './required-check-state.mjs'
 
 const R = (o) => ({ name: 'CI Gate', started_at: '2026-11-05T16:00:00Z', ...o })
 
@@ -79,4 +79,26 @@ test('live: a push run does not replace a pull_request run', () => {
   const out = liveCheckRuns(runs, [W(1, 1, 1, '2026-10-28T10:00:00Z'), W(2, 1, 2, '2026-10-28T11:00:00Z', 'push')])
   assert.equal(out.length, 2)
   assert.equal(red(out), true)
+})
+
+// ---- needsLiveFilter (#3453) ----
+test('needsLiveFilter: all green → false', () =>
+  assert.equal(needsLiveFilter([C('a', 'success', 1), C('b', 'neutral', 1), C('c', 'skipped', 1)]), false))
+test('needsLiveFilter: only pending → false', () =>
+  assert.equal(needsLiveFilter([{ name: 'a', status: 'in_progress', conclusion: null, completed_at: null }]), false))
+test('needsLiveFilter: any red conclusion → true', () => {
+  for (const c of ['failure', 'cancelled', 'timed_out', 'action_required', 'stale'])
+    assert.equal(needsLiveFilter([C('a', 'success', 1), C('b', c, 1)]), true, c)
+})
+test('needsLiveFilter: #3429 stuck in_progress with cancelled verdict → true', () =>
+  assert.equal(needsLiveFilter([{ name: 'a', status: 'in_progress', conclusion: 'cancelled', completed_at: '2026-11-05T16:41:46Z' }]), true))
+test('needsLiveFilter: empty / non-array → false', () => {
+  assert.equal(needsLiveFilter([]), false)
+  assert.equal(needsLiveFilter(null), false)
+})
+test('needsLiveFilter: #2950 fixture still takes the read path and merges', () => {
+  assert.equal(needsLiveFilter(fixture()), true)
+  const live = liveCheckRuns(fixture(), [wfA, wfB])
+  assert.equal(requiredCheckState(live, 'CI Gate'), 'success')
+  assert.equal(red(live), false)
 })

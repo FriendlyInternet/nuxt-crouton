@@ -152,7 +152,7 @@ jobs:
             // #3229: `labeled` fires for every label; only `build:approved` is worth a run.
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
-            const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+            const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
             const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
@@ -171,7 +171,7 @@ jobs:
             // Any RED check for this SHA? (failed check-run or failed commit status.)
             // #3429: GitHub can leave a finished run `in_progress` with a conclusion — isDone handles it.
             async function isRed(ref, runs) {
-              const RED = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
+              const RED = RED_CONCLUSIONS
               if (runs.some(r => isDone(r) && RED.includes(r.conclusion))) return true
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
@@ -282,11 +282,17 @@ jobs:
               // One check-run list per PR, shared by every reader below (#3306: fewer API calls).
               // #2950: drop check-runs of a CI run a newer run on this commit replaced (a cancelled
               // first run leaves reds that no later run overwrites). Same rule feeds every reader.
+              // #3453: the workflow-runs read only matters when a finished red/cancelled check exists.
+              const rawRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 })
               let wfRuns = []
-              try {
-                wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
-              } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
-              const checkRuns = liveCheckRuns(await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }), wfRuns)
+              const readWf = needsLiveFilter(rawRuns)
+              if (readWf) {
+                try {
+                  wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, head_sha: pr.head.sha, per_page: 100 })
+                } catch (e) { core.warning(`#${pull_number}: workflow runs for ${pr.head.sha.slice(0, 8)}: ${e.message}`) }
+              }
+              core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
+              const checkRuns = liveCheckRuns(rawRuns, wfRuns)
               const red = await isRed(pr.head.sha, checkRuns)
 
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
