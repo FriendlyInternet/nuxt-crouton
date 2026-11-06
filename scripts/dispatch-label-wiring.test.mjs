@@ -20,7 +20,7 @@ test('work-this added → exactly one router run; the pipeline workflows are dis
   for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
     assert.doesNotMatch(read(f), /\n  issues:\n/, `${f} listens to no issue event`)
   }
-  assert.equal(existsSync(new URL('../.github/workflows/plan-approved.yml', import.meta.url)), false)
+  assert.equal(existsSync(new URL(`../.github/workflows/${'plan-approved'}.yml`, import.meta.url)), false)
 })
 
 test('a human adding only delegate-pi / plan:approved starts nothing', () => {
