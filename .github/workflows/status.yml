@@ -116,8 +116,15 @@ jobs:
             async function ciState(ref) {
               let success = 0, pending = 0, failure = 0, cancelled = 0
               const failing = [] // #1909 — the ping must say WHICH checks, not just how many
-              const runs = await github.paginate(github.rest.checks.listForRef,
+              let runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
+              // #2950: ignore check-runs of a CI run a newer run on this commit replaced.
+              try {
+                const { liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+                const wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
+                  { owner, repo, head_sha: ref, per_page: 100 })
+                runs = liveCheckRuns(runs, wfRuns)
+              } catch (e) { core.warning(`live check-runs for ${ref}: ${e.message}`) }
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
@@ -196,7 +203,8 @@ jobs:
               const all = st.failing || []
               const act = redNoteAction({ scope: statusScope({ head: pr.head.ref, base: pr.base.ref }), failing: all, existingForSha: !!existing })
               if (act === 'skip') return
-              const causes = causesOf(all)
+              const rest = causesOf(all)
+              const causes = rest.length ? rest : all // #2950: never "0 failing checks"
               const names = causes.slice(0, 5)
               const more = causes.length - names.length
               const list = names.length
