@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, notOnMainHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -143,6 +143,17 @@ describe('loginPlan', () => {
   it('main for an unknown app is a not-on-main 404', () => {
     expect(loginPlan(null, 'x', 'main', true)).toMatchObject({ kind: 'page', status: 404 })
   })
+  it('not-on-main page text says it only has PR test builds', () => {
+    const p = loginPlan(null, 'x', 'main', true)
+    expect(p).toMatchObject({ kind: 'page', status: 404 })
+    const html = (p as { html: string }).html
+    expect(html).toBe(notOnMainHtml('x'))
+    expect(html).toContain('not on main yet — it only has PR test builds')
+  })
+  it('PR key for an app with a staging address redirects to the PR preview, not staging', () => {
+    expect(loginPlan({ stagingUrl: 'https://x', hasSignIn: true }, 'a', 'pr7', true, { gone: false, url: 'https://pr7.example.dev' }))
+      .toEqual({ kind: 'redirect', base: 'https://pr7.example.dev', signIn: true })
+  })
   it('main with an address is unchanged; opt-out or no secret skips sign-in', () => {
     expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: true }, 'a', 'main', true)).toEqual({ kind: 'redirect', base: 'https://s', signIn: true })
     expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: false }, 'a', 'main', true)).toMatchObject({ signIn: false })
@@ -151,5 +162,15 @@ describe('loginPlan', () => {
   it('gone / none PR previews map to 410 / 404', () => {
     expect(loginPlan(null, 'a', 'pr1', true, { gone: true, pr: 1 })).toMatchObject({ status: 410 })
     expect(loginPlan(null, 'a', 'pr1', true, { gone: 'none', pr: 1 })).toMatchObject({ status: 404 })
+  })
+})
+
+describe('decidePrLogin for an app not on main', () => {
+  it('devframe-spike pr3188 resolves from the PR own comments', async () => {
+    const get = (async (path: string) => {
+      if (path.includes('/pulls/3188')) return { data: { state: 'open' }, error: null }
+      return { data: [{ body: '<!-- deploy-staging:devframe-spike -->\npreview for this PR: https://devframe-spike-pr3188.example.dev' }], error: null }
+    }) as never
+    expect(await decidePrLogin(get, 'devframe-spike', 'pr3188')).toEqual({ gone: false, url: 'https://devframe-spike-pr3188.example.dev' })
   })
 })

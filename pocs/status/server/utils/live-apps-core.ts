@@ -45,7 +45,7 @@ export function noStagingHtml(app: string): string {
 
 /** 404 page for the `main` sign-in of an app that is not on main yet (only its PR previews exist). */
 export function notOnMainHtml(app: string): string {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not on main yet</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Not on main yet</h1><p><strong>${esc(app)}</strong> is not on main yet. Open it from a PR's preview link.</p></body>`
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not on main yet</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Not on main yet</h1><p><strong>${esc(app)}</strong> is not on main yet — it only has PR test builds. Open it from a PR's preview link.</p></body>`
 }
 
 export interface LoginTarget { stagingUrl: string, hasSignIn: boolean }
