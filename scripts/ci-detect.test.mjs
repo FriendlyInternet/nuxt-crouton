@@ -52,6 +52,6 @@ test('infra (scripts, lockfile, ci.yml) is full; push to main is all apps', () =
 })
 
 test('docs-only: stage none', () => {
-  const r = run(['docs/x.md'], { baseRef: 'epic/1-x' })
+  const r = run(['docs/x.md'])
   assert.equal(r.stage, 'none')
 })

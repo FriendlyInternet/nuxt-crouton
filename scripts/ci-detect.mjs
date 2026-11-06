@@ -53,7 +53,7 @@ function affectedApps({ files, stage, event, apps, readPkg }) {
  * PURE. `apps` = [{ name, pkg }] for every apps/* dir; `readPkg(shortName)` returns a package's
  * package.json (null if unknown) — injected so the dependency walk stays testable.
  */
-export function detect({ files = [], event = '', baseRef = '', apps = [], readPkg = () => null, model }) {
+export function detect({ files = [], event = '', apps = [], readPkg = () => null, model }) {
   const stage = files.map(f => stageOf(f, model)).reduce((hi, s) => RANK[s] > RANK[hi] ? s : hi, 'none')
   const packages = topNames(files, 'packages/')
 
@@ -80,7 +80,6 @@ function main() {
     const out = detect({
       files,
       event: process.env.EVENT || '',
-      baseRef: process.env.BASE_REF || '',
       apps,
       readPkg: n => readJson(`packages/${n}/package.json`),
       model
