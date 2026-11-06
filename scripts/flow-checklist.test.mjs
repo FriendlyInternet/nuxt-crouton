@@ -101,7 +101,7 @@ test('run-name carries the issue number', () => {
 
 test('"Owner ok" is ticked only from a real owner approval, never the plan:approved label (#3210)', () => {
   const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
-  assert.ok(!/flow-checklist\.mjs[^\n]*\bok\b/.test(wf('plan-approved.yml')), 'plan-approved.yml must not tick ok')
+  assert.ok(!/flow-checklist\.mjs[^\n]*\bok\b/.test(wf('label-router.yml')), 'label-router.yml must not tick ok')
   const oc = wf('on-comment.yml')
   assert.ok(oc.indexOf("'ok', '--link'") > oc.indexOf('isApproval(body)'), 'ok tick sits after the isApproval check')
 })
