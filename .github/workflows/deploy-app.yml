@@ -962,9 +962,8 @@ jobs:
           SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
-          # Attach the review login to the SEEDED demo team (#832) so the advertised
-          # login lands in the team the content seed populated (test1 → seed:org:test1),
-          # not an empty fresh org. Staging-only step → production is untouched.
+          # Attach the review login to the SEEDED demo team (#832) (test1 → seed:org:test1), not an empty
+          # fresh org. Staging-only step → production is untouched.
           # #1369: never advertise creds for a seed that failed (no `|| true`); warn loudly and
           # emit NO login — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
@@ -996,8 +995,7 @@ jobs:
             PR_NUM="${{ github.event.pull_request.number }}"
             [ -z "$PR_NUM" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
           fi
-          # Member + super-admin logins next to the admin one (#3421): best-effort, never fails the deploy.
-          KEY="$KEY" SEED_DB="$SEED_DB" node scripts/seed-review-roles.mjs
+          KEY="$KEY" SEED_DB="$SEED_DB" node scripts/seed-review-roles.mjs # #3421 member + super-admin logins, best-effort
 
       # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
       # The screenshot used to be captured inline here (#2173), so a miss could only be retried

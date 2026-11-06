@@ -314,7 +314,7 @@ async function main() {
     const decision = signUpDecision({ ok: !!res?.ok, status: res?.status, code, threw: !!threw, attempt, maxAttempts })
     if (decision === 'ok') {
       signedUp = true
-      info(`signed up ${email}`)
+      info(`signed up the ${role} login.`)
       break
     }
     if (decision === 'retry') {
@@ -324,7 +324,7 @@ async function main() {
       continue
     }
     if (decision === 'exists') {
-      info(`user ${email} already exists — already seeded, reusing.`)
+      info(`the ${role} user already exists — already seeded, reusing.`)
       // Re-establish a session for the org check below.
       let { res: si } = await post('/api/auth/sign-in/email', { email, password })
       if (!si.ok && (args.db || args.sqlite)) {
@@ -338,7 +338,7 @@ async function main() {
         }
       }
       if (!si.ok) {
-        warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+        warn(`existing ${role} user still refuses the current password — NOT advertising this login.`)
         process.exit(1)
       }
       break
@@ -376,7 +376,7 @@ async function main() {
     const sql = memberUpsertSql({ memberId, userId, orgId, role, createdAt })
     try {
       execSeedSql(args, sql)
-      info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
+      info(`attached the ${role} login to seeded team "${args.seedTeam}" (${orgId}).`)
       // Make the seeded team the review account's ONLY membership so a fresh browser
       // login resolves it as the ACTIVE org. Without this, an `autoCreateOnSignup` app
       // also mints a personal workspace that wins as trySetDefaultOrg's "first org",
@@ -388,7 +388,7 @@ async function main() {
         stdio: 'inherit',
         env: process.env
       })
-      info(`pruned ${email}'s other memberships — seeded team is now sole/active.`)
+      info(`pruned the ${role} login's other memberships — seeded team is now sole/active.`)
       const { res: sa } = await post('/api/auth/organization/set-active', { organizationId: orgId })
       if (sa.ok) {
         info('set seeded team active for the session.')
@@ -405,6 +405,10 @@ async function main() {
     }
   } else if (args.seedTeam && (args.db || args.sqlite) && !userId) {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
+    if (!mayCreateFreshTeam(role)) {
+      warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
+      process.exit(1)
+    }
   }
 
   if (!mayCreateFreshTeam(role) && !hasActiveOrg) {
@@ -440,11 +444,20 @@ async function main() {
   if (args.db || args.sqlite) {
     try {
       execSeedSql(args, markReviewerVerifiedSql(email))
-      info(`marked ${email} verified.`)
-      execSeedSql(args, superAdminSql(email, role === 'superadmin'))
-      info(`site-admin flag set for the ${role} login.`)
-    } catch (e) {
-      warn(`could not mark ${email} verified: ${e?.message || e} — feedback pins will be refused.`)
+      info(`marked the ${role} login verified.`)
+    } catch {
+      warn(`could not mark the ${role} login verified (SQL step failed) — feedback pins will be refused.`)
+    }
+    // The site-admin flag IS the role: a failed write must not advertise the login (a super admin
+    // without the flag, or a member that kept an old one).
+    if (role !== 'admin') {
+      try {
+        execSeedSql(args, superAdminSql(email, role === 'superadmin'))
+        info(`site-admin flag set for the ${role} login.`)
+      } catch {
+        warn(`could not set the site-admin flag for the ${role} login (SQL step failed) — NOT advertising it.`)
+        process.exit(1)
+      }
     }
   }
 

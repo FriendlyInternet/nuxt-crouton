@@ -245,3 +245,14 @@ test('#3421 only the admin login may fall back to its own fresh team (it would o
   assert.equal(mayCreateFreshTeam('member'), false)
   assert.equal(mayCreateFreshTeam('superadmin'), false)
 })
+
+test('#3421 the CLI prints no review address and fails a member/superadmin it cannot seed (no DB flag write)', async () => {
+  const { spawnSync } = await import('node:child_process')
+  const email = 'review+velo-main-member@example.com'
+  // Unreachable URL: sign-up exhausts retries and exits non-zero without advertising a login.
+  const r = spawnSync('node', ['scripts/seed-review-login.mjs', '--url', 'http://127.0.0.1:9', '--email', email,
+    '--password', 'pw', '--role', 'member', '--seed-team', 'test1', '--db', 'x'],
+  { encoding: 'utf8', env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } })
+  assert.notEqual(r.status, 0)
+  assert.ok(!(r.stdout + r.stderr).includes(email))
+})

@@ -26,6 +26,7 @@ function main(env = process.env) {
   for (const role of EXTRA_ROLES) {
     const { email, password } = roleLogin(secret, app, key, role)
     console.log(`::add-mask::${password}`)
+    console.log(`::add-mask::${email}`)
     const r = spawnSync('node', [fileURLToPath(new URL('./seed-review-login.mjs', import.meta.url)),
       '--url', url, '--email', email, '--password', password, '--role', role, '--seed-team', 'test1', '--db', db], { stdio: 'inherit' })
     const ok = r.status === 0
