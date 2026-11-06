@@ -6,7 +6,8 @@ name: Deploy POCs (preview)
 # committing pocs/<name>/deploy.config.json (which the bot CAN push, it's under pocs/).
 #
 # Triggers:
-#   • pull_request touching pocs/**  → deploy each CHANGED, opted-in POC (auto preview).
+#   • pull_request touching pocs/** or packages/** → deploy each opted-in POC whose own
+#                                      folder or dependent package changed (auto preview).
 #   • push to main touching pocs/**  → redeploy each CHANGED, opted-in POC's staging Worker
 #                                      (trunk = staging, like deploy-apps.yml; #2896).
 #   • workflow_dispatch(app)         → deploy one named POC (the bot can call this via the
@@ -24,7 +25,7 @@ on:
   pull_request:
     paths:
       - 'pocs/**'
-      # A shared UI piece changed → deploy the gallery so the PR gets a review link (#2462).
+      # A shared package changed → preview only the POCs that depend on it (#2462, #3475).
       - 'packages/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-pocs.yml'
