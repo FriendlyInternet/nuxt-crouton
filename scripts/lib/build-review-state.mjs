@@ -6,7 +6,8 @@
 //   final   — rejected twice, held for the owner
 //   round1  — rejected once, sent back to the worker
 //   failed  — the review itself failed to run
-//   other   — go / needs-owner
+//   needs-owner — the reviewer asked the owner for a call (an `ok` after it merges, #3428)
+//   other   — go
 //   pending — no state comment for this SHA yet
 import { markerValue } from './marker.mjs'
 export const FINAL_MARKER = '<!-- build-review-final -->'
@@ -32,11 +33,13 @@ const isFinal = (body) => body.includes(FINAL_MARKER) || firstHeading(body).star
 const kindOf = (c, failed) => {
   if (failed) return 'failed'
   const body = c.body || ''
-  if (markerValue(body, VERDICT_RE) !== 'no-go') return 'other'
+  const verdict = markerValue(body, VERDICT_RE)
+  if (verdict === 'needs-owner') return 'needs-owner'
+  if (verdict !== 'no-go') return 'other'
   return isFinal(body) ? 'final' : 'round1'
 }
 
-/** @returns {{kind: 'final'|'round1'|'failed'|'other'|'pending', at?: string}} */
+/** @returns {{kind: 'final'|'round1'|'failed'|'needs-owner'|'other'|'pending', at?: string}} */
 export function reviewState({ comments = [], headSha, bots = [] }) {
   const mine = comments
     .filter(c => isReviewerBot(c, bots))

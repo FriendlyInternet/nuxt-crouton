@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateBookingsEmaillog } from '../../../../database/queries'
+import { updateBookingsEmaillog, assertBookingsEmaillogReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import type { BookingsEmaillog } from '../../../../../types'
 
@@ -12,6 +12,8 @@ export default defineEventHandler(async (event) => {
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
 
   const body = await readBody<Partial<BookingsEmaillog>>(event)
+
+  await assertBookingsEmaillogReferences(team.id, body)
 
   return await updateBookingsEmaillog(emaillogId, team.id, user.id, {
     bookingId: body.bookingId,

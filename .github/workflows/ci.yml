@@ -50,7 +50,6 @@ jobs:
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
-      base_is_epic: ${{ steps.filter.outputs.base_is_epic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +64,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
@@ -140,7 +142,7 @@ jobs:
       - name: Run MCP Server tests
         run: pnpm --filter @fyit/crouton-mcp test
 
-  # A POC has no app typecheck sweep and no AI reviews (#2894): this is its one check.
+  # A POC has no app typecheck sweep and no AI reviews (#2894): typecheck plus the POC's own tests (#3315) are its checks.
   poc-typecheck:
     name: Typecheck POC
     needs: changes
@@ -162,7 +164,7 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
-      - name: Typecheck each changed POC
+      - name: Typecheck and test each changed POC
         env:
           POCS: ${{ needs.changes.outputs.pocs }}
           NODE_OPTIONS: '--max-old-space-size=8192'
@@ -171,12 +173,24 @@ jobs:
           for poc in $(echo "$POCS" | jq -r '.[]'); do
             dir="pocs/$poc"
             [ -f "$dir/package.json" ] || { echo "skip $poc (deleted)"; continue; }
-            if ! jq -e '.scripts.typecheck' "$dir/package.json" >/dev/null; then
-              echo "skip $poc (no typecheck script)"; continue
+            has_tc=0; has_test=0
+            jq -e '.scripts.typecheck' "$dir/package.json" >/dev/null && has_tc=1
+            jq -e '.scripts.test' "$dir/package.json" >/dev/null && has_test=1
+            if [ "$has_tc" = 0 ] && [ "$has_test" = 0 ]; then
+              echo "skip $poc (no typecheck or test script)"; continue
             fi
             echo "::group::$poc"
             [ -f "$dir/nuxt.config.ts" ] && (cd "$dir" && npx nuxt prepare)
-            pnpm --filter "./$dir" typecheck
+            if [ "$has_tc" = 1 ]; then
+              pnpm --filter "./$dir" typecheck
+            else
+              echo "skip $poc typecheck (no typecheck script)"
+            fi
+            if [ "$has_test" = 1 ]; then
+              pnpm --filter "./$dir" test
+            else
+              echo "skip $poc tests (no test script)"
+            fi
             echo "::endgroup::"
           done
 
@@ -319,7 +333,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
@@ -584,6 +601,11 @@ jobs:
             | tar -xz -C /tmp/actionlint
           /tmp/actionlint/actionlint -version
           /tmp/actionlint/actionlint -color -shellcheck= -pyflakes=
+      # actionlint does not check GitHub's 21,000-char expression limit (#3382): a ${{ }}-bearing
+      # string is rewritten to format(…), doubling every { } ', and over the limit the WHOLE file is
+      # rejected (every dispatch silently dropped). Node core only.
+      - name: Expression-length limit
+        run: node scripts/workflow-expr-limit.mjs
 
   fallow-audit:
     if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
