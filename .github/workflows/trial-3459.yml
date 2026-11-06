@@ -44,6 +44,9 @@ jobs:
           if has app-merge; then
             if GH_TOKEN=$APP_TOKEN gh pr merge $PR --merge 2>err.txt; then log "App direct merge: MERGED"; else log "App direct merge refused: $(cat err.txt)"; fi
           fi
+          if has app-rest-merge; then
+            if GH_TOKEN=$APP_TOKEN gh api -X PUT repos/$GH_REPO/pulls/$PR/merge -f merge_method=merge --jq '"App REST merge: merged=\(.merged) \(.message)"' 2>err.txt | tee -a "$GITHUB_STEP_SUMMARY"; then :; else log "App REST merge refused: $(cat err.txt)"; fi
+          fi
           if has open-approve-pr; then
             for n in 1 2; do
               GH_TOKEN=$APP_TOKEN gh pr create --base trial/base-approve --head trial/approve-p$n --title "Trial 3459 item 7 — P$n: owner taps Approve here" --body "Throwaway PR for #3459 item 7, opened by the Harness App so the owner can approve it. Do not merge by hand." 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
