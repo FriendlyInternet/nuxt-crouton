@@ -849,28 +849,13 @@ jobs:
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
-          PROBE="$GITHUB_WORKSPACE/scripts/email-probe.mjs"
-          FAILED=""
-          if [ "$MODE" = "magic-link" ]; then
-            BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
-            OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/sign-in/magic-link" "$BODY") || FAILED=$(echo "$OUT" | tail -1)
+          if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
             echo "$OUT"
-          else
-            PW=$(openssl rand -hex 12)
-            SU=$(jq -n --arg e "$PROBE_EMAIL" --arg p "$PW" --arg n "email-probe" '{email:$e, password:$p, name:$n}')
-            OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/sign-up/email" "$SU") || FAILED=$(echo "$OUT" | tail -1)
-            echo "$OUT"
-            if [ -z "$FAILED" ]; then
-              RB=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, redirectTo:"/"}')
-              OUT=$(node "$PROBE" send "$DEPLOY_URL/api/auth/request-password-reset" "$RB") || FAILED=$(echo "$OUT" | tail -1)
-              echo "$OUT"
-            fi
-          fi
-          if [ -n "$FAILED" ]; then
-            echo "::error::email probe: request failed: $FAILED"
-            echo "✗ email probe (${APP}): request failed: ${FAILED}" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"
+            echo "✗ email probe (${APP}): request failed: $(echo "$OUT" | tail -1)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          echo "$OUT"
           REASON="no send recorded"
           for _ in 1 2 3 4 5 6; do
             sleep 5

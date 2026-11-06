@@ -7,6 +7,7 @@
  *   … wrangler d1 execute … --json         | node scripts/email-probe.mjs verdict   (exit 0/1, reason on stdout)
  */
 import { readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const MODES = ['password-reset', 'magic-link']
@@ -130,6 +131,15 @@ async function send(url, body) {
   return 1
 }
 
+/** Whole request phase for one mode: exit 0 when every request landed, else 1 (reason = last stdout line). */
+async function requests(mode, base, email) {
+  const post = (path, o) => send(`${base}/api/auth/${path}`, JSON.stringify(o))
+  if (mode === 'magic-link') return post('sign-in/magic-link', { email, callbackURL: '/' })
+  const pw = randomBytes(12).toString('hex')
+  if (await post('sign-up/email', { email, password: pw, name: 'email-probe' }) !== 0) return 1
+  return post('request-password-reset', { email, redirectTo: '/' })
+}
+
 function readStdin() {
   try {
     return readFileSync(0, 'utf8')
@@ -161,8 +171,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === 'send') {
     process.exit(await send(arg, process.argv[4] ?? '{}'))
   }
+  else if (cmd === 'requests') {
+    process.exit(await requests(arg, process.argv[4], process.argv[5]))
+  }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | send <url> <json>')
+    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | send <url> <json> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }
