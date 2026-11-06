@@ -37,6 +37,7 @@ test('hasEmailKey', () => {
 test('verdict', () => {
   const wrap = results => JSON.stringify([{ results, success: true }])
   assert.deepEqual(verdict(wrap([{ status: 'sent', error: null }])), { ok: true })
+  assert.deepEqual(verdict(wrap([{ status: 'delivered', error: null }])), { ok: true })
   assert.deepEqual(verdict(wrap([{ status: 'failed', error: 'boom' }])), { ok: false, reason: 'boom' })
   assert.deepEqual(verdict(wrap([{ status: 'pending', error: null }])), { ok: false, reason: 'never confirmed' })
   assert.deepEqual(verdict(wrap([])), { ok: false, reason: 'no send recorded' })

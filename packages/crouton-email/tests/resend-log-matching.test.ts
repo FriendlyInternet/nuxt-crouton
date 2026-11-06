@@ -18,6 +18,15 @@ vi.mock('../../crouton-auth/server/utils/database', () => ({
   tables: { authEmailLog }
 }))
 
+vi.mock('../server/utils/senders', () => ({
+  sendVerificationLink: vi.fn(),
+  sendPasswordReset: vi.fn(),
+  sendTeamInvite: vi.fn(),
+  sendMagicLink: vi.fn(async () => ({ success: true, id: 're_real_1' }))
+}))
+vi.mock('../server/utils/template-renderer', () => ({ getEmailBrandConfig: vi.fn() }))
+vi.mock('../server/utils/resolve-email-settings', () => ({ resolveEmailOverrides: vi.fn(async () => undefined) }))
+
 const handlers = new Map<string, Array<(p: any) => Promise<void>>>()
 const nitroApp = {
   hooks: {
@@ -54,6 +63,7 @@ beforeAll(async () => {
   vi.stubGlobal('createError', (o: any) => Object.assign(new Error(o.statusMessage), o))
   const logger = (await import('../../crouton-auth/server/plugins/auth-email-logger')).default as any
   logger(nitroApp)
+  ;((await import('../server/plugins/auth-email-listener')).default as any)(nitroApp)
   webhook = (await import('../server/api/webhooks/resend.post')).default as any
 })
 
@@ -86,5 +96,14 @@ describe('Resend webhook → auth_email_log', () => {
     await deliver('email.bounced', 'resend-a', 'shared@example.com')
     await deliver('email.delivered', 'resend-a', 'shared@example.com')
     expect(row('team-a').status).toBe('bounced')
+  })
+
+  it('real path: listener send stores Resend id on the log row, then the webhook flips sent → delivered', async () => {
+    await nitroApp.hooks.callHook('crouton:auth:email', { type: 'magic-link', to: 'real@example.com', url: 'https://x.test/l' })
+    const logged = sqlite.prepare("select id, status, providerId from auth_email_log where recipientEmail = 'real@example.com'").get() as any
+    expect(logged.status).toBe('sent')
+    expect(logged.providerId).toBe('re_real_1')
+    await deliver('email.delivered', 're_real_1', 'real@example.com')
+    expect(row(logged.id).status).toBe('delivered')
   })
 })
