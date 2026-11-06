@@ -7,6 +7,7 @@
  *   … wrangler d1 execute … --json         | node scripts/email-probe.mjs verdict   (exit 0/1, reason on stdout)
  */
 import { readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const MODES = ['password-reset', 'magic-link']
@@ -64,9 +65,79 @@ export function verdict(d1Json) {
   }
   const row = Array.isArray(rows) ? rows[0] : undefined
   if (!row) return { ok: false, reason: 'no send recorded' }
-  if (row.status === 'sent') return { ok: true }
+  if (row.status === 'sent' || row.status === 'delivered') return { ok: true }
   if (row.status === 'failed') return { ok: false, reason: row.error || 'failed' }
   return { ok: false, reason: 'never confirmed' }
+}
+
+/** #3497 — backoff while a fresh preview Worker still answers 5xx (new auth secret not live yet). */
+export const PROBE_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 15000, 15000]
+
+export function retryDelays(env = {}) {
+  const raw = env.EMAIL_PROBE_RETRY_DELAYS_MS
+  if (typeof raw !== 'string' || raw.trim() === '') return PROBE_RETRY_DELAYS_MS
+  const parts = raw.split(',').map(x => x.trim())
+  if (!parts.every(x => /^\d+$/.test(x))) return PROBE_RETRY_DELAYS_MS
+  return parts.map(Number)
+}
+
+/** 'ok' | 'retry' | 'give-up' for one request attempt (attempt is 1-based). */
+export function requestDecision({ status, threw, attempt, maxAttempts }) {
+  const more = attempt < maxAttempts
+  if (threw) return more ? 'retry' : 'give-up'
+  if (status >= 200 && status < 300) return 'ok'
+  if (status === 422) return 'ok'
+  if (status >= 500) return more ? 'retry' : 'give-up'
+  return 'give-up'
+}
+
+async function send(url, body) {
+  const delays = retryDelays(process.env)
+  const maxAttempts = delays.length + 1
+  let last = ''
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let status = 0
+    let threw = false
+    let text = ''
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(30000),
+      })
+      status = res.status
+      text = (await res.text()).slice(0, 200)
+    }
+    catch (e) {
+      threw = true
+      text = String(e?.message || e).slice(0, 200)
+    }
+    last = threw ? 'network error' : String(status)
+    const d = requestDecision({ status, threw, attempt, maxAttempts })
+    if (d === 'ok') {
+      console.log(`HTTP ${status}`)
+      return 0
+    }
+    if (d === 'retry') {
+      const wait = delays[attempt - 1]
+      console.log(`→ HTTP ${last} (Worker not ready?) ${text} — retrying in ${wait / 1000}s (attempt ${attempt}/${maxAttempts})`)
+      await new Promise(r => setTimeout(r, wait))
+      continue
+    }
+    console.log(`HTTP ${last} ${text}`)
+    return 1
+  }
+  return 1
+}
+
+/** Whole request phase for one mode: exit 0 when every request landed, else 1 (reason = last stdout line). */
+async function requests(mode, base, email) {
+  const post = (path, o) => send(`${base}/api/auth/${path}`, JSON.stringify(o))
+  if (mode === 'magic-link') return post('sign-in/magic-link', { email, callbackURL: '/' })
+  const pw = randomBytes(12).toString('hex')
+  if (await post('sign-up/email', { email, password: pw, name: 'email-probe' }) !== 0) return 1
+  return post('request-password-reset', { email, redirectTo: '/' })
 }
 
 function readStdin() {
@@ -97,8 +168,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(v.ok ? 'sent' : v.reason)
     process.exit(v.ok ? 0 : 1)
   }
+  else if (cmd === 'send') {
+    process.exit(await send(arg, process.argv[4] ?? '{}'))
+  }
+  else if (cmd === 'requests') {
+    process.exit(await requests(arg, process.argv[4], process.argv[5]))
+  }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | verdict')
+    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | send <url> <json> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }
