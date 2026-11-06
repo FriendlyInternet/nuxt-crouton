@@ -50,7 +50,6 @@ jobs:
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
-      base_is_epic: ${{ steps.filter.outputs.base_is_epic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +64,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
@@ -331,7 +333,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
