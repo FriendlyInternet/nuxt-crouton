@@ -601,6 +601,11 @@ jobs:
             | tar -xz -C /tmp/actionlint
           /tmp/actionlint/actionlint -version
           /tmp/actionlint/actionlint -color -shellcheck= -pyflakes=
+      # actionlint does not check GitHub's 21,000-char expression limit (#3382): a ${{ }}-bearing
+      # string is rewritten to format(…), doubling every { } ', and over the limit the WHOLE file is
+      # rejected (every dispatch silently dropped). Node core only.
+      - name: Expression-length limit
+        run: node scripts/workflow-expr-limit.mjs
 
   fallow-audit:
     if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
