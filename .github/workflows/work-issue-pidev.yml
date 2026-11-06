@@ -29,9 +29,8 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #
 # WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
-#   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
-#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
-#     `workflow_dispatch`, where the actor is the human dispatcher.
+#   • Piece 2 — BOT-ACTOR GUARD: retired (#3312) — label-router.yml's `if` (actor ==
+#     `nuxt-harness[bot]`) now carries it; this workflow is dispatch-only.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
@@ -45,8 +44,8 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
 # PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard now lives in label-router.yml;
+# on that path on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
@@ -149,16 +148,6 @@ jobs:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
 
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
-      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      # The decision is the pure, unit-tested `botActorAllowed` (WS4 of #1685); this step is I/O
-      # only — so the SHIPPED guard IS the tested function. Contract: scripts/pipeline-loop-guard.test.mjs.
-      # (Placed after checkout so the script is available; the token minted above is unused if we exit.)
       # ── CLAIM GUARD (#1890) — is someone already on this issue? ──────────────────────
       # Five workflows stamped `status:in-progress` and NOTHING read it, so two runners could
       # build the same issue: #1478 started 8 min after #1473 closed its issue, and #1889 opened
