@@ -174,7 +174,10 @@ jobs:
             let requiredCheckStateFn = null
             let liveCheckRuns = runs => runs // #2950: identity until the helper loads
             try {
-              ({ isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`))
+              const m = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
+              isDone = m.isDone ?? isDone
+              requiredCheckStateFn = m.requiredCheckState ?? requiredCheckStateFn
+              liveCheckRuns = m.liveCheckRuns ?? liveCheckRuns
             } catch (e) {
               core.warning(`scripts/lib/required-check-state.mjs not loadable (${e.code || e.message}); using the status-only rule.`)
             }
