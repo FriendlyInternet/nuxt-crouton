@@ -47,6 +47,10 @@ jobs:
           if has app-rest-merge; then
             if GH_TOKEN=$APP_TOKEN gh api -X PUT repos/$GH_REPO/pulls/$PR/merge -f merge_method=merge --jq '"App REST merge: merged=\(.merged) \(.message)"' 2>err.txt | tee -a "$GITHUB_STEP_SUMMARY"; then :; else log "App REST merge refused: $(cat err.txt)"; fi
           fi
+          N=$(echo "$TITLE" | sed -n 's/.*\[merge-pr-\([0-9]*\)\].*/\1/p')
+          if [ -n "$N" ]; then
+            if GH_TOKEN=$APP_TOKEN gh api -X PUT repos/$GH_REPO/pulls/$N/merge -f merge_method=merge --jq '"App REST merge of #'"$N"': merged=\(.merged)"' 2>err.txt | tee -a "$GITHUB_STEP_SUMMARY"; then :; else log "App REST merge of #$N refused: $(cat err.txt)"; fi
+          fi
           if has open-approve-pr; then
             for n in 1 2; do
               GH_TOKEN=$APP_TOKEN gh pr create --base trial/base-approve --head trial/approve-p$n --title "Trial 3459 item 7 — P$n: owner taps Approve here" --body "Throwaway PR for #3459 item 7, opened by the Harness App so the owner can approve it. Do not merge by hand." 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
