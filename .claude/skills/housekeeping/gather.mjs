@@ -357,8 +357,17 @@ async function stuckPRs(openPRs) {
 }
 
 // ── Forgotten work-this labels (#3018) ───────────────────────────────────────
-async function staleWorkThisLabels(openIssues) {
+async function staleWorkThisLabels() {
   try {
+    // Own query: the shared openIssues list is one 100-item page and would miss older tickets.
+    const openIssues = []
+    for (let page = 1; page <= 10; page++) {
+      const r = await gh(
+        `/repos/${OWNER}/${NAME}/issues?state=open&labels=work-this&per_page=100&page=${page}`
+      )
+      openIssues.push(...r.filter((x) => !x.pull_request))
+      if (r.length < 100) break
+    }
     const canaryIssues = new Set(
       JSON.parse(readFileSync('.github/canaries.json', 'utf8'))
         .canaries.map((c) => c.issue)
@@ -511,7 +520,7 @@ async function gather() {
     idlePRs,
     epicPrsNoCi,
     okedPrsConflicting,
-    staleWorkThis: await staleWorkThisLabels(openIssues)
+    staleWorkThis: await staleWorkThisLabels()
   }
 }
 
