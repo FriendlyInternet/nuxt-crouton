@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { isEmailApp, probeMode, probeAddress, hasEmailKey, verdict } from './email-probe.mjs'
+import { isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders } from './email-probe.mjs'
 
 test('isEmailApp', () => {
   const velo = JSON.parse(readFileSync(new URL('../apps/velo/deploy.config.json', import.meta.url), 'utf8'))
@@ -133,8 +133,15 @@ test('#3497 retry delays', () => {
 
 async function runSend(statuses) {
   let hits = 0
+  const origins = []
   const server = createServer((req, res) => {
     req.resume()
+    origins.push(req.headers.origin)
+    // mimic better-auth: sec-fetch-* without Origin is refused
+    if (req.headers['sec-fetch-mode'] && !req.headers.origin) {
+      res.statusCode = 403
+      return res.end('MISSING_OR_NULL_ORIGIN')
+    }
     const code = statuses[Math.min(hits, statuses.length - 1)]
     hits++
     res.statusCode = code
@@ -148,8 +155,9 @@ async function runSend(statuses) {
   let out = ''
   child.stdout.on('data', d => (out += d))
   const code = await new Promise(r => child.on('close', r))
+  const port = Number(new URL(url).port)
   server.close()
-  return { code, hits, out }
+  return { code, hits, out, origins, port }
 }
 
 test('#3497 send end-to-end', async () => {
@@ -162,6 +170,18 @@ test('#3497 send end-to-end', async () => {
   const four = await runSend([400])
   assert.equal(four.code, 1)
   assert.equal(four.hits, 1)
+})
+
+test('#3514 probeHeaders sets Origin to the target origin', () => {
+  assert.deepEqual(probeHeaders('https://velo.pmcp.dev/api/auth/sign-up/email'), { 'Content-Type': 'application/json', Origin: 'https://velo.pmcp.dev' })
+  assert.equal(probeHeaders('https://velo-pr-12.x.workers.dev/a/b').Origin, 'https://velo-pr-12.x.workers.dev')
+  assert.equal(probeHeaders('http://127.0.0.1:1234/x').Origin, 'http://127.0.0.1:1234')
+})
+
+test('#3514 send carries Origin end-to-end', async () => {
+  const r = await runSend([200])
+  assert.equal(r.code, 0)
+  assert.equal(r.origins[0], `http://127.0.0.1:${r.port}`)
 })
 
 // #3505 — a probed app must have a real sender, else crouton-email falls back to example.com.
