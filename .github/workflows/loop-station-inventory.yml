@@ -84,7 +84,8 @@ jobs:
         if: steps.append.outputs.appended == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: bash scripts/data-pr.sh publish loop-station-history "chore(loop-station): record context-budget inventory" writeups/loop-station/history.jsonl
+        run: |
+          bash scripts/data-pr.sh publish loop-station-history "chore(loop-station): record context-budget inventory" writeups/loop-station/history.jsonl
 
       - name: Upload record artifact
         if: always()

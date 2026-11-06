@@ -112,7 +112,8 @@ jobs:
         if: steps.append.outputs.appended == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: bash scripts/data-pr.sh publish loop-station-usage "chore(loop-station): record weekly usage rollup" writeups/loop-station/usage.jsonl
+        run: |
+          bash scripts/data-pr.sh publish loop-station-usage "chore(loop-station): record weekly usage rollup" writeups/loop-station/usage.jsonl
 
       - name: Upload record artifact
         if: always()
@@ -214,7 +215,8 @@ jobs:
       - name: Open auto-merge data PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: bash scripts/data-pr.sh publish loop-station-findings "chore(loop-station): record accountability findings" writeups/loop-station/findings.jsonl
+        run: |
+          bash scripts/data-pr.sh publish loop-station-findings "chore(loop-station): record accountability findings" writeups/loop-station/findings.jsonl
 
   advisor:
     needs: findings

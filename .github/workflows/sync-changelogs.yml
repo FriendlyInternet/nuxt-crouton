@@ -76,4 +76,5 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: bash ../scripts/data-pr.sh publish changelog "chore(docs): sync changelog releases" data/changelog-releases.json
+        run: |
+          bash ../scripts/data-pr.sh publish changelog "chore(docs): sync changelog releases" data/changelog-releases.json
