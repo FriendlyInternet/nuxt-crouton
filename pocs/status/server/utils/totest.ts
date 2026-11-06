@@ -27,53 +27,67 @@ async function stagingUrl(event: H3Event, app: string | null): Promise<string | 
 
 export type ToTestResult = { data: Array<ToTestItem & { stagingUrl: string | null, mergedAt?: string | null }>, error: string | null }
 
+type ToTestEntry = ToTestItem & { stagingUrl: string | null, mergedAt?: string | null }
+type PullsResult = Awaited<ReturnType<typeof ghFetch<GhPull[]>>>
+
+// Epics rarely carry an app label: fall back to the files of a merged PR that references the epic.
+async function appFromLinkedPulls(event: H3Event, epicNumber: number, getPulls: () => Promise<PullsResult>): Promise<string | null> {
+  const ref = new RegExp(`#${epicNumber}(?!\\d)`)
+  const linked = ((await getPulls()).data ?? []).filter(x => x.merged_at && x.body && ref.test(x.body))
+  for (const p of linked) {
+    const files = await ghFetch<Array<{ filename: string }>>(event, `/repos/${REPO}/pulls/${p.number}/files?per_page=100`)
+    const app = appFromFiles((files.data ?? []).map(f => f.filename))
+    if (app) return app
+  }
+  return null
+}
+
+async function epicItem(event: H3Event, i: GhIssue, getPulls: () => Promise<PullsResult>): Promise<ToTestEntry> {
+  const section = extractHowToTest(i.body)
+  const app = appFromLabels(i.labels) ?? await appFromLinkedPulls(event, i.number, getPulls)
+  const url = await stagingUrl(event, app)
+  const steps = extractSteps(section)
+  return {
+    kind: 'epic', number: i.number, title: i.title, url: i.html_url, app,
+    what: firstParagraph(i.body), steps, to: extractTargetPath(steps, url), stagingUrl: url
+  }
+}
+
+async function pullItem(event: H3Event, p: GhPull): Promise<ToTestEntry | null> {
+  const section = extractHowToTest(p.body)
+  if (!section) return null
+  const [files, comments] = await Promise.all([
+    ghFetch<Array<{ filename: string }>>(event, `/repos/${REPO}/pulls/${p.number}/files?per_page=100`),
+    ghFetch<Array<{ body?: string, user?: { login?: string } }>>(event, `/repos/${REPO}/issues/${p.number}/comments?per_page=100`)
+  ])
+  const app = appFromFiles((files.data ?? []).map(f => f.filename))
+  const steps = extractSteps(section)
+  if (!app || hasOwnerOk(comments.data ?? [], OWNER_LOGIN) || isGithubOnly(steps)) return null
+  const url = await stagingUrl(event, app)
+  return {
+    kind: 'pr', number: p.number, title: p.title, url: p.html_url, app,
+    what: firstParagraph(p.body), steps, to: extractTargetPath(steps, url), stagingUrl: url, mergedAt: p.merged_at
+  }
+}
+
 export async function listToTest(event: H3Event): Promise<ToTestResult> {
-  const items: Array<ToTestItem & { stagingUrl: string | null, mergedAt?: string | null }> = []
+  const items: ToTestEntry[] = []
   const errors: string[] = []
 
-  let pullsCache: Awaited<ReturnType<typeof ghFetch<GhPull[]>>> | null = null
+  let pullsCache: PullsResult | null = null
   const getPulls = async () => pullsCache ??= await ghFetch<GhPull[]>(event, `/repos/${REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=30`)
 
   const epics = await ghFetch<GhIssue[]>(event, `/repos/${REPO}/issues?labels=status:to-test&state=all&per_page=50`)
   if (epics.error) errors.push(epics.error)
   for (const i of (epics.data ?? []).filter(x => !x.pull_request)) {
-    const section = extractHowToTest(i.body)
-    let app = appFromLabels(i.labels)
-    if (!app) {
-      // Fallback: the files of a merged PR that references this epic.
-      const ref = new RegExp(`#${i.number}(?!\\d)`)
-      const linked = ((await getPulls()).data ?? []).filter(x => x.merged_at && x.body && ref.test(x.body))
-      for (const p of linked) {
-        const files = await ghFetch<Array<{ filename: string }>>(event, `/repos/${REPO}/pulls/${p.number}/files?per_page=100`)
-        app = appFromFiles((files.data ?? []).map(f => f.filename))
-        if (app) break
-      }
-    }
-    const url = await stagingUrl(event, app)
-    const steps = extractSteps(section)
-    items.push({
-      kind: 'epic', number: i.number, title: i.title, url: i.html_url, app,
-      what: firstParagraph(i.body), steps, to: extractTargetPath(steps, url), stagingUrl: url
-    })
+    items.push(await epicItem(event, i, getPulls))
   }
 
   const pulls = await getPulls()
   if (pulls.error) errors.push(pulls.error)
   for (const p of (pulls.data ?? []).filter(x => x.merged_at)) {
-    const section = extractHowToTest(p.body)
-    if (!section) continue
-    const [files, comments] = await Promise.all([
-      ghFetch<Array<{ filename: string }>>(event, `/repos/${REPO}/pulls/${p.number}/files?per_page=100`),
-      ghFetch<Array<{ body?: string, user?: { login?: string } }>>(event, `/repos/${REPO}/issues/${p.number}/comments?per_page=100`)
-    ])
-    const app = appFromFiles((files.data ?? []).map(f => f.filename))
-    const steps = extractSteps(section)
-    if (!app || hasOwnerOk(comments.data ?? [], OWNER_LOGIN) || isGithubOnly(steps)) continue
-    const url = await stagingUrl(event, app)
-    items.push({
-      kind: 'pr', number: p.number, title: p.title, url: p.html_url, app,
-      what: firstParagraph(p.body), steps, to: extractTargetPath(steps, url), stagingUrl: url, mergedAt: p.merged_at
-    })
+    const item = await pullItem(event, p)
+    if (item) items.push(item)
   }
 
   return { data: items, error: errors.length ? errors.join('; ') : null }
