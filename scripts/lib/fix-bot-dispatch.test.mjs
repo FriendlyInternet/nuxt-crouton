@@ -114,3 +114,12 @@ test('redPingHeading: epic → main wording', async () => {
   assert.ok(all.includes("won't merge"))
   assert.ok(!all.includes('sub-PR'))
 })
+
+test('redPingHeading: work-* → main keeps the pipeline wording', async () => {
+  const { redPingHeading } = await import('./fix-bot-dispatch.mjs')
+  const h = redPingHeading({ who: 'owner', owner: 'pmcp', reason: 'the auto-fix stands down while the PR is blocked', base: 'main', head: 'work-3006', count: 1, list: '`A`' })
+  const all = h.heading + h.needed
+  assert.ok(all.includes('pipeline PR'))
+  assert.ok(all.includes('stands down'))
+  assert.ok(!all.includes('epic PR'))
+})

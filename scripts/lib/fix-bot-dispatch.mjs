@@ -86,7 +86,7 @@ export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, li
       needed: `**What's needed:** see the auto-fix "gave up" note — that one is yours.`,
     }
   }
-  if (base === 'main') {
+  if (base === 'main' && head.startsWith('epic/')) {
     return {
       heading: `🔴 **@${owner} — CI failed on this epic PR** (${n}): ${list}.`,
       needed: `**What's needed:** this epic PR won't merge while CI is red. Push a fix to \`${head}\`, ` +
