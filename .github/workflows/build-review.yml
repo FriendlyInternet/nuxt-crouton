@@ -1,4 +1,5 @@
 name: Build review (independent reviewer — pi.dev)
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}"
 
 # #2777 (epic #2754) — when a pipeline PR (head `work-<N>`) turns green, the same top-model
 # reviewer as the plan review (the `review` tier of .claude/pipeline-models.json) reads the
@@ -23,6 +24,9 @@ on:
       pr:
         description: 'PR number to (re-)review'
         required: true
+      reason:
+        description: "'body' = re-review because only the PR description changed (#3432)"
+        required: false
 
 concurrency:
   group: build-review-${{ github.event.inputs.pr || github.event.workflow_run.head_branch }}
@@ -35,6 +39,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -42,6 +48,18 @@ jobs:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
+
+      # Allowance at run start (#3251): GET /rate_limit does not count against it. The final
+      # record-outcome job reads it again; the difference is this run's approximate API spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
 
       # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
       # write token above stays on the trusted steps only.
@@ -69,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           INPUT_PR: ${{ github.event.inputs.pr }}
+          INPUT_REASON: ${{ github.event.inputs.reason }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
@@ -80,9 +99,11 @@ jobs:
           echo "$J"
           REF="$(echo "$J" | jq -r .headRefName)"; BASE="$(echo "$J" | jq -r .baseRefName)"
           SHA="$(echo "$J" | jq -r .headRefOid)"
-          # Only a pipeline PR: head work-<N>, into an epic branch, authored by the bot (#2985).
+          # Only a pipeline PR: head work-<N>, into an epic branch or main, authored by the bot (#2985, #3218).
           if ! echo "$J" | node scripts/build-review-pick.mjs; then
-            echo "not a ready pipeline PR — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+            echo "not a ready pipeline PR — skip"
+            case "$REF" in work-*) echo "::notice::build review skipped #$PR (base $BASE): not a ready pipeline PR (draft, closed, non-bot author or unexpected base)"; echo "build review skipped #$PR (base \`$BASE\`): not a ready pipeline PR" >> "$GITHUB_STEP_SUMMARY";; esac
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # CI Gate must have reported success for this exact head.
           if [ -z "$INPUT_PR" ]; then
@@ -90,12 +111,22 @@ jobs:
             if [ "$OK" = 0 ]; then echo "CI Gate not green for $SHA yet — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           fi
           # One review per head commit: a CI re-run on the same sha does not re-spend the model.
-          if gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-sha:$SHA -->"; then
+          # A description-only edit (#3432) gets one re-review per distinct body, not per commit.
+          BODY_KEY=""
+          if [ "$INPUT_REASON" = "body" ]; then
+            BODY_KEY="$(gh pr view "$PR" --json body -q .body | node scripts/lib/revise-outcome.mjs key)"
+          fi
+          if [ -n "$BODY_KEY" ]; then
+            if gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-body:$SHA:$BODY_KEY -->"; then
+              echo "already reviewed this description on $SHA — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          elif gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-sha:$SHA -->"; then
             echo "already reviewed $SHA — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           {
             echo "skip=false"; echo "pr=$PR"; echo "sha=$SHA"; echo "base=$BASE"
             echo "issue=${REF#work-}"
+            echo "body_key=$BODY_KEY"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -124,6 +155,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR: ${{ steps.pr.outputs.pr }}
+          SHA: ${{ steps.pr.outputs.sha }}
         run: |
           set -uo pipefail
           # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
@@ -133,7 +165,7 @@ jobs:
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
             echo "::error::review model $MODEL did not answer on provider claude-bridge — build review NOT run, no fallback (#2777)"
-            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model, so this PR is not approved.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model, so this PR is not approved.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$SHA" "$MODEL")" || true
             exit 1
           fi
 
@@ -151,10 +183,10 @@ jobs:
           gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
           # The newest approved plan comment, if the issue went through plan review.
           gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // ""' > "$D/plan.md"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- pipeline-plan:v1 -->[ \\t]*(\\r?\\n|\\z)"))] | last | .body // ""' > "$D/plan.md"
           # Prior sent-back rounds for THIS PR.
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("<!-- build-review-verdict:no-go -->"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- build-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
           echo "$PRIOR" > "$D/prior"
           # The PR head as DATA (never executed here), diffed with copy detection against the base.
           git fetch --no-tags origin "$BASE" "pull/${PR}/head"
@@ -199,47 +231,125 @@ jobs:
             | awk '/^---$/ && n < 2 { n++; next } n >= 2' \
             | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{pr}}#${PR}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
                   -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" -e "s#{{diff_file}}#$D/diff.patch#g" > "$D/prompt.txt"
-          pi --print --approve --provider claude-bridge --model "$PI_MODEL" "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict
         if: ${{ !cancelled() && steps.pr.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
           MODEL: ${{ steps.model.outputs.model }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE: ${{ steps.pr.outputs.issue }}
           PR: ${{ steps.pr.outputs.pr }}
           SHA: ${{ steps.pr.outputs.sha }}
+          BODY_KEY: ${{ steps.pr.outputs.body_key }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/build-review"
           # The parser is trusted code from the default branch (the checkout is the PR head).
           mkdir -p "$RUNNER_TEMP/trusted"
           git show "origin/${{ github.event.repository.default_branch }}:scripts/lib/build-verdict.mjs" > "$RUNNER_TEMP/trusted/build-verdict.mjs"
+          # Hand-off helper (#3306) — also trusted: the checkout is the PR head, which must not run with the write token.
+          mkdir -p "$RUNNER_TEMP/trusted/scripts/lib"
+          for f in handoff-exec.mjs lib/handoff.mjs lib/rate-limit.mjs; do
+            git show "origin/${{ github.event.repository.default_branch }}:scripts/$f" > "$RUNNER_TEMP/trusted/scripts/$f"
+          done
           PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
           fail() {
             echo "::error::$1"
-            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$1" "$RUN_URL")" || true
+            gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$SHA" "$1" "$RUN_URL")" || true
             exit 1
           }
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
           DECISION="$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
           VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
-          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL"; } > "$D/comment.md"
+          # #3173: on the final hold, tell the owner if their earlier `ok` came too early. Trusted default-branch
+          # copies only (mirrored tree so ../approval.mjs resolves); any failure just means no extra line.
+          OKAGAIN=""
+          if [ "$VERDICT" = "no-go" ] && [ "$ROUND" -ge 2 ]; then
+            T="$RUNNER_TEMP/trusted/scripts"
+            for F in approval.mjs comment-command.mjs lib/earlier-owner-ok.mjs lib/ok-reply.mjs; do
+              mkdir -p "$T/$(dirname "$F")"
+              git show "origin/${{ github.event.repository.default_branch }}:scripts/$F" > "$T/$F" 2>/dev/null || rm -f "$T/$F"
+            done
+            gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments" --jq '.[]' > "$D/comments.ndjson" 2>/dev/null || true
+            OKAGAIN="$(T="$T" CF="$D/comments.ndjson" node --input-type=module -e '
+              import { readFileSync } from "node:fs"
+              import { pathToFileURL } from "node:url"
+              const u = (f) => pathToFileURL(process.env.T + "/lib/" + f).href
+              const { earlierOwnerOk, lastVerdictAt } = await import(u("earlier-owner-ok.mjs"))
+              const { chooseOkReply } = await import(u("ok-reply.mjs"))
+              const comments = readFileSync(process.env.CF, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
+              const okBeforeFinal = earlierOwnerOk({ comments, owner: process.env.OWNER_LOGIN, since: lastVerdictAt(comments) })
+              const r = chooseOkReply({ state: { kind: "final" }, ownerOk: okBeforeFinal, okBeforeFinal })
+              if (r) process.stdout.write(r.text)
+            ' 2>/dev/null)" || OKAGAIN=""
+          fi
+          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; [ -n "$BODY_KEY" ] && printf '<!-- build-review-body:%s:%s -->\n' "$SHA" "$BODY_KEY"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
           # remove-then-add: re-adding a label the PR already carries fires no event.
           gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
+          # #3210 — tick "Build review" from the trusted default-branch copy (the checkout is the PR head). Cosmetic.
+          git show "origin/${{ github.event.repository.default_branch }}:scripts/flow-checklist.mjs" > "$RUNNER_TEMP/trusted/flow-checklist.mjs" 2>/dev/null \
+            && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" || true
           case "$VERDICT" in
-            go) gh pr edit "$PR" --add-label "build:approved" ;;
+            go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
             needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
             no-go)
               if [ "$ROUND" -ge 2 ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
                 CID="${COMMENT_URL##*issuecomment-}"
-                gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID"
+                node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c}}')"
               fi
               ;;
           esac
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
+  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
+  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [review]
+    if: ${{ always() && needs.review.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: build-review.yml
+          PR: "${{ github.event.inputs.pr }}"
+          BRANCH: "${{ github.event.workflow_run.head_branch }}"
+          STAGE: build-review
+          MODEL_TIER: review
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.review.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

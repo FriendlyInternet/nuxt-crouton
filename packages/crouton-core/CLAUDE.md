@@ -48,6 +48,7 @@ export default defineNuxtConfig({
 | `shared/seed/` | Composable seeding contract + runner core (`SeedProvider`, `SeedContext`, `buildUpsert`, `seedId`, `collectSeedSql`) — exported at `@fyit/crouton-core/shared/seed` |
 | `shared/utils/query-registry.ts` | The process-wide server query registry (#2309): `registerCollectionQueries` (a package's Nitro plugin merges its collections in), `resolveQueryRegistry` (package entries + the app's generated `queryRegistry`, app wins), `collectionQueries` (one entry from a lazy queries import + the `getAll<Name>`/`get<Name>ByIds` stem). Exported at `@fyit/crouton-core/shared/utils/query-registry`; consumed by crouton-pages' public collection endpoints |
 | `server/utils/encryption.ts` | AES-256-GCM encryption for storing third-party secrets at rest |
+| `server/utils/teamRefs.ts` | `assertRefsInTeam(db, teamId, refs)` — 400 `Invalid reference: <field>` when a referenced id (single or array) is missing or belongs to another team; generated queries expose `assert<X>References` that calls it, and generated POST/PATCH call that before the write (#3378) |
 | `server/utils/tiptap-renderer.ts` | Server-side TipTap JSON to HTML conversion (auto-imported by Nitro) |
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
@@ -98,11 +99,11 @@ export default defineNuxtConfig({
 | `app/composables/useCroutonRedirects.ts` | Built-in redirects collection config, Zod schema, columns |
 | `app/components/RedirectsList.vue` | `CroutonRedirectsList` — Admin list with path display and status badge |
 | `app/components/RedirectsForm.vue` | `CroutonRedirectsForm` — Create/edit form for redirects |
-| `server/middleware/redirects.ts` | Server middleware — matches incoming paths against active redirects |
+| `server/middleware/redirects.ts` | Server middleware — team-scoped: team from custom domain or `/<slug>` (looked up per request, no slug cache), falling back to `auth.teams.defaultTeamSlug` for single-team apps; only same-site targets |
 | `server/utils/redirectCache.ts` | In-memory redirect cache with thundering herd protection |
 | `server/database/schema/redirects.ts` | Drizzle schema for `crouton_redirects` table |
 | `server/database/queries/redirects.ts` | CRUD queries + `getActiveCroutonRedirects()` for cache |
-| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API for managing redirects |
+| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — admin-only (`requireTeamAdmin`); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
 | `types/redirects.ts` | `CroutonRedirect`, `CroutonRedirectFormData`, `NewCroutonRedirect` types |
 
 ## Architecture

@@ -78,3 +78,13 @@ test('go: still ignores a draft / non-epic head', () => {
   assert.equal(decideEpicMerge({ pr: pr({ draft: true }), checkRuns: green, go: { go: true, reason: '' } }).action, 'ignore')
   assert.equal(decideEpicMerge({ pr: pr({ head: { ref: 'work-1' } }), checkRuns: green, go: { go: true, reason: '' } }).action, 'ignore')
 })
+
+// #3306: a red NON-gate check never blocks — documents why the workflow must not skip fetching
+// comments/commits just because isRed() is true on an epic → main PR.
+test('red non-gate check with green gates and owner lgtm still merges', () =>
+  assert.equal(decide({ checkRuns: [...green, run('some-lint', 'completed', 'failure')] }).action, 'merge'))
+
+test('gates left in_progress but carrying a conclusion still merge (#3429)', () => {
+  const stuck = n => ({ ...run(n, 'in_progress', 'success'), completed_at: '2026-01-01T00:01:00Z' })
+  assert.equal(decide({ checkRuns: [stuck('CI Gate'), stuck('E2E Gate')] }).action, 'merge')
+})

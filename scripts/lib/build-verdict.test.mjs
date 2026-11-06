@@ -151,3 +151,20 @@ test('#3160: bare file name in ticket and unrelated scope passes item 2', () => 
 test('#3160: no copies leaves item 2 untouched', () => {
   assert.equal(precheck(mod('packages/a/x.ts'), '')['2'], undefined)
 })
+
+test('#3173: only the final hold carries the final marker, the ok wording and the optional ok-again line', () => {
+  const d = decide(copiedDiff, TICKET, verdict('go', {}))
+  const final = renderComment(d, { round: 2, okAgain: 'AGAIN-LINE' })
+  assert.match(final, /<!-- build-review-final -->/)
+  assert.match(final, /reply `ok` to merge as is/)
+  assert.match(final, /^AGAIN-LINE$/m)
+  assert.doesNotMatch(renderComment(d, { round: 2 }), /AGAIN-LINE/)
+  const first = renderComment(d, { round: 1, okAgain: 'AGAIN-LINE' })
+  assert.doesNotMatch(first, /build-review-final|AGAIN-LINE/)
+})
+
+test('3428: a needs-owner comment says ok merges', () => {
+  const d = decide(cleanDiff, TICKET, verdict('needs-owner', {}))
+  assert.equal(d.verdict, 'needs-owner')
+  assert.match(renderComment(d), /reply `ok` to merge as is/)
+})

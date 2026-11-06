@@ -1,3 +1,4 @@
+# Frozen history since #3457 — new rows go to the pipeline-data branch; union kept for in-flight PRs.
 # Append-only ledger: parallel PRs each add a row at EOF; union keeps both instead of conflicting.
 # (A later row for the same issue supersedes an earlier one; union may order same-issue rows from
 # parallel branches either way — acceptable, as parallel epics write different issues.)

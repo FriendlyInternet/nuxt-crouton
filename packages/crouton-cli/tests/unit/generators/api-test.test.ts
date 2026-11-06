@@ -115,3 +115,14 @@ describe('generateApiTest (#791)', () => {
     expect(code).not.toContain('Math.random(')
   })
 })
+
+describe('generateApiTest — team references (#3378)', () => {
+  it('mocks assert<X>References only when the collection has reference fields', () => {
+    const withRef = {
+      ...baseData,
+      fields: [...baseData.fields, { name: 'categoryId', type: 'string', refTarget: 'categories', zod: 'z.string()', meta: {} }],
+    }
+    expect(generateApiTest(withRef, null)).toContain('assertShopProductReferences: vi.fn()')
+    expect(generateApiTest(baseData, null)).not.toContain('References')
+  })
+})
