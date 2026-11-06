@@ -178,3 +178,19 @@ test('#3467 epic base: build:approved needs the head reviewed go', () => {
   assert.equal(e({ kind: 'pending' }).code, 'head-unreviewed')
   assert.equal(e({ kind: 'other' }).merge, true)
 })
+
+test('first-run A. owner ok + first-run red → merge, reason names it', () => {
+  const r = leaf({ firstRun: ['pr-comment'] })
+  assert.equal(r.merge, true)
+  assert.match(r.reason, /first-run check pr-comment ignored after owner ok/)
+})
+test('first-run B. no owner ok → held, even for build:approved on an epic base', () => {
+  const r = leaf({ firstRun: ['pr-comment'], go: { go: false } })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'first-run-no-ok')
+  const e = leaf({ baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], firstRun: ['automerge'], go: { go: false } })
+  assert.equal(e.merge, false)
+})
+test('first-run C. a real red still wins over first-run', () => {
+  assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
+})

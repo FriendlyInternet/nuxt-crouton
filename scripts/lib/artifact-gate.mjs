@@ -12,6 +12,7 @@ export async function artifactGate({ github, context, core, env = process.env, f
   if (env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
   if (env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
   if (env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
+  if (env.PLAN_EXPLAINED === '1') { core.setFailed('Plan malformed — explained on the issue by the plan step (#3028).'); return }
   if (env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
   if (env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
   const rs = parseRunStart(env.RUN_START)

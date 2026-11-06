@@ -13,6 +13,8 @@
 //
 // Pure. `go` is the already-computed result of ownerMergeGo(); `ciGate` is the required check's
 // state ('success' | 'pending' | 'missing' | …); `red` is true when any check has failed.
+// `firstRun` (#3470) names red checks that fail only because the PR adds the code they load; they are
+// ignored, but ONLY with the owner's ok (never without it, even for a `build:approved` PR).
 // `code` lets the caller react to a specific hold (e.g. warn once when the CI Gate never reported).
 const hold = (code, reason) => ({ merge: false, code, reason })
 
@@ -28,24 +30,31 @@ const preflight = ({ baseRef, head, red, ciGate, mergeableState }) => {
   return null
 }
 
-export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, ciGate, mergeableState }) {
-  const head = String(headRef)
-  const blocked = preflight({ baseRef, head, red, ciGate, mergeableState })
-  if (blocked) return blocked
-  const reviewedGo = headReview?.kind === 'other'
-  const short = String(headSha || '').slice(0, 8)
-  if (baseRef === 'main') {
-    if (!go?.go) return hold('no-ok', "waits for the owner's ok")
-    if (go.mergeSince && !reviewedGo && !okAfter(go, ownerHold)) {
-      return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
-    }
-    return { merge: true, code: 'merge', reason: 'owner ok' }
+const mainDecision = ({ go, ownerHold, short, headReview, reviewedGo, ok }) => {
+  if (!go?.go) return hold('no-ok', "waits for the owner's ok")
+  if (go.mergeSince && !reviewedGo && !okAfter(go, ownerHold)) {
+    return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
   }
+  return ok('owner ok')
+}
+
+const epicDecision = ({ labels, go, ownerHold, short, reviewedGo, ok }) => {
   const approved = labels.includes('build:approved')
-  if (approved && !reviewedGo && !okAfter(go, ownerHold)) {
+  const afterHold = okAfter(go, ownerHold)
+  if (approved && !reviewedGo && !afterHold) {
     return hold('head-unreviewed', `build:approved is for an older commit — waits for the build review of ${short}`)
   }
-  if (approved) return { merge: true, code: 'merge', reason: 'reviewed' }
-  if (okAfter(go, ownerHold)) return { merge: true, code: 'merge', reason: ownerHold.kind === 'needs-owner' ? 'owner ok after needs-owner' : 'owner ok after final hold' }
+  if (approved) return ok('reviewed')
+  if (afterHold) return ok(ownerHold.kind === 'needs-owner' ? 'owner ok after needs-owner' : 'owner ok after final hold')
   return hold('no-review', "no 'build:approved' yet")
+}
+
+export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, firstRun = [], ciGate, mergeableState }) {
+  const blocked = preflight({ baseRef, head: String(headRef), red, ciGate, mergeableState })
+  if (blocked) return blocked
+  const names = firstRun.join(', ')
+  if (firstRun.length && !go?.go) return hold('first-run-no-ok', `first-run check ${names} waits for the owner's ok`)
+  const ok = (r) => ({ merge: true, code: 'merge', reason: firstRun.length ? `${r}; first-run check ${names} ignored after owner ok` : r, ...(firstRun.length ? { firstRun } : {}) })
+  const ctx = { labels, go, ownerHold, headReview, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
+  return baseRef === 'main' ? mainDecision(ctx) : epicDecision(ctx)
 }
