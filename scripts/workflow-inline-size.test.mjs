@@ -1,6 +1,10 @@
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { inlineBlocks, check, scan, loadBaseline } from './workflow-inline-size.mjs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { inlineBlocks, check, scan, loadBaseline, blocksToMap, scanAtRev, LIMIT } from './workflow-inline-size.mjs'
 
 const body = (n, pad = '          ') => Array.from({ length: n }, (_, i) => `${pad}echo ${i}`).join('\n')
 const wf = (n, extra = '') => `name: x
@@ -89,8 +93,67 @@ test('trailing blanks and single-line run are not counted', () => {
   assert.equal(blocks[0].lines, 2)
 })
 
-test('corpus: committed baseline covers the real tree', () => {
+test('corpus: scanner reads the real tree and the baseline', () => {
+  // Size verdicts live in the dedicated CI step only (base-aware on PRs, baseline on push to main),
+  // so drift on main shows as a red main, never as a red unrelated PR.
   const blocks = scan('.')
   assert.ok(blocks.length > 150, `found ${blocks.length} blocks`)
-  assert.deepEqual(check(blocks, loadBaseline().blocks).failures, [])
+  for (const b of blocks) {
+    const parts = b.key.split(' › ')
+    assert.equal(parts.length, 4, b.key)
+    assert.ok(['run', 'script'].includes(parts[3]), b.key)
+  }
+  const bl = loadBaseline()
+  assert.equal(bl.limit, LIMIT)
+  for (const v of Object.values(bl.blocks)) assert.ok(Number.isInteger(v) && v > LIMIT)
+})
+
+const key = (n) => inlineBlocks(wf(n), 'a.yml')[0].key
+const head = (n) => inlineBlocks(wf(n), 'a.yml')
+const base = (n) => blocksToMap(head(n))
+
+test('base mode: block grown on base but untouched by the PR passes', () => {
+  assert.deepEqual(check(head(47), { [key(47)]: 44 }, LIMIT, base(47)).failures, [])
+})
+test('base mode: block the PR grows fails, naming it', () => {
+  const { failures } = check(head(55), { [key(50)]: 50 }, LIMIT, base(50))
+  assert.equal(failures.length, 1)
+  assert.match(failures[0], /Big/)
+  assert.match(failures[0], /grew from 50 to 55/)
+})
+test('base mode: new block over the limit fails', () => {
+  const { failures } = check(head(50), {}, LIMIT, {})
+  assert.equal(failures.length, 1)
+  assert.match(failures[0], /new inline block of 50 lines/)
+})
+test('base mode: growth covered by a raised baseline passes', () => {
+  assert.deepEqual(check(head(55), { [key(50)]: 55 }, LIMIT, base(50)).failures, [])
+})
+test('base mode: growth that stays under the limit passes', () => {
+  assert.deepEqual(check(head(30), {}, LIMIT, base(10)).failures, [])
+})
+
+const git = (cwd, ...a) => execFileSync('git', a, { cwd, stdio: 'ignore' })
+const tmp = mkdtempSync(join(tmpdir(), 'wis-'))
+const commit = (msg) => { git(tmp, 'add', '-A'); git(tmp, 'commit', '-qm', msg) }
+const put = (n) => { mkdirSync(join(tmp, '.github/workflows'), { recursive: true }); writeFileSync(join(tmp, '.github/workflows/a.yml'), wf(n)) }
+const bl = () => ({ '.github/workflows/a.yml › build › Big › run': 45 })
+after(() => rmSync(tmp, { recursive: true, force: true }))
+
+test('rule: main grown past the baseline does not fail a PR that leaves the block alone', () => {
+  git(tmp, 'init', '-q'); git(tmp, 'config', 'user.email', 't@t'); git(tmp, 'config', 'user.name', 't')
+  put(50); commit('main')
+  writeFileSync(join(tmp, 'README.md'), 'x'); commit('pr')
+  assert.equal(check(scan(tmp), bl(), LIMIT).failures.length, 1)
+  assert.deepEqual(check(scan(tmp), bl(), LIMIT, blocksToMap(scanAtRev('HEAD~1', tmp))).failures, [])
+})
+test('rule: a PR that grows the block still fails', () => {
+  put(51); commit('grow')
+  const { failures } = check(scan(tmp), bl(), LIMIT, blocksToMap(scanAtRev('HEAD~1', tmp)))
+  assert.equal(failures.length, 1)
+  assert.match(failures[0], /Big/)
+  assert.match(failures[0], /grew from 50 to 51/)
+})
+test('scanAtRev: unknown rev throws', () => {
+  assert.throws(() => scanAtRev('no-such-rev', tmp))
 })

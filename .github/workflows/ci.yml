@@ -465,6 +465,8 @@ jobs:
       IS_CODE: ${{ contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # merge-base for the inline-size check (#3478)
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
@@ -500,7 +502,17 @@ jobs:
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)
-        run: node scripts/workflow-inline-size.mjs
+        # PRs are judged against their merge-base, so growth already on main never reds an unrelated PR (#3478).
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            node scripts/workflow-inline-size.mjs --base "$(git merge-base "origin/$BASE_REF" HEAD)"
+          else
+            node scripts/workflow-inline-size.mjs
+          fi
 
       - name: Extract each `run:` block and lint it
         run: |
