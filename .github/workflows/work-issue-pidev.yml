@@ -1289,10 +1289,20 @@ jobs:
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               PLAN_NOTE="$(printf '\n\n📋 Built from the approved plan: https://github.com/%s/issues/%s#issuecomment-%s' "$GITHUB_REPOSITORY" "$ISSUE" "$APPROVED_PLAN_ID")"
             fi
+            # #3036: one line pointing at the issue's 🧪 How to test, so the PR page is not a dead end.
+            HOWTO_NOTE="$(ISSUE="$ISSUE" BODY_FILE="$RUNNER_TEMP/issue-body.txt" node --input-type=module -e '
+              import { readFileSync } from "node:fs"
+              import { howToTestPointer } from "./scripts/test-card.mjs"
+              let b = ""; try { b = readFileSync(process.env.BODY_FILE, "utf8") } catch {}
+              process.stdout.write(howToTestPointer(process.env.ISSUE, b))')" || HOWTO_NOTE=""
+            if [ -z "$HOWTO_NOTE" ]; then
+              echo "::warning::howToTestPointer failed — PR body gets the plain pointer instead (#3036)"
+              HOWTO_NOTE="How to test: see #$ISSUE → 🧪"
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s\n\n%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
