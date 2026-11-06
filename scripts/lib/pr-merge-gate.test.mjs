@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, shadowCheck } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -195,7 +195,7 @@ test('first-run C. a real red still wins over first-run', () => {
   assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
 })
 
-// ---- #3491: skipBeforeReads / applySharedCodeHold / shadowCheck ----
+// ---- #3491: skipBeforeReads / applySharedCodeHold / mergeDecisionCheck ----
 const pre = (o = {}) => skipBeforeReads({ draft: false, authorIsPipeline: true, baseRef: 'epic/1-x', headRef: 'work-1', ...o })
 test('D3 #2051/#2054: draft sign-off PR → skip draft', () => {
   assert.deepEqual(pre({ draft: true }), { skip: true, code: 'draft' })
@@ -251,19 +251,114 @@ test('a hold gate passes through, and a main base never holds', () => {
   assert.equal(sh({}, g) && applySharedCodeHold(g, { baseRef: 'epic/1-x', files: ['packages/a/x.ts'] }), g)
   assert.equal(sh({ baseRef: 'main' }), mergeGate)
 })
-test('shadowCheck: merge → success', () => {
-  const r = shadowCheck(mergeGate)
-  assert.equal(r.name, 'Merge decision (shadow)')
+
+test('mergeDecisionCheck: approved → completed/success/approved', () => {
+  const r = mergeDecisionCheck({ merge: true, code: 'merge', reason: 'reviewed' })
+  assert.equal(r.status, 'completed')
   assert.equal(r.conclusion, 'success')
-  assert.equal(r.output.title, 'merge')
+  assert.equal(r.output.title, 'approved')
 })
-test('shadowCheck: each hold code → neutral with that code', () => {
-  const answers = ['no-review', 'head-unreviewed', 'red', 'ci-pending', 'unmergeable', 'shared-code'].map((code) => ({ merge: false, code, reason: 'r' }))
-  answers.push(pre({ draft: true }), pre({ authorIsPipeline: false }), pre({ baseRef: 'main', headRef: 'x' }))
-  for (const a of answers) {
-    const r = shadowCheck(a)
-    assert.equal(r.conclusion, 'neutral')
-    assert.equal(r.output.title, a.code)
-    assert.ok(r.output.summary.includes(a.code))
+test('mergeDecisionCheck: every wait → in_progress, no conclusion', () => {
+  for (const code of ['no-review', 'head-unreviewed', 'shared-code', 'need-files', 'draft', 'not-v1-base']) {
+    const r = mergeDecisionCheck({ merge: false, code, reason: 'why' })
+    assert.equal(r.status, 'in_progress')
+    assert.equal('conclusion' in r, false)
+    assert.equal(r.output.title, `waiting: ${code}`)
+    assert.equal(r.output.summary, 'why')
   }
+  assert.equal(mergeDecisionCheck(undefined).output.title, 'waiting: unknown')
+})
+
+test('decideReview equals decideLeafMerge where preflight passes and firstRun is empty', () => {
+  const gos = [{ go: false }, okGo, mergedGo(), { go: true, mergeSince: true, approvedAt: '2026-11-06T12:00:00Z' }]
+  const holds = [null, { kind: 'final', at: '2026-11-06T11:30:00Z' }, { kind: 'needs-owner', at: '2026-11-06T11:30:00Z' }]
+  let n = 0
+  for (const baseRef of ['main', 'epic/1-x']) for (const labels of [[], ['build:approved']]) for (const go of gos)
+    for (const kind of ['pending', 'other', 'round1', 'final']) for (const ownerHold of holds) {
+      const x = { baseRef, labels, go, ownerHold, headSha: SHA, headReview: { kind } }
+      assert.deepEqual(decideReview(x), decideLeafMerge({ ...x, headRef: 'work-1', red: false, ciGate: 'success', mergeableState: 'clean' }))
+      n++
+    }
+  assert.equal(n, 192)
+})
+test('decideReview equals decideLeafMerge on the #3173/#3428 comment fixtures via reviewState', () => {
+  const fixtures = [
+    [[rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa'],
+    [[rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb'],
+    [[needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa'],
+    [[needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb'],
+    [[c('ok', '2026-11-01T09:00:00Z'), needsOwner('aaa', '2026-11-01T10:00:00Z')], 'aaa'],
+  ]
+  for (const [comments, headSha] of fixtures) {
+    const go = goFor(comments, [])
+    const st = reviewState({ comments, headSha, bots })
+    const x = { baseRef: 'epic/1-x', labels: [], go, ownerHold: ['final', 'needs-owner'].includes(st.kind) ? st : null, headSha, headReview: st }
+    assert.deepEqual(decideReview(x), decideLeafMerge({ ...x, headRef: 'work-2', red: false, ciGate: 'success', mergeableState: 'clean' }))
+  }
+})
+
+const v1 = (o) => decideV1({ draft: false, authorIsPipeline: true, baseRef: 'epic/1--v1-x', headRef: 'work-1', labels: ['build:approved'],
+  go: { go: false }, headReview: { kind: 'other' }, headSha: SHA, files: ['scripts/a.mjs'], ...o })
+test('v1 deadlock case: CI pending, blocked, red check → answered from review alone', () => {
+  const r = v1({ ciGate: 'pending', mergeableState: 'blocked', red: true })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'merge')
+})
+test('v1 draft → wait', () => {
+  const r = v1({ draft: true })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'draft')
+})
+test('v1 owner PR → pass, not auto-merged', () => {
+  const r = v1({ authorIsPipeline: false })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'not-pipeline')
+  assert.equal(r.autoMerge, false)
+  assert.match(r.reason, /merged by hand/)
+})
+test('v1 B1 revision after ok → wait', () => {
+  const go = goFor([c('ok', '2026-10-28T16:00:00Z')], [k('2026-10-28T17:00:00Z')])
+  const r = v1({ labels: [], go })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'no-review')
+})
+test('v1 B2/B3 new head unreviewed → head-unreviewed naming the SHA (#3467)', () => {
+  const r = v1({ headReview: { kind: 'pending' } })
+  assert.equal(r.code, 'head-unreviewed')
+  assert.match(r.reason, /04bfeaa0/)
+})
+test('v1 owner hold on an older commit doesn\'t count (:128 fixture, real reviewState)', () => {
+  const cs = [needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')]
+  const run = (headSha) => {
+    const st = reviewState({ comments: cs, headSha, bots })
+    return v1({ labels: [], go: goFor(cs, []), headSha, ownerHold: st.kind === 'needs-owner' ? st : null })
+  }
+  assert.equal(run('aaa').merge, true)
+  const stale = run('bbb')
+  assert.equal(stale.merge, false)
+  assert.equal(stale.code, 'no-review')
+})
+test('v1 shared-code without ok → wait (workflow file)', () => {
+  for (const files of [['.github/workflows/a.yml'], ['packages/a.ts', '.github/workflows/a.yml']]) {
+    const r = v1({ files })
+    assert.equal(r.merge, false)
+    assert.equal(r.code, 'shared-code')
+    assert.equal(r.hasWf, true)
+    assert.match(r.reason, /never self-merge/)
+  }
+  assert.equal(v1({ files: ['.github/workflows/a.yml'], go: { go: true } }).merge, true)
+})
+test('v1 packages-only with build:approved → pass (#2777)', () => {
+  const r = v1({ files: ['packages/a/x.ts'] })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'merge')
+})
+test('v1 missing files → need-files; a held review stays its own hold', () => {
+  const r = v1({ files: undefined })
+  assert.equal(r.code, 'need-files')
+  assert.equal(r.needFiles, true)
+  assert.equal(v1({ files: undefined, labels: [] }).code, 'no-review')
+})
+test('v1 non-v1 base → not-v1-base', () => {
+  for (const baseRef of ['epic/1-x', 'epic/12-v1-step-1']) assert.equal(v1({ baseRef }).code, 'not-v1-base')
 })

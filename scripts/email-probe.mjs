@@ -70,6 +70,26 @@ export function verdict(d1Json) {
   return { ok: false, reason: 'never confirmed' }
 }
 
+/** `name` of each entry in `wrangler secret list --format json`; [] on bad input. */
+export function secretNamesOf(secretListJson) {
+  try {
+    const list = JSON.parse(secretListJson)
+    return Array.isArray(list) ? list.map(s => s?.name).filter(n => typeof n === 'string') : []
+  }
+  catch {
+    return []
+  }
+}
+
+/** #3505 — does the app have a real sender address? (crouton-email defaults to noreply@example.com, which Resend refuses.) */
+export function senderVerdict({ app, nuxtConfigSource, secretNames }) {
+  if (secretNames?.includes('NUXT_EMAIL_FROM')) return { ok: true }
+  const m = /\bemail\s*:\s*\{[^}]*?\bfrom\s*:\s*['"]([^'"]*)['"]/.exec(nuxtConfigSource ?? '')
+  const from = m?.[1]?.trim()
+  if (from && !/@(?:[^@]*\.)?example\.com$/i.test(from)) return { ok: true }
+  return { ok: false, reason: `no sender address configured for ${app}` }
+}
+
 /** #3497 — backoff while a fresh preview Worker still answers 5xx (new auth secret not live yet). */
 export const PROBE_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 15000, 15000]
 
@@ -82,6 +102,11 @@ export function retryDelays(env = {}) {
 }
 
 /** 'ok' | 'retry' | 'give-up' for one request attempt (attempt is 1-based). */
+/** #3514 — Node fetch sends sec-fetch-mode, so better-auth demands an Origin. */
+export function probeHeaders(url) {
+  return { 'Content-Type': 'application/json', Origin: new URL(url).origin }
+}
+
 export function requestDecision({ status, threw, attempt, maxAttempts }) {
   const more = attempt < maxAttempts
   if (threw) return more ? 'retry' : 'give-up'
@@ -102,7 +127,7 @@ async function send(url, body) {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Origin: new URL(url).origin },
+        headers: probeHeaders(url),
         body,
         signal: AbortSignal.timeout(30000),
       })
@@ -168,6 +193,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(v.ok ? 'sent' : v.reason)
     process.exit(v.ok ? 0 : 1)
   }
+  else if (cmd === 'sender') {
+    const dir = process.argv[4] ?? '.'
+    let src = ''
+    try { src = readFileSync(`${dir}/nuxt.config.ts`, 'utf8') } catch {}
+    const v = senderVerdict({ app: arg, nuxtConfigSource: src, secretNames: secretNamesOf(readStdin()) })
+    console.log(v.ok ? 'ok' : v.reason)
+    process.exit(v.ok ? 0 : 1)
+  }
   else if (cmd === 'send') {
     process.exit(await send(arg, process.argv[4] ?? '{}'))
   }
@@ -175,7 +208,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(await requests(arg, process.argv[4], process.argv[5]))
   }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | send <url> <json> | requests <mode> <base> <email>')
+    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | sender <app> <appDir> | send <url> <json> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }

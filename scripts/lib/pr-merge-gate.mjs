@@ -1,9 +1,11 @@
 import { decideSharedCodeHold } from '../shared-code-hold.mjs'
-// The leaf merge rules for a PR the automerge workflow is about to merge (#3103) live in THIS FILE, not in one
-// function (#3491, owner 6 Nov 18:38): skipBeforeReads() runs before any reads (draft, base shape, pipeline
-// author); decideLeafMerge() decides who said yes, any red check, CI Gate, mergeable; applySharedCodeHold()
-// adds the packages/ + workflows hold; shadowCheck() shapes the answer for #3492's check-run. The workflow
-// gathers the facts and acts on the answers; nothing calls the #3491 functions yet (#3492 wires them).
+import { isV1Base } from './pipeline-version.mjs'
+// The leaf merge rules for a PR the automerge workflow is about to merge (#3103) live in THIS FILE (#3491, #3461):
+//   decideReview()         who said yes (owner ok / build:approved on the reviewed head) — review only, no CI facts.
+//   decideLeafMerge()      preflight (red check, CI Gate, mergeable) + first-run rule + decideReview(); what today's workflow uses.
+//   decideV1()             the v1 answer for a PR into a v1 epic branch: review only, GitHub does the CI wait (#3501).
+//   mergeDecisionCheck()   the check-run payload for an answer (pass = success, wait = in_progress, never neutral).
+//   skipBeforeReads() / applySharedCodeHold()  the pre-read skips and the packages/ + workflows hold.
 //
 //   (#3467) A merge commit after the owner's `ok` keeps the ok but may have resolved conflicts, so the PR
 //   also waits for a build-review `go` on the CURRENT head (`headReview.kind === 'other'`); on an epic base
@@ -52,14 +54,32 @@ const epicDecision = ({ labels, go, ownerHold, short, reviewedGo, ok }) => {
   return hold('no-review', "no 'build:approved' yet")
 }
 
+export function decideReview({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' } }) {
+  const ok = (r) => ({ merge: true, code: 'merge', reason: r })
+  const ctx = { labels, go, ownerHold, headReview, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
+  return baseRef === 'main' ? mainDecision(ctx) : epicDecision(ctx)
+}
+
 export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, firstRun = [], ciGate, mergeableState }) {
   const blocked = preflight({ baseRef, head: String(headRef), red, ciGate, mergeableState })
   if (blocked) return blocked
   const names = firstRun.join(', ')
   if (firstRun.length && !go?.go) return hold('first-run-no-ok', `first-run check ${names} waits for the owner's ok`)
-  const ok = (r) => ({ merge: true, code: 'merge', reason: firstRun.length ? `${r}; first-run check ${names} ignored after owner ok` : r, ...(firstRun.length ? { firstRun } : {}) })
-  const ctx = { labels, go, ownerHold, headReview, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
-  return baseRef === 'main' ? mainDecision(ctx) : epicDecision(ctx)
+  const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview })
+  if (r.merge && firstRun.length) return { ...r, reason: `${r.reason}; first-run check ${names} ignored after owner ok`, firstRun }
+  return r
+}
+
+// #3461: the v1 answer. No red/ciGate/mergeableState: a required check built on this would otherwise wait on itself.
+export function decideV1({ draft, authorIsPipeline, baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, files } = {}) {
+  if (!isV1Base(baseRef)) return hold('not-v1-base', `base ${baseRef} is not a v1 epic branch`)
+  const s = skipBeforeReads({ draft, authorIsPipeline, baseRef, headRef })
+  if (s.code === 'draft') return hold('draft', 'draft sign-off PR — waits until the owner marks it ready')
+  if (s.code === 'not-pipeline') return { merge: true, code: 'not-pipeline', autoMerge: false, reason: 'not a pipeline PR — merged by hand' }
+  if (s.skip) return hold(s.code, `skipped: ${s.code}`)
+  const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview })
+  if (r.merge && !Array.isArray(files)) return { ...hold('need-files', 'needs the PR file list for the shared-code hold'), needFiles: true }
+  return applySharedCodeHold(r, { baseRef, labels, files, go })
 }
 
 // #3491: the pre-read skips of automerge-epic-subpr.yml L248-254, in the same order.
@@ -81,10 +101,11 @@ export function applySharedCodeHold(gate, { baseRef, labels = [], files = [], go
   return gate
 }
 
-// #3491: the payload for #3492's information-only check-run.
-export function shadowCheck(answer) {
-  const merge = answer?.merge === true
-  const code = merge ? 'merge' : String(answer?.code || 'unknown')
-  return { name: 'Merge decision (shadow)', conclusion: merge ? 'success' : 'neutral',
-    output: { title: code, summary: merge ? `would merge — ${answer.reason || code}` : `would hold: ${code}${answer?.reason ? ` — ${answer.reason}` : ''}` } }
+// #3461: the payload for the required `Merge decision` check-run. A wait is in_progress, never neutral/skipped.
+export function mergeDecisionCheck(answer) {
+  if (answer?.merge === true) {
+    return { name: 'Merge decision', status: 'completed', conclusion: 'success', output: { title: 'approved', summary: String(answer.reason || answer.code || 'approved') } }
+  }
+  const code = String(answer?.code || 'unknown')
+  return { name: 'Merge decision', status: 'in_progress', output: { title: `waiting: ${code}`, summary: String(answer?.reason || code) } }
 }

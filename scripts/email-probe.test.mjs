@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { isEmailApp, probeMode, probeAddress, hasEmailKey, verdict } from './email-probe.mjs'
+import { isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders } from './email-probe.mjs'
 
 test('isEmailApp', () => {
   const velo = JSON.parse(readFileSync(new URL('../apps/velo/deploy.config.json', import.meta.url), 'utf8'))
@@ -137,6 +137,11 @@ async function runSend(statuses) {
   const server = createServer((req, res) => {
     req.resume()
     origins.push(req.headers.origin)
+    // mimic better-auth: sec-fetch-* without Origin is refused
+    if (req.headers['sec-fetch-mode'] && !req.headers.origin) {
+      res.statusCode = 403
+      return res.end('MISSING_OR_NULL_ORIGIN')
+    }
     const code = statuses[Math.min(hits, statuses.length - 1)]
     hits++
     res.statusCode = code
@@ -150,19 +155,80 @@ async function runSend(statuses) {
   let out = ''
   child.stdout.on('data', d => (out += d))
   const code = await new Promise(r => child.on('close', r))
+  const port = Number(new URL(url).port)
   server.close()
-  return { code, hits, out, origins, base: url.replace(/\/x$/, '') }
+  return { code, hits, out, origins, port }
 }
 
 test('#3497 send end-to-end', async () => {
   const ok = await runSend([500, 500, 200])
   assert.equal(ok.code, 0)
   assert.equal(ok.hits, 3)
-  assert.deepEqual(ok.origins, [ok.base, ok.base, ok.base])
   const bad = await runSend([500])
   assert.equal(bad.code, 1)
   assert.match(bad.out, /body-500/)
   const four = await runSend([400])
   assert.equal(four.code, 1)
   assert.equal(four.hits, 1)
+})
+
+test('#3514 probeHeaders sets Origin to the target origin', () => {
+  assert.deepEqual(probeHeaders('https://velo.pmcp.dev/api/auth/sign-up/email'), { 'Content-Type': 'application/json', Origin: 'https://velo.pmcp.dev' })
+  assert.equal(probeHeaders('https://velo-pr-12.x.workers.dev/a/b').Origin, 'https://velo-pr-12.x.workers.dev')
+  assert.equal(probeHeaders('http://127.0.0.1:1234/x').Origin, 'http://127.0.0.1:1234')
+})
+
+test('#3514 send carries Origin end-to-end', async () => {
+  const r = await runSend([200])
+  assert.equal(r.code, 0)
+  assert.equal(r.origins[0], `http://127.0.0.1:${r.port}`)
+})
+
+// #3505 — a probed app must have a real sender, else crouton-email falls back to example.com.
+import { senderVerdict, secretNamesOf } from './email-probe.mjs'
+import { readdirSync, existsSync } from 'node:fs'
+
+test('#3505 senderVerdict', () => {
+  const v = (src, secretNames = []) => senderVerdict({ app: 'x', nuxtConfigSource: src, secretNames })
+  const bad = { ok: false, reason: 'no sender address configured for x' }
+  assert.deepEqual(v("runtimeConfig:{ email:{ from:'noreply@messages.friendlyinter.net' } }"), { ok: true })
+  assert.deepEqual(v('runtimeConfig:{ foo: 1 }'), bad)
+  assert.deepEqual(v("email:{ from:'noreply@example.com' }"), bad)
+  assert.deepEqual(v("email:{ from:'a@mail.example.com' }"), bad)
+  assert.deepEqual(v("email:{ from:'' }"), bad)
+  assert.deepEqual(v("email:{ fromName:'Acme' }"), bad)
+  assert.deepEqual(v("email:{ fromName:'Acme' }", ['NUXT_EMAIL_FROM']), { ok: true })
+  assert.deepEqual(v("email:{ from:'x@notexample.com' }"), { ok: true })
+})
+
+test('#3505 every probed email app has a sender', () => {
+  const root = new URL('../', import.meta.url).pathname
+  let n = 0
+  for (const dir of ['apps', 'pocs']) {
+    for (const app of readdirSync(`${root}${dir}`)) {
+      const cfg = `${root}${dir}/${app}/deploy.config.json`
+      if (!existsSync(cfg) || !isEmailApp(JSON.parse(readFileSync(cfg, 'utf8')))) continue
+      n++
+      const src = readFileSync(`${root}${dir}/${app}/nuxt.config.ts`, 'utf8')
+      const r = senderVerdict({ app, nuxtConfigSource: src, secretNames: ['NUXT_EMAIL_FROM'] })
+      const own = senderVerdict({ app, nuxtConfigSource: src, secretNames: [] })
+      // status gets its sender from the Worker secret; every other app must set it in config
+      assert.equal(r.ok, true, `${app}: ${r.reason}`)
+      if (app !== 'status') assert.equal(own.ok, true, `${app}: ${own.reason}`)
+    }
+  }
+  assert.ok(n >= 4)
+})
+
+test('#3505 sender check runs before any send', () => {
+  const b = stepBlock('Probe email send')
+  const s = b.indexOf('email-probe.mjs" sender')
+  const r = b.indexOf('email-probe.mjs" requests')
+  assert.ok(s > 0 && r > s)
+})
+
+test('secretNamesOf', () => {
+  assert.deepEqual(secretNamesOf('[{"name":"A"},{"name":"B"}]'), ['A', 'B'])
+  assert.deepEqual(secretNamesOf(''), [])
+  assert.deepEqual(secretNamesOf('not json'), [])
 })
