@@ -760,12 +760,12 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
-          VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")"; RC=$?
+          RC=0; VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")" || RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
             gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
-            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+            echo "ok=0" >> "$GITHUB_OUTPUT"; echo "explained=1" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
           # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
@@ -1473,6 +1473,7 @@ jobs:
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          PLAN_EXPLAINED: ${{ steps.plan.outputs.explained }} # #3028
           RUN_START: ${{ steps.t0.outputs.ts }}
           # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
           # paging "produced nothing" on the ticket too would be a false alarm.

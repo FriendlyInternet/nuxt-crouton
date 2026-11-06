@@ -88,3 +88,18 @@ test('plan ok and revised exit early OK', async () => {
     assert.equal(h.calls.info.length, 1)
   }
 })
+
+test('plan malformed + explained (#3028): fails once, posts no comment', async () => {
+  const h = harness()
+  await h.run({ PLAN_OK: '0', PLAN_EXPLAINED: '1' })
+  assert.equal(h.calls.failed.length, 1)
+  assert.equal(h.calls.created.length, 0)
+})
+
+test('plan run with no plan comment: exactly one 🔴 comment', async () => {
+  const h = harness()
+  await h.run({ PLAN_OK: '0' })
+  assert.equal(h.calls.failed.length, 1)
+  assert.equal(h.calls.created.length, 1)
+  assert.match(h.calls.created[0], /produced nothing/)
+})
