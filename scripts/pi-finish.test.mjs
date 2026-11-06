@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { resolveSession, planAcceptance, planTestsGate, verdict } from './pi-finish.mjs';
 
 test('resolveSession: returns null (not throw) on a missing/empty session dir — the #1876 SESSION bug', () => {
@@ -99,4 +101,43 @@ test('verdict: not draft on a clean pass with no missing tests', () => {
 test('verdict: neutral acceptance with no missing tests is not draft', () => {
   const v = verdict({ acceptance: 'neutral', testsMissing: false });
   assert.equal(v.draft, false);
+});
+
+test('planTestsGate: a revision commit with no test, on a PR that already has one, is NOT missing (#3411)', () => {
+  const r = planTestsGate({ committedFiles: ['packages/x/util.ts'], prFiles: ['packages/x/util.ts', 'packages/x/util.test.ts'] });
+  assert.equal(r.missing, false);
+});
+
+test('planTestsGate: a PR with no test anywhere is still missing, and names the file (#3411)', () => {
+  const r = planTestsGate({ committedFiles: ['packages/x/util.ts'], prFiles: ['packages/x/util.ts', 'docs/a.md'] });
+  assert.equal(r.missing, true);
+  assert.deepEqual(r.pkgLogic, ['packages/x/util.ts']);
+});
+
+test('planTestsGate: no prFiles behaves exactly as before (#3411)', () => {
+  assert.equal(planTestsGate({ committedFiles: ['packages/x/util.ts'] }).missing, true);
+  assert.equal(planTestsGate({ committedFiles: ['packages/x/util.ts'], prFiles: [] }).missing, true);
+});
+
+test('planTestsGate: logic files from earlier commits count too (#3411)', () => {
+  const r = planTestsGate({ committedFiles: ['packages/x/b.ts', 'packages/x/b.test.ts'], prFiles: ['packages/x/a.ts'] });
+  assert.equal(r.missing, false);
+  assert.deepEqual(r.pkgLogic.sort(), ['packages/x/a.ts', 'packages/x/b.ts']);
+});
+
+test('CLI plan: optional pr-files argument; missing path exits 0 (#3411)', () => {
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'pi-finish.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-fin-'));
+  const committed = path.join(dir, 'c.txt');
+  const pr = path.join(dir, 'p.txt');
+  fs.writeFileSync(committed, 'packages/x/util.ts\n');
+  fs.writeFileSync(pr, 'packages/x/util.ts\npackages/x/util.test.ts\n');
+  const missing = spawnSync('node', [script, 'plan', committed, path.join(dir, 'nope.txt')], { encoding: 'utf8' });
+  assert.equal(missing.status, 0);
+  assert.match(missing.stdout, /TESTS_MISSING=1/);
+  assert.match(missing.stdout, /PKG_LOGIC_FILES=packages\/x\/util\.ts/);
+  const ok = spawnSync('node', [script, 'plan', committed, pr], { encoding: 'utf8' });
+  assert.equal(ok.status, 0);
+  assert.match(ok.stdout, /TESTS_MISSING=0/);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
