@@ -39,6 +39,10 @@
         "expectStatus": [404]
       },
       {
+        "path": "/api/public/{teamId}/smoke-none/smoke-item",
+        "expectStatus": [404]
+      },
+      {
         "path": "/api/crouton-sales/teams/{teamId}/sync-status"
       },
       {

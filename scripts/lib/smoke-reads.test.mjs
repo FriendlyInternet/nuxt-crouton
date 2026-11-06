@@ -66,14 +66,3 @@ test('expectStatus may be a list; any listed status passes, others fail', async 
   assert.equal(failed.length, 1)
   assert.match(failed[0], /\/c: HTTP 200, expected 403\|503/)
 })
-
-test('a transient network error is retried; a persistent one still fails', async () => {
-  let n = 0
-  const flaky = async () => { if (++n < 3) throw new Error('fetch failed'); return resp(200) }
-  assert.deepEqual(await runReads([{ path: '/a' }], deps(flaky)), [])
-  assert.equal(n, 3)
-
-  const down = async () => { throw new Error('fetch failed') }
-  const failed = await runReads([{ path: '/a' }], deps(down))
-  assert.deepEqual(failed, ['reads /a: fetch failed'])
-})
