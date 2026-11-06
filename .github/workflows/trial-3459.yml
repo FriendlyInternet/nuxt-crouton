@@ -1,0 +1,56 @@
+# Throwaway trial for #3459 — lives only on trial/* branches, never on main.
+# Behaviour is chosen by tags in the PR title: [app-ok] [app-fail] [spoof] [auto] [app-merge] [open-approve-pr]
+name: Trial 3459
+on:
+  pull_request:
+    branches: ['trial/base-checks', 'trial/base-bypass', 'trial/base-approve']
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  checks: write
+  statuses: write
+  pull-requests: read
+  contents: read
+jobs:
+  probe:
+    if: startsWith(github.base_ref, 'trial/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      - name: Run tagged probes
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          ACTIONS_TOKEN: ${{ github.token }}
+        run: |
+          log(){ echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          has(){ case "$TITLE" in *"[$1]"*) return 0;; esac; return 1; }
+          log "PR #$PR head $SHA title: $TITLE"
+          if has app-ok;   then GH_TOKEN=$APP_TOKEN gh api -X POST repos/$GH_REPO/check-runs -f name='Merge decision' -f head_sha=$SHA -f status=completed -f conclusion=success --jq '"app check: \(.conclusion) app=\(.app.id)"' | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          if has app-fail; then GH_TOKEN=$APP_TOKEN gh api -X POST repos/$GH_REPO/check-runs -f name='Merge decision' -f head_sha=$SHA -f status=completed -f conclusion=failure --jq '"app check: \(.conclusion) app=\(.app.id)"' | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          if has spoof; then
+            GH_TOKEN=$ACTIONS_TOKEN gh api -X POST repos/$GH_REPO/check-runs -f name='Merge decision' -f head_sha=$SHA -f status=completed -f conclusion=success --jq '"spoof check-run: \(.conclusion) app=\(.app.id)"' | tee -a "$GITHUB_STEP_SUMMARY" || log "spoof check-run refused"
+            GH_TOKEN=$ACTIONS_TOKEN gh api -X POST repos/$GH_REPO/statuses/$SHA -f context='Merge decision' -f state=success --jq '"spoof status: \(.state)"' | tee -a "$GITHUB_STEP_SUMMARY" || log "spoof status refused"
+          fi
+          if has auto; then
+            if GH_TOKEN=$APP_TOKEN gh pr merge $PR --auto --merge 2>err.txt; then log "auto-merge enabled by App"; else log "auto-merge refused: $(cat err.txt)"; fi
+          fi
+          if has app-merge; then
+            if GH_TOKEN=$APP_TOKEN gh pr merge $PR --merge 2>err.txt; then log "App direct merge: MERGED"; else log "App direct merge refused: $(cat err.txt)"; fi
+          fi
+          if has app-rest-merge; then
+            if GH_TOKEN=$APP_TOKEN gh api -X PUT repos/$GH_REPO/pulls/$PR/merge -f merge_method=merge --jq '"App REST merge: merged=\(.merged) \(.message)"' 2>err.txt | tee -a "$GITHUB_STEP_SUMMARY"; then :; else log "App REST merge refused: $(cat err.txt)"; fi
+          fi
+          if has open-approve-pr; then
+            for n in 1 2; do
+              GH_TOKEN=$APP_TOKEN gh pr create --base trial/base-approve --head trial/approve-p$n --title "Trial 3459 item 7 — P$n: owner taps Approve here" --body "Throwaway PR for #3459 item 7, opened by the Harness App so the owner can approve it. Do not merge by hand." 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+            done
+            P2=$(GH_TOKEN=$APP_TOKEN gh pr list --base trial/base-approve --head trial/approve-p2 --json number --jq '.[0].number')
+            if GH_TOKEN=$APP_TOKEN gh pr merge $P2 --auto --merge 2>err.txt; then log "auto-merge on P2 #$P2 enabled by App"; else log "P2 auto-merge refused: $(cat err.txt)"; fi
+          fi
