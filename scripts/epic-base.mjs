@@ -50,7 +50,7 @@ function readParent(api, repo, cur) {
     return { parent: api(`repos/${repo}/issues/${cur}/parent`) }
   } catch (e) {
     const msg = `${e.stderr || e.message || e}`
-    if (/404|No parent issue found/i.test(msg)) return { top: true } // top of the tree
+    if (/HTTP 404|No parent issue found/i.test(msg)) return { top: true } // top of the tree
     return { readError: errLine(e) }
   }
 }
@@ -68,6 +68,7 @@ function readEpicBranch(api, repo, number) {
 /** Walk up GitHub's parent links; stop at the first open ancestor with a branch. */
 export function walkAncestors(issue, repo, api = gh) {
   const ancestors = []
+  if (!repo) return { ancestors, readError: 'repo not set (GITHUB_REPOSITORY empty)' }
   let cur = issue
   for (let i = 0; i < MAX_DEPTH; i++) {
     const hop = readParent(api, repo, cur)
