@@ -1,7 +1,7 @@
 // Pure helpers for the live app list + PR previews — no Nitro auto-imports, so they unit-test.
 export interface PreviewComment { app: string, url: string }
 export interface Preview { app: string, pr: number, title: string, updatedAt: string, url: string }
-export interface LiveApp { app: string, stagingUrl: string | null, hasSignIn: boolean }
+export interface LiveApp { app: string, stagingUrl: string | null, hasSignIn: boolean, dir?: string }
 
 /** Parses the sticky `<!-- deploy-staging:<app> -->` comment deploy-app.yml posts on a PR. */
 export function parseDeployComment(body: string | null | undefined): PreviewComment | null {
@@ -98,11 +98,11 @@ export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error
   const tree = await get<{ tree: Array<{ path: string, type: string }>, truncated?: boolean }>(`/repos/${REPO}/git/trees/main?recursive=1`)
   if (tree.error || !tree.data) return { data: [], error: tree.error ?? 'empty git tree' }
   const errors: string[] = tree.data.truncated ? ['git tree truncated'] : []
-  const apps = await Promise.all(configPathsFromTree(tree.data.tree).map(async ({ app, path }) => {
+  const apps = await Promise.all(configPathsFromTree(tree.data.tree).map(async ({ app, path }): Promise<LiveApp | null> => {
     const r = await get<{ content?: string }>(`/repos/${REPO}/contents/${path}?ref=main`)
     if (r.error || !r.data?.content) { errors.push(`${path}: ${r.error ?? 'no content'}`); return null }
     try {
-      return liveAppFromConfig(app, JSON.parse(atob(r.data.content.replace(/\s/g, ''))))
+      return { ...liveAppFromConfig(app, JSON.parse(atob(r.data.content.replace(/\s/g, '')))), dir: path.slice(0, path.lastIndexOf('/')) }
     } catch { errors.push(`${path}: malformed JSON`); return null }
   }))
   return { data: apps.filter((a): a is LiveApp => !!a).sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }

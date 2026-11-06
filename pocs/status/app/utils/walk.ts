@@ -18,7 +18,8 @@ export function walkParam(item: { app?: string | null, number: number, title: st
 }
 
 // The "Open and sign in" link: page deep link (`to`) and the card's walk travel together.
-export function loginHrefFor(item: { app?: string | null, number: number, title: string, steps?: string[] | null, to?: string | null }): string {
+export function loginHrefFor(item: { app?: string | null, number: number, title: string, steps?: string[] | null, to?: string | null }): string | null {
+  if (!item.app) return null
   const q = new URLSearchParams()
   if (item.to) q.set('to', item.to)
   const w = item.steps?.length ? walkParam({ ...item, steps: item.steps }) : ''
