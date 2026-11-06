@@ -230,7 +230,7 @@
   description: "THE dispatch label (#3208): epic → splitter, anything else → a single-use worker builds it"
 - name: "pipeline:v1"
   color: "1d76db"
-  description: "Owner opt-in before work-this: the decomposer makes an epic/<n>--v1-... branch; GitHub auto-merges its leaf PRs on CI Gate + Merge decision (#3501). Nothing listens to this label."
+  description: "Opt-in: epic/<n>--v1 branch, leaf PRs auto-merge on CI Gate + Merge decision (#3501)"
 - name: "workflow"
   color: "006b75"
   description: "Loop/skill/flow improvement (often minted by a postmortem)"
