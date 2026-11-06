@@ -42,38 +42,50 @@ function gh(path) {
   return JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
 }
 
+const errLine = (e) => `${e.stderr || e.message || e}`.trim().split('\n')[0]
+
+/** One hop up: { parent } | { top: true } (no parent) | { readError }. */
+function readParent(api, repo, cur) {
+  try {
+    return { parent: api(`repos/${repo}/issues/${cur}/parent`) }
+  } catch (e) {
+    const msg = `${e.stderr || e.message || e}`
+    if (/404|No parent issue found/i.test(msg)) return { top: true } // top of the tree
+    return { readError: errLine(e) }
+  }
+}
+
+/** The `epic/<n>-*` branch of an open parent: { branch } | { readError }. */
+function readEpicBranch(api, repo, number) {
+  try {
+    const refs = api(`repos/${repo}/git/matching-refs/heads/epic/${number}-`)
+    return { branch: refs?.[0]?.ref?.replace(/^refs\/heads\//, '') || '' }
+  } catch (e) {
+    return { readError: errLine(e) }
+  }
+}
+
 /** Walk up GitHub's parent links; stop at the first open ancestor with a branch. */
 export function walkAncestors(issue, repo, api = gh) {
   const ancestors = []
-  let readError = ''
   let cur = issue
   for (let i = 0; i < MAX_DEPTH; i++) {
-    let parent
-    try {
-      parent = api(`repos/${repo}/issues/${cur}/parent`)
-    } catch (e) {
-      const msg = `${e.stderr || e.message || e}`
-      if (/404|No parent issue found/i.test(msg)) break // top of the tree
-      readError = msg.trim().split('\n')[0]
-      break
-    }
-    if (!parent || !parent.number) break
+    const hop = readParent(api, repo, cur)
+    if (hop.readError) return { ancestors, readError: hop.readError }
+    const parent = hop.parent
+    if (hop.top || !parent || !parent.number) break
     const state = `${parent.state || ''}`.toLowerCase()
     let branch = ''
     if (state === 'open') {
-      try {
-        const refs = api(`repos/${repo}/git/matching-refs/heads/epic/${parent.number}-`)
-        branch = refs?.[0]?.ref?.replace(/^refs\/heads\//, '') || ''
-      } catch (e) {
-        readError = `${e.stderr || e.message || e}`.trim().split('\n')[0]
-        break
-      }
+      const r = readEpicBranch(api, repo, parent.number)
+      if (r.readError) return { ancestors, readError: r.readError }
+      branch = r.branch
     }
     ancestors.push({ number: parent.number, state, branch })
     if (state === 'open' && branch) break
     cur = parent.number
   }
-  return { ancestors, readError }
+  return { ancestors, readError: '' }
 }
 
 function main(argv) {
