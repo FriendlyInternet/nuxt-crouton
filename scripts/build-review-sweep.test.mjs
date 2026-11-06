@@ -37,11 +37,11 @@ test('(h) draft or non-bot → no', () => {
   assert.equal(run({ pr: pr({ author: { login: 'pmcp' } }) }), false)
 })
 
-test('(bootstrap) workflow sweep step completes with a warning when the import fails', async () => {
+test('(no-fallback) workflow sweep step fails when the helper import fails', async () => {
   const { readFileSync } = await import('node:fs')
   const wf = readFileSync(new URL('../.github/workflows/automerge-epic-subpr.yml', import.meta.url), 'utf8')
-  const i = wf.indexOf('const { owner, repo } = context.repo\n            // Bootstrap-safe')
-  assert.ok(i > -1, 'sweep step with bootstrap-safe import not found')
+  const i = wf.indexOf('const { owner, repo } = context.repo\n            const { needsReview }')
+  assert.ok(i > -1, 'sweep step not found')
   const lines = wf.slice(i).split('\n')
   const body = [lines.shift()]
   for (const l of lines) { if (l.startsWith('            ')) body.push(l.slice(12)); else break }
@@ -52,8 +52,7 @@ test('(bootstrap) workflow sweep step completes with a warning when the import f
   try {
     const fn = new AsyncFunction('context', 'github', 'core', body.join('\n'))
     const github = new Proxy({}, { get() { throw new Error('github must not be touched when the import fails') } })
-    await fn({ repo: { owner: 'o', repo: 'r' } }, github, { warning: m => warnings.push(m), info() {} })
+    await assert.rejects(fn({ repo: { owner: 'o', repo: 'r' } }, github, { warning: m => warnings.push(m), info() {} }), /Cannot find module|ERR_MODULE_NOT_FOUND/)
   } finally { process.env.GITHUB_WORKSPACE = prev }
-  assert.equal(warnings.length, 1)
-  assert.match(warnings[0], /sweep skipped/)
+  assert.equal(warnings.length, 0)
 })
