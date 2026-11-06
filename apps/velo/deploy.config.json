@@ -79,6 +79,10 @@
       {
         "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
         "expectIncludes": "token"
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
       }
     ]
   }

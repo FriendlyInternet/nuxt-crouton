@@ -50,6 +50,13 @@
       "when": 1793183537432,
       "tag": "0006_thankful_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793955340403,
+      "tag": "0007_email_log_provider_id",
+      "breakpoints": true
     }
   ]
 }
