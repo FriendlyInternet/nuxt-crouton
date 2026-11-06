@@ -493,6 +493,10 @@ jobs:
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
         run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
 
+      # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
+      - name: Inline workflow block size (#3452)
+        run: node scripts/workflow-inline-size.mjs
+
       - name: Extract each `run:` block and lint it
         run: |
           set -uo pipefail
