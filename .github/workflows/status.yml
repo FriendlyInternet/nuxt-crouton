@@ -118,8 +118,8 @@ jobs:
               let runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
               // #2950: ignore check-runs of a CI run a newer run on this commit replaced.
+              const { liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
               try {
-                const { liveCheckRuns } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
                 const wfRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                   { owner, repo, head_sha: ref, per_page: 100 })
                 runs = liveCheckRuns(runs, wfRuns)
@@ -243,8 +243,8 @@ jobs:
               // id. Fenced, so no @mention in a log can ping. Any failure to fetch is skipped.
               let tails = ''
               let budget = 20000
+              const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
               try {
-                const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
                 for (const f of names.slice(0, 3)) {
                   if (!f.id || budget <= 0) continue
                   try {
@@ -263,8 +263,8 @@ jobs:
               // #3373: mention the owner ONLY when the fix-bot will not handle this failure. The
               // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
               let dec
+              const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
               try {
-                const { fixBotWillTry, expectedRunConclusion } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
                 const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                   { owner, repo, head_sha: pr.head.sha, per_page: 100 })
                 const bySuite = new Map(runs.map(r => [r.check_suite_id, r]))
@@ -333,8 +333,8 @@ jobs:
               const files = await github.paginate(github.rest.pulls.listFiles,
                 { owner, repo, pull_number: prNumber, per_page: 100 })
               let isVisual = true
+              const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
               try {
-                const { uiTouchedFromFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ui-touched.mjs`)
                 const pr = (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data
                 const cmp = await github.rest.repos.compareCommits(
                   { owner, repo, base: pr.base.sha, head: pr.head.sha, per_page: 1 })
@@ -351,8 +351,8 @@ jobs:
               }
               // One rule (#3351): a bot comment tagged review-capture that embeds a raw image.
               let hasEvidence = false
+              const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
               try {
-                const { hasCaptureEvidence } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/review-captures.mjs`)
                 hasEvidence = hasCaptureEvidence(await github.paginate(github.rest.issues.listComments,
                   { owner, repo, issue_number: prNumber, per_page: 100 }))
               } catch (e) {
