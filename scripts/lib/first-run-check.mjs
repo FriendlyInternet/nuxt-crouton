@@ -94,3 +94,16 @@ export async function noteFirstRunIgnored({ github, core, owner, repo, pull_numb
   await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
     body: `<!-- pipeline-note -->\n${mark}\nℹ️ Merged over first-run check(s) ${list} — they fail only because this PR adds the code they load.` })
 }
+
+// Red verdict for a PR (#3470): a red check counts unless it is a first-run failure. Matched by check-run
+// id, never by name — names repeat across workflows, so a real failure in a same-named run still blocks.
+export const redAfterFirstRun = ({ statusRed = false, redRuns = [], firstRunRuns = [] }) =>
+  statusRed || redRuns.some(r => !firstRunRuns.some(f => f.id === r.id))
+
+// isRed() resolves { statusRed, redRuns }; returns { red, firstRun: [names] } for the merge decision.
+export async function firstRunSplit({ isRed, pull_number, ...ctx }) {
+  const { statusRed, redRuns } = await isRed()
+  const firstRunRuns = redRuns.length ? await firstRunNames({ ...ctx, redRuns }) : []
+  return { red: redAfterFirstRun({ statusRed, redRuns, firstRunRuns }), firstRun: firstRunRuns.map(r => r.name),
+    noteIgnored: names => noteFirstRunIgnored({ ...ctx, pull_number, sha: ctx.pr.head.sha, names }) }
+}

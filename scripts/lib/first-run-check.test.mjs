@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { classifyFirstRun, parseFirstRunError } from './first-run-check.mjs'
+import { classifyFirstRun, parseFirstRunError, redAfterFirstRun } from './first-run-check.mjs'
 
 const modErr = "Unhandled error: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/runner/work/nuxt-crouton/nuxt-crouton/scripts/lib/red-note.mjs' imported from /x/index.js"
 const fnErr = 'Unhandled error: TypeError: needsLiveFilter is not a function'
@@ -41,4 +41,10 @@ test('8. epic shape: helper on head but not main → first-run', () => {
 test('parse: dotted names and non-matching text → null', () => {
   assert.equal(parseFirstRunError('a.b is not a function'), null)
   assert.equal(parseFirstRunError(''), null)
+})
+test('9. matched by run id: a first-run `automerge` run plus a second same-named run failing for real → blocks', () => {
+  const first = { id: 1, name: 'automerge' }, real = { id: 2, name: 'automerge' }
+  assert.equal(redAfterFirstRun({ redRuns: [first], firstRunRuns: [first] }), false)
+  assert.equal(redAfterFirstRun({ redRuns: [first, real], firstRunRuns: [first] }), true)
+  assert.equal(redAfterFirstRun({ statusRed: true, redRuns: [first], firstRunRuns: [first] }), true)
 })

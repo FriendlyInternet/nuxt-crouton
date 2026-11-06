@@ -157,7 +157,6 @@ jobs:
             const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
-            const { firstRunNames } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)
             const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
             if (!shouldRunOnEvent(context.eventName, context.payload)) {
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
@@ -295,12 +294,7 @@ jobs:
               }
               core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               const checkRuns = liveCheckRuns(rawRuns, wfRuns)
-              const { statusRed, redRuns } = await isRed(pr.head.sha, checkRuns)
-              // #3470: a red check that fails only because the PR adds the code it loads from main.
-              const firstRunRuns = redRuns.length ? await firstRunNames({ github, core, owner, repo, pr, redRuns, defaultBranch: process.env.DEFAULT_BRANCH }) : []
-              const firstRun = firstRunRuns.map(r => r.name)
-              const red = statusRed || redRuns.some(r => !firstRunRuns.some(f => f.id === r.id))
-
+              const { red, firstRun, noteIgnored } = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: () => isRed(pr.head.sha, checkRuns), defaultBranch: process.env.DEFAULT_BRANCH })
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
               // 'missing' → the workflow never started (a dropped event); say so loudly
@@ -409,7 +403,7 @@ jobs:
 
               // #2904: two merges into the same base seconds apart — the second gets HTTP 405
               // "Base branch was modified". Retry that (only that) a few times; any other error is final.
-              if (gate.firstRun?.length) await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).noteFirstRunIgnored({ github, core, owner, repo, pull_number, sha: pr.head.sha, names: gate.firstRun })
+              if (gate.firstRun?.length) await noteIgnored(gate.firstRun)
               let merged = false
               for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
                 try {
