@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateMainGallery } from '../../../../database/queries'
+import { updateMainGallery, assertMainGalleryReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { z } from 'zod'
 
@@ -22,6 +22,9 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
+
+  // Referenced records must belong to this team (#3378)
+  await assertMainGalleryReferences(team.id, body)
 
   // Only include fields that were actually sent in the request
   const updates: Record<string, any> = {}
