@@ -195,7 +195,7 @@ test('first-run C. a real red still wins over first-run', () => {
   assert.equal(leaf({ red: true, firstRun: ['pr-comment'] }).code, 'red')
 })
 
-// ---- #3491: skipBeforeReads / applySharedCodeHold / shadowCheck ----
+// ---- #3491: skipBeforeReads / applySharedCodeHold / mergeDecisionCheck ----
 const pre = (o = {}) => skipBeforeReads({ draft: false, authorIsPipeline: true, baseRef: 'epic/1-x', headRef: 'work-1', ...o })
 test('D3 #2051/#2054: draft sign-off PR → skip draft', () => {
   assert.deepEqual(pre({ draft: true }), { skip: true, code: 'draft' })
@@ -281,6 +281,21 @@ test('decideReview equals decideLeafMerge where preflight passes and firstRun is
     }
   assert.equal(n, 192)
 })
+test('decideReview equals decideLeafMerge on the #3173/#3428 comment fixtures via reviewState', () => {
+  const fixtures = [
+    [[rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa'],
+    [[rv('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb'],
+    [[needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'aaa'],
+    [[needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')], 'bbb'],
+    [[c('ok', '2026-11-01T09:00:00Z'), needsOwner('aaa', '2026-11-01T10:00:00Z')], 'aaa'],
+  ]
+  for (const [comments, headSha] of fixtures) {
+    const go = goFor(comments, [])
+    const st = reviewState({ comments, headSha, bots })
+    const x = { baseRef: 'epic/1-x', labels: [], go, ownerHold: ['final', 'needs-owner'].includes(st.kind) ? st : null, headSha, headReview: st }
+    assert.deepEqual(decideReview(x), decideLeafMerge({ ...x, headRef: 'work-2', red: false, ciGate: 'success', mergeableState: 'clean' }))
+  }
+})
 
 const v1 = (o) => decideV1({ draft: false, authorIsPipeline: true, baseRef: 'epic/1--v1-x', headRef: 'work-1', labels: ['build:approved'],
   go: { go: false }, headReview: { kind: 'other' }, headSha: SHA, files: ['scripts/a.mjs'], ...o })
@@ -312,8 +327,16 @@ test('v1 B2/B3 new head unreviewed → head-unreviewed naming the SHA (#3467)', 
   assert.equal(r.code, 'head-unreviewed')
   assert.match(r.reason, /04bfeaa0/)
 })
-test('v1 owner hold on an older commit doesn\'t count', () => {
-  assert.equal(v1({ labels: [], go: { go: false }, ownerHold: null }).merge, false)
+test('v1 owner hold on an older commit doesn\'t count (:128 fixture, real reviewState)', () => {
+  const cs = [needsOwner('aaa', '2026-11-01T10:00:00Z'), c('ok', '2026-11-01T11:00:00Z')]
+  const run = (headSha) => {
+    const st = reviewState({ comments: cs, headSha, bots })
+    return v1({ labels: [], go: goFor(cs, []), headSha, ownerHold: st.kind === 'needs-owner' ? st : null })
+  }
+  assert.equal(run('aaa').merge, true)
+  const stale = run('bbb')
+  assert.equal(stale.merge, false)
+  assert.equal(stale.code, 'no-review')
 })
 test('v1 shared-code without ok → wait (workflow file)', () => {
   for (const files of [['.github/workflows/a.yml'], ['packages/a.ts', '.github/workflows/a.yml']]) {
