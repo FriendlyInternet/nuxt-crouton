@@ -142,6 +142,7 @@ jobs:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
           FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}   # #3470: what the checks loaded
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}   # #3361: writes the retry note when the App is out of allowance
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -171,13 +172,13 @@ jobs:
             // Any RED check for this SHA? (failed check-run or failed commit status.)
             // #3429: GitHub can leave a finished run `in_progress` with a conclusion — isDone handles it.
             async function isRed(ref, runs) {
-              const RED = RED_CONCLUSIONS
-              if (runs.some(r => isDone(r) && RED.includes(r.conclusion))) return true
+              const redRuns = runs.filter(r => isDone(r) && RED_CONCLUSIONS.includes(r.conclusion))
+              let statusRed = false
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
-                if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) return true
+                if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) statusRed = true
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
-              return false
+              return { statusRed, redRuns }
             }
 
             // Has REQUIRED_CHECK completed successfully for this SHA? Returns one of
@@ -293,8 +294,7 @@ jobs:
               }
               core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               const checkRuns = liveCheckRuns(rawRuns, wfRuns)
-              const red = await isRed(pr.head.sha, checkRuns)
-
+              const { red, firstRun, noteIgnored } = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: () => isRed(pr.head.sha, checkRuns), defaultBranch: process.env.DEFAULT_BRANCH })
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
               // 'missing' → the workflow never started (a dropped event); say so loudly
@@ -342,7 +342,7 @@ jobs:
                 if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, ciGate: checkState, mergeableState: state })
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
                   const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
@@ -403,6 +403,7 @@ jobs:
 
               // #2904: two merges into the same base seconds apart — the second gets HTTP 405
               // "Base branch was modified". Retry that (only that) a few times; any other error is final.
+              if (gate.firstRun?.length) await noteIgnored(gate.firstRun)
               let merged = false
               for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
                 try {
