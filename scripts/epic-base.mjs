@@ -65,26 +65,31 @@ function readEpicBranch(api, repo, number) {
   }
 }
 
+/** One step up from `cur`: { done } (top of tree) | { readError } | { ancestor: { number, state, branch } }. */
+function stepUp(api, repo, cur) {
+  const hop = readParent(api, repo, cur)
+  if (hop.readError) return { readError: hop.readError }
+  const parent = hop.parent
+  if (hop.top || !parent || !parent.number) return { done: true }
+  const state = `${parent.state || ''}`.toLowerCase()
+  if (state !== 'open') return { ancestor: { number: parent.number, state, branch: '' } }
+  const r = readEpicBranch(api, repo, parent.number)
+  if (r.readError) return { readError: r.readError }
+  return { ancestor: { number: parent.number, state, branch: r.branch } }
+}
+
 /** Walk up GitHub's parent links; stop at the first open ancestor with a branch. */
 export function walkAncestors(issue, repo, api = gh) {
   const ancestors = []
   if (!repo) return { ancestors, readError: 'repo not set (GITHUB_REPOSITORY empty)' }
   let cur = issue
   for (let i = 0; i < MAX_DEPTH; i++) {
-    const hop = readParent(api, repo, cur)
-    if (hop.readError) return { ancestors, readError: hop.readError }
-    const parent = hop.parent
-    if (hop.top || !parent || !parent.number) break
-    const state = `${parent.state || ''}`.toLowerCase()
-    let branch = ''
-    if (state === 'open') {
-      const r = readEpicBranch(api, repo, parent.number)
-      if (r.readError) return { ancestors, readError: r.readError }
-      branch = r.branch
-    }
-    ancestors.push({ number: parent.number, state, branch })
-    if (state === 'open' && branch) break
-    cur = parent.number
+    const step = stepUp(api, repo, cur)
+    if (step.readError) return { ancestors, readError: step.readError }
+    if (step.done) break
+    ancestors.push(step.ancestor)
+    if (step.ancestor.branch) break
+    cur = step.ancestor.number
   }
   return { ancestors, readError: '' }
 }
