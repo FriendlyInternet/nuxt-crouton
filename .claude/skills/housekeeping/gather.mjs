@@ -22,7 +22,7 @@ import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
 import { isAgentComment } from '../../../scripts/approval.mjs'
-import { issuesWithRecentRun, staleWorkThis } from '../../../scripts/lib/stale-work-this.mjs'
+import { staleWorkThisLabels as collectStaleWorkThis } from '../../../scripts/lib/stale-work-this-gather.mjs'
 import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
@@ -357,58 +357,7 @@ async function stuckPRs(openPRs) {
 }
 
 // ── Forgotten work-this labels (#3018) ───────────────────────────────────────
-async function staleWorkThisLabels() {
-  try {
-    // Own query: the shared openIssues list is one 100-item page and would miss older tickets.
-    const openIssues = []
-    for (let page = 1; page <= 10; page++) {
-      const r = await gh(
-        `/repos/${OWNER}/${NAME}/issues?state=open&labels=work-this&per_page=100&page=${page}`
-      )
-      openIssues.push(...r.filter((x) => !x.pull_request))
-      if (r.length < 100) break
-    }
-    const canaryIssues = new Set(
-      JSON.parse(readFileSync('.github/canaries.json', 'utf8'))
-        .canaries.map((c) => c.issue)
-        .filter(Boolean)
-    )
-    const since = new Date(Date.now() - 60 * 60000).toISOString()
-    const runs = await gh(
-      `/repos/${OWNER}/${NAME}/actions/workflows/work-issue-pidev.yml/runs?per_page=100&created=${encodeURIComponent('>=' + since)}`
-    )
-    const recentRunIssues = issuesWithRecentRun(runs.workflow_runs || [])
-    const issues = []
-    for (const i of openIssues) {
-      const n = labelNames(i)
-      if (!n.includes('work-this') || n.includes('status:blocked')) continue
-      let labeledAt = null
-      for (let page = 1; ; page++) {
-        const ev = await gh(`/repos/${OWNER}/${NAME}/issues/${i.number}/events?per_page=100&page=${page}`)
-        for (const e of ev) {
-          if (e.event === 'labeled' && e.label?.name === 'work-this') labeledAt = e.created_at
-        }
-        if (ev.length < 100) break
-      }
-      if (!labeledAt) continue
-      const prs = await gh(
-        `/repos/${OWNER}/${NAME}/pulls?state=open&head=${OWNER}:work-${i.number}&per_page=1`
-      )
-      issues.push({
-        number: i.number,
-        title: i.title,
-        html_url: i.html_url,
-        labels: i.labels,
-        labeledAt,
-        openPr: prs.length > 0
-      })
-    }
-    return staleWorkThis({ issues, recentRunIssues, canaryIssues })
-  } catch (e) {
-    console.error(`staleWorkThis: skipped: ${e.message}`)
-    return null
-  }
-}
+const staleWorkThisLabels = () => collectStaleWorkThis({ gh, owner: OWNER, name: NAME })
 
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/

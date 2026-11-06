@@ -65,3 +65,40 @@ test('render', () => {
   assert.deepEqual(renderStuckSections({ staleWorkThis: [] }), [])
   assert.match(renderStuckSections({ staleWorkThis: null })[0][1][0], /unavailable/)
 })
+
+// ── real collection path with an injected GitHub client ──────────────────────
+import { staleWorkThisLabels } from './stale-work-this-gather.mjs'
+import { writeFileSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const dir = mkdtempSync(join(tmpdir(), 'swt-'))
+const canariesPath = join(dir, 'canaries.json')
+writeFileSync(canariesPath, JSON.stringify({ canaries: [{ issue: 99 }, { issue: null }] }))
+const fakeGh = (over = {}) => async (path) => {
+  if (over.throw) throw new Error('boom')
+  if (path.includes('/issues?state=open'))
+    return [
+      { number: 10, title: 'a', html_url: 'u10', labels: [{ name: 'work-this' }] },
+      { number: 11, title: 'has run', html_url: 'u11', labels: [{ name: 'work-this' }] },
+      { number: 12, title: 'has pr', html_url: 'u12', labels: [{ name: 'work-this' }] },
+      { number: 99, title: 'canary', html_url: 'u99', labels: [{ name: 'work-this' }] },
+      { number: 13, title: 'blocked', html_url: 'u13', labels: [{ name: 'work-this' }, { name: 'status:blocked' }] },
+      { number: 14, title: 'pr item', pull_request: {}, labels: [{ name: 'work-this' }] }
+    ]
+  if (path.includes('/actions/workflows/'))
+    return { workflow_runs: [run(11, 'success'), run(10, 'skipped')] }
+  if (path.includes('/events')) return [{ event: 'labeled', label: { name: 'work-this' }, created_at: ago(5) }]
+  if (path.includes('/pulls?')) return path.includes('work-12') ? [{ number: 1 }] : []
+  throw new Error('unexpected ' + path)
+}
+
+test('collection: lists only the forgotten ticket via real gather code', async () => {
+  const out = await staleWorkThisLabels({ gh: fakeGh(), owner: 'o', name: 'r', canariesPath, now: NOW })
+  assert.deepEqual(out.map((x) => x.number), [10])
+  assert.equal(out[0].labelAgeHours, 5)
+})
+test('collection: API failure yields null, not a throw', async () => {
+  const out = await staleWorkThisLabels({ gh: fakeGh({ throw: true }), owner: 'o', name: 'r', canariesPath, now: NOW })
+  assert.equal(out, null)
+})
