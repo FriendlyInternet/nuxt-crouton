@@ -386,6 +386,8 @@ jobs:
           cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
           # Revise outcome (#3432): counts a PR-description edit as a revision.
           cp scripts/lib/revise-outcome.mjs "$RUNNER_TEMP/revise-outcome.mjs"
+          # Adds the Workflow-change PR-body line when a workflow file is touched (#3469).
+          cp scripts/lib/workflow-change-line.mjs "$RUNNER_TEMP/workflow-change-line.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -1321,6 +1323,7 @@ jobs:
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          [ -n "$PRNUM" ] && node "$RUNNER_TEMP/workflow-change-line.mjs" --pr "$PRNUM" --issue "$ISSUE" --title "$TITLE" || true
           # Post the tagged screenshot comment (same marker the deploy-side capture uses, #3351);
           # if the write fails the run record must not claim an image the PR doesn't show.
           if [ "$EVIDENCE_ATTACHED" = "1" ]; then
