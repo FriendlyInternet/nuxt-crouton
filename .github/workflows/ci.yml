@@ -662,7 +662,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history: audit diffs against the merge-base with main
+          # Full history: audit diffs against the merge-base with the PR's base branch (main on push)
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -683,9 +683,12 @@ jobs:
           path: coverage
 
       - name: Run fallow audit (diff-scoped, coverage-fed)
-        # --coverage-root strips the generating checkout's prefix so per-function
-        # matching survives any root mismatch between the two jobs (#1256).
-        run: npx fallow audit --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
+        # Judged against the PR's OWN base (#3519) — epic/* PRs on their own diff, push → fallow default.
+        # --coverage-root strips the generating checkout's prefix (#1256).
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/fallow-audit.mjs --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
 
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job
