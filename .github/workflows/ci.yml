@@ -595,6 +595,33 @@ jobs:
           # /tmp). Everything else at -S warning is on and blocking.
           "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
+  # A pipeline PR (work-*) must not quietly delete a test case (#3314). Own job, no stage
+  # condition: node-checks skips POC-only PRs and the gate accepts a skipped job. The PR body
+  # is read live and passed via env, never pasted into the script.
+  removed-tests:
+    name: Removed tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Fail on unexplained removed test cases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          PR_BODY="$(gh pr view "$PR_NUMBER" --json body --jq .body)"
+          export PR_BODY
+          node scripts/check-removed-tests.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --branch "$HEAD_REF"
+
   # Parses every workflow the way GitHub does (#2970). A duplicate env key merged on 2026-10-28
   # made every worker dispatch fail to parse for ~30 min; nothing in CI parsed workflows.
   # shellcheck/pyflakes integration is OFF: shell is already covered by shellcheck-workflows.
@@ -699,7 +726,7 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, build-kassa, compile-check,
-            test, package-check, node-checks, actionlint, fallow-audit]
+            test, package-check, node-checks, removed-tests, actionlint, fallow-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
