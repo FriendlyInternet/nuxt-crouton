@@ -4,11 +4,12 @@
  * push/pull and the config edits that lost a conflict. Split out of Status.vue
  * so the banner's template stays small.
  */
-import type { LostEdit, SyncDevice } from '../../types'
+import type { SalesLostEdit, SalesSyncDevice } from '../../types'
+import { shortDeviceId } from '../../utils/sync-devices'
 
 const props = defineProps<{
-  devices: SyncDevice[]
-  lostEdits: LostEdit[]
+  devices: SalesSyncDevice[]
+  lostEdits: SalesLostEdit[]
   /** Current time on the server's clock (ms), so ages ignore device skew. */
   now: number
   /** Show the "no lost edits" line (only once data has loaded without error). */
@@ -19,7 +20,7 @@ const { t } = useT()
 const ago = useSyncAgo()
 const agoOf = (at: number | null | undefined) => ago(at, props.now)
 /** "price: 5 → 6" for the fields that differ; falls back to the lost values alone. */
-function diffLabel(l: LostEdit): string {
+function diffLabel(l: SalesLostEdit): string {
   const keys = Object.keys(l.lost).filter(k => k in l.kept && JSON.stringify(l.lost[k]) !== JSON.stringify(l.kept[k]))
   return (keys.length ? keys : Object.keys(l.lost).slice(0, 3))
     .slice(0, 4)

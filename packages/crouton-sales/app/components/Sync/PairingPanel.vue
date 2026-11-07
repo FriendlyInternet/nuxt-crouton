@@ -3,7 +3,7 @@
  * Pairing (#806): the "link a till" button plus the one-time code dialog with its
  * countdown and install command. Auto-imported as <SalesSyncPairingPanel>.
  */
-// TODO(#3540): the pairing code is not yet scoped to the active event; that wiring is tracked there.
+// No eventId is sent with the pairing request on purpose: the code is team-wide, not scoped to an event (#3540).
 const emit = defineEmits<{ closed: [] }>()
 
 const { t } = useT()

@@ -15,16 +15,17 @@
  * Auto-imported as <SalesSyncStatus>. Mount inside a clientOnly surface (the
  * dashboard block) — it polls and uses live timers.
  */
-import type { LostEdit, SyncDevice } from '../../types'
+import type { SalesLostEdit, SalesSyncDevice } from '../../types'
+import { shortDeviceId } from '../../utils/sync-devices'
 
 interface SyncStatusResponse {
   lastContactAt: number | null
   lastEventAt: number | null
   lastBatchApplied: number
   /** Every till of the team, freshest first (#2725). */
-  devices?: SyncDevice[]
+  devices?: SalesSyncDevice[]
   /** Latest config edits that lost a conflict, newest first (#816). */
-  lostEdits?: LostEdit[]
+  lostEdits?: SalesLostEdit[]
   serverNow: number
 }
 

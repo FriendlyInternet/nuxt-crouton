@@ -3,11 +3,12 @@
  * Linked devices list (#806): each till / print router with its last push/pull and an unlink
  * action. Auto-imported as <SalesSyncDeviceList>.
  */
-import type { Device, SyncDevice } from '../../types'
+import type { SalesDevice, SalesSyncDevice } from '../../types'
+import { bareDeviceId, shortDeviceId } from '../../utils/sync-devices'
 
 const props = defineProps<{
-  devices: Device[]
-  syncDevices: SyncDevice[]
+  devices: SalesDevice[]
+  syncDevices: SalesSyncDevice[]
   /** Server clock (ms) the sync ages are measured against. */
   now: number
 }>()
@@ -22,7 +23,7 @@ const { teamSlug } = useTeamContext()
 const syncOf = (id: string) => props.syncDevices.find(d => bareDeviceId(d.deviceId) === bareDeviceId(id))
 const dateOf = (at: string | number | null) => at ? new Date(at).toLocaleDateString() : '—'
 
-const unlinkTarget = ref<Device | null>(null)
+const unlinkTarget = ref<SalesDevice | null>(null)
 const unlinkOpen = computed({
   get: () => !!unlinkTarget.value,
   set: (v) => { if (!v) unlinkTarget.value = null }
