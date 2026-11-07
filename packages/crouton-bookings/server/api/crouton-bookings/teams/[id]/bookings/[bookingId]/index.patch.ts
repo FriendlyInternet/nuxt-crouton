@@ -2,15 +2,15 @@
  * Update a booking - allows any team member to update bookings
  * (not restricted to owner like the generated CRUD endpoint)
  */
-import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
+import { patchBookingGuarded } from '../../../../../../utils/booking-capacity'
+import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
 
 const updateSchema = z.object({
   location: z.string().optional(),
   date: z.string().optional(),
-  slot: z.string().optional(),
+  slot: z.union([z.string(), z.array(z.string())]).optional(),
   group: z.string().nullable().optional(),
   status: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
 })
@@ -38,52 +38,18 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Check booking exists and belongs to this team
-  const [existing] = await db
-    .select()
-    .from(bookingsBookings)
-    .where(
-      and(
-        eq(bookingsBookings.id as any, bookingId),
-        eq(bookingsBookings.teamId as any, team.id),
-      ),
-    )
+  // A booking may only point at its own team's location (#3378)
+  await assertRefsInTeam(db, team.id, [
+    { field: 'location', table: bookingsLocations, value: parsed.data.location },
+  ])
 
-  if (!existing) {
-    throw createError({
-      status: 404,
-      statusText: 'Booking not found',
-    })
-  }
-
-  // Build update data
-  const updateData: Record<string, unknown> = {
-    updatedBy: user.id,
-    updatedAt: new Date(),
-  }
-
-  if (parsed.data.location !== undefined) {
-    updateData.location = parsed.data.location
-  }
-  if (parsed.data.date !== undefined) {
-    updateData.date = new Date(parsed.data.date)
-  }
-  if (parsed.data.slot !== undefined) {
-    updateData.slot = parsed.data.slot
-  }
-  if (parsed.data.group !== undefined) {
-    updateData.group = parsed.data.group
-  }
-  if (parsed.data.status !== undefined) {
-    updateData.status = parsed.data.status
-  }
-
-  // Update the booking
-  const [updated] = await db
-    .update(bookingsBookings)
-    .set(updateData as any)
-    .where(eq(bookingsBookings.id as any, bookingId))
-    .returning()
-
-  return updated
+  // Capacity is re-checked when the booking moves or comes back from cancelled (#3379)
+  const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
+  return await patchBookingGuarded(db, {
+    teamId: team.id,
+    bookingId,
+    userId: user.id,
+    tz,
+    patch: parsed.data,
+  })
 })

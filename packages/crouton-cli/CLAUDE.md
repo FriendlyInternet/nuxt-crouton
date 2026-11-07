@@ -390,6 +390,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold`. Also `ownedRefTargets` / `ownedRefTargetNames` — the package-owned collections an app may `refTarget` (plural dir → layer + package schema export), limited to packages the app EXTENDS; a dir two extended packages both ship (`locations`: sales + bookings) is ambiguous and registers for neither (#2311) |
 | `lib/utils/ref-collection.ts` | `resolveRefCollectionKey(refTarget, currentLayer, collectionLayerMap)` — the registered collection KEY a reference points the UI at (`croutonAssets`, `bookingsLocations`), via the TARGET's layer. Used by the form picker, the list cell and the asset detector, which used to prefix the current layer (`mainAssets`) (#2311) |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
+| `lib/utils/team-ref-fields.ts` | Which fields are team-scoped references; the generator emits `assertXReferences` (queries) + calls in create/update routes, backed by crouton-core `assertRefsInTeam` (#3378) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
@@ -759,7 +760,7 @@ Drizzle schema, queries, routes, list, composable, form — from its own layer (
   `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
 
 The package's manifest `configuration` questions (bookings: email) are **still asked** for a package
-the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The CLI
+the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The answers are written under the manifest's `runtimeConfigKey` (the key the package reads), each setting on the side its `runtimeConfig: 'public'|'server'|'both'` names; an undeclared key falls back to `crouton<Feature>` with a warning (#3398). The CLI
 no longer merges manifest `collections` into the app config at all: every package that listed them owns
 them, so that path was removed (#2316). Answers land
 under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.config.ts` as before.
@@ -823,6 +824,7 @@ export default {
     // Access (optional; absent = output unchanged). create/reorder: 'member'|'admin'
     // (reorder also guards [id]/move); list: 'team'|'own' ('own' filters list AND ?ids= for non-admins)
     { name: 'notes', fieldsFile: './schemas/notes.json', access: { create: 'admin', list: 'own' } }
+    // Generator also emits an `<X>Access` export in queries.ts and registers it as `access` in the query registry (read by crouton-pages public endpoints)
   ],
   dialect: 'sqlite',
   seed: {

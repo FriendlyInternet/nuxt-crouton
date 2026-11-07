@@ -48,6 +48,14 @@ export interface CroutonManifest {
    */
   ownsCollections?: boolean
 
+  /**
+   * The `runtimeConfig` key this package reads its `configuration` answers from
+   * (e.g. 'maps' for `useRuntimeConfig().public.maps`). The generator writes
+   * the answers under exactly this key. Undeclared: it guesses `crouton<Feature>`
+   * and warns (#3398).
+   */
+  runtimeConfigKey?: string
+
   // Configuration options
   configuration?: Record<string, ManifestConfigOption>
 
@@ -139,6 +147,8 @@ export interface ManifestConfigOption {
   description?: string
   default: unknown
   options?: Array<{ value: string; label: string }>
+  /** Where the package reads this setting: 'public', 'server' or 'both' (default). */
+  runtimeConfig?: 'public' | 'server' | 'both'
 }
 
 export interface ManifestExtensionPoint {

@@ -1,6 +1,8 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -816,7 +818,14 @@ export function generateQueries(
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const own = data.collectionConfig?.access?.list === 'own'
+  const access = resolveAccess(data)
+  const own = access.list === 'own'
+  // The runtime registry reads this to refuse public exposure of 'own' collections (#3380)
+  const accessExport = Object.keys(access).length === 0
+    ? ''
+    : `
+
+export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const`
   const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
@@ -841,12 +850,26 @@ export function generateQueries(
     own
   }
 
+  // Team-scoped reference check (#3378) — only emitted when the collection has such refs
+  const teamRefFields = collectTeamRefFields(data)
+  const assertRefsQuery = teamRefFields.length === 0
+    ? ''
+    : `
+
+export async function assert${prefixedPascalCase}References(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.${getTargetLayerCamelCase(f.refTarget)}${pascal(f.refTarget)}, value: data.${f.name} },`).join('\n')}
+  ])
+}`
+
   return buildFileHeader(ctx)
     + buildGetAllQuery(ctx)
     + buildGetByIdsQuery(ctx)
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + accessExport
+    + assertRefsQuery
     + treeQueries
     + sortableQueries
 }

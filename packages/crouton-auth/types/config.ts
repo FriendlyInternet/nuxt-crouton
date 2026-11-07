@@ -222,9 +222,13 @@ export interface TeamsConfig {
   /**
    * Allow users to create new teams
    *
+   * - `true`: any signed-in user can create teams
+   * - `false`: nobody can
+   * - `'superAdmin'`: only the site admin (user `role: 'admin'`)
+   *
    * @default true
    */
-  allowCreate?: boolean
+  allowCreate?: boolean | 'superAdmin'
 
   /**
    * Maximum number of teams per user (0 = unlimited)

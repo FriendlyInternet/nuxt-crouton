@@ -10,7 +10,7 @@
  *   ### Verdict
  *   go | no-go | needs-owner
  *   ### Rubric
- *   - 3: PASS|FAIL — one line of evidence          (ids: 3 4 5 6 7 8 9)
+ *   - 3: PASS|FAIL — one line of evidence          (ids: 3 4 5 6 7 8 9 10)
  *   ### Question          (only for needs-owner: ONE yes/no question)
  *
  * Items 8 (rule stated and tested) and 9 (contradicts the record) are the two made explicit for
@@ -37,6 +37,7 @@ export const RUBRIC = [
   { id: '7', name: 'No owner decision needed' },
   { id: '8', name: 'Rule stated? (names what must stay true and asks for a test aimed at that rule, not only the mechanism)' },
   { id: '9', name: 'Contradicts the record? (no instruction conflicts with the epic Decisions log, a recorded experiment or a merged finding)' },
+  { id: '10', name: 'Own test steps? (every How-to-test step exercises only this ticket, not a sibling)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 const BEHAVIOUR = /^type:(feat|fix|perf|refactor)$/
@@ -84,7 +85,7 @@ export function parseVerdicts(body) {
     if (!['go', 'no-go', 'needs-owner'].includes(stated)) errors.push(`#${n}: Verdict must be go, no-go or needs-owner`)
     const items = {}
     for (const line of section(chunk, 'Rubric').split('\n')) {
-      const m = line.match(/^\s*(?:[-*]\s+)?\**([1-9])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
+      const m = line.match(/^\s*(?:[-*]\s+)?\**(10|[1-9])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
       if (m) items[m[1]] = { pass: m[2].toUpperCase() === 'PASS', evidence: m[3].replace(/\*\*/g, '').trim() }
     }
     for (const id of IDS) {
@@ -111,8 +112,8 @@ export function decide(tickets, verdictBody) {
     const items = {}
     for (const id of IDS) items[id] = floor[id] || r.items[id]
     const failed = IDS.filter((id) => !items[id].pass)
-    const hard = failed.filter((id) => id !== '7')
-    const verdict = hard.length ? 'no-go' : !items['7'].pass ? 'needs-owner' : 'go'
+    const hard = failed.filter((id) => id !== '7' && id !== '10')
+    const verdict = hard.length ? 'no-go' : !(items['7'].pass && items['10'].pass) ? 'needs-owner' : 'go'
     if (r.stated === 'go' && verdict !== 'go' && !Object.keys(floor).length) errors.push(`#${t.number}: reviewer said go but its own rubric fails: ${failed.join(', ')}`)
     if (verdict === 'needs-owner' && !r.question) errors.push(`#${t.number}: needs-owner needs a Question section`)
     per.push({ number: t.number, title: t.title, verdict, items, failed, question: r.question })

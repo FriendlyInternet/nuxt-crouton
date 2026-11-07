@@ -218,7 +218,7 @@ interface CroutonAuthConfig {
 
   // Team configuration
   teams?: {
-    allowCreate?: boolean             // Default: true (multi-tenant)
+    allowCreate?: boolean | 'superAdmin' // Default: true (multi-tenant); 'superAdmin' = only super-admins may create teams
     limit?: number                    // Max teams per user, default: 5
     memberLimit?: number              // Max members per team, default: 100
     requireInvite?: boolean           // Default: true
