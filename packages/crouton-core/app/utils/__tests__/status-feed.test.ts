@@ -161,3 +161,29 @@ describe('mergeTeamEvents with live sync', () => {
     expect(own[0]!.text).toContain('You saved')
   })
 })
+
+describe('mergeTeamEvents own floor', () => {
+  const row = (id: string, ts: number, userId: string) => ({ id, timestamp: ts, operation: 'update', collectionName: 'posts', userId, itemId: id })
+  const own = Array.from({ length: 10 }, (_, i) => row(`own${i}`, 1000 + i, 'me'))
+  const team = Array.from({ length: 30 }, (_, i) => row(`team${i}`, 5000 + i, 'bob'))
+
+  it('keeps the newest own entries in the feed despite newer teammate rows', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-own9', 'event-own8', 'event-own7'])
+  })
+
+  it('fills the rest with teammates when there are few own entries', () => {
+    const ids = mergeTeamEvents([], [own[0]!, ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-own0'])
+  })
+
+  it('behaves as before without a floor', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', true).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-team25'])
+  })
+
+  it('has no effect when others are excluded', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', false, 3).map(m => m.id)
+    expect(ids).toEqual(['event-own9', 'event-own8', 'event-own7', 'event-own6', 'event-own5'])
+  })
+})

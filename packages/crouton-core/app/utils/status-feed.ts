@@ -12,6 +12,8 @@ export interface StatusMessage {
   operation?: string
   itemId?: string
   seen: boolean
+  /** Set on entries merged from team events: true when the current user made the change */
+  own?: boolean
   retry?: () => void
 }
 
@@ -50,9 +52,10 @@ export interface TeamEventRow {
  * Merge the current user's own events into the local history (so they survive a reload).
  * Other users' events are dropped unless `includeOthers` (live sync on); with no
  * `currentUserId` nothing is merged. Dedupes by id and against in-memory entries for the same
- * collection+item+operation, newest first, capped at STATUS_RECENT_MAX.
+ * collection+item+operation, newest first, capped at STATUS_RECENT_MAX. With `includeOthers`, `ownFloor` slots
+ * are kept for the newest own entries (default 0 = plain newest-first).
  */
-export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false): StatusMessage[] {
+export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false, ownFloor = 0): StatusMessage[] {
   if (!currentUserId) return history
   const known = new Set(history.map(m => m.id))
   const fromEvents: StatusMessage[] = []
@@ -74,11 +77,15 @@ export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[]
       collection: ev.collectionName,
       userName: own ? undefined : ev.userName?.split(' ')[0] || undefined,
     }, t)
-    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
+    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true, own })
   }
-  return [...history, ...fromEvents]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, STATUS_RECENT_MAX)
+  const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
+  if (!includeOthers || ownFloor <= 0) return sorted.slice(0, STATUS_RECENT_MAX)
+  // Reserve `ownFloor` slots for the newest own entries so a busy team can't push them out
+  const isOwn = (m: StatusMessage) => !m.id.startsWith('event-') || m.own === true
+  const ownKept = new Set(sorted.filter(isOwn).slice(0, Math.min(ownFloor, STATUS_RECENT_MAX)))
+  const rest = sorted.filter(m => !ownKept.has(m)).slice(0, STATUS_RECENT_MAX - ownKept.size)
+  return [...ownKept, ...rest].sort((a, b) => b.timestamp - a.timestamp)
 }
 
 /** Drop entries that came from team events (used when the team changes). */
