@@ -117,6 +117,19 @@ describe('useCollectionQuery', () => {
 
   // Don't use vi.resetAllMocks() as it clears mock implementations
 
+  describe('skip while no team context', () => {
+    it('passes enabled=false and no __skip__ URL when there is no team', async () => {
+      mockRoute = { path: '/dashboard/products', params: {} }
+
+      await useCollectionQuery('products')
+
+      const call = mockUseFetch.mock.calls[0] as any
+      expect(call[1].enabled()).toBe(false)
+      expect(call[1].immediate).toBeUndefined()
+      expect(call[0]()).not.toContain('__skip__')
+    })
+  })
+
   describe('cache key generation', () => {
     it('generates key with collection name', async () => {
       await useCollectionQuery('products')
@@ -124,7 +137,7 @@ describe('useCollectionQuery', () => {
       expect(mockUseFetch).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
-          key: expect.stringContaining('collection:products:')
+          key: expect.objectContaining({ value: expect.stringContaining('collection:products:') })
         })
       )
     })
@@ -137,13 +150,13 @@ describe('useCollectionQuery', () => {
       expect(mockUseFetch).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
-          key: expect.stringContaining('collection:products:')
+          key: expect.objectContaining({ value: expect.stringContaining('collection:products:') })
         })
       )
 
       // Verify the key contains the serialized query
       const call = mockUseFetch.mock.calls[0] as any
-      expect(call[1].key).toContain('page')
+      expect(call[1].key.value).toContain('page')
     })
 
     it('different queries produce different keys', async () => {
@@ -151,12 +164,12 @@ describe('useCollectionQuery', () => {
       const query2 = computed(() => ({ page: 2 }))
 
       await useCollectionQuery('products', { query: query1 })
-      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       mockUseFetch.mockClear()
 
       await useCollectionQuery('products', { query: query2 })
-      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       expect(key1).not.toBe(key2)
     })
@@ -165,12 +178,12 @@ describe('useCollectionQuery', () => {
       const query = computed(() => ({ status: 'active' }))
 
       await useCollectionQuery('products', { query })
-      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       mockUseFetch.mockClear()
 
       await useCollectionQuery('products', { query })
-      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       expect(key1).toBe(key2)
     })
@@ -179,7 +192,7 @@ describe('useCollectionQuery', () => {
       await useCollectionQuery('products')
 
       const call = mockUseFetch.mock.calls[0] as any
-      expect(call[1].key).toBe('collection:products:{}')
+      expect(call[1].key.value).toBe('collection:products:{}')
     })
   })
 
@@ -240,8 +253,8 @@ describe('useCollectionQuery', () => {
 
     // These tests are skipped because the implementation changed:
     // When no team context is available, the implementation now:
-    // 1. Sets immediate: false to skip the initial fetch
-    // 2. Uses a computed ref that returns null (which becomes '/api/__skip__')
+    // 1. Sets enabled: () => false so no request fires (initial, watch or refresh)
+    // 2. Uses a computed ref that returns null (which becomes an empty URL)
     // 3. No longer logs an error - it silently waits for context to be available
 
     it.skip('logs error when team context missing', async () => {

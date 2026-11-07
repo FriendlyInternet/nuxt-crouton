@@ -25,7 +25,7 @@ const { teamId } = useTeamContext()
 // the reactive URL key drives the fetch once teamId resolves.
 const { data: flows, pending, refresh } = await useFetch(
   () => `/api/crouton-flow/teams/${teamId.value}/flows`,
-  { default: () => [] as any[], immediate: !!teamId.value }
+  { default: () => [] as any[], enabled: () => !!teamId.value }
 )
 
 // Search
