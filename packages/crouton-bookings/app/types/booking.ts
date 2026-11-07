@@ -102,6 +102,8 @@ export interface CartItem {
   locationId: string
   locationTitle: string
   date: Date | string
+  /** Calendar day picked (YYYY-MM-DD, browser-local); the server prefers it over `date` */
+  day?: string
   slotIds: string[]
   slotLabels: string[]
   slotColor?: string
