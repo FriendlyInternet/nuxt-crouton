@@ -79,7 +79,10 @@ concurrency:
   # Keyed on the PR when there is one (#2608): a manual dispatch with review_pr deploys the SAME
   # preview as the PR's own run, but has no head_ref, so keying on head_ref || ref put the two in
   # different groups and they raced (#2571).
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || github.ref }}
+  # Dispatches without a review_pr, and every production dispatch, get an `-<env>-<app>` suffix so
+  # they never evict a queued push-to-main staging run (#1699); production waits for that run
+  # explicitly in `detect`. Every other key is unchanged.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || github.ref }}${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'production' || !github.event.inputs.review_pr) && format('-{0}-{1}', github.event.inputs.environment, github.event.inputs.app) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -87,7 +90,10 @@ jobs:
   # job fans out over. push/pull_request → STAGING only (env hard-coded below, #318).
   detect:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
@@ -95,6 +101,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Wait for staging of this commit (#1699)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && github.event.inputs.skip_staging_smoke != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP: ${{ github.event.inputs.app }}
+        run: node scripts/await-staging.mjs
       - id: set
         env:
           EVENT: ${{ github.event_name }}
