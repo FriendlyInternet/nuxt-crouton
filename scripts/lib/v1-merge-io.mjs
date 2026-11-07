@@ -4,7 +4,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { chooseOkReply } from './ok-reply.mjs'
-import { mergeDecisionCheck, MERGE_DECISION } from './pr-merge-gate.mjs'
+import { mergeDecisionCheck, MERGE_DECISION, decideV1, shouldEnableAuto, canMergeNow } from './pr-merge-gate.mjs'
 
 export const isRateLimit = (e) => e.status === 429 || String(e.response?.headers?.['x-ratelimit-remaining']) === '0' || /rate limit/i.test(e.message || '')
 
@@ -107,4 +107,54 @@ export function makeMergeIo({ github, core, owner, repo, env }) {
     }
 
   return { mergeWithRetry, okReplyNote, announceSharedHold }
+}
+
+/** Off switch: PIPELINE_V1=off turns auto-merge off on a v1 PR (then today's path runs unchanged). */
+export async function v1OffSwitch({ github, core, pr, pull_number }) {
+  try {
+    await setAutoMerge(github, pr, 'disable')
+    core.info(`#${pull_number} v1 off — auto-merge switched off`)
+  } catch (e) {
+    if (isRateLimit(e)) throw e
+    core.warning(`#${pull_number}: could not switch auto-merge off: ${e.message}`)
+  }
+}
+
+/**
+ * The v1 path for one PR (#3501): answer from review alone, publish it as the `Merge decision` check;
+ * GitHub waits for CI and merges. `red` is a boolean, `checkState` the CI Gate state.
+ */
+export async function runV1({ github, core, owner, repo, env, pr, pull_number, go, prComments, rawRuns, red, checkState, BOTS, reviewState }) {
+  const { mergeWithRetry, okReplyNote, announceSharedHold } = makeMergeIo({ github, core, owner, repo, env })
+  // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
+  // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it). Pure over prComments: no API call.
+  const reviewSt = pr.head.ref.startsWith('work-')
+    ? reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${env.APP_SLUG}[bot]`] })
+    : { kind: 'pending' }
+  const labels = (pr.labels || []).map(l => l.name)
+  const ask = (files) => decideV1({ draft: pr.draft, authorIsPipeline: BOTS.includes(pr.user.login), baseRef: pr.base.ref, headRef: pr.head.ref, labels, go,
+    ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, headSha: pr.head.sha, headReview: reviewSt, red, files })
+  let answer = ask()
+  if (answer.needFiles) {
+    const fl = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
+    answer = ask(fl.map(f => f.filename))
+  }
+  core.info(`#${pull_number} v1 answer: ${answer.code} — ${answer.reason}`)
+  const wrote = await publishMergeDecision({ github, owner, repo, pr, rawRuns, appSlug: env.APP_SLUG, answer })
+  core.info(`#${pull_number} 'Merge decision' ${wrote}.`)
+  if (shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) {
+    try {
+      await setAutoMerge(github, pr, 'enable')
+      core.info(`#${pull_number} v1 auto-merge enabled.`)
+    } catch (e) {
+      if (isRateLimit(e)) throw e
+      core.info(`#${pull_number} enablePullRequestAutoMerge refused: ${e.message}`)
+      // Already clean: GitHub refuses auto-merge. Merge here ONLY when every fact says merge (the App bypasses the ruleset).
+      if (/clean status|already.*mergeable/i.test(e.message || '') && canMergeNow({ answer, ciGate: checkState, red })) await mergeWithRetry(pr, pull_number, false)
+      else core.warning(`#${pull_number}: auto-merge not enabled: ${e.message}`)
+    }
+  }
+  if (answer.code === 'shared-code') await announceSharedHold({ pull_number, pr, held: answer })
+  if (answer.code === 'no-review' && go.go) await okReplyNote({ pull_number, pr, go, reviewSt, prComments })
+  return answer
 }
