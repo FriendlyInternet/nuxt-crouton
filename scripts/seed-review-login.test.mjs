@@ -343,14 +343,60 @@ test('#3533 existing user refused (422 sign-up, 401 sign-in): exits 1 and prints
   assert.ok(!r.text.includes(r.email) && !r.text.includes('leak-check'))
 })
 
-test('#3533 seedOutcome: a member not attached to the seeded team is rejected even with a personal team active', () => {
-  assert.equal(seedOutcome({ role: 'member', seedRequested: true, attached: false, hasActiveOrg: true }), 'reject')
-  assert.equal(seedOutcome({ role: 'superadmin', seedRequested: true, attached: false, hasActiveOrg: true }), 'reject')
-  assert.equal(seedOutcome({ role: 'member', seedRequested: true, attached: true, hasActiveOrg: true }), 'ok')
-  assert.equal(seedOutcome({ role: 'member', seedRequested: false, attached: false, hasActiveOrg: true }), 'ok')
-  assert.equal(seedOutcome({ role: 'member', seedRequested: false, attached: false, hasActiveOrg: false }), 'reject')
-  assert.equal(seedOutcome({ role: 'admin', seedRequested: true, attached: false, hasActiveOrg: false }), 'ok')
+test('#3533 seedOutcome: member/superadmin count only when attached to the seeded team', () => {
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'reject')
+  assert.equal(seedOutcome({ role: 'superadmin', attached: false }), 'reject')
+  assert.equal(seedOutcome({ role: 'member', attached: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: false }), 'ok')
 })
+
+// Real script against a stub auth server and a fake `npx` first on PATH.
+async function runWithFakeNpx({ role, npxExit, setActiveStatus = 200, extraArgs = ['--seed-team', 'test1', '--db', 'x'] }) {
+  const { mkdtempSync, rmSync, writeFileSync, chmodSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/fake-npx-`)
+  writeFileSync(`${dir}/npx`, `#!/bin/sh\nexit ${npxExit}\n`)
+  chmodSync(`${dir}/npx`, 0o755)
+  const email = 'review+velo-main-x@example.com'
+  const server = createServer((req, res) => {
+    const st = req.url === '/api/auth/organization/set-active' ? setActiveStatus : 200
+    res.writeHead(st, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(req.url === '/api/auth/get-session'
+      ? { user: { id: 'u1' }, session: { activeOrganizationId: 'personal-org' } } : {}))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', role, ...extraArgs],
+    { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } },
+    (err, stdout, stderr) => resolve({ code: err ? err.code : 0, text: stdout + stderr }))
+  })
+  await new Promise(r => server.close(r))
+  rmSync(dir, { recursive: true, force: true })
+  return out
+}
+
+test('#3533 real script: a failing wrangler prints no address or SQL', async () => {
+  const r = await runWithFakeNpx({ role: 'member', npxExit: 1 })
+  assert.equal(r.code, 1)
+  assert.ok(r.text.includes('attach failed'))
+  assert.ok(!/review[-+]velo|example\.com|VALUES/.test(r.text), r.text)
+})
+
+test('#3533 real script: member with no --seed-team (personal team active) is not advertised', async () => {
+  const r = await runWithFakeNpx({ role: 'member', npxExit: 0, extraArgs: [] })
+  assert.equal(r.code, 1)
+  assert.ok(!r.text.includes('done.'))
+})
+
+for (const role of ['member', 'superadmin', 'admin']) {
+  test(`#3533 real script: ${role} with set-active 500 on the seeded team`, async () => {
+    const r = await runWithFakeNpx({ role, npxExit: 0, setActiveStatus: 500 })
+    // admin may fall back to a fresh team; member/superadmin must not be advertised
+    if (role === 'admin') assert.ok(!/review[-+]velo|example\.com/.test(r.text))
+    else assert.equal(r.code, 1)
+  })
+}
 
 test('#3533 real script: member whose set-active fails while a personal team is active exits non-zero', async () => {
   const { mkdtempSync, rmSync } = await import('node:fs')

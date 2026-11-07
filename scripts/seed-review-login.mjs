@@ -86,10 +86,16 @@ function execSeedSql(args, sql) {
   // execFileSync (no shell) passes the SQL as one argv entry — quotes/JSON need no
   // escaping. wrangler resolves the D1 db by name account-wide, so repo-root cwd is
   // fine. CF creds come from the deploy step's env.
-  execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
-    stdio: 'inherit',
-    env: process.env
-  })
+  // The SQL carries the review address (member id slug), and execFileSync's error text
+  // embeds the whole command — so rethrow a message that names only the exit status.
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
+      stdio: 'inherit',
+      env: process.env
+    })
+  } catch (e) {
+    throw new Error(`wrangler d1 execute failed (exit ${e?.status ?? 'unknown'})`)
+  }
 }
 
 /**
@@ -228,9 +234,9 @@ export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
  * team (member, superadmin) needs the SEEDED team when one was asked for — a personal team the
  * session already has active must not stand in for it. 'ok' | 'reject'.
  */
-export function seedOutcome({ role, seedRequested, attached, hasActiveOrg }) {
+export function seedOutcome({ role, attached }) {
   if (rolePlan(role).freshTeamFallback) return 'ok'
-  return (seedRequested ? attached : hasActiveOrg) ? 'ok' : 'reject'
+  return attached ? 'ok' : 'reject'
 }
 
 function warn(msg) {
@@ -428,7 +434,7 @@ async function main() {
     }
   }
 
-  if (seedOutcome({ role, seedRequested, attached, hasActiveOrg }) === 'reject') {
+  if (seedOutcome({ role, attached }) === 'reject') {
     warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
     process.exit(1)
   }
