@@ -176,6 +176,7 @@ jobs:
       # (KEY=main; same derivation as the "Seed review login" step below) and runs
       # scripts/smoke-deployed.mjs — node built-ins only, so it works before
       # `pnpm install` (the screenshot part self-skips without playwright).
+      # The detect job has already waited for this commit's staging deploy (#1699).
       # Gates the deliberate manual click (#318), never automates it. Escape
       # hatch: the skip-staging-smoke input (loud warning, next step).
       - name: Pre-prod confidence gate — smoke live staging
