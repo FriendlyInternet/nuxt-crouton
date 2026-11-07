@@ -13,6 +13,12 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0
 # untouched and are merged by resume-on-comment.yml when the owner comments `approve`.
 # No double-merge.
 #
+# V1 PATH (#3501): a PR whose base is epic/<n>--v1-* is NOT merged here. This workflow only answers (decideV1, review +
+# red check) and writes the required `Merge decision` check with the App token, then turns GitHub auto-merge on; GitHub
+# merges when `CI Gate` + `Merge decision` are green (ruleset docs/pipeline/ruleset-pipeline-v1.json). The App bypasses that
+# ruleset, so the one direct-merge fallback (GitHub refuses auto-merge on an already-clean PR) re-checks canMergeNow() itself.
+# Off order: variable PIPELINE_V1=off -> dispatch this check (switches auto-merge off) -> disable the ruleset. On: ruleset first.
+#
 # GREEN GATE (#339): don't auto-merge a PR whose checks are RED. We block on any FAILED
 # check-run / commit status for the head SHA; we deliberately do NOT block on merely
 # PENDING checks — this workflow's own check-run is in-progress while it evaluates, so
@@ -120,7 +126,8 @@ jobs:
         (github.event.comment.author_association == 'OWNER' ||
          github.event.comment.author_association == 'MEMBER' ||
          github.event.comment.author_association == 'COLLABORATOR')) ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success' &&
+        github.event.check_suite.app.slug != 'nuxt-harness') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -143,6 +150,7 @@ jobs:
           FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}   # #3470: what the checks loaded
+          PIPELINE_V1: ${{ vars.PIPELINE_V1 }}   # #3501: `off` = the v1 path is skipped, auto-merge on v1 PRs is switched off
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}   # #3361: writes the retry note when the App is out of allowance
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -154,7 +162,9 @@ jobs:
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
             const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-            const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideLeafMerge, withoutMergeDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { isV1Base, v1Enabled } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
+            const { runV1, v1OffSwitch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/v1-merge-io.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
             const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
@@ -247,12 +257,17 @@ jobs:
 
               // Only a non-draft, pipeline-authored, non-gate PR targeting an epic branch.
               if (pr.draft) { core.info(`#${pull_number} is a draft (gate PR) — skip.`); continue }
+              // #3501: a PR into a v1 epic branch takes the v1 path (GitHub merges; this only writes the `Merge decision` check).
+              const v1Base = isV1Base(pr.base.ref)
+              const v1 = v1Base && v1Enabled(process.env)
+              if (v1Base && !v1 && pr.auto_merge) await v1OffSwitch({ github, core, pr, pull_number })
               // An epic → main PR (#2832) is evaluated too, but ONLY merges on an owner `ok` (below).
               const epicToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('epic/')
               // A pipeline leaf PR straight into main (head `work-<N>`, no epic) — same rule: ONLY an owner `ok` merges it.
               const leafToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('work-')
               if (!pr.base.ref.startsWith('epic/') && !epicToMain && !leafToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
-              if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
+              // A v1 base needs a `Merge decision` on owner PRs too, or the ruleset blocks even a hand merge (decideV1 answers not-pipeline).
+              if (!BOTS.includes(pr.user.login) && !v1) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
               // An epic → main PR that conflicts with main would otherwise sit forever with no checks
@@ -294,7 +309,12 @@ jobs:
               }
               core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               const checkRuns = liveCheckRuns(rawRuns, wfRuns)
-              const { red, firstRun, noteIgnored } = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: () => isRed(pr.head.sha, checkRuns), defaultBranch: process.env.DEFAULT_BRANCH })
+              // ONE red read per PR, minus our own `Merge decision` run (it must never wait on itself). A v1 PR never waves
+              // first-run reds through (#3470 known limit), so it skips firstRunSplit and its extra reads.
+              const rawRed = await isRed(pr.head.sha, withoutMergeDecision(checkRuns))
+              const { red, firstRun, noteIgnored } = v1
+                ? { red: rawRed.statusRed || rawRed.redRuns.length > 0, firstRun: [], noteIgnored: async () => {} }
+                : await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: async () => rawRed, defaultBranch: process.env.DEFAULT_BRANCH })
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
               // 'missing' → the workflow never started (a dropped event); say so loudly
@@ -328,6 +348,11 @@ jobs:
               // CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
               // Loaded from the default-branch checkout above — never the PR head, so a PR cannot edit the
               // rule that judges it.
+              if (v1) {
+                await runV1({ github, core, owner, repo, env: process.env, pr, pull_number, go, prComments, rawRuns, red, checkState, BOTS, reviewState })
+                continue
+              }
+
               let gate
               if (epicToMain) {
                 // epic → main (#3105): the SAME decision the owner's `ok` runs (decideEpicMerge) — both
