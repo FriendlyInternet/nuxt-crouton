@@ -1114,6 +1114,13 @@ jobs:
             fi
           fi
           echo "visual surface touched: $UI_TOUCHED"
+          # #3531: hold only when a page + expected sight is named on a previewed app (scripts/signoff-surface.mjs).
+          SIGNOFF_OUT="$(node scripts/signoff-surface.mjs --ui "$UI_TOUCHED" --plan "$RUNNER_TEMP/approved-plan.txt" --issue "$RUNNER_TEMP/issue-body.txt" --base "$BASE_SHA" 2>/dev/null || true)"
+          SIGNOFF_HOLD="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^HOLD=//p')"; SIGNOFF_HOLD=${SIGNOFF_HOLD:-$UI_TOUCHED}
+          SIGNOFF_REASON="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^REASON=//p')"
+          HOLD_NOTE="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^NOTE_B64=//p' | base64 -d 2>/dev/null || true)"
+          SIGNOFF_SURFACE="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^SURFACE=//p')"
+          echo "sign-off hold: $SIGNOFF_HOLD ($SIGNOFF_REASON)"
 
           # PACKAGE-ONLY CHANGE (#2709) — no app was touched, so there is nothing to typecheck by
           # default. If a packages/<pkg> was committed, borrow ONE consuming app (the first apps/ or
@@ -1244,7 +1251,7 @@ jobs:
           # this step share one rule: evidence = that comment. Screenshots otherwise come from the
           # deployed preview (#2546): deploy-side capture posts the same tagged comment.
           EVIDENCE_ATTACHED=0; CAP_SHA=""; CAP_FILES=""
-          if [ "$UI_TOUCHED" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
+          if [ "$SIGNOFF_HOLD" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
             if PUB="$(node scripts/publish-review-captures.mjs --dir screenshots --key "issue${ISSUE}" 2>&1)"; then
               CAP_SHA="$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)"
               CAP_FILES="$(cd screenshots && ls *.png | paste -sd, -)"
@@ -1253,7 +1260,7 @@ jobs:
               echo "::warning::could not publish worker screenshots: $PUB"
             fi
           fi
-          [ "$UI_TOUCHED" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
+          [ "$SIGNOFF_HOLD" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
 
           # 7) Open the PR. On a FAILED acceptance or a missing test, open it as a DRAFT (automerge skips drafts, #339) —
           #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
@@ -1264,38 +1271,23 @@ jobs:
             # owner reviews from a phone and cannot judge a layout change from a diff, so the PR
             # waits for an `lgtm` reply exactly like the claude lane's UI gate (#307/#572).
             DRAFT_FLAG=""
-            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
+            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$SIGNOFF_HOLD" = "1" ]; } && DRAFT_FLAG="--draft"
             # #3411: say WHICH files lack a test on the ticket too, not just in the run record.
             if [ "$TESTS_MISSING" = "1" ]; then
               gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _tests gate (#3411)_\n\n🧪 **Drafted: no test for** `%s`. Build review skips drafts, so it will not run until a test is added (comment on the PR asking for one) or the PR is marked ready by hand.' "${PKG_LOGIC_FILES//,/\`, \`}")" || true
-            fi
-            HOLD_NOTE=""
-            # Trailing HTML comment on BOTH branches is a MACHINE marker, not owner-facing prose:
-            # capture-review-surfaces.mjs greps the PR body for it (HOLD_MARKER). It belongs on
-            # both branches below — the live preview is independent of whether the local
-            # screenshot capture (#2057) happened to succeed this run. Keep in sync with
-            # HOLD_MARKER there.
-            if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `ok` to release it, or `not ok: what is wrong`. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
-            elif [ "$UI_TOUCHED" = "1" ]; then
-              # Honest version (#2057): the old text here always said "evidence should be
-              # attached above", even when nothing was — which is exactly what happened on
-              # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
-              # never mistakes an empty PR for a reviewed one. A live preview (#2140) should
-              # still follow separately, so this is a lesser gap than it used to be.
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
             fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
             # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
             # nothing triggers off this label (#572); the PR-side ✅/`lgtm` route (#2052)
             # remains primary since that's where the reviewer is looking.
-            if [ "$UI_TOUCHED" = "1" ]; then
+            if [ "$SIGNOFF_HOLD" = "1" ]; then
               gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             fi
             # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
             # so the deploy screenshots the page that shows the change, not the app's start page.
             SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
+            [ -n "$SIGNOFF_SURFACE" ] && SURFACES="$(printf '%s\n%s' "$SURFACES" "$SIGNOFF_SURFACE")"
             # #2757: a build from an approved plan links that plan in the PR body.
             PLAN_NOTE=""
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
@@ -1332,6 +1324,15 @@ jobs:
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          # #3531: the sign-off link carries a pr{{PR}} placeholder until the PR number exists.
+          if [ -n "$PRNUM" ]; then
+            PR_BODY="$(gh pr view "$PRNUM" --json body -q .body 2>/dev/null || true)"
+            if printf '%s' "$PR_BODY" | grep -qF 'pr{{PR}}'; then
+              printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+              node scripts/signoff-surface.mjs --fill-pr "$PRNUM" --body "$RUNNER_TEMP/pr-body.txt" > "$RUNNER_TEMP/pr-body-filled.txt" \
+                && gh pr edit "$PRNUM" --body-file "$RUNNER_TEMP/pr-body-filled.txt" || true
+            fi
+          fi
           [ -n "$PRNUM" ] && node "$RUNNER_TEMP/workflow-change-line.mjs" --pr "$PRNUM" --issue "$ISSUE" --title "$TITLE" || true
           # Post the tagged screenshot comment (same marker the deploy-side capture uses, #3351);
           # if the write fails the run record must not claim an image the PR doesn't show.
@@ -1372,7 +1373,7 @@ jobs:
               }
               # #2057 — make a missing capture LOUD in the one comment a reviewer actually
               # reads, not just a line in the PR body nobody re-checks after the first read.
-              [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
+              [ "$SIGNOFF_HOLD" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
                 echo
                 echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys."
                 echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`ok\`."
