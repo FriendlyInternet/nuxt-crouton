@@ -90,6 +90,37 @@ export function parseAssumptions(text) {
 const DOC_LABEL = /(?:^|\s+[—–-]+\s+|\s*\|\s*)\**(Status|Evidence|Regression|Edit|Debt):\**\s*/gi
 const PERMALINK = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/[0-9a-f]{7,40}\/\S+/
 
+// The text of one docs row, or null for a table separator / header line.
+function docRowBody(l, firstTableLine) {
+  if (!l.startsWith('|')) return l.replace(/^(?:[-*]|\d+\.)\s+/, '')
+  if (/^[\s|:-]+$/.test(l)) return null
+  const hasField = /\b(?:Status|Evidence|Regression|Edit|Debt):/i.test(l)
+  return firstTableLine && !hasField ? null : l
+}
+
+function docRowFields(b) {
+  const hits = [...b.matchAll(DOC_LABEL)]
+  const claim = (hits.length ? b.slice(0, hits[0].index) : b).replace(/^\|/, '').replace(/\*\*/g, '').replace(/\|\s*$/, '').trim()
+  const f = {}
+  hits.forEach((h, i) => {
+    const end = i + 1 < hits.length ? hits[i + 1].index : b.length
+    f[h[1].toLowerCase()] = b.slice(h.index + h[0].length, end).replace(/\s*\|\s*$/, '').replace(/\*\*/g, '').trim()
+  })
+  return { claim, f, status: norm(f.status || ''), regression: norm(f.regression || '') }
+}
+
+function docRowErrors({ claim, f, status, regression }, num) {
+  const n = `docs row ${num}`
+  const errors = []
+  if (!claim) errors.push(`${n}: no claim`)
+  else if (!/\S+:\d+/.test(claim)) errors.push(`${n}: the claim needs a file:line`)
+  if (!['checked', 'wrong', 'canttell'].includes(status)) errors.push(`${n}: Status must be checked, wrong or can't tell`)
+  if (status === 'checked' && !PERMALINK.test(f.evidence || '')) errors.push(`${n}: a checked claim needs a github.com /blob/<sha>/ permalink as Evidence`)
+  if (regression !== 'yes' && regression !== 'no') errors.push(`${n}: Regression must be yes or no`)
+  if (!f.edit && !f.debt) errors.push(`${n}: needs an Edit: (the exact edit) or a Debt: (why not now)`)
+  return errors
+}
+
 export function parseDocs(text) {
   const t = text.trim()
   const none = t.match(/^\W*none\s*[—–:-]+\s*(\S.{2,})$/i)
@@ -97,34 +128,16 @@ export function parseDocs(text) {
   if (/^\W*none\W*$/i.test(t)) return { none: false, rows: [], errors: ['Docs: "none" needs a reason — write "none — <why no doc is touched>"'] }
   const errors = []
   const lines = t.split('\n').map((l) => l.trim()).filter((l) => /^(?:[-*]\s|\d+\.\s|\|)/.test(l))
-  let seenTable = false
   const rows = []
+  let seenTable = false
   for (const l of lines) {
-    let b = l
-    if (l.startsWith('|')) {
-      const first = !seenTable
-      seenTable = true
-      const hasField = /\b(?:Status|Evidence|Regression|Edit|Debt):/i.test(l)
-      if (/^[\s|:-]+$/.test(l)) continue
-      if (first && !hasField) continue
-    } else b = l.replace(/^(?:[-*]|\d+\.)\s+/, '')
-    const hits = [...b.matchAll(DOC_LABEL)]
-    const claim = (hits.length ? b.slice(0, hits[0].index) : b).replace(/^\|/, '').replace(/\*\*/g, '').replace(/\|\s*$/, '').trim()
-    const f = {}
-    hits.forEach((h, i) => {
-      const end = i + 1 < hits.length ? hits[i + 1].index : b.length
-      f[h[1].toLowerCase()] = b.slice(h.index + h[0].length, end).replace(/\s*\|\s*$/, '').replace(/\*\*/g, '').trim()
-    })
-    const n = `docs row ${rows.length + 1}`
-    const status = norm(f.status || '')
-    const regression = norm(f.regression || '')
-    if (!claim) errors.push(`${n}: no claim`)
-    else if (!/\S+:\d+/.test(claim)) errors.push(`${n}: the claim needs a file:line`)
-    if (!['checked', 'wrong', 'canttell'].includes(status)) errors.push(`${n}: Status must be checked, wrong or can't tell`)
-    if (status === 'checked' && !PERMALINK.test(f.evidence || '')) errors.push(`${n}: a checked claim needs a github.com /blob/<sha>/ permalink as Evidence`)
-    if (regression !== 'yes' && regression !== 'no') errors.push(`${n}: Regression must be yes or no`)
-    if (!f.edit && !f.debt) errors.push(`${n}: needs an Edit: (the exact edit) or a Debt: (why not now)`)
-    rows.push({ claim, status, evidence: f.evidence || '', regression, edit: f.edit || '', debt: f.debt || '' })
+    const first = l.startsWith('|') && !seenTable
+    if (l.startsWith('|')) seenTable = true
+    const body = docRowBody(l, first)
+    if (body === null) continue
+    const row = docRowFields(body)
+    errors.push(...docRowErrors(row, rows.length + 1))
+    rows.push({ claim: row.claim, status: row.status, evidence: row.f.evidence || '', regression: row.regression, edit: row.f.edit || '', debt: row.f.debt || '' })
   }
   if (!rows.length) errors.push('Docs must be rows (one per doc claim) or one line "none — <reason>"')
   return { none: false, rows, errors }
