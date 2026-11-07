@@ -305,3 +305,153 @@ test('#3421 the CLI prints no review address and fails a member/superadmin it ca
   assert.notEqual(r.status, 0)
   assert.ok(!(r.stdout + r.stderr).includes(email))
 })
+
+// ── #3533: the three tests #3498 left out ─────────────────────────────────────
+import { seedOutcome } from './seed-review-login.mjs'
+import { readFileSync } from 'node:fs'
+
+test('#3533 no log line in the script prints an email address', () => {
+  const src = readFileSync(SCRIPT, 'utf8')
+  const logCalls = src.split('\n').filter(l => /\b(info|warn|console\.(log|warn|error))\(/.test(l))
+  assert.ok(logCalls.length > 10, 'the scan must actually find the log calls')
+  for (const l of logCalls) assert.ok(!/email/i.test(l.replace(/'--email'|--email <e>/g, '')), `log line prints an email: ${l.trim()}`)
+})
+
+async function runStub(handler) {
+  const email = 'review+leak-check@example.com'
+  const server = createServer((req, res) => {
+    const { status, body } = handler(req.url)
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email, '--password', 'pw'],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, text: stdout + stderr }))
+  })
+  await new Promise(r => server.close(r))
+  return { ...out, email }
+}
+
+test('#3533 existing user refused (422 sign-up, 401 sign-in): exits 1 and prints no address', async () => {
+  const r = await runStub(url => url === '/api/auth/sign-up/email'
+    ? { status: 422, body: { code: 'USER_ALREADY_EXISTS' } }
+    : { status: 401, body: { code: 'INVALID_EMAIL_OR_PASSWORD' } })
+  assert.equal(r.code, 1)
+  assert.ok(r.text.length > 0)
+  assert.ok(!r.text.includes(r.email) && !r.text.includes('leak-check'))
+})
+
+test('#3533 seedOutcome: a member not attached to the seeded team is rejected even with a personal team active', () => {
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'fail')
+})
+
+test('#3533 seedOutcome: member/superadmin count only when attached to the seeded team', () => {
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'fail')
+  assert.equal(seedOutcome({ role: 'superadmin', attached: false }), 'fail')
+  assert.equal(seedOutcome({ role: 'member', attached: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'superadmin', attached: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: false }), 'ok')
+})
+
+test('#3533 seedOutcome admin: fresh team only when signed up with no active team', () => {
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: true, hasActiveOrg: false }), 'fresh-team')
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: true, hasActiveOrg: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: false, hasActiveOrg: false }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: true, signedUp: true, hasActiveOrg: false }), 'ok')
+  assert.equal(seedOutcome({ role: 'member', attached: false, signedUp: true, hasActiveOrg: false }), 'fail')
+})
+
+test('#3533 real script: admin attached but set-active failed still exits 0', async () => {
+  const r = await runWithFakeNpx({ role: 'admin', npxExit: 0, setActiveStatus: 500 })
+  assert.equal(r.code, 0, r.text)
+})
+
+// Real script against a stub auth server and a fake `npx` first on PATH.
+async function runWithFakeNpx({ role, npxExit, setActiveStatus = 200, extraArgs = ['--seed-team', 'test1', '--db', 'x'] }) {
+  const { mkdtempSync, rmSync, writeFileSync, chmodSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/fake-npx-`)
+  writeFileSync(`${dir}/npx`, `#!/bin/sh\nexit ${npxExit}\n`)
+  chmodSync(`${dir}/npx`, 0o755)
+  const email = 'review+velo-main-x@example.com'
+  const server = createServer((req, res) => {
+    const st = req.url === '/api/auth/organization/set-active' ? setActiveStatus : 200
+    res.writeHead(st, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(req.url === '/api/auth/get-session'
+      ? { user: { id: 'u1' }, session: { activeOrganizationId: 'personal-org' } } : {}))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', role, ...extraArgs],
+    { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } },
+    (err, stdout, stderr) => resolve({ code: err ? err.code : 0, text: stdout + stderr }))
+  })
+  await new Promise(r => server.close(r))
+  rmSync(dir, { recursive: true, force: true })
+  return out
+}
+
+test('#3533 real script: a failing wrangler prints no address or SQL', async () => {
+  const r = await runWithFakeNpx({ role: 'member', npxExit: 1 })
+  assert.equal(r.code, 1)
+  assert.ok(r.text.includes('attach failed'))
+  assert.ok(!/review[-+]velo|example\.com|VALUES/.test(r.text), r.text)
+})
+
+test('#3533 real script: member with no --seed-team (personal team active) is not advertised', async () => {
+  const r = await runWithFakeNpx({ role: 'member', npxExit: 0, extraArgs: [] })
+  assert.equal(r.code, 1)
+  assert.ok(!r.text.includes('done.'))
+})
+
+for (const role of ['member', 'superadmin', 'admin']) {
+  test(`#3533 real script: ${role} with set-active 500 on the seeded team`, async () => {
+    const r = await runWithFakeNpx({ role, npxExit: 0, setActiveStatus: 500 })
+    // admin may fall back to a fresh team; member/superadmin must not be advertised
+    if (role === 'admin') assert.ok(!/review[-+]velo|example\.com/.test(r.text))
+    else assert.equal(r.code, 1)
+  })
+}
+
+test('#3533 real script: member whose set-active fails while a personal team is active exits non-zero', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/seed-unattached-`)
+  const file = `${dir}/sqlite.db`
+  const d = new DatabaseSync(file)
+  const email = 'review+velo-main-member@example.com'
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1', '${email}', 0, 0);
+  `)
+  d.close()
+  const server = createServer((req, res) => {
+    const personal = req.url === '/api/auth/get-session'
+    res.writeHead(req.url === '/api/auth/organization/set-active' ? 500 : 200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(personal ? { user: { id: 'u1' }, session: { activeOrganizationId: 'personal-org' } } : {}))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const code = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', 'member', '--seed-team', 'test1', '--sqlite', file],
+    { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } }, err => resolve(err ? err.code : 0))
+  })
+  await new Promise(r => server.close(r))
+  rmSync(dir, { recursive: true, force: true })
+  assert.equal(code, 1)
+})
+
+test('#3533 memberUpsertSql escapes single quotes in ids (no statement break-out)', () => {
+  const d = rdb()
+  d.exec(memberUpsertSql({ memberId: "m'1", userId: "u'; DELETE FROM \"user\"; --", orgId: "o'rg", role: 'member', createdAt: 1 }))
+  const row = d.prepare('SELECT * FROM "member"').get()
+  assert.equal(row.id, "m'1")
+  assert.equal(row.userId, "u'; DELETE FROM \"user\"; --")
+  assert.equal(row.organizationId, "o'rg")
+  assert.equal(d.prepare('SELECT count(*) c FROM "user"').get().c, 2)
+})

@@ -86,10 +86,16 @@ function execSeedSql(args, sql) {
   // execFileSync (no shell) passes the SQL as one argv entry — quotes/JSON need no
   // escaping. wrangler resolves the D1 db by name account-wide, so repo-root cwd is
   // fine. CF creds come from the deploy step's env.
-  execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
-    stdio: 'inherit',
-    env: process.env
-  })
+  // The SQL carries the review address (member id slug), and execFileSync's error text
+  // embeds the whole command — so rethrow a message that names only the exit status.
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
+      stdio: 'inherit',
+      env: process.env
+    })
+  } catch (e) {
+    throw new Error(`wrangler d1 execute failed (exit ${e?.status ?? 'unknown'})`)
+  }
 }
 
 /**
@@ -218,9 +224,21 @@ export function memberUpsertSql({ memberId, userId, orgId, role, createdAt }) {
     `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
 }
 
-/** Fresh-team fallback (3b): only when sign-up made the user, no team is active, and the role allows it. */
+/**
+ * What to do after the seeded-team attach step. A role that must not own a fresh team
+ * (member, superadmin) needs the SEEDED team — a personal team already active must not stand in:
+ * 'ok' when attached, else 'fail'. Admin: 'fresh-team' when sign-up made the user and no team is
+ * active (3b fallback), otherwise 'ok'.
+ */
+export function seedOutcome({ role, attached, signedUp = false, hasActiveOrg = false }) {
+  if (attached) return 'ok'
+  if (!rolePlan(role).freshTeamFallback) return 'fail'
+  return signedUp && !hasActiveOrg ? 'fresh-team' : 'ok'
+}
+
+/** Fresh-team fallback (3b), derived from seedOutcome. */
 export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
-  return signedUp && !hasActiveOrg && rolePlan(role).freshTeamFallback
+  return seedOutcome({ role, attached: false, signedUp, hasActiveOrg }) === 'fresh-team'
 }
 
 function warn(msg) {
@@ -374,6 +392,7 @@ async function main() {
   //     fresh-org fallback (3b) is skipped; on failure (e.g. an app that doesn't
   //     seed test1 → no such org) it falls through to 3b so the reviewer still
   //     lands inside a team rather than at a create-team wall.
+  let attached = false
   if (args.seedTeam && (args.db || args.sqlite) && userId) {
     const orgId = seedOrgId(args.seedTeam)
     const memberId = seedId('member', args.seedTeam, email)
@@ -397,6 +416,7 @@ async function main() {
       if (sa.ok) {
         info('set seeded team active for the session.')
         hasActiveOrg = true
+        attached = true
       } else {
         warn(`set-active returned HTTP ${sa.status} — membership upserted but not active; falling back.`)
       }
@@ -415,7 +435,7 @@ async function main() {
     }
   }
 
-  if (!rolePlan(role).freshTeamFallback && !hasActiveOrg) {
+  if (seedOutcome({ role, attached, signedUp, hasActiveOrg }) === 'fail') {
     warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
     process.exit(1)
   }
