@@ -141,7 +141,7 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
           # Same browser install as deploy-app.yml:228 — no apt system-deps step (recorded as flaky, e2e.yml:168-172).
           pnpm exec playwright install chromium
-          node -e "import('playwright-core').catch(e => { console.error('::error::playwright-core is not loadable: ' + e.message); process.exit(1) })"
+          node -e "import('playwright-core').catch(e => { console.error('::error::playwright-core failed to import: ' + e.message); process.exit(1) })"
           echo "::notice::Playwright install took $(( $(date +%s) - start ))s"
 
       - name: Capture + post review-surface evidence
