@@ -23,7 +23,7 @@ const STEP = block('- id: plan', 'run').replaceAll('${{ github.repository }}', '
 
 const A_OK = '- The bug is in foo — Why: the stack trace ends there — Evidence: https://github.com/o/r/blob/abc/foo.ts#L10 — Status: verified'
 const GOOD = '<!-- pipeline-plan:v1 -->\n' + Object.entries({
-  Reproduced: 'yes — ran it', Cause: 'foo.ts:10', Fix: 'guard', Files: '- foo.ts', Test: 'foo.test.ts', Assumptions: A_OK, 'Needs owner': 'no — mechanical',
+  Reproduced: 'yes — ran it', Cause: 'foo.ts:10', Fix: 'guard', Files: '- foo.ts', Test: 'foo.test.ts', Assumptions: A_OK, Docs: 'none — test fixture', 'Needs owner': 'no — mechanical',
 }).map(([k, v]) => `### ${k}\n${v}`).join('\n\n')
 
 function run(fixture) {

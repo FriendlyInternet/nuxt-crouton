@@ -16,7 +16,7 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, a
 4. Scope: matches the ticket and plan; nothing extra, no drive-by changes.
 5. Plan followed: where a plan was approved, the diff does what it said. No plan → PASS "no approved plan".
 6. Every ticket step done: list every numbered step and acceptance line of the ticket and mark each `done`, `not done` or `dropped: <reason stated in the PR>`. Any `not done` is FAIL; name the step in the evidence.
-7. Docs table: in root `CLAUDE.md` "Maintaining AI Documentation", find the row for this change type. The file it names must be updated in the diff, or FAIL. No row fits → PASS "no row applies".
+7. Docs: (a) in root `CLAUDE.md` "Maintaining AI Documentation", find the row for this change type; the file it names must be updated in the diff, or FAIL (no row fits → that half passes "no row applies"). (b) If the plan has a `### Docs` section, every row that names an edit must be made in the diff or marked `Debt: <reason>`; otherwise FAIL naming the doc. Spot-check two `checked` rows against the code and cite them. A plan without `### Docs` (older plans, or no plan) → judge only (a). The evidence line cites the Docs rows it checked, not just "the CLAUDE.md row".
 
 The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
 
