@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const COMMENT_MARKER = '<!-- migration-guard -->'
-export const NOT_NEEDED_RE = /^\s*Migration-not-needed:\s*(\S.*)$/im
+export const NOT_NEEDED_RE = /^[ \t]*Migration-not-needed:[ \t]*(\S[^\n]*)$/im
 
 export const SCHEMA_TRIGGER_RE = [
   /^packages\/[^/]+\/server\/database\/schema\.ts$/,

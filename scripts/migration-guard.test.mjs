@@ -61,6 +61,9 @@ test('Migration-not-needed with reason → notice; bare → still fail', () => {
   assert.equal(n.status, 'notice')
   assert.match(n.markdown, /comment-only edit/)
   assert.equal(evaluateMigrationGuard({ ...base, body: 'Migration-not-needed:\n' }).status, 'fail')
+  // regression: a bare line must not borrow the next line as its reason
+  assert.equal(evaluateMigrationGuard({ ...base, body: 'Migration-not-needed:\nCloses #1' }).status, 'fail')
+  assert.equal(evaluateMigrationGuard({ ...base, body: 'Migration-not-needed:   \n\nCloses #1' }).status, 'fail')
 })
 
 test('generator error fails; legacy skipped never fails alone', () => {
