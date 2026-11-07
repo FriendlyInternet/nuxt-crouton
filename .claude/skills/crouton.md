@@ -112,6 +112,7 @@ Use this skill when the user mentions:
 | tags, string list | `array` | `"tags": { "type": "array" }` |
 | image, photo, picture | `image` | `"coverImage": { "type": "image" }` |
 | file, attachment, document | `file` | `"attachment": { "type": "file" }` |
+| link to another collection, foreign key | `reference` | `"authorId": { "type": "reference", "refTarget": "authors" }` |
 
 ### Common Field Meta Options
 

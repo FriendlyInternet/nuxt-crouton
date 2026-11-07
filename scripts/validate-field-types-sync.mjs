@@ -6,15 +6,12 @@
  * This script is used in CI to catch sync issues early.
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
-
-// Source of truth: the `fieldTypes` rows of every package's crouton.manifest.ts
-const packagesDir = join(projectRoot, 'packages')
 
 // MCP server field types
 const mcpFieldTypesPath = join(
@@ -26,20 +23,14 @@ const mcpFieldTypesPath = join(
 const skillPath = join(projectRoot, '.claude/skills/crouton.md')
 
 /**
- * Collect canonical field type names from every manifest's `fieldTypes` block
- * (rows look like `    string:    { label: 'String', ...`).
+ * Canonical field type names from every package manifest, via the real manifest loader.
  */
-function extractManifestFieldTypes() {
-  const types = []
-  for (const dir of readdirSync(packagesDir)) {
-    const content = readFileSafe(join(packagesDir, dir, 'crouton.manifest.ts'))
-    if (!content) continue
-    const block = content.match(/\bfieldTypes:\s*\{([\s\S]*?)\n  \},?\n/)
-    if (!block) continue
-    for (const m of block[1].matchAll(/^\s{4}(\w+):\s*\{\s*label:/gm)) types.push(m[1])
-  }
-  // `reference` is a relation pseudo-type, not a schema field type the skill/MCP list
-  return [...new Set(types)].filter(t => t !== 'reference')
+async function extractManifestFieldTypes() {
+  const { discoverManifests, getCanonicalFieldTypes } = await import(
+    pathToFileURL(join(projectRoot, 'packages/crouton-cli/lib/utils/manifest-loader.ts')).href
+  )
+  const manifests = await discoverManifests(projectRoot)
+  return [...new Set(getCanonicalFieldTypes(manifests))]
 }
 
 /**
@@ -137,14 +128,14 @@ function arrayEquals(a, b) {
   return sortedA.every((v, i) => v === sortedB[i])
 }
 
-function main() {
+async function main() {
   console.log('🔍 Validating field types sync...\n')
 
   let hasErrors = false
   const results = {}
 
   // 1. Extract generator field types (source of truth)
-  const generatorTypes = extractManifestFieldTypes()
+  const generatorTypes = await extractManifestFieldTypes()
   if (generatorTypes.length === 0) {
     console.error('❌ Could not extract field types from manifests')
     process.exit(1)
