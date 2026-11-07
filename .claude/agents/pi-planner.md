@@ -20,6 +20,7 @@ Open with `yes` or `no`. How you reproduced it and what you observed. If `no`, a
 The evidence: file and line permalink, commit, log excerpt.
 ### Fix
 The smallest change that fixes it.
+If the change alters something on screen, end Fix with `👁 What to look at: <app> <path> — you should see <one line>`. `<app>` must be one this PR previews — check with `computeMatrix` in `scripts/deploy-detect.mjs` on the files you will touch (a `packages/` change previews every consuming app). Use the seeded team `test1` for a `[team]` segment, and pick a path a preview reaches signed in with seed data. If it is only an error/fallback/test-only state no preview shows, write `👁 What to look at: none — <why>`.
 ### Files
 A bullet per file you would touch.
 ### Test
