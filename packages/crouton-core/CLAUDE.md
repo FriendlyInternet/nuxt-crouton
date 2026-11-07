@@ -234,6 +234,9 @@ collection:{name}:{queryJSON}     # List queries
 collection-item:{name}:{id}       # Single items
 ```
 
+The list key is a reactive `computed`, so changing a query on one instance changes
+that instance's key (two lists with different filters never share data).
+
 Mutations invalidate ALL cache keys for the collection.
 
 ## Server Pagination
@@ -250,7 +253,7 @@ const { items, page, pageSize, total, pageCount, paginationData, setPage }
 ```
 
 - `page`/`pageSize` are writable refs folded into the request query (changing `pageSize`
-  resets to page 1). They become part of the cache key, so each page caches separately.
+  resets to page 1). They become part of the cache key, so the key changes with the page and each page caches separately.
 - `total` prefers the server's `{ total }`, falling back to array length (so it also works
   against a non-paginated endpoint). `pageCount = ceil(total / pageSize)`.
 - `paginationData` is shaped for `<CroutonCollection :pagination-data>` and is `null` when

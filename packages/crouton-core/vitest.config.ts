@@ -20,7 +20,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/.nuxt/**'
+      '**/.nuxt/**',
+      'tests/nuxt-runtime/**'
     ],
     environment: 'happy-dom',
     globals: true,
