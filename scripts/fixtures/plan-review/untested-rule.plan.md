@@ -13,5 +13,7 @@ Force teamId on rows without one.
 insert.test.ts: a row without teamId gets the current teamId.
 ### Assumptions
 - the insert path is the only writer — Why: grep shows one call site — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/abc123/packages/crouton-core/server/utils/insert.ts#L20 — Status: verified
+### Docs
+none — test-only fixture
 ### Needs owner
 no, a mechanical fix.

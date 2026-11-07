@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { epicBranchName, isV1Base, v1Enabled } from './pipeline-version.mjs'
+import { chooseEpicVersion, epicBranchName, isV1Base, v1Enabled } from './pipeline-version.mjs'
 import { parseEpicNumber } from '../epic-ready.mjs'
 import { slugify } from '../epic-scaffold.mjs'
 
@@ -15,7 +15,7 @@ test('epicBranchName', () => {
 })
 test('isV1Base', () => {
   assert.equal(isV1Base('epic/12--v1-x'), true)
-  for (const r of ['epic/12-v1-step-1', 'epic/12-x', 'main', 'work-1', '', undefined]) assert.equal(isV1Base(r), false)
+  for (const r of ['epic/12-v1-step-1', 'epic/12-x', 'epic/12-slug', 'main', 'work-1', '', undefined]) assert.equal(isV1Base(r), false)
 })
 test('parseEpicNumber reads v1 names', () => {
   assert.equal(parseEpicNumber('epic/12--v1-x'), 12)
@@ -31,4 +31,15 @@ test('slug makers never produce -- or a v1 base', () => {
 test('v1Enabled', () => {
   for (const v of [{}, { PIPELINE_V1: 'on' }, undefined]) assert.equal(v1Enabled(v), true)
   for (const v of [{ PIPELINE_V1: 'off' }, { PIPELINE_V1: ' OFF ' }]) assert.equal(v1Enabled(v), false)
+})
+test('chooseEpicVersion', () => {
+  assert.equal(chooseEpicVersion({ labels: [], defaultVersion: 'v1' }), 'v1')
+  assert.equal(chooseEpicVersion({ labels: [], defaultVersion: undefined }), '')
+  assert.equal(chooseEpicVersion({ labels: ['pipeline:v1'] }), 'v1')
+  assert.equal(chooseEpicVersion({ labels: [], defaultVersion: ' V1 ' }), 'v1')
+  for (const d of ['v2', 'on', '']) assert.equal(chooseEpicVersion({ labels: [], defaultVersion: d }), '')
+  assert.equal(chooseEpicVersion(), '')
+  const name = (defaultVersion) => epicBranchName({ epic: 12, slug: 's', version: chooseEpicVersion({ labels: [], defaultVersion }) })
+  assert.equal(name('v1'), 'epic/12--v1-s')
+  assert.equal(name(undefined), 'epic/12-s')
 })
