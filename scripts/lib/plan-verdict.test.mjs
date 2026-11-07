@@ -137,9 +137,9 @@ test('route command: exit/stdout the workflow relies on', () => {
 
 test('rule: a pending design sign-off ends as a hold — never go, never plan:approved, rejection count unchanged', async () => {
   const { SIGNOFF_QUESTION } = await import('./plan-verdict.mjs')
-  const plan = fx('signoff-pending.plan.md')
+  const plan = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off by ticket instruction, still open')
   // (9) reviewer says needs-owner with no Question section
-  const d9 = decide(plan, fx('signoff-pending.verdict.md'))
+  const d9 = decide(plan, fx('pass.verdict.md').replace('\ngo\n', '\nneeds-owner\n').replace(/- 7: PASS[^\n]*/, '- 7: FAIL — design sign-off pending by ticket instruction'))
   assert.equal(d9.ok, true)
   assert.equal(d9.verdict, 'needs-owner')
   assert.equal(d9.question, SIGNOFF_QUESTION)
@@ -149,7 +149,7 @@ test('rule: a pending design sign-off ends as a hold — never go, never plan:ap
   assert.equal(d10.ok, true)
   assert.equal(d10.verdict, 'needs-owner')
   // (11) 7 FAIL and 4 FAIL → still a hold, never a no-go marker
-  const d11 = decide(plan, fx('signoff-pending-4.verdict.md'))
+  const d11 = decide(plan, fx('pass.verdict.md').replace('\ngo\n', '\nno-go\n').replace(/- 4: PASS[^\n]*/, '- 4: FAIL — over-built').replace(/- 7: PASS[^\n]*/, '- 7: FAIL — design sign-off pending by ticket instruction'))
   assert.equal(d11.verdict, 'needs-owner')
   const c = renderComment(d11, { round: 2 })
   assert.match(c, /<!-- plan-review-verdict:needs-owner -->/)

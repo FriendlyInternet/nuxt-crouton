@@ -1,6 +1,11 @@
 // node --test scripts/lib/signoff-route.test.mjs  (#3238)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { signoffRoute, isHoldComment, ownerQuestionKind, isDesignHold, SIGNOFF_MARKER, HOLD_HEADING } from './signoff-route.mjs'
 import { routeIssue } from './plan-route.mjs'
 
@@ -12,6 +17,15 @@ const quote = { body: `The plan quotes \`${HOLD_HEADING}\` and ${SIGNOFF_MARKER}
 
 test('(1) a ticket asking for sign-off with no hold routes to signoff', () => {
   assert.equal(signoffRoute({ text: T3207, comments: [] }).route, 'signoff')
+})
+test('(1b) real CLI: #3207-style body routes to signoff; a ticket that only quotes the phrase does not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'so-'))
+  const run = (body) => {
+    const f = join(dir, 'i.txt'); writeFileSync(f, body)
+    return execFileSync('node', [fileURLToPath(new URL('./signoff-route.mjs', import.meta.url)), f, '/dev/stdin', '--route'], { input: '[]' }).toString().trim()
+  }
+  assert.equal(run(T3207), 'signoff')
+  assert.equal(run('Case: #3207 ("Hold for design sign-off first (`signoff` with a `ui` mockup)") went to plan.\n> Hold for design sign-off first'), 'none')
 })
 test('(2) after the marked hold → none', () => {
   assert.equal(signoffRoute({ text: T3207, comments: [hold] }).route, 'none')

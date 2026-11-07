@@ -32,7 +32,14 @@ export function isHoldComment(body = '') {
   return b.split('\n')[0].trim() === SIGNOFF_MARKER || HEADING_OWN_LINE.test(b)
 }
 
-export const signoffRequested = (text = '') => SIGNOFF_PATTERN.test(text)
+/** Drop quoted material (blockquote lines, "…" / “…” spans, `code`) — a ticket that merely mentions the phrase isn't asking. */
+const unquoted = (text = '') =>
+  String(text)
+    .split('\n').filter((l) => !l.trim().startsWith('>')).join('\n')
+    .replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
+    .replace(/"[^"\n]*"/g, '').replace(/“[^”\n]*”/g, '')
+
+export const signoffRequested = (text = '') => SIGNOFF_PATTERN.test(unquoted(text))
 export const signoffAsked = (comments = []) => comments.some((c) => isHoldComment(c?.body))
 
 /** @returns {{route:'signoff'|'none', reason:string}} */
