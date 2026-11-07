@@ -43,4 +43,9 @@ describe('selectPieces', () => {
     const out = selectPieces([cand('Mock', 'ts'), cand('Real', 'vue')])
     expect(out.map(p => p.name)).toEqual(['Real'])
   })
+
+  it('does not list the old crouton-core collection-forms mock path', () => {
+    const out = selectPieces([{ pascalName: 'CollectionForms', filePath: '/repo/packages/crouton-core/app/components/__tests__/mocks/collection-forms.ts', priority: 0, mode: 'all' as const, island: false }])
+    expect(out).toEqual([])
+  })
 })

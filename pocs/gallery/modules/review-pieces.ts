@@ -7,7 +7,7 @@
 // first page load. So this module writes ONE generated file listing each package component with
 // a lazy `import()` — every piece is its own chunk, fetched only when its page opens.
 //
-// Scope: components whose real file lives in packages/crouton-*/app/components, minus the
+// Scope: .vue files only — components whose real file lives in packages/crouton-*/app/components, minus the
 // priority -1 stubs (placeholders that real components override) and server/island components.
 import { defineNuxtModule, addTemplate } from '@nuxt/kit'
 import type { Component } from '@nuxt/schema'
@@ -52,8 +52,8 @@ function packageOf(c: Candidate, real: string): string | null {
 export function selectPieces(components: Candidate[]): ReviewPiece[] {
   const seen = new Map<string, ReviewPiece & { priority: number }>()
   for (const c of components) {
-    if (!c.filePath.endsWith('.vue')) continue // a stray .ts helper in a components folder is not a piece
     const file = realPath(c.filePath)
+    if (!file.endsWith('.vue')) continue // a stray .ts helper in a components folder is not a piece
     const pkg = packageOf(c, file)
     if (!pkg) continue
     const priority = c.priority ?? 0
