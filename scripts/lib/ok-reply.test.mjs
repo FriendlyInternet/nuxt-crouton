@@ -11,7 +11,11 @@ test('pending / round1 / failed / ok-again each get their own non-empty text', (
   assert.equal(new Set(got.map(x => x.text)).size, 4)
 })
 test('final with a valid later ok → no reply (it merges)', () => assert.equal(r('final', { okBeforeFinal: false }), null))
-test('other (go / needs-owner) → no reply', () => assert.equal(r('other'), null))
+test('needs-owner: ok before → ok-again; ok after → null', () => {
+  assert.equal(chooseOkReply({ state: { kind: 'needs-owner' }, ownerOk: true, okBeforeFinal: true }).reason, 'ok-again')
+  assert.equal(chooseOkReply({ state: { kind: 'needs-owner' }, ownerOk: true }), null)
+})
+test('other (go) → no reply', () => assert.equal(r('other'), null))
 test('no owner ok → never a reply', () => {
   for (const kind of ['pending', 'round1', 'failed', 'final', 'other']) assert.equal(chooseOkReply({ state: { kind }, ownerOk: false, okBeforeFinal: true }), null)
 })

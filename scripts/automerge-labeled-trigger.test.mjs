@@ -27,9 +27,10 @@ test('job-level if filters labeled to build:approved', () => {
   assert.match(wf, /github\.event\.action != 'labeled' \|\| github\.event\.label\.name == 'build:approved'/)
 })
 
-test('step falls back (does not crash) when the helper import fails', () => {
+test('step imports the trigger helper unguarded (no fallback)', () => {
   const wf = readFileSync(new URL('../.github/workflows/automerge-epic-subpr.yml', import.meta.url), 'utf8')
-  assert.match(wf, /let shouldRunOnEvent = \(\) => true\s+try \{\s+\(\{ shouldRunOnEvent \} = await import\([^)]*automerge-trigger\.mjs[^)]*\)\)\s+\} catch/)
+  assert.match(wf, /const \{ shouldRunOnEvent \} = await import\([^)]*automerge-trigger\.mjs/)
+  assert.doesNotMatch(wf, /let shouldRunOnEvent = \(\) => true/)
 })
 
 // --- Evaluate the REAL job-level `if:` and run decideLeafMerge (restored from 42ce8657f) ---
@@ -49,7 +50,7 @@ test('real job `if`: labeled build:approved runs; labeled other is skipped', () 
 test('labeled: build:approved on a green, mergeable epic sub-PR reaches decideLeafMerge and merges', () => {
   assert.equal(jobRuns({ action: 'labeled', label: { name: 'build:approved' } }), true)
   const gate = decideLeafMerge({
-    baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'],
+    baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], headReview: { kind: 'other' },
     go: { go: false }, red: false, ciGate: 'success', mergeableState: 'clean',
   })
   assert.equal(gate.merge, true)

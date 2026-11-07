@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isAlreadyGone } from './wrangler-d1.mjs'
+import { isAlreadyGone, isUserTable } from './wrangler-d1.mjs'
 
 test('Worker already gone — the real CF phrasing (#1056)', () => {
   assert.equal(isAlreadyGone('This Worker does not exist on your account. [code: 10007]'), true)
@@ -31,4 +31,9 @@ test('a genuine failure is NOT treated as already-gone', () => {
   assert.equal(isAlreadyGone('connect ETIMEDOUT'), false)
   assert.equal(isAlreadyGone(''), false)
   assert.equal(isAlreadyGone(undefined), false)
+})
+
+test('isUserTable skips SQLite/Cloudflare internals, keeps app tables (#3416)', () => {
+  for (const n of ['_cf_KV', '_cf_METADATA', 'sqlite_sequence']) assert.equal(isUserTable(n), false, n)
+  for (const n of ['user', 'auth_email_log', 'd1_migrations', 'bookings_bookings', 'xcfy_table', 'a_cf_b', 'cf_notes']) assert.equal(isUserTable(n), true, n)
 })

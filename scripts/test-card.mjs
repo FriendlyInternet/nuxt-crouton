@@ -65,6 +65,11 @@ export function hasTestSteps(body = '') {
   return sectionChecks(body, '(?:🧪\\s*)?How to test').length > 0
 }
 
+/** One line for a PR body pointing at the issue's 🧪 steps; says so when there are none (#3036). */
+export function howToTestPointer(issue, body = '') {
+  return hasTestSteps(body) ? `How to test: see #${issue} → 🧪` : `How to test: #${issue} has no 🧪 steps`
+}
+
 /**
  * Up to `max` phone-friendly check lines: the "How to test" section (written for a person) first,
  * "Done when" (written for the worker) as the fallback. Metadata lines are dropped.

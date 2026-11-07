@@ -22,6 +22,13 @@
       "when": 1793051588148,
       "tag": "0002_violet_red_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955340404,
+      "tag": "0003_email_log_provider_id",
+      "breakpoints": true
     }
   ]
 }
