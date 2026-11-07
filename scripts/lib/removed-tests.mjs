@@ -32,13 +32,22 @@ export function listTestTitles(source) {
  * @returns {Array<{file:string,title:string}>} titles seen earlier and missing at head
  */
 export function removedTests(snapshots, head) {
+  return missingAtHead(collectSeen(snapshots), head)
+}
+
+function collectSeen(snapshots) {
   const seen = new Map()
   for (const snap of snapshots) {
     for (const [file, src] of Object.entries(snap)) {
-      if (!seen.has(file)) seen.set(file, new Set())
-      for (const t of listTestTitles(src)) seen.get(file).add(t)
+      const titles = seen.get(file) || new Set()
+      for (const t of listTestTitles(src)) titles.add(t)
+      seen.set(file, titles)
     }
   }
+  return seen
+}
+
+function missingAtHead(seen, head) {
   const out = []
   for (const [file, titles] of seen) {
     const kept = new Set(head[file] === undefined ? [] : listTestTitles(head[file]))
