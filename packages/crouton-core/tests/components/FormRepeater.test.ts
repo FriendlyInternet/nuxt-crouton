@@ -13,7 +13,7 @@ Object.assign(globalThis, {
   useT: () => ({ t: (k: string, p?: any) => (p?.name ? `${k}:${p.name}` : k) })
 })
 
-const guard = createRequire(import.meta.url)('../../../../../e2e/console-guard.cjs')
+const guard = createRequire(import.meta.url)('../../../../e2e/console-guard.cjs')
 
 const stubs = {
   UCard: { template: '<div><slot /></div>' },
@@ -23,7 +23,7 @@ const stubs = {
 }
 
 async function mountRepeater(componentName: string) {
-  const FormRepeater = (await import('../FormRepeater.vue')).default
+  const FormRepeater = (await import('../../app/components/FormRepeater.vue')).default
   return mount(FormRepeater, {
     props: { modelValue: [{ id: 'a' }], componentName },
     global: { stubs }
