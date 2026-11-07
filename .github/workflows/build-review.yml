@@ -303,8 +303,7 @@ jobs:
             needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT" ;;
             no-go)
               if [ "$ROUND" -ge 2 ]; then
-                gh issue edit "$ISSUE" --add-label "status:blocked"
-                echo "held=1" >> "$GITHUB_OUTPUT"
+                gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT"
               else
                 CID="${COMMENT_URL##*issuecomment-}"
                 node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c}}')"
@@ -334,7 +333,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .claude
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:

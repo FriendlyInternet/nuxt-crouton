@@ -1314,10 +1314,8 @@ jobs:
               # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
               elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
-              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
+              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"; [ -z "$DRAFT_FLAG" ] || echo "held=1" >> "$GITHUB_OUTPUT"  # #3583
             fi
-            # #3583: a held (draft) PR waits on the owner — let the release job re-check traffic.
-            if [ -n "$DRAFT_FLAG" ]; then echo "held=1" >> "$GITHUB_OUTPUT"; fi
           fi
 
           # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
@@ -1574,7 +1572,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .claude
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
