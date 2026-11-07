@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "eb0bfa36-0adf-4b14-a66f-ce787a595a10",
+  "id": "2a545e69-8187-4ba2-84dc-d720485f4adb",
   "prevId": "d12ec7f0-81f2-475e-95f7-200165989985",
   "tables": {
     "account": {
@@ -201,6 +201,13 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -236,6 +243,13 @@
           "name": "auth_email_log_created_idx",
           "columns": [
             "createdAt"
+          ],
+          "isUnique": false
+        },
+        "auth_email_log_provider_idx": {
+          "name": "auth_email_log_provider_idx",
+          "columns": [
+            "providerId"
           ],
           "isUnique": false
         }
@@ -815,44 +829,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "rateLimit": {
-      "name": "rateLimit",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "lastRequest": {
-          "name": "lastRequest",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

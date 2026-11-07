@@ -50,7 +50,6 @@ jobs:
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
-      base_is_epic: ${{ steps.filter.outputs.base_is_epic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +64,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
@@ -331,7 +333,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+              echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+              exit 1
+            fi
             BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
@@ -460,6 +465,8 @@ jobs:
       IS_CODE: ${{ contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # merge-base for the inline-size check (#3478)
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
@@ -492,6 +499,20 @@ jobs:
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
         run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
+
+      # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
+      - name: Inline workflow block size (#3452)
+        # PRs are judged against their merge-base, so growth already on main never reds an unrelated PR (#3478).
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            node scripts/workflow-inline-size.mjs --base "$(git merge-base "origin/$BASE_REF" HEAD)"
+          else
+            node scripts/workflow-inline-size.mjs
+          fi
 
       - name: Extract each `run:` block and lint it
         run: |
@@ -596,6 +617,11 @@ jobs:
             | tar -xz -C /tmp/actionlint
           /tmp/actionlint/actionlint -version
           /tmp/actionlint/actionlint -color -shellcheck= -pyflakes=
+      # actionlint does not check GitHub's 21,000-char expression limit (#3382): a ${{ }}-bearing
+      # string is rewritten to format(…), doubling every { } ', and over the limit the WHOLE file is
+      # rejected (every dispatch silently dropped). Node core only.
+      - name: Expression-length limit
+        run: node scripts/workflow-expr-limit.mjs
 
   fallow-audit:
     if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
@@ -636,7 +662,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history: audit diffs against the merge-base with main
+          # Full history: audit diffs against the merge-base with the PR's base branch (main on push)
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -657,9 +683,12 @@ jobs:
           path: coverage
 
       - name: Run fallow audit (diff-scoped, coverage-fed)
-        # --coverage-root strips the generating checkout's prefix so per-function
-        # matching survives any root mismatch between the two jobs (#1256).
-        run: npx fallow audit --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
+        # Judged against the PR's OWN base (#3519) — epic/* PRs on their own diff, push → fallow default.
+        # --coverage-root strips the generating checkout's prefix (#1256).
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/fallow-audit.mjs --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
 
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job

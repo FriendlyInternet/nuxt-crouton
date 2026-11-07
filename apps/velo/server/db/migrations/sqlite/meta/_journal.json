@@ -26,15 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640000797,
-      "tag": "0003_youthful_sir_ram",
+      "when": 1793955340404,
+      "tag": "0003_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1793640087857,
-      "tag": "0004_verify_existing_users",
+      "when": 1793955341404,
+      "tag": "0004_youthful_sir_ram",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793955342404,
+      "tag": "0005_verify_existing_users",
       "breakpoints": true
     }
   ]

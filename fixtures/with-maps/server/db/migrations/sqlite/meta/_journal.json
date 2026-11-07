@@ -12,15 +12,22 @@
     {
       "idx": 1,
       "version": "6",
-      "when": 1793640039053,
-      "tag": "0001_amazing_the_captain",
+      "when": 1793955340409,
+      "tag": "0001_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1793640105909,
-      "tag": "0002_verify_existing_users",
+      "when": 1793955341409,
+      "tag": "0002_amazing_the_captain",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955342409,
+      "tag": "0003_verify_existing_users",
       "breakpoints": true
     }
   ]

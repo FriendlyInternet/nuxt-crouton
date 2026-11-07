@@ -26,15 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640028306,
-      "tag": "0003_complete_surge",
+      "when": 1793955340416,
+      "tag": "0003_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1793640094361,
-      "tag": "0004_verify_existing_users",
+      "when": 1793955341416,
+      "tag": "0004_complete_surge",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793955342416,
+      "tag": "0005_verify_existing_users",
       "breakpoints": true
     }
   ]

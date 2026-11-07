@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "31f54da7-13e8-40ae-8da3-1eefc5814bf9",
+  "id": "2cbaac24-22eb-4891-8b54-de7a842849ce",
   "prevId": "a8d756a0-03cf-4f20-aed2-b60658535dfb",
   "tables": {
     "crate_changes": {
@@ -665,6 +665,13 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -700,6 +707,13 @@
           "name": "auth_email_log_created_idx",
           "columns": [
             "createdAt"
+          ],
+          "isUnique": false
+        },
+        "auth_email_log_provider_idx": {
+          "name": "auth_email_log_provider_idx",
+          "columns": [
+            "providerId"
           ],
           "isUnique": false
         }
@@ -2599,44 +2613,6 @@
           "name": "layout_configs_teamId_id_pk"
         }
       },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "rateLimit": {
-      "name": "rateLimit",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "lastRequest": {
-          "name": "lastRequest",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     }

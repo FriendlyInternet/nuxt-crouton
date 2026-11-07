@@ -1,8 +1,26 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateBookingsEmailtemplate, getBookingsEmailtemplatesByIds } from '../../../../database/queries'
+import { z } from 'zod'
+import { updateBookingsEmailtemplate, getBookingsEmailtemplatesByIds, assertBookingsEmailtemplateReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import type { BookingsEmailtemplate } from '../../../../../types'
+
+// Hand-added body validation (#3377). `locale` is a transient merge hint, not a column.
+const bodySchema = z.object({
+  name: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  fromEmail: z.string(),
+  triggerType: z.string(),
+  recipientType: z.string(),
+  isActive: z.boolean().nullish(),
+  daysOffset: z.number().int().nullish(),
+  locationId: z.string().nullish(),
+  translations: z.record(z.string(), z.object({
+    name: z.string().optional(),
+    subject: z.string().optional(),
+    body: z.string().optional()
+  })).nullish()
+}).partial().extend({ locale: z.string().optional() }).strip()
 
 export default defineEventHandler(async (event) => {
   const { emailtemplateId } = getRouterParams(event)
@@ -11,7 +29,9 @@ export default defineEventHandler(async (event) => {
   }
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
 
-  const body = await readBody<Partial<BookingsEmailtemplate>>(event)
+  const body = await readValidatedBody(event, bodySchema.parse)
+
+  await assertBookingsEmailtemplateReferences(team.id, body)
 
   // Handle translation updates properly
   if (body.translations && body.locale) {
@@ -38,5 +58,5 @@ export default defineEventHandler(async (event) => {
     daysOffset: body.daysOffset,
     locationId: body.locationId,
     translations: body.translations
-  }, { role: membership.role })
+  } as Parameters<typeof updateBookingsEmailtemplate>[3], { role: membership.role })
 })

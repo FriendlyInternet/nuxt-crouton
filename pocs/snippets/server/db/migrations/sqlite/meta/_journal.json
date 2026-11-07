@@ -12,15 +12,22 @@
     {
       "idx": 1,
       "version": "6",
-      "when": 1793640057154,
-      "tag": "0001_great_war_machine",
+      "when": 1793955340418,
+      "tag": "0001_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1793640098396,
-      "tag": "0002_verify_existing_users",
+      "when": 1793955341418,
+      "tag": "0002_great_war_machine",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955342418,
+      "tag": "0003_verify_existing_users",
       "breakpoints": true
     }
   ]

@@ -54,15 +54,22 @@
     {
       "idx": 7,
       "version": "6",
-      "when": 1793640022863,
-      "tag": "0007_keen_kulan_gath",
+      "when": 1793955340403,
+      "tag": "0007_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "6",
-      "when": 1793640086848,
-      "tag": "0008_verify_existing_users",
+      "when": 1793955341403,
+      "tag": "0008_keen_kulan_gath",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793955342403,
+      "tag": "0009_verify_existing_users",
       "breakpoints": true
     }
   ]

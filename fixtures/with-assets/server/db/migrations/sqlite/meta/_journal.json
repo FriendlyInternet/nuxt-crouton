@@ -26,15 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640034400,
-      "tag": "0003_bouncy_william_stryker",
+      "when": 1793955340406,
+      "tag": "0003_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1793640101548,
-      "tag": "0004_verify_existing_users",
+      "when": 1793955341406,
+      "tag": "0004_bouncy_william_stryker",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793955342406,
+      "tag": "0005_verify_existing_users",
       "breakpoints": true
     }
   ]

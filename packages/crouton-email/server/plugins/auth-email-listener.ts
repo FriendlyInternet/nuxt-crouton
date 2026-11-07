@@ -162,6 +162,7 @@ export default defineNitroPlugin((nitroApp) => {
           to: payload.to,
           type: payload.type,
           ok,
+          providerId: ok ? sendResult?.id : undefined,
           error: ok ? undefined : (caughtError ?? sendResult?.error ?? 'send failed')
         })
       }

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fd906fbb-dd75-450f-b6a8-599bb05c4919",
-  "prevId": "31f54da7-13e8-40ae-8da3-1eefc5814bf9",
+  "id": "64bc0e4c-e684-45f9-8c9f-b717c358d5fd",
+  "prevId": "2cbaac24-22eb-4891-8b54-de7a842849ce",
   "tables": {
     "crate_changes": {
       "name": "crate_changes",
@@ -665,6 +665,13 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -700,6 +707,13 @@
           "name": "auth_email_log_created_idx",
           "columns": [
             "createdAt"
+          ],
+          "isUnique": false
+        },
+        "auth_email_log_provider_idx": {
+          "name": "auth_email_log_provider_idx",
+          "columns": [
+            "providerId"
           ],
           "isUnique": false
         }

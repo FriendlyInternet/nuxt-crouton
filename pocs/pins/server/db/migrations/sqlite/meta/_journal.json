@@ -19,15 +19,22 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1793640056149,
-      "tag": "0002_slow_exiles",
+      "when": 1793955340417,
+      "tag": "0002_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640096247,
-      "tag": "0003_verify_existing_users",
+      "when": 1793955341417,
+      "tag": "0003_slow_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793955342417,
+      "tag": "0004_verify_existing_users",
       "breakpoints": true
     }
   ]

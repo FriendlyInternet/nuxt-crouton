@@ -26,15 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640052944,
-      "tag": "0003_busy_nightmare",
+      "when": 1793955340412,
+      "tag": "0003_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1793640090075,
-      "tag": "0004_verify_existing_users",
+      "when": 1793955341412,
+      "tag": "0004_busy_nightmare",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793955342412,
+      "tag": "0005_verify_existing_users",
       "breakpoints": true
     }
   ]

@@ -12,15 +12,22 @@
     {
       "idx": 1,
       "version": "6",
-      "when": 1793640027255,
-      "tag": "0001_yielding_revanche",
+      "when": 1793955340415,
+      "tag": "0001_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1793640093157,
-      "tag": "0002_verify_existing_users",
+      "when": 1793955341415,
+      "tag": "0002_yielding_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955342415,
+      "tag": "0003_verify_existing_users",
       "breakpoints": true
     }
   ]

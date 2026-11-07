@@ -19,15 +19,22 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1793640041569,
-      "tag": "0002_brainy_microbe",
+      "when": 1793955340411,
+      "tag": "0002_email_log_provider_id",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1793640108251,
-      "tag": "0003_verify_existing_users",
+      "when": 1793955341411,
+      "tag": "0003_brainy_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793955342411,
+      "tag": "0004_verify_existing_users",
       "breakpoints": true
     }
   ]

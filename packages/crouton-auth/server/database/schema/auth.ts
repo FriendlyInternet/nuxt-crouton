@@ -419,12 +419,15 @@ export const authEmailLog = sqliteTable('auth_email_log', {
   sentAt: integer('sentAt', { mode: 'timestamp' }),
   /** Additional context (e.g., inviter name, team name) */
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+  /** Email provider's message id (Resend) — delivery events match on this only (#3419) */
+  providerId: text('providerId'),
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date())
 }, table => [
   index('auth_email_log_org_idx').on(table.organizationId),
   index('auth_email_log_type_idx').on(table.emailType),
   index('auth_email_log_status_idx').on(table.status),
   index('auth_email_log_recipient_idx').on(table.recipientEmail),
+  index('auth_email_log_provider_idx').on(table.providerId),
   index('auth_email_log_created_idx').on(table.createdAt)
 ])
 
