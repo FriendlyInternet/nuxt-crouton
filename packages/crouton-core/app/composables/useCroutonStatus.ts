@@ -23,6 +23,10 @@ function displayTitle(collection: string, record: Record<string, unknown>): stri
   }
 }
 
+function mutationRecord(data?: Record<string, unknown>, result?: unknown): Record<string, unknown> | undefined {
+  return (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
+}
+
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
  */
@@ -31,7 +35,7 @@ function extractItemName(
   data?: Record<string, unknown>,
   result?: unknown,
 ): string | undefined {
-  const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
+  const record = mutationRecord(data, result)
   if (!record) return undefined
 
   return displayTitle(collection, record) ?? heuristicName(record)
