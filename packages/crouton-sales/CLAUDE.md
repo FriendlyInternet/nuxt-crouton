@@ -40,7 +40,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/api/crouton-sales/sync/ingest.post.ts` | Cloud D1 ingest endpoint (#178); also stamps the freshness heartbeat (#179) |
 | `server/utils/sync-pull.ts` + `sync/pull.get.ts` | Cloud → till config sync (#815): `collectConfigChanges()` (cloud, device-authed, per team, cursor + `skip` paging) and `pullConfigChanges()` (till, runs after each push; applies via `resolveConflict` side=till; cursor in `sales_sync_pull_state`; never writes the outbox). Equal timestamps keep the till's version on both sides. Delete markers are written on both sides (`captureConfigWrite`) |
 | `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, devices[], serverNow }` (headline = freshest till) |
-| `app/utils/sync-device.ts` + `app/types/sync.ts` | `bareDeviceId()` / `shortDeviceId()` (the one place the `device:` prefix + 8-char display id is handled) and the shared `Device` / `SyncDevice` / `LostEdit` types for the Sync components |
+| `app/utils/sync-device.ts` + `app/types/sync.ts` | `bareDeviceId()` / `shortDeviceId()` (contract: `test/sync-device.test.ts`; the one place the `device:` prefix + 8-char display id is handled) and the shared `Device` / `SyncDevice` / `LostEdit` types for the Sync components |
 | `app/components/Sync/Devices.vue` / `DeviceList.vue` / `PairingPanel.vue` | `SalesSyncDevices` (#806) composes `SalesSyncPairingPanel` (one-time pairing code) + `SalesSyncDeviceList` (linked tills/print routers, last push/pull, unlink) |
 | `app/components/Sync/Details.vue` | `SalesSyncDetails` — per-till push/pull + lost config edits for `<SalesSyncStatus detailed>` (#816) |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |
@@ -744,6 +744,15 @@ dropped in favour of the persistent trailing pencil; reorder persists via
 | Component | Auto-import Name | Purpose |
 |-----------|------------------|---------|
 | `PosSidebar.vue` | `SalesAdminPosSidebar` | Admin navigation sidebar |
+
+### Sync (`Sync/`)
+| Component | Auto-import Name | Purpose |
+|-----------|------------------|---------|
+| `Devices.vue` | `SalesSyncDevices` | Linked-devices section: composes the pairing panel + device list |
+| `DeviceList.vue` | `SalesSyncDeviceList` | Linked tills / print routers with last push/pull and unlink |
+| `PairingPanel.vue` | `SalesSyncPairingPanel` | "Link a till" button + one-time pairing code dialog |
+| `Details.vue` | `SalesSyncDetails` | Per-till push/pull + lost config edits |
+| `Status.vue` | `SalesSyncStatus` | Mirror freshness banner (`detailed` shows Details) |
 
 ### Print Settings (`Settings/`) - Opt-in
 | Component | Auto-import Name | Purpose |

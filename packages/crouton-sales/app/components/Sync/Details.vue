@@ -4,10 +4,10 @@
  * push/pull and the config edits that lost a conflict. Split out of Status.vue
  * so the banner's template stays small.
  */
-import type { LostEdit } from '../../types'
+import type { LostEdit, SyncDevice } from '../../types'
 
 const props = defineProps<{
-  devices: Array<{ deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }>
+  devices: SyncDevice[]
   lostEdits: LostEdit[]
   /** Current time on the server's clock (ms), so ages ignore device skew. */
   now: number
@@ -18,7 +18,6 @@ const props = defineProps<{
 const { t } = useT()
 const ago = useSyncAgo()
 const agoOf = (at: number | null | undefined) => ago(at, props.now)
-const tillName = (id: string | null) => shortDeviceId(id)
 /** "price: 5 → 6" for the fields that differ; falls back to the lost values alone. */
 function diffLabel(l: LostEdit): string {
   const keys = Object.keys(l.lost).filter(k => k in l.kept && JSON.stringify(l.lost[k]) !== JSON.stringify(l.kept[k]))
@@ -33,7 +32,7 @@ function diffLabel(l: LostEdit): string {
   <div class="space-y-3 text-sm">
     <ul v-if="devices.length" class="divide-y divide-default rounded-lg border border-default">
       <li v-for="d in devices" :key="d.deviceId" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
-        <span class="font-medium">{{ tillName(d.deviceId) }}</span>
+        <span class="font-medium">{{ shortDeviceId(d.deviceId) }}</span>
         <span class="text-muted">
           {{ t('sales.sync.lastPush') }}: {{ agoOf(d.lastContactAt) }} · {{ t('sales.sync.lastPull') }}: {{ agoOf(d.lastPullAt) }}
         </span>
@@ -44,7 +43,7 @@ function diffLabel(l: LostEdit): string {
       <ul class="divide-y divide-default rounded-lg border border-default">
         <li v-for="l in lostEdits" :key="l.id" class="space-y-0.5 px-3 py-2">
           <div class="flex flex-wrap justify-between gap-x-4">
-            <span class="font-medium">{{ l.entityType }} · {{ tillName(l.deviceId) }}</span>
+            <span class="font-medium">{{ l.entityType }} · {{ shortDeviceId(l.deviceId) }}</span>
             <span class="text-muted">{{ agoOf(l.at) }}</span>
           </div>
           <p class="break-words text-muted">{{ diffLabel(l) }}</p>
