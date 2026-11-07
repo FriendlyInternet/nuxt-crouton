@@ -3,17 +3,31 @@
 // Hand-edited (#3379): picks allowed fields only and checks capacity in the same statement.
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
+import { assertBookingsBookingReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { bookingsBookings } from '../../../../database/schema'
 import { bookingsLocations } from '../../../../../../locations/server/database/schema'
 import { LOCATION_COLS, dayRange, validateSelection, guardSql, guardedInsert, runAtomic } from '../../../../../../../server/utils/booking-capacity'
 
+// Hand-added body validation (#3377): wrong types -> 400, unknown/system keys are stripped.
+const bodySchema = z.object({
+  location: z.string().min(1),
+  date: z.coerce.date(),
+  slot: z.array(z.string()).min(1),
+  group: z.string().nullish(),
+  quantity: z.number().int(),
+  status: z.string().min(1)
+}).strip()
+
 export default defineEventHandler(async (event) => {
   const { team, user } = await resolveTeamAndCheckMembership(event)
 
-  const body = await readBody(event) || {}
+  const body = await readValidatedBody(event, bodySchema.parse)
   const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
   const db = useDB() as any
+
+  await assertBookingsBookingReferences(team.id, body)
 
   const [location] = await db.select(LOCATION_COLS).from(bookingsLocations)
     .where(and(eq(bookingsLocations.id as any, body.location), eq(bookingsLocations.teamId as any, team.id)))

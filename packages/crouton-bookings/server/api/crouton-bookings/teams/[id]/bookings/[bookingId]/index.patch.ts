@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { patchBookingGuarded } from '../../../../../../utils/booking-capacity'
+import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
 
 const updateSchema = z.object({
   location: z.string().optional(),
@@ -36,6 +37,11 @@ export default defineEventHandler(async (event) => {
       data: parsed.error.issues,
     })
   }
+
+  // A booking may only point at its own team's location (#3378)
+  await assertRefsInTeam(db, team.id, [
+    { field: 'location', table: bookingsLocations, value: parsed.data.location },
+  ])
 
   // Capacity is re-checked when the booking moves or comes back from cancelled (#3379)
   const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'

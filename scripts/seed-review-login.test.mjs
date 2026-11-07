@@ -103,3 +103,92 @@ test('second run (redeploy) revokes nothing', () => {
   d.exec(markReviewerVerifiedSql('review+velo-pr5@example.com'))
   assert.equal(count(d, 's3'), 1)
 })
+
+// ── #3474: exit 0 only when a working review login exists ──────────────────────────
+import { createServer } from 'node:http'
+import { execFile } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import {
+  isMissingSecretError, signUpDecision, SIGNUP_RETRY_DELAYS_MS, retryDelays
+} from './seed-review-login.mjs'
+
+const SCRIPT = fileURLToPath(new URL('./seed-review-login.mjs', import.meta.url))
+const MISSING = { message: '[crouton/auth] BETTER_AUTH_SECRET is required. Set it in your environment variables.' }
+
+async function runSeed(signUp, urlOverride) {
+  let signUpCalls = 0
+  const server = createServer((req, res) => {
+    let status = 200
+    let body = {}
+    if (req.url === '/api/auth/sign-up/email') {
+      signUpCalls++
+      ;({ status, body } = signUp(signUpCalls))
+    } else if (req.url === '/api/auth/organization/create') status = 403
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = urlOverride ?? `http://127.0.0.1:${server.address().port}`
+  const code = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'review+t@example.com', '--password', 'pw'],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      err => resolve(err ? err.code : 0))
+  })
+  await new Promise(r => server.close(r))
+  return { code, signUpCalls }
+}
+
+test('#3474 sign-up keeps failing with missing-secret error → non-zero', async () => {
+  const r = await runSeed(() => ({ status: 500, body: MISSING }))
+  assert.equal(r.code, 1)
+  assert.equal(r.signUpCalls, 3)
+})
+test('#3474 sign-up succeeds → exit 0', async () => {
+  const r = await runSeed(() => ({ status: 200, body: { user: { id: 'u1' } } }))
+  assert.equal(r.code, 0)
+  assert.equal(r.signUpCalls, 1)
+})
+test('#3474 secret arrives during retries → exit 0', async () => {
+  const r = await runSeed(n => n < 3 ? { status: 500, body: MISSING } : { status: 200, body: { user: { id: 'u1' } } })
+  assert.equal(r.code, 0)
+  assert.equal(r.signUpCalls, 3)
+})
+test('#3474 other sign-up error is not retried → non-zero', async () => {
+  const r = await runSeed(() => ({ status: 400, body: { code: 'INVALID_EMAIL' } }))
+  assert.equal(r.code, 1)
+  assert.equal(r.signUpCalls, 1)
+})
+test('#3474 unreachable Worker → non-zero', async () => {
+  const s = createServer()
+  await new Promise(r => s.listen(0, '127.0.0.1', r))
+  const port = s.address().port
+  await new Promise(r => s.close(r))
+  const r = await runSeed(() => ({ status: 200, body: {} }), `http://127.0.0.1:${port}`)
+  assert.equal(r.code, 1)
+})
+test('#3474 invalid --url → non-zero', async () => {
+  const r = await runSeed(() => ({ status: 200, body: {} }), 'not-a-url')
+  assert.equal(r.code, 1)
+})
+
+test('#3474 isMissingSecretError', () => {
+  assert.ok(isMissingSecretError(MISSING.message))
+  assert.ok(!isMissingSecretError('USER_ALREADY_EXISTS'))
+  assert.ok(!isMissingSecretError('HTTP 500'))
+})
+test('#3474 signUpDecision', () => {
+  const base = { ok: false, attempt: 1, maxAttempts: 7 }
+  assert.equal(signUpDecision({ ...base, status: 500, code: MISSING.message }), 'retry')
+  assert.equal(signUpDecision({ ...base, threw: true, code: 'fetch failed' }), 'retry')
+  assert.equal(signUpDecision({ ...base, ok: true, status: 200 }), 'ok')
+  assert.equal(signUpDecision({ ...base, status: 422, code: 'x' }), 'exists')
+  assert.equal(signUpDecision({ ...base, status: 400, code: 'USER_ALREADY_EXISTS' }), 'exists')
+  assert.equal(signUpDecision({ ...base, attempt: 7, status: 500, code: MISSING.message }), 'give-up')
+  assert.equal(signUpDecision({ ...base, status: 400, code: 'INVALID_EMAIL' }), 'give-up')
+})
+test('#3474 retry delays', () => {
+  assert.ok(SIGNUP_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0) <= 60000)
+  assert.deepEqual(retryDelays({ SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' }), [0, 0])
+  assert.equal(retryDelays({}), SIGNUP_RETRY_DELAYS_MS)
+  assert.equal(retryDelays({ SEED_SIGNUP_RETRY_DELAYS_MS: 'x' }), SIGNUP_RETRY_DELAYS_MS)
+})

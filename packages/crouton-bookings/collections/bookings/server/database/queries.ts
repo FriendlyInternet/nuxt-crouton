@@ -123,3 +123,10 @@ export async function deleteBookingsBooking(
 
   return { success: true }
 }
+
+// Referenced records must belong to this team (#3378)
+export async function assertBookingsBookingReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'location', table: locationsSchema.bookingsLocations, value: data.location },
+  ])
+}

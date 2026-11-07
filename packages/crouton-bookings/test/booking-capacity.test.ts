@@ -12,6 +12,9 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: hoisted.role } }),
 }))
 
+// Reference checks (#3378) are covered in team-references.test.ts; the DB here has no auth/team tables
+vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: async () => undefined }))
+
 let db: any
 const rows = () => db.$client.prepare('select * from bookings_bookings order by id').all()
 const DAY = Date.parse('2026-11-09T23:00:00Z') / 1000
@@ -31,8 +34,10 @@ beforeEach(async () => {
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)
   vi.stubGlobal('createError', (e: any) => Object.assign(new Error(e.statusText), e, { statusCode: e.status }))
   vi.stubGlobal('useDB', () => db)
+  vi.stubGlobal('assertRefsInTeam', async () => undefined)
   vi.stubGlobal('useRuntimeConfig', () => ({}))
   vi.stubGlobal('readBody', async () => hoisted.body)
+  vi.stubGlobal('readValidatedBody', async () => hoisted.body)
   vi.stubGlobal('getRouterParams', () => hoisted.params)
   vi.stubGlobal('getRouterParam', (_e: any, k: string) => hoisted.params[k])
   handlers.post = (await import('../collections/bookings/server/api/teams/[id]/bookings-bookings/index.post')).default as any
