@@ -65,7 +65,7 @@ const { data: flow, pending: flowPending, refresh: refreshFlow } = await useFetc
     : '',
   {
     default: () => null as any,
-    immediate: !!(selectedFlowId.value && teamId.value),
+    enabled: () => !!(selectedFlowId.value && teamId.value),
     watch: [selectedFlowId]
   }
 )
@@ -78,7 +78,7 @@ const { data: rows, pending: rowsPending } = await useFetch<Record<string, unkno
     : '',
   {
     default: () => [] as any[],
-    immediate: !!(flow.value && !flow.value.syncEnabled && teamId.value),
+    enabled: () => !!(flow.value && !flow.value.syncEnabled && teamId.value),
     watch: [flow]
   }
 )

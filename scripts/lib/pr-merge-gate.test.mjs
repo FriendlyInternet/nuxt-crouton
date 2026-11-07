@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -299,10 +299,43 @@ test('decideReview equals decideLeafMerge on the #3173/#3428 comment fixtures vi
 
 const v1 = (o) => decideV1({ draft: false, authorIsPipeline: true, baseRef: 'epic/1--v1-x', headRef: 'work-1', labels: ['build:approved'],
   go: { go: false }, headReview: { kind: 'other' }, headSha: SHA, files: ['scripts/a.mjs'], ...o })
-test('v1 deadlock case: CI pending, blocked, red check → answered from review alone', () => {
-  const r = v1({ ciGate: 'pending', mergeableState: 'blocked', red: true })
+test('v1 deadlock case: CI pending, blocked → answered from review alone', () => {
+  const r = v1({ ciGate: 'pending', mergeableState: 'blocked' })
   assert.equal(r.merge, true)
   assert.equal(r.code, 'merge')
+})
+test('v1 deadlock case: CI pending and mergeable blocked → answered from review alone', () => {
+  const r = v1({ red: false, ciGate: 'pending', mergeableState: 'blocked' })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'merge')
+})
+test('v1 C2 #339: red + review approved → hold red', () => {
+  const r = v1({ red: true })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'red')
+})
+test('v1 red:false → unchanged', () => assert.deepEqual(v1({ red: false }), v1({})))
+test('v1 red beats not-pipeline', () => assert.equal(v1({ red: true, authorIsPipeline: false }).code, 'red'))
+test('v1 red beats an owner ok', () => assert.equal(v1({ red: true, labels: [], go: { go: true } }).code, 'red'))
+test('withoutMergeDecision ignores the Merge decision run', () => {
+  const runs = [{ name: 'Merge decision', status: 'completed', conclusion: 'failure' }, { name: 'CI Gate', status: 'completed', conclusion: 'success' }]
+  const f = withoutMergeDecision(runs)
+  assert.deepEqual(f.map((r) => r.name), ['CI Gate'])
+  assert.equal(f.some((r) => r.conclusion === 'failure'), false)
+})
+test('shouldEnableAuto', () => {
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'merge' }, autoMergeOn: false }), true)
+  assert.equal(shouldEnableAuto({ answer: { merge: false, code: 'no-review' }, autoMergeOn: false }), true)
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'merge' }, autoMergeOn: true }), false)
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'not-pipeline' }, autoMergeOn: false }), false)
+})
+test('canMergeNow', () => {
+  const m = { merge: true, code: 'merge' }
+  assert.equal(canMergeNow({ answer: m, ciGate: 'success', red: false }), true)
+  assert.equal(canMergeNow({ answer: m, ciGate: 'pending', red: false }), false)
+  assert.equal(canMergeNow({ answer: m, ciGate: 'success', red: true }), false)
+  assert.equal(canMergeNow({ answer: { merge: false, code: 'no-review' }, ciGate: 'success', red: false }), false)
+  assert.equal(canMergeNow({ answer: { merge: true, code: 'not-pipeline' }, ciGate: 'success', red: false }), false)
 })
 test('v1 draft → wait', () => {
   const r = v1({ draft: true })
@@ -361,4 +394,32 @@ test('v1 missing files → need-files; a held review stays its own hold', () => 
 })
 test('v1 non-v1 base → not-v1-base', () => {
   for (const baseRef of ['epic/1-x', 'epic/12-v1-step-1']) assert.equal(v1({ baseRef }).code, 'not-v1-base')
+})
+
+const HOLD_AT = '2026-11-07T12:00:53Z'
+const held = (kind, go, o = {}) => v1({ labels: [], headReview: { kind, at: HOLD_AT }, ownerHold: { kind, at: HOLD_AT }, go, ...o })
+for (const kind of ['final', 'needs-owner']) {
+  test(`v1 ownerHold ${kind}, no ok → owner-held`, () => {
+    const r = held(kind, { go: false })
+    assert.equal(r.code, 'owner-held')
+    assert.equal(r.merge, false)
+    assert.match(r.reason, new RegExp(kind))
+  })
+}
+test('v1 ownerHold final, ok after → merge', () => {
+  assert.equal(held('final', { go: true, approvedAt: '2026-11-07T12:06:32Z' }).code, 'merge')
+})
+test('v1 no ownerHold, no build:approved → no-review', () => {
+  assert.equal(v1({ labels: [], ownerHold: null }).code, 'no-review')
+})
+test('mergeDecisionCheck owner-held title', () => {
+  const c = mergeDecisionCheck({ merge: false, code: 'owner-held', reason: 'x' })
+  assert.equal(c.output.title, 'held: waiting for your ok')
+  assert.equal(c.status, 'in_progress')
+  assert.equal(c.conclusion, undefined)
+})
+test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {
+  const r = decideLeafMerge({ draft: false, authorIsPipeline: true, baseRef: 'epic/12-slug', headRef: 'work-5', labels: [], go: { go: false },
+    ownerHold: { kind: 'final', at: HOLD_AT }, headReview: { kind: 'final', at: HOLD_AT }, headSha: SHA, files: ['scripts/a.mjs'], ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(r.code, 'no-review')
 })

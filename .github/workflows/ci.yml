@@ -617,6 +617,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # Report-only until the merge-commit fix is proven on 10 PRs (#3538).
+          # To switch failing back on: delete this line.
+          REMOVED_TESTS_MODE: report
         run: |
           PR_BODY="$(gh pr view "$PR_NUMBER" --json body --jq .body)"
           export PR_BODY
