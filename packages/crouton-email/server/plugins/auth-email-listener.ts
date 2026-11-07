@@ -41,6 +41,16 @@ async function getOverrides(emailType: EmailTemplateType, context: {
   }
 }
 
+/** Invitee addresses and invite links only reach the logs when auth debug is on. */
+function authDebug(): boolean {
+  try {
+    return !!(useRuntimeConfig() as any).public?.crouton?.auth?.debug
+  }
+  catch {
+    return false
+  }
+}
+
 /**
  * Nitro plugin that listens for crouton:auth:email hooks emitted by crouton-auth
  * and dispatches to the appropriate email sender.
@@ -51,7 +61,7 @@ async function getOverrides(emailType: EmailTemplateType, context: {
 export default defineNitroPlugin((nitroApp) => {
   console.log('[crouton-email] 🔌 auth-email-listener plugin registered')
   nitroApp.hooks.hook('crouton:auth:email', async (payload) => {
-    console.log(`[crouton-email] 📨 Hook received: type=${payload.type}, to=${payload.to}`)
+    if (authDebug()) console.log(`[crouton-email] 📨 Hook received: type=${payload.type}, to=${payload.to}`)
     let sendResult: SendEmailResult | undefined
     let caughtError: string | undefined
     try {
@@ -103,8 +113,8 @@ export default defineNitroPlugin((nitroApp) => {
             || (runtimeConfig as any).auth?.baseUrl
             || brand.appUrl
           const acceptLink = `${actionBaseUrl}/auth/accept-invitation/${payload.invitationId}`
-          console.log(`[crouton-email] 🔗 Invitation accept link: ${acceptLink}`)
-          console.log(`[crouton-email] 🔍 origin=${requestOrigin}, BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
+          if (authDebug()) console.log(`[crouton-email] 🔗 Invitation accept link: ${acceptLink}`)
+          if (authDebug()) console.log(`[crouton-email] 🔍 origin=${requestOrigin}, BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
           const overrides = await getOverrides('team-invite', {
             organizationName: payload.organizationName
           })
@@ -118,7 +128,7 @@ export default defineNitroPlugin((nitroApp) => {
             brandName: payload.organizationName,
             ...(overrides && { overrides })
           }, payload._event)
-          console.log(`[crouton-email] 📬 sendTeamInvite result:`, JSON.stringify(sendResult))
+          if (authDebug()) console.log(`[crouton-email] 📬 sendTeamInvite result:`, JSON.stringify(sendResult))
           break
         }
 
@@ -140,7 +150,7 @@ export default defineNitroPlugin((nitroApp) => {
     catch (err) {
       // Email failure must never break auth flow
       caughtError = err instanceof Error ? err.message : String(err)
-      console.error(`[crouton-email] Failed to send ${payload.type} email to ${payload.to}:`, err)
+      console.error(`[crouton-email] Failed to send ${payload.type} email:`, err)
     }
     finally {
       // Report the real outcome so crouton-auth's logger can flip the row it

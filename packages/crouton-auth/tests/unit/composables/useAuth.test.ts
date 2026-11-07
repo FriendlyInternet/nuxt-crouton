@@ -352,6 +352,41 @@ describe('useAuth', () => {
       })
     })
 
+    // #3138 R6: an invitee registering from the invite page must come back to it
+    // after the verify link — the page is sent to signUp.email as callbackURL.
+    it('passes callbackURL to signUp.email so the verify link returns to the invite page', async () => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: 't' }, error: null })
+
+      const { register } = useAuth()
+      await register({ email: 'i@example.com', password: 'password123', callbackURL: '/auth/accept-invitation/abc' })
+
+      expect(mockAuthClient.signUp.email).toHaveBeenCalledWith(
+        expect.objectContaining({ callbackURL: '/auth/accept-invitation/abc' })
+      )
+    })
+
+    it.each(['https://evil.example/x', '//evil.example/x'])('cleans hostile callbackURL %s to /', async (bad) => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: 't' }, error: null })
+
+      const { register } = useAuth()
+      await register({ email: 'i@example.com', password: 'password123', callbackURL: bad })
+
+      expect(mockAuthClient.signUp.email).toHaveBeenCalledWith(
+        expect.objectContaining({ callbackURL: '/' })
+      )
+    })
+
+    it('reports verificationRequired (and does not refresh) when no session was created', async () => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: null }, error: null })
+      mockRefresh.mockClear()
+
+      const { register } = useAuth()
+      const result = await register({ email: 'v@example.com', password: 'password123' })
+
+      expect(result).toEqual({ verificationRequired: true })
+      expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
     it('should throw on registration error', async () => {
       mockAuthClient.signUp.email.mockResolvedValue({
         data: null,

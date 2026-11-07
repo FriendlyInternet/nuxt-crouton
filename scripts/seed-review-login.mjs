@@ -154,6 +154,9 @@ function sqlStr(v) {
  * so resolve it from crouton-auth — the package every crouton app's auth comes from.
  */
 async function loadHashPassword() {
+  // Test seam: a checkout without better-auth installed (CI's node-checks) can still drive
+  // the whole flow with a stand-in hasher. Never set outside tests.
+  if (process.env.SEED_REVIEW_TEST_HASH_PREFIX) return async pw => `${process.env.SEED_REVIEW_TEST_HASH_PREFIX}${pw}`
   const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
   const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
   return hashPassword
@@ -168,6 +171,11 @@ export async function resetPasswordSql(email, password, hashPassword) {
   const hash = await (hashPassword || await loadHashPassword())(password)
   return `UPDATE "account" SET "password" = ${sqlStr(hash)} ` +
     `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
+}
+
+/** SQL that marks the review user's email verified (needed once verification is required, #3138). */
+export function verifyEmailSql(email) {
+  return `UPDATE "user" SET "emailVerified" = 1 WHERE "email" = ${sqlStr(email)};`
 }
 
 /**
@@ -276,7 +284,13 @@ async function main() {
       threw = e
     }
     const code = threw ? (threw?.message || String(threw)) : (json?.code || json?.message || `HTTP ${res.status}`)
-    const decision = signUpDecision({ ok: !!res?.ok, status: res?.status, code, threw: !!threw, attempt, maxAttempts })
+    // With email verification required (#3138) sign-up answers 200 with NO session —
+    // for a brand-new account and for an existing email alike — so a missing token
+    // means "go through the reuse path", not "signed up".
+    const noSession = !!res?.ok && !json?.token
+    const decision = noSession
+      ? 'exists'
+      : signUpDecision({ ok: !!res?.ok, status: res?.status, code, threw: !!threw, attempt, maxAttempts })
     if (decision === 'ok') {
       signedUp = true
       info(`signed up ${email}`)
@@ -291,18 +305,21 @@ async function main() {
     if (decision === 'exists') {
       info(`user ${email} already exists — already seeded, reusing.`)
       // Re-establish a session for the org check below.
-      let { res: si } = await post('/api/auth/sign-in/email', { email, password })
-      if (!si.ok && (args.db || args.sqlite)) {
-        // The account holds an old password (secret rotated, #2358) — reset it, retry.
-        info('existing user refuses this password — resetting it to the current one.')
+      let si = null
+      if (!noSession) ({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+      if (!si?.ok && (args.db || args.sqlite)) {
+        // Old password (secret rotated, #2358) and/or unverified email (#3138) — fix both
+        // server-side, then sign in. Re-hashing the password is harmless for a new account.
+        info('resetting the password and marking the email verified.')
         try {
           execSeedSql(args, await resetPasswordSql(email, password))
+          execSeedSql(args, verifyEmailSql(email))
           ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
         } catch (e) {
           warn(`password reset failed: ${e?.message || e}`)
         }
       }
-      if (!si.ok) {
+      if (!si?.ok) {
         warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
         process.exit(1)
       }

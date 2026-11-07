@@ -197,3 +197,46 @@ describe('createAuth config', () => {
     })
   })
 })
+
+describe('invitation email logging (#3138 R3)', () => {
+  const data = {
+    id: 'invite-id-123',
+    email: 'invitee@example.com',
+    organization: { name: 'Acme', id: 'org1' },
+    inviter: { user: { name: 'Boss', email: 'boss@example.com' } },
+    role: 'member',
+    expiresAt: new Date()
+  }
+
+  async function logged(debug: boolean) {
+    const spies = [vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')]
+    spies.forEach(s => s.mockImplementation(() => {}))
+    const org = plugin(build({ debug } as CroutonAuthConfig), 'organization')!
+    await org.config.sendInvitationEmail(data)
+    const out = spies.flatMap(s => s.mock.calls).map(c => c.map(String).join(' ')).join('\n')
+    spies.forEach(s => s.mockRestore())
+    return out
+  }
+
+  it('does not log the invitee email or invite id outside debug', async () => {
+    const out = await logged(false)
+    expect(out).not.toContain('invitee@example.com')
+    expect(out).not.toContain('invite-id-123')
+  })
+
+  it('may log them with debug on', async () => {
+    expect(await logged(true)).toContain('invitee@example.com')
+  })
+})
+
+describe('verification, reset and rate-limit config', () => {
+  it('revokes other sessions on password reset', () => {
+    expect(build().emailAndPassword.revokeSessionsOnPasswordReset).toBe(true)
+  })
+
+  it('uses the database for rate limiting and trusts only cf-connecting-ip', () => {
+    const c = build() as any
+    expect(c.rateLimit.storage).toBe('database')
+    expect(c.advanced.ipAddress.ipAddressHeaders).toEqual(['cf-connecting-ip'])
+  })
+})

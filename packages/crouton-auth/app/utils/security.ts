@@ -174,17 +174,19 @@ export function sanitizeInput(input: string): string {
  * @public Available for consumer apps to use directly.
  */
 export function sanitizeRedirectUrl(url: string): string {
-  // Only allow relative URLs or same-origin URLs
+  // Tab/newline are stripped by browsers inside URLs ("/\t/evil" → "//evil"),
+  // and a backslash is treated as "/" — reject all of them outright.
+  // eslint-disable-next-line no-control-regex
+  if (typeof url !== 'string' || /[\u0000-\u001f\u007f\\]/.test(url)) return '/'
+  // Resolve against the app's own origin (a fixed dummy one during SSR) and
+  // keep the result only if it stays on that origin.
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://app.invalid'
   try {
-    const parsed = new URL(url, window.location.origin)
-    if (parsed.origin !== window.location.origin) {
-      console.warn('[@crouton/auth] Blocked redirect to external URL:', url)
-      return '/'
-    }
-    return parsed.pathname + parsed.search
+    const parsed = new URL(url, origin)
+    if (parsed.origin !== origin) return '/'
+    return parsed.pathname + parsed.search + parsed.hash
   } catch {
-    // Invalid URL, return safe default
-    return url.startsWith('/') ? url : '/'
+    return '/'
   }
 }
 

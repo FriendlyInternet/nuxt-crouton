@@ -8,6 +8,7 @@
  * Fresh page loads (from.matched.length === 0) are NOT intercepted
  * so direct URL entry and email links continue to use the full auth layout.
  */
+import { sanitizeRedirectUrl } from '../utils/security'
 import type { AuthModalMode } from '../composables/useAuthModal'
 
 const AUTH_PATHS: Record<string, AuthModalMode> = {
@@ -36,7 +37,7 @@ export default defineNuxtPlugin(() => {
     //('/auth/login'). Resetting to '/' here would clobber X and strand the
     // user on the root page after sign-in (#1323). No explicit ?redirect= on
     // the incoming navigation → keep the pending target.
-    const redirectTo = (to.query.redirect as string) || (pending.open ? pending.redirectTo : '/')
+    const redirectTo = sanitizeRedirectUrl((to.query.redirect as string) || (pending.open ? pending.redirectTo : '/'))
     const previousPath = pending.open ? pending.previousPath : from.fullPath
     const prefillEmail = (to.query.email as string) || undefined
     // Convenience prefill for shared demo/preview links — fills the field but
