@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 // Route wiring for #3378: hand-owned POST/PATCH handlers must reject references to
 // another team's records before writing. The queries module is mocked, but its
@@ -35,6 +37,19 @@ vi.mock('../collections/emaillogs/server/database/queries', async () => {
   }
 })
 
+const DDL = `
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+`
+// Real in-memory DB: the bookings POST writes through the capacity guard, not create()
+const makeDb = (withLocation: boolean) => {
+  const client = new Database(':memory:')
+  client.exec(DDL)
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode) values ('l1','t1','s',?,0)`).run(JSON.stringify([{ id: 'a' }]))
+  return drizzle(client) as any
+}
+const bookingRows = (db: any) => db.$client.prepare('select * from bookings_bookings').all()
+
 const g = globalThis as any
 g.defineEventHandler = (fn: any) => fn
 g.createError = (e: any) => Object.assign(new Error(e.statusText), e)
@@ -52,6 +67,7 @@ const loadPatch = async () => (await import(`${dir}/bookings/server/api/teams/[i
 const loadLogPost = async () => (await import(`${dir}/emaillogs/server/api/teams/[id]/bookings-emaillogs/index.post.ts`)).default
 
 beforeEach(() => {
+  g.useDB = () => ({})
   h.rows = []
   h.select = vi.fn(() => ({ from: () => ({ where: async () => h.rows }) }))
   h.create = vi.fn(async d => d)
@@ -59,10 +75,21 @@ beforeEach(() => {
 })
 
 describe('bookings routes check references against the team (#3378)', () => {
+  it('booking with own team location is created', async () => {
+    h.rows = [{ id: 'loc1' }]
+    const db = makeDb(true)
+    g.useDB = () => db
+    body = { location: 'l1', date: '2026-11-10T00:00:00.000Z', slot: ['a'], quantity: 1, status: 'pending' }
+    await (await loadPost())({})
+    expect(bookingRows(db)).toHaveLength(1)
+  })
+
   it("booking with another team's location → 400, nothing created", async () => {
     body = { location: 'other', date: '2026-11-10T00:00:00.000Z', slot: ['s'], quantity: 1, status: 'pending' }
+    const db = makeDb(true)
+    g.useDB = () => db
     await expect((await loadPost())({})).rejects.toMatchObject({ status: 400, statusText: 'Invalid reference: location' })
-    expect(h.create).not.toHaveBeenCalled()
+    expect(bookingRows(db)).toHaveLength(0)
   })
 
   it('PATCH without location skips the check', async () => {
