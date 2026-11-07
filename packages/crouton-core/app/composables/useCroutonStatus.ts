@@ -2,6 +2,8 @@
 let hookRegistered = false
 let lastEventsFetch = 0
 let eventsTeamId: string | undefined
+// Newest teammate row timestamp seen so far: "new" is judged against this, not the 5-slot feed
+let newestTeamTs = 0
 
 const EVENTS_REFRESH_MIN_MS = 60_000
 const EVENTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -113,6 +115,7 @@ export function useCroutonStatus() {
     if (teamId !== eventsTeamId) {
       eventsTeamId = teamId
       lastEventsFetch = 0
+      newestTeamTs = 0
       history.value = dropTeamEvents(history.value)
     }
     if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return null
@@ -130,9 +133,11 @@ export function useCroutonStatus() {
       // Any request failed (e.g. 403 for non-admins): not a timing gap, so no retry
       if (settled.some(r => r.status === 'rejected')) return null
       const rows = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []))
-      const before = new Set(history.value.map(m => m.id))
       history.value = mergeTeamEvents(history.value, rows, t, userId, live, live ? OWN_SLOTS : 0)
-      return rows.filter(r => r.userId !== userId && !before.has(`event-${r.id}`)).length
+      const stamps = rows.filter(r => r.userId !== userId).map(r => new Date(r.timestamp).getTime()).filter(n => !Number.isNaN(n))
+      const added = stamps.filter(n => n > newestTeamTs).length
+      newestTeamTs = Math.max(newestTeamTs, ...stamps)
+      return added
     } catch {
       // Feed falls back to own changes
       return null

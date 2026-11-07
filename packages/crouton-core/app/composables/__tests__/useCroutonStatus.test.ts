@@ -89,6 +89,29 @@ describe('useCroutonStatus', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('busy team: retries once when no row is newer than the last seen', async () => {
+    fetchMock.mockImplementation(async (_u: string, o: any) => (o.query.userId ? [] : teamRows))
+    const s = await load()
+    await s.refreshTeamEvents(true) // establishes the newest seen teammate row
+    fetchMock.mockClear()
+    await s.onRemoteChange()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('busy team: no retry when a newer row arrived', async () => {
+    let rows = teamRows
+    fetchMock.mockImplementation(async (_u: string, o: any) => (o.query.userId ? [] : rows))
+    const s = await load()
+    await s.refreshTeamEvents(true)
+    fetchMock.mockClear()
+    rows = [row('newer', 9000, 'bob'), ...teamRows]
+    await s.onRemoteChange()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('retries only once', async () => {
     fetchMock.mockResolvedValue([])
     const s = await load()
