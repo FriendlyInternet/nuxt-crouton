@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree } from './epic-scaffold.mjs'
+import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree, v1LabelWarning } from './epic-scaffold.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PlanError } from './apply-decompose-plan.mjs'
 
@@ -115,4 +115,9 @@ test('packagesApproved {why, packages} labels every child with one pkg:* per pac
 
 test('packagesApproved object without packages is refused', () => {
   assert.throws(() => parseScaffoldPlan(PLAN({ packagesApproved: { why: 'x', packages: [] } })), PlanError)
+})
+
+test('v1LabelWarning: warns on pipeline:v1, silent otherwise (#3501)', () => {
+  assert.match(v1LabelWarning(['epic', 'pipeline:v1']), /pipeline:v1 is ignored/)
+  assert.equal(v1LabelWarning(['epic']), '')
 })

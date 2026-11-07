@@ -19,6 +19,8 @@ describe('safeRedirect', () => {
     expect(safeRedirect('//evil.com')).toBe('/')
     expect(safeRedirect('/\\evil.com')).toBe('/')
     expect(safeRedirect(undefined)).toBe('/')
+    expect(safeRedirect('/a\r\nb')).toBe('/')
+    expect(safeRedirect(`/${'a'.repeat(500)}`)).toBe('/')
   })
 })
 

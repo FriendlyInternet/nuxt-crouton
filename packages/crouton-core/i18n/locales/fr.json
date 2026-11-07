@@ -149,6 +149,7 @@
     "preview": "Aperçu de l'image"
   },
   "repeater": {
+    "componentMissing": "Impossible d'afficher cet élément : le composant « {name} » est introuvable.",
     "emptyState": "Aucun élément pour le moment. Cliquez sur \"{label}\" pour commencer.",
     "addItem": "Ajouter un élément"
   },
