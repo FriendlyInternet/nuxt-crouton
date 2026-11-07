@@ -61,3 +61,15 @@ test('merge did not touch this app (no job for it) -> go', () => {
   const pushRuns = [run(2, SHA, 'completed', 'success')]
   assert.equal(decide({ ...base, app: 'kassa', pushRuns, jobsBySha: { [SHA]: [job('velo', 'success')] } }).action, 'go')
 })
+
+test('just-merged commit with no push run yet -> wait', () => {
+  const pushRuns = [run(1, OLD, 'completed', 'success')]
+  const commitDate = new Date(Date.now() - 30_000).toISOString()
+  assert.equal(decide({ ...base, pushRuns, jobsBySha: {}, commitDate }).action, 'wait')
+})
+
+test('old commit with no push run -> go', () => {
+  const pushRuns = [run(1, OLD, 'completed', 'success')]
+  const commitDate = new Date(Date.now() - 3_600_000).toISOString()
+  assert.equal(decide({ ...base, pushRuns, jobsBySha: {}, commitDate }).action, 'go')
+})

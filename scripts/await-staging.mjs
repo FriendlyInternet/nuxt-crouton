@@ -8,13 +8,15 @@
 
 const POLL_MS = 20_000
 const DEADLINE_MS = 50 * 60_000
+// A just-merged commit may not have its push run visible in the API yet.
+const GRACE_MS = 5 * 60_000
 
 /**
  * Pure decision. `pushRuns`: push-to-main runs of deploy-apps.yml ({id, head_sha, status,
  * conclusion, created_at}); `jobsBySha[sha]`: jobs ({name, conclusion}) of that sha's push run.
  * @returns {{action: 'wait'|'go'|'refuse', reason: string}}
  */
-export function decide({ app, sha, dispatchCreatedAt, pushRuns, jobsBySha }) {
+export function decide({ app, sha, dispatchCreatedAt, pushRuns, jobsBySha, commitDate }) {
   const t = Date.parse(dispatchCreatedAt)
   const earlier = pushRuns.filter(r => Date.parse(r.created_at) <= t)
   const pending = earlier.filter(r => r.status !== 'completed')
@@ -22,7 +24,11 @@ export function decide({ app, sha, dispatchCreatedAt, pushRuns, jobsBySha }) {
     return { action: 'wait', reason: `${pending.length} earlier push run(s) still ${pending.map(r => r.status).join('/')}` }
   }
   const mine = earlier.find(r => r.head_sha === sha)
-  if (!mine) return { action: 'go', reason: 'no push run for this commit; staging already serves the latest code' }
+  if (!mine) {
+    const age = commitDate ? Date.now() - Date.parse(commitDate) : Infinity
+    if (age < GRACE_MS) return { action: 'wait', reason: 'no push run for this commit yet; commit is recent, waiting for it to appear' }
+    return { action: 'go', reason: 'no push run for this commit; staging already serves the latest code' }
+  }
   const jobs = jobsBySha[sha] || []
   const appJob = jobs.find(j => j.name.startsWith(`deploy (${app}, staging,`))
   if (appJob) {
@@ -46,13 +52,14 @@ async function main() {
     return res.json()
   }
   const me = await api(`actions/runs/${runId}`)
+  const commitDate = (await api(`commits/${sha}`)).commit.committer.date
   const deadline = Date.now() + DEADLINE_MS
   for (;;) {
     const { workflow_runs } = await api('actions/workflows/deploy-apps.yml/runs?event=push&branch=main&per_page=30')
     const jobsBySha = {}
     const mine = workflow_runs.find(r => r.head_sha === sha)
     if (mine) jobsBySha[sha] = (await api(`actions/runs/${mine.id}/jobs?per_page=100`)).jobs
-    const d = decide({ app, sha, dispatchCreatedAt: me.created_at, pushRuns: workflow_runs, jobsBySha })
+    const d = decide({ app, sha, dispatchCreatedAt: me.created_at, pushRuns: workflow_runs, jobsBySha, commitDate })
     console.log(`${d.action}: ${d.reason}`)
     if (d.action === 'go') return
     if (d.action === 'refuse') {
