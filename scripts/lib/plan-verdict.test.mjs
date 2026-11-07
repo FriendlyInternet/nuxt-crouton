@@ -159,3 +159,12 @@ test('rule: a pending design sign-off ends as a hold — never go, never plan:ap
   assert.equal(decide(fx('clean.plan.md'), fx('owner.verdict.md')).question.startsWith('Drop the legacy'), true)
   assert.equal(decide(fx('clean.plan.md'), fx('pass.verdict.md')).verdict, 'go')
 })
+
+test('a plan with no ### Docs fails item 1 as malformed', () => {
+  const plan = fx('clean.plan.md').replace(/### Docs\n[\s\S]*?(?=### Needs owner)/, '')
+  assert.ok(!/### Docs/.test(plan))
+  const r = precheck(plan)['1']
+  assert.equal(r.pass, false)
+  assert.match(r.evidence, /malformed.*Docs/)
+  assert.equal(decide(plan, fx('pass.verdict.md')).verdict, 'no-go')
+})

@@ -4,7 +4,8 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { crateTracks, cratePiles } from '~~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
+  if (demoSeedEnabled()) await seedDemoLibrary({ teamId: team.id, owner: user.id, createdBy: user.id, updatedBy: user.id })
   const db = useDB()
   const [piles, tracks] = await Promise.all([
     db.select({ id: cratePiles.id, name: cratePiles.name, parentId: cratePiles.parentId, order: cratePiles.order })

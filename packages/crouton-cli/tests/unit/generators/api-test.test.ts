@@ -126,3 +126,45 @@ describe('generateApiTest — team references (#3378)', () => {
     expect(generateApiTest(baseData, null)).not.toContain('References')
   })
 })
+
+describe('generateApiTest — same-team reference cases (#3424)', () => {
+  const withRef = {
+    ...baseData,
+    fields: [...baseData.fields, { name: 'categoryId', type: 'string', refTarget: 'categories', zod: 'z.string()', meta: {} }],
+  }
+  const code = generateApiTest(withRef, null)
+
+  it('POST and PATCH each get other-team, missing-id, same-team and null cases', () => {
+    expect(code.match(/rejects a reference to another team\\'s record \(400\)/g)).toHaveLength(2)
+    expect(code.match(/rejects a reference id that does not exist \(400\)/g)).toHaveLength(2)
+    expect(code.match(/accepts references that belong to the team/g)).toHaveLength(2)
+    expect(code.match(/accepts null for the optional reference `categoryId`/g)).toHaveLength(2)
+    expect(code).toContain('expect(createShopProduct).not.toHaveBeenCalled()')
+    expect(code).toContain('expect(updateShopProduct).not.toHaveBeenCalled()')
+    expect(code).toMatch(/import \{[^}]*assertShopProductReferences[^}]*\} from '.\/server\/database\/queries'/)
+  })
+
+  it('sends the reference value and asserts the check received it', () => {
+    expect(code).toContain("categoryId: 'ref_1'")
+    expect(code).toContain("expect.objectContaining({ categoryId: 'ref_1' })")
+    expect(code).toContain("categoryId: 'other_team_ref'")
+    expect(code).toContain("categoryId: 'missing_ref'")
+  })
+
+  it('emits a list reference as an array, never a bare string', () => {
+    const list = { ...baseData, fields: [...baseData.fields, { name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())', meta: {} }] }
+    const out = generateApiTest(list, null)
+    expect(out).toContain("tags: ['ref_1']")
+    expect(out).not.toContain("tags: 'ref_1'")
+  })
+
+  it('uses once-only rejections so a failing check cannot leak into later cases', () => {
+    expect(code).not.toMatch(/assertShopProductReferences as any\)\.mockRejectedValue\(/)
+  })
+
+  it('omits the null case when every reference is required, and all cases without references', () => {
+    const required = { ...withRef, fields: withRef.fields.map(f => (f.name === 'categoryId' ? { ...f, meta: { required: true } } : f)) }
+    expect(generateApiTest(required, null)).not.toContain('accepts null for the optional reference')
+    expect(generateApiTest(baseData, null)).not.toContain('another team')
+  })
+})
