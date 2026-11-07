@@ -14,7 +14,11 @@ const tryShow = (rev, file) => {
 }
 const testFilesAt = (rev) => git('ls-tree', '-r', '--name-only', rev).split('\n').filter((f) => TEST_FILE.test(f))
 
-export function collect(base, head) {
+export function collect(baseTip, head) {
+  // Compare against the merge-base, not the base branch tip: tests main gained after the
+  // branch point are not removals by this PR.
+  let base = baseTip
+  try { base = git('merge-base', baseTip, head).trim() } catch { /* unrelated history: use tip */ }
   const snapshots = []
   const baseSnap = {}
   for (const f of testFilesAt(base)) baseSnap[f] = tryShow(base, f)

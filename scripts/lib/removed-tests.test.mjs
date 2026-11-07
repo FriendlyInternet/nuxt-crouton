@@ -70,6 +70,22 @@ test('a renamed test is a removal (plus an addition)', () => {
   assert.match(r.stdout, /— old name/)
 })
 
+test('a test added to main after the branch point is not a removal (merge-base)', () => {
+  const { dir, shas } = repo([{ ...base, 'y.test.mjs': suite('one') }])
+  const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' })
+  g('checkout', '-q', '-b', 'work-9')
+  writeFileSync(join(dir, 'a.mjs'), 'changed\n'); g('commit', '-qam', 'branch work')
+  const head = g('rev-parse', 'HEAD').trim()
+  g('checkout', '-q', 'main')
+  writeFileSync(join(dir, 'z.test.mjs'), suite('added on main')); g('add', '-A'); g('commit', '-qm', 'main adds test')
+  const tip = g('rev-parse', 'HEAD').trim()
+  const r = spawnSync('node', [CLI, '--base', tip, '--head', head, '--branch', 'work-9'],
+    { cwd: dir, encoding: 'utf8', env: { ...process.env, PR_BODY: '' } })
+  rmSync(dir, { recursive: true, force: true })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.match(r.stdout, /no test case removed/)
+})
+
 test('a PR that only adds tests passes', () => {
   const r = run([{ ...base, 'y.test.mjs': suite('one') }, { 'y.test.mjs': suite('one', 'two') }])
   assert.equal(r.status, 0)
