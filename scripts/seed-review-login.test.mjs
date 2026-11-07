@@ -344,14 +344,28 @@ test('#3533 existing user refused (422 sign-up, 401 sign-in): exits 1 and prints
 })
 
 test('#3533 seedOutcome: a member not attached to the seeded team is rejected even with a personal team active', () => {
-  assert.equal(seedOutcome({ role: 'member', attached: false }), 'reject')
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'fail')
 })
 
 test('#3533 seedOutcome: member/superadmin count only when attached to the seeded team', () => {
-  assert.equal(seedOutcome({ role: 'member', attached: false }), 'reject')
-  assert.equal(seedOutcome({ role: 'superadmin', attached: false }), 'reject')
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'fail')
+  assert.equal(seedOutcome({ role: 'superadmin', attached: false }), 'fail')
   assert.equal(seedOutcome({ role: 'member', attached: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'superadmin', attached: true }), 'ok')
   assert.equal(seedOutcome({ role: 'admin', attached: false }), 'ok')
+})
+
+test('#3533 seedOutcome admin: fresh team only when signed up with no active team', () => {
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: true, hasActiveOrg: false }), 'fresh-team')
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: true, hasActiveOrg: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: false, signedUp: false, hasActiveOrg: false }), 'ok')
+  assert.equal(seedOutcome({ role: 'admin', attached: true, signedUp: true, hasActiveOrg: false }), 'ok')
+  assert.equal(seedOutcome({ role: 'member', attached: false, signedUp: true, hasActiveOrg: false }), 'fail')
+})
+
+test('#3533 real script: admin attached but set-active failed still exits 0', async () => {
+  const r = await runWithFakeNpx({ role: 'admin', npxExit: 0, setActiveStatus: 500 })
+  assert.equal(r.code, 0, r.text)
 })
 
 // Real script against a stub auth server and a fake `npx` first on PATH.

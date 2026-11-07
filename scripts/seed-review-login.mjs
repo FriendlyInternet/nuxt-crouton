@@ -224,19 +224,21 @@ export function memberUpsertSql({ memberId, userId, orgId, role, createdAt }) {
     `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
 }
 
-/** Fresh-team fallback (3b): only when sign-up made the user, no team is active, and the role allows it. */
-export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
-  return signedUp && !hasActiveOrg && rolePlan(role).freshTeamFallback
+/**
+ * What to do after the seeded-team attach step. A role that must not own a fresh team
+ * (member, superadmin) needs the SEEDED team — a personal team already active must not stand in:
+ * 'ok' when attached, else 'fail'. Admin: 'fresh-team' when sign-up made the user and no team is
+ * active (3b fallback), otherwise 'ok'.
+ */
+export function seedOutcome({ role, attached, signedUp = false, hasActiveOrg = false }) {
+  if (attached) return 'ok'
+  if (!rolePlan(role).freshTeamFallback) return 'fail'
+  return signedUp && !hasActiveOrg ? 'fresh-team' : 'ok'
 }
 
-/**
- * Whether a role's login may be advertised after seeding. A role that must not own a fresh
- * team (member, superadmin) needs the SEEDED team when one was asked for — a personal team the
- * session already has active must not stand in for it. 'ok' | 'reject'.
- */
-export function seedOutcome({ role, attached }) {
-  if (rolePlan(role).freshTeamFallback) return 'ok'
-  return attached ? 'ok' : 'reject'
+/** Fresh-team fallback (3b), derived from seedOutcome. */
+export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
+  return seedOutcome({ role, attached: false, signedUp, hasActiveOrg }) === 'fresh-team'
 }
 
 function warn(msg) {
@@ -390,7 +392,6 @@ async function main() {
   //     fresh-org fallback (3b) is skipped; on failure (e.g. an app that doesn't
   //     seed test1 → no such org) it falls through to 3b so the reviewer still
   //     lands inside a team rather than at a create-team wall.
-  const seedRequested = !!(args.seedTeam && (args.db || args.sqlite))
   let attached = false
   if (args.seedTeam && (args.db || args.sqlite) && userId) {
     const orgId = seedOrgId(args.seedTeam)
@@ -434,7 +435,7 @@ async function main() {
     }
   }
 
-  if (seedOutcome({ role, attached }) === 'reject') {
+  if (seedOutcome({ role, attached, signedUp, hasActiveOrg }) === 'fail') {
     warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
     process.exit(1)
   }
