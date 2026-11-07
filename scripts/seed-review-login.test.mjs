@@ -343,6 +343,10 @@ test('#3533 existing user refused (422 sign-up, 401 sign-in): exits 1 and prints
   assert.ok(!r.text.includes(r.email) && !r.text.includes('leak-check'))
 })
 
+test('#3533 seedOutcome: a member not attached to the seeded team is rejected even with a personal team active', () => {
+  assert.equal(seedOutcome({ role: 'member', attached: false }), 'reject')
+})
+
 test('#3533 seedOutcome: member/superadmin count only when attached to the seeded team', () => {
   assert.equal(seedOutcome({ role: 'member', attached: false }), 'reject')
   assert.equal(seedOutcome({ role: 'superadmin', attached: false }), 'reject')
