@@ -134,3 +134,12 @@ test('route command: exit/stdout the workflow relies on', () => {
   assert.equal(notNoGo.status, 1)
   assert.match(notNoGo.stderr, /route needs a no-go/)
 })
+
+test('a plan with no ### Docs fails item 1 as malformed', () => {
+  const plan = fx('clean.plan.md').replace(/### Docs\n[\s\S]*?(?=### Needs owner)/, '')
+  assert.ok(!/### Docs/.test(plan))
+  const r = precheck(plan)['1']
+  assert.equal(r.pass, false)
+  assert.match(r.evidence, /malformed.*Docs/)
+  assert.equal(decide(plan, fx('pass.verdict.md')).verdict, 'no-go')
+})
