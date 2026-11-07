@@ -104,7 +104,7 @@ Fixtures commit a dummy `.env` on purpose (`BETTER_AUTH_SECRET=dev-fixture-secre
 | Native dep misbehaving after install | its build script was skipped by policy (§1) | check `onlyBuiltDependencies` / `ignoredBuiltDependencies` before debugging the dep |
 | "Cannot resolve entry module .nuxt/hub/db/schema.entry.ts" | app used `hub: { database: true }` | must be `hub: { db: 'sqlite' }` (root CLAUDE.md gotcha) |
 | `git log -S` / `blame` hits a wall at one boundary commit | **the sandbox clone is shallow** (`git rev-parse --is-shallow-repository` → true); pickaxe attributes everything to the boundary merge | for real archaeology use GitHub (MCP `search_commits` / `list_commits`) or note the limit — don't cite the boundary commit as the origin |
-| A prior session claims tool X is unavailable | claimed limitations are hypotheses (root CLAUDE.md "verify capabilities") | 5-second probe (e.g. `ls /opt/pw-browsers`) before designing around it |
+| A prior session claims tool X is unavailable | claimed limitations are hypotheses (`crouton-harness-observability` §5; root CLAUDE.md one-liner) | 5-second probe (e.g. `ls /opt/pw-browsers`) before designing around it |
 
 ## Known drift in this area
 

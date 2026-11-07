@@ -8,9 +8,8 @@
 // comment — `isApproval` enforces that), the owner's latest verdict must not be a later
 // `not ok`, any later owner comment that is neither (e.g. `ok, but rename X`) is a change
 // request and resets the verdict, and no NON-MERGE commit may land after it (a worker revision
-// needs a fresh `ok`; a plain "merge main/epic into branch" commit does not, and neither does a
-// commit touching only `writeups/ui-proposals/**` — the bot's review-screenshot captures). The
-// workflow supplies `files` (filenames) on each commit so those capture commits can be told apart.
+// needs a fresh `ok`; a plain "merge main/epic into branch" commit does not). Review screenshots
+// are no longer commits (#3351), so there is no capture-commit exemption.
 
 // A CI-fix commit (#3104): the fix-bot's commit carries this trailer and is committed by claude[bot].
 // Owner decision (#3058): such a commit keeps the owner's `ok`; a worker revision commit voids it.
@@ -28,7 +27,7 @@ import { isAgentComment, isApproval } from '../approval.mjs'
  * @param {{ comments: Array<{user?: {login?: string, type?: string}, body?: string, created_at: string}>,
  *           commits: Array<{parents?: unknown[], files?: Array<string | {filename: string}>, commit?: {committer?: {date?: string}, author?: {date?: string}}}>,
  *           owner: string }} input
- * @returns {{ go: boolean, reason: string, approvedAt?: string }}
+ * @returns {{ go: boolean, reason: string, approvedAt?: string, mergeSince?: boolean }} — `mergeSince`: a merge commit landed after the ok (#3467)
  */
 export function ownerMergeGo({ comments = [], commits = [], owner }) {
   const mine = comments
@@ -47,11 +46,17 @@ export function ownerMergeGo({ comments = [], commits = [], owner }) {
   const revised = commits.some(k => {
     if ((k.parents || []).length > 1) return false // a merge commit (main/epic into branch)
     if (isCiFixCommit(k)) return false // fix-bot commit after a red check keeps the ok
-    const names = (k.files || []).map(f => (typeof f === 'string' ? f : f.filename))
-    if (names.length && names.every(n => n.startsWith('writeups/ui-proposals/'))) return false // review captures
     const d = k.commit?.committer?.date || k.commit?.author?.date
     return d && new Date(d) > approvedAt
   })
   if (revised) return { go: false, reason: 'a commit landed after the approval — needs a fresh ok', approvedAt: verdict.at }
-  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at }
+  // A merge commit keeps the ok, but it may have resolved conflicts (new code the owner never saw), so
+  // the caller makes the PR wait for a build review of the new head (#3467).
+  const mergeSince = commits.some(k => {
+    if ((k.parents || []).length <= 1) return false
+    const d = k.commit?.committer?.date || k.commit?.author?.date
+    return d && new Date(d) > approvedAt
+  })
+  if (mergeSince) return { go: true, reason: 'owner approved; a base merge landed since', approvedAt: verdict.at, mergeSince: true }
+  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at, mergeSince: false }
 }

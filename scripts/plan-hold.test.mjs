@@ -96,3 +96,9 @@ test('on-comment.yml wires the helper: replan step, agent skip, gate outcome', (
   assert.match(wf, /\.\.\.replanDispatch\(\{ issue: issue_number, commentId: context\.payload\.comment\.id \}\)/)
   assert.match(wf, /replyBody: context\.payload\.comment\.body/)
 })
+
+test('#3359 a verdict quoted below visible text does not count', async () => {
+  const { isPlanHold } = await import('./plan-hold.mjs')
+  const q = { body: 'review of review\n<!-- plan-review-verdict:no-go -->' }
+  assert.equal(isPlanHold({ comments: [q, q], labels: ['status:blocked'] }), false)
+})

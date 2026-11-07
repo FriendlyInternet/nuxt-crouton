@@ -112,7 +112,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (v.status === 'choice') process.exit(3)
     if (v.status === 'failed') { console.error(`::error::${v.reason}`); process.exit(1) }
     sh('git', ['add', '-u']) // tracked only: never stage runner scratch files
-    try { sh('git', ['diff', '--cached', '--check']) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
+    // Only the conflicted files: mid-merge the index holds the whole base diff, whose own whitespace is not ours to judge.
+    try { if (files.length) sh('git', ['diff', '--cached', '--check', '--', ...files]) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
     for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
     if (!run(SCRIPTS_TEST_CMD)) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
     const pkgs = [...new Set(files.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]

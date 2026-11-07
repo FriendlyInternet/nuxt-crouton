@@ -7,6 +7,7 @@
     "small":  { "claude": "haiku",  "pi": "claude-haiku-4-5", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)" },
     "medium": { "claude": "sonnet", "pi": "claude-sonnet-5-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
     "review": { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "independent plan reviewer (#2756) — strongest model, read-only, never edits code" },
+    "plan":   { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "plan-mode run (#3343) — investigation + the plan comment, strongest model" },
     "large":  { "claude": "opus",   "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
@@ -20,6 +21,7 @@
     "task-worker":       { "tier": "large",  "why": "writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model" },
     "pi-worker":         { "tier": "medium", "why": "pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier" },
     "pi-reviser":        { "tier": "medium", "why": "pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker" },
+    "pi-planner":       { "tier": "plan",   "why": "pi worker in PLAN mode (#2755/#3343) — investigates and posts the plan comment; runs on the strongest model so the plan is right before the builder starts" },
     "pi-decomposer":     { "tier": "medium", "why": "pi event-driven decomposer persona (#2431) — plan-only, no code written; extracted from decompose-on-issue-pidev.yml" },
     "task-orchestrator": { "tier": "medium", "why": "reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against." },
     "task-decomposer":   { "tier": "medium", "why": "LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824." },

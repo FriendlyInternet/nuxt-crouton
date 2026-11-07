@@ -1,5 +1,6 @@
 // API endpoint generators using @crouton/auth for team authentication
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
 
 // Wire-facing body schema for the generated endpoints (#1403): accepts null on
 // non-required fields. Falls back to the client fieldsSchema for older callers
@@ -162,10 +163,16 @@ export function generatePostEndpoint(data: Record<string, any>, config: Record<s
     : ''
 
   // Generate imports based on hierarchy needs
+  const hasTeamRefs = collectTeamRefFields(data).length > 0
+  const assertName = `assert${prefixedPascalCase}References`
+  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
+  const assertCall = hasTeamRefs
+    ? `\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)\n`
+    : ''
   const imports = hasHierarchy
-    ? `import { create${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds } from '${queriesPath}'
+    ? `import { create${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'
 import { nanoid } from 'nanoid'`
-    : `import { create${prefixedPascalCase} } from '${queriesPath}'`
+    : `import { create${prefixedPascalCase}${assertImport} } from '${queriesPath}'`
 
   // Generate hierarchy path calculation code if needed
   const hierarchyCalc = hasHierarchy
@@ -228,7 +235,7 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
-
+${assertCall}
   // body is the validated payload (id is not part of the schema)${hasHierarchy ? ' — we generate the id for path calculation' : ' — the database generates the id'}
   const dataWithoutId = body
 ${hierarchyCalc}
@@ -249,9 +256,15 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
 
   // Add imports based on translation needs
   const queriesPath = '../../../../database/queries'
+  const hasTeamRefs = collectTeamRefFields(data).length > 0
+  const assertName = `assert${prefixedPascalCase}References`
+  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
+  const assertCall = hasTeamRefs
+    ? `\n\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)`
+    : ''
   const imports = hasTranslations
-    ? `import { update${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds } from '${queriesPath}'`
-    : `import { update${prefixedPascalCase} } from '${queriesPath}'`
+    ? `import { update${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'`
+    : `import { update${prefixedPascalCase}${assertImport} } from '${queriesPath}'`
 
   // Repeater fields reference a named item schema in fieldsSchema; define it
   // locally so the server validation doesn't reference an undefined symbol.
@@ -295,7 +308,7 @@ export default defineEventHandler(async (event) => {
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
-  const body = await readValidatedBody(event, bodySchema.parse)${hasTranslations
+  const body = await readValidatedBody(event, bodySchema.parse)${assertCall}${hasTranslations
     ? `
 
   // Merge translations into the existing record (partial-locale PATCH, #1414):

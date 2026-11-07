@@ -60,8 +60,8 @@ If the Crouton MCP server is configured, you can use these tools for AI-assisted
 3. Call `validate_schema` to check schema
 4. Call `dry_run` to preview what will be generated
 5. **Schema sign-off gate (#314)** — run the **`schema-review`** skill and get **human sign-off**
-   on the field table **before** generating (see the `schema-review` skill + the "Schema Sign-Off"
-   rule in root `CLAUDE.md`). `validate_schema` is the machine check; this is the human one.
+   on the field table **before** generating (see the `schema-review` skill + the schema sign-off
+   gate in `crouton-change-control` §7). `validate_schema` is the machine check; this is the human one.
 6. Call `generate_collection` to create files — **only after approval**
 
 **Quick Commands:**

@@ -22,7 +22,7 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.
 9. Contradicts the record? No step contradicts the epic's Decisions log, a recorded experiment, or a merged PR's finding. Read the epic body and its comments (the issue file names the epic) and check each step against them. A plan that sets `priority: -1` on package component dirs while the epic records "app dir beats layers at equal priority" is FAIL.
 
-The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
+The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails. On a revised plan, review the whole plan, and check that no change in `### Changes from the previous plan` contradicts a `## Decisions` line.
 
 Verdict: `no-go` if any of 1–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 

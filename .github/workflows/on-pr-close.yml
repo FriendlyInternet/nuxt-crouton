@@ -180,6 +180,22 @@ jobs:
           script: |
             const { closeLinkedIssues } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/wave-release.mjs`)
             await closeLinkedIssues({ github, context, core })
+      - name: Tick Merged for v1 PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            // #3501: GitHub (not automerge-epic-subpr) merges a v1 PR, so the "Merged" tick happens here, whoever merged it.
+            const { isV1Base } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
+            const pr = context.payload.pull_request
+            if (!isV1Base(pr.base.ref)) return
+            const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
+            const closes = issueFromPrBody(pr.body || '')
+            if (!closes) { core.info('v1 PR without a Closes line — no tick.'); return }
+            require('node:child_process').execFileSync('node', ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
+              { env: { ...process.env, GH_TOKEN: process.env.FLOW_TOKEN, GITHUB_REPOSITORY: `${context.repo.owner}/${context.repo.repo}` }, stdio: 'inherit' })
 
   release-traffic:
     # (#2786) A pipeline PR (`work-<n>`) closing frees a slot: re-check every ticket parked by the

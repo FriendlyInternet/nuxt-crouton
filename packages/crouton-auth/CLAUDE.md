@@ -20,7 +20,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
 | `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
-| `allowCreate` | Can users create additional teams | true |
+| `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
 | `limit` | Max teams per user (0 = unlimited) | 0 |

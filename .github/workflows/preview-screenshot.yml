@@ -11,12 +11,10 @@ name: Preview screenshot
 #
 # Per app it logs into the live preview (login re-derived from REVIEW_SEED_SECRET, same formula as
 # the deploy's seed step; link-only apps use a preview-only token, #2700), captures the declared review surface(s) with
-# scripts/capture-review-surfaces.mjs and commits the PNG(s) to writeups/ui-proposals/ on the PR
-# branch (the sign-off gate looks there). The result is a check run named "Preview screenshot" on
+# scripts/capture-review-surfaces.mjs, publishes the PNG(s) to a non-branch ref
+# (refs/review-captures/pr<N>) and posts them in a tagged PR comment (#3351). The sign-off gate looks
+# for that comment, and Status reruns when this check completes (check_suite). The result is a check run named "Preview screenshot" on
 # the PR head: green = a usable shot, red = none, with the reason in one line.
-#
-# Loop guard (#2294): the capture commit re-runs CI and may redeploy; a run whose head commit is
-# our own "chore(review): capture" commit does nothing.
 
 on:
   workflow_run:
@@ -63,12 +61,11 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           INPUT_PR: ${{ inputs.pr }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
             PR="$INPUT_PR"
-            read -r HEAD_REF HEAD_SHA < <(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '[.head.ref, .head.sha] | @tsv')
+            HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq ".head.sha")
             # Newest successful deploy run for this exact commit that left preview records.
             RUN_ID=""
             for wf in deploy-apps.yml deploy-pocs.yml; do
@@ -79,28 +76,14 @@ jobs:
           else
             PR=$(printf '%s' "$RUN_PRS" | jq -r '.[0].number // empty')
             HEAD_SHA="$RUN_SHA"
-            HEAD_REF="$RUN_BRANCH"
           fi
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
-          { echo "pr=$PR"; echo "head_ref=$HEAD_REF"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
-
-      - name: Skip our own capture commit (loop guard)
-        id: guard
-        if: ${{ steps.target.outputs.skip == 'false' }}
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
-        run: |
-          MSG=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || true)
-          case "$MSG" in
-            "chore(review): capture "*) echo "head is a capture commit — skipping (#2294)"; echo "skip=true" >> "$GITHUB_OUTPUT";;
-            *) echo "skip=false" >> "$GITHUB_OUTPUT";;
-          esac
+          { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
 
       - name: Open check run
         id: check
-        if: ${{ steps.target.outputs.skip == 'false' && steps.guard.outputs.skip == 'false' }}
+        if: ${{ steps.target.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ steps.target.outputs.head_sha }}
@@ -112,7 +95,7 @@ jobs:
 
       - name: Download preview records
         id: records
-        if: ${{ steps.target.outputs.skip == 'false' && steps.guard.outputs.skip == 'false' }}
+        if: ${{ steps.target.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_IDS: ${{ steps.target.outputs.run_ids }}
@@ -131,14 +114,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Capture + commit review-surface evidence
+      - name: Capture + post review-surface evidence
         id: capture
         if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
         env:
           GH_TOKEN_PUSH: ${{ steps.token.outputs.token }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           PR_NUMBER: ${{ steps.target.outputs.pr }}
-          HEAD_REF: ${{ steps.target.outputs.head_ref }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -182,23 +164,29 @@ jobs:
             exit 0
           fi
           NAMES=$(printf '%s, ' "${PNGS[@]##*/}"); NAMES="${NAMES%, }"
-          BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
-          git clone --depth=1 --branch "$HEAD_REF" "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
-            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not clone ${HEAD_REF}" >> "$GITHUB_OUTPUT"; exit 0; }
-          mkdir -p "$BR/writeups/ui-proposals"; cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR" || exit 1
-          git config user.name "nuxt-harness[bot]"
-          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
-          git add writeups/ui-proposals/*.png
-          if git commit -q -m "chore(review): capture review surface(s) for PR #${PR_NUMBER} (#2173)"; then
-            if git push origin "HEAD:${HEAD_REF}"; then
-              echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=committed ${#PNGS[@]} shot(s): ${NAMES}" >> "$GITHUB_OUTPUT"
-            else
-              echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but the push to ${HEAD_REF} failed" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} — unchanged from the last commit" >> "$GITHUB_OUTPUT"
+          FILES=$(printf '%s,' "${PNGS[@]##*/}"); FILES="${FILES%,}"
+          # Shots live on a non-branch ref + a tagged PR comment, never a commit on the PR branch (#3351).
+          export GH_TOKEN="$GH_TOKEN_PUSH"
+          if ! PUB=$(node scripts/publish-review-captures.mjs --dir "$OUT" --key "pr${PR_NUMBER}" 2>&1); then
+            echo "$PUB" >&2
+            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but publishing them failed" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          SHA=$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)
+          if node scripts/comment-review-captures.mjs --pr "$PR_NUMBER" --key "pr${PR_NUMBER}" --sha "$SHA" --files "$FILES" \
+              --artifact-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; then
+            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=posted ${#PNGS[@]} shot(s): ${NAMES}" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not comment on PR #${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload screenshots (download backup)
+        if: ${{ always() && steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-screenshots-pr${{ steps.target.outputs.pr }}
+          path: ${{ runner.temp }}/uip/*.png
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Publish result
         if: ${{ always() && steps.check.outputs.id != '' }}

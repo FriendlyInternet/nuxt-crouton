@@ -101,3 +101,32 @@ describe('inlineContentToHtml', () => {
     expect(out).toContain('href="https://a.b"')
   })
 })
+
+describe('sanitizeHtml new-tab links (#3375)', () => {
+  it('filters unsafe attrs on target=_blank links', () => {
+    const out = sanitizeHtml('<a href="javascript:alert(1)" target="_blank" onclick="alert(2)">x</a>')
+    expect(out).not.toMatch(/onclick|href|javascript:/i)
+    expect(out).toContain('rel="noopener noreferrer"')
+  })
+  it('drops style/handlers but keeps safe href', () => {
+    const out = sanitizeHtml('<a target="_blank" href="https://x.y" style="color:red" onmouseover="alert(1)">x</a>')
+    expect(out).not.toMatch(/style|onmouseover/i)
+    expect(out).toContain('href="https://x.y"')
+    expect(out).toContain('rel="noopener noreferrer"')
+  })
+  it('control: same link without target is cleaned', () => {
+    const out = sanitizeHtml('<a href="javascript:alert(1)" onclick="alert(2)">x</a>')
+    expect(out).not.toMatch(/onclick|href/i)
+  })
+  it('leaves a safe plain link unchanged', () => {
+    expect(sanitizeHtml('<a href="https://x.y">x</a>')).toBe('<a href="https://x.y">x</a>')
+  })
+  it('adds rel for single-quoted target', () => {
+    expect(sanitizeHtml("<a href=https://x.y target='_blank'>x</a>")).toContain('rel="noopener noreferrer"')
+  })
+  it('keeps an author-set rel without adding a second', () => {
+    const out = sanitizeHtml('<a href="https://x.y" target="_blank" rel="nofollow">x</a>')
+    expect(out).toContain('rel="nofollow"')
+    expect(out.match(/rel=/g)).toHaveLength(1)
+  })
+})

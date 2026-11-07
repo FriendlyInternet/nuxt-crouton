@@ -7,7 +7,7 @@ export interface CroutonRedirect {
   owner: string
   fromPath: string
   toPath: string
-  statusCode: '301' | '302'
+  statusCode: '301' | '302' | '307' | '308'
   isActive: boolean
   createdAt: Date
   updatedAt: Date
@@ -18,7 +18,7 @@ export interface CroutonRedirect {
 }
 
 export type CroutonRedirectFormData = z.infer<typeof croutonRedirectSchema>
-export type NewCroutonRedirect = Omit<CroutonRedirect, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>
+export type NewCroutonRedirect = Omit<CroutonRedirect, 'id' | 'createdAt' | 'updatedAt'>
 
 export interface CroutonRedirectFormProps {
   items: string[]
