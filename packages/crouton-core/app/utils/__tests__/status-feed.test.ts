@@ -177,6 +177,21 @@ describe('mergeTeamEvents own floor', () => {
     expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-own0'])
   })
 
+  it('never pushes out the newest teammate change', () => {
+    const day = 24 * 3600 * 1000
+    const oldOwn = [0, 1, 2].map(i => row(`o${i}`, 1000 + i * day, 'me'))
+    const ids = mergeTeamEvents([], [...oldOwn, row('fresh', 9e12, 'bob')], t, 'me', true, 3).map(m => m.id)
+    expect(ids[0]).toBe('event-fresh')
+    expect(ids).toHaveLength(4)
+  })
+
+  it('recognises own entries across refreshes', () => {
+    const first = mergeTeamEvents([], own.slice(0, 3), t, 'me', true, 3)
+    const ids = mergeTeamEvents(first, [...own.slice(0, 3), ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(expect.arrayContaining(['event-own0', 'event-own1', 'event-own2']))
+    expect(ids).toHaveLength(5)
+  })
+
   it('behaves as before without a floor', () => {
     const ids = mergeTeamEvents([], [...own, ...team], t, 'me', true).map(m => m.id)
     expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-team25'])

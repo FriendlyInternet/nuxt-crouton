@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import * as feed from '../../utils/status-feed'
 
 const row = (id: string, ts: number, userId: string) => ({ id, timestamp: ts, operation: 'update', collectionName: 'posts', userId, itemId: id, userName: 'Bob' })
-const ownRows = Array.from({ length: 10 }, (_, i) => row(`own${i}`, 1000 + i, 'me'))
+const ownRows = Array.from({ length: 3 }, (_, i) => row(`own${i}`, 1000 + i, 'me'))
 const teamRows = Array.from({ length: 20 }, (_, i) => row(`team${i}`, 5000 + i, 'bob'))
 
 let apps: string[]
@@ -44,7 +44,7 @@ describe('useCroutonStatus', () => {
     await s.refreshTeamEvents(true)
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const queries = fetchMock.mock.calls.map(c => c[1].query)
-    expect(queries.find(q => q.userId === 'me')?.pageSize).toBe(10)
+    expect(queries.find(q => q.userId === 'me')?.pageSize).toBe(3)
     expect(queries.find(q => q.userId === undefined)?.pageSize).toBe(20)
   })
 
@@ -53,7 +53,7 @@ describe('useCroutonStatus', () => {
     const s = await load()
     await s.refreshTeamEvents(true)
     const ids = s.recent.value.map((m: any) => m.id)
-    expect(ids).toEqual(expect.arrayContaining(['event-own9', 'event-own8', 'event-own7']))
+    expect(ids).toEqual(expect.arrayContaining(['event-own2', 'event-own1', 'event-own0']))
     expect(s.recent.value).toHaveLength(5)
   })
 

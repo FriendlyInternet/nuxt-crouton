@@ -6,12 +6,14 @@ let eventsTeamId: string | undefined
 const EVENTS_REFRESH_MIN_MS = 60_000
 const EVENTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const EVENTS_LIMIT = 20
-/** Own events fetched separately when collab is on (the team query is dominated by teammates) */
-const OWN_FLOOR = 10
-/** Of the 5 feed slots, how many stay reserved for own changes */
+/** Of the 5 feed slots, how many stay reserved for own changes (also the size of the separate own fetch with collab) */
 const OWN_SLOTS = 3
 /** One retry when the collab signal arrived before the teammate's event row was stored */
 const REMOTE_RETRY_MS = 2000
+
+function mutationRecord(data?: Record<string, unknown>, result?: unknown): Record<string, unknown> | undefined {
+  return (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
+}
 
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
@@ -21,7 +23,7 @@ function extractItemName(
   data?: Record<string, unknown>,
   result?: unknown,
 ): string | undefined {
-  const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
+  const record = mutationRecord(data, result)
   if (!record) return undefined
 
   try {
@@ -127,17 +129,17 @@ export function useCroutonStatus() {
       const dateFrom = new Date(now - EVENTS_WINDOW_MS).toISOString()
       const requests = live
         ? [
-            $fetch<TeamEventRow[]>(url, { query: { userId, pageSize: OWN_FLOOR, dateFrom } }),
+            $fetch<TeamEventRow[]>(url, { query: { userId, pageSize: OWN_SLOTS, dateFrom } }),
             $fetch<TeamEventRow[]>(url, { query: { pageSize: EVENTS_LIMIT, dateFrom } }),
           ]
         : [$fetch<TeamEventRow[]>(url, { query: { userId, pageSize: EVENTS_LIMIT, dateFrom } })]
       const settled = await Promise.allSettled(requests)
-      // Every request failed (e.g. 403 for non-admins): not a timing gap, so no retry
-      if (settled.every(r => r.status === 'rejected')) return null
+      // Any request failed (e.g. 403 for non-admins): not a timing gap, so no retry
+      if (settled.some(r => r.status === 'rejected')) return null
       const rows = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []))
       const before = new Set(history.value.map(m => m.id))
       history.value = mergeTeamEvents(history.value, rows, t, userId, live, live ? OWN_SLOTS : 0)
-      return history.value.filter(m => m.id.startsWith('event-') && m.own === false && !before.has(m.id)).length
+      return rows.filter(r => r.userId !== userId && !before.has(`event-${r.id}`)).length
     } catch {
       // Feed falls back to own changes
       return null

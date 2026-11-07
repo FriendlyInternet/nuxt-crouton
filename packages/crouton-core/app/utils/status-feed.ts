@@ -12,8 +12,6 @@ export interface StatusMessage {
   operation?: string
   itemId?: string
   seen: boolean
-  /** Set on entries merged from team events: true when the current user made the change */
-  own?: boolean
   retry?: () => void
 }
 
@@ -58,6 +56,10 @@ export interface TeamEventRow {
 export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false, ownFloor = 0): StatusMessage[] {
   if (!currentUserId) return history
   const known = new Set(history.map(m => m.id))
+  // A StatusMessage keeps no userId, so own entries are recognised from this call's inputs:
+  // locally pushed history entries plus every fetched row of the current user (even already-known ones)
+  const ownIds = new Set(history.filter(m => !m.id.startsWith('event-')).map(m => m.id))
+  for (const ev of events) if (ev.userId === currentUserId) ownIds.add(`event-${ev.id}`)
   const fromEvents: StatusMessage[] = []
   for (const ev of events) {
     const id = `event-${ev.id}`
@@ -72,10 +74,10 @@ export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[]
       collection: ev.collectionName,
       userName: own ? undefined : ev.userName?.split(' ')[0] || undefined,
     }, t)
-    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true, own })
+    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
   }
   const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
-  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0)
+  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0, ownIds)
 }
 
 /** True when an in-memory (non-event) entry already covers this event's collection+item+operation. */
@@ -90,11 +92,10 @@ function hasLocalEntry(history: StatusMessage[], ev: TeamEventRow): boolean {
 }
 
 /** Cap newest-first list at STATUS_RECENT_MAX, reserving `ownFloor` slots for the newest own entries. */
-function capWithOwnFloor(sorted: StatusMessage[], ownFloor: number): StatusMessage[] {
+function capWithOwnFloor(sorted: StatusMessage[], ownFloor: number, ownIds: Set<string>): StatusMessage[] {
   if (ownFloor <= 0) return sorted.slice(0, STATUS_RECENT_MAX)
   // Reserve `ownFloor` slots for the newest own entries so a busy team can't push them out
-  const isOwn = (m: StatusMessage) => !m.id.startsWith('event-') || m.own === true
-  const ownKept = new Set(sorted.filter(isOwn).slice(0, Math.min(ownFloor, STATUS_RECENT_MAX)))
+  const ownKept = new Set(sorted.filter(m => ownIds.has(m.id)).slice(0, Math.min(ownFloor, STATUS_RECENT_MAX)))
   const rest = sorted.filter(m => !ownKept.has(m)).slice(0, STATUS_RECENT_MAX - ownKept.size)
   return [...ownKept, ...rest].sort((a, b) => b.timestamp - a.timestamp)
 }
