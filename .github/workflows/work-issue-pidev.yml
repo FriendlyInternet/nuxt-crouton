@@ -121,6 +121,7 @@ jobs:
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       conflict: ${{ steps.revise.outputs.conflict }}
+      held: ${{ steps.finish.outputs.held }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -1315,6 +1316,8 @@ jobs:
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
             fi
+            # #3583: a held (draft) PR waits on the owner — let the release job re-check traffic.
+            if [ -n "$DRAFT_FLAG" ]; then echo "held=1" >> "$GITHUB_OUTPUT"; fi
           fi
 
           # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
@@ -1548,6 +1551,42 @@ jobs:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/
           if-no-files-found: ignore
+
+  # ── Re-check traffic when a PR becomes held (#3583) ────────────────────────────────────
+  # A draft PR waits on the owner, not on a build, so same-package tickets parked behind it
+  # can start. Trusted default-branch checkout: the worker's tree holds agent-edited code.
+  release-traffic:
+    name: Release parked tickets
+    needs: [work-pi]
+    if: ${{ always() && needs.work-pi.outputs.held == '1' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+              const released = await releaseWaiting({ github, context })
+              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+            } catch (e) {
+              core.warning(`traffic release failed: ${e.message}`)
+            }
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
