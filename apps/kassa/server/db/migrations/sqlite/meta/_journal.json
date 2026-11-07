@@ -61,14 +61,21 @@
     {
       "idx": 8,
       "version": "6",
-      "when": 1793955341403,
-      "tag": "0008_keen_kulan_gath",
+      "when": 1793955340405,
+      "tag": "0008_domain_per_team_pending",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "6",
-      "when": 1793955342403,
+      "when": 1793955341405,
+      "tag": "0008_keen_kulan_gath",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793955342405,
       "tag": "0009_verify_existing_users",
       "breakpoints": true
     }
