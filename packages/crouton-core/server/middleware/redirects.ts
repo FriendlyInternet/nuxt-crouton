@@ -10,7 +10,8 @@
  * - The slug is looked up per request (no cache): a renamed slug taken by
  *   another team must not inherit the old team's redirects.
  * - `fromPath` is matched against the path with the `/<slug>` prefix removed,
- *   then (legacy rows) the full path; both scoped to the resolved team.
+ *   then (legacy rows) the full path whenever a slug was stripped (also on a
+ *   custom domain); both scoped to the resolved team.
  * - A `/<slug>/…` request keeps the prefix on same-site targets.
  * - Only same-site targets are followed.
  */
@@ -88,7 +89,7 @@ export default defineEventHandler(async (event) => {
 
   // Rows saved before team scoping may carry the prefix (`/acme/old`): same team only
   const redirect = findRedirect(redirectMap, teamId, matchPath)
-    ?? (prefix ? findRedirect(redirectMap, teamId, pathWithoutQuery) : undefined)
+    ?? (matchPath !== pathWithoutQuery ? findRedirect(redirectMap, teamId, pathWithoutQuery) : undefined)
   if (redirect && isSafeRedirectPath(redirect.toPath)) {
     return applyRedirect(event, path, redirect, prefix)
   }

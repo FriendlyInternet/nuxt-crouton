@@ -102,3 +102,31 @@ test('#3359 a verdict quoted below visible text does not count', async () => {
   const q = { body: 'review of review\n<!-- plan-review-verdict:no-go -->' }
   assert.equal(isPlanHold({ comments: [q, q], labels: ['status:blocked'] }), false)
 })
+
+const OWNER = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:needs-owner -->\n🔀 **Needs your call**'
+
+test('#3564 newest needs-owner + a decision reply ⇒ plan hold', () => {
+  assert.equal(hold([bot(PLAN), bot(NOGO), bot(PLAN), bot(OWNER), person('Decision: A')]), true)
+})
+
+test('#3564 needs-owner as the only verdict ⇒ plan hold', () => {
+  assert.equal(hold([bot(PLAN), bot(OWNER)]), true)
+})
+
+test('#3564 newest needs-owner + bare ok ⇒ not a re-plan', () => {
+  for (const replyBody of ['ok', 'lgtm', 'ok: reason']) {
+    assert.equal(hold([bot(PLAN), bot(OWNER)], { replyBody }), false, replyBody)
+  }
+})
+
+test('#3564 needs-owner with plan:approved ⇒ not a hold', () => {
+  assert.equal(hold([bot(PLAN), bot(OWNER)], { labels: ['status:blocked', 'plan:approved'] }), false)
+})
+
+test('#3564 a later go after needs-owner ends the hold', () => {
+  assert.equal(hold([bot(PLAN), bot(OWNER), bot(PLAN), bot(GO)]), false)
+})
+
+test('#3564 a person pasting the needs-owner marker is not a hold', () => {
+  assert.equal(hold([person(OWNER)]), false)
+})
