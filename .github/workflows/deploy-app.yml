@@ -993,8 +993,7 @@ jobs:
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
-            PR_NUM="${{ github.event.pull_request.number }}"
-            [ -z "$PR_NUM" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
+            [ -z "${{ github.event.pull_request.number }}" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
           fi
           KEY="$KEY" SEED_DB="$SEED_DB" node scripts/seed-review-roles.mjs # #3421 member + super-admin logins, best-effort
 
