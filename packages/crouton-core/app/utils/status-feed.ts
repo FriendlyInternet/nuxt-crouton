@@ -55,29 +55,57 @@ export interface TeamEventRow {
  */
 export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false, ownFloor = 0): StatusMessage[] {
   if (!currentUserId) return history
-  const known = new Set(history.map(m => m.id))
-  // A StatusMessage keeps no userId, so own entries are recognised from this call's inputs:
-  // locally pushed history entries plus every fetched row of the current user (even already-known ones)
+  const ownIds = collectOwnIds(history, events, currentUserId)
+  const fromEvents = newEventMessages(history, events, t, currentUserId, includeOthers)
+  const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
+  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0, ownIds)
+}
+
+/**
+ * A StatusMessage keeps no userId, so own entries are recognised from this call's inputs:
+ * locally pushed history entries plus every fetched row of the current user (even already-known ones).
+ */
+function collectOwnIds(history: StatusMessage[], events: TeamEventRow[], currentUserId: string): Set<string> {
   const ownIds = new Set(history.filter(m => !m.id.startsWith('event-')).map(m => m.id))
   for (const ev of events) if (ev.userId === currentUserId) ownIds.add(`event-${ev.id}`)
-  const fromEvents: StatusMessage[] = []
+  return ownIds
+}
+
+/** Whether a fetched event should be skipped (unknown time, someone else's, or already shown locally). */
+function skipEvent(history: StatusMessage[], ev: TeamEventRow, own: boolean, includeOthers: boolean, timestamp: number): boolean {
+  if (Number.isNaN(timestamp)) return true
+  if (!own) return !includeOthers
+  return hasLocalEntry(history, ev)
+}
+
+/** Turn fetched rows into status messages, deduped by id and against in-memory entries. */
+function newEventMessages(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId: string, includeOthers: boolean): StatusMessage[] {
+  const known = new Set(history.map(m => m.id))
+  const out: StatusMessage[] = []
   for (const ev of events) {
     const id = `event-${ev.id}`
     const timestamp = new Date(ev.timestamp).getTime()
-    if (known.has(id) || Number.isNaN(timestamp)) continue
     const own = ev.userId === currentUserId
-    if (!own && !includeOthers) continue
-    if (own && hasLocalEntry(history, ev)) continue
+    if (known.has(id) || skipEvent(history, ev, own, includeOthers, timestamp)) continue
     known.add(id)
     const { text, icon } = mutationStatus({
       operation: ev.operation,
       collection: ev.collectionName,
       userName: own ? undefined : ev.userName?.split(' ')[0] || undefined,
     }, t)
-    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
+    out.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
   }
-  const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
-  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0, ownIds)
+  return out
+}
+
+const NAME_FIELDS = ['title', 'name', 'label', 'subject', 'displayName']
+
+/** An item's display name: the configured title field first, then common name-like string fields. */
+export function itemNameFromRecord(record: Record<string, unknown> | undefined, titleField?: string): string | undefined {
+  if (!record) return undefined
+  if (titleField && record[titleField]) return String(record[titleField])
+  const field = NAME_FIELDS.find(f => record[f] && typeof record[f] === 'string')
+  return field ? record[field] as string : undefined
 }
 
 /** True when an in-memory (non-event) entry already covers this event's collection+item+operation. */

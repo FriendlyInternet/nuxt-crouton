@@ -6,6 +6,7 @@ import {
   markAllStatusSeen,
   mutationStatus,
   mergeTeamEvents,
+  itemNameFromRecord,
   dropTeamEvents,
   STATUS_RECENT_MAX,
   type StatusMessage,
@@ -200,5 +201,24 @@ describe('mergeTeamEvents own floor', () => {
   it('has no effect when others are excluded', () => {
     const ids = mergeTeamEvents([], [...own, ...team], t, 'me', false, 3).map(m => m.id)
     expect(ids).toEqual(['event-own9', 'event-own8', 'event-own7', 'event-own6', 'event-own5'])
+  })
+})
+
+describe('itemNameFromRecord', () => {
+  it('prefers the display-config title field', () => {
+    expect(itemNameFromRecord({ headline: 'H', title: 'T' }, 'headline')).toBe('H')
+  })
+  it.each(['title', 'name', 'label', 'subject', 'displayName'])('falls back to %s', (f) => {
+    expect(itemNameFromRecord({ [f]: 'X' })).toBe('X')
+  })
+  it('falls back when the configured field is empty', () => {
+    expect(itemNameFromRecord({ headline: '', name: 'N' }, 'headline')).toBe('N')
+  })
+  it('ignores non-string fallback values', () => {
+    expect(itemNameFromRecord({ title: 5, name: 'N' })).toBe('N')
+  })
+  it('returns undefined when nothing is found', () => {
+    expect(itemNameFromRecord({ other: 'x' })).toBeUndefined()
+    expect(itemNameFromRecord(undefined)).toBeUndefined()
   })
 })

@@ -15,6 +15,16 @@ function mutationRecord(data?: Record<string, unknown>, result?: unknown): Recor
   return (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
 }
 
+/** The collection's configured title field, if it has a display config. */
+function displayTitleField(collection: string): string | undefined {
+  try {
+    return useDisplayConfig(collection).title || undefined
+  } catch {
+    // Collection may not have config — fall through to heuristics
+    return undefined
+  }
+}
+
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
  */
@@ -23,24 +33,7 @@ function extractItemName(
   data?: Record<string, unknown>,
   result?: unknown,
 ): string | undefined {
-  const record = mutationRecord(data, result)
-  if (!record) return undefined
-
-  try {
-    const display = useDisplayConfig(collection)
-    if (display.title && record[display.title]) {
-      return String(record[display.title])
-    }
-  } catch {
-    // Collection may not have config — fall through to heuristics
-  }
-
-  for (const field of ['title', 'name', 'label', 'subject', 'displayName']) {
-    if (record[field] && typeof record[field] === 'string') {
-      return record[field] as string
-    }
-  }
-  return undefined
+  return itemNameFromRecord(mutationRecord(data, result), displayTitleField(collection))
 }
 
 /**
