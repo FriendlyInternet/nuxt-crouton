@@ -53,3 +53,12 @@ test('disables auto-merge', async () => {
     await v1OffSwitch({ github: m.github, core: m.core, pr: pr({ auto_merge: { x: 1 } }), pull_number: 5 })
     assert.match(m.calls.graphql[0], /disablePullRequestAutoMerge/)
 })
+
+test('owner ok before a final hold → owner-held + ok-again note once', async () => {
+  const m = mk()
+  const a = await runV1(base(m, pr(), { go: { go: true, approvedAt: '2026-11-07T11:00:00Z' }, reviewState: () => ({ kind: 'final', at: '2026-11-07T12:00:53Z' }) }))
+  assert.equal(a.code, 'owner-held')
+  assert.equal(m.calls.create[0].output.title, 'held: waiting for your ok')
+  assert.equal(m.calls.comments.length, 1)
+  assert.match(m.calls.comments[0].body ?? String(m.calls.comments[0]), /build-ok-waiting:ok-again:abc/)
+})
