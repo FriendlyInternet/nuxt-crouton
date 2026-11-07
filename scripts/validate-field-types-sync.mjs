@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { register } from 'node:module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
@@ -26,6 +27,17 @@ const skillPath = join(projectRoot, '.claude/skills/crouton.md')
  * Canonical field type names from every package manifest, by importing each package's crouton.manifest.ts directly.
  */
 async function extractManifestFieldTypes() {
+  // The CI job runs without `pnpm install`, so `@fyit/crouton-core/...` doesn't resolve from node_modules.
+  // Map that package to its in-repo source for the manifest imports.
+  const coreRoot = pathToFileURL(join(projectRoot, 'packages/crouton-core') + '/').href
+  const hooks = `export async function resolve(spec, ctx, next) {
+    if (spec.startsWith('@fyit/crouton-core/')) {
+      const rest = spec.slice('@fyit/crouton-core/'.length)
+      return next(${JSON.stringify(coreRoot)} + rest + (rest.endsWith('.ts') ? '' : '.ts'), ctx)
+    }
+    return next(spec, ctx)
+  }`
+  register('data:text/javascript,' + encodeURIComponent(hooks))
   const { readdirSync, existsSync } = await import('node:fs')
   const pkgsDir = join(projectRoot, 'packages')
   const types = new Set()
