@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Booking, LocationData, SettingsData } from '../types/booking'
+import type { BookingsStore } from '../composables/useBookingsStore'
 
 interface FilterState {
   statuses: string[]
@@ -29,6 +30,8 @@ interface Props {
   emptyMessage?: string
   /** Booking scope: 'personal' shows only the user's bookings, 'team' shows all team bookings */
   scope?: 'personal' | 'team'
+  /** Share one screen's state between several Panels (e.g. inline + full screen). */
+  store?: BookingsStore
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,6 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
   title: undefined,
   emptyMessage: undefined,
   scope: 'personal',
+  store: undefined,
 })
 
 const emit = defineEmits<{
@@ -127,7 +131,7 @@ const store = provideBookingsStore({
   locations: resolvedLocations,
   readOnly: previewMode,
   initialFilters: props.initialFilters,
-})
+}, props.store)
 
 // Closed days in the calendar: no location takes bookings that day.
 function isDateUnavailableForAll(date: Date): boolean {
@@ -199,7 +203,7 @@ const showLocations = ref(false)
 const showMap = ref(false)
 
 // Calendar view mode (lifted from Calendar component)
-const calendarView = ref<'week' | 'month'>('week')
+const calendarView = store.calendarView
 
 // Handle go-to-today from pill controls
 const onGoToToday = store.goToToday
