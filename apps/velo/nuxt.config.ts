@@ -68,6 +68,8 @@ export default defineNuxtConfig({
 
   // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
   croutonAuth: {
+    // Only the site admin creates books (teams); everyone else joins by invite
+    teams: { allowCreate: 'superAdmin' },
     methods: {
       passkeys: false
     }

@@ -21,7 +21,7 @@
  */
 import type { Team, MemberRole, Member, MemberWithUser } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
-import { mapOrganizationToTeam } from '../../shared/utils/auth'
+import { mapOrganizationToTeam, isSuperAdminUser } from '../../shared/utils/auth'
 import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 
 export interface CreateTeamData {
@@ -132,7 +132,7 @@ export function useTeam() {
 
   // Use useSession's activeOrganization which is properly populated via getFullOrganization()
   // Also get activeOrgRaw which includes members array for role checking
-  const { activeOrganization: sessionActiveOrg, activeOrgRaw } = useSession()
+  const { activeOrganization: sessionActiveOrg, activeOrgRaw, user: sessionUser } = useSession()
 
   // fallbackTeams is populated by `refreshTeams()` below and, crucially, by
   // `team-context.global.ts` during SSR — which is why a full page load
@@ -224,6 +224,7 @@ export function useTeam() {
 
   const canCreateTeam = computed(() => {
     if (config?.teams?.allowCreate === false) return false
+    if (config?.teams?.allowCreate === 'superAdmin' && !isSuperAdminUser(sessionUser.value as { role?: string, superAdmin?: boolean } | null)) return false
     const limit = config?.teams?.limit ?? 0 // 0 = unlimited
     if (limit === 0) return true
     return teams.value.length < limit

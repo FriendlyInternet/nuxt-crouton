@@ -27,7 +27,7 @@ import { isAgentComment, isApproval } from '../approval.mjs'
  * @param {{ comments: Array<{user?: {login?: string, type?: string}, body?: string, created_at: string}>,
  *           commits: Array<{parents?: unknown[], files?: Array<string | {filename: string}>, commit?: {committer?: {date?: string}, author?: {date?: string}}}>,
  *           owner: string }} input
- * @returns {{ go: boolean, reason: string, approvedAt?: string }}
+ * @returns {{ go: boolean, reason: string, approvedAt?: string, mergeSince?: boolean }} — `mergeSince`: a merge commit landed after the ok (#3467)
  */
 export function ownerMergeGo({ comments = [], commits = [], owner }) {
   const mine = comments
@@ -50,5 +50,13 @@ export function ownerMergeGo({ comments = [], commits = [], owner }) {
     return d && new Date(d) > approvedAt
   })
   if (revised) return { go: false, reason: 'a commit landed after the approval — needs a fresh ok', approvedAt: verdict.at }
-  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at }
+  // A merge commit keeps the ok, but it may have resolved conflicts (new code the owner never saw), so
+  // the caller makes the PR wait for a build review of the new head (#3467).
+  const mergeSince = commits.some(k => {
+    if ((k.parents || []).length <= 1) return false
+    const d = k.commit?.committer?.date || k.commit?.author?.date
+    return d && new Date(d) > approvedAt
+  })
+  if (mergeSince) return { go: true, reason: 'owner approved; a base merge landed since', approvedAt: verdict.at, mergeSince: true }
+  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at, mergeSince: false }
 }

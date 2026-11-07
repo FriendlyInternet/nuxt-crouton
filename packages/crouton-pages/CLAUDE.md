@@ -737,6 +737,8 @@ Collection-binder pages with `visibility: 'public'` and `status: 'published'` au
 - Strip internal fields via `server/utils/strip-internal-fields.ts`: audit ids (`createdBy`, `updatedBy`, `owner`, `userId`) and every joined user object (`ownerUser`, `createdByUser`, …), recursively through hydrated FK rows and arrays — the registry functions are the admin queries, which join staff emails. Only the public-safe collections of each package are registered at all (see each package's `server/query-registry.ts`)
 - Cache responses with SWR (5 min)
 
+- Refuse (404, before any query) a collection whose generated `<X>Access` declares `list: 'own'` (members see only their own rows) — the public handlers cannot scope by user, so such a collection is never served publicly. Collections with no access info behave as before
+
 The `CollectionBinderRenderer` auto-switches to public endpoints when not in `/admin/` and the page visibility is `'public'`.
 
 ## Demo Seeding (`@fyit/crouton-pages/seed`)

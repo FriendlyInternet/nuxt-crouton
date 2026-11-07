@@ -10,6 +10,7 @@ go
 - 7: PASS — mechanical
 - 8: PASS — a test aims at the rule
 - 9: PASS — no conflict with the record
+- 10: PASS — every step exercises only this ticket
 ### Question
 
 ## Ticket #2
@@ -23,5 +24,6 @@ go
 - 7: PASS — mechanical
 - 8: PASS — a test aims at the rule
 - 9: PASS — no conflict with the record
+- 10: PASS — every step exercises only this ticket
 ### Question
 
