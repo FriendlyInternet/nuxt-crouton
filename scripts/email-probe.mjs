@@ -165,6 +165,16 @@ async function requests(mode, base, email) {
   return post('request-password-reset', { email, redirectTo: '/' })
 }
 
+const QUOTA_RE = /daily (email )?sending quota/i
+
+/** #3586 — what the workflow does with a probe result: skip | pass | warn | fail. Previews never send; only a staging daily-quota refusal is a warning. */
+export function probeOutcome({ kind, reason } = {}) {
+  if (kind === 'preview') return 'skip'
+  if (kind === 'staging' && reason === 'sent') return 'pass'
+  if (kind === 'staging' && QUOTA_RE.test(reason ?? '')) return 'warn'
+  return 'fail'
+}
+
 function readStdin() {
   try {
     return readFileSync(0, 'utf8')
@@ -188,6 +198,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === 'bundle-has-key') {
     process.exit(bundleHasEmailKey(readStdin()) ? 0 : 1)
   }
+  else if (cmd === 'outcome') {
+    console.log(probeOutcome({ kind: arg, reason: process.argv[4] }))
+  }
   else if (cmd === 'verdict') {
     const v = verdict(readStdin())
     console.log(v.ok ? 'sent' : v.reason)
@@ -208,7 +221,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(await requests(arg, process.argv[4], process.argv[5]))
   }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | sender <app> <appDir> | send <url> <json> | requests <mode> <base> <email>')
+    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | outcome <kind> [reason] | sender <app> <appDir> | send <url> <json> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }

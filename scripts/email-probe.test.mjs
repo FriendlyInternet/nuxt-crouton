@@ -6,7 +6,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders } from './email-probe.mjs'
+import { spawnSync } from 'node:child_process'
+import { probeOutcome, isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders } from './email-probe.mjs'
 
 test('isEmailApp', () => {
   const velo = JSON.parse(readFileSync(new URL('../apps/velo/deploy.config.json', import.meta.url), 'utf8'))
@@ -65,7 +66,8 @@ test('step order: detect → key → probe, after all secret steps; gate last', 
 
 test('gate fires on anything but pass (a skipped probe goes red)', () => {
   const g = wf.slice(names[at('Gate on email probe')].idx)
-  assert.ok(g.includes("steps.email-probe.outputs.result != 'pass'"))
+  assert.ok(g.includes(`fromJSON('["pass","skip","warn"]')`))
+  assert.ok(g.includes('!contains('))
   assert.ok(!g.includes("== 'fail'"))
 })
 
@@ -231,4 +233,31 @@ test('secretNamesOf', () => {
   assert.deepEqual(secretNamesOf('[{"name":"A"},{"name":"B"}]'), ['A', 'B'])
   assert.deepEqual(secretNamesOf(''), [])
   assert.deepEqual(secretNamesOf('not json'), [])
+})
+
+const Q = 'You have reached your daily email sending quota.'
+test('#3586 probeOutcome', () => {
+  const o = (kind, reason) => probeOutcome({ kind, reason })
+  assert.equal(o('preview', undefined), 'skip')
+  assert.equal(o('preview', Q), 'skip')
+  assert.equal(o('staging', Q), 'warn')
+  assert.equal(o('staging', 'no send recorded'), 'fail')
+  assert.equal(o('staging', 'never confirmed'), 'fail')
+  assert.equal(o('staging', 'Invalid API key'), 'fail')
+  assert.equal(o('staging', 'sent'), 'pass')
+  assert.equal(o('bogus', 'sent'), 'fail')
+})
+
+test('#3586 outcome CLI', () => {
+  const run = (...a) => spawnSync('node', [new URL('./email-probe.mjs', import.meta.url).pathname, 'outcome', ...a], { encoding: 'utf8' })
+  const w = run('staging', Q)
+  assert.equal(w.stdout.trim(), 'warn')
+  assert.equal(w.status, 0)
+  assert.equal(run('preview').stdout.trim(), 'skip')
+})
+
+test('#3586 workflow wiring', () => {
+  const b = stepBlock('Probe email send')
+  assert.ok(b.includes('outcome "$KIND"') && b.includes('result=skip') && b.includes('::warning::'))
+  assert.ok(b.indexOf('result=skip') < b.indexOf('wrangler'))
 })
