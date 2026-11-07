@@ -24,6 +24,7 @@ import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
 import { isAgentComment } from '../../../scripts/approval.mjs'
 import { staleWorkThisLabels as collectStaleWorkThis } from '../../../scripts/lib/stale-work-this-gather.mjs'
 import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
+import { fetchAllPages } from '../../../scripts/lib/gh-paginate.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -44,8 +45,8 @@ const PROTECTED = new Set(['main', 'HEAD', 'gh-pages'])
 // This digest posts to its own standing issue — don't let it list itself.
 const STANDING_TITLE = process.env.HOUSEKEEPING_ISSUE_TITLE || '🧹 Housekeeping'
 
-async function gh(path) {
-  const res = await fetch('https://api.github.com' + path, {
+async function ghRaw(url) {
+  const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -53,8 +54,17 @@ async function gh(path) {
       'User-Agent': 'housekeeping-digest'
     }
   })
-  if (!res.ok) throw new Error(`GitHub ${res.status} on ${path}: ${await res.text()}`)
-  return res.json()
+  if (!res.ok) throw new Error(`GitHub ${res.status} on ${url}: ${await res.text()}`)
+  return { data: await res.json(), link: res.headers.get('link') }
+}
+async function gh(path) {
+  return (await ghRaw('https://api.github.com' + path)).data
+}
+// Follow Link rel="next" so lists longer than one page are complete; warn if the page cap cuts one short.
+async function ghAll(path, label) {
+  const { items, truncated } = await fetchAllPages(ghRaw, 'https://api.github.com' + path)
+  if (truncated) console.error(`stuckPRs: ${label}: page cap hit (${items.length} items) — list is incomplete`)
+  return items
 }
 const search = async (q) =>
   (await gh(`/search/issues?per_page=100&q=${encodeURIComponent(q)}`)).items || []
@@ -294,7 +304,7 @@ async function stuckPRs(openPRs) {
     try {
       let pr = await gh(`${repo}/pulls/${s.number}`)
       const isEpic = pr.base?.ref === 'main' && String(pr.head?.ref).startsWith('epic/')
-      const comments = await gh(`${repo}/issues/${s.number}/comments?per_page=100`)
+      const comments = await ghAll(`${repo}/issues/${s.number}/comments?per_page=100`, `#${s.number} comments`)
       const hasOwner = comments.some((c) => c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase())
 
       if (isEpic) {
@@ -318,7 +328,10 @@ async function stuckPRs(openPRs) {
           pr = await gh(`${repo}/pulls/${s.number}`)
         }
         if (pr.mergeable_state !== 'dirty') continue
-        const commits = await gh(`${repo}/pulls/${s.number}/commits?per_page=100`)
+        const commits = await ghAll(`${repo}/pulls/${s.number}/commits?per_page=100`, `#${s.number} commits`)
+        if (pr.commits > commits.length) {
+          console.error(`stuckPRs: #${s.number}: PR has ${pr.commits} commits, API returned ${commits.length} (250 cap) — verdict may be wrong`)
+        }
         // File lists only matter for commits newer than the latest comment-able ok; fetch them
         // for the tail so ui-proposals-only capture commits are not mistaken for revisions.
         const lastOwner = comments
