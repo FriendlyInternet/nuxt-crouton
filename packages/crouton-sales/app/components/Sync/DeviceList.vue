@@ -3,7 +3,7 @@
  * Linked devices list (#806): each till / print router with its last push/pull and an unlink
  * action. Auto-imported as <SalesSyncDeviceList>.
  */
-import type { Device, SyncDevice } from '../../types/sync'
+import type { Device, SyncDevice } from '../../types'
 
 const props = defineProps<{
   devices: Device[]

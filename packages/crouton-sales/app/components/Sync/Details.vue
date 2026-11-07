@@ -4,7 +4,7 @@
  * push/pull and the config edits that lost a conflict. Split out of Status.vue
  * so the banner's template stays small.
  */
-import type { LostEdit } from '../../types/sync'
+import type { LostEdit } from '../../types'
 
 const props = defineProps<{
   devices: Array<{ deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }>

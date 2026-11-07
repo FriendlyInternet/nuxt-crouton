@@ -7,7 +7,7 @@
  *
  * Auto-imported as <SalesSyncDevices>.
  */
-import type { Device, SyncDevice } from '../../types/sync'
+import type { Device, SyncDevice } from '../../types'
 
 const { t } = useT()
 const { teamSlug } = useTeamContext()
