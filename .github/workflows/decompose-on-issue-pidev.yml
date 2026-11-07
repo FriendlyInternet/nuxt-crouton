@@ -431,6 +431,7 @@ jobs:
               echo "reusing epic branch ${EPIC_BRANCH}"
             fi
           fi
+          case "$EPIC_BRANCH" in epic/*--v1-*) echo "epic branch version: v1 (${EPIC_BRANCH})";; *) echo "epic branch version: today (${EPIC_BRANCH})";; esac # #3501
           echo "context: epic=${EPIC} depth=${DEPTH} epic_branch=${EPIC_BRANCH}"
           APPLY_OUT="$RUNNER_TEMP/apply-out.txt"
           node scripts/apply-decompose-plan.mjs apply decompose-plan.json \
