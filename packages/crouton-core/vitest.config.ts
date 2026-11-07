@@ -6,12 +6,11 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '#build/crouton-collection-forms.mjs': resolve(import.meta.dirname, 'app/components/__tests__/mocks/collection-forms.ts')
+      '#build/crouton-collection-forms.mjs': resolve(import.meta.dirname, 'tests/components/mocks/collection-forms.ts')
     }
   },
   test: {
     include: [
-      'app/components/__tests__/**/*.test.ts',
       'app/composables/__tests__/**/*.test.ts',
       'app/utils/__tests__/**/*.test.ts',
       'server/utils/__tests__/**/*.test.ts',
@@ -20,7 +19,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/.nuxt/**'
+      '**/.nuxt/**',
+      'tests/nuxt-runtime/**'
     ],
     environment: 'happy-dom',
     globals: true,

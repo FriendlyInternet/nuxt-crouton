@@ -80,6 +80,7 @@ export function decideV1({ draft, authorIsPipeline, baseRef, headRef, labels = [
   if (s.code === 'not-pipeline') return { merge: true, code: 'not-pipeline', autoMerge: false, reason: 'not a pipeline PR — merged by hand' }
   if (s.skip) return hold(s.code, `skipped: ${s.code}`)
   const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview })
+  if (r.code === 'no-review' && ownerHold?.at) return hold('owner-held', `held for the owner after the build review (${ownerHold.kind})`)
   if (r.merge && !Array.isArray(files)) return { ...hold('need-files', 'needs the PR file list for the shared-code hold'), needFiles: true }
   return applySharedCodeHold(r, { baseRef, labels, files, go })
 }
@@ -121,5 +122,5 @@ export function mergeDecisionCheck(answer) {
     return { name: MERGE_DECISION, status: 'completed', conclusion: 'success', output: { title: 'approved', summary: String(answer.reason || answer.code || 'approved') } }
   }
   const code = String(answer?.code || 'unknown')
-  return { name: MERGE_DECISION, status: 'in_progress', output: { title: `waiting: ${code}`, summary: String(answer?.reason || code) } }
+  return { name: MERGE_DECISION, status: 'in_progress', output: { title: code === 'owner-held' ? 'held: waiting for your ok' : `waiting: ${code}`, summary: String(answer?.reason || code) } }
 }
