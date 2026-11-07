@@ -34,9 +34,10 @@ function extractItemName(
   const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
   if (!record) return undefined
 
-  const titled = displayTitle(collection, record)
-  if (titled) return titled
+  return displayTitle(collection, record) ?? heuristicName(record)
+}
 
+function heuristicName(record: Record<string, unknown>): string | undefined {
   const field = ['title', 'name', 'label', 'subject', 'displayName']
     .find(f => record[f] && typeof record[f] === 'string')
   return field ? (record[field] as string) : undefined
