@@ -192,3 +192,116 @@ test('#3474 retry delays', () => {
   assert.equal(retryDelays({}), SIGNUP_RETRY_DELAYS_MS)
   assert.equal(retryDelays({ SEED_SIGNUP_RETRY_DELAYS_MS: 'x' }), SIGNUP_RETRY_DELAYS_MS)
 })
+
+// ── Review-login roles (#3421) ────────────────────────────────────────────────
+import { rolePlan, superAdminSql, memberUpsertSql, shouldCreateFreshTeam } from './seed-review-login.mjs'
+
+function rdb() {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1','review+velo-main-superadmin@example.com',0),('u2','other@example.com',0);
+  `)
+  return d
+}
+const sa = (d, id) => d.prepare('SELECT "superAdmin" v FROM "user" WHERE "id"=?').get(id).v
+
+test('#3421 rolePlan: member is demoted, admin + superadmin own the team, only superadmin is site admin', () => {
+  assert.deepEqual(rolePlan('member'), { teamRole: 'member', superAdmin: false, freshTeamFallback: false })
+  assert.deepEqual(rolePlan('admin'), { teamRole: 'owner', superAdmin: false, freshTeamFallback: true })
+  assert.deepEqual(rolePlan('superadmin'), { teamRole: 'owner', superAdmin: true, freshTeamFallback: false })
+  assert.throws(() => rolePlan('owner'))
+})
+
+test('#3421 superAdminSql sets/clears only the matching user (case-insensitive)', () => {
+  const d = rdb()
+  d.exec(superAdminSql('Review+velo-main-superadmin@example.com', true))
+  assert.equal(sa(d, 'u1'), 1)
+  assert.equal(sa(d, 'u2'), 0)
+  d.exec(superAdminSql('review+velo-main-superadmin@example.com', false))
+  assert.equal(sa(d, 'u1'), 0)
+})
+
+test('#3421 superAdminSql: a quote in the email cannot break out', () => {
+  const d = rdb()
+  d.exec(superAdminSql(`x' OR '1'='1`, true))
+  assert.equal(sa(d, 'u1'), 0)
+  assert.equal(sa(d, 'u2'), 0)
+})
+
+test('#3421 a member login is stored as member, never owner; re-run with a new role updates the same row', () => {
+  const d = rdb()
+  const base = { memberId: 'm1', userId: 'u1', orgId: 'seed:org:test1', createdAt: 1 }
+  d.exec(memberUpsertSql({ ...base, role: 'member' }))
+  const role = () => d.prepare('SELECT "role" r FROM "member" WHERE "id"=?').get('m1').r
+  assert.equal(role(), 'member')
+  d.exec(memberUpsertSql({ ...base, role: 'superadmin' }))
+  assert.equal(role(), 'owner')
+  assert.equal(d.prepare('SELECT count(*) c FROM "member"').get().c, 1)
+})
+
+test('#3421 shouldCreateFreshTeam: only admin, only when signed up with no active team', () => {
+  const t = { signedUp: true, hasActiveOrg: false }
+  assert.equal(shouldCreateFreshTeam({ role: 'member', ...t }), false)
+  assert.equal(shouldCreateFreshTeam({ role: 'superadmin', ...t }), false)
+  assert.equal(shouldCreateFreshTeam({ role: 'admin', ...t }), true)
+  assert.equal(shouldCreateFreshTeam({ role: 'admin', signedUp: true, hasActiveOrg: true }), false)
+})
+
+// The real script against a fake auth server + a sqlite file: the role rule end to end.
+async function seedRole(role, { stale = false } = {}) {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/seed-roles-`)
+  const file = `${dir}/sqlite.db`
+  const d = new DatabaseSync(file)
+  const email = `review+velo-main-${role}@example.com`
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1', '${email}', 0, ${stale ? 1 : 0});
+  `)
+  if (stale) d.exec(`INSERT INTO "member" VALUES ('${'seed:member:test1:' + email.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}', 'u1', 'seed:org:test1', 'owner', 1)`)
+  d.close()
+  const server = createServer((req, res) => {
+    const body = req.url === '/api/auth/get-session' ? { user: { id: 'u1' }, session: {} } : {}
+    res.writeHead(req.url === '/api/auth/organization/create' ? 403 : 200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const code = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', role, '--seed-team', 'test1', '--sqlite', file],
+    { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } }, err => resolve(err ? err.code : 0))
+  })
+  await new Promise(r => server.close(r))
+  const v = new DatabaseSync(file)
+  const roles = v.prepare('SELECT "role" r FROM "member" WHERE "userId"=\'u1\'').all().map(x => x.r)
+  const superAdmin = v.prepare('SELECT "superAdmin" s FROM "user" WHERE "id"=\'u1\'').get().s
+  v.close()
+  rmSync(dir, { recursive: true, force: true })
+  return { code, roles, superAdmin }
+}
+
+test('#3421 real seeding: member → member only, never owner or site admin (even from a stale owner/superAdmin state)', async () => {
+  assert.deepEqual(await seedRole('member', { stale: true }), { code: 0, roles: ['member'], superAdmin: 0 })
+})
+test('#3421 real seeding: admin → owner, no site-admin flag', async () => {
+  assert.deepEqual(await seedRole('admin', { stale: true }), { code: 0, roles: ['owner'], superAdmin: 0 })
+})
+test('#3421 real seeding: superadmin → owner with the site-admin flag', async () => {
+  assert.deepEqual(await seedRole('superadmin'), { code: 0, roles: ['owner'], superAdmin: 1 })
+})
+
+test('#3421 the CLI prints no review address and fails a member/superadmin it cannot seed (no DB flag write)', async () => {
+  const { spawnSync } = await import('node:child_process')
+  const email = 'review+velo-main-member@example.com'
+  // Unreachable URL: sign-up exhausts retries and exits non-zero without advertising a login.
+  const r = spawnSync('node', ['scripts/seed-review-login.mjs', '--url', 'http://127.0.0.1:9', '--email', email,
+    '--password', 'pw', '--role', 'member', '--seed-team', 'test1', '--db', 'x'],
+  { encoding: 'utf8', env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } })
+  assert.notEqual(r.status, 0)
+  assert.ok(!(r.stdout + r.stderr).includes(email))
+})
