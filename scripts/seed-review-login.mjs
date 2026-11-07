@@ -223,6 +223,16 @@ export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
   return signedUp && !hasActiveOrg && rolePlan(role).freshTeamFallback
 }
 
+/**
+ * Whether a role's login may be advertised after seeding. A role that must not own a fresh
+ * team (member, superadmin) needs the SEEDED team when one was asked for — a personal team the
+ * session already has active must not stand in for it. 'ok' | 'reject'.
+ */
+export function seedOutcome({ role, seedRequested, attached, hasActiveOrg }) {
+  if (rolePlan(role).freshTeamFallback) return 'ok'
+  return (seedRequested ? attached : hasActiveOrg) ? 'ok' : 'reject'
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -374,6 +384,8 @@ async function main() {
   //     fresh-org fallback (3b) is skipped; on failure (e.g. an app that doesn't
   //     seed test1 → no such org) it falls through to 3b so the reviewer still
   //     lands inside a team rather than at a create-team wall.
+  const seedRequested = !!(args.seedTeam && (args.db || args.sqlite))
+  let attached = false
   if (args.seedTeam && (args.db || args.sqlite) && userId) {
     const orgId = seedOrgId(args.seedTeam)
     const memberId = seedId('member', args.seedTeam, email)
@@ -397,6 +409,7 @@ async function main() {
       if (sa.ok) {
         info('set seeded team active for the session.')
         hasActiveOrg = true
+        attached = true
       } else {
         warn(`set-active returned HTTP ${sa.status} — membership upserted but not active; falling back.`)
       }
@@ -415,7 +428,7 @@ async function main() {
     }
   }
 
-  if (!rolePlan(role).freshTeamFallback && !hasActiveOrg) {
+  if (seedOutcome({ role, seedRequested, attached, hasActiveOrg }) === 'reject') {
     warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
     process.exit(1)
   }

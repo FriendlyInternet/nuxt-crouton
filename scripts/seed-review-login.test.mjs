@@ -305,3 +305,89 @@ test('#3421 the CLI prints no review address and fails a member/superadmin it ca
   assert.notEqual(r.status, 0)
   assert.ok(!(r.stdout + r.stderr).includes(email))
 })
+
+// ── #3533: the three tests #3498 left out ─────────────────────────────────────
+import { seedOutcome } from './seed-review-login.mjs'
+import { readFileSync } from 'node:fs'
+
+test('#3533 no log line in the script prints an email address', () => {
+  const src = readFileSync(SCRIPT, 'utf8')
+  const logCalls = src.split('\n').filter(l => /\b(info|warn|console\.(log|warn|error))\(/.test(l))
+  assert.ok(logCalls.length > 10, 'the scan must actually find the log calls')
+  for (const l of logCalls) assert.ok(!/email/i.test(l.replace(/'--email'|--email <e>/g, '')), `log line prints an email: ${l.trim()}`)
+})
+
+async function runStub(handler) {
+  const email = 'review+leak-check@example.com'
+  const server = createServer((req, res) => {
+    const { status, body } = handler(req.url)
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email, '--password', 'pw'],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, text: stdout + stderr }))
+  })
+  await new Promise(r => server.close(r))
+  return { ...out, email }
+}
+
+test('#3533 existing user refused (422 sign-up, 401 sign-in): exits 1 and prints no address', async () => {
+  const r = await runStub(url => url === '/api/auth/sign-up/email'
+    ? { status: 422, body: { code: 'USER_ALREADY_EXISTS' } }
+    : { status: 401, body: { code: 'INVALID_EMAIL_OR_PASSWORD' } })
+  assert.equal(r.code, 1)
+  assert.ok(r.text.length > 0)
+  assert.ok(!r.text.includes(r.email) && !r.text.includes('leak-check'))
+})
+
+test('#3533 seedOutcome: a member not attached to the seeded team is rejected even with a personal team active', () => {
+  assert.equal(seedOutcome({ role: 'member', seedRequested: true, attached: false, hasActiveOrg: true }), 'reject')
+  assert.equal(seedOutcome({ role: 'superadmin', seedRequested: true, attached: false, hasActiveOrg: true }), 'reject')
+  assert.equal(seedOutcome({ role: 'member', seedRequested: true, attached: true, hasActiveOrg: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'member', seedRequested: false, attached: false, hasActiveOrg: true }), 'ok')
+  assert.equal(seedOutcome({ role: 'member', seedRequested: false, attached: false, hasActiveOrg: false }), 'reject')
+  assert.equal(seedOutcome({ role: 'admin', seedRequested: true, attached: false, hasActiveOrg: false }), 'ok')
+})
+
+test('#3533 real script: member whose set-active fails while a personal team is active exits non-zero', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/seed-unattached-`)
+  const file = `${dir}/sqlite.db`
+  const d = new DatabaseSync(file)
+  const email = 'review+velo-main-member@example.com'
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1', '${email}', 0, 0);
+  `)
+  d.close()
+  const server = createServer((req, res) => {
+    const personal = req.url === '/api/auth/get-session'
+    res.writeHead(req.url === '/api/auth/organization/set-active' ? 500 : 200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(personal ? { user: { id: 'u1' }, session: { activeOrganizationId: 'personal-org' } } : {}))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const code = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', 'member', '--seed-team', 'test1', '--sqlite', file],
+    { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } }, err => resolve(err ? err.code : 0))
+  })
+  await new Promise(r => server.close(r))
+  rmSync(dir, { recursive: true, force: true })
+  assert.equal(code, 1)
+})
+
+test('#3533 memberUpsertSql escapes single quotes in ids (no statement break-out)', () => {
+  const d = rdb()
+  d.exec(memberUpsertSql({ memberId: "m'1", userId: "u'; DELETE FROM \"user\"; --", orgId: "o'rg", role: 'member', createdAt: 1 }))
+  const row = d.prepare('SELECT * FROM "member"').get()
+  assert.equal(row.id, "m'1")
+  assert.equal(row.userId, "u'; DELETE FROM \"user\"; --")
+  assert.equal(row.organizationId, "o'rg")
+  assert.equal(d.prepare('SELECT count(*) c FROM "user"').get().c, 2)
+})
