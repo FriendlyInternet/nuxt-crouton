@@ -24,10 +24,9 @@
  * @see app/pages/admin/[team]/sales/events/[slug]/index.vue
  * @see app/components/Blocks/EventWorkspaceRender.vue
  */
-// Reka UI splitter (the primitive Nuxt UI's resizable dashboard panels build
-// on) — UDashboardPanel itself needs a top-level UDashboardGroup, which can't
-// be embedded mid-page.
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+// UDashboardPanel itself needs a top-level UDashboardGroup, which can't be
+// embedded mid-page — so the panes use USplitter instead.
+import type { SplitterItem } from '@nuxt/ui'
 import type { Ref } from 'vue'
 import type { SalesEvent } from '../../../collections/events/types'
 
@@ -219,6 +218,19 @@ const dataFilterCount = ref(0)
 // page, fullscreen modal), so a hardcoded budget always wastes space in one
 // of them. Measured after mount (SSR falls back to the class budget below);
 // 1rem breathing room at the bottom.
+// Panes in order; ids + autoSaveId are the persisted-layout keys — keep stable.
+const paneItems = computed<SplitterItem[]>(() => {
+  const items: SplitterItem[] = [
+    { id: 'pos', slot: 'pos', order: 1, minSize: 35, class: 'min-w-0', ui: { panel: 'block' } }
+  ]
+  if (isNarrow.value) return items
+  if (ordersOpen.value) items.push({ id: 'orders', slot: 'orders', order: 2, defaultSize: 30, minSize: 18, class: 'min-w-0 flex-col' })
+  if (clientsPaneOpen.value) items.push({ id: 'clients', slot: 'clients', order: 3, defaultSize: 25, minSize: 15, class: 'min-w-0 flex-col' })
+  if (dataPaneOpen.value) items.push({ id: 'data', slot: 'data', order: 4, defaultSize: 30, minSize: 18, class: 'min-w-0 flex-col' })
+  if (settingsPaneOpen.value) items.push({ id: 'settings', slot: 'settings', order: 5, defaultSize: 30, minSize: 20, class: 'min-w-0 flex-col' })
+  return items
+})
+
 const kassaRef = ref<HTMLElement | null>(null)
 const kassaTop = ref<number | null>(null)
 function measureKassaTop() {
@@ -368,12 +380,14 @@ const kassaHeightStyle = computed(() =>
       :class="fill ? 'h-full' : 'border border-default rounded-xl h-[calc(100dvh-8.5rem)] min-h-[28rem]'"
       :style="fill ? undefined : kassaHeightStyle"
     >
-      <SplitterGroup
-        direction="horizontal"
+      <USplitter
+        id="sales-workspace-pos"
         auto-save-id="sales-workspace-pos"
+        :items="paneItems"
         class="flex flex-1 min-w-0"
+        :ui="{ handle: 'w-1 cursor-col-resize bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors' }"
       >
-        <SplitterPanel id="pos" :order="1" :min-size="35" class="min-w-0">
+        <template #pos>
           <!-- No panel header: the event is named by the gutter switcher (the
                standalone order page keeps its own). closable: with no desktop
                header row, the kassa's category row hosts the modal exit
@@ -387,12 +401,8 @@ const kassaHeightStyle = computed(() =>
             v-model:edit-mode="kassaEditMode"
             @close="emit('close')"
           />
-        </SplitterPanel>
-        <template v-if="ordersOpen && !isNarrow">
-          <SplitterResizeHandle
-            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
-          />
-          <SplitterPanel id="orders" :order="2" :default-size="30" :min-size="18" class="min-w-0 flex flex-col">
+        </template>
+        <template #orders>
             <!-- Pane header mirrors the hanging tab (shared PaneHeader:
                  h-14 matches the POS header rows so all bottom borders align). -->
             <SalesEventWorkspacePaneHeader
@@ -418,13 +428,8 @@ const kassaHeightStyle = computed(() =>
                 @update:active-filter-count="ordersFilterCount = $event"
               />
             </div>
-          </SplitterPanel>
         </template>
-        <template v-if="clientsPaneOpen && !isNarrow">
-          <SplitterResizeHandle
-            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
-          />
-          <SplitterPanel id="clients" :order="3" :default-size="25" :min-size="15" class="min-w-0 flex flex-col">
+        <template #clients>
             <SalesEventWorkspacePaneHeader
               icon="i-lucide-users"
               :title="t('sales.workspace.clientsPanel.title')"
@@ -433,13 +438,8 @@ const kassaHeightStyle = computed(() =>
             <div class="flex-1 overflow-y-auto p-4 pt-2">
               <SalesEventWorkspaceClientsPanel :event="event" />
             </div>
-          </SplitterPanel>
         </template>
-        <template v-if="dataPaneOpen && !isNarrow">
-          <SplitterResizeHandle
-            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
-          />
-          <SplitterPanel id="data" :order="4" :default-size="30" :min-size="18" class="min-w-0 flex flex-col">
+        <template #data>
             <SalesEventWorkspacePaneHeader
               icon="i-lucide-chart-line"
               :title="t('sales.workspace.dataPanel.title')"
@@ -464,18 +464,11 @@ const kassaHeightStyle = computed(() =>
                 @update:active-filter-count="dataFilterCount = $event"
               />
             </div>
-          </SplitterPanel>
         </template>
-        <template v-if="settingsPaneOpen && !isNarrow">
-          <SplitterResizeHandle
-            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
-          />
-          <!-- Settings pane hosts the tabbed (sectioned) SettingsTab — the
-               pane is never wide enough for the old 3-column layout, so the
-               narrow-mode design is the design. Save lives in a fixed footer
-               below the scroll area (via the registered save API); the narrow
-               slideover is gated on isNarrow so only one instance mounts. -->
-          <SplitterPanel id="settings" :order="5" :default-size="30" :min-size="20" class="min-w-0 flex flex-col">
+        <!-- Settings pane hosts the tabbed SettingsTab; Save lives in the fixed
+             footer below the scroll area (registered save API). The narrow
+             slideover is gated on isNarrow so only one instance mounts. -->
+        <template #settings>
             <SalesEventWorkspacePaneHeader
               icon="i-lucide-settings"
               :title="t('sales.events.settings')"
@@ -495,9 +488,8 @@ const kassaHeightStyle = computed(() =>
               :saving="settingsSaving"
               @save="settingsTab?.save()"
             />
-          </SplitterPanel>
         </template>
-      </SplitterGroup>
+      </USplitter>
 
     </div>
 
