@@ -52,8 +52,9 @@ async function closeFullScreen(page: Page, dialog: Locator) {
   await expect(dialog).toHaveCount(0)
 }
 
-test.describe('bookings full screen', () => {
-  test.skip(FIXTURE !== 'with-bookings', 'only the with-bookings fixture has the admin bookings page')
+// Only the with-bookings fixture has the admin bookings page; other fixtures don't register this suite.
+test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings full screen (not this fixture)', () => {
+  if (FIXTURE !== 'with-bookings') return
 
   test('phone: full screen → inline keeps the week, the filter and the day', async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 390, height: 844 })
