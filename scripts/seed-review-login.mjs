@@ -190,9 +190,18 @@ export function markReviewerVerifiedSql(email) {
 /** The review-login roles (#3421). Keep in sync with pocs/status/server/utils/review-login.ts. */
 export const REVIEW_ROLES = ['member', 'admin', 'superadmin']
 
-/** Team role the seeded membership gets: only `member` is demoted; admin + superadmin own the team. */
-export function teamRoleFor(role) {
-  return role === 'member' ? 'member' : 'owner'
+/**
+ * The one place the role rule lives: team role, site-admin flag, and whether the login may fall
+ * back to its own fresh team (there it would OWN that team — wrong for member/superadmin).
+ */
+export function rolePlan(role) {
+  const plans = {
+    member: { teamRole: 'member', superAdmin: false, freshTeamFallback: false },
+    admin: { teamRole: 'owner', superAdmin: false, freshTeamFallback: true },
+    superadmin: { teamRole: 'owner', superAdmin: true, freshTeamFallback: false }
+  }
+  if (!Object.hasOwn(plans, role)) throw new Error(`unknown review role "${role}"`)
+  return plans[role]
 }
 
 /** Set (or clear) the site-admin flag on the review user. Run for every role so it is always explicit. */
@@ -202,18 +211,16 @@ export function superAdminSql(email, on) {
 
 /** Idempotent seeded-team membership upsert: re-running with a new role updates the same row. */
 export function memberUpsertSql({ memberId, userId, orgId, role, createdAt }) {
+  const teamRole = rolePlan(role).teamRole
   return `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},${sqlStr(teamRoleFor(role))},${createdAt}) ` +
+    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},${sqlStr(teamRole)},${createdAt}) ` +
     `ON CONFLICT("id") DO UPDATE SET ` +
     `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
 }
 
-/**
- * Only the admin login may fall back to its own fresh team when the seeded-team attach
- * fails — there it would be that team's OWNER, which is the wrong role for member/superadmin.
- */
-export function mayCreateFreshTeam(role) {
-  return role === 'admin'
+/** Fresh-team fallback (3b): only when sign-up made the user, no team is active, and the role allows it. */
+export function shouldCreateFreshTeam({ role, signedUp, hasActiveOrg }) {
+  return signedUp && !hasActiveOrg && rolePlan(role).freshTeamFallback
 }
 
 function warn(msg) {
@@ -384,10 +391,7 @@ async function main() {
       // Scoped to this throwaway review user; the orphaned personal org is harmless.
       const pruneSql =
         `DELETE FROM "member" WHERE "userId"=${sqlStr(userId)} AND "organizationId"<>${sqlStr(orgId)};`
-      execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${pruneSql}`, '--yes'], {
-        stdio: 'inherit',
-        env: process.env
-      })
+      execSeedSql(args, pruneSql)
       info(`pruned the ${role} login's other memberships — seeded team is now sole/active.`)
       const { res: sa } = await post('/api/auth/organization/set-active', { organizationId: orgId })
       if (sa.ok) {
@@ -398,27 +402,27 @@ async function main() {
       }
     } catch (e) {
       warn(`seeded-team attach failed: ${e?.message || e} — falling back to a fresh review team.`)
-      if (!mayCreateFreshTeam(role)) {
+      if (!rolePlan(role).freshTeamFallback) {
         warn(`${role} login must not own a fresh team — NOT advertising it.`)
         process.exit(1)
       }
     }
   } else if (args.seedTeam && (args.db || args.sqlite) && !userId) {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
-    if (!mayCreateFreshTeam(role)) {
+    if (!rolePlan(role).freshTeamFallback) {
       warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
       process.exit(1)
     }
   }
 
-  if (!mayCreateFreshTeam(role) && !hasActiveOrg) {
+  if (!rolePlan(role).freshTeamFallback && !hasActiveOrg) {
     warn(`${role} login could not be attached to the seeded team — NOT advertising it.`)
     process.exit(1)
   }
 
   // 3b. No active org yet → create a fresh one so the reviewer lands inside the
   //     app, not at a create-team wall (also the fallback when 3a couldn't attach).
-  if (signedUp && !hasActiveOrg) {
+  if (shouldCreateFreshTeam({ role, signedUp, hasActiveOrg })) {
     const slug = `review-${Math.random().toString(36).slice(2, 8)}`
     try {
       const { res, json } = await post('/api/auth/organization/create', { name: teamName, slug })
@@ -450,14 +454,12 @@ async function main() {
     }
     // The site-admin flag IS the role: a failed write must not advertise the login (a super admin
     // without the flag, or a member that kept an old one).
-    if (role !== 'admin') {
-      try {
-        execSeedSql(args, superAdminSql(email, role === 'superadmin'))
-        info(`site-admin flag set for the ${role} login.`)
-      } catch {
-        warn(`could not set the site-admin flag for the ${role} login (SQL step failed) — NOT advertising it.`)
-        process.exit(1)
-      }
+    try {
+      execSeedSql(args, superAdminSql(email, rolePlan(role).superAdmin))
+      info(`site-admin flag set for the ${role} login.`)
+    } catch {
+      warn(`could not set the site-admin flag for the ${role} login (SQL step failed) — NOT advertising it.`)
+      process.exit(1)
     }
   }
 

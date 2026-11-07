@@ -1,4 +1,4 @@
-import { parseReviewRole, withWalk, type ReviewRole } from './review-login'
+import { parseReviewRole, type ReviewRole } from './review-login'
 import { isSafePath } from './totest-core'
 
 type Q = Record<string, unknown>
@@ -28,18 +28,4 @@ export function parseLoginRequest(slug: string, q: Q): LoginRequest | null {
   const to = q.to === undefined || q.to === '' ? '' : String(q.to)
   if (to && !isSafePath(to)) return null
   return { app: slug, key, role, to }
-}
-
-/** Live entry wins; the build-time target is the fallback when GitHub is unreachable. */
-export function normalizeTarget(
-  liveApp: { stagingUrl?: string | null, hasSignIn: boolean } | undefined,
-  fallback: { stagingUrl?: string | null, hasSignIn: boolean } | null | undefined
-) {
-  const t = liveApp ?? fallback
-  return t ? { stagingUrl: t.stagingUrl ?? '', hasSignIn: t.hasSignIn } : null
-}
-
-/** Redirect target when the app has no sign-in: its site, optionally deep-linked. */
-export function plainSiteUrl(base: string, to: string, walk: string): string {
-  return to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base
 }

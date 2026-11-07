@@ -47,7 +47,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
       <template v-for="{ card, v } in cards" :key="card.app ?? 'general'">
         <div v-if="v.collapsed" class="flex items-center gap-3 rounded-lg border border-default p-3">
           <h2 class="flex-1 font-semibold">{{ v.title }}</h2>
-          <UButton v-if="v.signIn" size="sm" icon="i-lucide-log-in" label="Open and sign in" :href="v.signIn" target="_blank" />
+          <StagingSignIn :sign-in="v.signIn" :roles="card.hasSignIn && card.app !== 'status'" />
           <a :href="v.lastMergedHref" target="_blank" rel="noopener" class="text-sm text-primary">Last merged</a>
         </div>
 

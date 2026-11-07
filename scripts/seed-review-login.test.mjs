@@ -194,7 +194,7 @@ test('#3474 retry delays', () => {
 })
 
 // ── Review-login roles (#3421) ────────────────────────────────────────────────
-import { teamRoleFor, superAdminSql, memberUpsertSql, mayCreateFreshTeam } from './seed-review-login.mjs'
+import { rolePlan, superAdminSql, memberUpsertSql, shouldCreateFreshTeam } from './seed-review-login.mjs'
 
 function rdb() {
   const d = new DatabaseSync(':memory:')
@@ -207,10 +207,11 @@ function rdb() {
 }
 const sa = (d, id) => d.prepare('SELECT "superAdmin" v FROM "user" WHERE "id"=?').get(id).v
 
-test('#3421 teamRoleFor: member is demoted, admin + superadmin own the team', () => {
-  assert.equal(teamRoleFor('member'), 'member')
-  assert.equal(teamRoleFor('admin'), 'owner')
-  assert.equal(teamRoleFor('superadmin'), 'owner')
+test('#3421 rolePlan: member is demoted, admin + superadmin own the team, only superadmin is site admin', () => {
+  assert.deepEqual(rolePlan('member'), { teamRole: 'member', superAdmin: false, freshTeamFallback: false })
+  assert.deepEqual(rolePlan('admin'), { teamRole: 'owner', superAdmin: false, freshTeamFallback: true })
+  assert.deepEqual(rolePlan('superadmin'), { teamRole: 'owner', superAdmin: true, freshTeamFallback: false })
+  assert.throws(() => rolePlan('owner'))
 })
 
 test('#3421 superAdminSql sets/clears only the matching user (case-insensitive)', () => {
@@ -240,10 +241,58 @@ test('#3421 a member login is stored as member, never owner; re-run with a new r
   assert.equal(d.prepare('SELECT count(*) c FROM "member"').get().c, 1)
 })
 
-test('#3421 only the admin login may fall back to its own fresh team (it would own it)', () => {
-  assert.equal(mayCreateFreshTeam('admin'), true)
-  assert.equal(mayCreateFreshTeam('member'), false)
-  assert.equal(mayCreateFreshTeam('superadmin'), false)
+test('#3421 shouldCreateFreshTeam: only admin, only when signed up with no active team', () => {
+  const t = { signedUp: true, hasActiveOrg: false }
+  assert.equal(shouldCreateFreshTeam({ role: 'member', ...t }), false)
+  assert.equal(shouldCreateFreshTeam({ role: 'superadmin', ...t }), false)
+  assert.equal(shouldCreateFreshTeam({ role: 'admin', ...t }), true)
+  assert.equal(shouldCreateFreshTeam({ role: 'admin', signedUp: true, hasActiveOrg: true }), false)
+})
+
+// The real script against a fake auth server + a sqlite file: the role rule end to end.
+async function seedRole(role, { stale = false } = {}) {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(`${tmpdir()}/seed-roles-`)
+  const file = `${dir}/sqlite.db`
+  const d = new DatabaseSync(file)
+  const email = `review+velo-main-${role}@example.com`
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0, "superAdmin" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "user" VALUES ('u1', '${email}', 0, ${stale ? 1 : 0});
+  `)
+  if (stale) d.exec(`INSERT INTO "member" VALUES ('${'seed:member:test1:' + email.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}', 'u1', 'seed:org:test1', 'owner', 1)`)
+  d.close()
+  const server = createServer((req, res) => {
+    const body = req.url === '/api/auth/get-session' ? { user: { id: 'u1' }, session: {} } : {}
+    res.writeHead(req.url === '/api/auth/organization/create' ? 403 : 200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const code = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', `http://127.0.0.1:${server.address().port}`, '--email', email,
+      '--password', 'pw', '--role', role, '--seed-team', 'test1', '--sqlite', file],
+    { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0' } }, err => resolve(err ? err.code : 0))
+  })
+  await new Promise(r => server.close(r))
+  const v = new DatabaseSync(file)
+  const roles = v.prepare('SELECT "role" r FROM "member" WHERE "userId"=\'u1\'').all().map(x => x.r)
+  const superAdmin = v.prepare('SELECT "superAdmin" s FROM "user" WHERE "id"=\'u1\'').get().s
+  v.close()
+  rmSync(dir, { recursive: true, force: true })
+  return { code, roles, superAdmin }
+}
+
+test('#3421 real seeding: member → member only, never owner or site admin (even from a stale owner/superAdmin state)', async () => {
+  assert.deepEqual(await seedRole('member', { stale: true }), { code: 0, roles: ['member'], superAdmin: 0 })
+})
+test('#3421 real seeding: admin → owner, no site-admin flag', async () => {
+  assert.deepEqual(await seedRole('admin', { stale: true }), { code: 0, roles: ['owner'], superAdmin: 0 })
+})
+test('#3421 real seeding: superadmin → owner with the site-admin flag', async () => {
+  assert.deepEqual(await seedRole('superadmin'), { code: 0, roles: ['owner'], superAdmin: 1 })
 })
 
 test('#3421 the CLI prints no review address and fails a member/superadmin it cannot seed (no DB flag write)', async () => {
