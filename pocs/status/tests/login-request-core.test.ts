@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLoginRequest, signedOutBackPath } from '../server/utils/login-request-core'
+import { isOwnerEmail, ownerGate, parseLoginRequest, pickLoginTarget, plainRedirectUrl, signedOutBackPath } from '../server/utils/login-request-core'
 
 describe('signedOutBackPath', () => {
   it('keeps valid key and role', () => {
@@ -25,4 +25,34 @@ describe('parseLoginRequest', () => {
   it('accepts a valid request with defaults', () => {
     expect(parseLoginRequest('velo', { role: 'admin' })).toEqual({ app: 'velo', key: 'main', role: 'admin', to: '' })
   })
+})
+
+describe('isOwnerEmail', () => {
+  it('matches case/space-insensitively', () => expect(isOwnerEmail(' A@b.c ', 'a@B.c')).toBe(true))
+  it('rejects empty owner or email', () => {
+    expect(isOwnerEmail('a@b.c', '')).toBe(false)
+    expect(isOwnerEmail('', '')).toBe(false)
+    expect(isOwnerEmail('x@b.c', 'a@b.c')).toBe(false)
+  })
+})
+
+describe('plainRedirectUrl', () => {
+  const w = (to: string, walk: string) => `${to}?w=${walk}`
+  it('returns base when no to/walk', () => expect(plainRedirectUrl('https://x.io/', '', '', w)).toBe('https://x.io/'))
+  it('trims trailing slash and appends', () => expect(plainRedirectUrl('https://x.io/', '/p', 'a', w)).toBe('https://x.io/p?w=a'))
+})
+
+describe('pickLoginTarget', () => {
+  it('prefers live over fallback', () => expect(pickLoginTarget({ stagingUrl: 'u', hasSignIn: true }, { stagingUrl: 'f', hasSignIn: false })).toEqual({ stagingUrl: 'u', hasSignIn: true }))
+  it('falls back and defaults stagingUrl', () => expect(pickLoginTarget(undefined, { hasSignIn: false })).toEqual({ stagingUrl: '', hasSignIn: false }))
+  it('null when unknown', () => expect(pickLoginTarget(undefined, null)).toBeNull())
+})
+
+describe('ownerGate', () => {
+  it('signed out -> signin with return path', () => {
+    const g = ownerGate('', 'o@x.io', 'velo', { key: 'pr12' })
+    expect(g).toEqual({ kind: 'signin', location: `/signin?redirect=${encodeURIComponent('/api/status/login/velo?key=pr12')}` })
+  })
+  it('non-owner -> deny', () => expect(ownerGate('a@x.io', 'o@x.io', 'velo', {})).toEqual({ kind: 'deny' }))
+  it('owner -> ok', () => expect(ownerGate('O@x.io', 'o@x.io', 'velo', {})).toEqual({ kind: 'ok' }))
 })
