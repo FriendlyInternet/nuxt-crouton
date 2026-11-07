@@ -71,7 +71,7 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
     assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
   }
   // plan-review re-plans through the saved-hand-off wrapper (#3306); the dispatch itself lives in handoff-exec.
-  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
+  assert.match(readFileSync('.github/workflows/on-comment.yml', 'utf8'), /handoff-exec\.mjs replan/)
   assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('.github/workflows/label-router.yml', 'utf8'), /dispatch work-issue-pidev\.yml[^\n]*mode:"plan"/)

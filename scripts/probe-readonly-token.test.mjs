@@ -1,4 +1,4 @@
-// Tests the "reviewer token is read-only" probe step of build-review.yml / plan-review.yml (#3057).
+// Tests the "reviewer token is read-only" probe step of build-review.yml / on-comment.yml (plan-review job) (#3057).
 // The step runs under `bash -e`; it must decide on gh's exit code, not abort and not grep the body.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -30,7 +30,7 @@ function run(file, { code, stdout = '', stderr = '' }) {
   })
 }
 
-for (const file of ['build-review.yml', 'plan-review.yml']) {
+for (const file of ['build-review.yml', 'on-comment.yml']) {
   test(`${file}: exit 1 + HTTP 403 → expected, exit 0`, () => {
     const r = run(file, { code: 1, stderr: 'gh: Forbidden (HTTP 403)' })
     assert.equal(r.status, 0)
