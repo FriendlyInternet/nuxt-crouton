@@ -19,7 +19,7 @@ import { organization, twoFactor, magicLink, admin, haveIBeenPwned, type TwoFact
 import { i18n } from '@better-auth/i18n'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
-import { useNitroApp } from 'nitropack/runtime'
+import { useNitroApp, useRuntimeConfig } from 'nitropack/runtime'
 import { isSuperAdminUser } from '../../shared/utils/auth'
 import { resolveInitialOrgId, getOrgBySlug } from './session-org'
 import type { BetterAuthOptions } from 'better-auth'
@@ -84,7 +84,7 @@ export interface CreateAuthOptions {
  */
 function isEmailInstalled(): boolean {
   try {
-    const rc = (globalThis as any).useRuntimeConfig?.()
+    const rc = useRuntimeConfig()
     return !!rc?.public?.crouton?.email
   }
   catch {

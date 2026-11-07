@@ -306,57 +306,13 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
 
 **Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
-## Rate Limiting (Recommended)
+## Rate Limiting
 
-Authentication endpoints are prime targets for abuse. We recommend using `nuxthub-ratelimit` for rate limiting.
+Built in: `createAuth` enables Better Auth's database-backed rate limiter (counters live in the `rateLimit` table, so they are shared across Worker instances). Requests without a client-IP header are never limited. `nuxthub-ratelimit` is no longer needed for auth endpoints.
 
-### Installation
+## Email verification
 
-```bash
-pnpm add nuxthub-ratelimit
-```
-
-### Configuration
-
-```typescript
-// nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ['@crouton/auth', 'nuxthub-ratelimit'],
-
-  rateLimit: {
-    routes: {
-      // Strict limits for auth endpoints
-      '/api/auth/*': {
-        maxRequests: 15,
-        intervalSeconds: 60
-      },
-      // More lenient for general API
-      '/api/*': {
-        maxRequests: 150,
-        intervalSeconds: 60
-      }
-    }
-  }
-})
-```
-
-### Recommended Limits by Endpoint
-
-| Endpoint Pattern | Max Requests | Interval | Reason |
-|-----------------|--------------|----------|--------|
-| `/api/auth/sign-in/*` | 10 | 60s | Prevent brute force |
-| `/api/auth/sign-up/*` | 5 | 60s | Prevent account spam |
-| `/api/auth/forgot-password` | 3 | 60s | Prevent email abuse |
-| `/api/auth/verify-email` | 5 | 60s | Prevent verification spam |
-| `/api/auth/scoped-access/*` | 10 | 60s | Public redeem endpoint — PIN brute force + pre-auth hook work (the before-redeem hook does a DB read per attempt) |
-| `/api/auth/*` | 15 | 60s | General auth fallback |
-| `/api/*` | 150 | 60s | General API |
-
-### Requirements
-
-- Requires NuxtHub with KV enabled
-- Minimum TTL is 60 seconds (NuxtHub KV limitation)
-- See [nuxthub-ratelimit docs](https://github.com/fayazara/nuxthub-ratelimit)
+`useAuth().register({ ..., callbackURL })` accepts an optional post-verification redirect and returns `{ verificationRequired }`. Verification is required only in apps where `crouton-email` is installed (detected from `public.crouton.email` via `useRuntimeConfig()` in `server/lib/auth.ts`).
 
 ## Scoped Access Tokens & Grants
 
