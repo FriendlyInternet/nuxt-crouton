@@ -2,10 +2,10 @@
  * Removed-test check (#3314) — a pipeline PR must not quietly delete a test case.
  *
  * Comparing base to head misses the #3231 shape: a test file ADDED and then DELETED inside
- * one PR is absent at both ends. So we take the union of titles over every snapshot
- * (base tree, then each commit) and subtract what the head still has.
+ * one PR is absent at both ends. So we take the union of the base titles and the titles the
+ * PR's own commits added (merge commits ignored), and subtract what the head still has.
  *
- * Pure: no git, no fs. The CLI (scripts/check-removed-tests.mjs) builds the snapshots.
+ * Pure: no git, no fs. The CLI (scripts/check-removed-tests.mjs) does the git work.
  */
 
 export const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/
@@ -27,24 +27,27 @@ export function listTestTitles(source) {
 }
 
 /**
- * @param {Array<Record<string,string>>} snapshots ordered {path: source} maps (base first)
+ * Seen titles = every title at the merge-base + every title a PR's own (non-merge) commit
+ * added. Merge commits are never snapshotted: a "Merge main" commit carries main's history,
+ * and a test main later removed is not this PR's removal (#3538).
+ * @param {{base: Record<string,string>, added: Array<{file:string,before?:string,after:string}>}} input
+ *   base = {path: source} at the merge-base; added = per-commit {file, before, after} sources
  * @param {Record<string,string>} head {path: source} at head (absent path = file gone)
  * @returns {Array<{file:string,title:string}>} titles seen earlier and missing at head
  */
-export function removedTests(snapshots, head) {
-  return missingAtHead(collectSeen(snapshots), head)
-}
-
-function collectSeen(snapshots) {
+export function removedTests({ base, added }, head) {
   const seen = new Map()
-  for (const snap of snapshots) {
-    for (const [file, src] of Object.entries(snap)) {
-      const titles = seen.get(file) || new Set()
-      for (const t of listTestTitles(src)) titles.add(t)
-      seen.set(file, titles)
-    }
+  const add = (file, titles) => {
+    const set = seen.get(file) || new Set()
+    for (const t of titles) set.add(t)
+    seen.set(file, set)
   }
-  return seen
+  for (const [file, src] of Object.entries(base)) add(file, listTestTitles(src))
+  for (const { file, before, after } of added) {
+    const prev = new Set(listTestTitles(before))
+    add(file, listTestTitles(after).filter((t) => !prev.has(t)))
+  }
+  return missingAtHead(seen, head)
 }
 
 function missingAtHead(seen, head) {
