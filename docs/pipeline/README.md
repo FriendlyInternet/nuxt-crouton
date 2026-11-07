@@ -1,5 +1,7 @@
 # Pipeline v1 — a plain guide
 
+> **Read this first:** this guide is part of [#3458 — pipeline versions](https://github.com/FriendlyInternet/nuxt-crouton/issues/3458).
+
 ## What it is
 
 Pipeline v1 is an opt-in setting **per epic**. Put the `pipeline:v1` label on the epic
