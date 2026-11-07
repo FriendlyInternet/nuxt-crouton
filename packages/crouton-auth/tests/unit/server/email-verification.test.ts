@@ -108,3 +108,21 @@ describe('backfill migration', () => {
     expect(d.prepare('SELECT COUNT(*) AS n FROM `user` WHERE `emailVerified` = 0').get().n).toBe(0)
   })
 })
+
+describe('isEmailInstalled — reads public.crouton.email via useRuntimeConfig', () => {
+  it('is true when crouton-email is installed and false otherwise', async () => {
+    vi.resetModules()
+    vi.doMock('nitropack/runtime', () => ({
+      useNitroApp: () => ({ hooks: { callHook: async () => {} } }),
+      useRuntimeConfig: () => ({ public: { crouton: { email: {} } } })
+    }))
+    expect((await import('../../../server/lib/auth')).isEmailInstalled()).toBe(true)
+
+    vi.resetModules()
+    vi.doMock('nitropack/runtime', () => ({
+      useNitroApp: () => ({ hooks: { callHook: async () => {} } }),
+      useRuntimeConfig: () => ({ public: { crouton: { auth: {} } } })
+    }))
+    expect((await import('../../../server/lib/auth')).isEmailInstalled()).toBe(false)
+  })
+})

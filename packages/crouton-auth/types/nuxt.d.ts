@@ -11,6 +11,8 @@ declare module 'nuxt/schema' {
   interface PublicRuntimeConfig {
     crouton?: {
       auth?: CroutonAuthConfig
+      /** Defined by crouton-email when installed */
+      email?: Record<string, unknown>
     }
   }
 
@@ -24,6 +26,8 @@ declare module '@nuxt/schema' {
   interface PublicRuntimeConfig {
     crouton?: {
       auth?: CroutonAuthConfig
+      /** Defined by crouton-email when installed */
+      email?: Record<string, unknown>
     }
   }
 

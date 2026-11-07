@@ -82,7 +82,7 @@ export interface CreateAuthOptions {
  * crouton-email defines `public.crouton.email` by default; apps without it
  * have no way to send the verify link.
  */
-function isEmailInstalled(): boolean {
+export function isEmailInstalled(): boolean {
   try {
     const rc = useRuntimeConfig()
     return !!rc?.public?.crouton?.email
