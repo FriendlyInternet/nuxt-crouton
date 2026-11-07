@@ -58,6 +58,7 @@ for (const [file, step] of [
   ['on-comment.yml', 'ok'],
   ['work-issue-pidev.yml', 'pr'],
   ['build-review.yml', 'review'],
+  ['automerge-epic-subpr.yml', 'merged'],
   ['v1-merge-io.mjs', 'merged']
 ]) {
   test(`${file} ticks "${step}"`, () => {
