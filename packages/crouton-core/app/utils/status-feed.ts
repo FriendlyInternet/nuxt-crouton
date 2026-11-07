@@ -65,12 +65,7 @@ export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[]
     if (known.has(id) || Number.isNaN(timestamp)) continue
     const own = ev.userId === currentUserId
     if (!own && !includeOthers) continue
-    if (own && ev.itemId && history.some(m =>
-      !m.id.startsWith('event-')
-      && m.collection === ev.collectionName
-      && m.itemId === ev.itemId
-      && m.operation === ev.operation,
-    )) continue
+    if (own && hasLocalEntry(history, ev)) continue
     known.add(id)
     const { text, icon } = mutationStatus({
       operation: ev.operation,
@@ -80,7 +75,23 @@ export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[]
     fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true, own })
   }
   const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
-  if (!includeOthers || ownFloor <= 0) return sorted.slice(0, STATUS_RECENT_MAX)
+  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0)
+}
+
+/** True when an in-memory (non-event) entry already covers this event's collection+item+operation. */
+function hasLocalEntry(history: StatusMessage[], ev: TeamEventRow): boolean {
+  if (!ev.itemId) return false
+  return history.some(m =>
+    !m.id.startsWith('event-')
+    && m.collection === ev.collectionName
+    && m.itemId === ev.itemId
+    && m.operation === ev.operation,
+  )
+}
+
+/** Cap newest-first list at STATUS_RECENT_MAX, reserving `ownFloor` slots for the newest own entries. */
+function capWithOwnFloor(sorted: StatusMessage[], ownFloor: number): StatusMessage[] {
+  if (ownFloor <= 0) return sorted.slice(0, STATUS_RECENT_MAX)
   // Reserve `ownFloor` slots for the newest own entries so a busy team can't push them out
   const isOwn = (m: StatusMessage) => !m.id.startsWith('event-') || m.own === true
   const ownKept = new Set(sorted.filter(isOwn).slice(0, Math.min(ownFloor, STATUS_RECENT_MAX)))

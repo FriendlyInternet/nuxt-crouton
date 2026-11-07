@@ -13,6 +13,16 @@ const OWN_SLOTS = 3
 /** One retry when the collab signal arrived before the teammate's event row was stored */
 const REMOTE_RETRY_MS = 1000
 
+function displayTitle(collection: string, record: Record<string, unknown>): string | undefined {
+  try {
+    const title = useDisplayConfig(collection).title
+    return title && record[title] ? String(record[title]) : undefined
+  } catch {
+    // Collection may not have config — fall through to heuristics
+    return undefined
+  }
+}
+
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
  */
@@ -24,21 +34,12 @@ function extractItemName(
   const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
   if (!record) return undefined
 
-  try {
-    const display = useDisplayConfig(collection)
-    if (display.title && record[display.title]) {
-      return String(record[display.title])
-    }
-  } catch {
-    // Collection may not have config — fall through to heuristics
-  }
+  const titled = displayTitle(collection, record)
+  if (titled) return titled
 
-  for (const field of ['title', 'name', 'label', 'subject', 'displayName']) {
-    if (record[field] && typeof record[field] === 'string') {
-      return record[field] as string
-    }
-  }
-  return undefined
+  const field = ['title', 'name', 'label', 'subject', 'displayName']
+    .find(f => record[f] && typeof record[f] === 'string')
+  return field ? (record[field] as string) : undefined
 }
 
 /**
