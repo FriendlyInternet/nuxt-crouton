@@ -595,10 +595,6 @@ jobs:
           # /tmp). Everything else at -S warning is on and blocking.
           "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
-  # Parses every workflow the way GitHub does (#2970). A duplicate env key merged on 2026-10-28
-  # made every worker dispatch fail to parse for ~30 min; nothing in CI parsed workflows.
-  # shellcheck/pyflakes integration is OFF: shell is already covered by shellcheck-workflows.
-  # Corpus run at introduction: 5 real hits (undeclared secrets in deploy-app.yml), fixed.
   # A pipeline PR (work-*) must not quietly delete a test case (#3314). Own job, no stage
   # condition: node-checks skips POC-only PRs and the gate accepts a skipped job. The PR body
   # is read live and passed via env, never pasted into the script.
@@ -626,6 +622,10 @@ jobs:
           export PR_BODY
           node scripts/check-removed-tests.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --branch "$HEAD_REF"
 
+  # Parses every workflow the way GitHub does (#2970). A duplicate env key merged on 2026-10-28
+  # made every worker dispatch fail to parse for ~30 min; nothing in CI parsed workflows.
+  # shellcheck/pyflakes integration is OFF: shell is already covered by shellcheck-workflows.
+  # Corpus run at introduction: 5 real hits (undeclared secrets in deploy-app.yml), fixed.
   actionlint:
     name: Actionlint workflows
     needs: changes
