@@ -106,7 +106,7 @@ interface Field {
   zod: string
   default: string
   tsType: string
-  translatable?: boolean
+  translatableType?: boolean
 }
 
 interface WriteScaffoldOptions {
