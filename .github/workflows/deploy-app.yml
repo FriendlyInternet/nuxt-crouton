@@ -815,6 +815,8 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
+          KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
+          if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
@@ -847,6 +849,8 @@ jobs:
           echo "result=fail" >> "$GITHUB_OUTPUT"   # overwritten on success; a crash stays red
           PROBE_EMAIL="delivered+${APP}@resend.dev"
           PR_NUM="${{ github.event.pull_request.number }}"
+          KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
+          if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
@@ -876,11 +880,12 @@ jobs:
             REASON="$V"
             [ "$REASON" = "never confirmed" ] || [ "$REASON" = "no send recorded" ] || break
           done
-          if [ "$REASON" = "no send recorded" ] || [ "$REASON" = "never confirmed" ]; then
-            echo "::error::email probe: no send recorded"
-          else
-            echo "::error::email probe failed: $REASON"
+          O=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND" "$REASON"); echo "result=$O" >> "$GITHUB_OUTPUT"
+          if [ "$O" = warn ]; then
+            echo "::warning::email probe: Resend daily quota reached — ${REASON}"
+            echo "⚠ email probe (${APP}): daily quota reached" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
+          echo "::error::email probe failed: $REASON"
           echo "✗ email probe (${APP}): ${REASON}" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
@@ -1184,7 +1189,7 @@ jobs:
       # on "not pass" (not "is fail") means a skipped or crashed probe is red too. Runs last so
       # seed + smoke still happen — the check fails, the deploy stays.
       - name: Gate on email probe
-        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.email-probe.outputs.result != 'pass' }}
+        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && !contains(fromJSON('["pass","skip","warn"]'), steps.email-probe.outputs.result) }}
         run: |
           echo "::error::email probe did not confirm a send (result='${{ steps.email-probe.outputs.result }}')"
           exit 1
