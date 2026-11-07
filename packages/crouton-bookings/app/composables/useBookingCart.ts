@@ -499,6 +499,7 @@ export function useBookingCart() {
       locationId: formState.locationId!,
       locationTitle: selectedLocation.value.title,
       date: formState.date.toISOString(),
+      day: toDateKey(formState.date),
       slotIds,
       slotLabels,
       groupId: formState.groupId,
