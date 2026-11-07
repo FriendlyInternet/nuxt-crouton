@@ -13,5 +13,7 @@ Call refreshNuxtData with the keys after every save.
 none
 ### Assumptions
 - refreshing is enough — Why: seems right — Evidence: not checked — Status: unverified
+### Docs
+none — test-only fixture
 ### Needs owner
 no
