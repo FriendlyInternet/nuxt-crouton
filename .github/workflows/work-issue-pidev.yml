@@ -1314,8 +1314,9 @@ jobs:
               # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
               elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
-              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"; [ -z "$DRAFT_FLAG" ] || echo "held=1" >> "$GITHUB_OUTPUT"  # #3583
+              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
             fi
+            [ -z "$DRAFT_FLAG" ] || echo "held=1" >> "$GITHUB_OUTPUT"  # #3583 new draft AND re-dispatch
           fi
 
           # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
