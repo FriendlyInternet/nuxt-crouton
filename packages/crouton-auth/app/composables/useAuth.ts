@@ -24,6 +24,7 @@ import type { User } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 import { magicLinkCallbackURL } from '../utils/magicLinkCallback'
+import { sanitizeRedirectUrl } from '../utils/security'
 
 export interface LoginCredentials {
   email: string
@@ -285,7 +286,7 @@ export function useAuth() {
         email: data.email,
         password: data.password,
         name: displayName,
-        ...(data.callbackURL && { callbackURL: data.callbackURL })
+        ...(data.callbackURL && { callbackURL: sanitizeRedirectUrl(data.callbackURL) })
       })
 
       if (debug) {

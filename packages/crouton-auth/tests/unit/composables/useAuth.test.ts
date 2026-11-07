@@ -365,6 +365,17 @@ describe('useAuth', () => {
       )
     })
 
+    it.each(['https://evil.example/x', '//evil.example/x'])('cleans hostile callbackURL %s to /', async (bad) => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: 't' }, error: null })
+
+      const { register } = useAuth()
+      await register({ email: 'i@example.com', password: 'password123', callbackURL: bad })
+
+      expect(mockAuthClient.signUp.email).toHaveBeenCalledWith(
+        expect.objectContaining({ callbackURL: '/' })
+      )
+    })
+
     it('reports verificationRequired (and does not refresh) when no session was created', async () => {
       mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: null }, error: null })
       mockRefresh.mockClear()
