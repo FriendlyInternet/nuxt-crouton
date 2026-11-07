@@ -130,6 +130,14 @@ describe('useCollectionQuery', () => {
     })
   })
 
+  describe('refresh', () => {
+    it('delegates to useFetch refresh', async () => {
+      const { refresh } = await useCollectionQuery('products')
+      await refresh()
+      expect(mockFetchState.refresh).toHaveBeenCalled()
+    })
+  })
+
   describe('cache key generation', () => {
     it('generates key with collection name', async () => {
       await useCollectionQuery('products')
@@ -172,6 +180,18 @@ describe('useCollectionQuery', () => {
       const key2 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       expect(key1).not.toBe(key2)
+    })
+
+    it('key is reactive: changing the query on one instance changes the key', async () => {
+      const q = ref<Record<string, unknown>>({ status: 'a' })
+
+      await useCollectionQuery('products', { query: q as any })
+      const key = (mockUseFetch.mock.calls[0] as any)[1].key
+      const before = key.value
+      q.value = { status: 'b' }
+
+      expect(key.value).not.toBe(before)
+      expect(key.value).toContain('"status":"b"')
     })
 
     it('generates consistent key for same query', async () => {
@@ -247,40 +267,6 @@ describe('useCollectionQuery', () => {
 
       expect(mockUseFetch).toHaveBeenCalledWith(
         expect.any(Function),
-        expect.any(Object)
-      )
-    })
-
-    // These tests are skipped because the implementation changed:
-    // When no team context is available, the implementation now:
-    // 1. Sets enabled: () => false so no request fires (initial, watch or refresh)
-    // 2. Uses a computed ref that returns null (which becomes an empty URL)
-    // 3. No longer logs an error - it silently waits for context to be available
-
-    it.skip('logs error when team context missing', async () => {
-      mockRoute = {
-        path: '/dashboard/products', // No team param
-        params: {}
-      }
-
-      await useCollectionQuery('products')
-
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        '[useCollectionQuery] Team context required but not available',
-        expect.any(Object)
-      )
-    })
-
-    it.skip('returns path with undefined when no team context', async () => {
-      mockRoute = {
-        path: '/dashboard/products',
-        params: {}
-      }
-
-      await useCollectionQuery('products')
-
-      expect(mockUseFetch).toHaveBeenCalledWith(
-        '/api/teams/undefined/shop-products',
         expect.any(Object)
       )
     })
