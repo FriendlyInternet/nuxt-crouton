@@ -49,7 +49,7 @@ a strong signal, not proof; the #865 eval scoreboard is where this gets validate
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
 data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
-(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
+(#2755) → `on-comment.yml` (plan-review job) has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
 differs, links the plan in its PR body and appends a row to
