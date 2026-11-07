@@ -19,6 +19,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
   assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
+  bookings-fullscreen.smoke.spec.ts # with-bookings only: full screen → inline keeps week/filter/day/view (#3079)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 
