@@ -98,6 +98,8 @@ export interface FieldTypeDefinition {
   seed: FieldTypeSeed
   /** Source literal of a schema-valid value, embedded in the generated `<Collection>.test.ts`. */
   testSample: string
+  /** Collection-level `translatable: true` auto-detect may translate fields of this type. */
+  translatable?: boolean
   component?: string
   previewComponent?: string
   aliases?: string[]
@@ -120,7 +122,7 @@ export interface FieldTypeSeed {
  * `defaultValue` renamed `default` and the canonical type name attached.
  */
 export type FieldTypeMapping
-  = Pick<FieldTypeDefinition, 'db' | 'sqlite' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component'>
+  = Pick<FieldTypeDefinition, 'db' | 'sqlite' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component' | 'translatable'>
     & { default: string; canonical: string }
 
 export interface ManifestCollection {

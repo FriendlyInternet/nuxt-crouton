@@ -60,8 +60,8 @@ export function mapType(t: string, validTypes?: Set<string>): string {
   if (validTypes) {
     return validTypes.has(t) ? t : 'string'
   }
-  // Fallback for callers that don't pass validTypes (backward compat during migration)
-  return ['string', 'text', 'richText', 'number', 'decimal', 'boolean', 'date', 'json', 'repeater', 'array', 'image', 'file'].includes(t) ? t : 'string'
+  // Without the manifest's type set there is nothing to validate against (no private type list, #2906).
+  return t || 'string'
 }
 
 interface Field {

@@ -6,18 +6,15 @@
  * This script is used in CI to catch sync issues early.
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 
-// Source of truth: Generator field types
-const generatorHelpersPath = join(
-  projectRoot,
-  'packages/crouton-cli/lib/utils/helpers.ts'
-)
+// Source of truth: the `fieldTypes` rows of every package's crouton.manifest.ts
+const packagesDir = join(projectRoot, 'packages')
 
 // MCP server field types
 const mcpFieldTypesPath = join(
@@ -29,36 +26,20 @@ const mcpFieldTypesPath = join(
 const skillPath = join(projectRoot, '.claude/skills/crouton.md')
 
 /**
- * Extract field type names from generator's mapType function
+ * Collect canonical field type names from every manifest's `fieldTypes` block
+ * (rows look like `    string:    { label: 'String', ...`).
  */
-function extractGeneratorFieldTypes(content) {
-  // Match the array in mapType function: ['string', 'text', ...]
-  const match = content.match(/\['([a-zA-Z]+)'(?:,\s*'([a-zA-Z]+)')*\]\.includes/)
-  if (!match) {
-    // Try matching typeMapping object keys
-    const typeMapMatch = content.match(/export const typeMapping\s*=\s*\{([\s\S]+?)\n\}/)
-    if (typeMapMatch) {
-      const keys = typeMapMatch[1].match(/^\s*(\w+):/gm)
-      if (keys) {
-        return keys.map(k => k.trim().replace(':', ''))
-      }
-    }
-    return null
+function extractManifestFieldTypes() {
+  const types = []
+  for (const dir of readdirSync(packagesDir)) {
+    const content = readFileSafe(join(packagesDir, dir, 'crouton.manifest.ts'))
+    if (!content) continue
+    const block = content.match(/\bfieldTypes:\s*\{([\s\S]*?)\n  \},?\n/)
+    if (!block) continue
+    for (const m of block[1].matchAll(/^\s{4}(\w+):\s*\{\s*label:/gm)) types.push(m[1])
   }
-
-  // Extract all types from the includes call
-  const fullMatch = content.match(
-    /\[['"]([a-zA-Z]+)['"](?:,\s*['"]([a-zA-Z]+)['"])*\]\.includes/
-  )
-  if (fullMatch) {
-    const typesStr = content.match(
-      /\[([^\]]+)\]\.includes/
-    )?.[1]
-    if (typesStr) {
-      return typesStr.match(/'([a-zA-Z]+)'/g)?.map(t => t.replace(/'/g, ''))
-    }
-  }
-  return null
+  // `reference` is a relation pseudo-type, not a schema field type the skill/MCP list
+  return [...new Set(types)].filter(t => t !== 'reference')
 }
 
 /**
@@ -163,19 +144,13 @@ function main() {
   const results = {}
 
   // 1. Extract generator field types (source of truth)
-  const generatorContent = readFileSafe(generatorHelpersPath)
-  if (!generatorContent) {
-    console.error('❌ Could not read generator helpers.mjs')
+  const generatorTypes = extractManifestFieldTypes()
+  if (generatorTypes.length === 0) {
+    console.error('❌ Could not extract field types from manifests')
     process.exit(1)
   }
 
-  const generatorTypes = extractGeneratorFieldTypes(generatorContent)
-  if (!generatorTypes) {
-    console.error('❌ Could not extract field types from generator')
-    process.exit(1)
-  }
-
-  console.log(`📦 Generator (source of truth): ${generatorTypes.length} types`)
+  console.log(`📦 Manifests (source of truth): ${generatorTypes.length} types`)
   console.log(`   Types: ${generatorTypes.join(', ')}\n`)
   results.generator = generatorTypes
 

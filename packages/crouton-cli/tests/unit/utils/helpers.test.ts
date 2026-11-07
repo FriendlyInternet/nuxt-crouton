@@ -128,9 +128,7 @@ describe('mapType', () => {
     expect(mapType('array')).toBe('array')
   })
 
-  it('returns string for unknown types (fallback mode)', () => {
-    expect(mapType('unknown')).toBe('string')
-    expect(mapType('invalid')).toBe('string')
+  it('returns string for an empty type (fallback mode)', () => {
     expect(mapType('')).toBe('string')
   })
 

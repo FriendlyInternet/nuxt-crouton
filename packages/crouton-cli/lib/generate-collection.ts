@@ -691,7 +691,7 @@ function resolveTranslationConfig(params: {
         'remarkPrompt', 'terms', 'conditions', 'notes']
       collectionLevelTranslatable = fields
         .filter(f => autoDetectFieldNames.includes(f.name)
-          && (f.type === 'string' || f.type === 'text'))
+          && f.translatable === true)
         .map(f => f.name)
     }
 

@@ -7,7 +7,8 @@ import { loadFields } from '../../../lib/utils/load-fields.ts'
 // Mirrors the shape getTypeMapping() produces: alias keys carry the canonical
 // type via `canonical`, so loadFields can normalize them (#285).
 const typeMapping = {
-  string: { db: '', sqlite: { column: 'text' }, zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput' },
+  string: { db: '', sqlite: { column: 'text' }, zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput', translatable: true },
+  richText: { db: '', sqlite: { column: 'text' }, zod: 'z.string()', default: "''", tsType: 'string', canonical: 'richText', component: 'CroutonEditorSimple', translatable: true },
   number: { db: '', sqlite: { column: 'text' }, zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
   date: { db: '', sqlite: { column: 'text' }, zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
   repeater: { db: '', sqlite: { column: 'text' }, zod: 'z.array(z.any())', default: '[]', tsType: 'any[]', canonical: 'repeater', component: 'CroutonFormRepeater' },
@@ -74,5 +75,14 @@ describe('loadFields attaches the manifest-declared form component (#2286)', () 
     expect(props.label.component).toBe('UInput')
     expect(props.at.component).toBe('CroutonCalendar')
     expect(props.n.component).toBe('UInputNumber')
+  })
+})
+
+describe('loadFields translatable flag', () => {
+  it('carries the manifest translatable flag (richText included)', async () => {
+    const byName = await loadFromSchema({ body: { type: 'richText' }, title: { type: 'string' }, count: { type: 'number' } })
+    expect(byName.body.translatable).toBe(true)
+    expect(byName.title.translatable).toBe(true)
+    expect(byName.count.translatable).toBeUndefined()
   })
 })
