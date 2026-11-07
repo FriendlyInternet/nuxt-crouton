@@ -149,6 +149,7 @@
     "preview": "Voorbeeld van de afbeelding"
   },
   "repeater": {
+    "componentMissing": "Dit item kan niet worden getoond: component \"{name}\" is niet gevonden.",
     "emptyState": "Nog geen items. Klik op \"{label}\" om te beginnen.",
     "addItem": "Item toevoegen"
   },
