@@ -110,7 +110,12 @@ jobs:
           # How many deploy jobs were meant to leave a record (#3575); empty = lookup failed.
           OK=1
           for id in $RUN_IDS; do
-            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[]' | jq -s . > "$RUNNER_TEMP/jobs-$id.json" || OK=0
+            # No pipe: a failed `gh api` must set OK=0 (a pipe into jq would hide it and write []).
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[]' > "$RUNNER_TEMP/jobs-$id.ndjson"; then
+              jq -s . "$RUNNER_TEMP/jobs-$id.ndjson" > "$RUNNER_TEMP/jobs-$id.json" || OK=0
+            else
+              OK=0
+            fi
           done
           if [ "$OK" = 1 ]; then
             echo "expected=$(node scripts/lib/screenshot-verdict.mjs count "$RUNNER_TEMP"/jobs-*.json)" >> "$GITHUB_OUTPUT"

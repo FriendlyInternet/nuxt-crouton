@@ -76,3 +76,29 @@ test('upload step is gated on the record step output, not hashFiles', () => {
   assert.ok(!block.includes('hashFiles('))
   assert.ok(block.includes('steps.preview_record.outputs.recorded'))
 })
+
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const cli = fileURLToPath(new URL('./screenshot-verdict.mjs', import.meta.url))
+import { fileURLToPath } from 'node:url'
+
+test('CLI verdict with empty EXPECTED (jobs lookup failed) → failure', () => {
+  const r = spawnSync('node', [cli, 'verdict'], { env: { ...process.env, EXPECTED: '', RECORDS: '0', RESULT: '', SUMMARY: '' }, encoding: 'utf8' })
+  assert.match(r.stdout, /conclusion=failure/)
+})
+
+test('CLI count reads a jobs file like the workflow does', () => {
+  const d = mkdtempSync(join(tmpdir(), 'sv-'))
+  const f = join(d, 'jobs-1.json')
+  writeFileSync(f, JSON.stringify([job('a', 'success', 'success')]))
+  const r = spawnSync('node', [cli, 'count', f], { encoding: 'utf8' })
+  assert.equal(r.stdout.trim(), '1')
+})
+
+test('preview-screenshot.yml does not pipe gh api into jq for the jobs lookup', () => {
+  const w = readFileSync(new URL('../../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
+  assert.ok(!/gh api[^\n]*\|\s*jq -s/.test(w))
+})
