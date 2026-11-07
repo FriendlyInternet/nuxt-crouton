@@ -90,7 +90,7 @@ test('sanitizeLabels keeps known and drops unknown (the bad-label create failure
 // ── buildChildBody ───────────────────────────────────────────────────────────────
 test('buildChildBody injects the WS2 block at childDepth', () => {
   const body = buildChildBody('## body', { epic: 1685, childDepth: 2, epic_branch: BRANCH })
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null, base: null })
   assert.match(body, /^## body/)
 })
 

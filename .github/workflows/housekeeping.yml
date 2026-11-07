@@ -19,6 +19,7 @@ permissions:
   issues: write
   pull-requests: read   # mergeable_state + PR comments/commits (#3317)
   checks: read          # `CI Gate` check-run lookup on epic PR heads (#3317)
+  actions: read   # list work-issue runs for the stale work-this row (#3018)
 
 concurrency:
   group: housekeeping

@@ -72,7 +72,7 @@ export function expectedRunConclusion({ runConclusion, checkConclusion }) {
 }
 
 /** Heading + "What's needed" for the red ping. The @mention exists ONLY on the `owner` path. */
-export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, list = '', head = '' }) {
+export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, list = '', head = '', base = '' }) {
   const n = `${count} failing check${count === 1 ? '' : 's'}`
   if (who === 'bot') {
     return {
@@ -84,6 +84,13 @@ export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, li
     return {
       heading: `🔴 **CI failed on this pipeline PR** (${n}): ${list}.`,
       needed: `**What's needed:** see the auto-fix "gave up" note — that one is yours.`,
+    }
+  }
+  if (base === 'main' && head.startsWith('epic/')) {
+    return {
+      heading: `🔴 **@${owner} — CI failed on this epic PR** (${n}): ${list}.`,
+      needed: `**What's needed:** this epic PR won't merge while CI is red. Push a fix to \`${head}\`, ` +
+        `or reply \`ok\` and the CI fix runs and it merges when green.`,
     }
   }
   return {

@@ -176,6 +176,7 @@ jobs:
       # (KEY=main; same derivation as the "Seed review login" step below) and runs
       # scripts/smoke-deployed.mjs — node built-ins only, so it works before
       # `pnpm install` (the screenshot part self-skips without playwright).
+      # The detect job has already waited for this commit's staging deploy (#1699).
       # Gates the deliberate manual click (#318), never automates it. Escape
       # hatch: the skip-staging-smoke input (loud warning, next step).
       - name: Pre-prod confidence gate — smoke live staging
@@ -849,22 +850,19 @@ jobs:
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
-          if [ "$MODE" = "magic-link" ]; then
-            BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
-              -H 'Content-Type: application/json' -d "$BODY" || true)
-            echo "magic-link request → HTTP $CODE"
-          else
-            PW=$(openssl rand -hex 12)
-            SU=$(jq -n --arg e "$PROBE_EMAIL" --arg p "$PW" --arg n "email-probe" '{email:$e, password:$p, name:$n}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-up/email" \
-              -H 'Content-Type: application/json' -d "$SU" || true)
-            echo "sign-up → HTTP $CODE (200 new, 422 already exists — both fine)"
-            RB=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, redirectTo:"/"}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/request-password-reset" \
-              -H 'Content-Type: application/json' -d "$RB" || true)
-            echo "request-password-reset → HTTP $CODE"
+          SECRETS=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+          if ! S=$(echo "$SECRETS" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" sender "$APP" .); then
+            echo "::error::email probe failed: $S"
+            echo "✗ email probe (${APP}): $S" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+          if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
+            echo "$OUT"
+            echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"
+            echo "✗ email probe (${APP}): request failed: $(echo "$OUT" | tail -1)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "$OUT"
           REASON="no send recorded"
           for _ in 1 2 3 4 5 6; do
             sleep 5
@@ -920,7 +918,7 @@ jobs:
       # deployed Worker (no raw SQL). Idempotent: deterministic creds per preview, so
       # a redeploy reprints the SAME working login instead of piling up users; an
       # existing user is detected and reused. Best-effort — a seed hiccup never fails
-      # the deploy. Staging only; production seeds nothing.
+      # the deploy, EXCEPT on PR previews (#3474): there a dead login must look broken. Staging only; production seeds nothing.
       - name: Seed review login (staging only)
         id: seed
         if: ${{ inputs.environment != 'production' && steps.deploy.outputs.url != '' }}
@@ -968,10 +966,8 @@ jobs:
           # Attach the review login to the SEEDED demo team (#832) so the advertised
           # login lands in the team the content seed populated (test1 → seed:org:test1),
           # not an empty fresh org. Staging-only step → production is untouched.
-          # #1369: DON'T mask the seed with `|| true` and then advertise the creds anyway — that
-          # printed a working-looking login for a user that was never created (the seed POSTed to a
-          # dead URL → failed silently → 401 on login). Only surface the creds when the seed actually
-          # succeeded; otherwise emit a loud warning and NO login (a broken preview must look broken).
+          # #1369: never advertise creds for a seed that failed (no `|| true`); warn loudly and
+          # emit NO login — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
                --seed-team test1 --db "$SEED_DB"; then
@@ -998,6 +994,8 @@ jobs:
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
+            PR_NUM="${{ github.event.pull_request.number }}"
+            [ -z "$PR_NUM" ] || { echo "::error::Review-login seed failed on PR preview for ${APP} — failing, not posting a dead sign-in link (#3474)."; exit 1; }
           fi
 
       # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
@@ -1005,7 +1003,9 @@ jobs:
       # by redeploying. It is now its own workflow ("Preview screenshot" check): this step only
       # records WHERE the preview is. No secrets in the file — the review login is re-derived
       # downstream from REVIEW_SEED_SECRET, since artifacts are readable by anyone with repo access.
+      # scripts/lib/screenshot-verdict.mjs matches on this exact step name (#3575) — keep them in sync.
       - name: Record preview for the screenshot check (#2697)
+        id: preview_record
         if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && (steps.seed.outputs.email != '' || steps.seed.outputs.preview_token == 'true') && steps.deploy.outputs.url != '' }}
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
@@ -1016,13 +1016,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/preview-meta"
           jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
             '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+          echo "recorded=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload preview record
-        if: ${{ hashFiles(format('{0}/preview-meta/meta.json', runner.temp)) != '' }}
+        if: ${{ steps.preview_record.outputs.recorded == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: preview-meta-${{ inputs.app }}
           path: ${{ runner.temp }}/preview-meta/meta.json
+          if-no-files-found: error
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the

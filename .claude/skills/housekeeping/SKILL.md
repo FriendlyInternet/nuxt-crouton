@@ -23,6 +23,10 @@ the only thing it writes.
   label declared in `.github/labels.yml` (CLAUDE.md treats a missing label as a build
   failure). Report-only — never auto-prune (a destructive label sync strips the label from
   every issue).
+- **🪦 Forgotten work-this labels** — open tickets with `work-this` for >1h, no open `work-<n>`
+  PR and no worker run (runs that ended `skipped` don't count) in the last hour. Never listed:
+  `status:blocked`, epics, and the fixed canary tickets in `.github/canaries.json`. Re-run with
+  `gh workflow run work-issue-pidev.yml -f issue=<N>` (not by re-adding the label, #2990).
 - **⏳ Stuck in-progress** — `status:in-progress` issues with no activity in >N days.
 - **✅ Epics ready to close** — all sub-issues closed but the epic still open, split by the
   action each needs (read from the `status:ready-to-close` / `status:needs-postmortem` label

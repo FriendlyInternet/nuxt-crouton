@@ -39,8 +39,7 @@ export function hits(text, re) {
 export const ALLOW = [
   ['canary.yml', '--add-label', 'synthetic probe with its own 25 s tripwire that reruns on cron; replaying a stale probe would report a false result'],
   ['alfred-deploy-trigger.sh', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
-  ['loop-station-inventory.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
-  ['weekly.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
+  ['loop-station-refresh.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
 ]

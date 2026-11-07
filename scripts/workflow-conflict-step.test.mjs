@@ -92,7 +92,7 @@ test('clean verify: one two-parent commit, no failure comment, no flags', () => 
 })
 
 // ── Artifact-gate skips ──
-const GATE = block('Artifact-gate — fail if the agent produced nothing', 'script')
+import { artifactGate } from './lib/artifact-gate.mjs'
 
 async function gate(env) {
   const calls = { failed: [], info: [] }
@@ -104,8 +104,7 @@ async function gate(env) {
   for (const k of keys) delete process.env[k]
   Object.assign(process.env, { ISSUE_NUMBER: '1' }, env)
   try {
-    const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
-    await new AsyncFunction('core', 'github', 'context', 'require', GATE.replace(/\$\{\{[^}]*\}\}/g, '2020-01-01T00:00:00Z'))(core, github, { repo: {} }, () => ({}))
+    await artifactGate({ github, context: { repo: {} }, core, env: process.env })
   } finally { for (const k of keys) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]) }
   return calls
 }

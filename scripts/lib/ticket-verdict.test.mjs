@@ -79,3 +79,23 @@ test('hold: with reviewTickets no child gets a trigger label, a review is reques
   assert.equal(open.filter((a) => a.type === 'trigger-label').length, 1)
   assert.equal(open.some((a) => a.type === 'request-ticket-review'), false)
 })
+
+test('item 10 (own test steps) FAIL → needs-owner, never no-go', () => {
+  const ten = fx('clean.verdict.md').replace('## Ticket #1\n### Verdict\ngo', '## Ticket #1\n### Verdict\nneeds-owner').replace('- 10: PASS — every step exercises only this ticket', '- 10: FAIL — step 2 needs #2828 seed data')
+  // (a) with a question → needs-owner
+  const a = ten.replace('### Question\n\n## Ticket #2', '### Question\nDrop the sibling-dependent step?\n\n## Ticket #2')
+  const da = decide(set('clean.json'), a)
+  assert.equal(da.ok, true)
+  assert.equal(da.tickets[0].verdict, 'needs-owner')
+  assert.equal(da.verdict, 'needs-owner')
+  // (b) no question → error
+  assert.match(decide(set('clean.json'), ten).errors.join(), /needs-owner needs a Question/)
+  // (c) hard fail wins
+  const c = a.replace('- 4: PASS — one-line change', '- 4: FAIL — bigger fix exists')
+  assert.equal(decide(set('clean.json'), c).tickets[0].verdict, 'no-go')
+  // (d) "10" parses as id 10, not 1
+  assert.equal(parseVerdicts(fx('clean.verdict.md')).tickets[1].items['10'].pass, true)
+  // (e) missing line → error
+  const e = fx('clean.verdict.md').replace(/^- 10: .*\n/gm, '')
+  assert.match(decide(set('clean.json'), e).errors.join(), /rubric item 10 missing a PASS\/FAIL line/)
+})

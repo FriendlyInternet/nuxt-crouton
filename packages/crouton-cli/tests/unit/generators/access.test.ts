@@ -70,3 +70,14 @@ describe('per-collection access (#3148)', () => {
     expect(generateApiTest(withAccess({ list: 'own' }), cfg)).toContain('ownerId: USER.id')
   })
 })
+
+describe('queries module exports its access (#3380)', () => {
+  it('emits <X>Access when access is declared', () => {
+    const out = generateQueries(withAccess({ list: 'own' }), cfg)
+    expect(out).toMatch(/export const \w+Access = \{"list":"own"\} as const/)
+  })
+
+  it('emits no Access export without access', () => {
+    expect(generateQueries(none, cfg)).not.toContain('Access =')
+  })
+})

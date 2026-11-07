@@ -72,6 +72,8 @@ export default defineCroutonManifest({
     }
   ],
 
+  runtimeConfigKey: 'croutonBookings',
+
   configuration: {
     'email.enabled': {
       type: 'boolean',

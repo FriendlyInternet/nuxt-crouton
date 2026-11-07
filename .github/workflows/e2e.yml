@@ -47,6 +47,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
+      base_is_epic: ${{ steps.filter.outputs.base_is_epic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,10 +63,19 @@ jobs:
             echo "Non-PR event ($EVENT) → relevant (full matrix)."
             exit 0
           fi
-          git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+          if ! git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1; then
+            echo "::error::Could not fetch the PR base branch '$BASE_REF' from origin — cannot compute the changed files. Re-run the job; if it persists, check the base branch still exists."
+            exit 1
+          fi
           base="$(git merge-base "origin/$BASE_REF" HEAD)"
           files="$(git diff --name-only "$base" HEAD)"
           echo "changed files:"; echo "$files" | sed 's/^/  /'
+          if [[ "$BASE_REF" == epic/* ]] && ! echo "$files" | grep -qE '^(fixtures/|e2e/)'; then
+            echo "base_is_epic=true" >> "$GITHUB_OUTPUT"
+            echo "base_is_epic=true  (leaf PR into $BASE_REF — e2e matrix runs on the epic → main PR; E2E Gate still reports)" >&2
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if echo "$files" | grep -qE '^(packages/|fixtures/|e2e/|pnpm-lock\.yaml$|\.github/workflows/e2e\.yml$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else

@@ -11,7 +11,9 @@
  * is `decideTraffic` — pure, no I/O — so the shipped guard IS the tested function. The
  * workflow steps only gather facts (`gatherTrafficFacts`) and apply the verdict.
  *
- * RELEASE. `work-issue-pidev.yml` marks a waiting ticket with `WAIT_MARKER` in its comment.
+ * RELEASE. `work-issue-pidev.yml` parks a ticket with `status:blocked` + `traffic:waiting` (the walk
+ * lists only those, so held tickets traffic did not park are never read) and `WAIT_MARKER` in its
+ * comment (the ownership/dedup check, #3311).
  * When any `work-*` PR closes (or an issue closes / loses a label), `releaseWaiting` re-checks each waiting ticket and, if clear,
  * removes `status:blocked` and does REMOVE-then-ADD of `work-this` — adding a label the issue
  * already carries fires no event (#1750).
@@ -21,6 +23,7 @@ import { routeIssue } from './lib/plan-route.mjs'
 import { handoffGuard } from './handoff-exec.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
+export const WAITING_LABEL = 'traffic:waiting'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
 
 const names = (labels) => (labels || []).map((l) => (typeof l === 'string' ? l : l.name))
@@ -126,7 +129,7 @@ export async function gatherTrafficFacts({ github, context, issueNumber, labels 
 /** Park the ticket: `status:blocked`, `work-this` off (so it can be re-added), one comment. */
 export async function applyWait({ github, context, issueNumber, verdict }) {
   const { owner, repo } = context.repo
-  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] })
+  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked', WAITING_LABEL] })
   try {
     await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'work-this' })
   } catch { /* already gone (workflow_dispatch) */ }
@@ -186,6 +189,7 @@ async function releaseOne({ github, context, it }) {
   const ref = { owner, repo, issue_number: it.number }
   // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
   if (!(await removeLabelIfPresent(github, { ...ref, name: 'status:blocked' }))) return scopeLabels(labels)
+  await removeLabelIfPresent(github, { ...ref, name: WAITING_LABEL })
   await removeLabelIfPresent(github, { ...ref, name: 'work-this' })
   // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
   await handoffGuard({ kind: 'label', issue: it.number, label: 'work-this' },
@@ -198,7 +202,7 @@ async function releaseOne({ github, context, it }) {
 export async function releaseWaiting({ github, context }) {
   const { owner, repo } = context.repo
   const waiting = await github.paginate(github.rest.issues.listForRepo,
-    { owner, repo, state: 'open', labels: 'status:blocked', per_page: 100 })
+    { owner, repo, state: 'open', labels: `status:blocked,${WAITING_LABEL}`, per_page: 100 })
   const released = []
   const claimed = new Set() // scopes already released this pass: one ticket per scope
   waiting.sort((a, b) => a.number - b.number)

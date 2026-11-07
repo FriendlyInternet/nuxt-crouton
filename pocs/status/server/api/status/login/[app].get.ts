@@ -2,7 +2,7 @@ import { appTargetFor } from '../../../utils/app-urls'
 import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
-import { previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
+import { loginPlan } from '../../../utils/live-apps-core'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -37,34 +37,22 @@ export default defineEventHandler(async (event) => {
   const live = await listLiveApps(event)
   const liveApp = live.data.find(a => a.app === app)
   const target = liveApp
-    ? { stagingUrl: liveApp.stagingUrl, hasSignIn: liveApp.hasSignIn }
+    ? { stagingUrl: liveApp.stagingUrl ?? '', hasSignIn: liveApp.hasSignIn }
     : appTargetFor(app)
-  if (!target?.stagingUrl) {
-    setResponseStatus(event, 404)
+  const normalized = target ? { stagingUrl: target.stagingUrl ?? '', hasSignIn: target.hasSignIn } : null
+  const decision = key === 'main' ? undefined : await resolvePrLogin(event, app, key)
+  const secret = String(cfg.reviewSeedSecret || '')
+  const plan = loginPlan(normalized, app, key, !!secret, decision)
+  if (plan.kind === 'page') {
+    setResponseStatus(event, plan.status)
     setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-    return `<!doctype html><meta charset="utf-8"><title>No staging URL</title><p>No staging URL is configured for <strong>${app}</strong>. Add <code>stagingUrl</code> to its deploy.config.json.</p>`
+    return plan.html
   }
-  let base = target.stagingUrl
-  if (key !== 'main') {
-    const decision = await resolvePrLogin(event, app, key)
-    if (decision.gone === 'none') {
-      setResponseStatus(event, 404)
-      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-      return previewNoneHtml(decision.pr, app, target.stagingUrl)
-    }
-    if (decision.gone) {
-      setResponseStatus(event, 410)
-      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
-      return previewGoneHtml(decision.pr, app, target.stagingUrl)
-    }
-    base = decision.url
-  }
-
+  const base = plan.base
   const walk = sanitizeWalk(getQuery(event).walk)
 
-  // No sign-in for this app (opted out, or no seed secret here): just open its staging site.
-  const secret = String(cfg.reviewSeedSecret || '')
-  if (!target.hasSignIn || !secret) {
+  // No sign-in for this app (opted out, or no seed secret here): just open its site.
+  if (!plan.signIn) {
     return sendRedirect(event, to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base, 302)
   }
 
