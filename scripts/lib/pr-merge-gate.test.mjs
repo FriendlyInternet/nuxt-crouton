@@ -304,6 +304,11 @@ test('v1 deadlock case: CI pending, blocked → answered from review alone', () 
   assert.equal(r.merge, true)
   assert.equal(r.code, 'merge')
 })
+test('v1 deadlock case: CI pending and mergeable blocked → answered from review alone', () => {
+  const r = v1({ red: false, ciGate: 'pending', mergeableState: 'blocked' })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'merge')
+})
 test('v1 C2 #339: red + review approved → hold red', () => {
   const r = v1({ red: true })
   assert.equal(r.merge, false)

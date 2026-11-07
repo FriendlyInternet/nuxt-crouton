@@ -124,8 +124,7 @@ export async function v1OffSwitch({ github, core, pr, pull_number }) {
  * The v1 path for one PR (#3501): answer from review alone, publish it as the `Merge decision` check;
  * GitHub waits for CI and merges. `red` is a boolean, `checkState` the CI Gate state.
  */
-export async function runV1({ github, core, owner, repo, env, pr, pull_number, go, prComments, rawRuns, red, checkState, BOTS, reviewState }) {
-  const { mergeWithRetry, okReplyNote, announceSharedHold } = makeMergeIo({ github, core, owner, repo, env })
+export async function decideV1Answer({ github, owner, repo, env, pr, pull_number, go, prComments, red, BOTS, reviewState }) {
   // #3173: a work-* PR on an epic branch that the reviewer rejected twice (or that needs the owner's call, #3428) is held for the owner,
   // and the owner's `ok` AFTER that hold is the go (no `build:approved` is ever added for it). Pure over prComments: no API call.
   const reviewSt = pr.head.ref.startsWith('work-')
@@ -139,21 +138,30 @@ export async function runV1({ github, core, owner, repo, env, pr, pull_number, g
     const fl = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
     answer = ask(fl.map(f => f.filename))
   }
+  return { answer, reviewSt }
+}
+
+async function enableAutoOrMerge({ github, core, pr, pull_number, answer, checkState, red, mergeWithRetry }) {
+  if (!shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) return
+  try {
+    await setAutoMerge(github, pr, 'enable')
+    core.info(`#${pull_number} v1 auto-merge enabled.`)
+  } catch (e) {
+    if (isRateLimit(e)) throw e
+    core.info(`#${pull_number} enablePullRequestAutoMerge refused: ${e.message}`)
+    // Already clean: GitHub refuses auto-merge. Merge here ONLY when every fact says merge (the App bypasses the ruleset).
+    if (/clean status|already.*mergeable/i.test(e.message || '') && canMergeNow({ answer, ciGate: checkState, red })) await mergeWithRetry(pr, pull_number, false)
+    else core.warning(`#${pull_number}: auto-merge not enabled: ${e.message}`)
+  }
+}
+
+export async function runV1({ github, core, owner, repo, env, pr, pull_number, go, prComments, rawRuns, red, checkState, BOTS, reviewState }) {
+  const { mergeWithRetry, okReplyNote, announceSharedHold } = makeMergeIo({ github, core, owner, repo, env })
+  const { answer, reviewSt } = await decideV1Answer({ github, owner, repo, env, pr, pull_number, go, prComments, red, BOTS, reviewState })
   core.info(`#${pull_number} v1 answer: ${answer.code} — ${answer.reason}`)
   const wrote = await publishMergeDecision({ github, owner, repo, pr, rawRuns, appSlug: env.APP_SLUG, answer })
   core.info(`#${pull_number} 'Merge decision' ${wrote}.`)
-  if (shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) {
-    try {
-      await setAutoMerge(github, pr, 'enable')
-      core.info(`#${pull_number} v1 auto-merge enabled.`)
-    } catch (e) {
-      if (isRateLimit(e)) throw e
-      core.info(`#${pull_number} enablePullRequestAutoMerge refused: ${e.message}`)
-      // Already clean: GitHub refuses auto-merge. Merge here ONLY when every fact says merge (the App bypasses the ruleset).
-      if (/clean status|already.*mergeable/i.test(e.message || '') && canMergeNow({ answer, ciGate: checkState, red })) await mergeWithRetry(pr, pull_number, false)
-      else core.warning(`#${pull_number}: auto-merge not enabled: ${e.message}`)
-    }
-  }
+  await enableAutoOrMerge({ github, core, pr, pull_number, answer, checkState, red, mergeWithRetry })
   if (answer.code === 'shared-code') await announceSharedHold({ pull_number, pr, held: answer })
   if (answer.code === 'no-review' && go.go) await okReplyNote({ pull_number, pr, go, reviewSt, prComments })
   return answer
