@@ -49,9 +49,10 @@ function packageOf(c: Candidate, real: string): string | null {
 }
 
 /** Which components are reviewable pieces, as plain data. */
-function selectPieces(components: Candidate[]): ReviewPiece[] {
+export function selectPieces(components: Candidate[]): ReviewPiece[] {
   const seen = new Map<string, ReviewPiece & { priority: number }>()
   for (const c of components) {
+    if (!c.filePath.endsWith('.vue')) continue // a stray .ts helper in a components folder is not a piece
     const file = realPath(c.filePath)
     const pkg = packageOf(c, file)
     if (!pkg) continue

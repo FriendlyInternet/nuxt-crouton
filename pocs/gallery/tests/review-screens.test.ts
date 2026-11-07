@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { selectScreens } from '../modules/review-pieces'
+import { selectPieces, selectScreens } from '../modules/review-pieces'
 import { DEMO_TEAM_SLUG } from '../demo-team'
 
 const page = (pkg: string, path: string) => ({ path, file: `/repo/packages/${pkg}/app/pages${path}.vue` })
@@ -34,5 +34,13 @@ describe('selectScreens', () => {
       page('crouton-bookings', '/dashboard/:team/bookings'),
     ])
     expect(out.map(s => s.label).sort()).toEqual(['locations', 'overview', 'settings'])
+  })
+})
+
+describe('selectPieces', () => {
+  it('keeps .vue components and drops a stray .ts helper from a package components folder', () => {
+    const cand = (name: string, ext: string) => ({ pascalName: name, filePath: `/repo/packages/crouton-x/app/components/${name}.${ext}`, priority: 0, mode: 'all' as const, island: false })
+    const out = selectPieces([cand('Mock', 'ts'), cand('Real', 'vue')])
+    expect(out.map(p => p.name)).toEqual(['Real'])
   })
 })
