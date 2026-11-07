@@ -20,8 +20,11 @@ export default defineCroutonManifest({
   // No collections — this is a UI/composable-only package
   collections: [],
 
+  runtimeConfigKey: 'maps',
+
   configuration: {
     'style': {
+      runtimeConfig: 'public',
       type: 'select',
       label: 'Default Map Style',
       description: 'Default OpenFreeMap style for all maps. Keyless — no token required. Can be overridden per component or via MAPS_STYLE env var.',
@@ -35,6 +38,7 @@ export default defineCroutonManifest({
       ]
     },
     'geocodingUrl': {
+      runtimeConfig: 'server',
       type: 'string',
       label: 'Nominatim URL',
       description: 'Base URL for the Nominatim geocoding server. Set via NOMINATIM_URL env var. Defaults to the public OpenStreetMap instance; point at a self-hosted instance to avoid rate limits.',

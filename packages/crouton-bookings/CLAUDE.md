@@ -267,3 +267,5 @@ API: /api/crouton-bookings/teams/[id]/[resource]
 Type: [Domain][Entity] (e.g., BookingWithRelations)
 Table: bookings[Collection] (e.g., bookingsBookings)
 ```
+
+**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.

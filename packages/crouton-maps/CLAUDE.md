@@ -25,6 +25,7 @@ base tiles come from [OpenFreeMap](https://openfreemap.org) and geocoding from
 | `app/composables/useGeocode.ts` | Geocoding (address ↔ coords) via the server proxy |
 | `app/composables/useCurrentLocation.ts` | Browser geolocation + reverse-geocode in one call |
 | `app/composables/useMarkerColor.ts` | Derives marker color from CSS `--ui-primary` |
+| `app/composables/useMapConfig.ts` | Reads `public.maps`; `style` accepts a preset name (`positron`) or a full style URL (resolved via `getMapStyle`) |
 | `app/composables/useMapStyles.ts` | OpenFreeMap style presets (`MAP_STYLES`, `getMapStyle`) + legacy `MAPBOX_STYLES`/`getMapboxStyle` aliases |
 
 ## Configuration
