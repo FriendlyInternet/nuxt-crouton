@@ -815,8 +815,6 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
-          KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
-          if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
