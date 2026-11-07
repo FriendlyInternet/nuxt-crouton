@@ -18,7 +18,8 @@ const GRACE_MS = 5 * 60_000
  */
 export function decide({ app, sha, dispatchCreatedAt, pushRuns, jobsBySha, commitDate }) {
   const t = Date.parse(dispatchCreatedAt)
-  const earlier = pushRuns.filter(r => Date.parse(r.created_at) <= t)
+  // A run for this very commit always counts, even if created after the dispatch.
+  const earlier = pushRuns.filter(r => r.head_sha === sha || Date.parse(r.created_at) <= t)
   const pending = earlier.filter(r => r.status !== 'completed')
   if (pending.length) {
     return { action: 'wait', reason: `${pending.length} earlier push run(s) still ${pending.map(r => r.status).join('/')}` }

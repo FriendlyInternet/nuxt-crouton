@@ -73,3 +73,9 @@ test('old commit with no push run -> go', () => {
   const commitDate = new Date(Date.now() - 3_600_000).toISOString()
   assert.equal(decide({ ...base, pushRuns, jobsBySha: {}, commitDate }).action, 'go')
 })
+
+test('same-commit run created after the dispatch and still running -> wait', () => {
+  const pushRuns = [run(4, SHA, 'in_progress', null, AFTER)]
+  const commitDate = new Date(Date.now() - 6 * 60_000).toISOString()
+  assert.equal(decide({ ...base, pushRuns, jobsBySha: {}, commitDate }).action, 'wait')
+})
