@@ -163,6 +163,6 @@ export async function runV1({ github, core, owner, repo, env, pr, pull_number, g
   core.info(`#${pull_number} 'Merge decision' ${wrote}.`)
   await enableAutoOrMerge({ github, core, pr, pull_number, answer, checkState, red, mergeWithRetry })
   if (answer.code === 'shared-code') await announceSharedHold({ pull_number, pr, held: answer })
-  if (answer.code === 'no-review' && go.go) await okReplyNote({ pull_number, pr, go, reviewSt, prComments })
+  if (['no-review', 'owner-held'].includes(answer.code) && go.go) await okReplyNote({ pull_number, pr, go, reviewSt, prComments })
   return answer
 }
