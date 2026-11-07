@@ -81,8 +81,8 @@ describe('loadFields attaches the manifest-declared form component (#2286)', () 
 describe('loadFields translatable flag', () => {
   it('carries the manifest translatable flag (richText included)', async () => {
     const byName = await loadFromSchema({ body: { type: 'richText' }, title: { type: 'string' }, count: { type: 'number' } })
-    expect(byName.body.translatable).toBe(true)
-    expect(byName.title.translatable).toBe(true)
-    expect(byName.count.translatable).toBeUndefined()
+    expect(byName.body.translatableType).toBe(true)
+    expect(byName.title.translatableType).toBe(true)
+    expect(byName.count.translatableType).toBeUndefined()
   })
 })

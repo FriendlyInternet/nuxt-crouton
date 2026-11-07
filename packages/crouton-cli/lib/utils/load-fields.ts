@@ -21,7 +21,7 @@ export interface Field {
   /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
   component?: string
   /** Manifest flag: collection-level `translatable: true` auto-detect may translate this type */
-  translatable?: boolean
+  translatableType?: boolean
   /** SQLite column the manifest declares for this type; database-schema emits from it */
   sqlite?: { column: 'integer' | 'real' | 'text' | 'json', mode?: 'boolean' | 'timestamp' }
 }
@@ -127,7 +127,7 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       seed: t.seed,
       testSample: t.testSample,
       component: t.component,
-      translatable: t.translatable,
+      translatableType: t.translatable,
       sqlite: t.sqlite
     }
   })

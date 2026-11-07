@@ -2,7 +2,7 @@
 /**
  * Validate Field Types Sync
  *
- * Ensures field types in MCP server match the generator's field types.
+ * Ensures field types in the Claude skill match the manifests' field types.
  * This script is used in CI to catch sync issues early.
  */
 
@@ -13,12 +13,6 @@ import { register } from 'node:module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
-
-// MCP server field types
-const mcpFieldTypesPath = join(
-  projectRoot,
-  'packages/crouton-mcp/src/utils/field-types.ts'
-)
 
 // Claude skill field types
 const skillPath = join(projectRoot, '.claude/skills/crouton.md')
@@ -36,6 +30,11 @@ async function extractManifestFieldTypes() {
       return next(${JSON.stringify(coreRoot)} + rest + (rest.endsWith('.ts') ? '' : '.ts'), ctx)
     }
     return next(spec, ctx)
+  }
+  export async function load(url, ctx, next) {
+    // Manifests import schema JSON without \`with { type: 'json' }\`; supply the attribute so bare Node can read them.
+    if (url.endsWith('.json')) return next(url, { ...ctx, importAttributes: { ...ctx.importAttributes, type: 'json' } })
+    return next(url, ctx)
   }`
   register('data:text/javascript,' + encodeURIComponent(hooks))
   const { readdirSync, existsSync } = await import('node:fs')
@@ -44,48 +43,11 @@ async function extractManifestFieldTypes() {
   for (const pkg of readdirSync(pkgsDir).sort()) {
     const file = join(pkgsDir, pkg, 'crouton.manifest.ts')
     if (!existsSync(file)) continue
-    let mod
-    try {
-      mod = await import(pathToFileURL(file).href)
-    } catch (err) {
-      // Manifests that import schema JSON without `with { type: 'json' }` can't load under bare Node.
-      if (err?.code !== 'ERR_IMPORT_ATTRIBUTE_MISSING') throw err
-      console.warn(`⚠️  ${pkg}: manifest not loadable by bare Node (JSON import), skipped`)
-      continue
-    }
+    // An unreadable manifest is a failure, never a skip.
+    const mod = await import(pathToFileURL(file).href)
     for (const name of Object.keys(mod.default?.fieldTypes ?? {})) types.add(name)
   }
   return [...types]
-}
-
-/**
- * Extract field type names from MCP server's FIELD_TYPES object
- */
-function extractMcpFieldTypes(content) {
-  // Match FIELD_TYPES object - look for pattern: typeName: {
-  // Only match top-level keys (those followed by an opening brace)
-  const types = []
-
-  // Find all lines that match: <word>: { (top-level keys in the object)
-  // These are the field type names like string, text, number, etc.
-  const regex = /^\s*(\w+):\s*\{$/gm
-  let match
-
-  // First, extract the FIELD_TYPES object content
-  const objectMatch = content.match(/export const FIELD_TYPES[^=]*=\s*\{([\s\S]*?)\n\}/)
-  if (!objectMatch) return null
-
-  const objectContent = objectMatch[1]
-
-  while ((match = regex.exec(objectContent)) !== null) {
-    const key = match[1]
-    // Filter out property names that are clearly nested (db, drizzle, zod, etc.)
-    if (!['db', 'sqlite', 'column', 'mode', 'zod', 'default', 'tsType'].includes(key)) {
-      types.push(key)
-    }
-  }
-
-  return types.length > 0 ? types : null
 }
 
 /**
@@ -170,37 +132,7 @@ async function main() {
   console.log(`   Types: ${generatorTypes.join(', ')}\n`)
   results.generator = generatorTypes
 
-  // 2. Check MCP server field types
-  const mcpContent = readFileSafe(mcpFieldTypesPath)
-  if (mcpContent) {
-    const mcpTypes = extractMcpFieldTypes(mcpContent)
-    if (mcpTypes) {
-      results.mcp = mcpTypes
-      if (arrayEquals(generatorTypes, mcpTypes)) {
-        console.log(`✅ MCP Server: ${mcpTypes.length} types (matches generator)`)
-      } else {
-        console.log(`❌ MCP Server: ${mcpTypes.length} types (MISMATCH)`)
-        console.log(`   Types: ${mcpTypes.join(', ')}`)
-
-        const missing = generatorTypes.filter(t => !mcpTypes.includes(t))
-        const extra = mcpTypes.filter(t => !generatorTypes.includes(t))
-
-        if (missing.length > 0) {
-          console.log(`   Missing: ${missing.join(', ')}`)
-        }
-        if (extra.length > 0) {
-          console.log(`   Extra: ${extra.join(', ')}`)
-        }
-        hasErrors = true
-      }
-    } else {
-      console.log('⚠️  MCP Server: Could not extract field types')
-    }
-  } else {
-    console.log('⚠️  MCP Server: field-types.ts not found')
-  }
-
-  // 3. Check skill file field types
+  // 2. Check skill file field types
   const skillContent = readFileSafe(skillPath)
   if (skillContent) {
     const skillTypes = extractSkillFieldTypes(skillContent)

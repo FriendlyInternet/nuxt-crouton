@@ -56,4 +56,12 @@ describe('translatable repeater reads propDef.component', () => {
     expect(input).toContain('<CroutonEditorSimple')
     expect(input).toContain('<UInput')
   })
+
+  it('renders UTextarea for a translatable property whose manifest component is UTextarea', () => {
+    const { input } = generateFieldComponents(repeater(
+      { body: { type: 'text', component: 'UTextarea' } },
+      { translatableProperties: ['body'] }
+    ), collectionData)
+    expect(input).toContain('<UTextarea')
+  })
 })
