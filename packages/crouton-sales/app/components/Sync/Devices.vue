@@ -7,12 +7,7 @@
  *
  * Auto-imported as <SalesSyncDevices>.
  */
-interface Device {
-  deviceId: string
-  type: string
-  claimedAt: string | number | null
-}
-interface SyncDevice { deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }
+import type { Device, SyncDevice } from '../../types/sync'
 
 const { t } = useT()
 const { teamSlug } = useTeamContext()

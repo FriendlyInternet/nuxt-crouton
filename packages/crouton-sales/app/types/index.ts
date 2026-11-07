@@ -86,3 +86,4 @@ export interface SalesProductMatrixBlockAttrs {
   measure?: 'units' | 'revenue'
   title?: string
 }
+export type { Device, SyncDevice, LostEdit } from './sync'

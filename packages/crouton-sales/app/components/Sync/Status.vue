@@ -96,7 +96,7 @@ const title = computed(() => {
   if (deviceCount.value > 1) {
     lines.push(t('sales.sync.tillsSynced', { n: deviceCount.value }))
     for (const d of data.value!.devices!) {
-      lines.push(`${d.deviceId.replace('device:', '').slice(0, 8)} — ${d.lastContactAt ? ago(d.lastContactAt, serverNow.value) : '…'}`)
+      lines.push(`${shortDeviceId(d.deviceId)} — ${d.lastContactAt ? ago(d.lastContactAt, serverNow.value) : '…'}`)
     }
   }
   return lines.join('\n')
