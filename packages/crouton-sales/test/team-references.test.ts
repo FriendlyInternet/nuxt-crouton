@@ -24,7 +24,6 @@ vi.mock('../collections/categories/server/database/queries', async (orig) => ({
   updateSalesCategory: (...a: any[]) => h.update(...a),
 }))
 vi.mock('../server/utils/config-capture', () => ({ captureConfigWrite: async () => {} }))
-vi.mock('../collections/products/server/utils/config-capture', () => ({ captureConfigWrite: async () => {} }))
 
 const TABLES = ['events', 'categories', 'locations', 'clients', 'orders', 'products', 'printers']
 const FIELD_TABLE: Record<string, string> = {
