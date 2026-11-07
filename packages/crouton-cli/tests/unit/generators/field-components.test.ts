@@ -46,3 +46,14 @@ describe('repeater item Input.vue renders the manifest component', () => {
     expect(input).not.toContain('USwitch')
   })
 })
+
+describe('translatable repeater reads propDef.component', () => {
+  it('renders the manifest component for a translatable property, UInput without one', () => {
+    const { input } = generateFieldComponents(repeater(
+      { body: { type: 'richText', component: 'CroutonEditorSimple' }, label: { type: 'string' } },
+      { translatableProperties: ['body', 'label'] }
+    ), collectionData)
+    expect(input).toContain('<CroutonEditorSimple')
+    expect(input).toContain('<UInput')
+  })
+})
