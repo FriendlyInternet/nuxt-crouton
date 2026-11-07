@@ -668,7 +668,7 @@ function resolveStructureConfig(collectionConfig: Record<string, any> | null, hi
 // Returns the (possibly created or replaced) config object; when translatable
 // fields are found, the existing config's translations map is updated in place
 // so the caller's config object observes the merged field list.
-function resolveTranslationConfig(params: {
+export function resolveTranslationConfig(params: {
   fields: Field[]
   config: Record<string, any> | null
   collectionConfig: Record<string, any> | null
