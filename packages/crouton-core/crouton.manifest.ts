@@ -1,4 +1,4 @@
-import { defineCroutonManifest } from './shared/manifest'
+import { defineCroutonManifest } from './shared/manifest.ts'
 
 export default defineCroutonManifest({
   id: 'crouton-core',

@@ -23,14 +23,27 @@ const mcpFieldTypesPath = join(
 const skillPath = join(projectRoot, '.claude/skills/crouton.md')
 
 /**
- * Canonical field type names from every package manifest, via the real manifest loader.
+ * Canonical field type names from every package manifest, by importing each package's crouton.manifest.ts directly.
  */
 async function extractManifestFieldTypes() {
-  const { discoverManifests, getCanonicalFieldTypes } = await import(
-    pathToFileURL(join(projectRoot, 'packages/crouton-cli/lib/utils/manifest-loader.ts')).href
-  )
-  const manifests = await discoverManifests(projectRoot)
-  return [...new Set(getCanonicalFieldTypes(manifests))]
+  const { readdirSync, existsSync } = await import('node:fs')
+  const pkgsDir = join(projectRoot, 'packages')
+  const types = new Set()
+  for (const pkg of readdirSync(pkgsDir).sort()) {
+    const file = join(pkgsDir, pkg, 'crouton.manifest.ts')
+    if (!existsSync(file)) continue
+    let mod
+    try {
+      mod = await import(pathToFileURL(file).href)
+    } catch (err) {
+      // Manifests that import schema JSON without `with { type: 'json' }` can't load under bare Node.
+      if (err?.code !== 'ERR_IMPORT_ATTRIBUTE_MISSING') throw err
+      console.warn(`⚠️  ${pkg}: manifest not loadable by bare Node (JSON import), skipped`)
+      continue
+    }
+    for (const name of Object.keys(mod.default?.fieldTypes ?? {})) types.add(name)
+  }
+  return [...types]
 }
 
 /**
