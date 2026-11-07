@@ -68,12 +68,13 @@ const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route
     <!-- Logged in: show the booking panel -->
     <div
       v-else
-      class="bg-default backdrop-blur-sm rounded-3xl border border-default shadow-lg shadow-neutral-950/5 overflow-clip"
+      class="flex max-h-[85dvh] flex-col bg-default backdrop-blur-sm rounded-3xl border border-default shadow-lg shadow-neutral-950/5 overflow-clip"
     >
       <CroutonBookingsPanel
         :title="attrs.title || undefined"
         :empty-message="attrs.emptyMessage || undefined"
         :scope="attrs.scope || 'personal'"
+        class="flex-1 min-h-0"
       />
     </div>
   </div>
