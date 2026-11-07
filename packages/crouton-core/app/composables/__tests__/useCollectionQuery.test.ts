@@ -270,6 +270,37 @@ describe('useCollectionQuery', () => {
         expect.any(Object)
       )
     })
+
+    // Skipped: when no team context is available the composable now passes
+    // `enabled: false` (no fetch, no error log) instead of the old __skip__ URL.
+
+    it.skip('logs error when team context missing', async () => {
+      mockRoute = {
+        path: '/dashboard/products', // No team param
+        params: {}
+      }
+
+      await useCollectionQuery('products')
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        '[useCollectionQuery] Team context required but not available',
+        expect.any(Object)
+      )
+    })
+
+    it.skip('returns path with undefined when no team context', async () => {
+      mockRoute = {
+        path: '/dashboard/products',
+        params: {}
+      }
+
+      await useCollectionQuery('products')
+
+      expect(mockUseFetch).toHaveBeenCalledWith(
+        '/api/teams/undefined/shop-products',
+        expect.any(Object)
+      )
+    })
   })
 
   describe('response handling', () => {
