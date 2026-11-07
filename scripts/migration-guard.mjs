@@ -32,6 +32,19 @@ export function parseStatements(sql = '') {
   return sql.split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean)
 }
 
+function readTarget(root, group, name) {
+  const dir = `${group}/${name}`
+  const abs = join(root, dir)
+  const pkgPath = join(abs, 'package.json')
+  if (!existsSync(join(abs, 'deploy.config.json')) || !existsSync(pkgPath)) return null
+  let pkg
+  try { pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) } catch { return null }
+  if (!pkg.scripts?.['db:generate']) return null
+  const cfg = join(abs, 'drizzle.config.ts')
+  const legacy = existsSync(cfg) && readFileSync(cfg, 'utf8').includes('.nuxt/hub/db/schema.mjs')
+  return { dir, name: pkg.name || name, legacy }
+}
+
 /** Deployed apps/POCs with a deploy.config.json and a db:generate script. */
 export function listTargets(root) {
   const out = []
@@ -39,50 +52,30 @@ export function listTargets(root) {
     const base = join(root, group)
     if (!existsSync(base)) continue
     for (const name of readdirSync(base).sort()) {
-      const dir = `${group}/${name}`
-      const abs = join(root, dir)
-      if (!existsSync(join(abs, 'deploy.config.json')) || !existsSync(join(abs, 'package.json'))) continue
-      let pkg
-      try { pkg = JSON.parse(readFileSync(join(abs, 'package.json'), 'utf8')) } catch { continue }
-      if (!pkg.scripts?.['db:generate']) continue
-      let legacy = false
-      const cfg = join(abs, 'drizzle.config.ts')
-      if (existsSync(cfg)) legacy = readFileSync(cfg, 'utf8').includes('.nuxt/hub/db/schema.mjs')
-      out.push({ dir, name: pkg.name || name, legacy })
+      const t = readTarget(root, group, name)
+      if (t) out.push(t)
     }
   }
   return out
 }
 
-/**
- * @param {{changedFiles?: string[], body?: string, results?: Record<string, any>, targets?: {dir:string,name?:string}[]}} input
- * results: dir → { statements } | { error } | { skipped: 'legacy' }
- */
-export function evaluateMigrationGuard({ changedFiles = [], body = '', results = {}, names = {} } = {}) {
-  const empty = { missing: [], errored: [], skipped: [] }
-  if (!isSchemaChange(changedFiles)) {
-    return { status: 'not-involved', ...empty, markdown: 'No package schema file changed — migration guard not involved.' }
-  }
+function classifyResults(results, names) {
   const missing = []
   const errored = []
   const skipped = []
   for (const dir of Object.keys(results).sort()) {
     const r = results[dir] || {}
-    const app = names[dir] || dir
+    const command = `pnpm --filter ${names[dir] || dir} db:generate`
     if (r.skipped) skipped.push({ app: dir, reason: r.skipped })
-    else if (r.error) errored.push({ app: dir, error: String(r.error).split('\n')[0], command: `pnpm --filter ${app} db:generate` })
-    else if (Array.isArray(r.statements) && r.statements.length > 0) {
-      missing.push({ app: dir, statements: r.statements, command: `pnpm --filter ${app} db:generate` })
-    }
+    else if (r.error) errored.push({ app: dir, error: String(r.error).split('\n')[0], command })
+    else if (Array.isArray(r.statements) && r.statements.length > 0) missing.push({ app: dir, statements: r.statements, command })
   }
-  let status = missing.length || errored.length ? 'fail' : skipped.length ? 'notice' : 'pass'
-  const m = NOT_NEEDED_RE.exec(body || '')
-  let reason = null
-  if (status === 'fail' && m) { status = 'notice'; reason = m[1].trim() }
+  return { missing, errored, skipped }
+}
 
-  const lines = []
+function renderMarkdown({ status, missing, errored, skipped, reason }) {
   const head = { fail: '❌ Missing app migration', notice: 'ℹ️ Migration guard notice', pass: '✅ App migrations are up to date' }[status]
-  lines.push(`### ${head}`)
+  const lines = [`### ${head}`]
   if (missing.length) {
     lines.push('', 'This PR changes a package schema, but these apps would still generate a migration. Run the command and commit the result:')
     for (const x of missing) {
@@ -98,7 +91,22 @@ export function evaluateMigrationGuard({ changedFiles = [], body = '', results =
   if (reason) lines.push('', `Overridden by \`Migration-not-needed:\` — ${reason}`)
   if (status === 'fail') lines.push('', 'No migration needed? Add a PR body line `Migration-not-needed: <why>`.')
   lines.push('', 'See `.claude/skills/db-migrations/SKILL.md`.')
-  return { status, missing, errored, skipped, reason, markdown: lines.join('\n') }
+  return lines.join('\n')
+}
+
+/**
+ * results: dir → { statements } | { error } | { skipped: 'legacy' }; names: dir → package name
+ */
+export function evaluateMigrationGuard({ changedFiles = [], body = '', results = {}, names = {} } = {}) {
+  if (!isSchemaChange(changedFiles)) {
+    return { status: 'not-involved', missing: [], errored: [], skipped: [], markdown: 'No package schema file changed — migration guard not involved.' }
+  }
+  const { missing, errored, skipped } = classifyResults(results, names)
+  let status = missing.length || errored.length ? 'fail' : skipped.length ? 'notice' : 'pass'
+  const m = NOT_NEEDED_RE.exec(body || '')
+  let reason = null
+  if (status === 'fail' && m) { status = 'notice'; reason = m[1].trim() }
+  return { status, missing, errored, skipped, reason, markdown: renderMarkdown({ status, missing, errored, skipped, reason }) }
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
