@@ -134,3 +134,28 @@ test('route command: exit/stdout the workflow relies on', () => {
   assert.equal(notNoGo.status, 1)
   assert.match(notNoGo.stderr, /route needs a no-go/)
 })
+
+test('rule: a pending design sign-off ends as a hold — never go, never plan:approved, rejection count unchanged', async () => {
+  const { SIGNOFF_QUESTION } = await import('./plan-verdict.mjs')
+  const plan = fx('signoff-pending.plan.md')
+  // (9) reviewer says needs-owner with no Question section
+  const d9 = decide(plan, fx('signoff-pending.verdict.md'))
+  assert.equal(d9.ok, true)
+  assert.equal(d9.verdict, 'needs-owner')
+  assert.equal(d9.question, SIGNOFF_QUESTION)
+  assert.equal(d9.items['7'].pass, false)
+  // (10) a lenient reviewer saying go with every item PASS is still a hold
+  const d10 = decide(plan, fx('pass.verdict.md'))
+  assert.equal(d10.ok, true)
+  assert.equal(d10.verdict, 'needs-owner')
+  // (11) 7 FAIL and 4 FAIL → still a hold, never a no-go marker
+  const d11 = decide(plan, fx('signoff-pending-4.verdict.md'))
+  assert.equal(d11.verdict, 'needs-owner')
+  const c = renderComment(d11, { round: 2 })
+  assert.match(c, /<!-- plan-review-verdict:needs-owner -->/)
+  assert.ok(c.includes(SIGNOFF_QUESTION))
+  assert.doesNotMatch(c, /plan-review-verdict:no-go/)
+  // (12) controls
+  assert.equal(decide(fx('clean.plan.md'), fx('owner.verdict.md')).question.startsWith('Drop the legacy'), true)
+  assert.equal(decide(fx('clean.plan.md'), fx('pass.verdict.md')).verdict, 'go')
+})
