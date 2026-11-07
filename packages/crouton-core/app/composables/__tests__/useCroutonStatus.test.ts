@@ -76,7 +76,7 @@ describe('useCroutonStatus', () => {
     await s.onRemoteChange()
     round = 2
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(2000)
     expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(s.recent.value.map((m: any) => m.id)).toContain('event-late')
   })
@@ -95,5 +95,22 @@ describe('useCroutonStatus', () => {
     await s.onRemoteChange()
     await vi.advanceTimersByTimeAsync(10_000)
     expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('does not retry when the requests fail', async () => {
+    fetchMock.mockRejectedValue(new Error('403'))
+    const s = await load()
+    await s.onRemoteChange()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('a burst of remote changes leaves one retry', async () => {
+    fetchMock.mockResolvedValue([])
+    const s = await load()
+    await s.onRemoteChange()
+    await s.onRemoteChange()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(fetchMock).toHaveBeenCalledTimes(6)
   })
 })

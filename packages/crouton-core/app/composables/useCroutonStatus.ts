@@ -11,21 +11,7 @@ const OWN_FLOOR = 10
 /** Of the 5 feed slots, how many stay reserved for own changes */
 const OWN_SLOTS = 3
 /** One retry when the collab signal arrived before the teammate's event row was stored */
-const REMOTE_RETRY_MS = 1000
-
-function displayTitle(collection: string, record: Record<string, unknown>): string | undefined {
-  try {
-    const title = useDisplayConfig(collection).title
-    return title && record[title] ? String(record[title]) : undefined
-  } catch {
-    // Collection may not have config — fall through to heuristics
-    return undefined
-  }
-}
-
-function mutationRecord(data?: Record<string, unknown>, result?: unknown): Record<string, unknown> | undefined {
-  return (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
-}
+const REMOTE_RETRY_MS = 2000
 
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
@@ -35,16 +21,24 @@ function extractItemName(
   data?: Record<string, unknown>,
   result?: unknown,
 ): string | undefined {
-  const record = mutationRecord(data, result)
+  const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
   if (!record) return undefined
 
-  return displayTitle(collection, record) ?? heuristicName(record)
-}
+  try {
+    const display = useDisplayConfig(collection)
+    if (display.title && record[display.title]) {
+      return String(record[display.title])
+    }
+  } catch {
+    // Collection may not have config — fall through to heuristics
+  }
 
-function heuristicName(record: Record<string, unknown>): string | undefined {
-  const field = ['title', 'name', 'label', 'subject', 'displayName']
-    .find(f => record[f] && typeof record[f] === 'string')
-  return field ? (record[field] as string) : undefined
+  for (const field of ['title', 'name', 'label', 'subject', 'displayName']) {
+    if (record[field] && typeof record[field] === 'string') {
+      return record[field] as string
+    }
+  }
+  return undefined
 }
 
 /**
@@ -115,8 +109,8 @@ export function useCroutonStatus() {
    * Merge recent changes (own; teammates' too with collab) from crouton-events into the feed. No-op without the
    * events app; throttled to once per minute unless `force`. Call on mount / pill open.
    */
-  const refreshTeamEvents = async (force = false): Promise<number> => {
-    if (!useCroutonApps().hasApp('events')) return 0
+  const refreshTeamEvents = async (force = false): Promise<number | null> => {
+    if (!useCroutonApps().hasApp('events')) return null
     const userId = getUserId()
     const live = useCroutonApps().hasApp('collab')
     const teamId = useTeamContext().getTeamId()
@@ -126,7 +120,7 @@ export function useCroutonStatus() {
       lastEventsFetch = 0
       history.value = dropTeamEvents(history.value)
     }
-    if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return 0
+    if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return null
     lastEventsFetch = now
     try {
       const url = `/api/teams/${teamId}/crouton-events`
@@ -138,20 +132,22 @@ export function useCroutonStatus() {
           ]
         : [$fetch<TeamEventRow[]>(url, { query: { userId, pageSize: EVENTS_LIMIT, dateFrom } })]
       const settled = await Promise.allSettled(requests)
+      // Every request failed (e.g. 403 for non-admins): not a timing gap, so no retry
+      if (settled.every(r => r.status === 'rejected')) return null
       const rows = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []))
       const before = new Set(history.value.map(m => m.id))
       history.value = mergeTeamEvents(history.value, rows, t, userId, live, live ? OWN_SLOTS : 0)
       return history.value.filter(m => m.id.startsWith('event-') && m.own === false && !before.has(m.id)).length
     } catch {
       // Feed falls back to own changes
-      return 0
+      return null
     }
   }
 
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   const onRemoteChange = async () => {
     const added = await refreshTeamEvents(true)
-    if (!added) {
+    if (added === 0) {
       clearTimeout(retryTimer)
       retryTimer = setTimeout(() => { refreshTeamEvents(true) }, REMOTE_RETRY_MS)
     }
