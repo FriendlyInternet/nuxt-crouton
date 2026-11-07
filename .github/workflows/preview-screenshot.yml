@@ -14,7 +14,8 @@ name: Preview screenshot
 # scripts/capture-review-surfaces.mjs, publishes the PNG(s) to a non-branch ref
 # (refs/review-captures/pr<N>) and posts them in a tagged PR comment (#3351). The sign-off gate looks
 # for that comment, and Status reruns when this check completes (check_suite). The result is a check run named "Preview screenshot" on
-# the PR head: green = a usable shot, red = none, with the reason in one line.
+# the PR head: green = a usable shot, red = none, with the reason in one line;
+# grey only when no job in this commit's deploy was meant to leave a record (#3575).
 
 on:
   workflow_run:
@@ -106,6 +107,21 @@ jobs:
           done
           N=$(find "$RUNNER_TEMP/records" -name meta.json | wc -l)
           echo "count=$N" >> "$GITHUB_OUTPUT"
+          # How many deploy jobs were meant to leave a record (#3575); empty = lookup failed.
+          OK=1
+          for id in $RUN_IDS; do
+            # No pipe: a failed `gh api` must set OK=0 (a pipe into jq would hide it and write []).
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[]' > "$RUNNER_TEMP/jobs-$id.ndjson"; then
+              jq -s . "$RUNNER_TEMP/jobs-$id.ndjson" > "$RUNNER_TEMP/jobs-$id.json" || OK=0
+            else
+              OK=0
+            fi
+          done
+          if [ "$OK" = 1 ]; then
+            echo "expected=$(node scripts/lib/screenshot-verdict.mjs count "$RUNNER_TEMP"/jobs-*.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "expected=" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
@@ -196,10 +212,10 @@ jobs:
           RESULT: ${{ steps.capture.outputs.result }}
           SUMMARY: ${{ steps.capture.outputs.summary }}
           RECORDS: ${{ steps.records.outputs.count }}
+          EXPECTED: ${{ steps.records.outputs.expected }}
         run: |
-          if [ "$RESULT" = ok ]; then C=success
-          elif [ -z "$RESULT" ] && { [ "$RECORDS" = 0 ] || [ -z "$RECORDS" ]; }; then C=neutral; SUMMARY="no preview deployed for this commit — nothing to capture"
-          else C=failure; [ -n "$SUMMARY" ] || SUMMARY="capture step did not finish"; fi
+          OUT=$(node scripts/lib/screenshot-verdict.mjs verdict)
+          C=$(printf '%s\n' "$OUT" | sed -n 's/^conclusion=//p'); SUMMARY=$(printf '%s\n' "$OUT" | sed -n 's/^summary=//p')
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" -f status=completed -f conclusion="$C" \
             -f 'output[title]=Preview screenshot' -f "output[summary]=${SUMMARY}" >/dev/null \
             || echo "::warning::could not publish the check result"

@@ -11,8 +11,8 @@
  * @see https://www.better-auth.com/docs/concepts/database
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
-import { relations } from 'drizzle-orm'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { relations, sql } from 'drizzle-orm'
 import { user } from './user'
 import { userProfile } from './user-profile'
 
@@ -263,7 +263,7 @@ export const subscription = sqliteTable('subscription', {
 export const domain = sqliteTable('domain', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
-  domain: text('domain').notNull().unique(),
+  domain: text('domain').notNull(),
   status: text('status').notNull().default('pending'), // 'pending', 'verified', 'failed'
   verificationToken: text('verificationToken').notNull(),
   verifiedAt: integer('verifiedAt', { mode: 'timestamp' }),
@@ -273,7 +273,10 @@ export const domain = sqliteTable('domain', {
 }, table => [
   index('domain_org_idx').on(table.organizationId),
   index('domain_domain_idx').on(table.domain),
-  index('domain_status_idx').on(table.status)
+  index('domain_status_idx').on(table.status),
+  // Pending claims may coexist across teams; only one team can hold a verified domain.
+  uniqueIndex('domain_org_domain_uniq').on(table.organizationId, table.domain),
+  uniqueIndex('domain_verified_uniq').on(table.domain).where(sql`${table.status} = 'verified'`)
 ])
 
 // ============================================================================
