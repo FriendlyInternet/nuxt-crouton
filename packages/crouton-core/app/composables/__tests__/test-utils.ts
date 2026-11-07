@@ -5,7 +5,7 @@ import { ref, computed, reactive } from 'vue'
  * Creates mock implementations of common Nuxt composables
  * for testing purposes.
  */
-export function createNuxtMocks(overrides: Record<string, any> = {}) {
+export function createNuxtMocks(overrides: Record<string, any> = {}): Record<string, any> {
   return {
     useRoute: () => ({
       path: '/teams/test-team/products',

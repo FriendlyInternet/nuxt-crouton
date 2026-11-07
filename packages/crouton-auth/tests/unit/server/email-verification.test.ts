@@ -109,20 +109,26 @@ describe('backfill migration', () => {
   })
 })
 
-describe('isEmailInstalled — reads public.crouton.email via useRuntimeConfig', () => {
+async function verifyRequired() {
+  const { createAuth: create } = await import('../../../server/lib/auth')
+  const auth = create({ config: {} as any, db: { all: async () => [] } as never, secret: 'x'.repeat(40), baseURL: BASE })
+  return !!(await auth.$context).options.emailAndPassword?.requireEmailVerification
+}
+
+describe('email-installed signal — reads public.crouton.email via useRuntimeConfig', () => {
   it('is true when crouton-email is installed and false otherwise', async () => {
     vi.resetModules()
     vi.doMock('nitropack/runtime', () => ({
       useNitroApp: () => ({ hooks: { callHook: async () => {} } }),
       useRuntimeConfig: () => ({ public: { crouton: { email: {} } } })
     }))
-    expect((await import('../../../server/lib/auth')).isEmailInstalled()).toBe(true)
+    expect(await verifyRequired()).toBe(true)
 
     vi.resetModules()
     vi.doMock('nitropack/runtime', () => ({
       useNitroApp: () => ({ hooks: { callHook: async () => {} } }),
       useRuntimeConfig: () => ({ public: { crouton: { auth: {} } } })
     }))
-    expect((await import('../../../server/lib/auth')).isEmailInstalled()).toBe(false)
+    expect(await verifyRequired()).toBe(false)
   })
 })

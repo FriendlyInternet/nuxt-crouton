@@ -82,7 +82,7 @@ export interface CreateAuthOptions {
  * crouton-email defines `public.crouton.email` by default; apps without it
  * have no way to send the verify link.
  */
-export function isEmailInstalled(): boolean {
+function isEmailInstalled(): boolean {
   try {
     const rc = useRuntimeConfig()
     return !!rc?.public?.crouton?.email
@@ -135,17 +135,7 @@ export function createAuth(options: CreateAuthOptions) {
     // Email verification (required for changeEmail)
     emailVerification: {
       sendVerificationEmail: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Verification email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'verification',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
+        await sendAuthEmail(config, 'verification', user, url)
       },
       // Verification is required only where a mailer exists (crouton-email)
       sendOnSignUp: verifyEmail,
@@ -223,6 +213,26 @@ export function createAuth(options: CreateAuthOptions) {
   })
 }
 
+/** Dispatch an auth email through the `crouton:auth:email` hook (mailer-agnostic). */
+async function sendAuthEmail(
+  config: CroutonAuthConfig,
+  type: 'verification' | 'password-reset',
+  user: { email: string, name?: string },
+  url: string
+) {
+  if (config.debug) {
+    console.log(`[crouton/auth] ${type} email for ${user.email}: ${url}`)
+  }
+  let _event: any; try { _event = useEvent() } catch {}
+  await useNitroApp().hooks.callHook('crouton:auth:email', {
+    _event,
+    type,
+    to: user.email,
+    url,
+    userName: user.name
+  }).catch(() => {})
+}
+
 /**
  * Build email/password configuration from @crouton/auth config
  */
@@ -243,17 +253,7 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig, verifyEmail = false
       ...(verifyEmail && { requireEmailVerification: true }),
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
+        await sendAuthEmail(config, 'password-reset', user, url)
       }
     }
   }
@@ -269,17 +269,7 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig, verifyEmail = false
     // Password reset
     sendResetPassword: customConfig.resetEnabled !== false
       ? async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
+        await sendAuthEmail(config, 'password-reset', user, url)
       }
       : undefined
   }
