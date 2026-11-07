@@ -194,6 +194,8 @@ jobs:
           gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
           REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
+          ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold; }
+          node scripts/flow-checklist.mjs "$ISSUE" --verdict plan "$VERDICT" --round "$ROUND" --link "$REVIEW_URL" ${ROUTE:+--route "$ROUTE"} || true
           case "$VERDICT" in
             go)
               node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$ISSUE" '{issue:$i,label:"plan:approved"}')"
@@ -202,7 +204,6 @@ jobs:
               gh issue edit "$ISSUE" --add-label "status:blocked"
               ;;
             no-go)
-              ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold
               if [ "$ROUTE" = hold ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
