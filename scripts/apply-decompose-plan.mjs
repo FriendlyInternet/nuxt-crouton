@@ -585,19 +585,25 @@ export function applySignoffFallback(plan, { text = '', comments = [] } = {}) {
   }
 }
 
+/** Reads the target issue and applies applySignoffFallback to a leaf plan; never throws (best effort). */
+function withSignoffFallback(plan, args) {
+  if (!plan.leaf) return plan
+  try {
+    const issue = JSON.parse(realExec('gh', ['issue', 'view', String(args.target), '--repo', args.repo, '--json', 'title,body,comments']))
+    return applySignoffFallback(plan, { text: `${issue.title}\n${issue.body}`, comments: (issue.comments || []).map(c => ({ body: c.body })) })
+  } catch (e) {
+    console.error(`signoff fallback skipped: ${e.message}`)
+    return plan
+  }
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   if (args._[0] !== 'apply' || !args._[1]) {
     console.error('usage: node scripts/apply-decompose-plan.mjs apply <plan.json> --repo O/R --target N [--epic N --epic-branch B --depth D]')
     process.exit(2)
   }
-  let plan = parsePlan(readFileSync(args._[1], 'utf8'))
-  if (plan.leaf) {
-    try {
-      const issue = JSON.parse(realExec('gh', ['issue', 'view', String(args.target), '--repo', args.repo, '--json', 'title,body,comments']))
-      plan = applySignoffFallback(plan, { text: `${issue.title}\n${issue.body}`, comments: (issue.comments || []).map(c => ({ body: c.body })) })
-    } catch (e) { console.error(`signoff fallback skipped: ${e.message}`) }
-  }
+  const plan = withSignoffFallback(parsePlan(readFileSync(args._[1], 'utf8')), args)
   const target = Number(args.target)
   const ctx = {
     target,
