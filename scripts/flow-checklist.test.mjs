@@ -108,3 +108,83 @@ const wf = f => readFileSync(new URL(f.endsWith('.mjs') ? `./lib/${f}` : `../.gi
   const oc = wf('on-comment.yml')
   assert.ok(oc.indexOf("'ok', '--link'") > oc.indexOf('isApproval(body)'), 'ok tick sits after the isApproval check')
 })
+
+// ── review verdicts in the checklist (#3565) ──
+import { review, reviewLine, sentToOwner } from './flow-checklist.mjs'
+import { spawnSync } from 'node:child_process'
+
+const TODAY_EMPTY = '<!-- flow-checklist:7 -->\n> 🤖 **pi.dev harness** · ticket flow · _edited in place_\n\n- [ ] Routed\n- [ ] Plan + mockup posted\n- [ ] Owner ok\n- [ ] Build PR opened\n- [ ] Build review\n- [ ] Merged'
+
+test('no verdict → output byte-identical to today', () => {
+  assert.equal(render(7, {}), TODAY_EMPTY)
+  assert.equal(tick('', 7, 'routed', { note: 'plan', link: 'http://x' }), TODAY_EMPTY.replace('- [ ] Routed', '- [x] Routed — plan · http://x'))
+})
+
+test('plan verdict then build verdict → both lines', () => {
+  const b = review(review('', 7, 'plan', 'go', 1, { link: 'L1' }), 7, 'build', 'no-go', 2, { link: 'L2' })
+  assert.ok(b.includes('**Latest reviews**\n- Plan review — go (round 1) · L1\n- Build review — no-go (round 2) · sent to you · L2\n\n- [ ] Routed'))
+})
+
+test('newer build verdict replaces older, plan line kept', () => {
+  let b = review('', 7, 'plan', 'go', 1)
+  b = review(b, 7, 'build', 'no-go', 1)
+  b = review(b, 7, 'build', 'go', 2)
+  assert.equal(b.match(/^- Build review — .*$/gm).length, 1)
+  assert.match(b, /^- Build review — go \(round 2\)$/m)
+  assert.match(b, /^- Plan review — go \(round 1\)$/m)
+})
+
+test('parse(render(x)) round-trips steps and verdicts', () => {
+  let b = tick('', 7, 'routed', { note: 'plan' })
+  b = review(b, 7, 'plan', 'go', 1, { link: 'P' })
+  b = review(tick(b, 7, 'review', { note: 'x' }), 7, 'build', 'needs-owner', 1)
+  assert.deepEqual(parse(render(7, parse(b))), parse(b))
+  assert.equal(render(7, parse(b)), b)
+})
+
+test('sentToOwner table', () => {
+  for (const a of [['build', 'needs-owner', 1], ['build', 'no-go', 2], ['plan', 'needs-owner', 1], ['plan', 'no-go', 1, 'hold']]) assert.equal(sentToOwner(...a), true, a.join())
+  for (const a of [['build', 'go', 2], ['build', 'no-go', 1], ['plan', 'go', 1], ['plan', 'no-go', 1, 'retry'], ['plan', 'no-go', 1]]) assert.equal(sentToOwner(...a), false, a.join())
+  assert.throws(() => reviewLine('x', 'go', 1))
+  assert.throws(() => reviewLine('plan', 'maybe', 1))
+  assert.throws(() => reviewLine('plan', 'go', 'a'))
+})
+
+test('verdict-only call with no checklist comment creates nothing', () => {
+  const g = fakeGh()
+  assert.equal(apply({ repo: 'o/r', issue: 5, verdict: { kind: 'plan', verdict: 'go', round: 1 }, createIfMissing: false, run: g.run }), 'skipped')
+  assert.equal(g.comments.length, 0)
+  assert.equal(g.calls.length, 1)
+})
+
+test('verdict-only call edits the existing comment, ticks + links untouched', () => {
+  const g = fakeGh()
+  apply({ repo: 'o/r', issue: 5, step: 'routed', link: 'http://r', run: g.run })
+  apply({ repo: 'o/r', issue: 5, step: 'plan', link: 'http://p', run: g.run })
+  assert.equal(apply({ repo: 'o/r', issue: 5, verdict: { kind: 'plan', verdict: 'go', round: 1 }, createIfMissing: false, run: g.run }), 'edited')
+  assert.equal(g.comments.length, 1)
+  assert.match(g.comments[0].body, /^- \[x\] Routed — http:\/\/r$/m)
+  assert.match(g.comments[0].body, /^- \[x\] Plan \+ mockup posted — http:\/\/p$/m)
+  assert.match(g.comments[0].body, /\*\*Latest reviews\*\*/)
+})
+
+test('later ticks keep the reviews block', () => {
+  const b = review('', 7, 'build', 'go', 1, { link: 'L' })
+  const slice = s => s.slice(s.indexOf('**Latest reviews**'), s.indexOf('- [')) 
+  const b2 = tick(tick(b, 7, 'pr', { link: 'P' }), 7, 'merged', {})
+  assert.equal(slice(b2), slice(b))
+})
+
+test('plan-review.yml makes a verdict-only call before the case', () => {
+  const w = wf('plan-review.yml')
+  assert.match(w, /flow-checklist\.mjs "\$ISSUE" --verdict plan /)
+  assert.ok(w.indexOf('flow-checklist.mjs "$ISSUE" --verdict plan') < w.indexOf('case "$VERDICT" in'))
+})
+
+test('build-review.yml passes --verdict build on the review tick line', () => {
+  assert.match(wf('build-review.yml'), /flow-checklist\.mjs" "\$ISSUE" review [^\n]*--verdict build/)
+})
+
+test('CLI with no step and no --verdict exits 2', () => {
+  assert.equal(spawnSync('node', ['scripts/flow-checklist.mjs', '5']).status, 2)
+})
