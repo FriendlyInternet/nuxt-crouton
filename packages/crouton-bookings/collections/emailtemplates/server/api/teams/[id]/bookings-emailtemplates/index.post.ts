@@ -1,8 +1,9 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
+// The requireTeamAdmin utility handles team resolution and auth
 import { z } from 'zod'
 import { createBookingsEmailtemplate, assertBookingsEmailtemplateReferences } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { assertFromEmailOnSendingDomain } from '../../../../../../../server/utils/sender-domain'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 
 // Hand-added body validation (#3377). No .min(1) on fromEmail: the admin page starts it as ''.
 const bodySchema = z.object({
@@ -23,10 +24,11 @@ const bodySchema = z.object({
 }).strip()
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await requireTeamAdmin(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
+  assertFromEmailOnSendingDomain(event, body.fromEmail)
   await assertBookingsEmailtemplateReferences(team.id, body)
 
 
