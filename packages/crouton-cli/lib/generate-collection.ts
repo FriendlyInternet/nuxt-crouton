@@ -50,6 +50,7 @@ import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
 import { generateCollectionTypesRegistry } from './generators/collection-types-registry.ts'
 import { generateQueryRegistryFile } from './generators/query-registry.ts'
+import { isDependentField } from './utils/list-fields.ts'
 
 // ---------------------------------------------------------------------------
 // Generation History
@@ -378,9 +379,9 @@ export function buildFieldsSchema(params: {
   const regularFieldsSchema = fields
     .filter(f => f.name !== 'id' && !translatableFieldNames.includes(f.name) && !hierarchyFieldNames.includes(f.name))
     .map((f) => {
-      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+      const dependent = isDependentField(f)
       const hasRepeaterProperties = f.type === 'repeater' && (f.meta?.translatableProperties || f.meta?.properties)
-      let baseZod = isDependentField ? 'z.array(z.string())' : f.zod
+      let baseZod = dependent ? 'z.array(z.string())' : f.zod
       // Dates arrive as ISO strings (forms/JSON) — coerce so validation accepts them.
       if (f.type === 'date') baseZod = 'z.coerce.date()'
       if (hasRepeaterProperties) {
@@ -390,7 +391,7 @@ export function buildFieldsSchema(params: {
       }
       if (f.meta?.required) {
         // Manifest zod as-is; only dependent arrays and text get a non-empty check.
-        if (isDependentField || f.type === 'string' || f.type === 'text') {
+        if (dependent || f.type === 'string' || f.type === 'text') {
           return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
         }
         return `${f.name}: ${baseZod}`
@@ -463,8 +464,8 @@ function buildFieldsDefault(params: {
   const { fields, config, hierarchy, cases } = params
   const hierarchyDefaultNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
   let fieldDefaults = fields.filter(f => f.name !== 'id' && !hierarchyDefaultNames.includes(f.name)).map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    if (isDependentField) {
+    const dependent = isDependentField(f)
+    if (dependent) {
       return `${f.name}: null`
     }
     return `${f.name}: ${f.default}`
@@ -499,8 +500,8 @@ export function buildFieldsTypes(params: {
   const { fields, config, hierarchy, cases } = params
   const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
   const typeLines = fields.filter(f => f.name !== 'id').map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    let tsType = isDependentField ? 'string[] | null' : f.tsType
+    const dependent = isDependentField(f)
+    let tsType = dependent ? 'string[] | null' : f.tsType
     if (f.meta?.required) {
       // Required ⇒ the zod schema enforces a present, non-null value, so the
       // interface must not widen to null (some tsTypes, e.g. date, default to
