@@ -13,7 +13,7 @@
     ".github/workflows/deploy-app.yml › deploy › deploy › run": 118,
     ".github/workflows/deploy-app.yml › deploy › email-probe › run": 42,
     ".github/workflows/deploy-app.yml › deploy › seed › run": 63,
-    ".github/workflows/deploy-app.yml › deploy › Wire preview-review bridge config (staging, PR-tied) › run": 54,
+    ".github/workflows/deploy-app.yml › deploy › Wire preview-review bridge config (staging, PR-tied) › run": 56,
     ".github/workflows/e2e.yml › detect › set › run": 56,
     ".github/workflows/fix-ci-on-failure.yml › fixbot › gate › script": 125,
     ".github/workflows/fix-ci-on-failure.yml › fixbot › guard › run": 72,
