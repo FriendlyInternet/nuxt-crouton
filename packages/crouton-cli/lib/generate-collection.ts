@@ -1418,7 +1418,7 @@ interface PostGenerationOptions {
 // WS2). Throws on a HARD failure (duplicate table / drizzle error) so the bin
 // exits non-zero + prints a recipe; a SOFT deferral (unresolvable extends) prints
 // its recipe and returns (exit 0).
-async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
+async function runMigrationStep(appDir: string = process.cwd()): Promise<string[] | undefined> {
   let result
   try {
     result = await generateMigrations(appDir)
@@ -1431,12 +1431,12 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
   }
   if (result.generated) {
     console.log(`\n✓ Database migration generated`)
-    return
+    return undefined
   }
   if (result.reason === 'deferred') {
     console.log(`\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
     for (const step of result.recipe) console.log(`     ${step}`)
-    return
+    return result.recipe
   }
   console.error(`\n✗ Database migration was NOT generated`)
   if (result.detail) console.error(`  ${result.detail}`)
@@ -1444,7 +1444,7 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
   throw new Error('migration generation failed')
 }
 
-async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, force: boolean): Promise<void> {
+async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, force: boolean): Promise<string[] | undefined> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DATABASE SETUP`)
   console.log(`${'═'.repeat(60)}\n`)
@@ -1466,7 +1466,7 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
 
   // Generate the migration once for all collections — no Nuxt process (#1445 WS2).
   console.log(`\nRunning database migration...`)
-  await runMigrationStep()
+  return await runMigrationStep()
 }
 
 // Setup the CSS @source directive for Tailwind.
@@ -1550,8 +1550,9 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   const { allCollections, config, dryRun, noDb, force } = opts
 
   // Update schema index for all collections and run migration once (unless disabled)
+  let deferredMigration: string[] | undefined
   if (!noDb && !dryRun && allCollections.length > 0) {
-    await runBatchDatabaseSetup(allCollections, force)
+    deferredMigration = await runBatchDatabaseSetup(allCollections, force)
   }
 
   // Setup CSS @source directive for Tailwind
@@ -1566,7 +1567,19 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  ALL DONE!`)
   console.log(`${'═'.repeat(60)}\n`)
-  console.log(`Next step: Restart your Nuxt dev server\n`)
+  console.log(formatNextSteps(deferredMigration))
+}
+
+// Closing "Next steps" block. A deferred migration (#1742) is restated here as the
+// first numbered step so it can't be missed in the mid-log line. Exit code stays 0.
+export function formatNextSteps(deferredMigration?: string[]): string {
+  const steps = [
+    ...(deferredMigration?.length
+      ? [`Generate the database migration (deferred — layers not yet resolved):\n${deferredMigration.map(s => `       ${s}`).join('\n')}`]
+      : []),
+    'Restart your Nuxt dev server'
+  ]
+  return `Next steps:\n${steps.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}\n`
 }
 
 // ---------------------------------------------------------------------------
