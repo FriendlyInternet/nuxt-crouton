@@ -75,6 +75,7 @@ function linkedIssues(p: GhPr): number[] {
   return [...out]
 }
 
+// fallow-ignore-next-line complexity -- one linear pass assembling now/next/waiting; splitting scatters the shared sets
 export function classifyNow(input: NowInput): NowResult {
   const latest = (n: number) => (input.comments[n] ?? []).at(-1)?.body ?? ''
   const waiting: WaitingItem[] = []

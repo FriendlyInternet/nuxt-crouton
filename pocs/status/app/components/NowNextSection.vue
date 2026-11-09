@@ -13,6 +13,7 @@ const sections = computed(() => [
 
 <template>
   <div class="space-y-4">
+    <!-- fallow-ignore-next-line complexity -->
     <UAlert v-if="res?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="res.error" />
     <p v-if="status === 'pending'" class="text-muted">Loading pipeline…</p>
     <section v-for="s in sections" :key="s.key" class="space-y-2">

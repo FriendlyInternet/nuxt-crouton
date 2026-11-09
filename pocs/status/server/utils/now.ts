@@ -7,6 +7,7 @@ const REPO = 'FriendlyInternet/nuxt-crouton'
 // 7 lists + 2 comment-feed pages + ≤16 per-item reads = ≤25 calls per refresh.
 const MAX_COMMENT_READS = 16
 
+// fallow-ignore-next-line complexity -- sequential fetch plan with a call budget; one place keeps the budget readable
 export async function listNow(event: H3Event): Promise<{ data: NowResult | null, error: string | null }> {
   const [pulls, work, blocked, running, queued, approved, reviewing] = await Promise.all([
     ghFetch<GhPr[]>(event, `/repos/${REPO}/pulls?state=open&per_page=50`),
