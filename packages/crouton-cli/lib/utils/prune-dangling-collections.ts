@@ -89,13 +89,10 @@ async function pruneSchemaBarrel(cwd: string, dryRun: boolean, out: PruneResult[
   for (const entry of found) out.push({ file, entry })
 }
 
-async function pruneAppConfig(cwd: string, dryRun: boolean, out: PruneResult['removed']): Promise<void> {
-  const file = await resolveAppConfigPath(cwd)
-  const parsed = await readParsed(file)
-  if (!parsed) return
-  const { mod } = parsed
+type DanglingImport = { local: string; layer: string; name: string }
 
-  const dangling: Array<{ local: string; layer: string; name: string }> = []
+async function findDanglingImports(cwd: string, mod: any): Promise<DanglingImport[]> {
+  const dangling: DanglingImport[] = []
   for (const node of programBody(mod)) {
     if (node.type !== 'ImportDeclaration' || !node.source?.value) continue
     const src = parseCollectionSource(String(node.source.value))
@@ -104,19 +101,32 @@ async function pruneAppConfig(cwd: string, dryRun: boolean, out: PruneResult['re
       if (spec.local?.name) dangling.push({ local: spec.local.name, layer: src.layer, name: src.name })
     }
   }
+  return dangling
+}
+
+function removeRegistryRefs(registry: any, local: string): void {
+  if (!registry) return
+  for (const key of Object.keys(registry)) {
+    const value = registry[key]
+    if (value && (value.$type === 'identifier' ? value.$name : undefined) === local) {
+      delete registry[key]
+    }
+  }
+}
+
+async function pruneAppConfig(cwd: string, dryRun: boolean, out: PruneResult['removed']): Promise<void> {
+  const file = await resolveAppConfigPath(cwd)
+  const parsed = await readParsed(file)
+  if (!parsed) return
+  const { mod } = parsed
+
+  const dangling = await findDanglingImports(cwd, mod)
   if (!dangling.length) return
 
   if (!dryRun) {
     const registry = getOptions(mod)?.croutonCollections
     for (const d of dangling) {
-      if (registry) {
-        for (const key of Object.keys(registry)) {
-          const value = registry[key]
-          if (value && (value.$type === 'identifier' ? value.$name : undefined) === d.local) {
-            delete registry[key]
-          }
-        }
-      }
+      removeRegistryRefs(registry, d.local)
       delete mod.imports[d.local]
     }
     await writeFile(file, generateCode(mod).code, 'utf-8')
