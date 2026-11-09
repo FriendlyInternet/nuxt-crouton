@@ -41,13 +41,13 @@ CroutonBooking
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
 │   ├── CalendarOnly.vue - CroutonBookingsLayoutCalendarOnly (`bookings-calendar-only`) — just the grid
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
-│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-view toggles kept local/inert)
+│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map, location cards)
 └── PanelMap.vue        - Map display
 ```
 
