@@ -32,6 +32,8 @@ const cards = computed(() => (appsRes.value?.data ?? []).map(c => ({ card: c, v:
       <p v-if="appsStatus === 'pending'" class="text-muted">Loading…</p>
       <p v-else-if="!cards.length" class="text-muted">No apps found.</p>
 
+      <NowNextSection />
+
       <StatusAppCard v-for="{ card, v } in cards" :key="card.app ?? 'general'" :card="card" :v="v" />
     </div>
   </UContainer>
