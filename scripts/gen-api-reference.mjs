@@ -34,23 +34,25 @@ const jsdoc = (node) => {
 const oneLine = s => s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim()
 const code = s => '`' + String(s).replace(/`/g, "'").replace(/\\?\|/g, '\\|') + '`'
 
+const propKey = p => (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name) ? p.name.text : null)
+function evalObject(n) {
+  const o = {}
+  for (const p of n.properties) {
+    const k = ts.isPropertyAssignment(p) ? propKey(p) : null
+    if (k) o[k] = evalLiteral(p.initializer)
+  }
+  return o
+}
+const LITERAL_KEYWORDS = new Map([[ts.SyntaxKind.TrueKeyword, true], [ts.SyntaxKind.FalseKeyword, false]])
+
 /** Statically evaluate a literal expression (strings, numbers, booleans, arrays, objects). */
 function evalLiteral(n) {
   if (!n) return undefined
   if (ts.isStringLiteralLike(n)) return n.text
   if (ts.isNumericLiteral(n)) return Number(n.text)
-  if (n.kind === ts.SyntaxKind.TrueKeyword) return true
-  if (n.kind === ts.SyntaxKind.FalseKeyword) return false
+  if (LITERAL_KEYWORDS.has(n.kind)) return LITERAL_KEYWORDS.get(n.kind)
   if (ts.isArrayLiteralExpression(n)) return n.elements.map(evalLiteral)
-  if (ts.isObjectLiteralExpression(n)) {
-    const o = {}
-    for (const p of n.properties) {
-      if (!ts.isPropertyAssignment(p)) continue
-      const k = ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name) ? p.name.text : null
-      if (k) o[k] = evalLiteral(p.initializer)
-    }
-    return o
-  }
+  if (ts.isObjectLiteralExpression(n)) return evalObject(n)
   return undefined
 }
 const walk = (node, fn) => { fn(node); ts.forEachChild(node, c => walk(c, fn)) }
@@ -112,23 +114,23 @@ function genComponents() {
 }
 
 // ── composables ────────────────────────────────────────────────────────
+const isExported = st => ts.isFunctionDeclaration(st) && st.name && st.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)
+const exportedFunctions = s => s.statements.filter(isExported)
+function composableEntry(s, st, dir, f) {
+  const params = st.parameters.map(p => p.getText(s).replace(/\s+/g, ' ')).join(', ')
+  const ret = st.type ? `: ${st.type.getText(s).replace(/\s+/g, ' ')}` : ''
+  let out = `\n## ${st.name.text}\n\n`
+  const d = jsdoc(st)
+  if (d) out += d.split('\n').filter(l => !l.trim().startsWith('@')).join('\n').trim().split(/\n\n/)[0] + '\n\n'
+  return out + `\`\`\`ts\n${st.name.text}(${params})${ret}\n\`\`\`\n\n_Source: \`${dir}/${f}\`_\n`
+}
 function genComposables() {
   const dir = 'packages/crouton-core/app/composables'
   const files = readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.ts')).sort()
   let out = `---\ntitle: Composables\ndescription: Every exported crouton-core composable (generated from the code)\nicon: i-lucide-box\n---\n\n${HEADER(dir + '/*.ts')}\n# Composables\n\nAuto-imported. Signatures are read from the source; the description is the JSDoc above each function.\n`
   for (const f of files) {
-    const text = rd(`${dir}/${f}`)
-    const s = sf(f, text)
-    for (const st of s.statements) {
-      if (!ts.isFunctionDeclaration(st) || !st.name) continue
-      if (!st.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) continue
-      const params = st.parameters.map(p => p.getText(s).replace(/\s+/g, ' ')).join(', ')
-      const ret = st.type ? `: ${st.type.getText(s).replace(/\s+/g, ' ')}` : ''
-      out += `\n## ${st.name.text}\n\n`
-      const d = jsdoc(st)
-      if (d) out += d.split('\n').filter(l => !l.trim().startsWith('@')).join('\n').trim().split(/\n\n/)[0] + '\n\n'
-      out += `\`\`\`ts\n${st.name.text}(${params})${ret}\n\`\`\`\n\n_Source: \`${dir}/${f}\`_\n`
-    }
+    const s = sf(f, rd(`${dir}/${f}`))
+    for (const st of exportedFunctions(s)) out += composableEntry(s, st, dir, f)
   }
   return out
 }
