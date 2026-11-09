@@ -1,8 +1,8 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
+// The requireTeamAdmin utility handles team resolution and auth
 import { z } from 'zod'
 import { updateBookingsLocation, getBookingsLocationsByIds } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 
 // Hand-added body validation (#3377). `locale` is a transient merge hint, not a column.
 const bodySchema = z.object({
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   if (!locationId) {
     throw createError({ status: 400, statusText: 'Missing location ID' })
   }
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await requireTeamAdmin(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
