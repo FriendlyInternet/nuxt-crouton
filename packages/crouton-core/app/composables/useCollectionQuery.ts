@@ -147,8 +147,10 @@ export async function useCollectionQuery(
   // see the user's better-auth session. On the client this is undefined.
   const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
-  // Re-fetch when a remote client changed this collection (registered before the await)
-  useRemoteCollectionRefresh(collection, () => refresh())
+  // Re-fetch when a remote client changed this collection (registered before the await;
+  // a change arriving while the first load is pending is a no-op — that load returns fresh data)
+  let refreshOnRemote: (() => Promise<void>) | undefined
+  useRemoteCollectionRefresh(collection, () => refreshOnRemote?.())
 
   // Use Nuxt's useFetch with proper caching
   // Skip fetching if no team context (will re-fetch when context becomes available)
@@ -165,6 +167,7 @@ export async function useCollectionQuery(
     () => fullApiPath.value ?? '',
     fetchOptions
   )
+  refreshOnRemote = refresh
 
   // Return normalized data structure
   // Handle both array responses and paginated responses
