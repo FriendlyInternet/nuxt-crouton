@@ -2,6 +2,7 @@
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -817,7 +818,14 @@ export function generateQueries(
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const own = data.collectionConfig?.access?.list === 'own'
+  const access = resolveAccess(data)
+  const own = access.list === 'own'
+  // The runtime registry reads this to refuse public exposure of 'own' collections (#3380)
+  const accessExport = Object.keys(access).length === 0
+    ? ''
+    : `
+
+export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const`
   const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
@@ -860,6 +868,7 @@ ${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + accessExport
     + assertRefsQuery
     + treeQueries
     + sortableQueries

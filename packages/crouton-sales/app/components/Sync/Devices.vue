@@ -7,23 +7,18 @@
  *
  * Auto-imported as <SalesSyncDevices>.
  */
-interface Device {
-  deviceId: string
-  type: string
-  claimedAt: string | number | null
-}
-interface SyncDevice { deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }
+import type { SalesDevice, SalesSyncDevice } from '../../types'
 
 const { t } = useT()
 const { teamSlug } = useTeamContext()
 
 const base = computed(() => `/api/crouton-sales/teams/${teamSlug.value}`)
 
-const { data: devices, refresh, error: loadError } = await useFetch<Device[]>(
+const { data: devices, refresh, error: loadError } = await useFetch<SalesDevice[]>(
   () => `${base.value}/devices`,
   { default: () => [] }
 )
-const { data: sync, refresh: refreshSync } = await useFetch<{ devices?: SyncDevice[], serverNow: number }>(
+const { data: sync, refresh: refreshSync } = await useFetch<{ devices?: SalesSyncDevice[], serverNow: number }>(
   () => `${base.value}/sync-status`,
   { default: () => ({ devices: [], serverNow: Date.now() }) }
 )

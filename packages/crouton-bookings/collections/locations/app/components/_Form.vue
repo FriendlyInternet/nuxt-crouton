@@ -190,6 +190,7 @@
             }"
             show-ai-translate
             field-type="locations"
+            @update:english="(data: { field: string, value: string }) => applyEnglishTitle(state, data)"
             :label="$t('bookings.locationForm.translations')"
           />
         </div>
@@ -217,6 +218,7 @@
 
 <script setup lang="ts">
 import type { LocationData } from '../../../../app/types/booking'
+import { applyEnglishTitle } from '../utils/applyEnglishTitle'
 
 // useBookingsLocations is auto-imported from the generated collection layer at runtime
 declare function useBookingsLocations(): {

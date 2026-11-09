@@ -405,6 +405,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           REPO: ${{ github.repository }}
+          PIPELINE_DEFAULT: ${{ vars.PIPELINE_DEFAULT }}
         run: |
           set -uo pipefail
           if [ ! -f decompose-plan.json ]; then
@@ -425,12 +426,13 @@ jobs:
             if [ -z "$EPIC_BRANCH" ]; then
               SLUG="$(gh issue view "$ISSUE" --repo "$REPO" --json title -q .title \
                 | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
-              EPIC_BRANCH="epic/${EPIC}-${SLUG}"
+              EPIC_BRANCH="$(node --input-type=module -e "import { epicBranchName } from './scripts/lib/pipeline-version.mjs'; console.log(epicBranchName({ epic: process.argv[1], slug: process.argv[2], version: process.argv[3] }))" "$EPIC" "$SLUG" "$(node scripts/epic-version.mjs "$ISSUE")")" # #3501/#3462: pipeline:v1 label or PIPELINE_DEFAULT=v1 -> epic/<n>--v1-<slug>
               git push origin "origin/main:refs/heads/${EPIC_BRANCH}" && echo "created epic branch ${EPIC_BRANCH}"
             else
               echo "reusing epic branch ${EPIC_BRANCH}"
             fi
           fi
+          case "$EPIC_BRANCH" in epic/*--v1-*) echo "epic branch version: v1 (${EPIC_BRANCH})";; *) echo "epic branch version: today (${EPIC_BRANCH})";; esac # #3501
           echo "context: epic=${EPIC} depth=${DEPTH} epic_branch=${EPIC_BRANCH}"
           APPLY_OUT="$RUNNER_TEMP/apply-out.txt"
           node scripts/apply-decompose-plan.mjs apply decompose-plan.json \

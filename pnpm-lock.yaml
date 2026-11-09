@@ -719,6 +719,9 @@ importers:
       nuxt:
         specifier: ^4.6.2
         version: 4.6.3(122b1bad7d07187925d8fa8c314b47e7)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/crouton-audio:
     dependencies:

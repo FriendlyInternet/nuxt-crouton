@@ -39,10 +39,10 @@ export function hits(text, re) {
 export const ALLOW = [
   ['canary.yml', '--add-label', 'synthetic probe with its own 25 s tripwire that reruns on cron; replaying a stale probe would report a false result'],
   ['alfred-deploy-trigger.sh', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
-  ['loop-station-inventory.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
-  ['weekly.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
+  ['loop-station-refresh.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
+  ['epic-version.mjs', '--add-label', 'stamps the pipeline:v1 version marker on an epic; it starts no stage and a missed stamp is re-derived from the default'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
 
