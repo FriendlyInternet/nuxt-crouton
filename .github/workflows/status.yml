@@ -83,12 +83,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Default branch (never fork PR code) — scripts/: the status logic (pr-status-io.mjs, #3617), log-tail (#2677), ui-touched.mjs (#3228).
-      # A same-repo pull_request event checks out its own head so a PR that ADDS/moves those scripts finds them
-      # (the default branch doesn't have them yet → ERR_MODULE_NOT_FOUND); forks and every other event stay on the default branch.
+      # Default branch only (never PR code) — scripts/: the status logic (pr-status-io.mjs, #3617), log-tail (#2677), ui-touched.mjs (#3228).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.head.sha || github.event.repository.default_branch }}
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: scripts
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
