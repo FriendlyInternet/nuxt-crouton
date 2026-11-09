@@ -21,10 +21,10 @@ const { applyFilters, hasActiveFilters, filters } = useBookingsLayoutFilters()
 
 const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
 
-// useBookingsList fetches client-only (`server: false`): on the server `loading` is
-// false (empty state drawn) but on the client it flips to true during hydration
-// (skeleton) — a hydration mismatch. Show the skeleton until mounted so server and
-// first client render agree.
+// useBookingsList fetches client-only (`server: false`), and its `loading` also
+// depends on whether a team is resolved yet (`!currentTeam.value?.id || ...`), so the
+// server-side value can differ from the first client render. Show the skeleton until
+// mounted so server and first client render agree.
 const mounted = ref(false)
 onMounted(() => { mounted.value = true })
 const showLoading = computed(() => !mounted.value || loading.value)
