@@ -68,6 +68,9 @@
         "expectStatus": [404]
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
+      },
+      {
         "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
       },
       {
