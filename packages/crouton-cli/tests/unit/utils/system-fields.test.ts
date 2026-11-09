@@ -20,9 +20,7 @@ describe('system-fields: one enumeration, pinned to the core manifest', () => {
   })
 
   it('AUTO_FIELDS is every auto column plus the hierarchy columns', () => {
-    expect([...AUTO_FIELDS].sort()).toEqual(
-      [...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy].sort()
-    )
+    expect([...AUTO_FIELDS]).toEqual([...AUTO_GENERATED_FIELDS, 'parentId', 'path', 'depth', 'order'])
   })
 
   it('every system group name is a reserved field name in the manifest', () => {
