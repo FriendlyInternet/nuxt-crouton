@@ -5,7 +5,6 @@
 import nodeFs from 'node:fs'
 import { parseRunStart } from './run-start.mjs'
 
-// fallow-ignore-next-line complexity -- the decompose artifact-gate moved verbatim out of the workflow; each branch is a distinct deliverable check, covered by decompose-artifact-gate.test.mjs (#3618)
 export async function decomposeArtifactGate({ github, context, core, env = process.env, fs = nodeFs }) {
   const issue_number = Number(env.ISSUE_NUMBER)
   const rs = parseRunStart(env.RUN_START)
