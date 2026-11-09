@@ -40,6 +40,7 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
  * write it, honouring `--tests`).
  */
 import { resolveAccess } from './api-endpoints.ts'
+import { isListField } from '../utils/list-fields.ts'
 import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
 
 /**
@@ -50,9 +51,8 @@ function buildRefCases(ctx: { S: string, idParam: string, assertFn: string, hasT
   // Same-team reference check (#3378/#3424). The queries module is mocked here, so these prove the
   // ROUTE wiring (check runs before the write, its rejection stops the write, a null optional
   // reference passes); the check itself is tested against a real database in its own package.
-  const isListRef = (f: any) => f.type === 'array' || String(f.type || '').startsWith('array')
-  // Body fragment carrying every reference field with the given id (list refs take an array).
-  const refBody = (id: string) => teamRefs.map(f => `${f.name}: ${isListRef(f) ? `['${id}']` : `'${id}'`}`).join(', ')
+    // Body fragment carrying every reference field with the given id (list refs take an array).
+  const refBody = (id: string) => teamRefs.map(f => `${f.name}: ${isListField(f) ? `['${id}']` : `'${id}'`}`).join(', ')
   const refMatch = (id: string) => `expect.objectContaining({ ${refBody(id)} })`
   const refRejection = (bodyFor: (id: string) => string, call: (b: string) => string, writeFn: string) => `
     it('rejects a reference to another team\\'s record (400) and never writes', async () => {
@@ -150,8 +150,9 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
   const hasTeamRefs = teamRefs.length > 0
   const assertFn = `assert${S}References`
   if (hasTeamRefs) queryImports.push(assertFn)
-  // An optional single-value reference for the "null is fine" case (list refs skip the check differently)
-  const optionalRef = teamRefs.find(f => !f.meta?.required && f.type !== 'array' && !String(f.type || '').startsWith('array'))
+  // An optional reference for the "null is fine" case — single preferred, list refs too: optional
+  // fields are `.nullish()` on the wire either way (#3424, #3600)
+  const optionalRef = teamRefs.find(f => !f.meta?.required && !isListField(f)) ?? teamRefs.find(f => !f.meta?.required)
   if (hierarchy) queryImports.push(`updatePosition${S}`)
   if (hasReorder) queryImports.push(`reorderSiblings${P}`)
 
