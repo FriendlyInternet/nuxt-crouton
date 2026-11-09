@@ -68,12 +68,29 @@ export function findRecentDuplicate(events: TimelineEvent[], body: string): stri
 const MAX_TIMELINE_PAGES = 10
 const nextLink = (link: string | null) => /<([^>]+)>;\s*rel="next"/.exec(link ?? '')?.[1] ?? null
 
+/** Read the issue timeline, following `Link: rel="next"` up to MAX_TIMELINE_PAGES. */
+async function readTimeline(
+  first: string,
+  headers: Record<string, string>,
+  kind: ParsedReply['kind'],
+  fetchImpl: typeof fetch
+): Promise<{ data: TimelineEvent[], error: null } | { data: null, error: string }> {
+  const events: TimelineEvent[] = []
+  let next: string | null = first
+  for (let page = 0; next && page < MAX_TIMELINE_PAGES; page++) {
+    const list: Response = await fetchImpl(next, { headers })
+    if (!list.ok) return { data: null, error: list.status === 403 || list.status === 404 ? permissionHint(kind, list.status) : `GitHub ${list.status}` }
+    events.push(...((await list.json()) as TimelineEvent[]))
+    next = nextLink(list.headers.get('link'))
+  }
+  return { data: events, error: null }
+}
+
 /**
  * Post the reply unless an identical comment already exists since the latest commit/reference or
  * other verdict (double-post guard — returns the existing comment's URL instead). Reads the issue
  * timeline (paginated). PRs use the issue-comments endpoint.
  */
-// fallow-ignore-next-line complexity — paginated timeline + duplicate guard; covered by reply-core.test.ts
 export async function postReply(
   repo: string,
   reply: ParsedReply,
@@ -89,14 +106,9 @@ export async function postReply(
   }
   const url = `${GH_API}/repos/${repo}/issues/${reply.number}/comments`
   try {
-    const events: TimelineEvent[] = []
-    let next: string | null = `${GH_API}/repos/${repo}/issues/${reply.number}/timeline?per_page=100`
-    for (let page = 0; next && page < MAX_TIMELINE_PAGES; page++) {
-      const list: Response = await fetchImpl(next, { headers })
-      if (!list.ok) return { data: null, error: list.status === 403 || list.status === 404 ? permissionHint(reply.kind, list.status) : `GitHub ${list.status}` }
-      events.push(...((await list.json()) as TimelineEvent[]))
-      next = nextLink(list.headers.get('link'))
-    }
+    const tl = await readTimeline(`${GH_API}/repos/${repo}/issues/${reply.number}/timeline?per_page=100`, headers, reply.kind, fetchImpl)
+    if (tl.error) return { data: null, error: tl.error }
+    const events = tl.data
     const dup = findRecentDuplicate(events, reply.body)
     if (dup) return { data: { url: dup, existing: true }, error: null }
 

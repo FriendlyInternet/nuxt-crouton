@@ -49,7 +49,6 @@ async function copyExport() {
 // app's own pan/zoom (rAF, not a MutationObserver — the transform changes every
 // frame). Cheap: one getBoundingClientRect per frame while the panel is open.
 let raf = 0
-// fallow-ignore-next-line complexity — rAF highlight tracker; CRAP inflated by 0 coverage (client component)
 function track() {
   const e = current.value
   const sel = e ? selectorFor(e.hook) : ''
