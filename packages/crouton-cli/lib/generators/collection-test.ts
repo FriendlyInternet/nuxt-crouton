@@ -14,10 +14,7 @@
 // `.min(1)` on an array, dates are `z.coerce.date()` (accept an ISO string),
 // and translatable fields are validated under `translations.<defaultLocale>`.
 
-import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from '../utils/system-fields.ts'
-// Auto-generated / system columns and hierarchy columns are injected by the
-// runtime, not part of the create/validate schema — never sampled here.
-export const AUTO_FIELDS = new Set([...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy])
+import { AUTO_FIELDS } from '../utils/system-fields.ts'
 
 function isDependentField(field: Record<string, any>): boolean {
   return Boolean((field.meta?.dependsOn && field.meta?.dependsOnCollection) || field.meta?.displayAs === 'slotButtonGroup')

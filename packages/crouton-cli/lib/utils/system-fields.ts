@@ -26,6 +26,9 @@ export const AUTO_GENERATED_FIELDS: string[] = [
   ...SYSTEM_FIELD_GROUPS.audit
 ]
 
+/** Columns generators never author by hand: every auto column plus the hierarchy columns. */
+export const AUTO_FIELDS: Set<string> = new Set([...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy])
+
 /** The metadata columns: timestamps + audit, in that order. */
 export function metadataFields(): string[] {
   return [...SYSTEM_FIELD_GROUPS.timestamps, ...SYSTEM_FIELD_GROUPS.audit]
