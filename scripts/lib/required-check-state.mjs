@@ -39,3 +39,14 @@ export function liveCheckRuns(checkRuns, workflowRuns) {
   const superseded = new Set(workflowRuns.filter(w => !live.has(w.id)).map(w => w.check_suite_id))
   return checkRuns.filter(c => !superseded.has(c.check_suite?.id))
 }
+
+/** Conclusions that make a finished check-run red (or cancelled). */
+export const RED_CONCLUSIONS = ['failure', 'cancelled', 'timed_out', 'action_required', 'stale']
+
+/**
+ * Is the workflow-runs read (for liveCheckRuns) worth its API call? (#3453)
+ * The filter only changes an outcome when a finished red/cancelled check-run exists.
+ */
+export function needsLiveFilter(checkRuns) {
+  return Array.isArray(checkRuns) && checkRuns.some(r => isDone(r) && RED_CONCLUSIONS.includes(r.conclusion))
+}

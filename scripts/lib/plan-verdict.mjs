@@ -93,6 +93,14 @@ export function planNotes(planBody) {
   return unverified.length ? { 3: `plan declares ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` } : {}
 }
 
+export const SIGNOFF_QUESTION = 'design sign-off pending — reply `ok` on the mockup first'
+
+/** PURE. Does the plan itself say its only open owner item is a ticket-requested design sign-off? (#3238) */
+export function pendingSignoff(planBody) {
+  const plan = parsePlan(planBody)
+  return plan.needsOwner === true && /design sign-?off/i.test(section(planBody, 'Needs owner'))
+}
+
 /** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision. */
 export function decide(planBody, verdictBody) {
   const v = parseVerdict(verdictBody)
@@ -107,6 +115,10 @@ export function decide(planBody, verdictBody) {
   if (hardFails.length) verdict = 'no-go'
   else if (!items['7'].pass) verdict = 'needs-owner'
   else verdict = 'go'
+  // A pending design sign-off is a hold, never a pass or a rejection (#3238).
+  if (pendingSignoff(planBody)) {
+    return { ok: true, verdict: 'needs-owner', stated: v.stated, items, failed, question: SIGNOFF_QUESTION, overridden: Object.keys(floor), notes: planNotes(planBody) }
+  }
   if (v.stated === 'go' && verdict !== 'go' && !Object.keys(floor).length) {
     errors.push(`reviewer said go but its own rubric fails: ${failed.join(', ')}`)
   }

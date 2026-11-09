@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { ref } from 'vue'
-import { createBookingsStore } from '../app/composables/useBookingsStore'
+import { createSSRApp, defineComponent, h, ref } from 'vue'
+import { renderToString } from 'vue/server-renderer'
+import { createBookingsStore, provideBookingsStore, useBookingsStore } from '../app/composables/useBookingsStore'
 
 /**
  * #2561 step 1 — the bookings screen's shared state lives in ONE store.
@@ -191,5 +192,49 @@ describe('one store per screen', () => {
     expect(b.selectedDate.value).toBeNull()
     expect(b.filters.value.locations).toEqual([])
     expect(b.creatingAt.value).toBeNull()
+  })
+})
+
+describe('one screen, two panels (#3079)', () => {
+  const sources = () => ({
+    bookings: ref([]), calendarBookings: ref([]), locations: ref([loc('a')]), readOnly: ref(false),
+  })
+
+  /** Mount two "panels" under one parent; each provides, a grandchild injects. */
+  async function mountTwo(shared?: ReturnType<typeof createBookingsStore>) {
+    const provided: any[] = []
+    const injected: any[] = []
+    const Grand = defineComponent({ setup() { injected.push(useBookingsStore()); return () => h('i') } })
+    const Panel = defineComponent({
+      setup() { provided.push(provideBookingsStore(sources(), shared)); return () => h(Grand) },
+    })
+    await renderToString(createSSRApp({ render: () => h('div', [h(Panel), h(Panel)]) }))
+    return { provided, injected }
+  }
+
+  it('calendarView defaults to week and is part of the store', () => {
+    const s = setup()
+    expect(s.calendarView.value).toBe('week')
+    s.calendarView.value = 'month'
+    expect(s.calendarView.value).toBe('month')
+  })
+
+  it('provideBookingsStore with an existing store provides that same store', async () => {
+    const shared = setup()
+    const { provided, injected } = await mountTwo(shared)
+    expect([...provided, ...injected].every(x => x === shared)).toBe(true)
+    provided[1].selectDate(day('2026-11-09'))
+    provided[1].filters.value.showCancelled = true
+    provided[1].calendarView.value = 'month'
+    expect(provided[0].selectedDate.value).toEqual(day('2026-11-09'))
+    expect(provided[0].filters.value.showCancelled).toBe(true)
+    expect(provided[0].calendarView.value).toBe('month')
+  })
+
+  it('without an existing store each call still gets its own', async () => {
+    const { provided } = await mountTwo()
+    expect(provided[0]).not.toBe(provided[1])
+    provided[1].calendarView.value = 'month'
+    expect(provided[0].calendarView.value).toBe('week')
   })
 })

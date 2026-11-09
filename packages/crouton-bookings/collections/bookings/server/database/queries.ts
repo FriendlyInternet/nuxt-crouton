@@ -2,7 +2,6 @@
 import { eq, and, desc, inArray } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
-import type { BookingsBooking, NewBookingsBooking } from '../../types'
 import * as locationsSchema from '../../../locations/server/database/schema'
 import { user } from '~~/server/db/schema'
 
@@ -91,54 +90,6 @@ export async function getBookingsBookingsByIds(teamId: string, bookingIds: strin
     .orderBy(desc(tables.bookingsBookings.createdAt))
 
   return bookings
-}
-
-export async function createBookingsBooking(data: NewBookingsBooking) {
-  const db = useDB()
-
-  const [booking] = await (db as any)
-    .insert(tables.bookingsBookings)
-    .values(data)
-    .returning()
-
-  return booking
-}
-
-export async function updateBookingsBooking(
-  recordId: string,
-  teamId: string,
-  userId: string,
-  updates: Partial<BookingsBooking>,
-  options?: { role?: string }
-) {
-  const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
-
-  const conditions = [
-    eq(tables.bookingsBookings.id, recordId),
-    eq(tables.bookingsBookings.teamId, teamId),
-  ]
-  if (!isAdmin) {
-    conditions.push(eq(tables.bookingsBookings.owner, userId))
-  }
-
-  const [booking] = await (db as any)
-    .update(tables.bookingsBookings)
-    .set({
-      ...updates,
-      updatedBy: userId
-    })
-    .where(and(...conditions))
-    .returning()
-
-  if (!booking) {
-    throw createError({
-      status: 404,
-      statusText: 'BookingsBooking not found or unauthorized'
-    })
-  }
-
-  return booking
 }
 
 export async function deleteBookingsBooking(

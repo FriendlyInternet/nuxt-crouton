@@ -88,6 +88,12 @@ export default defineCachedEventHandler(async (event) => {
       throw createError({ status: 404, statusText: 'Not found' })
     }
 
+    // Members-only rows must never be served anonymously (#3380) — refuse before any query
+    const access = await collectionQueries.access?.()
+    if (access?.list === 'own') {
+      throw createError({ status: 404, statusText: 'Not found' })
+    }
+
     // ── 4. Fetch item by ID ──
     const getByIdsFn = await collectionQueries.getByIds()
     const items = await getByIdsFn(team.id, [itemId])

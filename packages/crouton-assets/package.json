@@ -51,6 +51,7 @@
   "peerDependencies": {
     "nuxt": "^4.0.0",
     "@fyit/crouton-core": "workspace:*",
-    "@vueuse/core": "^11.0.0"
+    "@vueuse/core": "^11.0.0",
+    "zod": "^3.0.0"
   }
 }

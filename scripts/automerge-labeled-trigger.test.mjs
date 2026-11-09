@@ -50,7 +50,7 @@ test('real job `if`: labeled build:approved runs; labeled other is skipped', () 
 test('labeled: build:approved on a green, mergeable epic sub-PR reaches decideLeafMerge and merges', () => {
   assert.equal(jobRuns({ action: 'labeled', label: { name: 'build:approved' } }), true)
   const gate = decideLeafMerge({
-    baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'],
+    baseRef: 'epic/1-x', headRef: 'work-1', labels: ['build:approved'], headReview: { kind: 'other' },
     go: { go: false }, red: false, ciGate: 'success', mergeableState: 'clean',
   })
   assert.equal(gate.merge, true)
@@ -63,4 +63,16 @@ test('a skipped label event never merges; without the label the epic sub-PR is h
     go: { go: false }, red: false, ciGate: 'success', mergeableState: 'clean',
   })
   assert.equal(gate.merge, false)
+})
+
+// #3501: the Harness App's own `Merge decision` check_suite must never restart this workflow.
+const runsFor = (event_name, event) => new Function('github', `return !!(${expr})`)({ event_name, event })
+test('check_suite success from nuxt-harness → skipped', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'success', app: { slug: 'nuxt-harness' } } }), false)
+})
+test('check_suite success from another app → runs', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'success', app: { slug: 'github-actions' } } }), true)
+})
+test('check_suite failure → skipped', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'failure', app: { slug: 'github-actions' } } }), false)
 })

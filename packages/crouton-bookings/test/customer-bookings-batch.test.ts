@@ -15,7 +15,7 @@ vi.mock('../server/utils/booking-emails', () => ({ isBookingEmailEnabled: () => 
 vi.mock('../server/utils/email-service', () => ({ triggerBookingCreatedEmail: async () => ({ success: true }) }))
 
 export const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
 `
 const DATE = '2026-11-10T00:00:00.000Z'
@@ -28,8 +28,8 @@ function call(bookings: any[]) {
 }
 const rows = () => db.$client.prepare('select * from bookings_bookings').all()
 const loc = (id: string, over: Record<string, unknown> = {}) => {
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, ...over }
-  db.$client.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode)').run(l)
+  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, ...over }
+  db.$client.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay)').run(l)
 }
 const item = (locationId: string, over: Record<string, unknown> = {}) => ({ id: 'c', locationId, locationTitle: locationId, date: DATE, ...over })
 
@@ -172,5 +172,69 @@ describe('customer-bookings-batch (#3139)', () => {
     const err: any = await call([item('inv')]).catch(e => e)
     expect(err.status).toBe(500)
     expect(err.statusText).toBe('Failed to create bookings')
+  })
+
+  describe('capacity gaps (#3379)', () => {
+    const slots = (cap?: number, n = 1) => JSON.stringify(Array.from({ length: n }, (_, k) => ({ id: k === 0 ? 'am' : `s${k}`, ...(cap ? { capacity: cap } : {}) })))
+
+    it('empty slot selection at a slotted location is refused', async () => {
+      loc('s', { slots: slots() })
+      await expect(call([item('s', { slotIds: [] })])).rejects.toMatchObject({ status: 400 })
+      expect(rows()).toHaveLength(0)
+    })
+
+    it('unknown slot id is 400, not 500', async () => {
+      loc('s', { slots: slots() })
+      await expect(call([item('s', { slotIds: ['zzz'] })])).rejects.toMatchObject({ status: 400 })
+    })
+
+    it('part-day refused on a day booked full-day, and the reverse', async () => {
+      loc('s', { slots: slots(2), offerFullDay: 1 })
+      await call([item('s', { slotIds: ['all-day'] })])
+      await expect(call([item('s', { slotIds: ['am'] })])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(1)
+      loc('t', { slots: slots(2), offerFullDay: 1 })
+      await call([item('t', { slotIds: ['am'] })])
+      await expect(call([item('t', { slotIds: ['all-day'] })])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(2)
+    })
+
+    it('all or nothing: a refused 3rd item leaves no rows; same slot twice over capacity too', async () => {
+      loc('s', { slots: slots() })
+      loc('inv', { inventoryMode: 1, quantity: 5 })
+      await call([item('s', { slotIds: ['am'] })])
+      await expect(call([item('inv', { quantity: 1 }), item('inv', { quantity: 1 }), item('s', { slotIds: ['am'] })])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(1)
+      await expect(call([item('inv', { quantity: 3 }), item('inv', { quantity: 3 })])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(1)
+    })
+
+    it('the SQL guard alone aborts the whole batch (pre-check bypassed)', async () => {
+      loc('inv', { inventoryMode: 1, quantity: 1 })
+      const { guardSql, guardedInsert, runAtomic, dayRange, validateSelection } = await import('../server/utils/booking-capacity')
+      const sel = validateSelection({ inventoryMode: 1, quantity: 1 }, [], 1)
+      const range = dayRange(DATE, 'Europe/Brussels')!
+      const mk = (id: string) => guardedInsert({ id, teamId: 't1', owner: 'u', location: 'inv', storedTs: range.storedTs, slot: null, group: null, quantity: 1, status: 'active', by: 'u', nowTs: 1 }, guardSql({ teamId: 't1', locationId: 'inv', range, selection: sel }))
+      await expect(runAtomic(db, [mk('a'), mk('b')])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(0)
+    })
+
+    it('a 20-slot full day stays under 100 bound params', async () => {
+      loc('s', { slots: slots(1, 20), offerFullDay: 1 })
+      const counts: number[] = []
+      db = drizzle(db.$client, { logger: { logQuery: (_q: string, p: unknown[]) => { counts.push(p.length) } } })
+      await call([item('s', { slotIds: ['all-day'] })])
+      expect(rows()).toHaveLength(1)
+      expect(Math.max(...counts)).toBeLessThanOrEqual(100)
+    })
+
+    it('a plain day is stored as Brussels midnight and blocks only that day', async () => {
+      loc('inv', { inventoryMode: 1, quantity: 1 })
+      await call([item('inv', { date: '2026-11-09T15:00:00.000Z', day: '2026-11-10' })])
+      expect(rows()[0].date).toBe(Date.parse('2026-11-09T23:00:00Z') / 1000)
+      await expect(call([item('inv', { date: '2026-11-10T10:00:00Z' })])).rejects.toMatchObject({ status: 409 })
+      await call([item('inv', { day: '2026-11-11' })])
+      expect(rows()).toHaveLength(2)
+    })
   })
 })
