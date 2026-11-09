@@ -84,21 +84,29 @@ export function regenerate(appDir, { run = execFileSync } = {}) {
   }
 }
 
+async function hasCollections(cfg) {
+  try {
+    const mod = await import(pathToFileURL(cfg).href)
+    const cols = (mod.default || mod).collections
+    return Array.isArray(cols) ? cols.length > 0 : Boolean(cols && Object.keys(cols).length)
+  } catch { return false /* unreadable config: not checkable */ }
+}
+
+function appCandidates(root) {
+  return ['apps', 'pocs'].flatMap((group) => {
+    const base = join(root, group)
+    if (!existsSync(base)) return []
+    return readdirSync(base).sort()
+      .filter(name => !name.startsWith('.'))
+      .map(name => ({ id: `${group}/${name}`, cfg: join(base, name, 'crouton.config.js') }))
+      .filter(c => existsSync(c.cfg))
+  })
+}
+
 export async function discoverApps(root) {
   const apps = []
-  for (const group of ['apps', 'pocs']) {
-    const base = join(root, group)
-    if (!existsSync(base)) continue
-    for (const name of readdirSync(base).sort()) {
-      if (name.startsWith('.')) continue
-      const cfg = join(base, name, 'crouton.config.js')
-      if (!existsSync(cfg)) continue
-      try {
-        const mod = await import(pathToFileURL(cfg).href)
-        const cols = (mod.default || mod).collections
-        if (Array.isArray(cols) ? cols.length : cols && Object.keys(cols).length) apps.push(`${group}/${name}`)
-      } catch { /* unreadable config: not checkable */ }
-    }
+  for (const c of appCandidates(root)) {
+    if (await hasCollections(c.cfg)) apps.push(c.id)
   }
   return apps
 }
@@ -140,19 +148,20 @@ export function readDriftReport(file) {
   }
 }
 
+function appLines(a) {
+  if (a.status === 'error') return [`- \`${a.app}\` — ⛔ can't regenerate: ${a.error}`]
+  const out = []
+  const behind = (a.collections || []).filter(c => c.status === 'behind').length
+  if (behind) out.push(`- \`${a.app}\` — 🟡 ${behind}/${(a.collections || []).length} collections behind (${a.filesBehind} files)`)
+  const routes = (a.routesWithoutBodyValidation || []).length
+  if (routes) out.push(`- \`${a.app}\` — 🔴 ${routes} routes without body validation`)
+  return [...out, ...(a.problems || []).map(p => `- \`${a.app}\` — ${p}`)]
+}
+
 export function renderDriftLines(report) {
   if (!report) return null
   if (report.error) return [`⚠️ The app-collection report could not run this time — see the "App collection drift" step in the workflow log.`]
-  const lines = []
-  for (const a of report) {
-    if (a.status === 'error') { lines.push(`- \`${a.app}\` — ⛔ can't regenerate: ${a.error}`); continue }
-    const behind = (a.collections || []).filter(c => c.status === 'behind').length
-    const total = (a.collections || []).length
-    if (behind) lines.push(`- \`${a.app}\` — 🟡 ${behind}/${total} collections behind (${a.filesBehind} files)`)
-    const routes = (a.routesWithoutBodyValidation || []).length
-    if (routes) lines.push(`- \`${a.app}\` — 🔴 ${routes} routes without body validation`)
-    for (const p of a.problems || []) lines.push(`- \`${a.app}\` — ${p}`)
-  }
+  const lines = report.flatMap(appLines)
   if (!lines.length) return null
   lines.push('_Regenerate deliberately: `cd <app> && crouton config --force` — or add the collection to ALLOW in scripts/app-collection-drift.mjs with a reason._')
   return lines
