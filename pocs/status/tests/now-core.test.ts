@@ -26,7 +26,7 @@ describe('classifyNow', () => {
   })
   it('a final-hold verdict puts a PR in Waiting, not Now', () => {
     const r = classifyNow({ ...base, pulls: [pr(30)], comments: { 30: [{ body: 'Review rejected twice. Held for you.' }] } })
-    expect(r.waiting.map(w => w.number)).toEqual([30])
+    expect(r.waiting).toMatchObject([{ number: 30, kind: 'pr', reason: 'Review rejected twice. Held for you.' }])
     expect(r.now).toEqual([])
   })
   it('ignores non-pipeline PRs', () => {
