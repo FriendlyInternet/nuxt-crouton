@@ -193,3 +193,10 @@ export async function deleteSalesCategory(
 
   return { success: true }
 }
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesCategoryReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'eventId', table: eventsSchema.salesEvents, value: data.eventId },
+  ])
+}

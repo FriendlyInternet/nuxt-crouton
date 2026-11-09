@@ -591,15 +591,18 @@ jobs:
           github-token: ${{ steps.app-token-early.outputs.token }}
           script: |
             const issue_number = context.payload.issue.number
-            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            // A pi design-hold (#3238): see isDesignHold — a real hold comment (own-line heading or marker,
+            // not a quote), no children yet, and an epic or the hold is still the newest question.
+            const { pathToFileURL } = require('node:url')
+            const { isDesignHold } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/lib/signoff-route.mjs`).href)
             const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
-            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            const labels = (context.payload.issue.labels || []).map(l => typeof l === 'string' ? l : l.name)
             let noChildren = true
             try {
               const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
               noChildren = subs.length === 0
             } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
-            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            if (!isDesignHold({ labels, comments: comments.map(c => ({ body: c.body || '' })), noChildren })) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
             // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}

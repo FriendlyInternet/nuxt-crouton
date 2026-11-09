@@ -381,7 +381,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
 | `lib/generators/*.ts` | Template generators (16 files) |
 | `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. Opt-in with `--tests` (#785, off by default since #2286). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
-| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths. Same `--tests` gate (#791) |
+| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths, and (for collections with reference fields) same-team reference cases: other-team id / missing id → 400 with no write, same-team + null → ok (#3424). Same `--tests` gate (#791) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -933,8 +933,8 @@ When modifying the generator, **always check if examples need updating**:
 4. Call generator in appropriate step
 
 ### Add a new field type
-1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `drizzle`,
-   `zod`, `tsType`, `defaultValue`, **and `component`** (the form control). That row is the
+1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `sqlite`,
+   `zod`, `tsType`, `defaultValue`, **`component`** (the form control), and `translatable: true` if collection-level `translatable` should auto-translate it (string, text, richText). That row is the
    single source: `getTypeMapping()` (`lib/utils/manifest-loader.ts`) flattens it and `loadFields`
    attaches `zod` / `default` / `tsType` / `component` to every field (#285, #2286).
 2. The generated `_Form.vue` renders `field.component` as-is (`renderDefaultTypeField` in
@@ -942,7 +942,7 @@ When modifying the generator, **always check if examples need updating**:
    bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
    → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
    *type* because they describe the value, not the widget.
-3. Add the SQLite column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+3. Add the SQLite column in `lib/generators/database-schema.ts` if the `sqlite` column kind is new.
 4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
    attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
    are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
@@ -1109,7 +1109,7 @@ npx nuxt typecheck
 | `lib/generators/types.ts` | TypeScript type generation (snapshot) |
 | `lib/generators/composable.ts` | Composable generation (snapshot) |
 | `lib/generators/collection-test.ts` | Schema-smoke test emission — import path, per-type sample derivation, valid/invalid cases (#785) |
-| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791) |
+| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791), same-team reference cases (#3424) |
 
 ## Seed Data Generation
 

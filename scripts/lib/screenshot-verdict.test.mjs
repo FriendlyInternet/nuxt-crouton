@@ -102,3 +102,14 @@ test('preview-screenshot.yml does not pipe gh api into jq for the jobs lookup', 
   const w = readFileSync(new URL('../../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
   assert.ok(!/gh api[^\n]*\|\s*jq -s/.test(w))
 })
+
+test('preview-screenshot.yml installs repo Playwright before the capture (#3593)', () => {
+  const yml = readFileSync(new URL('../../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
+  const install = yml.indexOf('pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace')
+  const capture = yml.indexOf('node scripts/capture-review-surfaces.mjs')
+  assert.ok(install >= 0 && capture >= 0 && install < capture)
+  assert.ok(yml.includes('pnpm exec playwright install chromium'))
+  assert.ok(!yml.includes('npx --yes playwright'))
+  assert.ok(!yml.split('\n').some(l => l.includes('playwright install') && /\|\|\s*true\s*$/.test(l)))
+  assert.ok(!/playwright install[^\n]*--with-deps/.test(yml))
+})
