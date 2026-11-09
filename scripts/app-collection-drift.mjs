@@ -113,7 +113,7 @@ export async function discoverApps(root) {
 
 /** Classify an app's collections; allow-list entries are keyed by repo-relative collection dir. */
 export function analyze(app, committed, result, allow = ALLOW) {
-  if (result.status === 'error') return { app, status: 'error', error: result.error }
+  if (result.status === 'error') return { app, status: 'error', error: result.error, routesWithoutBodyValidation: missesBodyValidation(committed) }
   const cmp = compareTrees(committed, result.tree)
   const behindDirs = new Set([...cmp.changed, ...cmp.missing, ...cmp.extra].map(collectionOf))
   for (const d of [...cmp.configuredNotCommitted, ...cmp.committedNotConfigured]) behindDirs.add(d)
@@ -149,8 +149,9 @@ export function readDriftReport(file) {
 }
 
 function appLines(a) {
-  if (a.status === 'error') return [`- \`${a.app}\` — ⛔ can't regenerate: ${a.error}`]
   const out = []
+  if (a.status === 'error') out.push(`- \`${a.app}\` — ⛔ can't regenerate: ${a.error}`)
+  for (const c of (a.collections || []).filter(c => c.status === 'allowed')) out.push(`- \`${c.dir}\` — allowed: ${c.reason}`)
   const behind = (a.collections || []).filter(c => c.status === 'behind').length
   if (behind) out.push(`- \`${a.app}\` — 🟡 ${behind}/${(a.collections || []).length} collections behind (${a.filesBehind} files)`)
   const routes = (a.routesWithoutBodyValidation || []).length
@@ -179,13 +180,15 @@ export async function buildReport(root) {
 function renderText(report) {
   if (!report.length) return 'No apps with configured collections.'
   return report.map((a) => {
-    if (a.status === 'error') return `${a.app}: ⛔ can't regenerate — ${a.error}`
+    const routesLine = `${(a.routesWithoutBodyValidation || []).length} routes lack body validation`
+    if (a.status === 'error') return `${a.app}: ⛔ can't regenerate — ${a.error} (${routesLine})`
+    const allowed = a.collections.filter(c => c.status === 'allowed').map(c => `\n    allowed: ${c.dir} — ${c.reason}`).join('')
     const ex = a.examples.map(e => `    ${e}`).join('\n')
     const extra = [
       ...a.configuredNotCommitted.map(d => `    configured, not committed: ${d}`),
       ...a.committedNotConfigured.map(d => `    committed, not configured: ${d}`),
     ].join('\n')
-    return `${a.app}: ${a.status} (${a.filesBehind} files differ, ${a.routesWithoutBodyValidation.length} routes lack body validation)\n${ex}${extra ? `\n${extra}` : ''}`
+    return `${a.app}: ${a.status} (${a.filesBehind} files differ, ${routesLine})\n${ex}${extra ? `\n${extra}` : ''}${allowed}`
   }).join('\n')
 }
 

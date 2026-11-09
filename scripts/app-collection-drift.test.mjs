@@ -110,3 +110,40 @@ test('renderDriftLines', () => {
   assert.match(text, /🟡 1\/2 collections behind \(38 files\)/)
   assert.match(text, /🔴 2 routes without body validation/)
 })
+
+test('allow-listed collection stays visible in the digest lines', () => {
+  const dir = 'pocs/x/layers/a/collections/t'
+  const r = analyze('pocs/x', { 'layers/a/collections/t/f.ts': b('1') }, { status: 'ok', tree: { 'layers/a/collections/t/f.ts': b('2') } }, { [dir]: 'hand edit' })
+  assert.equal(r.status, 'current')
+  const text = renderDriftLines([r]).join('\n')
+  assert.match(text, /allowed: hand edit/)
+})
+
+test('an app that cannot regenerate still reports its unvalidated routes', () => {
+  const r = analyze('pocs/s', { 'layers/a/collections/t/server/api/x/index.post.ts': b('readBody(event)') }, { status: 'error', error: 'Error: bad' })
+  assert.equal(r.routesWithoutBodyValidation.length, 1)
+  const text = renderDriftLines([r]).join('\n')
+  assert.match(text, /can't regenerate/)
+  assert.match(text, /1 routes without body validation/)
+})
+
+test('readCollections builds layers/<l>/collections/<name>/… keys from disk', async () => {
+  const { readCollections } = await import('./app-collection-drift.mjs')
+  const dir = mkdtempSync(join(tmpdir(), 'rc-'))
+  try {
+    mkdirSync(join(dir, 'layers/a/collections/t/app'), { recursive: true })
+    mkdirSync(join(dir, 'layers/a/other'), { recursive: true })
+    writeFileSync(join(dir, 'layers/a/collections/t/app/f.ts'), 'x')
+    writeFileSync(join(dir, 'layers/a/other/skip.ts'), 'y')
+    assert.deepEqual(Object.keys(readCollections(dir)), ['layers/a/collections/t/app/f.ts'])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('regenerate extracts the Error: line from a failing run', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rg-'))
+  try {
+    mkdirSync(join(dir, 'app'))
+    const run = () => { throw Object.assign(new Error('boom'), { stderr: 'noise\nError: Cannot find module x\nmore' }) }
+    assert.deepEqual(regenerate(join(dir, 'app'), { run }), { status: 'error', error: 'Error: Cannot find module x' })
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
