@@ -11,7 +11,7 @@
         "path": "/api/teams/{teamId}/sales-categories",
         "method": "POST",
         "body": {
-          "eventId": "smoke-check",
+          "eventId": "seed:event:test1:vlaamsekermis",
           "title": "smoke-{rand}"
         }
       },
