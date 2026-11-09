@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createSSRApp, defineComponent, h, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { createBookingsStore, provideBookingsStore, useBookingsStore } from '../app/composables/useBookingsStore'
+import { createBookingsStore, getOrCreateStore, provideBookingsStore, useBookingsStore } from '../app/composables/useBookingsStore'
 
 /**
  * #2561 step 1 — the bookings screen's shared state lives in ONE store.
@@ -236,5 +236,20 @@ describe('one screen, two panels (#3079)', () => {
     expect(provided[0]).not.toBe(provided[1])
     provided[1].calendarView.value = 'month'
     expect(provided[0].calendarView.value).toBe('week')
+  })
+})
+
+describe('layout blocks side by side (#2561)', () => {
+  it('blocks asking for the same scope share one store; another app instance gets its own', () => {
+    const holderA: Record<string, any> = {}
+    const holderB: Record<string, any> = {}
+    const list = getOrCreateStore(holderA, 'team', () => setup())
+    const calendar = getOrCreateStore(holderA, 'team', () => setup())
+    expect(calendar).toBe(list)
+    list.selectDay(day('2026-11-02'))
+    expect(calendar.selectedDate.value).toEqual(day('2026-11-02'))
+    const other = getOrCreateStore(holderB, 'team', () => setup())
+    expect(other).not.toBe(list)
+    expect(other.selectedDate.value).toBeNull()
   })
 })

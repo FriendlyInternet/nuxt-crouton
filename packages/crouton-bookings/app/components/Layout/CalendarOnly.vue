@@ -6,8 +6,8 @@
  * the `bookings-filters` block drives which locations/statuses the calendar
  * reflects (Calendar filters its own indicators from the `filters` prop).
  *
- * Gap-report note (#924): the calendar↔list cross-highlight + click-to-create-on-
- * a-date flow is Panel-owned orchestration; across panes it's inert here.
+ * Selecting a day, hovering a booking and the + button go through the screen's
+ * store (#2561), so the sibling list block reacts.
  */
 const props = withDefaults(defineProps<{
   scope?: 'personal' | 'team'
@@ -16,19 +16,31 @@ const props = withDefaults(defineProps<{
 }>(), { scope: 'team', view: 'month' })
 
 const { calendarBookings, locations, settings } = useBookingsList({ scope: props.scope })
-const { filters } = useBookingsLayoutFilters()
+const store = useBookingsLayoutStore(props.scope)
+const { filters, shownDate, selectedDate, creatingAt } = store
 
 const view = ref<'week' | 'month'>(props.view)
+
+function onDayClick(date: Date) {
+  store.startCreate(date)
+}
 </script>
 
 <template>
   <div class="@container h-full overflow-auto p-2 @md:p-3">
     <CroutonBookingsCalendar
       v-model:filters="filters"
+      v-model:date="shownDate"
       :bookings="calendarBookings ?? []"
       :locations="locations ?? []"
       :settings="settings ?? null"
       :view="view"
+      :selected-date="selectedDate"
+      :creating-at-date="creatingAt"
+      :is-date-unavailable="date => store.closedReason(date) !== null"
+      @select="date => date && store.selectDay(date)"
+      @day-click="onDayClick"
+      @hover-booking="store.hover"
     />
   </div>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * CroutonBookingsLayoutFilters — the filter controls as an atomic layout block
- * (#924). Reads/writes the shared filter store (`useBookingsLayoutFilters`), so
+ * (#924). Reads/writes the shared filter store (`useBookingsLayoutStore`), so
  * it drives the sibling list / calendar / locations blocks across panes.
  *
  * Gap-report note (#924): `CroutonBookingsPanelFilters` also emits Panel-VIEW
@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{
 }>(), { scope: 'team' })
 
 const { locations } = useBookingsList({ scope: props.scope })
-const { filters } = useBookingsLayoutFilters()
+const { filters } = useBookingsLayoutStore(props.scope)
 const { open: openCroutonForm } = useCrouton()
 const { isAdmin } = useTeam()
 

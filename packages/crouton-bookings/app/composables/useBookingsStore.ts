@@ -205,3 +205,12 @@ export function provideBookingsStore(src: BookingsStoreSources, existing?: Booki
 export function useBookingsStore(): BookingsStore | null {
   return inject(BOOKINGS_STORE_KEY, null)
 }
+
+/**
+ * Find the store kept under `key` in `holder`, or make it. Layout blocks that
+ * sit side by side with no Panel above them share one store this way; the holder
+ * belongs to one app instance (one request on the server), so two requests never share.
+ */
+export function getOrCreateStore(holder: Record<string, BookingsStore>, key: string, create: () => BookingsStore): BookingsStore {
+  return holder[key] ??= create()
+}

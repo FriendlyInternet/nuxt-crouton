@@ -14,7 +14,7 @@ import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/la
 //
 // Plus the ATOMIC blocks (#924 gap test): the Panel's sub-surfaces broken out so a
 // user can reassemble the native layout from blocks. They coordinate cross-pane via
-// the shared `useBookingsLayoutFilters` store (the layout tree can't wire pane↔pane
+// the shared bookings store (`useBookingsLayoutStore`, #2561) (the layout tree can't wire pane↔pane
 // — see that composable + the #924 report). All take an optional `scope` config.
 const layoutScopeConfig = [
   {

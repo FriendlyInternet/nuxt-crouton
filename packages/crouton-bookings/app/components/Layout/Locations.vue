@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{
 
 const { t } = useT()
 const { locations } = useBookingsList({ scope: props.scope })
-const { filters, toggleLocation } = useBookingsLayoutFilters()
+const { filters, toggleLocation } = useBookingsLayoutStore(props.scope)
 
 /** Location titles may be a plain string or an i18n object ({ en, nl, ... }). */
 function locName(loc: { title?: unknown }): string {

@@ -5,21 +5,22 @@
  * `useFetch` cache key ⇒ no duplicate network calls across blocks) and applies
  * the shared layout filter store, then renders `CroutonBookingsList`.
  *
- * Atomicity note (#924 gap report): the native Panel also feeds List a bundle of
- * interaction state (selected-date highlight, hovered-booking-id, creating-at-
- * date, scroll-target) driven by the sibling Calendar. Across separate panes the
- * layout tree can't carry that, so those cross-surface niceties are inert here —
- * the list still lists + filters, which is the block's atomic job.
+ * Its interaction state (selected day, hovered booking, new-booking date, scroll
+ * target) comes from the screen's bookings store (#2561), the same one the
+ * calendar block drives.
  */
 const props = withDefaults(defineProps<{
   /** 'personal' = my bookings, 'team' = all team bookings. */
   scope?: 'personal' | 'team'
 }>(), { scope: 'team' })
 
-const { bookings, loading, error } = useBookingsList({ scope: props.scope })
-const { applyFilters, hasActiveFilters, filters } = useBookingsLayoutFilters()
+const { loading, error, refresh } = useBookingsList({ scope: props.scope })
+const store = useBookingsLayoutStore(props.scope)
+const { filters, filteredBookings, hasActiveFilters, selectedDate, hoveredBookingId, creatingAt, scrollTarget } = store
 
-const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
+async function onCreated() {
+  await store.finishCreate(refresh)
+}
 </script>
 
 <template>
@@ -30,6 +31,16 @@ const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
       :error="error"
       :has-active-filters="hasActiveFilters"
       :active-location-filter="filters.locations"
+      :selected-date="selectedDate"
+      :highlighted-booking-id="hoveredBookingId"
+      :creating-at-date="creatingAt"
+      :scroll-target="scrollTarget"
+      :is-day-fully-booked="store.isFullyBooked"
+      @created="onCreated"
+      @cancel-create="store.cancelCreate"
+      @new-booking="store.startCreate"
+      @top-visible-date-change="store.showPeriod"
+      @date-click="store.selectDate"
     />
   </div>
 </template>
