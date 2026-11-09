@@ -8,7 +8,6 @@
     ".github/workflows/build-review.yml › review › post › run": 61,
     ".github/workflows/ci.yml › node-checks › Extract each `run:` block and lint it › run": 78,
     ".github/workflows/decompose-on-issue-pidev.yml › decompose-pi › Apply decompose plan › run": 69,
-    ".github/workflows/decompose-on-issue-pidev.yml › decompose-pi › Artifact-gate — fail if the agent produced nothing › script": 234,
     ".github/workflows/decompose-on-issue-pidev.yml › decompose-pi › pi › run": 62,
     ".github/workflows/deploy-app.yml › deploy › deploy › run": 118,
     ".github/workflows/deploy-app.yml › deploy › email-probe › run": 42,

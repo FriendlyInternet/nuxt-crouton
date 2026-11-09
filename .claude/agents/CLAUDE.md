@@ -155,7 +155,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   opened, the file written — before you say it's done or end your turn. Describing the plan
   ("the worker is now creating the schemas…") is **not** doing it: that exact no-op (a run
   that exits `success` having produced nothing) is what the **artifact-gate** in
-  `decompose-on-issue.yml` now turns into a **red** run. Do the work, then prove it landed.
+  `decompose-on-issue-pidev.yml` (logic: `scripts/lib/decompose-artifact-gate.mjs`) now turns into a **red** run. Do the work, then prove it landed.
   **One first-class PASS shape worth knowing (#1076):** a PR opened this run + a
   `.github/workflows/**` patch embedded in its body for a human to apply (the token can't write
   there — see `task-worker.md` → "`.github/workflows/` boundary") already satisfies the gate via
@@ -174,7 +174,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   In the **default (in-process / claude) mode** you get a child worked by **spawning** it with the
   `Agent` tool (a `task-decomposer` or `task-worker`) in THIS run and waiting for its result.
   **NEVER apply the `delegate` label to a sub-issue to "dispatch" it here:** applied from inside a
-  claude run you are `claude[bot]`, so it re-enters `decompose-on-issue.yml` as a **disallowed bot
+  claude run you are `claude[bot]`, so it re-enters `decompose-on-issue-pidev.yml` (logic: `scripts/lib/decompose-artifact-gate.mjs`) as a **disallowed bot
   actor** → the bot-actor guard rejects that child run → it produces nothing; worse, a sub-issue
   dispatched that way runs `/task-decompose` on *itself as a fresh epic off `main`*, where the real
   epic's scaffold doesn't exist. (This is exactly how the #457 deploy stalled: the orchestrator
@@ -300,7 +300,7 @@ package). Threaded through `epic_branch` in the agent contract:
 ### Claude-action workflow standard (any `anthropics/claude-code-action` workflow)
 
 When you add or copy a workflow that runs `anthropics/claude-code-action` (the event→agent
-glue like `claude.yml` / `decompose-on-issue.yml` / `on-comment.yml`), it MUST carry
+glue like `claude.yml` / `decompose-on-issue-pidev.yml` (logic: `scripts/lib/decompose-artifact-gate.mjs`) / `on-comment.yml`), it MUST carry
 all of these by **default** — they're not optional extras; each one has burned us:
 
 - **`id-token: write` at the JOB level.** Job-level `permissions` *fully overrides* (does
