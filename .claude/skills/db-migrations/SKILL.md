@@ -41,7 +41,7 @@ schema.ts (app layer OR package)            ← Drizzle table definitions
 Measured on a cold scaffold (#1457): `crouton config` 0.8s, `pnpm db:generate` 1.8s,
 `pnpm dev` boots in ~6s. No `nuxt build`, so the build-first gotcha below cannot occur.
 
-**Legacy (bundled `.mjs`) — no app in this repo is on it any more (#1456 was the last).**
+**Legacy (bundled `.mjs`) — no app in this repo is on it any more (#1456 was the last; #3590 moved the last four POCs off it).**
 Kept because an EXTERNAL consumer on an older scaffold still hits it. This is the
 world the build-first recipe further down exists for:
 
