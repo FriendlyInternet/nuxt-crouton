@@ -73,6 +73,7 @@ export function classifyPr({ merge, parent, prFiles = [], body = '', names = {} 
   return { guard: guard.status, flagged, clean: false, preExistingOnly: guard.status === 'fail' && flagged.length === 0 }
 }
 
+// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
 export function computeTotals(rows) {
   const t = { fired: 0, real: 0, falseAlarm: 0, preExisting: 0 }
   const seen = new Set()
@@ -154,6 +155,7 @@ function ghPr(n) {
 }
 
 /** Same test as listTargets, but against a commit's tree instead of a checkout. */
+// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
 function measurableAt(sha) {
   const show = (p) => { try { return sh('git', ['show', `${sha}:${p}`], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return null } }
   let legacy = 0
@@ -194,6 +196,7 @@ function runAt(sha, wt, cacheDir) {
   return data
 }
 
+// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
 function main() {
   const wt = arg('worktree') || '/tmp/mg-wt'
   const cacheDir = arg('cache') || '/tmp/mg-cache'
