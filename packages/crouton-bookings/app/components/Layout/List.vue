@@ -20,13 +20,21 @@ const { bookings, loading, error } = useBookingsList({ scope: props.scope })
 const { applyFilters, hasActiveFilters, filters } = useBookingsLayoutFilters()
 
 const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
+
+// useBookingsList fetches client-only (`server: false`): on the server `loading` is
+// false (empty state drawn) but on the client it flips to true during hydration
+// (skeleton) — a hydration mismatch. Show the skeleton until mounted so server and
+// first client render agree.
+const mounted = ref(false)
+onMounted(() => { mounted.value = true })
+const showLoading = computed(() => !mounted.value || loading.value)
 </script>
 
 <template>
   <div class="@container h-full overflow-auto p-2 @md:p-3">
     <CroutonBookingsList
       :bookings="filteredBookings"
-      :loading="loading"
+      :loading="showLoading"
       :error="error"
       :has-active-filters="hasActiveFilters"
       :active-location-filter="filters.locations"
