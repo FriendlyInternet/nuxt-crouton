@@ -76,6 +76,14 @@ export async function gatherCarryInput({ github, core, context }, epicBranch) {
   return carryInput
 }
 
+function adjustForSoloLeaf({ core, epicNumber, closedIssueNumber, blockEpicNumber, subIssues }) {
+  if (closedIssueNumber === null || epicNumber !== closedIssueNumber) return subIssues
+  const { isSolo } = resolveEpicTarget({ closedIssueNumber, blockEpicNumber, subIssueCount: subIssues.length })
+  if (!isSolo) { core.info(`#${closedIssueNumber} is a genuine epic (${subIssues.length} sub-issue(s)) — closed via /close-epic, not here; skip.`); return null }
+  core.info(`#${closedIssueNumber} is a solo leaf (its own epic branch, no real sub-issues) — treating its own closure as the completion signal.`)
+  return [{ number: closedIssueNumber, state: 'closed' }]
+}
+
 export async function runEpicReadyPr({ github, context, core }, { ownerLogin, dispatchBranch } = {}) {
   const { owner, repo } = context.repo
   const OWNER = ownerLogin || 'pmcp'
@@ -97,14 +105,9 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
   // resolves epicNumber to its own number, with zero real sub-issues — that used to be
   // indistinguishable from the genuine-epic case and always skipped. Treat it as its
   // epic's one completed child instead.
-  if (closedIssueNumber !== null) {
-    const { isSolo } = resolveEpicTarget({ closedIssueNumber, blockEpicNumber, subIssueCount: subIssues.length })
-    if (epicNumber === closedIssueNumber) {
-      if (!isSolo) { core.info(`#${closedIssueNumber} is a genuine epic (${subIssues.length} sub-issue(s)) — closed via /close-epic, not here; skip.`); return }
-      core.info(`#${closedIssueNumber} is a solo leaf (its own epic branch, no real sub-issues) — treating its own closure as the completion signal.`)
-      subIssues = [{ number: closedIssueNumber, state: 'closed' }]
-    }
-  }
+  const adjusted = adjustForSoloLeaf({ core, epicNumber, closedIssueNumber, blockEpicNumber, subIssues })
+  if (adjusted === null) return
+  subIssues = adjusted
 
   // 2) any existing OPEN epic→main PR (idempotency guard)
   const existing = await github.paginate(github.rest.pulls.list,
