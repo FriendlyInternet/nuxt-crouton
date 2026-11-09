@@ -29,12 +29,11 @@
  *      + /set-active so the reviewer lands INSIDE the app. Apps with
  *      autoCreateOnSignup / defaultTeamSlug already have an active org → skipped.
  *
- * Best-effort by contract: an auth-level hiccup prints a warning and exits 0 so it
- * can't fail a deploy. Two exits are non-zero: a usage error (missing
- * --url/--email/--password), and an existing account that still refuses the given
- * password after the reset attempt — the caller only advertises a login on exit 0
- * (#1369), so a login known NOT to work must not exit 0 (#2358). The deploy step
- * wraps this in `if`, so neither fails the deploy.
+ * Exit 0 <=> a working review login exists (#1369, #2358, #3474). Anything else is
+ * non-zero: usage error (2); an invalid --url, an unreachable Worker, a sign-up that
+ * still fails after retries (the fresh Worker may not see its auth secret for a few
+ * seconds), or an existing account that refuses the password (1). The caller only
+ * advertises a login on exit 0.
  *
  * Staging only — the caller (deploy-app.yml) gates this to environment != production.
  */
@@ -99,6 +98,29 @@ function execSeedSql(args, sql) {
  * `review+<app>-<key>@example.com` decodes as a SPACE unencoded, so a hand-built
  * link logs in as the wrong address.
  */
+export const SIGNUP_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 15000, 15000]
+
+export function isMissingSecretError(code) {
+  return /BETTER_AUTH_SECRET is required/i.test(String(code ?? ''))
+}
+
+/** 'ok' | 'exists' | 'retry' | 'give-up' for one sign-up attempt. */
+export function signUpDecision({ ok, status, code, threw, attempt, maxAttempts }) {
+  if (ok) return 'ok'
+  if (!threw && (status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code ?? '')))) return 'exists'
+  if ((threw || isMissingSecretError(code)) && attempt < maxAttempts) return 'retry'
+  return 'give-up'
+}
+
+export function retryDelays(env = process.env) {
+  const raw = env.SEED_SIGNUP_RETRY_DELAYS_MS
+  if (raw) {
+    const parts = raw.split(',').map(x => x.trim())
+    if (parts.every(x => /^\d+$/.test(x))) return parts.map(Number)
+  }
+  return SIGNUP_RETRY_DELAYS_MS
+}
+
 export function buildLoginUrl({ url, email, password, landing }) {
   const q = new URLSearchParams({ email, password })
   if (landing) q.set('redirect', landing)
@@ -203,8 +225,8 @@ async function main() {
   try {
     origin = new URL(url).origin
   } catch {
-    warn(`invalid --url "${url}" — skipping seed.`)
-    process.exit(0)
+    warn(`invalid --url "${url}" — no login created.`)
+    process.exit(1)
   }
   const base = origin
   const name = args.name || 'Review Tester'
@@ -239,41 +261,55 @@ async function main() {
     return { res, json }
   }
 
-  // 1. Sign up (autoSignIn returns a session cookie on success).
+  // 1. Sign up (autoSignIn returns a session cookie on success). A brand-new Worker
+  //    may not see its just-uploaded auth secret for a few seconds → retry (#3474).
+  const delays = retryDelays()
+  const maxAttempts = delays.length + 1
   let signedUp = false
-  try {
-    const { res, json } = await post('/api/auth/sign-up/email', { name, email, password })
-    if (res.ok) {
+  for (let attempt = 1; ; attempt++) {
+    let res = null
+    let json = null
+    let threw = null
+    try {
+      ;({ res, json } = await post('/api/auth/sign-up/email', { name, email, password }))
+    } catch (e) {
+      threw = e
+    }
+    const code = threw ? (threw?.message || String(threw)) : (json?.code || json?.message || `HTTP ${res.status}`)
+    const decision = signUpDecision({ ok: !!res?.ok, status: res?.status, code, threw: !!threw, attempt, maxAttempts })
+    if (decision === 'ok') {
       signedUp = true
       info(`signed up ${email}`)
-    } else {
-      const code = json?.code || json?.message || `HTTP ${res.status}`
-      if (res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))) {
-        info(`user ${email} already exists — already seeded, reusing.`)
-        // Re-establish a session for the org check below.
-        let { res: si } = await post('/api/auth/sign-in/email', { email, password })
-        if (!si.ok && (args.db || args.sqlite)) {
-          // The account holds an old password (secret rotated, #2358) — reset it, retry.
-          info('existing user refuses this password — resetting it to the current one.')
-          try {
-            execSeedSql(args, await resetPasswordSql(email, password))
-            ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
-          } catch (e) {
-            warn(`password reset failed: ${e?.message || e}`)
-          }
-        }
-        if (!si.ok) {
-          warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
-          process.exit(1)
-        }
-      } else {
-        warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)
-        process.exit(0)
-      }
+      break
     }
-  } catch (e) {
-    warn(`sign-up request error: ${e?.message || e} — skipping.`)
-    process.exit(0)
+    if (decision === 'retry') {
+      const wait = delays[attempt - 1]
+      info(`sign-up: Worker not ready (${isMissingSecretError(code) ? 'no auth secret yet' : 'request error'}) — retrying in ${Math.round(wait / 1000)}s (attempt ${attempt}/${maxAttempts})`)
+      await new Promise(r => setTimeout(r, wait))
+      continue
+    }
+    if (decision === 'exists') {
+      info(`user ${email} already exists — already seeded, reusing.`)
+      // Re-establish a session for the org check below.
+      let { res: si } = await post('/api/auth/sign-in/email', { email, password })
+      if (!si.ok && (args.db || args.sqlite)) {
+        // The account holds an old password (secret rotated, #2358) — reset it, retry.
+        info('existing user refuses this password — resetting it to the current one.')
+        try {
+          execSeedSql(args, await resetPasswordSql(email, password))
+          ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+        } catch (e) {
+          warn(`password reset failed: ${e?.message || e}`)
+        }
+      }
+      if (!si.ok) {
+        warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+        process.exit(1)
+      }
+      break
+    }
+    warn(`could not create the review login after ${attempt} attempt(s) (${code}) — NOT advertising it.`)
+    process.exit(1)
   }
 
   // 2. Capture the review user's id + whether the session already has an active org

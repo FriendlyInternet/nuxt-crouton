@@ -109,3 +109,5 @@ of these now?"* — fixing is a separate, explicit step (this skill finds; it do
 - It complements, not replaces, the built-in `security-review` skill (which passively reviews a
   diff) and `/review` (general code review). Reach for `/red-team` when you want something that
   *actively hunts* for exploits at a chosen depth.
+
+> Note (moved from root CLAUDE.md, #3350): findings are collated into a `writeups/reports/red-team-*.md` report.

@@ -90,7 +90,7 @@ test('sanitizeLabels keeps known and drops unknown (the bad-label create failure
 // ── buildChildBody ───────────────────────────────────────────────────────────────
 test('buildChildBody injects the WS2 block at childDepth', () => {
   const body = buildChildBody('## body', { epic: 1685, childDepth: 2, epic_branch: BRANCH })
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null, base: null })
   assert.match(body, /^## body/)
 })
 
@@ -352,4 +352,33 @@ test('missingMockupReason: silent for non-UI holds, loud when a mockup was promi
   assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
   assert.match(missingMockupReason({ summary: 'x', questions: [], ui: '<p/>' }, [], 'boom'), /boom/)
   assert.equal(missingMockupReason({ summary: 'mockup', questions: [], ui: '<p/>' }, [{ label: 'UI mockup', path: 'a.png' }]), '')
+})
+
+// ── #3238: a ticket that asks for a design sign-off never slips through as a leaf ──
+import { applySignoffFallback } from './apply-decompose-plan.mjs'
+import { signoffRoute, SIGNOFF_MARKER } from './lib/signoff-route.mjs'
+const ASKS = 'Do X\n**Hold for design sign-off first** (`signoff` with a `ui` mockup)'
+
+test('#3238 (5) leaf + ticket asks + no hold → one signoff-hold, no work-this', () => {
+  const plan = applySignoffFallback({ leaf: true, children: [] }, { text: ASKS, comments: [] })
+  assert.ok(plan.signoff)
+  const acts = planToActions(plan, CTX)
+  assert.equal(acts.length, 1)
+  assert.equal(acts[0].type, 'signoff-hold')
+  assert.ok(!acts.some(a => a.type === 'add-label'))
+})
+test('#3238 (6) the rendered hold starts with the marker and counts as asked', () => {
+  const plan = applySignoffFallback({ leaf: true, children: [] }, { text: ASKS, comments: [] })
+  const bodies = []
+  runActions(planToActions(plan, CTX), { repo: 'o/r', exec: () => '', log: () => {}, writeBody: (n, b) => { bodies.push(b); return n } })
+  assert.ok(bodies[0].startsWith(SIGNOFF_MARKER))
+  assert.equal(signoffRoute({ text: ASKS, comments: [{ body: bodies[0] }] }).route, 'none')
+})
+test('#3238 (7) marker already present → leaf unchanged', () => {
+  const leaf = { leaf: true, children: [] }
+  assert.equal(applySignoffFallback(leaf, { text: ASKS, comments: [{ body: `${SIGNOFF_MARKER}\nx` }] }), leaf)
+})
+test('#3238 (8) ticket does not ask → leaf unchanged', () => {
+  const leaf = { leaf: true, children: [] }
+  assert.equal(applySignoffFallback(leaf, { text: 'plain', comments: [] }), leaf)
 })

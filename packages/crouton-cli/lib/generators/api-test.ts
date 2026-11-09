@@ -40,6 +40,74 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
  * write it, honouring `--tests`).
  */
 import { resolveAccess } from './api-endpoints.ts'
+import { isListField } from '../utils/list-fields.ts'
+import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+
+/**
+ * Same-team reference test cases for POST/PATCH (#3378/#3424), split out of generateApiTest to keep it small.
+ */
+function buildRefCases(ctx: { S: string, idParam: string, assertFn: string, hasTeamRefs: boolean, optionalRef: any, teamRefs: any[] }): { postRefCases: string, patchRefCases: string } {
+  const { S, idParam, assertFn, hasTeamRefs, optionalRef, teamRefs } = ctx
+  // Same-team reference check (#3378/#3424). The queries module is mocked here, so these prove the
+  // ROUTE wiring (check runs before the write, its rejection stops the write, a null optional
+  // reference passes); the check itself is tested against a real database in its own package.
+    // Body fragment carrying every reference field with the given id (list refs take an array).
+  const refBody = (id: string) => teamRefs.map(f => `${f.name}: ${isListField(f) ? `['${id}']` : `'${id}'`}`).join(', ')
+  const refMatch = (id: string) => `expect.objectContaining({ ${refBody(id)} })`
+  const refRejection = (bodyFor: (id: string) => string, call: (b: string) => string, writeFn: string) => `
+    it('rejects a reference to another team\\'s record (400) and never writes', async () => {
+      ;(${assertFn} as any).mockRejectedValueOnce(Object.assign(new Error('Invalid reference'), { status: 400 }))
+      await expect(${call(bodyFor('other_team_ref'))}).rejects.toMatchObject({ status: 400 })
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('other_team_ref')})
+      expect(${writeFn}).not.toHaveBeenCalled()
+    })
+
+    it('rejects a reference id that does not exist (400) and never writes', async () => {
+      ;(${assertFn} as any).mockRejectedValueOnce(Object.assign(new Error('Invalid reference'), { status: 400 }))
+      await expect(${call(bodyFor('missing_ref'))}).rejects.toMatchObject({ status: 400 })
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('missing_ref')})
+      expect(${writeFn}).not.toHaveBeenCalled()
+    })`
+  const postBody = (id: string) => `{ ...VALID_BODY, ${refBody(id)} }`
+  const patchBody = (id: string) => `{ ${refBody(id)} }`
+  const postCall = (b: string) => `postHandler({ __body: ${b} } as any)`
+  const patchCall = (b: string) => `patchHandler({ __params: { ${idParam}: 'rec_1' }, __body: ${b} } as any)`
+  const postRefCases = hasTeamRefs ? `
+${refRejection(postBody, postCall, `create${S}`)}
+
+    it('accepts references that belong to the team', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(create${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await ${postCall(postBody('ref_1'))}
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('ref_1')})
+      expect(create${S}).toHaveBeenCalledWith(expect.objectContaining({ ${refBody('ref_1')} }))
+    })${optionalRef ? `
+
+    it('accepts null for the optional reference \`${optionalRef.name}\`', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(create${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await postHandler({ __body: { ...VALID_BODY, ${optionalRef.name}: null } } as any)
+      expect(create${S}).toHaveBeenCalled()
+    })` : ''}` : ''
+  const patchRefCases = hasTeamRefs ? `
+${refRejection(patchBody, patchCall, `update${S}`)}
+
+    it('accepts references that belong to the team', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(update${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await ${patchCall(patchBody('ref_1'))}
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('ref_1')})
+      expect(update${S}).toHaveBeenCalled()
+    })${optionalRef ? `
+
+    it('accepts null for the optional reference \`${optionalRef.name}\`', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(update${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await patchHandler({ __params: { ${idParam}: 'rec_1' }, __body: { ${optionalRef.name}: null } } as any)
+      expect(update${S}).toHaveBeenCalled()
+    })` : ''}` : ''
+  return { postRefCases, patchRefCases }
+}
 
 export function generateApiTest(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { layer, plural, singular, camelCase, pascalCase, pascalCasePlural, layerPascalCase, originalCollectionName } = data
@@ -72,11 +140,19 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     `update${S}: vi.fn()`,
     `delete${S}: vi.fn()`,
   ]
+  if (collectTeamRefFields(data).length > 0) queryExports.push(`assert${S}References: vi.fn()`)
   if (hierarchy) queryExports.push(`updatePosition${S}: vi.fn()`)
   if (hasReorder) queryExports.push(`reorderSiblings${P}: vi.fn()`)
 
   // Named imports we assert against.
   const queryImports = [`getAll${P}`, `create${S}`, `update${S}`, `delete${S}`]
+  const teamRefs = collectTeamRefFields(data)
+  const hasTeamRefs = teamRefs.length > 0
+  const assertFn = `assert${S}References`
+  if (hasTeamRefs) queryImports.push(assertFn)
+  // An optional reference for the "null is fine" case — single preferred, list refs too: optional
+  // fields are `.nullish()` on the wire either way (#3424, #3600)
+  const optionalRef = teamRefs.find(f => !f.meta?.required && !isListField(f)) ?? teamRefs.find(f => !f.meta?.required)
   if (hierarchy) queryImports.push(`updatePosition${S}`)
   if (hasReorder) queryImports.push(`reorderSiblings${P}`)
 
@@ -107,6 +183,8 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
       expect(create${S}).not.toHaveBeenCalled()
     })`
   }
+
+  const { postRefCases, patchRefCases } = buildRefCases({ S, idParam, assertFn, hasTeamRefs, optionalRef, teamRefs })
 
   // --- describe blocks
   const getBlock = `
@@ -151,7 +229,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
       const result = await postHandler({ __body: VALID_BODY } as any)
       expect(create${S}).toHaveBeenCalledWith(expect.objectContaining({ teamId: TEAM.id, owner: USER.id }))
       expect(result).toMatchObject({ id: 'rec_1' })
-    })${invalidPostCase}
+    })${invalidPostCase}${postRefCases}
   })`
 
   const patchBlock = `
@@ -175,7 +253,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     it('propagates a not-found from the query as a 404', async () => {
       ;(update${S} as any).mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }))
       await expect(patchHandler({ __params: { ${idParam}: 'missing' }, __body: {} } as any)).rejects.toMatchObject({ status: 404 })
-    })
+    })${patchRefCases}
   })`
 
   const deleteBlock = `

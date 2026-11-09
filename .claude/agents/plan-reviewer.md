@@ -13,16 +13,16 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 1. Reproduced? It must be OBSERVED (app booted, test run), not reasoned from code. For a workflow/CI change nothing can be booted: observed means the real run logs or API timeline were read, by the planner or by you. "no" with a reason that is not real is FAIL.
 1b. Every assumption has a Why and a working evidence link that says what the plan claims.
 2. Cause proven? Evidence ties the symptom to the cause. Any claim stated without a check ("should", "probably", "likely") is FAIL.
-3. Undeclared assumptions the plan relies on → FAIL. Declared `unverified` assumptions with a reason → PASS; list each with what you found when you checked it yourself.
+3. Undeclared assumptions the plan relies on → FAIL. Declared `unverified` assumptions with a reason → PASS; list each with what you found when you checked it yourself. A `### Docs` row marked `checked` whose evidence link does not show the claim, or a doc claim the diff obviously makes false that the Docs section does not list, is FAIL.
 4. Over-engineering: is there a smaller change, an existing helper, a VueUse/Nuxt primitive or config option? A new abstraction must earn its place.
 5. Best practice, no hacks: no private framework APIs, no suppressions, no special-casing, no `any` casts or timeouts papering over a cause.
 6. Scope: matches the issue; no drive-by changes.
-7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step.
+7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step. A design sign-off the ticket itself asks for, still open, is FAIL with evidence "design sign-off pending by ticket instruction". The pipeline holds on it; it is not a rejection (#3238).
 
 8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.
 9. Contradicts the record? No step contradicts the epic's Decisions log, a recorded experiment, or a merged PR's finding. Read the epic body and its comments (the issue file names the epic) and check each step against them. A plan that sets `priority: -1` on package component dirs while the epic records "app dir beats layers at equal priority" is FAIL.
 
-The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
+The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails. On a revised plan, review the whole plan, and check that no change in `### Changes from the previous plan` contradicts a `## Decisions` line.
 
 Verdict: `no-go` if any of 1–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 

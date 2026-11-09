@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideFixBotDispatch, pickFailedRun } from './fix-bot-dispatch.mjs'
+import { readFileSync } from 'node:fs'
+import { decideFixBotDispatch, pickFailedRun, fixBotWillTry, expectedRunConclusion, redPingHeading, FIX_BOT_WORKFLOWS } from './fix-bot-dispatch.mjs'
 
 const yes = { go: true, reason: 'ok' }
 const no = { go: false, reason: 'a commit landed after the approval' }
@@ -27,4 +28,104 @@ test('pickFailedRun: newest CI/E2E failure wins, other workflows ignored', () =>
     { id: 3, name: 'Lint', conclusion: 'failure', created_at: '2026-01-01T03:00:00Z' },
   ])
   assert.equal(r.id, 2)
+})
+
+// ── #3373: fixBotWillTry — the rule both workflows run
+const base = { head: 'work-12', base: 'epic/1-x', state: 'open', labels: [], failures: [{ workflow: 'CI', conclusion: 'failure' }] }
+const w = (o) => fixBotWillTry({ ...base, ...o })
+const F = (workflow, conclusion = 'failure') => ({ workflow, conclusion })
+
+test('willTry: base → bot, attempts 0', () => { const r = w(); assert.equal(r.who, 'bot'); assert.equal(r.attempts, 0) })
+test('willTry: CI + E2E + Deploy all failure → bot', () =>
+  assert.equal(w({ failures: [F('CI'), F('E2E'), F('Deploy Apps (Cloudflare Workers)')] }).who, 'bot'))
+test('willTry: unwatched workflow → owner, names it', () => {
+  const r = w({ failures: [F('Packages guard')] })
+  assert.equal(r.who, 'owner'); assert.equal(r.code, 'not-watched'); assert.match(r.reason, /Packages guard/)
+})
+test('willTry: mixed CI + Review → owner', () => assert.equal(w({ failures: [F('CI'), F('Review')] }).who, 'owner'))
+test('willTry: commit status (null workflow) → owner not-watched', () => {
+  const r = w({ failures: [{ workflow: null, conclusion: null }] })
+  assert.equal(r.who, 'owner'); assert.equal(r.code, 'not-watched')
+})
+for (const c of ['timed_out', 'action_required', 'stale', 'cancelled']) {
+  test(`willTry: ${c} → owner not-failure`, () => {
+    const r = w({ failures: [F('CI', c)] })
+    assert.equal(r.who, 'owner'); assert.equal(r.code, 'not-failure')
+  })
+}
+test('willTry: attempts 3 → gave-up; 2 → bot', () => {
+  assert.equal(w({ labels: ['ci-fix-attempts:3'] }).who, 'gave-up')
+  const r = w({ labels: ['ci-fix-attempts:2'] })
+  assert.equal(r.who, 'bot'); assert.equal(r.attempts, 2); assert.equal(r.attemptLabel, 'ci-fix-attempts:2')
+})
+test('willTry: status:blocked → owner blocked', () => {
+  const r = w({ labels: ['status:blocked'] }); assert.equal(r.who, 'owner'); assert.equal(r.code, 'blocked')
+})
+test('willTry: feature head / closed → owner not-eligible', () => {
+  assert.equal(w({ head: 'feature/x' }).code, 'not-eligible')
+  const r = w({ state: 'closed' }); assert.equal(r.code, 'not-eligible'); assert.match(r.reason, /not open/)
+})
+test('willTry: epic head → owner automatic, bot when manual', () => {
+  const o = { head: 'epic/9-x', base: 'main', go: yes }
+  assert.equal(w(o).who, 'owner')
+  assert.equal(w({ ...o, manual: true }).who, 'bot')
+})
+test('willTry: manual with no failed run → none', () => assert.equal(w({ manual: true, failures: [] }).who, 'none'))
+
+test('expectedRunConclusion', () => {
+  assert.equal(expectedRunConclusion({ runConclusion: 'failure', checkConclusion: 'failure' }), 'failure')
+  assert.equal(expectedRunConclusion({ runConclusion: null, checkConclusion: 'failure' }), 'failure')
+  assert.equal(expectedRunConclusion({ runConclusion: null, checkConclusion: 'timed_out' }), 'timed_out')
+  assert.equal(expectedRunConclusion({ runConclusion: 'success', checkConclusion: 'failure' }), 'success')
+})
+
+test('redPingHeading: never @mentions (#3622)', () => {
+  for (const who of ['bot', 'gave-up', 'owner', 'none']) {
+    for (const r of [{ head: 'work-1', base: 'epic/1-x' }, { head: 'epic/3-x', base: 'main' }]) {
+      const x = redPingHeading({ who, count: 1, list: '`x`', reason: 'because', ...r })
+      assert.ok(!(x.heading + x.needed).includes('@'), `${who} ${r.head}`)
+    }
+  }
+  const o = redPingHeading({ who: 'owner', count: 1, list: '`x`', head: 'work-1', base: 'epic/1-x', reason: 'because' })
+  assert.match(o.needed, /because/)
+})
+
+// Lockstep with the workflows (read as text)
+const fixYml = readFileSync(new URL('../../.github/workflows/fix-ci-on-failure.yml', import.meta.url), 'utf8')
+const statusYml = readFileSync(new URL('../../.github/workflows/status.yml', import.meta.url), 'utf8')
+const statusSrc = readFileSync(new URL('./pr-status-io.mjs', import.meta.url), 'utf8') // the red ping moved here (#3617)
+test('lockstep: trigger workflows list equals FIX_BOT_WORKFLOWS', () => {
+  const m = /^\s*workflows:\s*\[(.*)\]/m.exec(fixYml)
+  assert.deepEqual(JSON.parse(`[${m[1]}]`), FIX_BOT_WORKFLOWS)
+})
+test('lockstep: job if keeps conclusion == failure and work-', () => {
+  assert.match(fixYml, /conclusion == 'failure'/); assert.match(fixYml, /'work-'/)
+})
+test('lockstep: gate has no second copy of the decision', () => {
+  assert.ok(fixYml.includes('fixBotWillTry('))
+  for (const s of ['const MAX =', 'attempts >= MAX', "labels.includes('status:blocked')"]) assert.ok(!fixYml.includes(s), s)
+})
+test('lockstep: the status red ping (pr-status-io.mjs) uses the shared decision and builder', () => {
+  assert.ok(statusSrc.includes('fixBotWillTry(')); assert.ok(statusSrc.includes('redPingHeading('))
+  assert.ok(!statusSrc.includes('`🔴 **@${OWNER} — CI failed '))
+  assert.ok(!statusSrc.includes("'mentioned @' + OWNER"))
+  assert.ok(!statusYml.includes('`🔴 **@${OWNER} — CI failed '), 'no second heading copy in status.yml either')
+})
+
+test('redPingHeading: epic → main wording', async () => {
+  const { redPingHeading } = await import('./fix-bot-dispatch.mjs')
+  const h = redPingHeading({ who: 'owner', owner: 'pmcp', base: 'main', head: 'epic/3-x', count: 1, list: '`A`' })
+  const all = h.heading + h.needed
+  assert.ok(!all.includes('@'))
+  assert.ok(all.includes("won't merge"))
+  assert.ok(!all.includes('sub-PR'))
+})
+
+test('redPingHeading: work-* → main keeps the pipeline wording', async () => {
+  const { redPingHeading } = await import('./fix-bot-dispatch.mjs')
+  const h = redPingHeading({ who: 'owner', owner: 'pmcp', reason: 'the auto-fix stands down while the PR is blocked', base: 'main', head: 'work-3006', count: 1, list: '`A`' })
+  const all = h.heading + h.needed
+  assert.ok(all.includes('pipeline PR'))
+  assert.ok(all.includes('stands down'))
+  assert.ok(!all.includes('epic PR'))
 })

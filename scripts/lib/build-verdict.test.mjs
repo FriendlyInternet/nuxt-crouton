@@ -151,3 +151,63 @@ test('#3160: bare file name in ticket and unrelated scope passes item 2', () => 
 test('#3160: no copies leaves item 2 untouched', () => {
   assert.equal(precheck(mod('packages/a/x.ts'), '')['2'], undefined)
 })
+
+test('#3173: only the final hold carries the final marker, the ok wording and the optional ok-again line', () => {
+  const d = decide(copiedDiff, TICKET, verdict('go', {}))
+  const final = renderComment(d, { round: 2, okAgain: 'AGAIN-LINE' })
+  assert.match(final, /<!-- build-review-final -->/)
+  assert.match(final, /reply `ok` to merge as is/)
+  assert.match(final, /^AGAIN-LINE$/m)
+  assert.doesNotMatch(renderComment(d, { round: 2 }), /AGAIN-LINE/)
+  const first = renderComment(d, { round: 1, okAgain: 'AGAIN-LINE' })
+  assert.doesNotMatch(first, /build-review-final|AGAIN-LINE/)
+})
+
+test('3428: a needs-owner comment says ok merges', () => {
+  const d = decide(cleanDiff, TICKET, verdict('needs-owner', {}))
+  assert.equal(d.verdict, 'needs-owner')
+  assert.match(renderComment(d), /reply `ok` to merge as is/)
+})
+
+const SK = (k) => ['it', k].join('.')
+const addTest = (line) => `diff --git a/tests/a.test.ts b/tests/a.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/a.test.ts
+@@ -0,0 +1 @@
++${line}
+`
+const SNAP = 'apps/velo/server/db/migrations/sqlite/meta/'
+
+test('#3550 workflow gate: a ci.yml edit passes item 3 when the ticket has a Workflow-change: yes line', () => {
+  const d = mod('.github/workflows/ci.yml')
+  assert.equal(precheck(d, "the CI step reports only. Workflow-change: yes, if the step's failure mode changes.")['3'], undefined)
+  assert.equal(precheck(d, '- Workflow-change: yes.')['3'], undefined)
+})
+test('#3550 workflow gate: a ci.yml edit without Workflow-change: yes and without the path still fails item 3', () => {
+  const d = mod('.github/workflows/ci.yml')
+  assert.match(precheck(d, TICKET)['3'].evidence, /ci\.yml/)
+  assert.match(precheck(d, 'Workflow-change: no')['3'].evidence, /ci\.yml/)
+})
+test('#3550 workflow gate: Workflow-change: yes does not exempt a non-workflow gate', () => {
+  assert.match(precheck(mod('.fallowrc.json'), 'Workflow-change: yes.')['3'].evidence, /\.fallowrc\.json/)
+})
+test('#3550 migration snapshot: a new meta/NNNN_snapshot.json copied from the previous one passes item 2', () => {
+  const d = cp(`${SNAP}0003_snapshot.json`, `${SNAP}0004_snapshot.json`) + mod('apps/velo/server/db/schema.ts')
+  assert.equal(precheck(d, TICKET)['2'], undefined)
+})
+test('#3550 migration snapshot: a copied .ts in the same scope still fails item 2', () => {
+  const d = cp(`${SNAP}0003_snapshot.json`, `${SNAP}0004_snapshot.json`) + cp('apps/velo/server/a.ts', 'apps/velo/server/b.ts') + mod('apps/velo/server/db/schema.ts')
+  const ev = precheck(d, TICKET)['2'].evidence
+  assert.match(ev, /b\.ts/)
+  assert.doesNotMatch(ev, /snapshot/)
+})
+test('#3550 skip text: it.skip inside a string literal in a test file passes item 3', () => {
+  assert.equal(precheck(addTest(`const src = "${SK('skip')}('x', () => {})"`), TICKET)['3'], undefined)
+  assert.equal(precheck(addTest(`const a = ["${['test', 'skip'].join('.')}('s', () => {})", '${SK('only')}']`), TICKET)['3'], undefined)
+})
+test('#3550 skip text: a real it.skip / describe.skip / xit call still fails item 3', () => {
+  for (const l of [`${SK('skip')}('x', () => {})`, `${['describe', 'skip'].join('.')}('x', () => {})`, `${'x' + 'it'}('x', () => {})`]) {
+    assert.match(precheck(addTest(l), TICKET)['3'].evidence, /skipped/)
+  }
+})

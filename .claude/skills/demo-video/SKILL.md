@@ -39,7 +39,7 @@ Idempotent. Installs `shot-scraper` via pip and makes sure Playwright's expected
 chromium exists — downloading it where possible, or (in the egress-blocked web
 harness) **symlink-shimming** the expected build dirs onto the pre-installed
 `/opt/pw-browsers` browsers. Don't hand-roll the shim; don't conclude "no
-browser" from a failed `playwright install` (see CLAUDE.md's headless-browser
+browser" from a failed `playwright install` (see `crouton-harness-observability` §5's headless-browser
 note — same trap).
 
 ## Recording

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, notOnMainHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -111,5 +111,66 @@ describe('decidePrLogin', () => {
     expect(r.data).toEqual([{ app: 'velo', pr: 5, title: 'open', updatedAt: 'u', url: 'https://velo-pr7.example.dev' }])
     expect(paths).toHaveLength(2)
     expect(paths.some(p => p.includes('issues/comments'))).toBe(false)
+  })
+})
+
+describe('apps without a staging address', () => {
+  it('none/gone pages omit the staging link when stagingUrl is empty', () => {
+    expect(previewNoneHtml(7, 'spike', '')).not.toContain('href=""')
+    expect(previewNoneHtml(7, 'spike', '')).not.toContain('staging</a>')
+    expect(previewGoneHtml(7, 'spike', '')).not.toContain('href=""')
+    expect(previewNoneHtml(7, 'spike', 'https://s')).toContain('Open spike staging')
+  })
+  it('main 404 says the app only has PR test builds', () => {
+    const html = noStagingHtml('spike')
+    expect(html).toContain('only has PR test builds')
+    expect(html).not.toContain('deploy.config.json')
+  })
+})
+
+describe('loginPlan', () => {
+  const open = { gone: false as const, url: 'https://pr3188.example.dev' }
+  it('PR key for an app not on main signs in on the PR preview', () => {
+    expect(loginPlan(null, 'devframe-spike', 'pr3188', true, open)).toEqual({ kind: 'redirect', base: 'https://pr3188.example.dev', signIn: true })
+  })
+  it('PR key with an empty staging address still signs in on the preview', () => {
+    expect(loginPlan({ stagingUrl: '', hasSignIn: true }, 'spike', 'pr3188', true, open)).toEqual({ kind: 'redirect', base: 'https://pr3188.example.dev', signIn: true })
+  })
+  it('main with an empty staging address is a 404 page', () => {
+    const p = loginPlan({ stagingUrl: '', hasSignIn: true }, 'spike', 'main', true)
+    expect(p).toMatchObject({ kind: 'page', status: 404 })
+  })
+  it('main for an unknown app is a not-on-main 404', () => {
+    expect(loginPlan(null, 'x', 'main', true)).toMatchObject({ kind: 'page', status: 404 })
+  })
+  it('not-on-main page text says it only has PR test builds', () => {
+    const p = loginPlan(null, 'x', 'main', true)
+    expect(p).toMatchObject({ kind: 'page', status: 404 })
+    const html = (p as { html: string }).html
+    expect(html).toBe(notOnMainHtml('x'))
+    expect(html).toContain('not on main yet — it only has PR test builds')
+  })
+  it('PR key for an app with a staging address redirects to the PR preview, not staging', () => {
+    expect(loginPlan({ stagingUrl: 'https://x', hasSignIn: true }, 'a', 'pr7', true, { gone: false, url: 'https://pr7.example.dev' }))
+      .toEqual({ kind: 'redirect', base: 'https://pr7.example.dev', signIn: true })
+  })
+  it('main with an address is unchanged; opt-out or no secret skips sign-in', () => {
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: true }, 'a', 'main', true)).toEqual({ kind: 'redirect', base: 'https://s', signIn: true })
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: false }, 'a', 'main', true)).toMatchObject({ signIn: false })
+    expect(loginPlan({ stagingUrl: 'https://s', hasSignIn: true }, 'a', 'main', false)).toMatchObject({ signIn: false })
+  })
+  it('gone / none PR previews map to 410 / 404', () => {
+    expect(loginPlan(null, 'a', 'pr1', true, { gone: true, pr: 1 })).toMatchObject({ status: 410 })
+    expect(loginPlan(null, 'a', 'pr1', true, { gone: 'none', pr: 1 })).toMatchObject({ status: 404 })
+  })
+})
+
+describe('decidePrLogin for an app not on main', () => {
+  it('devframe-spike pr3188 resolves from the PR own comments', async () => {
+    const get = (async (path: string) => {
+      if (path.includes('/pulls/3188')) return { data: { state: 'open' }, error: null }
+      return { data: [{ body: '<!-- deploy-staging:devframe-spike -->\npreview for this PR: https://devframe-spike-pr3188.example.dev' }], error: null }
+    }) as never
+    expect(await decidePrLogin(get, 'devframe-spike', 'pr3188')).toEqual({ gone: false, url: 'https://devframe-spike-pr3188.example.dev' })
   })
 })

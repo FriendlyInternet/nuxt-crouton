@@ -13,7 +13,7 @@
 //     `work-issue-pidev.yml` / `decompose-on-issue-pidev.yml` call the `bot-guard` CLI below.
 //
 //  2. EXACT-LABEL GATING (#535) — a job fires ONLY on the exact trigger label freshly applied
-//     (`work-this` for the worker, `delegate-pi`/`delegate-hard` for the decomposer), never on a
+//     (`work-this` for the worker, `delegate-pi` for the decomposer), never on a
 //     worker's incidental `status:in-progress` add. This mirrors each workflow's job `if:` so the
 //     re-fire loop is closed. (`jobShouldFire` is the executable spec of that `if:`.)
 //
@@ -37,9 +37,9 @@ import { appendFileSync, readFileSync } from 'node:fs'
 export const ALLOWED_BOT = 'nuxt-harness[bot]'
 export const MAX_DEPTH = 3
 export const MAX_CHILDREN = 6
-// The labels that legitimately DRIVE a fresh pipeline run (a human or the App may apply them).
+// The labels that legitimately DRIVE a fresh pipeline run (only the pipeline app applies `delegate` / `delegate-pi`; people apply `work-this`).
 export const WORKER_TRIGGER = 'work-this'
-export const DECOMPOSE_TRIGGERS = ['delegate-pi', 'delegate-hard']
+export const DECOMPOSE_TRIGGERS = ['delegate-pi']
 
 /**
  * INVARIANT 1 — may `actor` drive the pipeline?
@@ -130,6 +130,57 @@ function decideRevision(revision) {
 export const CLAIM_TTL_MINUTES = 90
 export const DEFAULT_BRANCH = 'main'
 
+// Each rule takes the claim context and returns a verdict, or null to fall through to the next.
+function ruleIssueClosed(ctx) {
+  if (ctx.issueState !== 'closed') return null
+  return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
+}
+
+function ruleMergedElsewhere(ctx) {
+  const { others, defaultBranch, lastReopenedAt } = ctx
+  // A merge that PREDATES the issue's last reopen is history: reopening means "work it again"
+  // (#2779 — #813 was reopened after PR #817 removed its feature, and the guard refused it).
+  // An unknown time on either side fails SAFE: the merge still counts.
+  const reopened = lastReopenedAt ? Date.parse(lastReopenedAt) : NaN
+  const predatesReopen = (pr) => {
+    const at = pr.mergedAt ? Date.parse(pr.mergedAt) : NaN
+    return Number.isFinite(reopened) && Number.isFinite(at) && at < reopened
+  }
+  const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch) && !predatesReopen(pr))
+  if (!merged) return null
+  return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue (reopened after it? that counts as new work — reopen the issue after the merge to work it again)` }
+}
+
+function ruleCompetingOpenPR(ctx) {
+  const open = ctx.others.find((pr) => pr.state === 'open')
+  if (!open) return null
+  return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
+}
+
+// A fresh run on an issue whose OWN branch already has an open PR would rebuild `work-<n>`
+// from main and force-push it, wiping the revisions made on that PR (#2990: #2972 → PR #2976).
+// Revisions take the `revision` path, so a fresh run has no legitimate reason to be here.
+// A PLAN-only run builds nothing and never touches the branch, so it may proceed.
+function ruleOwnOpenPR(ctx) {
+  if (ctx.mode === 'plan') return null
+  const ownOpen = ctx.linkedPRs.find((pr) => pr && ctx.mine.has(pr.number) && pr.state === 'open' && !pr.merged)
+  if (!ownOpen) return null
+  return { action: 'refuse', claimedBy: ownOpen.number, reason: `PR #${ownOpen.number} is already open for this issue — re-running would overwrite its branch and any revisions on it` }
+}
+
+function ruleInProgressStamp(ctx) {
+  const since = ctx.inProgressSince ? Date.parse(ctx.inProgressSince) : NaN
+  const at = ctx.now ? Date.parse(ctx.now) : NaN
+  if (!Number.isFinite(since) || !Number.isFinite(at)) return null
+  const ageMin = (at - since) / 60_000
+  if (ageMin < ctx.ttlMinutes) {
+    return { action: 'refuse', reason: `status:in-progress was stamped ${Math.round(ageMin)}m ago (< ${ctx.ttlMinutes}m) — another run holds it` }
+  }
+  return { action: 'proceed', reason: `status:in-progress is stale (${Math.round(ageMin)}m > ${ctx.ttlMinutes}m) — treating the prior run as dead` }
+}
+
+const CLAIM_RULES = [ruleIssueClosed, ruleMergedElsewhere, ruleCompetingOpenPR, ruleOwnOpenPR, ruleInProgressStamp]
+
 export function decideClaim({
   issueState = 'open',
   linkedPRs = [],
@@ -140,43 +191,22 @@ export function decideClaim({
   lastReopenedAt = null,
   self = {},
   revision = null,
+  mode = '',
 } = {}) {
   if (revision) return decideRevision(revision)
-  if (issueState === 'closed') {
-    return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
-  }
 
   // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
   // `self.prs` holds EVERY PR on our branch (a re-run can leave a closed one beside an open one).
   const mine = new Set([...(self?.prs || []), self?.pr].filter((n) => n != null))
-  const others = (linkedPRs || []).filter((pr) => pr && !mine.has(pr.number))
-  // A merge that PREDATES the issue's last reopen is history: reopening means "work it again"
-  // (#2779 — #813 was reopened after PR #817 removed its feature, and the guard refused it).
-  // An unknown time on either side fails SAFE: the merge still counts.
-  const reopened = lastReopenedAt ? Date.parse(lastReopenedAt) : NaN
-  const predatesReopen = (pr) => {
-    const at = pr.mergedAt ? Date.parse(pr.mergedAt) : NaN
-    return Number.isFinite(reopened) && Number.isFinite(at) && at < reopened
+  const prs = linkedPRs || []
+  const ctx = {
+    issueState, linkedPRs: prs, inProgressSince, now, ttlMinutes, defaultBranch, lastReopenedAt, mode, mine,
+    others: prs.filter((pr) => pr && !mine.has(pr.number)),
   }
-  const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch) && !predatesReopen(pr))
-  if (merged) {
-    return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue (reopened after it? that counts as new work — reopen the issue after the merge to work it again)` }
+  for (const rule of CLAIM_RULES) {
+    const verdict = rule(ctx)
+    if (verdict) return verdict
   }
-  const open = others.find((pr) => pr.state === 'open')
-  if (open) {
-    return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
-  }
-
-  const since = inProgressSince ? Date.parse(inProgressSince) : NaN
-  const at = now ? Date.parse(now) : NaN
-  if (Number.isFinite(since) && Number.isFinite(at)) {
-    const ageMin = (at - since) / 60_000
-    if (ageMin < ttlMinutes) {
-      return { action: 'refuse', reason: `status:in-progress was stamped ${Math.round(ageMin)}m ago (< ${ttlMinutes}m) — another run holds it` }
-    }
-    return { action: 'proceed', reason: `status:in-progress is stale (${Math.round(ageMin)}m > ${ttlMinutes}m) — treating the prior run as dead` }
-  }
-
   return { action: 'proceed', reason: 'no claim found' }
 }
 

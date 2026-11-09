@@ -2,7 +2,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { holdOrRetry, parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
 
 const fx = (n) => readFileSync(new URL(`../fixtures/plan-review/${n}`, import.meta.url), 'utf8')
 
@@ -99,4 +101,70 @@ test('the comment carries the marker, the type and a collapsed checklist', () =>
   assert.match(c, /<!-- plan-review:v1 -->/)
   assert.match(c, /Plan approved/)
   assert.match(c, /<details>/)
+})
+
+test('holdOrRetry: judgement failures hold from round 2, mechanical retry until round 3', () => {
+  assert.equal(holdOrRetry({ round: 1, failedChecks: ['7'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 1, failedChecks: ['9'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['1b', '8'] }), 'retry')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['7'] }), 'hold')
+  assert.equal(holdOrRetry({ round: 2, failedChecks: ['6', '9'] }), 'hold')
+  assert.equal(holdOrRetry({ round: 3, failedChecks: ['1b'] }), 'hold')
+})
+
+test('rule: a real verdict failing only a mechanical check retries at round 2; a failed 9 holds', () => {
+  const mech = decide(fx('untested-rule.plan.md'), fx('untested-rule.verdict.md'))
+  assert.equal(holdOrRetry({ round: 2, failedChecks: mech.failed }), 'retry')
+  assert.match(renderComment(mech, { round: 2 }), /Plan sent back/)
+  const judge = decide(fx('contradicts-record.plan.md'), fx('contradicts-record.verdict.md'))
+  assert.equal(holdOrRetry({ round: 2, failedChecks: judge.failed }), 'hold')
+  assert.match(renderComment(judge, { round: 2 }), /Held for you/)
+})
+
+test('route command: exit/stdout the workflow relies on', () => {
+  const f = (n) => fileURLToPath(new URL(`../fixtures/plan-review/${n}`, import.meta.url))
+  const script = fileURLToPath(new URL('./plan-verdict.mjs', import.meta.url))
+  const route = (plan, verdict, round) => spawnSync('node', [script, 'route', f(plan), f(verdict), ...(round === undefined ? [] : [String(round)])], { encoding: 'utf8' })
+  const out = (r) => r.stdout.trim()
+  assert.deepEqual(['1', '2', '3'].map((r) => out(route('untested-rule.plan.md', 'untested-rule.verdict.md', r))), ['retry', 'retry', 'hold'])
+  assert.deepEqual(['1', '2', '3'].map((r) => out(route('contradicts-record.plan.md', 'contradicts-record.verdict.md', r))), ['retry', 'hold', 'hold'])
+  assert.equal(out(route('untested-rule.plan.md', 'untested-rule.verdict.md')), 'retry')
+  assert.equal(out(route('untested-rule.plan.md', 'untested-rule.verdict.md', 'abc')), 'retry')
+  const notNoGo = route('clean.plan.md', 'pass.verdict.md', 1)
+  assert.equal(notNoGo.status, 1)
+  assert.match(notNoGo.stderr, /route needs a no-go/)
+})
+
+test('rule: a pending design sign-off ends as a hold — never go, never plan:approved, rejection count unchanged', async () => {
+  const { SIGNOFF_QUESTION } = await import('./plan-verdict.mjs')
+  const plan = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off by ticket instruction, still open')
+  // (9) reviewer says needs-owner with no Question section
+  const d9 = decide(plan, fx('pass.verdict.md').replace('\ngo\n', '\nneeds-owner\n').replace(/- 7: PASS[^\n]*/, '- 7: FAIL — design sign-off pending by ticket instruction'))
+  assert.equal(d9.ok, true)
+  assert.equal(d9.verdict, 'needs-owner')
+  assert.equal(d9.question, SIGNOFF_QUESTION)
+  assert.equal(d9.items['7'].pass, false)
+  // (10) a lenient reviewer saying go with every item PASS is still a hold
+  const d10 = decide(plan, fx('pass.verdict.md'))
+  assert.equal(d10.ok, true)
+  assert.equal(d10.verdict, 'needs-owner')
+  // (11) 7 FAIL and 4 FAIL → still a hold, never a no-go marker
+  const d11 = decide(plan, fx('pass.verdict.md').replace('\ngo\n', '\nno-go\n').replace(/- 4: PASS[^\n]*/, '- 4: FAIL — over-built').replace(/- 7: PASS[^\n]*/, '- 7: FAIL — design sign-off pending by ticket instruction'))
+  assert.equal(d11.verdict, 'needs-owner')
+  const c = renderComment(d11, { round: 2 })
+  assert.match(c, /<!-- plan-review-verdict:needs-owner -->/)
+  assert.ok(c.includes(SIGNOFF_QUESTION))
+  assert.doesNotMatch(c, /plan-review-verdict:no-go/)
+  // (12) controls
+  assert.equal(decide(fx('clean.plan.md'), fx('owner.verdict.md')).question.startsWith('Drop the legacy'), true)
+  assert.equal(decide(fx('clean.plan.md'), fx('pass.verdict.md')).verdict, 'go')
+})
+
+test('a plan with no ### Docs fails item 1 as malformed', () => {
+  const plan = fx('clean.plan.md').replace(/### Docs\n[\s\S]*?(?=### Needs owner)/, '')
+  assert.ok(!/### Docs/.test(plan))
+  const r = precheck(plan)['1']
+  assert.equal(r.pass, false)
+  assert.match(r.evidence, /malformed.*Docs/)
+  assert.equal(decide(plan, fx('pass.verdict.md')).verdict, 'no-go')
 })
