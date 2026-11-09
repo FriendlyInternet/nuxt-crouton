@@ -76,9 +76,10 @@ jobs:
                 dispatch work-issue-pidev.yml "$(jq -nc --arg i "$ISSUE" '{issue:$i}')"
                 exit 0
               fi
-              # #3208: a big (epic) issue is split, not built.
-              if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
-                echo "issue #$ISSUE is an epic → splitter"
+              # #3208: a big (epic) issue is split, not built; #3238: so is one asking for a design sign-off (mockup hold first).
+              SO="$(gh issue view "$ISSUE" --repo "$REPO" --json comments --jq '[.comments[] | {body}]' | node scripts/lib/signoff-route.mjs "$RUNNER_TEMP/route-issue.txt" /dev/stdin --route)"
+              if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ] || [ "$SO" = "signoff" ]; then
+                echo "issue #$ISSUE is an epic or asks for a design sign-off → decomposer"
                 dispatch decompose-on-issue-pidev.yml "$(jq -nc --arg i "$ISSUE" '{issue:$i,harness:"pi"}')"
                 exit 0
               fi
