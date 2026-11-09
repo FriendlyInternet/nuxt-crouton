@@ -17,7 +17,7 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 4. Over-engineering: is there a smaller change, an existing helper, a VueUse/Nuxt primitive or config option? A new abstraction must earn its place.
 5. Best practice, no hacks: no private framework APIs, no suppressions, no special-casing, no `any` casts or timeouts papering over a cause.
 6. Scope: matches the issue; no drive-by changes.
-7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step.
+7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step. A design sign-off the ticket itself asks for, still open, is FAIL with evidence "design sign-off pending by ticket instruction". The pipeline holds on it; it is not a rejection (#3238).
 
 8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.
 9. Contradicts the record? No step contradicts the epic's Decisions log, a recorded experiment, or a merged PR's finding. Read the epic body and its comments (the issue file names the epic) and check each step against them. A plan that sets `priority: -1` on package component dirs while the epic records "app dir beats layers at equal priority" is FAIL.

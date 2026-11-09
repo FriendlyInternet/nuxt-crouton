@@ -37,6 +37,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { classifyHandoffError } from './lib/handoff.mjs'
 import { writePipelineBlock } from './pipeline-context.mjs'
 import { shouldReview, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
+import { SIGNOFF_MARKER, HOLD_HEADING, signoffRoute } from './lib/signoff-route.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 
 export class PlanError extends Error {}
@@ -436,10 +437,11 @@ const ACTION_HANDLERS = {
     const { repo, exec, writeBody } = state
     const art = renderSignoffArtifacts(a.signoff, state)
     const rawBase = a.epic_branch ? `https://raw.githubusercontent.com/${repo}/${a.epic_branch}` : null
-    const lines = []
+    // The marker is the FIRST line: label-router and on-comment recognise a real hold by it (#3238).
+    const lines = [SIGNOFF_MARKER]
     lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI) · _design sign-off gate (#1821)_')
     lines.push('')
-    lines.push('## 🎨 Design sign-off needed before building')
+    lines.push(HOLD_HEADING)
     lines.push('')
     lines.push(a.signoff.summary)
     lines.push('')
@@ -565,13 +567,43 @@ function needsTicketReview(plan, ctx, repo) {
   return !hasLabel(repo, ctx.target, APPROVED_LABEL)
 }
 
+/**
+ * #3238: a ticket that asks for "Hold for design sign-off first" must not slip through as a leaf.
+ * If the decomposer returned a leaf, no hold was posted yet and the ticket asks for one, turn the
+ * plan into a mockup-less sign-off hold (the #2809 rule then flags the missing mockup).
+ */
+export function applySignoffFallback(plan, { text = '', comments = [] } = {}) {
+  if (!plan.leaf || signoffRoute({ text, comments }).route !== 'signoff') return plan
+  return {
+    signoff: {
+      summary: 'This ticket asks for a design sign-off first, but the decomposer returned a single ticket with no mockup.',
+      questions: ['Reply `ok` to build without a mockup, or reply asking for one.'],
+      schema: null,
+      diagram: null,
+      ui: null,
+    },
+  }
+}
+
+/** Reads the target issue and applies applySignoffFallback to a leaf plan; never throws (best effort). */
+function withSignoffFallback(plan, args) {
+  if (!plan.leaf) return plan
+  try {
+    const issue = JSON.parse(realExec('gh', ['issue', 'view', String(args.target), '--repo', args.repo, '--json', 'title,body,comments']))
+    return applySignoffFallback(plan, { text: `${issue.title}\n${issue.body}`, comments: (issue.comments || []).map(c => ({ body: c.body })) })
+  } catch (e) {
+    console.error(`signoff fallback skipped: ${e.message}`)
+    return plan
+  }
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   if (args._[0] !== 'apply' || !args._[1]) {
     console.error('usage: node scripts/apply-decompose-plan.mjs apply <plan.json> --repo O/R --target N [--epic N --epic-branch B --depth D]')
     process.exit(2)
   }
-  const plan = parsePlan(readFileSync(args._[1], 'utf8'))
+  const plan = withSignoffFallback(parsePlan(readFileSync(args._[1], 'utf8')), args)
   const target = Number(args.target)
   const ctx = {
     target,
