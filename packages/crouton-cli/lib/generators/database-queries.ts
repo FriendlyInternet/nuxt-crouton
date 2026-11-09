@@ -1,7 +1,7 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
 import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
@@ -573,6 +573,7 @@ function buildGetAllOpts(filterFields: string[], tableName: string, own = false)
 
 // Shared context for the CRUD query template builders below
 interface QueryTemplateContext {
+  hasPersonRefs: boolean
   tableName: string
   prefixedPascalCase: string
   prefixedPascalCasePlural: string
@@ -595,6 +596,30 @@ interface QueryTemplateContext {
 }
 
 // Imports + schema imports header of the generated queries file
+/**
+ * Person-field membership check (#1958): a person field may only hold a member of the
+ * caller's team. Built on crouton-auth's `getMembership` (fails closed). Accepts a string or
+ * an array of strings, the same shapes `assertRefsInTeam` accepts. Exported so a test can run it.
+ */
+export function buildPersonRefCheck(personFields: Array<Record<string, any>>, prefixedPascalCase: string): string {
+  if (personFields.length === 0) return ''
+  return `
+
+// A person field may only hold a member of the caller's team (#1958)
+export async function assert${prefixedPascalCase}TeamMembers(event: Parameters<typeof getMembership>[0], teamId: string, data: Record<string, any>) {
+  for (const [field, value] of [${personFields.map(f => `['${f.name}', data.${f.name}]`).join(', ')}] as const) {
+    if (value === undefined || value === null || value === '') continue
+    const ids = typeof value === 'string'
+      ? [value]
+      : Array.isArray(value) && value.every(v => typeof v === 'string') ? value.filter(v => v !== '') : null
+    if (!ids) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    for (const id of new Set(ids)) {
+      if (!(await getMembership(event, teamId, id))) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    }
+  }
+}`
+}
+
 function buildFileHeader(ctx: QueryTemplateContext): string {
   // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
   const sqlImport = ', sql'
@@ -603,7 +628,7 @@ import { eq, and, desc${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { ${ctx.prefixedPascalCase}, New${ctx.prefixedPascalCase} } from '${ctx.typesPath}'
-${ctx.schemaImports}`
+${ctx.schemaImports}${ctx.hasPersonRefs ? `\nimport { getMembership } from '@fyit/crouton-auth/server/utils/team'` : ''}`
 }
 
 // getAll* — team-scoped list with FK filters, joins, post-processing, and the
@@ -847,8 +872,11 @@ export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as co
     overload2Opts,
     implOpts,
     filterConditions,
-    own
+    own,
+    hasPersonRefs: collectPersonRefFields(data).length > 0
   }
+
+  const personRefFields = collectPersonRefFields(data)
 
   // Team-scoped reference check (#3378) — only emitted when the collection has such refs
   const teamRefFields = collectTeamRefFields(data)
@@ -870,6 +898,7 @@ ${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.
     + buildDeleteQuery(ctx)
     + accessExport
     + assertRefsQuery
+    + buildPersonRefCheck(personRefFields, prefixedPascalCase)
     + treeQueries
     + sortableQueries
 }

@@ -458,8 +458,17 @@ it against the collection list only ever produces a false refusal. Omitting `ref
 `users` target still fails — that's the #1825 chores case, where the generator took the
 collection path and wrote an import to a `users` collection nobody created.
 
-Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
-raw id) in the generated List. The join works today; the UI half does not.
+**Person field behaviour (#1958)** — `isPersonRef()` in `lib/utils/team-ref-fields.ts` is the one
+predicate. For such a field the generators emit:
+
+- **Form**: a `USelectMenu` over `useTeam().loadMembers()` (current team only; `multiple` for `type: "array"`).
+- **List**: `CroutonUsersCardMini` from the joined `<field>User` (single fields only — an array person
+  field still renders through the generic reference path, because the query joins single refs only).
+- **API**: `assert<X>TeamMembers(event, teamId, body)` (built on crouton-auth `getMembership`) called in
+  POST/PATCH; a user id outside the caller's team gets `400 Invalid reference: <field>`.
+- **Seed**: `seed.json` records `personFields`; `seed-app` fills each with a real team member
+  (`SELECT userId FROM member …`), or NULL when the team has no members yet.
+- No FK to `user.id` (same as `owner`/`createdBy`), and no separate `person` field type.
 
 ### Field Meta Properties
 

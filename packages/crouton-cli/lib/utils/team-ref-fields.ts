@@ -12,3 +12,16 @@ export function collectTeamRefFields(data: Record<string, any>): Array<Record<st
     f.refTarget && f.refScope !== 'external' && f.refScope !== 'adapter',
   )
 }
+
+/**
+ * A "person" field references a user: `refScope: 'external'` + `refTarget: 'users'` (#1958).
+ * The query already joins the user; the Form/List/API/seed generators branch on this so a
+ * person is picked from, shown from, and validated against the caller's team members.
+ */
+export function isPersonRef(field: Record<string, any>): boolean {
+  return !!field.refTarget && field.refScope === 'external' && field.refTarget === 'users'
+}
+
+export function collectPersonRefFields(data: Record<string, any>): Array<Record<string, any>> {
+  return (data.fields || []).filter(isPersonRef)
+}

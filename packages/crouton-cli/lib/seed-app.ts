@@ -177,7 +177,7 @@ async function discoverProviders(
  */
 // Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
 // fallow-ignore-next-line complexity
-function collectCollectionFixtureSql(appDir: string, core: any, teamId: string): string {
+export function collectCollectionFixtureSql(appDir: string, core: any, teamId: string): string {
   const layersDir = join(appDir, 'layers')
   if (!existsSync(layersDir)) return ''
 
@@ -200,13 +200,19 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
         continue
       }
 
-      const { table, key, rows } = fixture ?? {}
+      const { table, key, rows, personFields } = fixture ?? {}
       if (!table || !Array.isArray(rows) || rows.length === 0) continue
 
       rows.forEach((row: Record<string, unknown>, i: number) => {
         const keyVal = key && row[key] != null ? row[key] : i
         const id = core.seedId(layer, collection, String(keyVal))
+        // Person fields (#1958): point at a real team member if one exists, else NULL.
+        const personValues: Record<string, unknown> = {}
+        for (const field of Array.isArray(personFields) ? personFields : []) {
+          personValues[field] = core.raw(`(SELECT "userId" FROM "member" WHERE "organizationId" = ${core.sqlValue(teamId)} ORDER BY "createdAt" LIMIT 1)`)
+        }
         const values = {
+          ...personValues,
           teamId,
           owner: 'seed',
           createdBy: 'seed',

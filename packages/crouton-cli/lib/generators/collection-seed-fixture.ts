@@ -7,6 +7,7 @@
 // deployed app comes up with sample rows — its public surfaces aren't empty
 // (#298). Rows are auto-derived from the schema; edit seed.json to replace them
 // with real content.
+import { isPersonRef } from '../utils/team-ref-fields.ts'
 import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from '../utils/system-fields.ts'
 import { toSnakeCase } from '../utils/helpers.ts'
 
@@ -21,6 +22,8 @@ export interface SeedFixture {
   key: string | null
   /** Sample rows — user fields only; the runner injects id/teamId/audit/timestamps. */
   rows: Array<Record<string, unknown>>
+  /** Person fields (external `users` refs, #1958) — the seed runner fills each with a real team member when one exists. */
+  personFields?: string[]
 }
 
 /** Derive a plausible literal sample value for a field at row `i`. */
@@ -83,5 +86,7 @@ export function generateSeedFixture(data: Record<string, any>, count = 3): SeedF
     return row
   })
 
-  return { table, key, rows }
+  const personFields = (fields as Array<Record<string, any>>).filter(isPersonRef).map(f => f.name)
+
+  return personFields.length > 0 ? { table, key, rows, personFields } : { table, key, rows }
 }

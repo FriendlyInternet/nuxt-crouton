@@ -40,7 +40,7 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
  * write it, honouring `--tests`).
  */
 import { resolveAccess } from './api-endpoints.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
 
 /**
  * Same-team reference test cases for POST/PATCH (#3378/#3424), split out of generateApiTest to keep it small.
@@ -141,6 +141,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     `delete${S}: vi.fn()`,
   ]
   if (collectTeamRefFields(data).length > 0) queryExports.push(`assert${S}References: vi.fn()`)
+  if (collectPersonRefFields(data).length > 0) queryExports.push(`assert${S}TeamMembers: vi.fn()`)
   if (hierarchy) queryExports.push(`updatePosition${S}: vi.fn()`)
   if (hasReorder) queryExports.push(`reorderSiblings${P}: vi.fn()`)
 
