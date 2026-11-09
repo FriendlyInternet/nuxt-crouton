@@ -11,7 +11,6 @@ defineProps<{
   compact?: 'auto' | 'always' | 'never'
   placement?: 'fixed' | 'inline'
   extraItems?: unknown[]
-  useModal?: boolean
 }>()
 </script>
 

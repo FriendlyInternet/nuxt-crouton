@@ -23,21 +23,18 @@ interface Props {
   placement?: 'fixed' | 'inline'
   /** Extra menu items (e.g. "Manage site"), rendered above sign out */
   extraItems?: DropdownMenuItem[]
-  /** Use the account-settings modal instead of navigating to /account */
-  useModal?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showStatus: true,
   compact: 'auto',
   placement: 'fixed',
-  extraItems: () => [],
-  useModal: false
+  extraItems: () => []
 })
 
 const { t } = useT()
 const route = useRoute()
-const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
+const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems()
 const { currentTeam, currentRole, isAdmin } = useTeam()
 const { current, recent, unread, markAllSeen, dismiss, refreshTeamEvents } = useCroutonStatus()
 const { hasApp } = useCroutonApps()

@@ -251,9 +251,9 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
       <!-- User pill: bottom-left (fixed), or the left end of the dock on full-screen pages -->
       <ClientOnly>
         <div v-if="dockBottom" class="pointer-events-auto order-first">
-          <CroutonUserPill placement="inline" use-modal :extra-items="manageSiteItems" />
+          <CroutonUserPill placement="inline" :extra-items="manageSiteItems" />
         </div>
-        <CroutonUserPill v-else class="pointer-events-auto" placement="fixed" use-modal :extra-items="manageSiteItems" />
+        <CroutonUserPill v-else class="pointer-events-auto" placement="fixed" :extra-items="manageSiteItems" />
       </ClientOnly>
 
       <!-- Package-contributed pill actions (e.g. the edit-page pencil).
@@ -273,8 +273,5 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
         </div>
       </ClientOnly>
     </div>
-
-    <!-- Account Settings Modal -->
-    <AccountSettingsModal />
   </div>
 </template>
