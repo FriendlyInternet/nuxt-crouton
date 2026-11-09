@@ -258,7 +258,7 @@ jobs:
               body: '<!-- pipeline-note -->\n' + `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
 
             if (d.action === 'ignore') return
-            if (!go.go) return // red/wait only matter while the ok stands
+            if (!go.go || await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)).replyIfConflicting({ github, owner, repo, pull_number, say })) return // only while the ok stands; a conflicting PR gets the resolver, not a wait (#3227)
             if (d.action === 'red') {
               const names = d.failing.map(f => `\`${f}\``).join(', ')
               try {
