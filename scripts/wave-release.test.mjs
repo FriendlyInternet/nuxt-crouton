@@ -50,6 +50,15 @@ test('one blocker open → hold (no label, no comment)', async () => {
   assert.ok(w.log.some(m => m.includes('blockers-open')))
 })
 
+test('Blocked-by blocker with an open held PR (still open issue) → not released (#3583)', async () => {
+  const w = world({
+    found: [{ number: 10, body: 'Blocked-by: #1', labels: [] }],
+    issues: { 1: { state: 'open', labels: lbl(['status:blocked']) } },
+  })
+  await releaseReady(w)
+  assert.equal(w.calls.addLabels.length, 0)
+})
+
 test('already-dispatched dependent is skipped', async () => {
   const w = world({
     found: [{ number: 10, body: 'Blocked-by: #1', labels: lbl(['status:in-progress']) }],

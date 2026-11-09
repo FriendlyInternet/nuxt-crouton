@@ -77,11 +77,14 @@ pnpm typecheck:fixtures                            # all fixtures (root script)
 ```
 
 CI (`.github/workflows/e2e.yml`) **regenerates each fixture from its committed
-schemas, then type-checks it** before the Playwright smoke — so a generator
-template regression (the class of bug behind #195) turns CI red instead of only
-surfacing when someone scaffolds a new app. Keep the committed fixture output in
-sync: after changing a generator template, regenerate the fixtures
-(`cd fixtures/<name> && crouton config --force`) and commit the result.
+schemas, fails if the result differs from what is committed** (changed or new
+files — `scripts/fixture-drift.mjs`, #3152)**, then type-checks and lints it**
+before the Playwright smoke — so a generator template regression (the class of
+bug behind #195) turns CI red instead of only surfacing when someone scaffolds a
+new app. Keep the committed fixture output in sync: after changing a generator
+template, regenerate the fixtures (`cd fixtures/<name> && crouton config --force`)
+and commit the result. A generator PR that changes output is red until the
+regenerated fixtures are committed with it.
 
 ## How it works
 

@@ -285,3 +285,56 @@ test('parked tickets are released; held tickets traffic did not park are never r
   assert.ok(!reads.includes(60) && !reads.includes(61))
   assert.deepEqual(await releaseWaiting({ github, context }), [])
 })
+
+test('held PRs do not block; Blocked-by still waits (#3583)', () => {
+  const w = (o, body) => decideTraffic({ issue: 9, labels: ['pkg:b'], body,
+    others: [{ number: 1, ...o, labels: ['pkg:b', ...(o.labels || [])] }] })
+  assert.equal(w({ openPr: true }).action, 'wait')
+  assert.equal(w({ openPr: true, held: true }).action, 'proceed')
+  assert.equal(w({ openPr: true, held: true, labels: ['status:blocked'] }).action, 'proceed')
+  assert.equal(w({ planning: true }).action, 'proceed')
+  assert.equal(w({ openPr: true, labels: ['epic'] }).action, 'proceed')
+  const v = w({ openPr: true, held: true }, 'Blocked-by: #1')
+  assert.equal(v.action, 'wait')
+  assert.deepEqual(v.waitingFor, [1])
+})
+
+test('gatherTrafficFacts marks held from draft or status:blocked (#3583)', async () => {
+  const { gatherTrafficFacts } = await import('./traffic-control.mjs')
+  const items = [
+    { number: 1, title: 't', labels: [{ name: 'pkg:b' }] },
+    { number: 2, title: 't', labels: [{ name: 'pkg:b' }, { name: 'status:blocked' }] },
+    { number: 3, title: 't', labels: [{ name: 'pkg:b' }] },
+  ]
+  const draft = { 1: true, 2: false, 3: false }
+  const github = { paginate: async () => items,
+    rest: { issues: { listForRepo: 'x' },
+      pulls: { list: async ({ head }) => ({ data: [{ draft: draft[Number(head.split('work-')[1])] }] }) } } }
+  const others = await gatherTrafficFacts({ github, context: { repo: { owner: 'o', repo: 'r' } }, issueNumber: 9, labels: ['pkg:b'] })
+  assert.deepEqual(others.map((o) => o.held), [true, true, false])
+})
+
+test('releaseWaiting releases a parked ticket behind a held draft (#3583)', async () => {
+  const mk = (number, l) => ({ number, labels: l.map((name) => ({ name })) })
+  const waiting = [mk(5, ['status:blocked', 'pkg:b'])]
+  const other = { number: 4, title: 't', labels: [{ name: 'pkg:b' }, { name: 'status:in-progress' }, { name: 'work-this' }] }
+  const github = { paginate: async (fn, o) => (fn === 'list'
+      ? (o.labels === 'status:blocked,traffic:waiting' ? waiting : [other])
+      : fn === 'events' ? [] : [{ body: '<!-- traffic-wait -->' }]),
+    rest: { issues: { listForRepo: 'list', listComments: 'comments', listEvents: 'events', removeLabel: async () => {}, addLabels: async () => {} },
+      pulls: { list: async ({ head }) => ({ data: head.endsWith('work-4') ? [{ draft: true }] : [] }) } } }
+  const released = await releaseWaiting({ github, context: { repo: { owner: 'o', repo: 'r' } } })
+  assert.deepEqual(released, [5])
+})
+
+test('held=1 is set in its own step right after finish, and release-traffic reads that step (#3583)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const wf = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
+  const finish = wf.indexOf('- id: finish')
+  const held = wf.indexOf('- id: held')
+  const line = wf.indexOf('echo "held=1" >> "$GITHUB_OUTPUT"')
+  assert.ok(finish > 0 && held > finish && line > held, 'held step must follow finish')
+  assert.equal(wf.split('echo "held=1"').length - 1, 1)
+  assert.match(wf, /held: \$\{\{ steps\.held\.outputs\.held \}\}/)
+  assert.match(wf, /if: \$\{\{ always\(\) && needs\.work-pi\.outputs\.held == '1' \}\}/)
+})
