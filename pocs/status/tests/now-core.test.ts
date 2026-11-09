@@ -24,10 +24,30 @@ describe('classifyNow', () => {
     expect(r.waiting).toMatchObject([{ number: 9, reason: 'pick A or B' }])
     expect(r.next).toEqual([])
   })
-  it('a final-hold verdict puts a PR in Waiting, not Now', () => {
-    const r = classifyNow({ ...base, pulls: [pr(30)], comments: { 30: [{ body: 'Review rejected twice. Held for you.' }] } })
-    expect(r.waiting).toMatchObject([{ number: 30, kind: 'pr', reason: 'Review rejected twice. Held for you.' }])
+  const finalHold = { body: '<!-- build-review-sha:abc -->\n<!-- build-review-verdict:no-go -->\n<!-- build-review-final -->\n🔴 **Build rejected twice** — needs you', created_at: '2026-11-01T10:00:00Z', user: { login: 'nuxt-harness[bot]', type: 'Bot' } }
+  it('a final review hold (decideReview says wait) puts a PR in Waiting, not Now', () => {
+    const r = classifyNow({ ...base, pulls: [pr(30, { head: { ref: 'work-30', sha: 'abc' } })], comments: { 30: [finalHold] } })
+    expect(r.waiting).toMatchObject([{ number: 30, kind: 'pr' }])
     expect(r.now).toEqual([])
+  })
+  it('once the owner says ok after the hold, the PR is no longer waiting for the owner', () => {
+    const ok = { body: 'ok', created_at: '2026-11-02T10:00:00Z', user: { login: 'pmcp', type: 'User' } }
+    const r = classifyNow({ ...base, pulls: [pr(30, { head: { ref: 'work-30', sha: 'abc' } })], comments: { 30: [finalHold, ok] } })
+    expect(r.waiting).toEqual([])
+    expect(r.now.map(n => n.number)).toEqual([30])
+  })
+  it('a PR whose ticket is blocked for the owner is Waiting with the ticket reason, not Now', () => {
+    const r = classifyNow({
+      ...base, pulls: [pr(40, { body: 'Closes #9', head: { ref: 'work-9', sha: 'zzz' } })], blockedIssues: [issue(9)],
+      comments: { 9: [{ body: '## 🔀 Blocked — pick A or B\n**Needs:** answer' }] }
+    })
+    expect(r.waiting.find(w => w.number === 40)).toMatchObject({ kind: 'pr', reason: 'pick A or B' })
+    expect(r.now).toEqual([])
+  })
+  it('Next is grouped by epic (from the ticket marker) then number; plan:approved tickets are included', () => {
+    const e = (n: number, epic: number) => ({ ...issue(n), body: `<!-- pipeline: epic=${epic} depth=1 -->` })
+    const r = classifyNow({ ...base, workIssues: [e(12, 2), e(11, 1)], approvedIssues: [e(10, 2), e(11, 1)] })
+    expect(r.next.map(n => [n.epic, n.number])).toEqual([[1, 11], [2, 10], [2, 12]])
   })
   it('ignores non-pipeline PRs', () => {
     const r = classifyNow({ ...base, pulls: [pr(31, { user: { login: 'someone', type: 'User' } })] })

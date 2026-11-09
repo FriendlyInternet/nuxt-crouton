@@ -1,13 +1,25 @@
 // Pure classifier for the Now / Next / Waiting view — no Nitro auto-imports, so it unit-tests.
 // Input is raw GitHub payloads; output is the three lists. No state of its own.
+// "Waiting for owner" for a PR comes from the pipeline's own gate (decideReview), not a rule re-worked here.
+import { decideReview } from '../../../../scripts/lib/pr-merge-gate.mjs'
+import { reviewState } from '../../../../scripts/lib/build-review-state.mjs'
+import { ownerMergeGo } from '../../../../scripts/lib/owner-merge-go.mjs'
+
+// The gate modules infer narrow JSDoc types; this app feeds them raw GitHub payloads.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const reviewStateAny = reviewState as (a: any) => any
+const ownerMergeGoAny = ownerMergeGo as (a: any) => any
+const decideReviewAny = decideReview as (a: any) => { merge: boolean }
+
+export const OWNER_LOGIN = 'pmcp'
 export interface GhLabel { name?: string }
 export interface GhPr {
   number: number, title: string, html_url: string, draft?: boolean, body?: string | null
-  head?: { ref?: string }, base?: { ref?: string }, labels?: GhLabel[], user?: { login?: string, type?: string }
+  head?: { ref?: string, sha?: string }, base?: { ref?: string }, labels?: GhLabel[], user?: { login?: string, type?: string }
 }
-export interface GhIssueLite { number: number, title: string, html_url: string, labels?: GhLabel[], pull_request?: unknown }
+export interface GhIssueLite { number: number, title: string, html_url: string, body?: string | null, labels?: GhLabel[], pull_request?: unknown }
 export interface GhRun { name?: string, display_title?: string, status?: string, html_url?: string }
-export interface GhComment { body?: string | null }
+export interface GhComment { body?: string | null, created_at?: string, user?: { login?: string, type?: string } }
 
 export interface NowItem { number: number, kind: 'pr' | 'issue', title: string, url: string, step: string }
 export interface NextItem { number: number, title: string, url: string, epic: number | null }
@@ -17,6 +29,8 @@ export interface NowResult { now: NowItem[], next: NextItem[], waiting: WaitingI
 export interface NowInput {
   pulls: GhPr[]
   workIssues: GhIssueLite[]
+  /** Open issues labelled plan:approved (plan signed off, waiting to be built). */
+  approvedIssues?: GhIssueLite[]
   blockedIssues: GhIssueLite[]
   runs: GhRun[]
   /** Comment bodies (oldest first) keyed by issue/PR number — only fetched for held candidates. */
@@ -29,7 +43,19 @@ const isPipelinePr = (p: GhPr) => {
   const bot = p.user?.type === 'Bot' || /\[bot\]$|^nuxt-harness$/.test(p.user?.login ?? '')
   return bot && (ref.startsWith('work-') || ref.startsWith('epic/'))
 }
-const FINAL_HOLD = /held for you|rejected twice/i
+
+/** Does the pipeline's gate say this PR waits for the owner (final / needs-owner review hold, owner not yet ok)? */
+function waitsForOwner(p: GhPr, comments: GhComment[]): boolean {
+  const bots = [...new Set(comments.filter(c => c.user?.type === 'Bot').map(c => c.user?.login))]
+  const headSha = p.head?.sha ?? ''
+  const state = reviewStateAny({ comments, headSha, bots })
+  const ownerHold = state.kind === 'final' || state.kind === 'needs-owner' ? state : null
+  if (!ownerHold) return false
+  const go = ownerMergeGoAny({ comments, commits: [], owner: OWNER_LOGIN })
+  const labels = (p.labels ?? []).map(l => l.name ?? '')
+  return !decideReviewAny({ baseRef: p.base?.ref ?? 'main', headRef: p.head?.ref ?? '', labels, go, ownerHold, headSha, headReview: state }).merge
+}
+const epicOf = (i: GhIssueLite) => { const m = /\bepic=(\d+)/.exec(i.body ?? ''); return m ? Number(m[1]) : null }
 
 /** One-line reason from a hold comment: the "## … Blocked — X" heading, else the first prose line. */
 export function holdReason(body: string | null | undefined): string {
@@ -58,11 +84,14 @@ export function classifyNow(input: NowInput): NowResult {
     heldNumbers.add(i.number)
     waiting.push({ number: i.number, kind: 'issue', title: i.title, url: i.html_url, reason: holdReason(latest(i.number)) || 'Blocked' })
   }
-  for (const p of input.pulls) {
+  const blockedReason = new Map(waiting.map(w => [w.number, w.reason]))
+  for (const p of input.pulls.filter(x => !x.draft)) {
     const verdict = latest(p.number)
-    if (hasLabel(p, 'status:blocked') || FINAL_HOLD.test(verdict)) {
+    const blockedTicket = linkedIssues(p).find(n => blockedReason.has(n))
+    if (hasLabel(p, 'status:blocked') || blockedTicket !== undefined || waitsForOwner(p, input.comments[p.number] ?? [])) {
       heldNumbers.add(p.number)
-      waiting.push({ number: p.number, kind: 'pr', title: p.title, url: p.html_url, reason: holdReason(verdict) || 'Held for you' })
+      const reason = holdReason(verdict) || (blockedTicket !== undefined ? blockedReason.get(blockedTicket) : '') || 'Held for you'
+      waiting.push({ number: p.number, kind: 'pr', title: p.title, url: p.html_url, reason })
     }
   }
 
@@ -73,7 +102,7 @@ export function classifyNow(input: NowInput): NowResult {
     if (!n || active.has(n)) continue
     active.add(n)
     const mode = /·\s*(\w+)/.exec(r.display_title ?? r.name ?? '')?.[1] ?? 'build'
-    now.push({ number: n, kind: 'issue', title: r.display_title ?? r.name ?? `#${n}`, url: r.html_url ?? '', step: mode === 'plan' ? 'Planning' : 'Building' })
+    now.push({ number: n, kind: 'issue', title: r.display_title ?? r.name ?? `#${n}`, url: r.html_url ?? '', step: /review/i.test(r.name ?? '') ? 'In review' : mode === 'plan' ? 'Planning' : 'Building' })
   }
   const withPr = new Set<number>()
   for (const p of input.pulls.filter(isPipelinePr)) {
@@ -82,10 +111,11 @@ export function classifyNow(input: NowInput): NowResult {
     now.push({ number: p.number, kind: 'pr', title: p.title, url: p.html_url, step: p.draft ? 'Draft — in a fix round' : 'In review / CI' })
   }
 
-  const next = input.workIssues
+  const next = [...input.workIssues, ...(input.approvedIssues ?? [])]
+    .filter((i, idx, all) => all.findIndex(x => x.number === i.number) === idx)
     .filter(i => !i.pull_request && !hasLabel(i, 'status:blocked') && !heldNumbers.has(i.number) && !withPr.has(i.number) && !active.has(i.number))
-    .map(i => ({ number: i.number, title: i.title, url: i.html_url, epic: null as number | null }))
-    .sort((a, b) => a.number - b.number)
+    .map(i => ({ number: i.number, title: i.title, url: i.html_url, epic: epicOf(i) }))
+    .sort((a, b) => (a.epic ?? Infinity) - (b.epic ?? Infinity) || a.number - b.number)
 
   return { now: now.filter(n => !(n.kind === 'issue' && heldNumbers.has(n.number))), next, waiting }
 }
