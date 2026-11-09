@@ -107,7 +107,7 @@ export async function postReply(
   const url = `${GH_API}/repos/${repo}/issues/${reply.number}/comments`
   try {
     const tl = await readTimeline(`${GH_API}/repos/${repo}/issues/${reply.number}/timeline?per_page=100`, headers, reply.kind, fetchImpl)
-    if (tl.error) return { data: null, error: tl.error }
+    if (!tl.data) return { data: null, error: tl.error }
     const events = tl.data
     const dup = findRecentDuplicate(events, reply.body)
     if (dup) return { data: { url: dup, existing: true }, error: null }
