@@ -6,13 +6,13 @@ interface Props {
   /** Selected location IDs */
   selectedLocations: string[]
   /** Whether locations panel is expanded */
-  showLocations: boolean
+  showLocations?: boolean
   /** Whether map is visible */
-  showMap: boolean
+  showMap?: boolean
   /** Whether calendar is visible */
-  showCalendar: boolean
+  showCalendar?: boolean
   /** Whether there are locations with coordinates (for map toggle) */
-  hasLocationsWithCoordinates: boolean
+  hasLocationsWithCoordinates?: boolean
   /** Whether a day is selected in the calendar */
   hasSelectedDate?: boolean
   /** Whether to show cancelled bookings */
@@ -21,9 +21,16 @@ interface Props {
   canManageLocations?: boolean
   /** Current calendar view mode */
   calendarView?: 'week' | 'month'
+  /** Panel-only view controls (Week/Month, Today, fold, map, location cards). Off on composed pages. */
+  viewToggles?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  showLocations: false,
+  showMap: false,
+  showCalendar: true,
+  hasLocationsWithCoordinates: false,
+  viewToggles: true,
   canManageLocations: false,
   calendarView: 'week',
   hasSelectedDate: false,
@@ -74,7 +81,7 @@ const settingsItems = computed(() => {
     onSelect: keepOpen,
   }))
   const viewItems = [
-    ...(props.hasLocationsWithCoordinates
+    ...(props.viewToggles && props.hasLocationsWithCoordinates
       ? [{
           type: 'checkbox' as const,
           label: t('bookings.filters.map'),
@@ -92,7 +99,7 @@ const settingsItems = computed(() => {
       onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
       onSelect: keepOpen,
     },
-    ...(locationItems.length > 0
+    ...(props.viewToggles && locationItems.length > 0
       ? [{
           type: 'checkbox' as const,
           label: t('bookings.filters.locationCards'),
@@ -116,7 +123,7 @@ const settingsItems = computed(() => {
   <div class="flex flex-col gap-3">
     <!-- One short row: Week|Month · Today · settings · fold -->
     <div class="flex items-center justify-between gap-2">
-      <UFieldGroup v-if="showCalendar" size="sm">
+      <UFieldGroup v-if="viewToggles && showCalendar" size="sm">
         <UButton
           :color="calendarView === 'week' ? 'primary' : 'neutral'"
           :variant="calendarView === 'week' ? 'solid' : 'outline'"
@@ -134,7 +141,7 @@ const settingsItems = computed(() => {
       </UFieldGroup>
       <div class="flex items-center gap-1 shrink-0 ms-auto">
         <UButton
-          v-if="showCalendar"
+          v-if="viewToggles && showCalendar"
           size="sm"
           color="neutral"
           variant="soft"
@@ -156,6 +163,7 @@ const settingsItems = computed(() => {
         </UDropdownMenu>
 
         <UButton
+          v-if="viewToggles"
           size="sm"
           color="neutral"
           variant="ghost"
@@ -193,7 +201,7 @@ const settingsItems = computed(() => {
       leave-from-class="opacity-100 max-h-[200px]"
       leave-to-class="opacity-0 max-h-0"
     >
-      <div v-if="showLocations && locations && locations.length > 0" class="flex flex-wrap gap-2 overflow-hidden">
+      <div v-if="viewToggles && showLocations && locations && locations.length > 0" class="flex flex-wrap gap-2 overflow-hidden">
         <CroutonBookingsLocationCard
           v-for="location in locations"
           :key="location.id"
