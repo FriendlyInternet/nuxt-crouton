@@ -38,10 +38,6 @@ export default defineNuxtConfig({
     kv: true
   },
 
-  croutonEmail: {
-    enabled: true
-  },
-
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
   ogImage: { enabled: false },
 
@@ -67,6 +63,11 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    email: {
+      from: 'noreply@messages.friendlyinter.net',
+      fromName: 'Friendly Internet'
+    },
+
     croutonBookings: {
       email: {
         enabled: false

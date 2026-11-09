@@ -16,7 +16,7 @@
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { appendFileSync } from 'node:fs'
-import { resolveAppDb, queryD1Json } from './lib/wrangler-d1.mjs'
+import { resolveAppDb, queryD1Json, isUserTable } from './lib/wrangler-d1.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -86,7 +86,7 @@ async function main() {
     return
   }
 
-  const tables = queryD1Json(db.name, listTablesSql, { cwd: repoRoot }).map(r => r.name)
+  const tables = queryD1Json(db.name, listTablesSql, { cwd: repoRoot }).map(r => r.name).filter(isUserTable)
   if (tables.length === 0) {
     console.log('  (no tables)\n')
     writeSummary([`### db-counts — \`${db.name}\` (${args.env})`, '', '_No tables._'])

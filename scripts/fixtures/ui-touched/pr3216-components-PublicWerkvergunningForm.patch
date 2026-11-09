@@ -1,0 +1,9 @@
+@@ -304,7 +304,7 @@ const fieldLabels: Record<string, string> = {
+ }
+ 
+ function labelFor(path: string) {
+-  const head = (path || '').split('.')[0]
++  const head = (path || '').split('.')[0] ?? ''
+   return fieldLabels[head] ?? head ?? 'Veld'
+ }
+ 

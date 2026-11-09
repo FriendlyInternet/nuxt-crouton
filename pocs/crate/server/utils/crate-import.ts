@@ -101,3 +101,29 @@ export async function upsertLookups(audit: ImportAudit, lookups: LookupIn[]) {
   }
   return { lookupsUpserted: rows.length }
 }
+
+/** Put one source's result into each track's lookup, keeping every other source's entry. */
+export async function mergeLookupSource(audit: ImportAudit, source: string, tips: { trackId: string, result: Record<string, unknown> }[]) {
+  if (!tips.length) return { tipsMerged: 0 }
+  const db = useDB()
+  const existing = new Map<string, unknown[]>()
+  for (const part of chunk(tips.map(t => t.trackId), MAX_PARAMS - 1)) {
+    const rows = await db.select({ trackId: crateLookups.trackId, results: crateLookups.results }).from(crateLookups)
+      .where(and(eq(crateLookups.teamId, audit.teamId), inArray(crateLookups.trackId, part)))
+    for (const r of rows) existing.set(r.trackId, (r.results as unknown[] | null) ?? [])
+  }
+  const now = new Date()
+  const rows = tips.map(t => ({
+    ...audit,
+    trackId: t.trackId,
+    fetchedAt: now,
+    results: [...(existing.get(t.trackId) ?? []).filter(r => (r as { source?: string }).source !== source), { ...t.result, source }]
+  }))
+  for (const part of chunk(rows, rowsPerInsert(rows[0]!, 3, 2))) {
+    await db.insert(crateLookups).values(part).onConflictDoUpdate({
+      target: [crateLookups.teamId, crateLookups.trackId],
+      set: { fetchedAt: sql`excluded.fetchedAt`, results: sql`excluded.results`, updatedBy: audit.updatedBy, updatedAt: now }
+    })
+  }
+  return { tipsMerged: rows.length }
+}

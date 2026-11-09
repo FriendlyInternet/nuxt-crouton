@@ -35,7 +35,7 @@ import { costFromFile } from '../../../scripts/lib/session-cost.mjs'
  */
 function sessionCost(projDir, session) {
   const r = costFromFile(path.join(projDir, session + '.jsonl'))
-  return r.turns > 0 ? { usd: r.usd, tokens: r.tokens, turns: r.turns, model: r.model } : null
+  return r.turns > 0 ? { usd: r.usd, tokens: r.tokens, turns: r.turns, model: r.model, estimatedUsd: r.estimatedUsd } : null
 }
 
 function flag(name, fallback = null) {

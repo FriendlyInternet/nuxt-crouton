@@ -1,8 +1,12 @@
 import { useNitroApp } from 'nitropack/runtime'
+import { requireServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 
 export default defineEventHandler(async (event) => {
   // Auth check - require authenticated user
-  const session = await requireAuth(event)
+  const session = await requireServerSession(event)
+  const userId = session.user.id
+  const activeTeamId = (session.session as { activeOrganizationId?: string | null }).activeOrganizationId
 
   const { pathname } = await readBody<{ pathname: string }>(event)
 
@@ -13,6 +17,20 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Ownership: own user prefix, or the active team's prefix as team admin
+  let decoded = pathname
+  try { decoded = decodeURIComponent(pathname) } catch { /* keep raw */ }
+  if (decoded.split('/').some(seg => seg === '..' || seg === '.') || pathname.includes('..')) {
+    throw createError({ status: 403, statusText: 'Forbidden' })
+  }
+  if (decoded.startsWith(`users/${userId}/`)) {
+    // own file
+  } else if (activeTeamId && decoded.startsWith(`teams/${activeTeamId}/`)) {
+    await requireTeamAdmin(event)
+  } else {
+    throw createError({ status: 403, statusText: 'Forbidden' })
+  }
+
   try {
     await blob.delete(pathname)
 
@@ -20,7 +38,7 @@ export default defineEventHandler(async (event) => {
     nitroApp.hooks.callHook('crouton:operation', {
       type: 'asset:deleted',
       source: 'crouton-assets',
-      userId: session.id,
+      userId,
       metadata: { pathname },
     }).catch(() => {})
 

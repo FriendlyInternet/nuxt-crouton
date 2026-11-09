@@ -1,3 +1,5 @@
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+
 /**
  * PATCH /api/teams/[id]/translations-ui/[translationId]
  * Update a team-specific translation override
@@ -17,16 +19,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // Get team and verify membership
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await requireTeamAdmin(event)
 
-  // TODO: Add admin check when isTeamAdmin is available
-  // const isAdmin = await isTeamAdmin(team.id, user.id)
-  // if (!isAdmin) {
-  //   throw createError({
-  //     status: 403,
-  //     statusText: 'Unauthorized - admin access required'
-  //   })
-  // }
 
   const body = await readBody(event)
 

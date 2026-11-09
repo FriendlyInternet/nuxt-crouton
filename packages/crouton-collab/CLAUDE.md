@@ -728,3 +728,7 @@ are actively editing those items.
 # Via curl (when DO is running)
 curl https://your-app.com/api/collab/room-123/users
 ```
+
+## Team-scoped rooms and tokens (#3134)
+
+Room keys are `${teamId}:${roomType}:${roomId}`. The collab token carries `{userId, teamId, room}`; the worker sets the room key from the URL path and `CollabRoom` authorizes `/ws`, `/state` and `/users` with `authorizeRoomRequest` (token must name exactly this room, inside its team) — 401 otherwise. The cookie-forwarding mode and client-supplied `appOrigin` are gone. `/api/collab/token` requires `?teamId=&room=` and checks membership. Same-origin routes require `teamId` and prefix the store key with the canonical team id. Redeploy collab workers after upgrading; open editors reconnect under the new room names.

@@ -234,3 +234,5 @@ Also print a tight summary: counts by severity (confirmed vs suspected) and, for
   report it.
 - **Stay in scope.** Only the requested `scope`. A `quick` run flags only what the
   diff touches — never the pre-existing backlog.
+
+> Note (moved from root CLAUDE.md, #3350): input is `{ scope, depth, fix }`; patches the safe set only under `fix:true`.

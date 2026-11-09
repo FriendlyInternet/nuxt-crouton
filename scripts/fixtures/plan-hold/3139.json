@@ -1,0 +1,56 @@
+{
+ "issue": 3139,
+ "labels": [
+  "status:blocked"
+ ],
+ "comments": [
+  {
+   "body": "<!-- work-run:3139 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964089526\n\nIts PR + preview land here when it finishes.",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _via the `delegate-pi` label_\n\nclassified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes — by code reading at e01156021c508cf9e028ac1c90352e12791cdcc6 (no live boot: the hole is in request validation, visible statically; the existing suite is pure-function vitest, `packages/crouton-bookings/test/*.test.ts`, no HTTP harness). Observed in [customer-bookings-batch.post.ts](https://github.com/FriendlyInternet/nuxt-crouton/blob/e01156021c508cf9e028ac1c90352e12791cdcc6/packages/crouton",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan sent back** (round 1 of 2) — 4 check(s) failed. The planner is re-run with these reasons.\n\n<details><summary>Review checklist</summary>\n\n- ❌ **1. Reproduced? (observed, not reasoned)** — The plan says \"yes — by code reading\". That is reasoning from code, not seeing it happen. The reason it gives for not running anything doesn't hold: the package",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nRound 2 — answers the four failed review checks (observed repro, correct archaeology, status assumption, rule + endpoint-level tests).\n\n### Reproduced\nyes — observed by running the real handler, not by reading it. I ran [customer-bookings-batch.post.ts](https://github.com/FriendlyInternet/nuxt-crouton/blob/e01156021c508cf9e028ac1c90352e12791cdcc6/packages/crouton-bookings/server/api/crouton-bookings/teams/%5Bid",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 4 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The planner ran the real batch handler under vitest and shows its output: a foreign location, quantity -5 an",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision, agreed in chat 2026-10-29 22:46_\n\nDecision: the generated `bookings-bookings` POST becomes admin-only (customers book through `customer-bookings-batch`; recorded in #3148), so admins may set `status`. The limit/stock rule is enforced in the batch endpoint and tested there. The race test must run truly concurrent requests (two connections / parallel workers), not `Promise.all` on one better-s",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40960699881)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\nRound 3 — follows the owner's 2026-10-29 decision: generated `bookings-bookings` POST becomes admin-only (admins may set `status`); the stock/limit rule is enforced and tested in the batch endpoint; the race test uses truly parallel connections; nothing here depends on #3135.\n\n### Reproduced\nyes — three observations.\n1. **Handler accepts bad input** (run earlier this issue, vitest, real handler [customer-bookin",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964655105).",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964655105).",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I re-ran the race myself: 8 worker threads, each with its own SQLite connection to one WAL file, released to",
+   "userType": "Bot"
+  }
+ ]
+}

@@ -15,9 +15,8 @@
  *   pocs          JSON list of changed pocs/*
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
  *   workflows     'true' when .github/(workflows|actions) changed
- *   base_is_epic  'true' when the PR base branch starts with epic/
  *
- *   EVENT=pull_request BASE_REF=main FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
+ *   EVENT=pull_request FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
  */
 import { readdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -54,7 +53,7 @@ function affectedApps({ files, stage, event, apps, readPkg }) {
  * PURE. `apps` = [{ name, pkg }] for every apps/* dir; `readPkg(shortName)` returns a package's
  * package.json (null if unknown) — injected so the dependency walk stays testable.
  */
-export function detect({ files = [], event = '', baseRef = '', apps = [], readPkg = () => null, model }) {
+export function detect({ files = [], event = '', apps = [], readPkg = () => null, model }) {
   const stage = files.map(f => stageOf(f, model)).reduce((hi, s) => RANK[s] > RANK[hi] ? s : hi, 'none')
   const packages = topNames(files, 'packages/')
 
@@ -64,8 +63,7 @@ export function detect({ files = [], event = '', baseRef = '', apps = [], readPk
     packages: [...packages].sort(),
     pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
-    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f)),
-    base_is_epic: baseRef.startsWith('epic/')
+    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f))
   }
 }
 
@@ -82,7 +80,6 @@ function main() {
     const out = detect({
       files,
       event: process.env.EVENT || '',
-      baseRef: process.env.BASE_REF || '',
       apps,
       readPkg: n => readJson(`packages/${n}/package.json`),
       model

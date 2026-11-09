@@ -1,0 +1,71 @@
+name: Qodo second opinion (advisory)
+run-name: "Qodo second opinion (workflow run)"
+
+# #3370 — two-week experiment: ask Qodo to review every ready pipeline PR, next to our own build
+# review, so we can score how often our review misses real problems. ADVISORY ONLY: this posts one
+# `/review` comment per head SHA and nothing else. It never labels, blocks or requests revisions
+# (bot comments are ignored by the comment router and revise-route.mjs).
+# NOTE: Qodo has so far only answered `/review` posted by the human account; this posts as the app.
+# If Qodo ignores app comments, the score report prints a "Qodo has not answered" warning.
+# Score the results with: node scripts/qodo-score.mjs
+#
+# Workflow-change: new advisory workflow for the Qodo review experiment (#3370).
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to ask Qodo to review'
+        required: true
+
+concurrency:
+  group: qodo-second-opinion-${{ github.event.inputs.pr || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  ask:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'work-')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Post one /review per head SHA
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_PR: ${{ github.event.inputs.pr }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          if [ -n "$INPUT_PR" ]; then PR="$INPUT_PR"
+          else PR="$(gh pr list --repo "$REPO" --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number // empty')"; fi
+          if [ -z "$PR" ]; then echo "no open PR — nothing to do"; exit 0; fi
+          J="$(gh pr view "$PR" --repo "$REPO" --json number,headRefName,headRefOid,baseRefName,isDraft,author,state)"
+          if ! echo "$J" | node scripts/build-review-pick.mjs; then
+            echo "not a ready pipeline PR — skip"; exit 0
+          fi
+          SHA="$(echo "$J" | jq -r .headRefOid)"
+          # Write to a file first: piping into `grep -q` under pipefail can SIGPIPE gh and read as "not asked".
+          gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
+          if node scripts/qodo-score.mjs --asked-at "$RUNNER_TEMP/comments.json" "$SHA"; then
+            echo "already asked for $SHA — skip"; exit 0
+          fi
+          # The marker goes in the same comment, so Qodo still sees `/review` as the command.
+          printf '/review\n\n<!-- qodo-asked-sha:%s -->\n' "$SHA" > "$RUNNER_TEMP/c.md"
+          gh pr comment "$PR" --repo "$REPO" --body-file "$RUNNER_TEMP/c.md"
+          echo "asked Qodo to review #$PR at $SHA" >> "$GITHUB_STEP_SUMMARY"

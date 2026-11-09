@@ -65,26 +65,30 @@ async function fetchEventFacts({ github, owner, repo, issueNumber, issue, linked
 }
 
 /**
- * Gather the claim facts for one issue.
- *
- * @param {object}  o
- * @param {object}  o.github        an Octokit-shaped client (the `github` global in github-script)
- * @param {object}  o.context       the github-script `context`
- * @param {number}  o.issueNumber
- * @param {object} [o.core]         optional logger; only `warning` is used
- * @returns {Promise<object>} the shape `decideClaim` consumes
+ * The PR a revision continues (#3061): newest PR on the branch, any state. A lookup failure
+ * returns `lookupFailed` so the guard fails open rather than refuse a revision on a glitch.
  */
-export async function gatherClaimFacts({ github, context, issueNumber, core }) {
-  const { owner, repo } = context.repo
-  const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
+async function fetchRevisionFacts({ github, owner, repo, branch, warn }) {
+  try {
+    const { data } = await github.rest.pulls.list({
+      owner, repo, head: `${owner}:${branch}`, state: 'all', sort: 'created', direction: 'desc', per_page: 5,
+    })
+    const pr = (data || [])[0]
+    if (!pr) return { branch, pr: null }
+    return { branch, pr: pr.number, state: pr.state, merged: Boolean(pr.merged_at) }
+  } catch (e) {
+    warn(`claim facts: could not look up the PR on ${branch} (${e.message})`)
+    return { branch, lookupFailed: true }
+  }
+}
 
-  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
-
+/**
+ * Every PR whose body closes the issue, with refs/merge state. The search API returns neither
+ * head nor base ref, so each candidate is fetched (at most 20, usually 1).
+ */
+async function fetchLinkedPrs({ github, owner, repo, issueNumber, warn }) {
   const q = `repo:${owner}/${repo} is:pr ${issueNumber} in:body`
   const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
-
-  // The search API returns neither head nor base ref, so each candidate is fetched. Both refs
-  // are load-bearing (see the header), and the candidate list is small — at most 20, usually 1.
   const linkedPRs = []
   let selfPr = null
   const selfPrs = []
@@ -97,12 +101,41 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
     }
     linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
   }
+  return { linkedPRs, selfPr, selfPrs }
+}
+
+/**
+ * Gather the claim facts for one issue.
+ *
+ * @param {object}  o
+ * @param {object}  o.github        an Octokit-shaped client (the `github` global in github-script)
+ * @param {object}  o.context       the github-script `context`
+ * @param {number}  o.issueNumber
+ * @param {object} [o.core]         optional logger; only `warning` is used
+ * @param {string} [o.reviseBranch] set on a REVISION: the branch whose PR is the unit being worked.
+ *                                  Adds `revision` so the guard judges that PR, not the issue.
+ * @param {string} [o.mode]         the run mode ('plan' = plan-only); lets the guard let a plan run past an open own PR (#2990)
+ * @returns {Promise<object>} the shape `decideClaim` consumes
+ */
+export async function gatherClaimFacts({ github, context, issueNumber, core, reviseBranch = '', mode = '' }) {
+  const { owner, repo } = context.repo
+  const warn = (m) => (core?.warning ? core.warning(m) : console.warn(m))
+
+  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber })
+
+  const { linkedPRs, selfPr, selfPrs } = await fetchLinkedPrs({ github, owner, repo, issueNumber, warn })
 
   const { inProgressSince, lastReopenedAt } = await fetchEventFacts({
     github, owner, repo, issueNumber, issue, linkedPRs,
   })
 
+  const revision = reviseBranch
+    ? await fetchRevisionFacts({ github, owner, repo, branch: reviseBranch, warn })
+    : undefined
+
   return {
+    ...(revision ? { revision } : {}),
+    mode,
     issueState: issue.state,
     linkedPRs,
     inProgressSince,

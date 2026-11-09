@@ -63,7 +63,7 @@ const alignClass = computed(() => {
     <template v-for="item in processedItems" :key="item.value">
       <NuxtLink
         v-if="item.link"
-        :to="item.link"
+        :to="safeUrl(item.link)"
         :target="item.link.startsWith('http') ? '_blank' : undefined"
         :rel="item.link.startsWith('http') ? 'noopener noreferrer' : undefined"
         class="shrink-0"

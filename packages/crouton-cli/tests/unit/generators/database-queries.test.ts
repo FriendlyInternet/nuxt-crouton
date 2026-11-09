@@ -55,3 +55,22 @@ describe('generateQueries — package-owned reference', () => {
     expect(out).toContain('assetsSchema.mediaAssets')
   })
 })
+
+describe('generateQueries — assert<X>References (#3378)', () => {
+  it('emits a team-scoped reference check using the already-imported table', () => {
+    const out = generateQueries(data, null, 'main', new Map([['assets', 'main']]))
+    expect(out).toContain('export async function assertMainGalleryReferences(teamId: string')
+    expect(out).toContain("{ field: 'imageId', table: assetsSchema.mainAssets, value: data.imageId }")
+  })
+
+  it('skips external references and emits nothing without refs', () => {
+    const ext = { ...data, fields: [{ name: 'who', type: 'string', refTarget: 'users', refScope: 'external', meta: {} }] }
+    expect(generateQueries(ext, null, 'main')).not.toContain('References')
+    expect(generateQueries({ ...data, fields: [data.fields[0]] }, null, 'main')).not.toContain('References')
+  })
+
+  it('includes array references', () => {
+    const arr = { ...data, fields: [{ name: 'tagIds', type: 'array', refTarget: 'tags', meta: {} }] }
+    expect(generateQueries(arr, null, 'main', new Map([['tags', 'main']]))).toContain("field: 'tagIds'")
+  })
+})

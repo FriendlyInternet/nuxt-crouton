@@ -1,3 +1,5 @@
+import { allowGeocodeCall } from '../../utils/geocodeRateLimit'
+
 /**
  * GET /api/maps/geocode
  *
@@ -62,6 +64,12 @@ function toFeature(r: NominatimResult): NormalizedFeature {
 }
 
 export default defineEventHandler(async (event) => {
+  // Authenticated callers only: this proxies to a third-party geocoder.
+  const user = await requireAuth(event)
+  if (!allowGeocodeCall(user.id)) {
+    throw createError({ status: 429, statusText: 'Too many geocoding requests' })
+  }
+
   const config = useRuntimeConfig(event)
   const baseUrl = ((config as any).maps?.geocodingUrl as string | undefined)
     || 'https://nominatim.openstreetmap.org'

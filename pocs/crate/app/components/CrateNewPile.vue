@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CratePile, CrateTrack } from '~/composables/useCrate'
 
-const props = defineProps<{ piles: CratePile[], pathLabel: (p: CratePile) => string, track: CrateTrack | null }>()
+const props = defineProps<{ piles: CratePile[], pathLabel: (p: CratePile) => string, track: CrateTrack | null, tags: string[] }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ create: [name: string, parentId: string | null, fileTrack: boolean] }>()
 
@@ -12,6 +12,13 @@ const parents = computed(() => [
   { label: 'Top level', value: null },
   ...props.piles.map(p => ({ label: props.pathLabel(p), value: p.id })).sort((a, b) => a.label.localeCompare(b.label))
 ])
+
+// Tags in the library that aren't piles yet, matching what's typed — tap one to use it.
+const suggestions = computed(() => {
+  const q = name.value.trim().toLowerCase()
+  if (!q) return []
+  return props.tags.filter(t => t.toLowerCase().includes(q) && t.toLowerCase() !== q).slice(0, 6)
+})
 
 /** Open prefilled — e.g. from a genre word, with a guessed parent. */
 function start(prefill: { name?: string, parentId?: string | null } = {}) {
@@ -34,6 +41,9 @@ defineExpose({ start })
       <form class="space-y-4" @submit.prevent="submit">
         <UFormField label="Name">
           <UInput v-model="name" size="xl" class="w-full" autofocus />
+          <div v-if="suggestions.length" class="mt-2 flex flex-wrap gap-1">
+            <UButton v-for="tag in suggestions" :key="tag" :label="tag" size="xs" color="neutral" variant="soft" icon="i-lucide-tag" @click="name = tag" />
+          </div>
         </UFormField>
         <UFormField label="Inside">
           <USelectMenu v-model="parentId" :items="parents" value-key="value" size="xl" class="w-full" />

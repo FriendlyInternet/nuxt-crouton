@@ -47,13 +47,14 @@ a strong signal, not proof; the #865 eval scoreboard is where this gets validate
 
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
-data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
 (#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
-`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+`plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
-differs, links the plan in its PR body and appends a row to
-`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+differs, links the plan in its PR body; the run's record step writes the ledger row to the
+`pipeline-data` branch under `plan-ledger/` (`scripts/plan-ledger.mjs --write`, #3457).
+`writeups/reports/plan-review-ledger.jsonl` stays on main as frozen history up to 6 Nov 2026. Chores and app-only
 tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
 
 ## The red-team agent (standalone — not part of the pipeline)
@@ -130,7 +131,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 |-------|------|-----------|--------------|-------|
 | `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
-**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+**It is ADVISORY on findings — it has no 🔴 and never blocks on what it finds; the check goes red only if simplify did not run (no verdict, #3070).** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
 `.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
@@ -309,6 +310,9 @@ all of these by **default** — they're not optional extras; each one has burned
 - **`anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`** — a real API key, NEVER a
   subscription `CLAUDE_CODE_OAUTH_TOKEN` (subscription OAuth is interactive-only and
   disallowed for CI — Anthropic Legal & Compliance).
+- **`allowed_bots: "nuxt-harness[bot],github-actions[bot]"`** — the action refuses any run
+  started by a bot actor unless listed, and exits green while refusing; pipeline pushes are
+  bot-started, so without it the reviewers silently never run (#3119).
 - **`show_full_output: true`** — the full agent log prints inline; debugging a run must not
   require a debug re-run.
 - **Pin the action to a SHA, kept in sync** across these workflows (bump them together).

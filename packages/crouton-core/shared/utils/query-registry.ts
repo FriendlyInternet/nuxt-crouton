@@ -14,6 +14,12 @@
 export interface CollectionQueries {
   getAll: () => Promise<(teamId: string, ...rest: any[]) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  /**
+   * The collection's declared access (`list: 'own'` etc., #3148), exported by its generated
+   * queries module. Optional: older registries and package entries have none. Public endpoints
+   * refuse a collection whose `list` is `'own'` (#3380).
+   */
+  access?: () => Promise<{ list?: 'team' | 'own', create?: string, reorder?: string } | undefined>
 }
 
 export type QueryRegistry = Record<string, CollectionQueries>
@@ -44,5 +50,6 @@ export function collectionQueries(load: () => Promise<Record<string, any>>, name
   return {
     getAll: () => load().then(m => m[`getAll${name}`]),
     getByIds: () => load().then(m => m[`get${name}ByIds`]),
+    access: () => load().then(m => m[`${name}Access`]),
   }
 }

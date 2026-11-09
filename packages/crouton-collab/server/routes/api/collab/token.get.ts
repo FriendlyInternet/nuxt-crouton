@@ -3,12 +3,13 @@
  *
  * Flow:
  * 1. Client fetches this endpoint (same-origin, session cookies sent automatically)
- * 2. Server validates session, creates token with userId + expiry, signs with HMAC
+ * 2. Server validates session + team membership, creates token with userId, team, room + expiry, signs with HMAC
  * 3. Client passes token as query param when connecting to cross-origin collab worker
  * 4. CollabRoom DO verifies HMAC signature and expiry — no callback needed
  */
 import { signCollabToken } from '../../../utils/collabToken'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
+import { resolveTokenRoom } from '../../../utils/collabTeamAccess'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -22,7 +23,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 500, statusText: 'Server misconfigured: COLLAB_TOKEN_SECRET is not set' })
   }
 
-  const token = await signCollabToken(session.user.id, secret)
+  // The client may send a slug or an id; the token and room key carry the canonical id.
+  const { teamId, roomKey } = await resolveTokenRoom(event, getQuery(event), session.user.id)
 
-  return { token }
+  const token = await signCollabToken({ userId: session.user.id, teamId, room: roomKey }, secret)
+
+  return { token, teamId }
 })

@@ -31,7 +31,7 @@ interface RuntimeAuthConfig {
     phone?: boolean | object
   }
   teams?: {
-    allowCreate?: boolean
+    allowCreate?: boolean | 'superAdmin'
     limit?: number
     memberLimit?: number
     requireInvite?: boolean

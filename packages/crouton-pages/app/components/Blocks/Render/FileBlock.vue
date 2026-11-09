@@ -33,7 +33,7 @@ const { t } = useT()
     <!-- Render download button -->
     <a
       v-else
-      :href="attrs.file"
+      :href="safeUrl(attrs.file)"
       download
       class="inline-flex items-center gap-2.5 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg)] px-5 py-3 text-sm font-medium text-[var(--ui-text)] shadow-sm transition-colors hover:bg-[var(--ui-bg-elevated)] hover:border-[var(--ui-border-hover)]"
     >

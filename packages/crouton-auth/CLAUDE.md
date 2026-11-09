@@ -20,7 +20,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
 | `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
-| `allowCreate` | Can users create additional teams | true |
+| `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
 | `limit` | Max teams per user (0 = unlimited) | 0 |
@@ -230,6 +230,10 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `twoFactor` - 2FA settings
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
+
+### Custom Domain Claims
+
+`domain` rows are unique per `(organizationId, domain)`, so a team's unverified (pending) claim never blocks another team. Only one team can hold a *verified* domain (partial unique index `domain_verified_uniq`). `POST /api/teams/[id]/domains` refuses a domain only if another team already has it verified; `.../domains/[domainId]/verify` refuses to verify if another team verified it first (409). Apps need migration `domain_per_team_pending` (kassa 0008, velo 0004).
 
 ### Auth Email Log API
 

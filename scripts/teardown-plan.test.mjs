@@ -89,3 +89,11 @@ test('11: branches match the exact app name followed by nothing, - or /', () => 
   assert.equal(branchMatchesApp('crouton-builder', 'crouton-builder-demo'), false)
   assert.equal(branchMatchesApp('crouton-builders', 'crouton-builder'), false)
 })
+
+test('6: teardown workflows never upload the database export (#3067)', async () => {
+  const { readFileSync } = await import('node:fs')
+  for (const f of ['teardown-app.yml', 'teardown-on-removal.yml']) {
+    const src = readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+    assert.ok(!/upload-artifact/.test(src), `${f} must not upload artifacts`)
+  }
+})

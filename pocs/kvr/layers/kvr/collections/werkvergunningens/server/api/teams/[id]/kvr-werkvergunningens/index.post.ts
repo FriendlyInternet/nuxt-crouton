@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)
 
   // Exclude id field to let the database generate it
-  const { id, ...dataWithoutId } = body
+  const dataWithoutId = { ...body }
 
   // Convert date string to Date object
   if (dataWithoutId.datum) {

@@ -5,7 +5,8 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { uiTouched, commentLines, underUiKey } from './ui-touched.mjs'
+import { readFileSync } from 'node:fs'
+import { uiTouched, uiTouchedFromFiles, commentLines, underUiKey, isCandidatePath, githubFileDiff } from './ui-touched.mjs'
 
 const none = () => null
 
@@ -58,15 +59,16 @@ test('a template class= change is visual', () => {
   assert.equal(uiTouched(d, none), 1)
 })
 
-test('a script-only .vue change still counts', () => {
+test('a script-only .vue change (mapped to <script>) is not visual (#3228)', () => {
   const d = `diff --git a/x.vue b/x.vue
 --- a/x.vue
 +++ b/x.vue
-@@ -1 +1 @@
+@@ -2 +2 @@
 -const a = 1
 +const a = 2
 `
-  assert.equal(uiTouched(d, none), 1)
+  assert.equal(uiTouched(d, none), 1) // unmappable -> hold
+  assert.equal(uiTouched(d, () => ['<script setup>', 'const a = 2', '</script>', '<template><div/></template>']), 0)
 })
 
 test('app.config.ts change under ui: is visual; unreadable file holds', () => {
@@ -135,4 +137,116 @@ test('#2852: regenerated fixtures/** .vue files are not a visual change', () => 
 `
   assert.equal(uiTouched(diff, none), 0)
   assert.equal(uiTouched(diff.replaceAll('fixtures/basic', 'apps/basic'), none), 1)
+})
+
+// ---- #3228: uiTouchedFromFiles ----
+const SFC = ['<script setup lang="ts">', 'const a = 1', 'const b = 2', '</script>', '<template>', '  <div class="p-2" />', '</template>', '<style>', '.a { color: red }', '</style>']
+const file = (filename, patch, extra = {}) => ({ filename, patch, status: 'modified', ...extra })
+const reader = (text, seen = []) => (ref) => { seen.push(ref); return text.join('\n') }
+
+test('#3228 script-only .vue (defineModel / ?? hunks) -> 0', async () => {
+  const p = '@@ -2 +2 @@\n-const a = defineModel<string>()\n+const a = defineModel<string>({ required: true })\n@@ -3 +3 @@\n-const b = x\n+const b = x ?? \'\''
+  assert.equal(await uiTouchedFromFiles([file('a/app/components/Input.vue', p)], reader(SFC)), 0)
+})
+
+test('#3228 template / style / css / new / deleted / unreadable -> 1', async () => {
+  const tpl = file('x.vue', '@@ -6 +6 @@\n-  <div class="p-2" />\n+  <div class="p-4" />')
+  const sty = file('x.vue', '@@ -9 +9 @@\n-.a { color: red }\n+.a { color: blue }')
+  assert.equal(await uiTouchedFromFiles([tpl], reader(SFC)), 1)
+  assert.equal(await uiTouchedFromFiles([sty], reader(SFC)), 1)
+  assert.equal(await uiTouchedFromFiles([file('x.css', '@@ -1 +1 @@\n-a\n+b')], reader(SFC)), 1)
+  const scr = '@@ -2 +2 @@\n-const a = 1\n+const a = 2'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', scr, { status: 'added' })], reader(SFC)), 1)
+  assert.equal(await uiTouchedFromFiles([file('x.vue', scr, { status: 'removed' })], reader(SFC)), 1)
+  assert.equal(await uiTouchedFromFiles([file('x.vue', undefined)], reader(SFC)), 1)
+  assert.equal(await uiTouchedFromFiles([file('x.vue', scr)], () => { throw new Error('nope') }), 1)
+})
+
+test('#3228 script + template mixed -> 1; app.config ui: -> 1', async () => {
+  const p = '@@ -2 +2 @@\n-const a = 1\n+const a = 2\n@@ -6 +6 @@\n-x\n+  <div class="p-4" />'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], reader(SFC)), 1)
+  const cfg = ['export default {', '  ui: {', '    x: 1', '  }', '}']
+  assert.equal(await uiTouchedFromFiles([file('app.config.ts', '@@ -3 +3 @@\n-    x: 1\n+    x: 2')], reader(cfg)), 1)
+})
+
+test('#3228 -U3 context lines give the same verdict as -U0', async () => {
+  const u3 = '@@ -1,5 +1,5 @@\n <script setup lang="ts">\n-const a = 1\n+const a = 2\n const b = 2\n </script>\n <template>'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', u3)], reader(SFC)), 0)
+})
+
+test('#3228 removed lines are read from the merge-base text, not the tip', async () => {
+  // Removed line is old-side line 2. At the merge base it is inside <script>; at the tip the
+  // file was reshuffled so line 2 sits inside <template>.
+  const mb = ['<script setup>', 'const a = 1', '</script>', '<template>', '<div/>', '</template>']
+  const tip = ['<template>', '<div class="old"/>', '</template>', '<script setup>', '</script>']
+  const seen = []
+  const readText = (ref) => { seen.push(ref); return (ref === 'merge-base' ? mb : tip).join('\n') }
+  const p = '@@ -2 +1 @@\n-const a = 1'
+  // reading the merge base (correct) -> script -> 0
+  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], readText), 0)
+  assert.ok(seen.includes('merge-base'))
+  // reading the tip (the old bug) -> template -> 1; proves the fixtures tell the two apart
+  assert.equal(await uiTouchedFromFiles([file('x.vue', p)], () => tip.join('\n')), 1)
+})
+
+test('status.yml passes merge_base_commit as the old-side source', () => {
+  const yml = readFileSync(new URL('../.github/workflows/status.yml', import.meta.url), 'utf8')
+  assert.match(yml, /merge_base_commit/)
+  assert.match(yml, /ref: ref === 'head' \? pr\.head\.sha : mergeBase/)
+})
+
+test('#3228 real PR #3216 patches (script-only .vue) replay as not visual', async () => {
+  const dir = new URL('./fixtures/ui-touched/', import.meta.url)
+  const rd = (n) => readFileSync(new URL(n, dir), 'utf8')
+  const files = [
+    ['pocs/kvr/app/components/PublicWerkvergunningForm.vue', 'pr3216-components-PublicWerkvergunningForm'],
+    ['pocs/kvr/layers/kvr/collections/settings/app/components/Recipient/Input.vue', 'pr3216-Recipient-Input']
+  ].map(([filename, base]) => file(filename, rd(`${base}.patch`).trimEnd(), { _base: rd(`${base}.base.txt`) }))
+  // head text = merge-base text with the patch's single -/+ line swap applied
+  const headOf = (f) => {
+    const lines = f._base.split('\n')
+    const m = f.patch.match(/^@@ -(\d+)/)
+    const minus = f.patch.split('\n').filter(l => l.startsWith('-'))
+    const plus = f.patch.split('\n').filter(l => l.startsWith('+'))
+    assert.equal(minus.length, 1)
+    // hunk starts with 3 context lines before the change
+    const at = Number(m[1]) - 1 + f.patch.split('\n').findIndex(l => l.startsWith('-')) - 1
+    assert.equal(lines[at], minus[0].slice(1))
+    lines[at] = plus[0].slice(1)
+    return lines.join('\n')
+  }
+  const readText = (ref, path) => {
+    const f = files.find(x => x.filename === path)
+    return ref === 'merge-base' ? f._base : headOf(f)
+  }
+  assert.equal(await uiTouchedFromFiles(files, readText), 0)
+})
+
+test('isCandidatePath: visual and app.config paths yes, fixtures and docs no', () => {
+  assert.equal(isCandidatePath('packages/x/app/components/A.vue'), true)
+  assert.equal(isCandidatePath('apps/a/app/app.config.ts'), true)
+  assert.equal(isCandidatePath('packages/x/CLAUDE.md'), false)
+})
+
+test('githubFileDiff: added, removed and renamed entries', () => {
+  const added = githubFileDiff({ filename: 'a.vue', status: 'added', patch: '@@ -0,0 +1 @@\n+x' })
+  assert.match(added, /--- \/dev\/null\n\+\+\+ b\/a\.vue/)
+  const removed = githubFileDiff({ filename: 'a.vue', status: 'removed', patch: '@@ -1 +0,0 @@\n-x' })
+  assert.match(removed, /--- a\/a\.vue\n\+\+\+ \/dev\/null/)
+  const renamed = githubFileDiff({ filename: 'b.vue', previous_filename: 'a.vue', status: 'renamed', patch: 'P' })
+  assert.match(renamed, /^diff --git a\/a\.vue b\/b\.vue\n--- a\/a\.vue\n\+\+\+ b\/b\.vue\nP\n$/)
+})
+
+test('#3228 -U3 template change right after </script> is visual; script tag line is visual', async () => {
+  const tpl = '@@ -3,5 +3,5 @@\n const b = 2\n </script>\n <template>\n-  <div class="p-2" />\n+  <div class="p-4" />\n </template>\n <style>'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', tpl)], reader(SFC)), 1)
+  const tag = '@@ -1 +1 @@\n-<script setup>\n+<script setup lang="ts">'
+  assert.equal(await uiTouchedFromFiles([file('x.vue', tag)], reader(SFC)), 1)
+})
+
+test('a renamed .vue with a script-only edit is visual (#3228)', async () => {
+  const scr = '@@ -2 +2 @@\n-const a = 1\n+const a = 2'
+  assert.equal(await uiTouchedFromFiles([file('B.vue', scr, { status: 'renamed', previous_filename: 'A.vue' })], reader(SFC)), 1)
+  const diff = `diff --git a/A.vue b/B.vue\n--- a/A.vue\n+++ b/B.vue\n${scr}\n`
+  assert.equal(uiTouched(diff, () => SFC), 1)
 })

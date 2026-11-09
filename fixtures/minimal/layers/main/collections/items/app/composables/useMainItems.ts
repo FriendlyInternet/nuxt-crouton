@@ -40,7 +40,6 @@ const _mainItemsConfig = {
   name: 'mainItems',
   layer: 'main',
   apiPath: 'main-items',
-  componentName: 'MainItemsForm',
   defaultValues: {
     name: '',
     done: false

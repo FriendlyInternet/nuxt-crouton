@@ -77,14 +77,7 @@ jobs:
           [ -z "$FAILED" ]
         continue-on-error: true
 
-      - name: Upload database backups
-        if: steps.plan.outputs.apps != ''
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: teardown-db-backups
-          path: teardown-backups/
-          retention-days: 30
-          if-no-files-found: ignore
+      # backups are not uploaded: public repo, see #3067
 
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -155,7 +148,7 @@ jobs:
               '',
               sections.join('\n\n'),
               '',
-              'A database export was kept for 30 days as the `teardown-db-backups` artifact on the run above.',
+              'The database export is not uploaded (public repo, #3067); it exists only on the short-lived runner.',
               '',
               '</details>',
               '',

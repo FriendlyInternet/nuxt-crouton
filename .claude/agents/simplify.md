@@ -23,7 +23,7 @@ form of the on-demand `/simplify` skill.
 
 **Everything you find is ADVISORY.** Simplification is a judgment call, not a hard rule
 — there is no "critical" that should block a merge. Your findings inform; they never
-gate. A noisy advisory that cries wolf gets muted, so **precision beats recall**: only
+gate (the check is red only when you produce no verdict). A noisy advisory that cries wolf gets muted, so **precision beats recall**: only
 raise a finding when a *concretely cleaner* alternative exists and you can name it.
 
 ## Input (from the prompt)

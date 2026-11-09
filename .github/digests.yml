@@ -44,3 +44,9 @@ skills-digest:
   schedule: monthly:1
   deliver: [email]
   # to: [you@example.com]   # the workflow reads the DIGEST_REPORT_EMAIL repo var; this is documentation
+
+# Weekly deterministic quality gather (#3063/#3065): what the pipeline merged, churn, reverts,
+# postmortems and the workflow security scans. Numbers only — the review half reads its JSON.
+quality-digest:
+  schedule: weekly:mon
+  deliver: []

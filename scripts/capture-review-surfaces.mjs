@@ -22,13 +22,13 @@
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
 //   PR_BODY (env): the PR body, read for review-surface markers (#2433).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
 //   shoot is derived from them (#2698).
 //
-// Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
-// Prints `captured=<file>` per kept shot (the workflow commits them). NEVER exits non-zero on a
+// Output: screenshots/review-captures/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
+// Prints `captured=<file>` per kept shot (the workflow publishes them to a non-branch ref + PR comment, #3351). NEVER exits non-zero on a
 // capture miss — a missing capture just means no evidence, and the sign-off gate withholds.
 
 import { resolve } from 'node:path'
@@ -201,7 +201,7 @@ async function main() {
     process.exit(2)
   }
   const origin = String(args.url).replace(/\/$/, '')
-  const outDir = args.out || 'writeups/ui-proposals'
+  const outDir = args.out || 'screenshots/review-captures'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
   const app = args.app || ''
   const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app, changedFiles: (process.env.CHANGED_FILES || '').split('\n') })

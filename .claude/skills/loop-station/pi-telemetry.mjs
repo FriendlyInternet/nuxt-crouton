@@ -31,6 +31,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { costFromText, costForPiUsage } from '../../../scripts/lib/session-cost.mjs'
 import { skillLoadsFromSession, toolStatsFromSession, formatToolStats } from './lib/skill-loads.mjs'
 
 function num(v) {
@@ -253,6 +254,42 @@ export function readSessionToolStats(dir) {
   return total
 }
 
+/** Top-level *.jsonl of the per-run session dir only (no recursion: helper event streams are not priced). */
+export function readMainSessionFiles(dir) {
+  if (!dir || !fs.existsSync(dir)) return []
+  let entries
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return [] }
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith('.jsonl'))
+    .map((e) => path.join(dir, e.name))
+}
+
+/** Main-session cost (top-level *.jsonl only) + each helper once from its subagent meta. */
+function priceRun(metas, sessionDir) {
+  let usd = 0, estimatedUsd = 0, tokens = 0, turns = 0, model = null
+  for (const f of readMainSessionFiles(sessionDir)) {
+    let text = ''
+    try { text = fs.readFileSync(f, 'utf8') } catch { continue }
+    const r = costFromText(text)
+    usd += r.usd; estimatedUsd += r.estimatedUsd; tokens += r.tokens; turns += r.turns
+    model = r.model || model
+  }
+  for (const m of metas) {
+    const o = subagentMetaToRunOutcome(m)
+    const t = o.tokens.total
+    if (!t && !o.costUsd) continue
+    if (o.costUsd > 0) usd += o.costUsd
+    else {
+      const est = costForPiUsage(m.usage, o.model)
+      usd += est; estimatedUsd += est
+    }
+    tokens += t
+    turns += o.turns ?? 0
+    model = o.model || model
+  }
+  return { usd: Math.round(usd * 1e6) / 1e6, tokens, turns, model, estimatedUsd: Math.round(estimatedUsd * 1e6) / 1e6 }
+}
+
 /**
  * One-shot: a pi telemetry directory (+ optionally the run's session dir) → WS2 trace events
  * (with the leading `meta` header line the data seam expects). Agent events come from the
@@ -265,9 +302,18 @@ export function buildPiTrace(dir, opts = {}) {
     ...subagentMetasToWs2Events(metas),
     ...readSessionSkillLoads(opts.sessionDir),
   ].sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0))
-  if (!events.length) return null
+  const cost = priceRun(metas, opts.sessionDir)
+  if (!events.length && cost.turns === 0) return null
   return {
-    meta: { kind: 'meta', source: 'pi', harness: 'pi', eventCount: events.length },
+    meta: {
+      kind: 'meta',
+      source: 'pi',
+      harness: 'pi',
+      eventCount: events.length,
+      workflow: process.env.GITHUB_WORKFLOW || undefined,
+      run: process.env.GITHUB_RUN_ID || undefined,
+      cost,
+    },
     events,
   }
 }

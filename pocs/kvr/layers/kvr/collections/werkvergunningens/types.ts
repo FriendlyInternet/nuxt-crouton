@@ -59,10 +59,10 @@ export interface KvrWerkvergunningen {
   werkverantwoordelijkeVoornaam?: string
   werkverantwoordelijkeHoedanigheid?: string
   werkverantwoordelijkeAannemer?: string
-  werkverantwoordelijkeHandtekening?: Record<string, any>
+  werkverantwoordelijkeHandtekening?: string | null
   schakelbevoegdeNaam?: string
   schakelbevoegdeVoornaam?: string
-  schakelbevoegdeHandtekening?: Record<string, any>
+  schakelbevoegdeHandtekening?: string | null
   photos?: any[]
   recipientEmail: string
   emailStatus?: string
@@ -75,7 +75,7 @@ export interface KvrWerkvergunningen {
 }
 
 export type KvrWerkvergunningenFormData = z.infer<typeof kvrWerkvergunningenSchema>
-export type NewKvrWerkvergunningen = Omit<KvrWerkvergunningen, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>
+export type NewKvrWerkvergunningen = Omit<KvrWerkvergunningen, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id?: string, createdBy?: string, updatedBy?: string }
 
 // Props type for the Form component
 export interface KvrWerkvergunningenFormProps {

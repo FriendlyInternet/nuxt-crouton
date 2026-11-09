@@ -2,6 +2,7 @@
 
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { resolveAccess } from '../generators/api-endpoints.ts'
 import { detectRequiredDependencies } from './module-detector.ts'
 
 export interface ValidationResult {
@@ -39,6 +40,12 @@ export async function validateConfig(config: Record<string, any> | null): Promis
   if (config.collections && Array.isArray(config.collections)) {
     // Enhanced format with multiple schemas
     for (const col of config.collections) {
+      // Invalid access rules must fail a dry run too (#3380)
+      try {
+        resolveAccess({ collectionConfig: col, plural: col.name })
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e))
+      }
       if (!col.fieldsFile) {
         errors.push(`Collection '${col.name}' is missing fieldsFile path`)
         continue

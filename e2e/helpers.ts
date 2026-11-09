@@ -58,6 +58,8 @@ export interface SurfaceSpec {
   name: string
   /** Route to visit. `{team}` is replaced with the active team slug. */
   path: string
+  /** Optional CSS selector (or list of selectors, clicked in order) clicked after load, before asserting (e.g. open a create form, then its tab). */
+  click?: string | string[]
   /** What must be visible for the surface to count as working. At least one. */
   expect: {
     /** CSS selector that must be visible, e.g. "#pages-sidebar". */
@@ -172,7 +174,20 @@ export interface CollabSpec {
   field: string
 }
 
+/**
+ * Generated-endpoint access check (#3148): the fixture declares `access` on two
+ * collections and e2e/access.smoke.spec.ts asserts the generated handlers enforce it.
+ */
+export interface AccessSpec {
+  /** Collection with `access: { create: 'admin', reorder: 'admin' }` + hierarchy. */
+  admindocs: { apiPath: string }
+  /** Collection with `access: { create: 'member', list: 'own' }`. */
+  membernotes: { apiPath: string }
+}
+
 export interface FixtureManifest {
+  /** Optional role-enforcement check; omit for fixtures without access declarations. */
+  access?: AccessSpec
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
   surfaces?: SurfaceSpec[]
