@@ -114,7 +114,11 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       } catch (e) { core.warning(`annotations for ${f.name}: ${e.message}`) }
     }
     const why = failureExcerpts(entries)
+    return quoteJobLogs({ pr, st, marker, existing, causes, names, list, why })
+  }
 
+  // Step 2 of pingOnRed: quote the end of each failing job's log.
+  async function quoteJobLogs({ pr, st, marker, existing, causes, names, list, why }) {
     // The actual end of each failing job's log (#2677): annotations are often noise or
     // absent (a deploy failure has none). For Actions checks the check-run id IS the job
     // id. Fenced, so no @mention in a log can ping. Any failure to fetch is skipped.
@@ -134,6 +138,11 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
         } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
       }
     } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
+    return sendRedPing({ pr, st, marker, existing, causes, list, why, tails })
+  }
+
+  // Step 3 of pingOnRed: pick the wording from the fix-bot decision, then create or refresh the note.
+  async function sendRedPing({ pr, st, marker, existing, causes, list, why, tails }) {
     // #3622: never mentions the owner; the decision only picks the wording. The
     // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
     let dec
@@ -260,6 +269,9 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
     // Child tree lines.
     const lines = []
     for (const s of subs) {
+      await pushChildLine(s)
+    }
+    async function pushChildLine(s) {
       let icon = '⏳', note = 'queued'
       if (s.state === 'closed') { icon = '✅'; note = '' }
       // Two different holds, two different asks (#2083): `blocked` wants a reply,
@@ -284,6 +296,9 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
     // blocked ⇒ sign-off · 0 + open ⇒ decomposing · some open ⇒ build · all closed ⇒ assembled.
     const card = epicCard({ title, epicBlocked, subs, childLines: lines, now })
     if (card.needsSignoffCheck) {
+      await askForSignoff()
+    }
+    async function askForSignoff() {
       // #2156: only ASK for sign-off once the held PR is actually reviewable — its CI
       // is green. Pinging the instant the draft opens asks for a decision that can't be
       // made yet: on #2156 the sign-off ping fired 4 minutes BEFORE CI went red on a
@@ -320,6 +335,9 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
   // Resolve the epic: the issue itself if it has sub-issues, else its parent via the
   // WS2 pipeline block (`<!-- pipeline: epic=N … -->`) in the body.
   if (context.eventName === 'issues') {
+    return refreshEpicForIssue()
+  }
+  async function refreshEpicForIssue() {
     const issue = context.payload.issue
     let hasSubs = false
     try {
@@ -338,6 +356,9 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
   if (context.eventName === 'pull_request') {
     prNumbers.add(context.payload.pull_request.number)
   } else {
+    await addAssociatedPrs()
+  }
+  async function addAssociatedPrs() {
     // `workflow_run` first — it is the only one of the three that actually fires for
     // our Actions-generated checks (#1884). It also carries `pull_requests`, but that
     // array is empty for a run from a fork, so resolve by head SHA like the others.

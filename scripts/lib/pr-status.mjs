@@ -28,6 +28,11 @@ export function tallyCi({ checkRuns = [], statuses = [] } = {}) {
     else if (s.state === 'success') success++
     else { failure++; failing.push({ name: s.context }) } // error, failure — a commit status carries no annotations
   }
+  return ciVerdict({ success, pending, failure, cancelled, failing })
+}
+
+/** The icon + word for a set of counts (failure > pending > cancelled > passing). */
+function ciVerdict({ success, pending, failure, cancelled, failing }) {
   const total = success + pending + failure + cancelled
   let icon = '⏳', word = 'pending'
   if (total === 0) { icon = '⏳'; word = 'queued' }
