@@ -32,6 +32,7 @@ describe('signed-out routing', () => {
     vi.stubGlobal('useRuntimeConfig', () => ({}))
     vi.stubGlobal('useServerAuth', () => ({ api: { getSession: async () => null } }))
     vi.stubGlobal('getRouterParam', (e: any) => e.app)
+    vi.stubGlobal('getQuery', () => ({}))
     vi.stubGlobal('sendRedirect', (_e: unknown, loc: string, code: number) => ({ loc, code }))
     return (await import('../server/api/status/login/[app].get')).default as unknown as (e: unknown) => Promise<any>
   }
