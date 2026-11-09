@@ -121,7 +121,7 @@ jobs:
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       conflict: ${{ steps.revise.outputs.conflict }}
-      held: ${{ steps.finish.outputs.held }}
+      held: ${{ steps.held.outputs.held }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -1316,7 +1316,6 @@ jobs:
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
             fi
-            [ -z "$DRAFT_FLAG" ] || echo "held=1" >> "$GITHUB_OUTPUT"  # #3583 new draft AND re-dispatch
           fi
 
           # #3210 — tick "Build PR opened" on the ticket's flow checklist (cosmetic; never fails the run).
@@ -1392,6 +1391,17 @@ jobs:
           else
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
+
+      # #3583: held=1 when the PR is a draft AFTER the whole create/re-dispatch logic in `finish`
+      # (new draft AND re-dispatch). Own step so the frozen `finish` block does not grow.
+      - id: held
+        if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
+        run: |
+          D="$(gh pr list --head "$BR" --state open --json isDraft -q '.[0].isDraft' 2>/dev/null || true)"
+          [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
 
       - name: Upload worker screenshots (download backup, #3351)
         if: ${{ always() && inputs.mode != 'plan' }}

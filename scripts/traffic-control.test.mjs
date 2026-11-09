@@ -327,17 +327,14 @@ test('releaseWaiting releases a parked ticket behind a held draft (#3583)', asyn
   assert.deepEqual(released, [5])
 })
 
-test('worker sets held=1 after the whole create/re-dispatch block, so a NEW draft re-checks waiters (#3583)', async () => {
+test('held=1 is set in its own step right after finish, and release-traffic reads that step (#3583)', async () => {
   const { readFileSync } = await import('node:fs')
   const wf = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-  const create = wf.indexOf('gh pr create $DRAFT_FLAG')
-  const redispatch = wf.indexOf('Re-dispatch: toggle the existing PR')
-  const held = wf.indexOf('echo "held=1" >> "$GITHUB_OUTPUT"')
-  assert.ok(create > 0 && redispatch > create && held > redispatch, 'held=1 must come after both branches')
+  const finish = wf.indexOf('- id: finish')
+  const held = wf.indexOf('- id: held')
+  const line = wf.indexOf('echo "held=1" >> "$GITHUB_OUTPUT"')
+  assert.ok(finish > 0 && held > finish && line > held, 'held step must follow finish')
   assert.equal(wf.split('echo "held=1"').length - 1, 1)
-  // the line sits outside the else branch: the next non-blank line before it closes the else (fi)
-  const lines = wf.slice(0, held).split('\n')
-  const before = lines[lines.length - 2].trim()
-  assert.equal(before, 'fi')
+  assert.match(wf, /held: \$\{\{ steps\.held\.outputs\.held \}\}/)
   assert.match(wf, /if: \$\{\{ always\(\) && needs\.work-pi\.outputs\.held == '1' \}\}/)
 })
