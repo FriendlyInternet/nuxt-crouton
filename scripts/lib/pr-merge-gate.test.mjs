@@ -395,3 +395,31 @@ test('v1 missing files → need-files; a held review stays its own hold', () => 
 test('v1 non-v1 base → not-v1-base', () => {
   for (const baseRef of ['epic/1-x', 'epic/12-v1-step-1']) assert.equal(v1({ baseRef }).code, 'not-v1-base')
 })
+
+const HOLD_AT = '2026-11-07T12:00:53Z'
+const held = (kind, go, o = {}) => v1({ labels: [], headReview: { kind, at: HOLD_AT }, ownerHold: { kind, at: HOLD_AT }, go, ...o })
+for (const kind of ['final', 'needs-owner']) {
+  test(`v1 ownerHold ${kind}, no ok → owner-held`, () => {
+    const r = held(kind, { go: false })
+    assert.equal(r.code, 'owner-held')
+    assert.equal(r.merge, false)
+    assert.match(r.reason, new RegExp(kind))
+  })
+}
+test('v1 ownerHold final, ok after → merge', () => {
+  assert.equal(held('final', { go: true, approvedAt: '2026-11-07T12:06:32Z' }).code, 'merge')
+})
+test('v1 no ownerHold, no build:approved → no-review', () => {
+  assert.equal(v1({ labels: [], ownerHold: null }).code, 'no-review')
+})
+test('mergeDecisionCheck owner-held title', () => {
+  const c = mergeDecisionCheck({ merge: false, code: 'owner-held', reason: 'x' })
+  assert.equal(c.output.title, 'held: waiting for your ok')
+  assert.equal(c.status, 'in_progress')
+  assert.equal(c.conclusion, undefined)
+})
+test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {
+  const r = decideLeafMerge({ draft: false, authorIsPipeline: true, baseRef: 'epic/12-slug', headRef: 'work-5', labels: [], go: { go: false },
+    ownerHold: { kind: 'final', at: HOLD_AT }, headReview: { kind: 'final', at: HOLD_AT }, headSha: SHA, files: ['scripts/a.mjs'], ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(r.code, 'no-review')
+})

@@ -176,6 +176,7 @@ jobs:
       # (KEY=main; same derivation as the "Seed review login" step below) and runs
       # scripts/smoke-deployed.mjs — node built-ins only, so it works before
       # `pnpm install` (the screenshot part self-skips without playwright).
+      # The detect job has already waited for this commit's staging deploy (#1699).
       # Gates the deliberate manual click (#318), never automates it. Escape
       # hatch: the skip-staging-smoke input (loud warning, next step).
       - name: Pre-prod confidence gate — smoke live staging
@@ -846,6 +847,8 @@ jobs:
           echo "result=fail" >> "$GITHUB_OUTPUT"   # overwritten on success; a crash stays red
           PROBE_EMAIL="delivered+${APP}@resend.dev"
           PR_NUM="${{ github.event.pull_request.number }}"
+          KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
+          if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
           else TARGET="--env staging"; fi
           START=$(date +%s)
@@ -875,11 +878,12 @@ jobs:
             REASON="$V"
             [ "$REASON" = "never confirmed" ] || [ "$REASON" = "no send recorded" ] || break
           done
-          if [ "$REASON" = "no send recorded" ] || [ "$REASON" = "never confirmed" ]; then
-            echo "::error::email probe: no send recorded"
-          else
-            echo "::error::email probe failed: $REASON"
+          O=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND" "$REASON"); echo "result=$O" >> "$GITHUB_OUTPUT"
+          if [ "$O" = warn ]; then
+            echo "::warning::email probe: Resend daily quota reached — ${REASON}"
+            echo "⚠ email probe (${APP}): daily quota reached" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
+          echo "::error::email probe failed: $REASON"
           echo "✗ email probe (${APP}): ${REASON}" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
@@ -1002,7 +1006,9 @@ jobs:
       # by redeploying. It is now its own workflow ("Preview screenshot" check): this step only
       # records WHERE the preview is. No secrets in the file — the review login is re-derived
       # downstream from REVIEW_SEED_SECRET, since artifacts are readable by anyone with repo access.
+      # scripts/lib/screenshot-verdict.mjs matches on this exact step name (#3575) — keep them in sync.
       - name: Record preview for the screenshot check (#2697)
+        id: preview_record
         if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && (steps.seed.outputs.email != '' || steps.seed.outputs.preview_token == 'true') && steps.deploy.outputs.url != '' }}
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
@@ -1013,13 +1019,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/preview-meta"
           jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
             '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+          echo "recorded=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload preview record
-        if: ${{ hashFiles(format('{0}/preview-meta/meta.json', runner.temp)) != '' }}
+        if: ${{ steps.preview_record.outputs.recorded == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: preview-meta-${{ inputs.app }}
           path: ${{ runner.temp }}/preview-meta/meta.json
+          if-no-files-found: error
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
@@ -1179,7 +1187,7 @@ jobs:
       # on "not pass" (not "is fail") means a skipped or crashed probe is red too. Runs last so
       # seed + smoke still happen — the check fails, the deploy stays.
       - name: Gate on email probe
-        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.email-probe.outputs.result != 'pass' }}
+        if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && !contains(fromJSON('["pass","skip","warn"]'), steps.email-probe.outputs.result) }}
         run: |
           echo "::error::email probe did not confirm a send (result='${{ steps.email-probe.outputs.result }}')"
           exit 1

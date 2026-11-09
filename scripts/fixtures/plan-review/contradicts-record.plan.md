@@ -13,5 +13,7 @@ Set `priority: -1` on the package component dirs.
 components.test.ts: app Card beats the package Card; package Card still wins over the Nuxt UI one.
 ### Assumptions
 - only crouton-core registers component dirs — Why: grep shows one config — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/abc123/nuxt.config.ts#L30 — Status: verified
+### Docs
+none — test-only fixture
 ### Needs owner
 no, a mechanical fix.

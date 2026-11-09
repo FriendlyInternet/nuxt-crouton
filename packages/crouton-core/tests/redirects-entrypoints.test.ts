@@ -88,6 +88,11 @@ describe('redirect review findings', () => {
     expect(await mw('/a/dup')).toEqual({ redirected: '/a/dup2', code: 301 })
     expect(await mw('/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
   })
+  it('8) custom domain + slug in path: legacy prefixed row still works, same team only (#3376)', async () => {
+    expect(await mw('/a/legacy', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/a/legacy-new', code: 301 })
+    expect(await mw('/b/legacy', { resolvedDomainTeamId: 'A' })).toBeUndefined()
+    expect(await mw('/a/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
+  })
 })
 
 describe('redirect endpoints (real handlers)', () => {

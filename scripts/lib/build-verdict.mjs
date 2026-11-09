@@ -39,7 +39,7 @@ export const RUBRIC = [
   { id: '4', name: 'Scope (matches the ticket and plan; nothing extra)' },
   { id: '5', name: 'Plan followed (where a plan was approved, the diff does what it said)' },
   { id: '6', name: 'Every ticket step done (each numbered step and acceptance line is done, or dropped with the reason stated in the PR)' },
-  { id: '7', name: 'Docs table (the CLAUDE.md "Maintaining AI Documentation" row for this change type is updated)' },
+  { id: '7', name: 'Docs (the CLAUDE.md "Maintaining AI Documentation" row is followed, and every doc edit the plan\'s Docs section names is made or marked as debt)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 
