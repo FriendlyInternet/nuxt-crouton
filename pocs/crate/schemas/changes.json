@@ -1,8 +1,9 @@
 {
   "groupId": { "type": "string", "meta": { "required": true, "maxLength": 64, "label": "User action (one undo step)" } },
-  "trackId": { "type": "string", "refTarget": "tracks", "meta": { "required": true, "label": "Track" } },
-  "before": { "type": "array", "meta": { "label": "Tags before" } },
-  "after": { "type": "array", "meta": { "label": "Tags after" } },
+  "trackId": { "type": "string", "refTarget": "tracks", "meta": { "label": "Track (empty for a pile change)" } },
+  "pileId": { "type": "string", "refTarget": "piles", "meta": { "label": "Pile (set for a pile change: before/after hold its name + place)" } },
+  "before": { "type": "array", "meta": { "label": "Tags before (or the pile before)" } },
+  "after": { "type": "array", "meta": { "label": "Tags after (or the pile after)" } },
   "summary": { "type": "string", "meta": { "maxLength": 300, "label": "Summary (e.g. + Rythms)" } },
   "undoOf": { "type": "string", "meta": { "maxLength": 64, "label": "groupId this change reverts (empty = normal change)" } }
 }

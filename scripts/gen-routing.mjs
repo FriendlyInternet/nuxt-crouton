@@ -43,7 +43,7 @@ function agentModel(name) {
 const drift = []
 
 // Drift guard 1 (#2161): routing.json's `pi` column must name the same models as the setting.
-const TIER_SETTING = { small: 'light', medium: 'default', large: 'hard', review: 'review' }
+const TIER_SETTING = { small: 'light', medium: 'default', large: 'hard', review: 'review', plan: 'plan' }
 for (const [tier, key] of Object.entries(TIER_SETTING)) {
   const pi = tiers[tier]?.pi
   if (pi && pi !== MODELS[key]) {

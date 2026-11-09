@@ -39,6 +39,7 @@
   "scripts": {
     "build": "unbuild",
     "dev": "unbuild --stub",
+    "test": "vitest run",
     "prepack": "pnpm build"
   },
   "keywords": [

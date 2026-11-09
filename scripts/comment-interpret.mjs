@@ -32,7 +32,7 @@ export function parseModelOutput(text) {
 
 const ask = (reason, extra = {}) => ({ action: 'ask', reason, ...extra })
 
-const DELEGATE_LABEL = /^(delegate|delegate-pi|delegate-hard|work-this)$/
+const DELEGATE_LABEL = /^(delegate|delegate-pi|work-this)$/
 
 /**
  * A ticket with an open sign-off hold is never released from here: `replan` / `start` there would

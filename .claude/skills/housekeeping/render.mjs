@@ -12,6 +12,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { renderStuckSections } from './stuck-render.mjs'
 // Brand identity SSOT — shared with crouton-email. Plain ESM, no install needed.
 import { BRAND_NAME, BRAND_URL } from '../../../packages/crouton-email/brand/email-brand.mjs'
 
@@ -132,6 +133,8 @@ if (data.idlePRs?.length) {
     ]
   ])
 }
+
+sections.push(...renderStuckSections(data))
 
 // 📚 Skill freshness (#1100 WS3) — knowledge skills whose cited paths drifted or whose
 // `verified:` stamp aged out. Report-only; a re-verified/re-stamped skill drops off next run.

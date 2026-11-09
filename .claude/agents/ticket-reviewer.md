@@ -17,8 +17,9 @@ Grade EVERY ticket on EVERY item, PASS or FAIL, with ONE line of concrete eviden
 7. No owner decision needed: PASS when none. FAIL when the ticket needs a product, data or cost decision, or an irreversible step.
 8. Rule stated? A ticket that changes behaviour names the RULE that must hold (the invariant, e.g. "no request may change another team's row") and asks for at least one test aimed at that rule, not only at the prescribed mechanism. "Force teamId on rows without one" with no cross-team test is FAIL: it only proves the mechanism ran. Tickets that change no behaviour (docs, chores) PASS.
 9. Contradicts the record? No instruction conflicts with the epic's Decisions log, a recorded experiment (tables in the epic body) or a merged PR's finding. Check each instruction against them. A ticket that says set `priority: -1` on package component dirs while the epic records an experiment showing the app dir beats layers at equal priority is FAIL — quote the record.
+10. Own test steps? Every step under the ticket's ## 🧪 How to test exercises only what THIS ticket adds. A step that needs another ticket's work is FAIL — name the step and the ticket it depends on.
 
-Verdict per ticket: `no-go` if any of 3–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `go`. Write the file in EXACTLY this shape, one section per ticket in the file, plain language for the owner, no insider jargon:
+Verdict per ticket: `no-go` if any of 3–6, 8 or 9 is FAIL; else `needs-owner` if 7 or 10 is FAIL; else `go`. Write the file in EXACTLY this shape, one section per ticket in the file, plain language for the owner, no insider jargon:
 
 <!-- ticket-review:v1 -->
 ## Ticket #<number>
@@ -32,6 +33,7 @@ go | no-go | needs-owner
 - 7: PASS|FAIL — evidence
 - 8: PASS|FAIL — evidence
 - 9: PASS|FAIL — evidence
+- 10: PASS|FAIL — evidence
 ### Question
 (only for needs-owner: ONE yes/no question for the owner, with your recommendation)
 

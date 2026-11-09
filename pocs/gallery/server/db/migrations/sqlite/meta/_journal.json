@@ -8,6 +8,27 @@
       "when": 1793012602690,
       "tag": "0000_empty_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793955340415,
+      "tag": "0001_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794067293448,
+      "tag": "0002_foamy_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794070582243,
+      "tag": "0003_lean_silvermane",
+      "breakpoints": true
     }
   ]
 }

@@ -13,5 +13,7 @@ Add the team id to the key.
 useList.test.ts: two teams get separate keys.
 ### Assumptions
 - the key is only built in useList — Why: grep shows one call site — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/abc123/packages/crouton-core/app/composables/useList.ts#L12 — Status: verified
+### Docs
+- packages/crouton-core/CLAUDE.md:42 "list keys include the team id" — Status: checked — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/abc1234/packages/crouton-core/app/composables/useList.ts#L12 — Regression: no — Edit: none needed
 ### Needs owner
 no, a mechanical fix.

@@ -46,3 +46,14 @@ test('#3060 generated-by trailer is not part of the decision', () => {
   assert.equal(parseDecision({ ...owner, held: true, body: 'ok: because X' + T }), 'because X')
   assert.equal(parseDecision({ ...owner, body: 'Decision: Y' + T }), 'Y')
 })
+
+test('#3341 relayed owner answers (COLLABORATOR account) are recorded', () => {
+  const c = { authorAssociation: 'COLLABORATOR', userType: 'User' }
+  const ans = "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _Maarten's answer to the held plan_\n\n"
+  const dec = "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _Maarten's decision, from chat_\n\n"
+  assert.equal(parseDecision({ ...c, held: true, body: ans + 'not ok: X' }), 'X')
+  assert.equal(parseDecision({ ...c, body: dec + 'Decision: Y' }), 'Y')
+  assert.equal(parseDecision({ ...c, body: ans + 'not ok: X' }), null)
+  assert.equal(parseDecision({ ...c, userType: 'Bot', body: 'Decision: Y' }), null)
+  assert.equal(parseDecision({ ...c, body: "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _status update_\n\nDecision: Y" }), null)
+})

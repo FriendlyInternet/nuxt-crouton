@@ -11,12 +11,11 @@ name: Preview screenshot
 #
 # Per app it logs into the live preview (login re-derived from REVIEW_SEED_SECRET, same formula as
 # the deploy's seed step; link-only apps use a preview-only token, #2700), captures the declared review surface(s) with
-# scripts/capture-review-surfaces.mjs and commits the PNG(s) to writeups/ui-proposals/ on the PR
-# branch (the sign-off gate looks there). The result is a check run named "Preview screenshot" on
-# the PR head: green = a usable shot, red = none, with the reason in one line.
-#
-# Loop guard (#2294): the capture commit re-runs CI and may redeploy; a run whose head commit is
-# our own "chore(review): capture" commit does nothing.
+# scripts/capture-review-surfaces.mjs, publishes the PNG(s) to a non-branch ref
+# (refs/review-captures/pr<N>) and posts them in a tagged PR comment (#3351). The sign-off gate looks
+# for that comment, and Status reruns when this check completes (check_suite). The result is a check run named "Preview screenshot" on
+# the PR head: green = a usable shot, red = none, with the reason in one line;
+# grey only when no job in this commit's deploy was meant to leave a record (#3575).
 
 on:
   workflow_run:
@@ -63,12 +62,11 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           INPUT_PR: ${{ inputs.pr }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
             PR="$INPUT_PR"
-            read -r HEAD_REF HEAD_SHA < <(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '[.head.ref, .head.sha] | @tsv')
+            HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq ".head.sha")
             # Newest successful deploy run for this exact commit that left preview records.
             RUN_ID=""
             for wf in deploy-apps.yml deploy-pocs.yml; do
@@ -79,28 +77,14 @@ jobs:
           else
             PR=$(printf '%s' "$RUN_PRS" | jq -r '.[0].number // empty')
             HEAD_SHA="$RUN_SHA"
-            HEAD_REF="$RUN_BRANCH"
           fi
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
-          { echo "pr=$PR"; echo "head_ref=$HEAD_REF"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
-
-      - name: Skip our own capture commit (loop guard)
-        id: guard
-        if: ${{ steps.target.outputs.skip == 'false' }}
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
-        run: |
-          MSG=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || true)
-          case "$MSG" in
-            "chore(review): capture "*) echo "head is a capture commit — skipping (#2294)"; echo "skip=true" >> "$GITHUB_OUTPUT";;
-            *) echo "skip=false" >> "$GITHUB_OUTPUT";;
-          esac
+          { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
 
       - name: Open check run
         id: check
-        if: ${{ steps.target.outputs.skip == 'false' && steps.guard.outputs.skip == 'false' }}
+        if: ${{ steps.target.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ steps.target.outputs.head_sha }}
@@ -112,7 +96,7 @@ jobs:
 
       - name: Download preview records
         id: records
-        if: ${{ steps.target.outputs.skip == 'false' && steps.guard.outputs.skip == 'false' }}
+        if: ${{ steps.target.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_IDS: ${{ steps.target.outputs.run_ids }}
@@ -123,6 +107,21 @@ jobs:
           done
           N=$(find "$RUNNER_TEMP/records" -name meta.json | wc -l)
           echo "count=$N" >> "$GITHUB_OUTPUT"
+          # How many deploy jobs were meant to leave a record (#3575); empty = lookup failed.
+          OK=1
+          for id in $RUN_IDS; do
+            # No pipe: a failed `gh api` must set OK=0 (a pipe into jq would hide it and write []).
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[]' > "$RUNNER_TEMP/jobs-$id.ndjson"; then
+              jq -s . "$RUNNER_TEMP/jobs-$id.ndjson" > "$RUNNER_TEMP/jobs-$id.json" || OK=0
+            else
+              OK=0
+            fi
+          done
+          if [ "$OK" = 1 ]; then
+            echo "expected=$(node scripts/lib/screenshot-verdict.mjs count "$RUNNER_TEMP"/jobs-*.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "expected=" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
@@ -131,21 +130,33 @@ jobs:
         with:
           node-version: 22
 
-      - name: Capture + commit review-surface evidence
+      - name: Install Playwright (capture)
+        id: pw
+        if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        timeout-minutes: 5
+        run: |
+          set -eo pipefail
+          start=$(date +%s)
+          # Root workspace only: brings playwright-core + sharp, the only packages the capture scripts import (#3593).
+          pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
+          # Same browser install as deploy-app.yml:228 — no apt system-deps step (recorded as flaky, e2e.yml:168-172).
+          pnpm exec playwright install chromium
+          node -e "import('playwright-core').catch(e => { console.error('::error::playwright-core failed to import: ' + e.message); process.exit(1) })"
+          echo "::notice::Playwright install took $(( $(date +%s) - start ))s"
+
+      - name: Capture + post review-surface evidence
         id: capture
         if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
         env:
           GH_TOKEN_PUSH: ${{ steps.token.outputs.token }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           PR_NUMBER: ${{ steps.target.outputs.pr }}
-          HEAD_REF: ${{ steps.target.outputs.head_ref }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           # Changed files drive which page is shot when the PR declares no review-surface (#2698).
           CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null || true); export CHANGED_FILES
-          npx --yes playwright install --with-deps chromium >/dev/null 2>&1 || npx playwright install chromium >/dev/null 2>&1 || true
           [ -n "$REVIEW_SEED_SECRET" ] || { echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=REVIEW_SEED_SECRET is not set — cannot log in to the preview" >> "$GITHUB_OUTPUT"; exit 0; }
           OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
           LOG="$RUNNER_TEMP/capture.log"; : > "$LOG"
@@ -182,23 +193,29 @@ jobs:
             exit 0
           fi
           NAMES=$(printf '%s, ' "${PNGS[@]##*/}"); NAMES="${NAMES%, }"
-          BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
-          git clone --depth=1 --branch "$HEAD_REF" "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
-            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not clone ${HEAD_REF}" >> "$GITHUB_OUTPUT"; exit 0; }
-          mkdir -p "$BR/writeups/ui-proposals"; cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR" || exit 1
-          git config user.name "nuxt-harness[bot]"
-          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
-          git add writeups/ui-proposals/*.png
-          if git commit -q -m "chore(review): capture review surface(s) for PR #${PR_NUMBER} (#2173)"; then
-            if git push origin "HEAD:${HEAD_REF}"; then
-              echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=committed ${#PNGS[@]} shot(s): ${NAMES}" >> "$GITHUB_OUTPUT"
-            else
-              echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but the push to ${HEAD_REF} failed" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} — unchanged from the last commit" >> "$GITHUB_OUTPUT"
+          FILES=$(printf '%s,' "${PNGS[@]##*/}"); FILES="${FILES%,}"
+          # Shots live on a non-branch ref + a tagged PR comment, never a commit on the PR branch (#3351).
+          export GH_TOKEN="$GH_TOKEN_PUSH"
+          if ! PUB=$(node scripts/publish-review-captures.mjs --dir "$OUT" --key "pr${PR_NUMBER}" 2>&1); then
+            echo "$PUB" >&2
+            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but publishing them failed" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          SHA=$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)
+          if node scripts/comment-review-captures.mjs --pr "$PR_NUMBER" --key "pr${PR_NUMBER}" --sha "$SHA" --files "$FILES" \
+              --artifact-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; then
+            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=posted ${#PNGS[@]} shot(s): ${NAMES}" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not comment on PR #${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload screenshots (download backup)
+        if: ${{ always() && steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-screenshots-pr${{ steps.target.outputs.pr }}
+          path: ${{ runner.temp }}/uip/*.png
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Publish result
         if: ${{ always() && steps.check.outputs.id != '' }}
@@ -206,12 +223,12 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           CHECK_ID: ${{ steps.check.outputs.id }}
           RESULT: ${{ steps.capture.outputs.result }}
-          SUMMARY: ${{ steps.capture.outputs.summary }}
+          SUMMARY: ${{ steps.pw.outcome == 'failure' && 'could not install Playwright — see the "Install Playwright (capture)" step log' || steps.capture.outputs.summary }}
           RECORDS: ${{ steps.records.outputs.count }}
+          EXPECTED: ${{ steps.records.outputs.expected }}
         run: |
-          if [ "$RESULT" = ok ]; then C=success
-          elif [ -z "$RESULT" ] && { [ "$RECORDS" = 0 ] || [ -z "$RECORDS" ]; }; then C=neutral; SUMMARY="no preview deployed for this commit — nothing to capture"
-          else C=failure; [ -n "$SUMMARY" ] || SUMMARY="capture step did not finish"; fi
+          OUT=$(node scripts/lib/screenshot-verdict.mjs verdict)
+          C=$(printf '%s\n' "$OUT" | sed -n 's/^conclusion=//p'); SUMMARY=$(printf '%s\n' "$OUT" | sed -n 's/^summary=//p')
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" -f status=completed -f conclusion="$C" \
             -f 'output[title]=Preview screenshot' -f "output[summary]=${SUMMARY}" >/dev/null \
             || echo "::warning::could not publish the check result"

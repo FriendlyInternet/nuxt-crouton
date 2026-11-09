@@ -5,3 +5,5 @@
 export * from '@fyit/crouton-auth/server/database/schema/auth'
 export * from './translations-ui'
 export { mainItems } from '../../layers/main/collections/items/server/database/schema'
+export { mainAdmindocs } from '../../layers/main/collections/admindocs/server/database/schema'
+export { mainMembernotes } from '../../layers/main/collections/membernotes/server/database/schema'

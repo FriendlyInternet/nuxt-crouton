@@ -16,6 +16,7 @@ on:
 
 jobs:
   verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:

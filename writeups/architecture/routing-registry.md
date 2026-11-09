@@ -9,6 +9,7 @@ demotion. `$out/Mtok` is the Claude baseline output price — the cost lever.
 - **small** — Claude `claude-haiku-4-5` · pi `claude-haiku-4-5` · ~$5/Mtok out — reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)
 - **medium** — Claude `claude-sonnet-5-5` · pi `claude-sonnet-5-5` · ~$15/Mtok out — most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)
 - **review** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — independent plan reviewer (#2756) — strongest model, read-only, never edits code
+- **plan** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — plan-mode run (#3343) — investigation + the plan comment, strongest model
 - **large** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
 
 Default tier: **medium**
@@ -22,6 +23,7 @@ Default tier: **medium**
 | `task-worker` | large | claude-opus-5-5 | claude-opus-5-5 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
 | `pi-worker` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier |
 | `pi-reviser` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker |
+| `pi-planner` | plan | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi worker in PLAN mode (#2755/#3343) — investigates and posts the plan comment; runs on the strongest model so the plan is right before the builder starts |
 | `pi-decomposer` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | pi event-driven decomposer persona (#2431) — plan-only, no code written; extracted from decompose-on-issue-pidev.yml |
 | `task-orchestrator` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
 | `task-decomposer` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |

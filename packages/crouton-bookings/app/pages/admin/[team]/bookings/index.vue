@@ -74,6 +74,14 @@ function exitPreview() {
   impersonatedUserId.value = null
 }
 
+// One store for the screen: the inline and full-screen Panels share day, filters and view
+const store = createBookingsStore({
+  bookings,
+  calendarBookings: bookings,
+  locations,
+  readOnly: isPreview,
+})
+
 // Shared Panel props + handlers (inline and fullscreen modal)
 const panelProps = computed(() => ({
   bookings: bookings.value,
@@ -81,6 +89,7 @@ const panelProps = computed(() => ({
   settings: firstSettings.value,
   loading: loading.value,
   title: '',
+  store,
   emptyMessage: isPreview.value
     ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser.value?.name || t('bookings.admin.thisUser') })
     : t('bookings.admin.noBookingsForTeam'),

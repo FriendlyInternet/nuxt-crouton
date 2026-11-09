@@ -20,6 +20,8 @@ export interface Field {
   testSample?: string
   /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
   component?: string
+  /** Manifest flag: collection-level `translatable: true` auto-detect may translate this type */
+  translatableType?: boolean
   /** SQLite column the manifest declares for this type; database-schema emits from it */
   sqlite?: { column: 'integer' | 'real' | 'text' | 'json', mode?: 'boolean' | 'timestamp' }
 }
@@ -99,33 +101,34 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
   if (validTypes.size === 0) console.warn('⚠ No field types discovered from crouton manifests — skipping field type validation')
   for (const [name, def] of entries) validateField(name, def, validTypes)
 
-  return entries.map(([name, meta]) => {
-    const fieldMeta = meta?.meta || {} as Record<string, any>
+  return entries.map(([name, rawMeta]) => {
+    const meta = rawMeta ?? {}
+    const fieldMeta = meta.meta || {} as Record<string, any>
     // Set default area if not specified
-    if (!fieldMeta.area) {
-      fieldMeta.area = 'main'
-    }
+    fieldMeta.area ||= 'main'
 
     // Resolve aliases (e.g. `datetime` → `date`, `integer` → `number`) to the
     // canonical type so every downstream generator that branches on `field.type`
     // sees the canonical name. typeMapping carries `canonical` for both canonical
     // and alias keys; fall back to mapType for unknown types (#285).
-    const resolvedType = typeMapping[meta?.type]?.canonical ?? mapType(meta?.type, validTypes)
+    const resolvedType = typeMapping[meta.type]?.canonical ?? mapType(meta.type, validTypes)
 
     attachPropertyManifest(fieldMeta, typeMapping)
+    const t = typeMapping[resolvedType] ?? {}
     return {
       name,
       type: resolvedType,
       meta: fieldMeta,
-      refTarget: meta?.refTarget,
-      refScope: meta?.refScope,
-      zod: typeMapping[resolvedType]?.zod || 'z.string()',
-      default: typeMapping[resolvedType]?.default || '\'\'',
-      tsType: typeMapping[resolvedType]?.tsType || 'string',
-      seed: typeMapping[resolvedType]?.seed,
-      testSample: typeMapping[resolvedType]?.testSample,
-      component: typeMapping[resolvedType]?.component,
-      sqlite: typeMapping[resolvedType]?.sqlite
+      refTarget: meta.refTarget,
+      refScope: meta.refScope,
+      zod: t.zod || 'z.string()',
+      default: t.default || '\'\'',
+      tsType: t.tsType || 'string',
+      seed: t.seed,
+      testSample: t.testSample,
+      component: t.component,
+      translatableType: t.translatable,
+      sqlite: t.sqlite
     }
   })
 }

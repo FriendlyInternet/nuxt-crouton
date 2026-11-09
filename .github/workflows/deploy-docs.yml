@@ -81,6 +81,11 @@ jobs:
         run: pnpm cf:deploy
         working-directory: docs
 
+      # Post-deploy: confirm the content DB is ready (ready=1 + fast query); repairs once, else fails (#3183).
+      - name: Verify content DB
+        if: github.event_name != 'pull_request'
+        run: node scripts/verify-content-db.mjs
+
       # On PRs, build only (no deploy) as a smoke test that the cloudflare_module build
       # + content→D1 dump succeed.
       - name: Build only (PR smoke test)
