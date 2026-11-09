@@ -18,7 +18,7 @@ export interface SpecWalkToolContext {
  * The **Spec walk** tool — the "does it still work?" facet of the glasses
  * launcher (#1038). It walks the app's LIVE behaviours (from the same composed
  * plan the Plan tool ships) one at a time against the running build, capturing
- * ✅/⚠️ verdicts and exporting the `lgtm <id>` C1 sign-off. Like Plan it drives a
+ * ✅/⚠️ verdicts and exporting the `ok <id>` sign-off (or sending it, for a link walk). Like Plan it drives a
  * transient panel, so activate/deactivate just flip its open flag, and it hides
  * itself when the app ships no walkable spec.
  */

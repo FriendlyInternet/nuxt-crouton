@@ -30,7 +30,7 @@ dropdown of toggleable tools:
   stays interactive so you perform each step) and walks the app's LIVE
   behaviours one at a time: how-to-test steps, a `data-handoff` outline that
   tracks the current behaviour's element through pan/zoom, ✅ works / ⚠️ issue
-  per entry, and an Export that emits the `lgtm <id>` C1 sign-off. **No build
+  per entry, and an Export that emits the `ok <id>` sign-off — or, for a link walk carrying `ref` + `result`, a **Send result** that posts `ok` / `not ok: …` on the epic via the status app. **No build
   data of its own** — it reuses the same composed plan the Plan tool ships
   (`runtimeConfig.public.croutonPlan`), pulling the behaviours under `done`/
   `active` phases + increments. Hides itself when no plan is configured, so it
@@ -179,11 +179,11 @@ The walk is the C1 sign-off gate made in-app: each behaviour shows its
 `howToTest` steps and, via its `hook`, outlines the live element it targets
 (rAF-tracked so it survives the app's own pan/zoom). Mark ✅ works / ⚠️ issue per
 entry (persisted to `localStorage`, keyed `specwalk:<plan-title-slug>` so two
-apps don't collide); **Sign off** exports `lgtm <id>` lines for the ✅s (plus the
-⚠️ issues + notes) to paste back to the agent — that recorded `lgtm` is what the
+apps don't collide); **Sign off** exports `ok <id>` lines for the ✅s (plus the
+⚠️ issues + notes) to paste back to the agent — that recorded `ok` is what the
 done-rule derives from (never a green build). The panel is a **non-blocking**
 bottom sheet (no backdrop) so you can actually perform each gesture while it's
-open, and it body-mounts from the plugin (NOT page/app.vue — the #1039 lesson).
+open, and it body-mounts from the plugin (NOT page/app.vue — the #1039 lesson). A link walk (`?walk=`) with `ref` + `result` ends in Send result instead (credentialed fetch to the status app's `/api/walk-result`; same-site cookie, CORS allowlist).
 
 ## Key Files
 
@@ -207,9 +207,9 @@ open, and it body-mounts from the plugin (NOT page/app.vue — the #1039 lesson)
 | `src/runtime/components/PlanSpecRow.vue` | One spec-ledger entry as a `UCollapsible` (bucket + behaviour → expect/hook/how-to-test). Shows the live walk **verdict** (✅ works / ⚠️ issue / ✓ signed) and, for a walkable behaviour, a **Walk & sign off** button that `emit`s `walk` (the overlay opens the Spec walk on it). |
 | `src/runtime/plugins/tools/plan.client.ts` | Registers the Plan tool + mounts its overlay. |
 | `src/runtime/tools/specwalk.ts` | **Spec walk** tool factory — `marked/total` badge + open/close the walk panel (unit-tested). |
-| `src/runtime/tools/specwalk-data.ts` | Pure spec-walk helpers (`walkEntries` = flatten a `ComposedPlan`'s LIVE behaviours · `stepsOf` · `selectorFor` · `exportText` = the `lgtm <id>` sign-off) — no Vue, unit-tested. |
+| `src/runtime/tools/specwalk-data.ts` | Pure spec-walk helpers (`walkEntries` = flatten a `ComposedPlan`'s LIVE behaviours · `stepsOf` · `selectorFor` · `exportText` = the `ok <id>` sign-off · `parseWalkParam` (link walk incl. `ref`/`result`) · `walkResultPayload` · `isSendTarget` · `createResultSender`) — no Vue, unit-tested. |
 | `src/runtime/composables/useSpecWalk.ts` | Reads `runtimeConfig.public.croutonPlan`, holds the walk + per-behaviour verdicts (localStorage, per-app scoped); shared open flag for the panel. **Scoped walk (#1180):** a `scopeIds` narrows the walked list to a subset — `walkAll()` (full regression), `walkScoped(ids)` (a plan section = "what we just did"), `jumpTo(id)` (one behaviour) — while verdicts stay global by id (a scoped pass still counts toward the overall `markedTotal`/`total`; the launcher badge is always overall). `walk` is the ACTIVE (possibly scoped) list; `marked` is scoped, `markedTotal`/`total` are overall; sign-off exports the scope when scoped, else everything. |
-| `src/runtime/components/SpecWalkOverlay.vue` | The non-blocking walk panel — a **stock Nuxt UI `UDrawer` in non-modal mode** (`:modal="false" :overlay="false"`, `direction="bottom"`): no backdrop, so the app stays interactive while you perform each gesture (the reason it isn't a `USlideover`/`UModal`, which trap the page). Content in the `#body` slot; steps, `data-handoff` outline tracker (rAF), verdicts, `lgtm <id>` Export. **Minimize + dismiss via the native handle (#1180):** the drawer's own snap points (`[0.4, 0.92]`) — drag the grab handle down to a peek, up for the full walk, or all the way down to **dismiss** (`open→false`). **No ✕** on the drawer; when dismissed a floating **re-entry pill** (`started && !open`, bottom-centre) re-opens it without the Plan → walk round-trip, and the pill's own ✕ (`end()`) fully leaves the session. State (idx/verdicts/notes/scope) is module-singleton + localStorage, so snapping/dismissing loses nothing. Readable walk text (base-size behaviour, un-muted steps). Standard-utility styling only (no arbitrary Tailwind — see the gotcha). |
+| `src/runtime/components/SpecWalkOverlay.vue` | The non-blocking walk panel — a **stock Nuxt UI `UDrawer` in non-modal mode** (`:modal="false" :overlay="false"`, `direction="bottom"`): no backdrop, so the app stays interactive while you perform each gesture (the reason it isn't a `USlideover`/`UModal`, which trap the page). Content in the `#body` slot; steps, `data-handoff` outline tracker (rAF), verdicts, `ok <id>` Export (or Send result for a link walk with `ref`). **Minimize + dismiss via the native handle (#1180):** the drawer's own snap points (`[0.4, 0.92]`) — drag the grab handle down to a peek, up for the full walk, or all the way down to **dismiss** (`open→false`). **No ✕** on the drawer; when dismissed a floating **re-entry pill** (`started && !open`, bottom-centre) re-opens it without the Plan → walk round-trip, and the pill's own ✕ (`end()`) fully leaves the session. State (idx/verdicts/notes/scope) is module-singleton + localStorage, so snapping/dismissing loses nothing. Readable walk text (base-size behaviour, un-muted steps). Standard-utility styling only (no arbitrary Tailwind — see the gotcha). |
 | `src/runtime/overlay/envProfile.ts` | **Environment profile (#1181)** — a dependency-free `readEnvProfile(win?, nav?)` → `{ device, os, browser, viewportW/H, dpr, touch, orientation, ua }` (UA heuristic; `null` on server) + `formatEnv` one-liner. Stamped onto the Spec-walk sign-off export (`specwalk-data.exportText`'s new `env` arg, via `useSpecWalk`) and the Annotate payload (`capture.ts` `Annotation.env` / `buildAnnotation`, via `useAnnotate`), so every sign-off / feedback says WHERE it was checked. Pure + testable. |
 | `src/runtime/plugins/tools/specwalk.client.ts` | Registers the Spec-walk tool + body-mounts its panel (`mountOverlayInBody`, the #1039 lesson). |
 | `src/runtime/composables/useAnnotate.ts` | Annotate state + DOM select/highlight + POST to `/api/_feedback`. |

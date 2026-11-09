@@ -37,9 +37,41 @@ function permissionHint(kind: 'issue' | 'pr', status: number): string {
   return `GitHub ${status}: the token is missing the "${perm}" permission (or the ${kind === 'pr' ? 'PR' : 'issue'} does not exist)`
 }
 
+export interface TimelineEvent {
+  event?: string
+  body?: string
+  html_url?: string
+}
+
+/** A comment that is itself a verdict (`ok` / `not ok: …`) — a different one ends the duplicate window. */
+const VERDICT = /^\s*(?:not\s+)?ok\b/i
+
 /**
- * Post the reply unless an identical comment already exists on the target (double-post guard —
- * returns the existing comment's URL instead). PRs use the issue-comments endpoint.
+ * Newest → oldest: an identical `commented` body is a duplicate (return its URL). The search stops
+ * (no duplicate) at a commit / PR reference or at a different verdict, because the earlier `ok`
+ * then described older work and a fresh one must still post.
+ */
+export function findRecentDuplicate(events: TimelineEvent[], body: string): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.event === 'commented') {
+      const text = (e.body ?? '').trim()
+      if (text === body) return e.html_url ?? null
+      if (VERDICT.test(text)) return null
+    } else if (e.event === 'committed' || e.event === 'referenced' || e.event === 'cross-referenced') {
+      return null
+    }
+  }
+  return null
+}
+
+const MAX_TIMELINE_PAGES = 10
+const nextLink = (link: string | null) => /<([^>]+)>;\s*rel="next"/.exec(link ?? '')?.[1] ?? null
+
+/**
+ * Post the reply unless an identical comment already exists since the latest commit/reference or
+ * other verdict (double-post guard — returns the existing comment's URL instead). Reads the issue
+ * timeline (paginated). PRs use the issue-comments endpoint.
  */
 export async function postReply(
   repo: string,
@@ -56,11 +88,16 @@ export async function postReply(
   }
   const url = `${GH_API}/repos/${repo}/issues/${reply.number}/comments`
   try {
-    const list = await fetchImpl(`${url}?per_page=100`, { headers })
-    if (!list.ok) return { data: null, error: list.status === 403 || list.status === 404 ? permissionHint(reply.kind, list.status) : `GitHub ${list.status}` }
-    const comments = (await list.json()) as Array<{ body?: string, html_url: string }>
-    const dup = comments.find(c => (c.body ?? '').trim() === reply.body)
-    if (dup) return { data: { url: dup.html_url, existing: true }, error: null }
+    const events: TimelineEvent[] = []
+    let next: string | null = `${GH_API}/repos/${repo}/issues/${reply.number}/timeline?per_page=100`
+    for (let page = 0; next && page < MAX_TIMELINE_PAGES; page++) {
+      const list: Response = await fetchImpl(next, { headers })
+      if (!list.ok) return { data: null, error: list.status === 403 || list.status === 404 ? permissionHint(reply.kind, list.status) : `GitHub ${list.status}` }
+      events.push(...((await list.json()) as TimelineEvent[]))
+      next = nextLink(list.headers.get('link'))
+    }
+    const dup = findRecentDuplicate(events, reply.body)
+    if (dup) return { data: { url: dup, existing: true }, error: null }
 
     const res = await fetchImpl(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ body: reply.body }) })
     if (!res.ok) return { data: null, error: res.status === 403 || res.status === 404 ? permissionHint(reply.kind, res.status) : `GitHub ${res.status}` }

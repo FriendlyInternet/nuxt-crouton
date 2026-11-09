@@ -6,8 +6,8 @@
  * toggled by the shared `open` flag from useSpecWalk. A NON-blocking bottom
  * sheet (no backdrop — the app stays interactive so you actually perform each
  * step), one behaviour at a time with its how-to-test steps, ✅ works / ⚠️ issue
- * per entry, and an Export that emits `lgtm <id>` lines to paste back to the
- * agent (the C1 sign-off). A light outline tracks the current behaviour's DOM
+ * per entry, and an Export that emits `ok <id>` lines to paste back to the
+ * agent — or, for a link walk with `ref` + `result`, a Send result that posts ok / not ok on the epic. A light outline tracks the current behaviour's DOM
  * hook through pan/zoom.
  *
  * Styling follows the PlanOverlay convention: standard Tailwind utilities +
@@ -20,7 +20,8 @@ import { useSpecWalk } from '../composables/useSpecWalk'
 
 const {
   open, started, idx, walk, verdicts, marked, markedTotal, total, current, scoped,
-  setVerdict, setNote, go, walkAll, end, exportText, stepsOf, selectorFor
+  setVerdict, setNote, go, walkAll, end, exportText, stepsOf, selectorFor,
+  sendTarget, canSend, sendState, sendResult, adhocRef
 } = useSpecWalk()
 
 const showExport = ref(false)
@@ -133,13 +134,40 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
         <!-- SIGN-OFF EXPORT -->
         <template v-if="showExport">
           <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-            <p class="text-xs text-muted">
-              {{ marked }} of {{ walk.length }} marked. Copy this and paste it back to the agent — each
-              <code>lgtm &lt;id&gt;</code> signs that behaviour off (C1).
-            </p>
-            <UTextarea :model-value="exportText" :rows="10" readonly class="w-full font-mono text-xs" />
+            <template v-if="sendTarget">
+              <p class="text-xs text-muted">
+                {{ marked }} of {{ walk.length }} marked. Posts <code>ok</code> / <code>not ok: …</code> on
+                {{ adhocRef }} via {{ sendTarget }}.
+              </p>
+              <p v-if="sendState.status === 'sent'" class="text-sm text-success">
+                Sent ✓
+                <a v-if="sendState.url" :href="sendState.url" target="_blank" rel="noopener" class="underline">See the comment</a>
+              </p>
+              <p v-else-if="sendState.status === 'error'" class="text-sm text-error" role="alert">
+                <template v-if="sendState.unauthorized">
+                  Sign in to <a :href="`https://${sendTarget}`" target="_blank" rel="noopener" class="underline">{{ sendTarget }}</a> first, then Send again.
+                </template>
+                <template v-else>{{ sendState.error }}</template>
+              </p>
+              <p v-else-if="!canSend" class="text-xs text-warning">Mark every step first.</p>
+            </template>
+            <template v-else>
+              <p class="text-xs text-muted">
+                {{ marked }} of {{ walk.length }} marked. Copy this and paste it back to the agent — each
+                <code>ok &lt;id&gt;</code> signs that behaviour off.
+              </p>
+              <UTextarea :model-value="exportText" :rows="10" readonly class="w-full font-mono text-xs" />
+            </template>
           </div>
           <UButton
+            v-if="sendTarget"
+            size="sm" color="primary" class="shrink-0" icon="i-lucide-send"
+            :label="sendState.status === 'sent' ? 'Sent' : sendState.status === 'sending' ? 'Sending…' : 'Send result'"
+            :disabled="!canSend || sendState.status === 'sending' || sendState.status === 'sent'"
+            :loading="sendState.status === 'sending'" @click="sendResult()"
+          />
+          <UButton
+            v-else
             size="sm" color="primary" class="shrink-0" :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
             :label="copied ? 'Copied' : 'Copy sign-off'" @click="copyExport"
           />

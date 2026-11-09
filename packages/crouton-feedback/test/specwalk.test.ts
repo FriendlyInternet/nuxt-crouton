@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { consumeWalkQuery, parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
+import { describe, it, expect, vi } from 'vitest'
+import { consumeWalkQuery, parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, isSendTarget, walkResultPayload, createResultSender, type VerdictMap } from '../src/runtime/tools/specwalk-data'
 import { createSpecWalkTool } from '../src/runtime/tools/specwalk'
 import type { ComposedPlan } from '../src/runtime/tools/plan-data'
 
@@ -83,13 +83,13 @@ describe('selectorFor', () => {
 describe('exportText', () => {
   const walk = walkEntries(plan)
 
-  it('emits lgtm <id> for each ✅, then the ⚠️ issues with notes', () => {
+  it('emits ok <id> for each ✅, then the ⚠️ issues with notes', () => {
     const verdicts: VerdictMap = {
       'spec-a': { verdict: 'works' },
       'spec-b1': { verdict: 'issue', note: 'ghost is off-center' },
       'spec-b2': { verdict: 'works' }
     }
-    expect(exportText(walk, verdicts)).toBe('lgtm spec-a\nlgtm spec-b2\n\n⚠️ spec-b1 — ghost is off-center')
+    expect(exportText(walk, verdicts)).toBe('ok spec-a\nok spec-b2\n\n⚠️ spec-b1 — ghost is off-center')
   })
 
   it('is explicit when nothing is marked', () => {
@@ -170,5 +170,46 @@ describe('consumeWalkQuery (walk arriving via client-side navigation)', () => {
     let dropped = 0
     consumeWalkQuery({ walk: '!!bad!!' }, { start: r => parseWalkParam(r) !== null, drop: () => { dropped++ } })
     expect(dropped).toBe(1)
+  })
+})
+
+describe('link walk → Send result', () => {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const link = (extra: object = {}) => parseWalkParam(enc({ title: 'T', ref: '#123', result: 'https://status.pmcp.dev/api/walk-result', steps: [{ text: 'Open' }, { text: 'Toolbar' }], ...extra }))!
+
+  it('ref #123, all works → payload carries every step as works', () => {
+    const w = link()
+    const v: VerdictMap = Object.fromEntries(w.entries.map(e => [e.id, { verdict: 'works' as const }]))
+    expect(walkResultPayload(w.entries, v, w.ref)).toEqual({ ref: '#123', steps: [{ text: 'Open', verdict: 'works' }, { text: 'Toolbar', verdict: 'works' }] })
+  })
+  it('step 2 issue → payload carries the step text and note', () => {
+    const w = link()
+    const v: VerdictMap = { [w.entries[0]!.id]: { verdict: 'works' }, [w.entries[1]!.id]: { verdict: 'issue', note: 'toolbar hidden' } }
+    expect(walkResultPayload(w.entries, v, w.ref)!.steps[1]).toEqual({ text: 'Toolbar', verdict: 'issue', note: 'toolbar hidden' })
+  })
+  it('no ref → no payload; unsafe result urls are dropped; foreign hosts are no target', () => {
+    const w = link({ ref: '' })
+    expect(w.ref).toBe('')
+    expect(walkResultPayload(w.entries, {}, w.ref)).toBeNull()
+    expect(link({ result: 'javascript:x' }).result).toBe('')
+    expect(link({ result: 'http://status.pmcp.dev/x' }).result).toBe('')
+    expect(isSendTarget('https://evil.com/x', 'velo.pmcp.dev')).toBe(false)
+    expect(isSendTarget('https://status.pmcp.dev/x', 'velo.pmcp.dev')).toBe(true)
+    expect(isSendTarget('http://localhost:3000/x', 'velo.pmcp.dev')).toBe(false)
+  })
+  it('send twice (concurrent and sequential) → one request; an error allows a retry', async () => {
+    const payload = { ref: '#1', steps: [{ text: 'a', verdict: 'works' as const }] }
+    const f = vi.fn(async () => new Response(JSON.stringify({ data: { url: 'u1' } }), { status: 200 }))
+    const send = createResultSender(f as unknown as typeof fetch)
+    const [a, b] = await Promise.all([send('https://s/x', payload), send('https://s/x', payload)])
+    const c = await send('https://s/x', payload)
+    expect([a.url, b.url, c.url]).toEqual(['u1', 'u1', 'u1'])
+    expect(f).toHaveBeenCalledTimes(1)
+
+    const g = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 401 })).mockResolvedValueOnce(new Response(JSON.stringify({ data: { url: 'u2' } }), { status: 200 }))
+    const s2 = createResultSender(g as unknown as typeof fetch)
+    expect((await s2('https://s/x', payload)).status).toBe(401)
+    expect((await s2('https://s/x', payload)).url).toBe('u2')
+    expect(g).toHaveBeenCalledTimes(2)
   })
 })
