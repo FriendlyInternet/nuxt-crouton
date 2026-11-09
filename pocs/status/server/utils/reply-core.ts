@@ -73,6 +73,7 @@ const nextLink = (link: string | null) => /<([^>]+)>;\s*rel="next"/.exec(link ??
  * other verdict (double-post guard — returns the existing comment's URL instead). Reads the issue
  * timeline (paginated). PRs use the issue-comments endpoint.
  */
+// fallow-ignore-next-line complexity — paginated timeline + duplicate guard; covered by reply-core.test.ts
 export async function postReply(
   repo: string,
   reply: ParsedReply,
