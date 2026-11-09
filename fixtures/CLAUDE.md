@@ -21,6 +21,11 @@ authenticates, and does CRUD** after a `packages/` change or dependency bump.
 - **Don't deploy these** and don't treat them as examples to copy — they exist
   only to be booted by the e2e harness. They're throwaway: each fixture's
   `.data/`, `.auth/`, `playwright-report/`, `test-results/` are gitignored.
+- **Generated files here must match the generator byte-for-byte.** CI regenerates
+  each fixture with `crouton config --force` and fails on any drift
+  (`scripts/fixture-drift.mjs`, #3152). After changing a generator template, run
+  `cd fixtures/<name> && node ../../packages/crouton-cli/bin/crouton-generate.js config --force`
+  for every affected fixture and commit the result in the same PR.
 - **To change what gets smoked, edit the fixture's `e2e.manifest.json`** — it
   declares the collections to CRUD and any package `surfaces` to assert. The
   shared specs in `e2e/` read it; you almost never write test code per fixture.
