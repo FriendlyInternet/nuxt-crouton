@@ -21,6 +21,8 @@ import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type Ow
 import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
+import { pruneDanglingCollectionRefs } from './utils/prune-dangling-collections.ts'
+import { getAllLayers, getAllCollectionsInLayer } from './utils/layer-discovery.ts'
 import { loadFields } from './utils/load-fields.ts'
 import { validateConfig } from './utils/validate-config.ts'
 import { updateLayerRootConfig, setupLayerI18n } from './utils/layer-config.ts'
@@ -1690,6 +1692,24 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
   // Track all collections for batch db:generate
   const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
 
+  // Drop references to collection folders that were deleted (#226) — the stale
+  // barrel would otherwise crash the migration step below.
+  await pruneDanglingCollectionRefs({ dryRun: config.flags?.dryRun || false })
+
+  // Collections on disk but absent from the config stay wired up — warn, never delete.
+  if (!config._onlyCollection) {
+    const configured = new Set<string>(
+      config.targets.flatMap((t: any) => t.collections.map((c: string) => `${t.layer}/${c}`))
+    )
+    for (const layer of await getAllLayers()) {
+      for (const name of await getAllCollectionsInLayer(layer)) {
+        if (!configured.has(`${layer}/${name}`)) {
+          console.log(`! ${layer}/${name} is on disk but not in crouton.config — it stays wired up. To remove it: crouton rollback ${layer} ${name}`)
+        }
+      }
+    }
+  }
+
   // Process each target
   for (const target of config.targets) {
     for (const collectionName of target.collections) {
@@ -1829,6 +1849,9 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
   } catch (error: any) {
     throw new Error(`Error loading schema: ${error.message}`, { cause: error })
   }
+
+  // Drop references to deleted collection folders before the migration step loads the barrel (#226)
+  await pruneDanglingCollectionRefs({ dryRun: args.dryRun })
 
   // Proceed with generation
   await writeScaffold({ ...args, fields })

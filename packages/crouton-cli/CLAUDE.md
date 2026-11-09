@@ -247,6 +247,8 @@ crouton init scratch --out sandboxes/scratch
 
 ## Rollback Command (`crouton rollback`)
 
+**Removing a collection:** `crouton config` never deletes generated files. It does clean up *dangling* references (schema barrel, `app.config`, layer/root `extends`) to collection or layer folders that no longer exist (`lib/utils/prune-dangling-collections.ts`, exact matching). A collection that is still on disk but missing from `crouton.config` stays wired up and gets a warning; remove it with `crouton rollback <layer> <collection>`.
+
 Removes a generated collection — files, schema-index re-export, `app.config.ts`
 entry, and layer/root `extends`. Two things WS4 (#1445) got right:
 
@@ -374,6 +376,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | File | Purpose |
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
+| `lib/utils/prune-dangling-collections.ts` | `pruneDanglingCollectionRefs` — removes barrel/app.config/`extends` entries whose collection or layer folder is gone; runs at the start of `config` and `generate` |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
 | `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
 | `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
