@@ -77,7 +77,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `strip-status-on-close.yml` | issue closed | Strips `status:*` labels (#641) |
 | `cleanup-epic-branches.yml` | PR closed | Deletes `epic/*` head branch only when merged into main (#613) |
 | `weekly.yml` (`cleanup` job) | weekly cron + dispatch | Merged-branch janitor; dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
-| `status.yml` | PR/issue events, CI completions | One run per event: `board` job moves Projects-v2 cards; `pr-comment` job keeps the sticky PR status + epic rollup (merged from project-status + the former pipeline-pr-status, #2891/#2892) |
+| `status.yml` | PR/issue events, CI completions | One run per event: `board` job moves Projects-v2 cards; `pr-comment` job keeps the sticky PR status + epic rollup (logic in `scripts/lib/pr-status-io.mjs`, #3617; merged from project-status + the former pipeline-pr-status, #2891/#2892) |
 | `db-clone.yml` | dispatch | D1 mirror between envs (`db-clone` skill) |
 | `db-counts.yml` | dispatch | Read-only row counts of any app DB — the safe "what's in there" check (#384) |
 | `teardown-app.yml` | dispatch | CF/branch/issue teardown (`remove-app` skill) — runs in CI because the interactive agent has no Cloudflare creds |
