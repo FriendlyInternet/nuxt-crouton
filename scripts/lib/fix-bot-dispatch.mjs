@@ -29,7 +29,7 @@ export function pickFailedRun(runs = []) {
 }
 
 // ── #3373: ONE "will the fix-bot try?" decision, shared by fix-ci-on-failure.yml (the gate) and
-// status.yml (the red ping), so the red ping's wording reflects whether the bot will handle a failure (never a mention, #3622).
+// scripts/lib/pr-status-io.mjs (the red ping, posted by status.yml), so the red ping's wording reflects whether the bot will handle a failure (never a mention, #3622).
 // Keep FIX_BOT_WORKFLOWS in lockstep with the `workflow_run.workflows` list in fix-ci-on-failure.yml
 // (a test enforces it).
 export const FIX_BOT_WORKFLOWS = ['CI', 'E2E', 'Deploy Apps (Cloudflare Workers)']
