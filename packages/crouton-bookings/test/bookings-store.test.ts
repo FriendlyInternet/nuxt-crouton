@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createSSRApp, defineComponent, h, ref } from 'vue'
+import { createSSRApp, defineComponent, h, provide, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { useBookingsLayoutStore } from '../app/composables/useBookingsLayoutStore'
 import { createBookingsStore, getOrCreateStore, provideBookingsStore, useBookingsStore } from '../app/composables/useBookingsStore'
@@ -278,6 +278,32 @@ describe('useBookingsLayoutStore — the real entry point (#2561)', () => {
     const [b1] = await render({})
     expect(b1).not.toBe(a1)
     expect(b1.selectedDate.value).toBeNull()
+  })
+
+  it('two layouts on one page share no filters, selected day or hover; blocks inside one layout do', async () => {
+    stubs()
+    vi.stubGlobal('useNuxtApp', () => ({}))
+    const got: any[][] = [[], []]
+    const mk = (n: number) => defineComponent({
+      setup() {
+        provide('croutonLayoutInstance', {})
+        const Block = defineComponent({ setup() { got[n].push(useBookingsLayoutStore('team')); return () => h('i') } })
+        return () => h('section', [h(Block), h(Block)])
+      },
+    })
+    const A = mk(0)
+    const B = mk(1)
+    const html = await renderToString(createSSRApp({ render: () => h('div', [h(A), h(B)]) }))
+    expect(html).toContain('<section>')
+    expect(got[0][0]).toBe(got[0][1])
+    expect(got[1][0]).toBe(got[1][1])
+    expect(got[0][0]).not.toBe(got[1][0])
+    got[0][0].selectDay(day('2026-11-02'))
+    got[0][0].filters.value.showCancelled = true
+    got[0][0].hoveredBookingId.value = 'x'
+    expect(got[1][0].selectedDate.value).toBeNull()
+    expect(got[1][0].filters.value.showCancelled).toBe(false)
+    expect(got[1][0].hoveredBookingId.value).toBeNull()
   })
 
   it('a store provided above the blocks wins over the fallback', async () => {

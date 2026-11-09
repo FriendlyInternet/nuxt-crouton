@@ -55,6 +55,11 @@ const props = withDefaults(
 // `variant` like any other prop.
 const variants = inject(LAYOUT_VARIANTS_KEY, ref({} as Record<string, string>))
 
+// Layout instance identity (#2561): the outermost renderer of a layout provides one
+// object; nested renderers reuse it. Blocks key their screen state on it, so two
+// layouts on one page share nothing.
+if (!inject<object | null>('croutonLayoutInstance', null)) provide('croutonLayoutInstance', {})
+
 // Render context (#983): a read-only render (`interactive=false` — a served page
 // or the builder board's live preview) is a PAGE; the authoring render is ADMIN.
 // A data-bound leaf (a collection list) injects this to pick a content-sized page
