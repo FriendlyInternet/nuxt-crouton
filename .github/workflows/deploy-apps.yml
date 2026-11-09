@@ -132,6 +132,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write   # reusable workflow comments the preview URL on the PR
+      issues: read           # reusable workflow resolves the app's status:to-test epic (#3051)
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}

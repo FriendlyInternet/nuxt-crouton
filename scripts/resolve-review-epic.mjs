@@ -42,7 +42,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const [app, reviewPr = ''] = process.argv.slice(2)
   let epics = []
   if (!reviewPr) {
-    try { epics = fetchEpics() } catch (e) { console.error(`resolve-review-epic: epic lookup failed (${e.message}) — overlay stays off`) }
+    try { epics = fetchEpics() } catch (e) { console.error(`::warning::resolve-review-epic: epic lookup failed (${e.message}) — overlay stays off`) }
   }
   const r = chooseReviewTarget({ app, reviewPr, epics })
   console.error(`resolve-review-epic: ${r.source}${r.number ? ` → #${r.number}` : ''}`)

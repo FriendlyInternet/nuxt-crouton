@@ -126,6 +126,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write   # for the staging-URL PR comment
+      issues: read           # resolve-review-epic lists the app's status:to-test epic (#3051)
     # Serialize (don't cancel — a cancel mid-migration is unsafe) deploys to the
     # same app+env so concurrent runs can't race on auto-provisioning / sync / D1.
     #
@@ -272,9 +273,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APP: ${{ inputs.app }}
           REVIEW_PR: ${{ inputs.review-pr }}
+          REVIEW_KEY_PR: ${{ github.event.pull_request.number || inputs.review-pr }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           N="$(node scripts/resolve-review-epic.mjs "$APP" "$REVIEW_PR")" || N=""
           echo "number=$N" >> "$GITHUB_OUTPUT"
+          # Seed key mirrors the seed step: the PR number, else the sanitised ref (main).
+          if [ -n "$REVIEW_KEY_PR" ]; then KEY="pr${REVIEW_KEY_PR}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       # The one real step: run the SAME script a developer runs locally. It builds
       # with NITRO_PRESET=cloudflare_module, deploys (auto-provisioning id-less
@@ -626,8 +632,7 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
           PR: ${{ steps.review-target.outputs.number }}
-          REVIEW_KEY_PR: ${{ github.event.pull_request.number || inputs.review-pr }}
-          REF_NAME: ${{ github.ref_name }}
+          REVIEW_KEY: ${{ steps.review-target.outputs.key }}
           APP_ID: ${{ secrets.HARNESS_APP_ID }}
           INSTALLATION_ID: ${{ steps.review-app-token.outputs.installation-id }}
           PRIVATE_KEY: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -650,9 +655,7 @@ jobs:
             REVIEWERS=""
             WHY="REVIEW_SEED_SECRET is not set, so no review login is seeded"
           else
-            # Seed key mirrors the seed step: the PR number, else the sanitised ref (main).
-            if [ -n "$REVIEW_KEY_PR" ]; then KEY="pr${REVIEW_KEY_PR}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
-            REVIEWERS="review+${APP}-${KEY}@example.com"
+            REVIEWERS="review+${APP}-${REVIEW_KEY}@example.com"
             WHY=""
           fi
           if [ -z "$REVIEWERS" ]; then
