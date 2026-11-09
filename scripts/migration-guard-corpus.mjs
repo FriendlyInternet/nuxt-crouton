@@ -73,7 +73,6 @@ export function classifyPr({ merge, parent, prFiles = [], body = '', names = {} 
   return { guard: guard.status, flagged, clean: false, preExistingOnly: guard.status === 'fail' && flagged.length === 0 }
 }
 
-// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
 export function computeTotals(rows) {
   const t = { fired: 0, real: 0, falseAlarm: 0, preExisting: 0 }
   const seen = new Set()
@@ -81,15 +80,19 @@ export function computeTotals(rows) {
     if (!r.classified || r.rollupOf?.length) continue // roll-ups re-show their sub-PRs: count once
     if (r.classified.guard === 'fail') t.fired++
     if (r.classified.preExistingOnly) t.preExisting++
-    for (const f of r.classified.flagged) {
-      const key = `${f.app}|${f.introduced.join('||')}|${f.newError}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      if (f.verdict.startsWith('likely real')) t.real++
-      else t.falseAlarm++
-    }
+    tallyFlagged(r.classified.flagged, seen, t)
   }
   return t
+}
+
+function tallyFlagged(flagged, seen, t) {
+  for (const f of flagged) {
+    const key = `${f.app}|${f.introduced.join('||')}|${f.newError}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (f.verdict.startsWith('likely real')) t.real++
+    else t.falseAlarm++
+  }
 }
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ')
@@ -155,27 +158,29 @@ function ghPr(n) {
 }
 
 /** Same test as listTargets, but against a commit's tree instead of a checkout. */
-// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
 function measurableAt(sha) {
   const show = (p) => { try { return sh('git', ['show', `${sha}:${p}`], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return null } }
+  const dirs = ['apps', 'pocs'].flatMap(group => {
+    try { return sh('git', ['ls-tree', '--name-only', sha, `${group}/`], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean) } catch { return [] }
+  })
   let legacy = 0
   let found = 0
-  for (const group of ['apps', 'pocs']) {
-    let names = []
-    try { names = sh('git', ['ls-tree', '--name-only', sha, `${group}/`], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean) } catch { /* none */ }
-    for (const dir of names) {
-      if (show(`${dir}/deploy.config.json`) === null) continue
-      const pkg = show(`${dir}/package.json`)
-      let hasGen = false
-      try { hasGen = Boolean(JSON.parse(pkg).scripts?.['db:generate']) } catch { /* ignore */ }
-      if (!hasGen) continue
-      const cfg = show(`${dir}/drizzle.config.ts`)
-      if (cfg !== null && cfg.includes('.nuxt/hub/db/schema.mjs')) legacy++
-      else found++
-    }
+  for (const dir of dirs) {
+    const kind = targetKind(dir, show)
+    if (kind === 'legacy') legacy++
+    else if (kind === 'ok') found++
   }
   if (found) return { ok: true }
   return { ok: false, reason: legacy ? 'every target was legacy (skipped)' : 'no deployed app with db:generate' }
+}
+
+function targetKind(dir, show) {
+  if (show(`${dir}/deploy.config.json`) === null) return 'none'
+  let hasGen = false
+  try { hasGen = Boolean(JSON.parse(show(`${dir}/package.json`)).scripts?.['db:generate']) } catch { /* ignore */ }
+  if (!hasGen) return 'none'
+  const cfg = show(`${dir}/drizzle.config.ts`)
+  return cfg !== null && cfg.includes('.nuxt/hub/db/schema.mjs') ? 'legacy' : 'ok'
 }
 
 function runAt(sha, wt, cacheDir) {
@@ -196,7 +201,31 @@ function runAt(sha, wt, cacheDir) {
   return data
 }
 
-// fallow-ignore-next-line complexity -- one-off corpus script, never wired into CI
+function buildRow(n, m, wt, cacheDir) {
+  if (m.error || !m.mergeCommit) return { pr: n, reason: m.error || 'no merge commit' }
+  if (!isSchemaChange(m.files)) return null
+  const merge = m.mergeCommit.oid
+  const row = { pr: n, merged: (m.mergedAt || '').slice(0, 10), base: m.baseRefName, head: m.headRefName, note: `${m.files.length} files` }
+  const me = measurableAt(merge)
+  if (!me.ok) return { ...row, reason: `not measurable — ${me.reason}` }
+  const mr = runAt(merge, wt, cacheDir)
+  if (mr.buildError) return { ...row, reason: `build failed: ${mr.buildError}` }
+  let parent
+  if (!isClean(mr.results)) {
+    const par = runAt(sh('git', ['rev-parse', `${merge}^1`], { cwd: REPO_ROOT }).trim(), wt, cacheDir)
+    parent = par.buildError ? undefined : par.results
+  }
+  row.classified = classifyPr({ merge: mr.results, parent, prFiles: m.files, body: m.body, names: mr.names })
+  return row
+}
+
+function markRollups(rows) {
+  for (const r of rows) {
+    const subs = rows.filter(s => s.pr !== r.pr && s.base && s.base === r.head && s.classified?.flagged.length).map(s => s.pr)
+    if (r.classified?.flagged.length && subs.length && r.base === 'main') r.rollupOf = subs
+  }
+}
+
 function main() {
   const wt = arg('worktree') || '/tmp/mg-wt'
   const cacheDir = arg('cache') || '/tmp/mg-cache'
@@ -205,29 +234,8 @@ function main() {
   const prs = arg('prs') ? arg('prs').split(',').map(Number) : discover()
   const metas = {}
   for (const n of prs) { try { metas[n] = ghPr(n) } catch (e) { metas[n] = { error: String(e.message).split('\n')[0] } } }
-  const rows = []
-  for (const n of prs) {
-    const m = metas[n]
-    if (m.error || !m.mergeCommit) { rows.push({ pr: n, reason: m.error || 'no merge commit' }); continue }
-    if (!isSchemaChange(m.files)) continue
-    const merge = m.mergeCommit.oid
-    const row = { pr: n, merged: (m.mergedAt || '').slice(0, 10), base: m.baseRefName, head: m.headRefName, note: `${m.files.length} files` }
-    const me = measurableAt(merge)
-    if (!me.ok) { rows.push({ ...row, reason: `not measurable — ${me.reason}` }); continue }
-    const mr = runAt(merge, wt, cacheDir)
-    if (mr.buildError) { rows.push({ ...row, reason: `build failed: ${mr.buildError}` }); continue }
-    let pr
-    if (!isClean(mr.results)) {
-      const par = runAt(sh('git', ['rev-parse', `${merge}^1`], { cwd: REPO_ROOT }).trim(), wt, cacheDir)
-      pr = par.buildError ? undefined : par.results
-    }
-    row.classified = classifyPr({ merge: mr.results, parent: pr, prFiles: m.files, body: m.body, names: mr.names })
-    rows.push(row)
-  }
-  for (const r of rows) {
-    const subs = rows.filter(s => s.pr !== r.pr && s.base && s.base === r.head && s.classified?.flagged.length).map(s => s.pr)
-    if (r.classified?.flagged.length && subs.length && r.base === 'main') r.rollupOf = subs
-  }
+  const rows = prs.map(n => buildRow(n, metas[n], wt, cacheDir)).filter(Boolean)
+  markRollups(rows)
   const head = sh('git', ['rev-parse', '--short=9', 'HEAD'], { cwd: REPO_ROOT }).trim()
   const report = renderReport(rows, { head, date: new Date().toISOString().slice(0, 10), discovered: prs.length, command: `node scripts/migration-guard-corpus.mjs --worktree ${wt} --cache ${cacheDir}` })
   const out = arg('out')
