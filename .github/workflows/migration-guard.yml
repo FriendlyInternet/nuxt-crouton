@@ -9,6 +9,8 @@ on:
     branches: [main, 'epic/**']
     types: [opened, synchronize, reopened, edited]
     paths:
+      - '.github/workflows/migration-guard.yml'
+      - 'scripts/migration-guard.mjs'
       - 'packages/*/server/database/schema.ts'
       - 'packages/*/server/database/schema/**'
       - 'packages/*/collections/*/server/database/schema.ts'
@@ -50,6 +52,9 @@ jobs:
               { ...context.repo, pull_number: pr.number })
             fs.writeFileSync('/tmp/files.txt', files.map(f => f.filename).join('\n'))
             fs.writeFileSync('/tmp/body.txt', pr.body || '')
+
+      - name: Build packages (drizzle configs import their dist/ schemas)
+        run: pnpm build:packages
 
       - name: Run each app's db:generate
         run: node scripts/migration-guard.mjs generate --root . --out /tmp/results.json

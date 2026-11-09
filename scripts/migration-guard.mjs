@@ -127,7 +127,10 @@ function runGenerate(root, outPath) {
     })
     const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', migDir], { cwd: root, encoding: 'utf8' })
     const sqlFiles = status.split('\n').map(l => l.slice(3).trim()).filter(f => f.endsWith('.sql'))
-    if (r.status !== 0) {
+    const out = `${r.stdout || ''}${r.stderr || ''}`
+    // drizzle-kit exits 0 even when it cannot load its config; only a recognised success line counts
+    const understood = /No schema changes|migration file/i.test(out)
+    if (r.status !== 0 || !understood) {
       const text = `${r.stderr || ''}${r.stdout || ''}`.trim().split('\n').filter(Boolean).pop() || `exit ${r.status}`
       results[t.dir] = { error: text }
     } else {
