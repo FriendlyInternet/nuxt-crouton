@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createSSRApp, defineComponent, h, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
+import { useBookingsLayoutStore } from '../app/composables/useBookingsLayoutStore'
 import { createBookingsStore, getOrCreateStore, provideBookingsStore, useBookingsStore } from '../app/composables/useBookingsStore'
 
 /**
@@ -251,5 +252,42 @@ describe('layout blocks side by side (#2561)', () => {
     const other = getOrCreateStore(holderB, 'team', () => setup())
     expect(other).not.toBe(list)
     expect(other.selectedDate.value).toBeNull()
+  })
+})
+
+describe('useBookingsLayoutStore — the real entry point (#2561)', () => {
+  const stubs = () => {
+    vi.stubGlobal('ref', ref)
+    vi.stubGlobal('useBookingsList', () => ({ bookings: ref([]), calendarBookings: ref([]), locations: ref([loc('a')]) }))
+  }
+
+  /** Render two blocks in one "server request" (one nuxtApp). */
+  async function render(nuxtApp: Record<string, any>) {
+    stubs()
+    vi.stubGlobal('useNuxtApp', () => nuxtApp)
+    const got: any[] = []
+    const Block = defineComponent({ setup() { got.push(useBookingsLayoutStore('team')); return () => h('i') } })
+    await renderToString(createSSRApp({ render: () => h('div', [h(Block), h(Block)]) }))
+    return got
+  }
+
+  it('two blocks in one request share a store; a second request shares nothing with it', async () => {
+    const [a1, a2] = await render({})
+    expect(a1).toBe(a2)
+    a1.selectDay(day('2026-11-02'))
+    const [b1] = await render({})
+    expect(b1).not.toBe(a1)
+    expect(b1.selectedDate.value).toBeNull()
+  })
+
+  it('a store provided above the blocks wins over the fallback', async () => {
+    stubs()
+    vi.stubGlobal('useNuxtApp', () => ({}))
+    const mine = setup()
+    const got: any[] = []
+    const Block = defineComponent({ setup() { got.push(useBookingsLayoutStore('team')); return () => h('i') } })
+    const Panel = defineComponent({ setup() { provideBookingsStore({ bookings: ref([]), calendarBookings: ref([]), locations: ref([]), readOnly: ref(false) }, mine); return () => h(Block) } })
+    await renderToString(createSSRApp({ render: () => h(Panel) }))
+    expect(got[0]).toBe(mine)
   })
 })
