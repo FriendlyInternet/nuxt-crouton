@@ -155,7 +155,7 @@ export function baselineRaises(prBlocks, baseBlocks) {
 }
 
 /** True iff the PR body carries a non-empty `Baseline-raise-approved:` line. */
-export const raiseApproved = (body) => /^\s*Baseline-raise-approved:\s*\S/m.test(body ?? '')
+export const raiseApproved = (body) => /^[ \t]*Baseline-raise-approved:[ \t]*\S/m.test(body ?? '')
 
 /** The committed baseline's blocks at `rev`; undefined when the file is absent there. */
 export function baselineAtRev(rev, root = '.') {
@@ -202,7 +202,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       }
     }
   }
-  const { failures: f0, stale } = check(blocks, base.blocks, base.limit ?? LIMIT, baseBlocks)
+  const { failures: f0, stale } = check(blocks, base.blocks, LIMIT, baseBlocks) // LIMIT, not base.limit: a PR must not turn the gate off by editing the file's own limit (#3615)
   const failures = [...f0, ...raiseFailures]
   for (const s of stale) console.log(`note: ${s}`)
   for (const f of failures) console.error(`FAIL: ${f}`)
