@@ -87,10 +87,17 @@ describe('admin-only routes (#3135)', () => {
       expect(await status((await route(mod))({}))).toBe(403)
     })
   }
-  it('admin passes the gate (admin-bookings → 200)', async () => {
+  it('admin-bookings GET: admin → 200', async () => {
     h.role = 'admin'
     expect(await status((await route(`${S}/admin-bookings.get`))({}))).toBe(200)
   })
+  for (const [label, mod] of adminOnly) {
+    it(`${label}: admin is not refused (not 403)`, async () => {
+      h.role = 'admin'
+      body = {}
+      expect(await status((await route(mod))({}))).not.toBe(403)
+    })
+  }
 })
 
 describe('bookings-bookings list', () => {
