@@ -19,6 +19,7 @@ const trail = computed(() => level.value ? [...ancestors(level.value), level.val
 const topTray = useLocalStorage<TopTray>('crate:top-tray', 'inbox')
 const trayTracks = computed(() => tray(level.value, topTray.value))
 const main = ref<HTMLElement>()
+const recentOpen = ref(false)
 function goUp() {
   const parentId = level.value?.parentId
   openLevel(parentId ? crate.piles.value.find(p => p.id === parentId) ?? null : null)
@@ -278,6 +279,7 @@ function startNewPile() {
       @open="openLevel"
       @up="goUp"
       @undo="crate.undo()"
+      @recent="recentOpen = true"
       @list="listOpen = true"
       @listen="listen"
       @upload="fileInput?.click()"
@@ -373,6 +375,8 @@ function startNewPile() {
     >
       {{ ghost.name }}
     </div>
+
+    <CrateRecentChanges v-model:open="recentOpen" :api="crate.api" @pick="(id) => { const t = tracks.find(x => x.id === id); if (t) show(t, false); else toast.add({ title: 'That track is gone' }) }" />
 
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
 
