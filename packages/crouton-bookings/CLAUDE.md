@@ -61,7 +61,7 @@ CroutonBooking
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
-| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; members see own rows only) |
+| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (owner or team admin; others get 403) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]/resend-email` | POST | Resend email (if enabled) |
 
