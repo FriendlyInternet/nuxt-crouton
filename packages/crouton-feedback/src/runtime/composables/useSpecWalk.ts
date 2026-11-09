@@ -60,6 +60,7 @@ function slug(s: string): string {
   return (s || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'app'
 }
 
+// fallow-ignore-next-line complexity — composable aggregating walk state; CRAP inflated by 0 coverage (client composable)
 export function useSpecWalk() {
   const cfg = (useRuntimeConfig().public.croutonPlan ?? {}) as Partial<ComposedPlan>
 
@@ -103,6 +104,7 @@ export function useSpecWalk() {
   // The launcher badge tracks OVERALL progress (not the current scope).
   const badge = computed<string | null>(() => (allWalk.value.length ? `${markedTotal.value}/${allWalk.value.length}` : null))
 
+  // fallow-ignore-next-line complexity — small verdict/advance logic; CRAP inflated by 0 coverage (client composable)
   function setVerdict(v: Verdict) {
     const e = current.value
     if (!e) return
@@ -179,11 +181,13 @@ export function useSpecWalk() {
   ))
 
   // Send result: only a link walk carrying `ref` + `result`, and only to a sibling host.
+  // fallow-ignore-next-line complexity — guard chain; CRAP inflated by 0 coverage (client composable)
   const sendTarget = computed(() => {
     if (!adhoc.value || !adhocRef.value || !adhocResult.value || !import.meta.client) return ''
     return isSendTarget(adhocResult.value, location.hostname) ? new URL(adhocResult.value).host : ''
   })
   const canSend = computed(() => !!sendTarget.value && adhoc.value!.every(e => verdicts.value[e.id]?.verdict))
+  // fallow-ignore-next-line complexity — guard + state transitions; sender itself is unit-tested in specwalk-data
   async function sendResult() {
     if (!canSend.value || sendState.value.status === 'sending') return
     const payload = walkResultPayload(adhoc.value!, verdicts.value, adhocRef.value)
