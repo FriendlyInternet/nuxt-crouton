@@ -247,6 +247,8 @@ crouton init scratch --out sandboxes/scratch
 
 ## Rollback Command (`crouton rollback`)
 
+**Removing a collection:** `crouton config` never deletes generated files. It does clean up *dangling* references (schema barrel, `app.config`, layer/root `extends`) to collection or layer folders that no longer exist (`lib/utils/prune-dangling-collections.ts`, exact matching). A collection that is still on disk but missing from `crouton.config` stays wired up and gets a warning; remove it with `crouton rollback <layer> <collection>`.
+
 Removes a generated collection — files, schema-index re-export, `app.config.ts`
 entry, and layer/root `extends`. Two things WS4 (#1445) got right:
 
@@ -374,6 +376,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | File | Purpose |
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
+| `lib/utils/prune-dangling-collections.ts` | `pruneDanglingCollectionRefs` — removes barrel/app.config/`extends` entries whose collection or layer folder is gone; runs at the start of `config` and `generate` |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
 | `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
 | `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
@@ -381,7 +384,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
 | `lib/generators/*.ts` | Template generators (16 files) |
 | `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. Opt-in with `--tests` (#785, off by default since #2286). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
-| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths, and (for collections with reference fields) same-team reference cases: other-team id / missing id → 400 with no write, same-team + null → ok (#3424). Same `--tests` gate (#791) |
+| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths, and (for collections with reference fields) same-team reference cases: other-team id / missing id → 400 with no write, same-team + null → ok, optional single and list refs (#3424, #3600). Same `--tests` gate (#791) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -391,6 +394,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/ref-collection.ts` | `resolveRefCollectionKey(refTarget, currentLayer, collectionLayerMap)` — the registered collection KEY a reference points the UI at (`croutonAssets`, `bookingsLocations`), via the TARGET's layer. Used by the form picker, the list cell and the asset detector, which used to prefix the current layer (`mainAssets`) (#2311) |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/team-ref-fields.ts` | Which fields are team-scoped references; the generator emits `assertXReferences` (queries) + calls in create/update routes, backed by crouton-core `assertRefsInTeam` (#3378) |
+| `lib/utils/list-fields.ts` | `isDependentField` / `isListField` — the one rule for "this field's body value is a list" (dependent fields, `z.array(` zod, `array` type), shared by the schema generator and the generated tests (#3600) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |

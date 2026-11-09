@@ -21,6 +21,7 @@
 
 import { routeIssue } from './lib/plan-route.mjs'
 import { handoffGuard } from './handoff-exec.mjs'
+import { parseBlockers } from './wave-gate.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
 export const WAITING_LABEL = 'traffic:waiting'
@@ -39,9 +40,12 @@ export const PIPELINE_LABELS = ['delegate', 'delegate-pi', 'work-this']
  * Does this ticket count as open pipeline work? Never an epic; otherwise an open `work-<n>` PR,
  * or `status:in-progress` AND pipeline-owned (a hand-held in-progress ticket has no PR coming).
  */
-function isBlocker(o) {
+function isBlocker(o, mineBlockedBy = []) {
   const n = names(o.labels)
   if (n.includes('epic')) return false
+  // #3583: a held PR (draft, or ticket status:blocked) waits on the owner, not on a build —
+  // it does not block, unless this ticket declares `Blocked-by: #n` on it.
+  if (o.openPr && o.held && !mineBlockedBy.includes(o.number)) return false
   if (o.openPr) return true
   // #3214: a ticket still in plan mode (no approved plan, no PR) changes no code — never a blocker.
   if (o.planning) return false
@@ -68,7 +72,7 @@ export function parseUnblocks(body) {
  * @param {number}   o.issue           the ticket about to start
  * @param {string[]|object[]} o.labels the ticket's labels
  * @param {string}   [o.body]          the ticket body (`Unblocks: #n` lines let it pass #n)
- * @param {Array<{number:number,labels:any[],openPr?:boolean,planning?:boolean}>} o.others
+ * @param {Array<{number:number,labels:any[],openPr?:boolean,held?:boolean,planning?:boolean}>} o.others
  *        open pipeline tickets (issues, not PRs). `openPr` = an open `work-<number>` PR exists.
  * @returns {{action:'proceed'|'wait', waitingFor:number[], reason:string}}
  */
@@ -76,9 +80,10 @@ export function decideTraffic({ issue, labels, body, others }) {
   const mine = scopeLabels(labels)
   if (!mine.length) return { action: 'proceed', waitingFor: [], reason: 'ticket has no pkg:/app:/poc: label' }
   const unblocks = parseUnblocks(body)
+  const mineBlockedBy = parseBlockers(body)
   const all = (others || [])
     .filter((o) => o.number !== issue)
-    .filter((o) => isBlocker(o))
+    .filter((o) => isBlocker(o, mineBlockedBy))
     .filter((o) => scopeLabels(o.labels).some((l) => mine.includes(l)))
     .map((o) => o.number)
     .sort((a, b) => a - b)
@@ -116,12 +121,13 @@ export async function gatherTrafficFacts({ github, context, issueNumber, labels 
       { owner, repo, state: 'open', head: `${owner}:work-${it.number}`, per_page: 5 })
     const lbls = names(it.labels)
     const openPr = prs.length > 0
+    const held = openPr && (prs.some((p) => p.draft) || lbls.includes('status:blocked'))
     let planning = false
     try {
       planning = !openPr && !lbls.includes('plan:approved')
         && routeIssue({ labels: lbls, text: `${it.title || ''}\n${it.body || ''}` }).mode === 'plan'
     } catch { /* unreadable routing config: treat as a builder (safe side) */ }
-    others.push({ number: it.number, labels: lbls, openPr, planning })
+    others.push({ number: it.number, labels: lbls, openPr, held, planning })
   }
   return others
 }
