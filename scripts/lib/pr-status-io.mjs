@@ -61,7 +61,7 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
     if (epicMatch) await updateEpic(Number(epicMatch[1]))
   }
 
-  // One-shot @mention on a fresh failure — the ONLY loud signal (#1815). A red pipeline
+  // One-shot red note on a fresh failure — the ONLY loud signal (#1815). A red pipeline
   // PR won't auto-merge into its epic (automerge-epic-subpr.yml leaves it open), so it
   // needs the owner. Keyed by head SHA so a re-fired check_suite for the SAME commit
   // never re-pings; a new failing commit (new SHA) does. Mentions don't fire on comment
@@ -134,7 +134,7 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
         } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
       }
     } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
-    // #3373: mention the owner ONLY when the fix-bot will not handle this failure. The
+    // #3622: never mentions the owner; the decision only picks the wording. The
     // decision is the same pure function the fix-ci gate runs (scripts/lib/fix-bot-dispatch.mjs).
     let dec
     try {
@@ -146,7 +146,7 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       core.warning(`fix-bot decision unavailable: ${e.message}`)
       dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }
     }
-    const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, owner: OWNER, reason: dec.reason,
+    const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, reason: dec.reason,
       attempts: dec.attempts, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
     const body = renderRedPing({ marker, hd, why, tails, pr })
     if (existing) {
@@ -156,7 +156,7 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       return
     }
     await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
-    core.info(`Red ping on #${pr.number} (${pr.head.sha.slice(0, 7)}): ${dec.who === 'bot' || dec.who === 'gave-up' ? 'no mention' : 'mentioned @' + OWNER} (decision: ${dec.code}).`)
+    core.info(`Red ping on #${pr.number} (${pr.head.sha.slice(0, 7)}): no mention (decision: ${dec.code}).`)
   }
 
   // #2135: one-shot @mention the moment an epic shows "Awaiting your sign-off" — the

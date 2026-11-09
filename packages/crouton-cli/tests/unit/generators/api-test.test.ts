@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateApiTest } from '../../../lib/generators/api-test.ts'
+import { buildFieldsSchema } from '../../../lib/generate-collection.ts'
 
 // Minimal `data` shape the orchestrator passes to generators (see buildGeneratorData
 // in generate-collection.ts). The API test imports the generated route handlers and
@@ -166,5 +167,42 @@ describe('generateApiTest — same-team reference cases (#3424)', () => {
     const required = { ...withRef, fields: withRef.fields.map(f => (f.name === 'categoryId' ? { ...f, meta: { required: true } } : f)) }
     expect(generateApiTest(required, null)).not.toContain('accepts null for the optional reference')
     expect(generateApiTest(baseData, null)).not.toContain('another team')
+  })
+})
+
+describe('generateApiTest — list references use the schema generator\'s list rule (#3600)', () => {
+  const ref = (extra: Record<string, any>) => ({ type: 'string', zod: 'z.string()', meta: {}, ...extra })
+  const cases = [
+    ['zod list', ref({ name: 'tags', refTarget: 'tags', zod: 'z.array(z.string())' })],
+    ['dependsOn', ref({ name: 'slots', refTarget: 'slots', meta: { dependsOn: 'location', dependsOnCollection: 'locations', dependsOnField: 'slots' } })],
+    ['slotButtonGroup', ref({ name: 'slots', refTarget: 'slots', meta: { displayAs: 'slotButtonGroup' } })],
+  ] as const
+
+  it.each(cases)('%s: sends a list, keeps the null case, and matches the server schema', (_label, field) => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, field] }, null)
+    for (const id of ['ref_1', 'other_team_ref', 'missing_ref']) {
+      expect(out).toContain(`${field.name}: ['${id}']`)
+      expect(out).not.toContain(`${field.name}: '${id}'`)
+    }
+    expect(out).toContain(`accepts null for the optional reference \`${field.name}\``)
+    expect(out).toContain(`${field.name}: null`)
+    const schema = buildFieldsSchema({ fields: [...baseData.fields, field] as any, config: null, hierarchy: { enabled: false } as any, cases: { plural: 'products' }, layerCamelCase: 'shop', mode: 'server' })
+    expect(schema).toMatch(new RegExp(`${field.name}: z\\.array\\(.*\\.nullish\\(\\)`))
+  })
+
+  it('a type: array ref gets the null case', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())' })] }, null)
+    expect(out).toContain('accepts null for the optional reference `tags`')
+  })
+
+  it('prefers an optional single ref for the null case', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())' }), ref({ name: 'categoryId', refTarget: 'categories' })] }, null)
+    expect(out).toContain('accepts null for the optional reference `categoryId`')
+    expect(out).not.toContain('accepts null for the optional reference `tags`')
+  })
+
+  it('dependsOn without dependsOnCollection stays a single value', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'slots', refTarget: 'slots', meta: { dependsOn: 'location' } })] }, null)
+    expect(out).toContain("slots: 'ref_1'")
   })
 })
