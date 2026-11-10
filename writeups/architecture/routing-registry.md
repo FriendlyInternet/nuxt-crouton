@@ -11,6 +11,7 @@ demotion. `$out/Mtok` is the Claude baseline output price — the cost lever.
 - **review** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — independent plan reviewer (#2756) — strongest model, read-only, never edits code
 - **plan** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — plan-mode run (#3343) — investigation + the plan comment, strongest model
 - **decompose** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — event-driven epic splitter (#3670) — once per epic, strongest model
+- **build** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — pi issue worker / reviser (#3693) — builds the code, Opus trial
 - **large** — Claude `claude-opus-5-5` · pi `claude-opus-5-5` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
 
 Default tier: **medium**
@@ -22,8 +23,8 @@ Default tier: **medium**
 | `build-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits |
 | `plan-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27 |
 | `task-worker` | large | claude-opus-5-5 | claude-opus-5-5 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
-| `pi-worker` | build | undefined | — | — | — | pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model (`build` tier) — on Opus trial since #3693 |
-| `pi-reviser` | build | undefined | — | — | — | pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker — on Opus trial since #3693 |
+| `pi-worker` | build | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model (`build` tier) — on Opus trial since #3693 |
+| `pi-reviser` | build | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker — on Opus trial since #3693 |
 | `pi-planner` | plan | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi worker in PLAN mode (#2755/#3343) — investigates and posts the plan comment; runs on the strongest model so the plan is right before the builder starts |
 | `pi-decomposer` | decompose | claude-opus-5-5 | claude-opus-5-5 | $75 | — | pi event-driven decomposer persona (#2431) — plan-only, no code written; extracted from decompose-on-issue-pidev.yml — on Opus since #3670 (a bad split poisons every downstream build) |
 | `task-orchestrator` | medium | claude-sonnet-5-5 | claude-sonnet-5-5 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
