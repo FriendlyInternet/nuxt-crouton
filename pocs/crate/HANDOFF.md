@@ -12,6 +12,7 @@ Tag a rekordbox library into genre **piles** on the phone. Epic #2204. Brief: th
 - Behaviours: see `spec.json` (signed off 2026-10-13).
 - Playback is the native `<audio>`. It starts at 30%, and Next plays inside the tap (iOS gesture rule). Dropbox links are `Content-Disposition: attachment`: opening one in a tab downloads it, while an `<audio>` element plays it.
 - Undo = server-side `crate_changes` groups. An undo is itself a group with `undoOf`, and undos are never undone.
+- Recent changes (#2209): clock icon in the header → `GET /crate/changes` (one entry per group, newest first; folding is `server/utils/crate-recent.ts`, tested). Tapping an entry puts its track on the deck.
 - Pile edits (#2211: rename, move, earlier/later, remove) go through `POST /crate/piles/:id/edit` and are undoable like tag writes: a pile row has `pileId` set, `trackId` null, and `before`/`after` = `{ name, parentId, order }` (`null` = pile doesn't exist). The plans are pure functions in `server/utils/crate-pile-ops.ts` (tested in `tests/`).
 - Renaming a pile renames the tag on every track. Moving one rewrites ancestor tags (adds the new parents, drops old parents nothing else needs). Removing one keeps the tag on tracks and moves its sub-piles up.
 - The library loads client-only (`server: false`): ~6.5k tracks is too big to inline into SSR HTML, and the team id only resolves after the session loads.
