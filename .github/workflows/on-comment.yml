@@ -19,7 +19,7 @@ name: On comment
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
-#   (bot plan)      plan-review              plan-review.yml (#3313; the worker's plan comment, own `if`)
+#   (bot plan)      plan-review              the plan-review job (#3313; the worker's plan comment, own `if`)
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
@@ -617,9 +617,9 @@ jobs:
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
-      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
+      # An issue held after the plan reviewer rejected twice (the plan-review job) is not a gate PR or a
       # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
-      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
+      # Detect the hold the way the plan-review job makes it (two no-go verdicts, newest a no-go; the job
       # guard already requires status:blocked) and re-run the planner with the reply as feedback.
       # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
       - name: Re-plan a held plan from the reply
@@ -1673,6 +1673,7 @@ jobs:
           REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
           ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold; }
+          # Best-effort checklist tick: the verdict comment is already posted, so a failure here must not fail the run.
           node scripts/flow-checklist.mjs "$ISSUE" --verdict plan "$VERDICT" --round "$ROUND" --link "$REVIEW_URL" ${ROUTE:+--route "$ROUTE"} || true
           case "$VERDICT" in
             go)
