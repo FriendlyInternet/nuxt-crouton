@@ -1,6 +1,7 @@
 /**
  * Pure LayoutSplit → Nuxt UI `SplitterItem[]` mapping for the editable panes
- * (`CroutonLayoutComposePane`, `CroutonLayoutEditorPane`) — #3707.
+ * (`CroutonLayoutComposePane`, `CroutonLayoutEditorPane`) — #3707 — and the
+ * renderer's splitter path (`CroutonLayoutRenderer`) — #3708.
  *
  * USplitter wraps reka-ui's Splitter: it renders one `SplitterPanel` per item
  * (keyed `item.id ?? index`) with a handle between each. Items deliberately
@@ -46,4 +47,62 @@ const HANDLE_CLASS = {
 
 export function splitterHandleClass(direction: 'horizontal' | 'vertical', thickness: 'px' | '1'): string {
   return HANDLE_CLASS[direction][thickness]
+}
+
+/** In-place collapse context for {@link rendererSplitterItems}. */
+export interface RendererCollapse {
+  /** Per child: is its whole subtree collapsed at the current breakpoint? */
+  collapsed: boolean[]
+  /** The thin resting size (%) a collapsed panel shrinks to. */
+  pct: number
+  /** The active in-place collapse style → the `mq-co-<style>` transition class. */
+  style: string
+}
+
+/**
+ * Renderer split: the editor items, plus — when an in-place collapse style is
+ * active — every panel `collapsible` at `collapsedSize: pct` with the style's
+ * `mq-co-*` flex-grow transition class, and each collapsed child pinned to `pct`.
+ * `collapse: null` (no in-place style) leaves the collapse keys off entirely.
+ */
+export function rendererSplitterItems(
+  split: LayoutSplit,
+  minFor: (child: LayoutNode) => number,
+  collapse: RendererCollapse | null,
+): SplitterItem[] {
+  const items = editorSplitterItems(split, minFor)
+  if (!collapse) return items
+  return items.map((item, i) => {
+    const next: SplitterItem = {
+      ...item,
+      collapsible: true,
+      collapsedSize: collapse.pct,
+      class: `overflow-hidden mq-co-${collapse.style}`,
+    }
+    if (collapse.collapsed[i]) {
+      next.defaultSize = collapse.pct
+      next.minSize = collapse.pct
+    }
+    return next
+  })
+}
+
+/**
+ * Renderer handle: today's 1px `bg-border` divider when interactive; `hidden`
+ * (paired with USplitter's `disabled`) when not — a view-only in-place-collapse
+ * split shows no draggable seam.
+ */
+export function rendererHandleClass(direction: 'horizontal' | 'vertical', interactive: boolean): string {
+  if (!interactive) return 'hidden'
+  return `bg-border hover:bg-primary transition-colors ${splitterHandleClass(direction, 'px')}`
+}
+
+/**
+ * What to do with a panel given the WANTED collapsed state vs its live state.
+ * `want === undefined` means "no collapse context" → never touch the panel.
+ */
+export function collapseAction(want: boolean | undefined, isCollapsed: boolean): 'collapse' | 'expand' | null {
+  if (want === true && !isCollapsed) return 'collapse'
+  if (want === false && isCollapsed) return 'expand'
+  return null
 }
