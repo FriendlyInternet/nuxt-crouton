@@ -1,6 +1,6 @@
 // API endpoint generators using @crouton/auth for team authentication
 import { collectFilterFields } from '../utils/filter-fields.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
 
 // Wire-facing body schema for the generated endpoints (#1403): accepts null on
 // non-required fields. Falls back to the client fieldsSchema for older callers
@@ -165,10 +165,14 @@ export function generatePostEndpoint(data: Record<string, any>, config: Record<s
   // Generate imports based on hierarchy needs
   const hasTeamRefs = collectTeamRefFields(data).length > 0
   const assertName = `assert${prefixedPascalCase}References`
-  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
-  const assertCall = hasTeamRefs
+  const hasPersonRefs = collectPersonRefFields(data).length > 0
+  const membersName = `assert${prefixedPascalCase}TeamMembers`
+  const assertImport = (hasTeamRefs ? `, ${assertName}` : '') + (hasPersonRefs ? `, ${membersName}` : '')
+  const assertCall = (hasTeamRefs
     ? `\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)\n`
-    : ''
+    : '') + (hasPersonRefs
+    ? `\n  // Person fields must be members of this team (#1958)\n  await ${membersName}(event, team.id, body)\n`
+    : '')
   const imports = hasHierarchy
     ? `import { create${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'
 import { nanoid } from 'nanoid'`
@@ -258,10 +262,14 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
   const queriesPath = '../../../../database/queries'
   const hasTeamRefs = collectTeamRefFields(data).length > 0
   const assertName = `assert${prefixedPascalCase}References`
-  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
-  const assertCall = hasTeamRefs
+  const hasPersonRefs = collectPersonRefFields(data).length > 0
+  const membersName = `assert${prefixedPascalCase}TeamMembers`
+  const assertImport = (hasTeamRefs ? `, ${assertName}` : '') + (hasPersonRefs ? `, ${membersName}` : '')
+  const assertCall = (hasTeamRefs
     ? `\n\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)`
-    : ''
+    : '') + (hasPersonRefs
+    ? `\n\n  // Person fields must be members of this team (#1958)\n  await ${membersName}(event, team.id, body)`
+    : '')
   const imports = hasTranslations
     ? `import { update${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'`
     : `import { update${prefixedPascalCase}${assertImport} } from '${queriesPath}'`
