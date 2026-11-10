@@ -88,3 +88,53 @@ test('workflow: the route job admits a pin, and the test-card step passes the co
   assert.match(y, /startsWith\(github\.event\.comment\.body, '🎯 \*\*Preview feedback\*\*'\)/)
   assert.match(y, /COMMENT_USER_TYPE: \$\{\{ github\.event\.comment\.user\.type \}\}/)
 })
+
+// ── real path: run the script against a fake GitHub API ──────────────────────
+import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
+
+async function runPin({ labels, kids }) {
+  const calls = []
+  const srv = createServer((req, res) => {
+    let b = ''
+    req.on('data', c => (b += c))
+    req.on('end', () => {
+      const path = req.url.split('?')[0]
+      calls.push(`${req.method} ${path}${b ? ' ' + b : ''}`)
+      res.setHeader('Content-Type', 'application/json')
+      if (req.method === 'GET' && path === '/repos/o/r/issues/7') return res.end(JSON.stringify({ number: 7, state: 'open', labels: labels.map(name => ({ name })) }))
+      if (req.method === 'GET' && path.endsWith('/sub_issues')) return res.end(JSON.stringify(kids))
+      if (req.method === 'POST' && path === '/repos/o/r/issues') return res.end(JSON.stringify({ id: 99, number: 50 }))
+      res.end('{}')
+    })
+  })
+  await new Promise(r => srv.listen(0, r))
+  const env = {
+    ...process.env, GITHUB_TOKEN: 't', ISSUE_NUMBER: '7', DIGEST_REPO: 'o/r', APPLY: 'true',
+    GITHUB_API_URL_OVERRIDE: `http://127.0.0.1:${srv.address().port}`,
+    COMMENT_BODY: PIN, COMMENT_AUTHOR_ASSOCIATION: 'NONE', COMMENT_USER_TYPE: 'Bot'
+  }
+  const code = await new Promise(r => spawn(process.execPath, [new URL('./handle-test-reply.mjs', import.meta.url).pathname], { env, stdio: 'ignore' }).on('exit', r))
+  srv.close()
+  return { code, calls }
+}
+const old = { number: 3, state: 'closed', body: `x\n${PIN_MARKER}\n> old\n<!-- /preview-pins -->` }
+
+test('real path: first pin on a to-test epic creates + links the sub-issue and flips to failed', async () => {
+  const { code, calls } = await runPin({ labels: ['epic', 'status:to-test'], kids: [] })
+  assert.equal(code, 0)
+  assert.ok(calls.some(c => c.startsWith('POST /repos/o/r/issues {')))
+  assert.ok(calls.some(c => c.startsWith('POST /repos/o/r/issues/7/sub_issues')))
+  assert.ok(calls.some(c => c.startsWith('POST /repos/o/r/issues/7/labels') && c.includes('status:failed')))
+})
+test('real path: second test round (earlier pin issue is closed) starts a NEW pin issue and fails the epic', async () => {
+  const { calls } = await runPin({ labels: ['epic', 'status:to-test'], kids: [old] })
+  assert.ok(!calls.some(c => c.startsWith('PATCH /repos/o/r/issues/3')))
+  assert.ok(calls.some(c => c.startsWith('POST /repos/o/r/issues {')))
+  assert.ok(calls.some(c => c.includes('status:failed')))
+})
+test('real path: later pin appends to the open pin issue, epic label untouched', async () => {
+  const { calls } = await runPin({ labels: ['epic', 'status:failed'], kids: [{ ...old, state: 'open' }] })
+  assert.ok(calls.some(c => c.startsWith('PATCH /repos/o/r/issues/3')))
+  assert.ok(!calls.some(c => c.includes('/labels')))
+})

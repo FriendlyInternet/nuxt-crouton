@@ -130,7 +130,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     process.exit(1)
   }
   const gh = async (path, init) => {
-    const res = await fetch('https://api.github.com' + path, {
+    const res = await fetch((process.env.GITHUB_API_URL_OVERRIDE || 'https://api.github.com') + path, {
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -166,7 +166,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   // Preview pins (#3052): the pin sub-issue is the one among the epic's children carrying PIN_MARKER.
   if (isPreviewPin(process.env.COMMENT_BODY)) {
     const kids = await gh(`${base}/sub_issues?per_page=100`)
-    const pinIssue = kids.find(k => String(k.body || '').includes(PIN_MARKER)) || null
+    const pinIssue = kids.find(k => k.state !== 'closed' && String(k.body || '').includes(PIN_MARKER)) || null
     const p = decidePin({
       labels, body: process.env.COMMENT_BODY, association: process.env.COMMENT_AUTHOR_ASSOCIATION,
       userType: process.env.COMMENT_USER_TYPE, pinIssue
