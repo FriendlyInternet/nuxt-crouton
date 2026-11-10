@@ -50,7 +50,7 @@ export async function prepareSchemaForMigration(appDir: string): Promise<Prepare
 
 export type GenerateMigrationsResult
   = | { generated: true, reason?: undefined, detail?: undefined }
-    | { generated: false, reason: 'deferred', recipe: string[], detail?: undefined }
+    | { generated: false, reason: 'deferred', recipe: string[], unresolved: string[], detail?: undefined }
     | { generated: false, reason: 'generate-failed', detail?: string }
 
 /**
@@ -71,7 +71,7 @@ export async function generateMigrations(
   // Soft stop: a declared layer couldn't be resolved → generating now would
   // silently omit its tables. Defer with the recipe rather than ship a partial.
   if (unresolved.length > 0) {
-    return { generated: false, reason: 'deferred', recipe: manualMigrationSteps(appDir) }
+    return { generated: false, reason: 'deferred', recipe: manualMigrationSteps(appDir), unresolved }
   }
 
   // Generate via the app's own db:generate — drizzle-kit reads the runtime-

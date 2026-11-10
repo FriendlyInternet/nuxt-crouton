@@ -66,6 +66,8 @@ describe('generateMigrations — failure contract', () => {
     const res = await generateMigrations(app)
     expect(res).toMatchObject({ generated: false, reason: 'deferred' })
     expect((res as any).recipe.join('\n')).toMatch(/pnpm install|db:generate/)
+    // #1742: the deferral names what it could not resolve (for the closing summary)
+    expect((res as any).unresolved).toContain('@fyit/crouton-does-not-exist')
   })
 
   it('propagates a DuplicateTableError (→ non-zero exit at the CLI layer)', async () => {

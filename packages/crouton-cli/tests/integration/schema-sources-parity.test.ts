@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveSchemaSources } from '../../lib/utils/schema-sources.ts'
+import { resolveSchemaSources, resolveSchemaGraph } from '../../lib/utils/schema-sources.ts'
 
 // Two tiers:
 //  1. Resolver-only checks (transitive reach, no-dup, fanfare no-crash) run in
@@ -55,6 +55,12 @@ describe('resolveSchemaSources — resolver-only checks (real fixtures)', () => 
     // Crash-risk case, not a schema case: themes carry no schema, but the walk
     // must resolve their subpath exports without throwing.
     await expect(resolveSchemaSources(p('apps/fanfare'))).resolves.toBeDefined()
+  })
+
+  it('resolves import-only @fyit layers for apps/velo (#1742)', () => {
+    // @fyit/crouton-admin and @fyit/crouton-email export `.` with `import` only;
+    // a CJS resolver left them unresolved, so every app soft-deferred its migration.
+    expect(resolveSchemaGraph(p('apps/velo')).unresolved).toEqual([])
   })
 })
 

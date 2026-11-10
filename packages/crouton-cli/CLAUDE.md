@@ -181,7 +181,11 @@ Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
   naming both files → the CLI exits **non-zero**.
 - **Unresolvable `extends`** (e.g. an out-of-monorepo scaffold whose deps aren't
   installed, so a layer can't resolve) → **defers** softly: `{ generated: false,
-  reason: 'deferred', recipe }`, the caller prints `manualMigrationSteps()`.
+  reason: 'deferred', recipe, unresolved }`, the caller prints `manualMigrationSteps()`
+  mid-log and the closing summary repeats it as numbered next step 1
+  (`formatClosingSummary`, both `crouton config` and `crouton generate`, #1742).
+  Bare `extends` specs resolve with ESM conditions (`exsolve`), so import-only
+  layers like `@fyit/crouton-admin` no longer trigger a false deferral.
 - **drizzle-kit error** → `{ reason: 'generate-failed', detail }` → non-zero.
 
 The scaffolded `drizzle.config.ts` (`tmplDrizzleConfig`) calls

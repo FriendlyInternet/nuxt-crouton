@@ -1232,7 +1232,7 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<MigrationOutcome | null> {
   // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
   // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
   // branch and emit an import to a collection that does not exist, turning a local, obvious
@@ -1267,7 +1267,7 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
 
   if (dryRun) {
     printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
-    return
+    return null
   }
 
   // Check for required modules/dependencies (writes nuxt.config.ts — never in a dry run)
@@ -1312,8 +1312,9 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
   await updateLayerAndRootConfigs({ layer, collection, config, cases })
 
   // Create database table if requested
+  let migration: MigrationOutcome | null = null
   if (!noDb) {
-    await runDatabaseSetup([{ name: collection, layer }], force)
+    migration = await runDatabaseSetup([{ name: collection, layer }], force)
   }
 
   // Update collection registry
@@ -1333,6 +1334,7 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
   }
 
   console.log(`\n✓ Successfully generated collection '${cases.plural}' in layer '${layer}'`)
+  return migration
 }
 
 interface PostGenerationOptions {
@@ -1350,7 +1352,7 @@ interface PostGenerationOptions {
 // WS2). Throws on a HARD failure (duplicate table / drizzle error) so the bin
 // exits non-zero + prints a recipe; a SOFT deferral (unresolvable extends) prints
 // its recipe and returns (exit 0).
-async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
+async function runMigrationStep(appDir: string = process.cwd()): Promise<MigrationOutcome> {
   let result
   try {
     result = await generateMigrations(appDir)
@@ -1363,12 +1365,12 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
   }
   if (result.generated) {
     console.log(`\n✓ Database migration generated`)
-    return
+    return { deferred: false, recipe: [], unresolved: [] }
   }
   if (result.reason === 'deferred') {
     console.log(`\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
     for (const step of result.recipe) console.log(`     ${step}`)
-    return
+    return { deferred: true, recipe: result.recipe, unresolved: result.unresolved }
   }
   console.error(`\n✗ Database migration was NOT generated`)
   if (result.detail) console.error(`  ${result.detail}`)
@@ -1378,7 +1380,7 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
 
 // The one database step for both paths: schema index → translations_ui → migration.
 // Throws on any failure so the CLI exits non-zero.
-async function runDatabaseSetup(allCollections: Array<{ name: string; layer: string }>, force: boolean): Promise<void> {
+async function runDatabaseSetup(allCollections: Array<{ name: string; layer: string }>, force: boolean): Promise<MigrationOutcome> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DATABASE SETUP`)
   console.log(`${'═'.repeat(60)}\n`)
@@ -1400,7 +1402,7 @@ async function runDatabaseSetup(allCollections: Array<{ name: string; layer: str
 
   // Generate the migration once for all collections — no Nuxt process (#1445 WS2).
   console.log(`\nRunning database migration...`)
-  await runMigrationStep()
+  return await runMigrationStep()
 }
 
 // Setup the CSS @source directive for Tailwind.
@@ -1486,8 +1488,9 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   const { allCollections, config, dryRun, noDb, force } = opts
 
   // Update schema index for all collections and run migration once (unless disabled)
+  let migration: MigrationOutcome | null = null
   if (!noDb && !dryRun && allCollections.length > 0) {
-    await runDatabaseSetup(allCollections, force)
+    migration = await runDatabaseSetup(allCollections, force)
   }
 
   // Setup CSS @source directive for Tailwind
@@ -1502,7 +1505,7 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  ALL DONE!`)
   console.log(`${'═'.repeat(60)}\n`)
-  console.log(`Next step: Restart your Nuxt dev server\n`)
+  console.log(`${formatClosingSummary(migration).join('\n')}\n`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1617,6 +1620,34 @@ async function applyPackageConfiguration(config: Record<string, any>, options: R
 // is the one source of truth for the fallback (#1450).
 export function resolveDialect(config: Record<string, any> | null | undefined): string {
   return config?.dialect || 'sqlite'
+}
+
+/** What the migration step did — carried up to the closing summary (#1742). */
+export interface MigrationOutcome {
+  deferred: boolean
+  recipe: string[]
+  unresolved: string[]
+}
+
+// The closing "next steps" lines of `crouton config` / `crouton generate`. A
+// soft-deferred migration is easy to miss mid-log, and missing it means deploying
+// an app with no migrations — so it is restated here as numbered step 1 (#1742).
+// `null` = no migration step ran (noDb / dry run).
+export function formatClosingSummary(outcome: MigrationOutcome | null): string[] {
+  const restart = 'Restart your Nuxt dev server'
+  if (!outcome || !outcome.deferred) return [`Next step: ${restart}`]
+  const commands = outcome.recipe
+    .map(step => step.replace(/^cd .+? && /, '').replace(/\s+#.*$/, '').trim())
+    .filter(Boolean)
+  const command = commands.length > 0 ? commands.join(' && ') : 'pnpm db:generate'
+  const why = outcome.unresolved.length > 0
+    ? `layers not yet resolved: ${outcome.unresolved.join(', ')}`
+    : 'layers not yet resolved'
+  return [
+    'Next steps:',
+    `  1. ${command}   (migration was deferred — ${why})`,
+    `  2. ${restart}`
+  ]
 }
 
 // Generate one collection entry from the enhanced config format. Returns the
@@ -1856,7 +1887,7 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
   await pruneDanglingCollectionRefs({ dryRun: args.dryRun })
 
   // Proceed with generation
-  await writeScaffold({ ...args, fields })
+  const migration = await writeScaffold({ ...args, fields })
 
   // Generate the type + query registries for type-safe CRUD composables
   if (!args.dryRun) {
@@ -1865,6 +1896,6 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     console.log(`\n${'═'.repeat(60)}`)
     console.log(`  ALL DONE!`)
     console.log(`${'═'.repeat(60)}\n`)
-    console.log(`Next step: Restart your Nuxt dev server\n`)
+    console.log(`${formatClosingSummary(migration).join('\n')}\n`)
   }
 }
