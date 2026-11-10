@@ -714,7 +714,7 @@ and **error paths** (invalid body → rejected before any write, missing id para
 
 ## Default Layout (generate → POC, #709)
 
-After collections are generated, `runPostGeneration` runs the **deterministic
+After collections are generated, `runPostGeneration` runs, **for an app that extends `@fyit/crouton-layout`**, the **deterministic
 layout pass** (`lib/compose-layout.ts` → `@fyit/crouton-layout`'s `composeDefaultLayout`)
 and writes **`crouton.layout.json`** at the app root: a `layout_configs`-format
 tree that arranges the generated collections into a good default — **calendar-primary**
@@ -727,9 +727,9 @@ side-by-side split falls back to a vertical stack.
 (row id `default`), so a freshly seeded POC boots with a real, data-bound layout
 instead of a blank canvas — editable in `CroutonLayout` (the layout is **data**,
 not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
-The seed only does this for an app that **extends `@fyit/crouton-layout`** — the generator
-writes `crouton.layout.json` for every app, but the table exists only where that layer is
-migrated, so for any other app the file is skipped with a log line (#2249).
+The seed only does this for an app that **extends `@fyit/crouton-layout`** — both halves
+are opt-in: the generator writes `crouton.layout.json` only for such an app (otherwise it prints
+`Skipped default layout (layout not enabled)`), and the seed skips any leftover file (#2249, #2282).
 
 ## Output Location
 

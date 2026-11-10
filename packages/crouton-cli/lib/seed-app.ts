@@ -237,7 +237,7 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
  * layout for the POC's single seeded team; multi-team seeding is out of scope here.
  *
  * Only for an app that extends `@fyit/crouton-layout`: the generator writes the file
- * for every app, but `layout_configs` exists only where that layer is migrated (#2249).
+ * only for such apps; a leftover file elsewhere is skipped (#2249, #2282).
  */
 // Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
 // fallow-ignore-next-line complexity
