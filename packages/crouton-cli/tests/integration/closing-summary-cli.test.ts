@@ -82,4 +82,29 @@ describe('closing summary lists a postponed migration (#1742)', () => {
     const res = await runCLI(['config'], dir)
     expectDeferredClosing(res)
   }, 150_000)
+
+  // #1742 review: once layers resolve, an app with NO db:generate script
+  // (fixtures/minimal and friends) must keep the soft deferral + exit 0 — not
+  // hard-fail on pnpm's "Missing script: db:generate".
+  it('crouton config on an app with resolvable layers but no db:generate script defers, exit 0', async () => {
+    writeFileSync(join(dir, 'nuxt.config.ts'),
+      'export default defineNuxtConfig({ extends: [\'@fyit/crouton-core\'] })\n')
+    writeFileSync(join(dir, 'crouton.config.js'), `export default {
+  collections: [{ name: 'widgets', fieldsFile: './schema.json' }],
+  dialect: 'sqlite',
+  targets: [{ layer: 'shop', collections: ['widgets'] }]
+}
+`)
+    const res = await runCLI(['config'], dir)
+    const out = res.stdout
+    expect(res.exitCode, `stderr:\n${res.stderr}\nstdout:\n${out}`).toBe(0)
+    expect(out).toContain('↻ Migration deferred — the app has no db:generate script')
+    expect(`${out}${res.stderr}`).not.toContain('Database migration was NOT generated')
+
+    const tail = out.slice(out.lastIndexOf('ALL DONE!') + 'ALL DONE!'.length)
+    const lines = tail.split('\n').map(l => l.trim()).filter(l => l && !/^═+$/.test(l))
+    expect(lines[0]).toBe('Next steps:')
+    expect(lines[1]).toMatch(/^1\. .*db:generate.*no db:generate script/)
+    expect(lines[2]).toBe('2. Restart your Nuxt dev server')
+  }, 150_000)
 })

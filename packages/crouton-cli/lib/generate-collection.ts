@@ -20,6 +20,7 @@ import { validateRefTargets } from './utils/validate-ref-targets.ts'
 import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type OwnedRefTarget } from './utils/owned-collections.ts'
 import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
+import type { DeferralCause } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { pruneDanglingCollectionRefs } from './utils/prune-dangling-collections.ts'
 import { getAllLayers, getAllCollectionsInLayer } from './utils/layer-discovery.ts'
@@ -1368,9 +1369,11 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<Migrati
     return { deferred: false, recipe: [], unresolved: [] }
   }
   if (result.reason === 'deferred') {
-    console.log(`\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
+    console.log(result.cause === 'no-db-generate-script'
+      ? `\n↻ Migration deferred — the app has no db:generate script:`
+      : `\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
     for (const step of result.recipe) console.log(`     ${step}`)
-    return { deferred: true, recipe: result.recipe, unresolved: result.unresolved }
+    return { deferred: true, cause: result.cause, recipe: result.recipe, unresolved: result.unresolved }
   }
   console.error(`\n✗ Database migration was NOT generated`)
   if (result.detail) console.error(`  ${result.detail}`)
@@ -1625,6 +1628,8 @@ export function resolveDialect(config: Record<string, any> | null | undefined): 
 /** What the migration step did — carried up to the closing summary (#1742). */
 export interface MigrationOutcome {
   deferred: boolean
+  /** Set when deferred; absent reads as 'unresolved-layers'. */
+  cause?: DeferralCause
   recipe: string[]
   unresolved: string[]
 }
@@ -1636,6 +1641,13 @@ export interface MigrationOutcome {
 export function formatClosingSummary(outcome: MigrationOutcome | null): string[] {
   const restart = 'Restart your Nuxt dev server'
   if (!outcome || !outcome.deferred) return [`Next step: ${restart}`]
+  if (outcome.cause === 'no-db-generate-script') {
+    return [
+      'Next steps:',
+      '  1. Add "db:generate": "drizzle-kit generate" to package.json scripts, then run pnpm db:generate   (migration was deferred — the app has no db:generate script)',
+      `  2. ${restart}`
+    ]
+  }
   const commands = outcome.recipe
     .map(step => step.replace(/^cd .+? && /, '').replace(/\s+#.*$/, '').trim())
     .filter(Boolean)

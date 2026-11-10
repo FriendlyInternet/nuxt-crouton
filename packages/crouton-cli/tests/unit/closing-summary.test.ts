@@ -38,4 +38,13 @@ describe('formatClosingSummary', () => {
     expect(step).not.toContain('cd ')
     expect(step).not.toContain('#')
   })
+
+  it('(e) deferred for a missing db:generate script → step 1 says to add the script', () => {
+    const lines = formatClosingSummary({ deferred: true, cause: 'no-db-generate-script', recipe: [], unresolved: [] })
+    expect(lines[0]).toBe('Next steps:')
+    expect(lines[1]).toMatch(/^ {2}1\. Add "db:generate".*pnpm db:generate/)
+    expect(lines[1]).toContain('no db:generate script')
+    expect(lines[1]).not.toContain('layers not yet resolved')
+    expect(lines[2]).toBe('  2. Restart your Nuxt dev server')
+  })
 })

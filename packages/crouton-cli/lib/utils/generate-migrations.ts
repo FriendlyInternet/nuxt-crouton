@@ -7,6 +7,8 @@
 // gone — see the epic brief for why.
 
 import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import consola from 'consola'
 
 import { detectPackageManager } from './detect-package-manager.ts'
@@ -48,9 +50,15 @@ export async function prepareSchemaForMigration(appDir: string): Promise<Prepare
   return { paths, unresolved }
 }
 
+/**
+ * Why a migration was soft-deferred: a declared layer did not resolve, or the
+ * app has no `db:generate` script to run drizzle-kit with (#1742).
+ */
+export type DeferralCause = 'unresolved-layers' | 'no-db-generate-script'
+
 export type GenerateMigrationsResult
   = | { generated: true, reason?: undefined, detail?: undefined }
-    | { generated: false, reason: 'deferred', recipe: string[], unresolved: string[], detail?: undefined }
+    | { generated: false, reason: 'deferred', cause: DeferralCause, recipe: string[], unresolved: string[], detail?: undefined }
     | { generated: false, reason: 'generate-failed', detail?: string }
 
 /**
@@ -71,7 +79,24 @@ export async function generateMigrations(
   // Soft stop: a declared layer couldn't be resolved → generating now would
   // silently omit its tables. Defer with the recipe rather than ship a partial.
   if (unresolved.length > 0) {
-    return { generated: false, reason: 'deferred', recipe: manualMigrationSteps(appDir), unresolved }
+    return { generated: false, reason: 'deferred', cause: 'unresolved-layers', recipe: manualMigrationSteps(appDir), unresolved }
+  }
+
+  // Soft stop: no `db:generate` script to run (an app not scaffolded by
+  // `crouton init`). Running it would only fail with "Missing script" — defer
+  // with the recipe, exit 0, as these apps always did before their layers
+  // resolved (#1742).
+  if (!hasScript(appDir, 'db:generate')) {
+    return {
+      generated: false,
+      reason: 'deferred',
+      cause: 'no-db-generate-script',
+      recipe: [
+        `add "db:generate": "drizzle-kit generate" to the scripts in ${join(appDir, 'package.json')}`,
+        'pnpm db:generate'
+      ],
+      unresolved: []
+    }
   }
 
   // Generate via the app's own db:generate — drizzle-kit reads the runtime-
@@ -91,6 +116,16 @@ export async function generateMigrations(
 
   consola.success('Generated migrations')
   return { generated: true }
+}
+
+function hasScript(appDir: string, script: string): boolean {
+  const pkgPath = join(appDir, 'package.json')
+  if (!existsSync(pkgPath)) return false
+  try {
+    return typeof JSON.parse(readFileSync(pkgPath, 'utf-8'))?.scripts?.[script] === 'string'
+  } catch {
+    return false
+  }
 }
 
 function runScriptCommand(pm: 'pnpm' | 'yarn' | 'npm', script: string): [string, string[]] {
