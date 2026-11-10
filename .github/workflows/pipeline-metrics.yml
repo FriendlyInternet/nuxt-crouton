@@ -1,0 +1,69 @@
+name: Pipeline metrics (collect + roll up run history)
+
+# Copies workflow-run and job history into the `pipeline-data` branch under metrics/ and
+# rolls it up into metrics/latest.json (#3679). Hourly because a busy day adds ~6,000 job
+# lookups; each run is capped and picks up where the last stopped. See scripts/metrics/README.md.
+# Workflow-change: new hourly metrics collector (owner merges).
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: 'Max GitHub API calls this run may use'
+        default: '1500'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pipeline-metrics
+  cancel-in-progress: false
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # No fallback to the built-in token: it cannot push and gets only 1,000 calls an hour.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .github/workflows
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: pipeline-data
+          path: data
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Collect run + job history
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          MAX_CALLS: ${{ inputs.max_calls || '1500' }}
+        run: node scripts/metrics/collect.mjs --data data --workflows .github/workflows --max-calls "$MAX_CALLS"
+
+      - name: Publish collected files
+        run: node scripts/metrics/publish.mjs --data data --message "data(metrics): collect"
+
+      - name: Roll up
+        run: node scripts/metrics/rollup.mjs --data data
+
+      - name: Publish roll-up
+        run: node scripts/metrics/publish.mjs --data data --message "data(metrics): rollup"
