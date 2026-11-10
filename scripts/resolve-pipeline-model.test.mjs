@@ -44,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the six the workflows use', () => {
-  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan', 'decompose'])
+test('VALID_TIERS is exactly the seven the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan', 'decompose', 'build'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file
@@ -97,4 +97,26 @@ test('decomposer PI_MODEL and run record both read the decompose tier (#3670)', 
   assert.match(wf, /MODEL_TIER: decompose\b/)
   assert.doesNotMatch(wf, /MODEL_TIER: default\b/)
   assert.equal(tierModel('decompose'), 'claude-opus-5-5')
+})
+
+test('build tier resolves to its configured model (#3693)', () => {
+  assert.equal(resolveModel({ build: 'claude-opus-5-5' }, 'build'), 'claude-opus-5-5')
+  assert.throws(() => resolveModel({ build: 'x' }, 'builder'), /tier must be one of/)
+})
+
+test('the committed config resolves build to claude-opus-5-5 (#3693)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const cfg = JSON.parse(readFileSync('.claude/pipeline-models.json', 'utf8'))
+  assert.equal(resolveModel(cfg, 'build'), 'claude-opus-5-5')
+})
+
+test('worker PI_MODEL and run record read the build tier (#3693)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { tierModel } = await import('./eval-ledger/record-run.mjs')
+  const wf = readFileSync('.github/workflows/work-issue-pidev.yml', 'utf8')
+  assert.match(wf, /resolve-pipeline-model\.mjs build/)
+  assert.equal((wf.match(/steps\.model\.outputs\.build \}\}/g) || []).length, 2)
+  assert.doesNotMatch(wf, /steps\.model\.outputs\.default/)
+  assert.match(wf, /MODEL_TIER: "\$\{\{ inputs\.mode == 'plan' && 'plan' \|\| 'build' \}\}"/)
+  assert.equal(tierModel('build'), 'claude-opus-5-5')
 })
