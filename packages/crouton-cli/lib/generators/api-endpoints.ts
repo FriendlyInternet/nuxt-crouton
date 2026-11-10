@@ -128,6 +128,25 @@ ${ownerSetup}
 })`
 }
 
+/**
+ * Import names + call lines for the write-time reference checks (#3378 same-team records,
+ * #1958 person fields must be team members). `lead`/`trail` wrap each call so POST and PATCH
+ * keep their own spacing. Split out to keep the endpoint generators small.
+ */
+function buildReferenceAsserts(data: Record<string, any>, prefixedPascalCase: string, lead: string, trail: string) {
+  const checks: Array<{ name: string, comment: string, args: string }> = []
+  if (collectTeamRefFields(data).length > 0) {
+    checks.push({ name: `assert${prefixedPascalCase}References`, comment: 'Referenced records must belong to this team (#3378)', args: 'team.id, body' })
+  }
+  if (collectPersonRefFields(data).length > 0) {
+    checks.push({ name: `assert${prefixedPascalCase}TeamMembers`, comment: 'Person fields must be members of this team (#1958)', args: 'event, team.id, body' })
+  }
+  return {
+    assertImport: checks.map(c => `, ${c.name}`).join(''),
+    assertCall: checks.map(c => `${lead}  // ${c.comment}\n  await ${c.name}(${c.args})${trail}`).join(''),
+  }
+}
+
 export function generatePostEndpoint(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { singular, pascalCase, pascalCasePlural, layerPascalCase, layer, plural, fields } = data
   const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
@@ -163,16 +182,7 @@ export function generatePostEndpoint(data: Record<string, any>, config: Record<s
     : ''
 
   // Generate imports based on hierarchy needs
-  const hasTeamRefs = collectTeamRefFields(data).length > 0
-  const assertName = `assert${prefixedPascalCase}References`
-  const hasPersonRefs = collectPersonRefFields(data).length > 0
-  const membersName = `assert${prefixedPascalCase}TeamMembers`
-  const assertImport = (hasTeamRefs ? `, ${assertName}` : '') + (hasPersonRefs ? `, ${membersName}` : '')
-  const assertCall = (hasTeamRefs
-    ? `\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)\n`
-    : '') + (hasPersonRefs
-    ? `\n  // Person fields must be members of this team (#1958)\n  await ${membersName}(event, team.id, body)\n`
-    : '')
+  const { assertImport, assertCall } = buildReferenceAsserts(data, prefixedPascalCase, '\n', '\n')
   const imports = hasHierarchy
     ? `import { create${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'
 import { nanoid } from 'nanoid'`
@@ -260,16 +270,7 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
 
   // Add imports based on translation needs
   const queriesPath = '../../../../database/queries'
-  const hasTeamRefs = collectTeamRefFields(data).length > 0
-  const assertName = `assert${prefixedPascalCase}References`
-  const hasPersonRefs = collectPersonRefFields(data).length > 0
-  const membersName = `assert${prefixedPascalCase}TeamMembers`
-  const assertImport = (hasTeamRefs ? `, ${assertName}` : '') + (hasPersonRefs ? `, ${membersName}` : '')
-  const assertCall = (hasTeamRefs
-    ? `\n\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)`
-    : '') + (hasPersonRefs
-    ? `\n\n  // Person fields must be members of this team (#1958)\n  await ${membersName}(event, team.id, body)`
-    : '')
+  const { assertImport, assertCall } = buildReferenceAsserts(data, prefixedPascalCase, '\n\n', '')
   const imports = hasTranslations
     ? `import { update${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'`
     : `import { update${prefixedPascalCase}${assertImport} } from '${queriesPath}'`

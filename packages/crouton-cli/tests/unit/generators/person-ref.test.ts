@@ -7,7 +7,8 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { transformSync } from 'esbuild'
+// Node's built-in type stripper (no extra dependency) turns the generated TS into runnable JS.
+import { stripTypeScriptTypes } from 'node:module'
 import { generateFormComponent } from '../../../lib/generators/form-component.ts'
 import { generateListComponent } from '../../../lib/generators/list-component.ts'
 import { generateQueries, buildPersonRefCheck } from '../../../lib/generators/database-queries.ts'
@@ -41,7 +42,7 @@ const mk = (fields: any[]) => ({ ...base, fields: withComponent(fields) })
 
 describe('person field only stores a member of the caller team', () => {
   const code = buildPersonRefCheck([person, personArr], 'MainTasks').replace('export ', '')
-  const js = transformSync(code, { loader: 'ts' }).code
+  const js = stripTypeScriptTypes(code)
   const members: Record<string, string[]> = { teamA: ['alice', 'bob'], teamB: ['mallory'] }
   function setup() {
     const calls: Array<[string, string]> = []
