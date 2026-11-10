@@ -8,10 +8,26 @@ const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > -1 
 const mcpUrl = arg('mcp-url', 'https://crouton.pmcp.dev/mcp')
 const model = arg('model', 'claude-sonnet-5-5')
 const out = arg('out')
+const questionsFile = arg('questions', new URL('./questions.json', import.meta.url).pathname)
 const key = process.env.ANTHROPIC_API_KEY
 if (!key) { console.error('ANTHROPIC_API_KEY is required'); process.exit(2) }
 
-const { questions } = JSON.parse(readFileSync(new URL('./questions.json', import.meta.url), 'utf8'))
+const { questions } = JSON.parse(readFileSync(questionsFile, 'utf8'))
+
+// Real CLI command names, read from the CLI's own `subCommands` map (no hand-kept list).
+function realCliCommands() {
+  const src = readFileSync(new URL('../../packages/crouton-cli/bin/crouton-generate.js', import.meta.url), 'utf8')
+  const block = src.match(/subCommands:\s*\{([\s\S]*?)\n\s*\}/)?.[1] ?? ''
+  const names = [...block.matchAll(/^\s*(?:'([\w-]+)'|([\w-]+))\s*:/gm)].map(m => m[1] || m[2])
+  if (!names.length) throw new Error('could not read CLI subCommands')
+  return names
+}
+
+// The same validator behind the MCP validate_schema tool (needs `pnpm --filter @fyit/crouton-mcp build`).
+const ctx = { cliCommands: realCliCommands() }
+if (questions.some(q => q.kind === 'schema')) {
+  ctx.validateSchema = (await import('../../packages/crouton-mcp/dist/tools/validate-schema.js')).handleValidateSchema
+}
 
 async function ask(question) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -31,7 +47,7 @@ async function ask(question) {
 const results = []
 for (const q of questions) {
   let r
-  try { r = scoreAnswer(q, await ask(q.question)) } catch (e) { r = { id: q.id, pass: false, failures: [String(e)] } }
+  try { r = scoreAnswer(q, await ask(q.question), ctx) } catch (e) { r = { id: q.id, pass: false, failures: [String(e)] } }
   console.log(`${r.pass ? 'PASS' : 'FAIL'} ${q.id}${r.pass ? '' : ' — ' + r.failures.join('; ')}`)
   results.push(r)
 }

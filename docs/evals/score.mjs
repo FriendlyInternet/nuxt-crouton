@@ -18,16 +18,40 @@ export function extractJsonBlocks(text) {
   return blocks
 }
 
-/** @returns {{ id: string, pass: boolean, failures: string[] }} */
-export function scoreAnswer(q, answer) {
+/** Commands used as `crouton <cmd>` inside code spans/fences of an answer. */
+export function extractCliCommands(text) {
+  const out = []
+  for (const m of text.matchAll(/```[\s\S]*?```|`[^`\n]+`/g)) {
+    for (const c of m[0].matchAll(/(?:^|[\s`$])crouton(?:-generate)?\s+([a-z][\w-]*)/g)) out.push(c[1])
+  }
+  return out
+}
+
+/**
+ * @param ctx.validateSchema real validator (handleValidateSchema from crouton-mcp); required for kind:'schema'
+ * @param ctx.cliCommands real CLI command names; when given, every `crouton <cmd>` in the answer must be one
+ * @returns {{ id: string, pass: boolean, failures: string[] }}
+ */
+export function scoreAnswer(q, answer, ctx = {}) {
   const failures = []
   for (const n of q.mustMention || []) if (!has(answer, n)) failures.push(`missing: ${n}`)
   for (const n of q.mustNotMention || []) if (has(answer, n)) failures.push(`forbidden: ${n}`)
+  if (ctx.cliCommands) {
+    for (const c of new Set(extractCliCommands(answer))) {
+      if (!ctx.cliCommands.includes(c)) failures.push(`unknown CLI command: crouton ${c}`)
+    }
+  }
   if (q.kind === 'schema') {
-    const blocks = extractJsonBlocks(answer)
+    const blocks = extractJsonBlocks(answer).filter(b => b && typeof b === 'object' && !Array.isArray(b))
     if (!blocks.length) failures.push('no parseable JSON schema in answer')
-    const keys = new Set(blocks.flatMap(b => [...collectKeys(b)]))
-    for (const k of q.schemaForbiddenKeys || []) if (keys.has(k)) failures.push(`schema uses forbidden key: ${k}`)
+    else if (typeof ctx.validateSchema !== 'function') failures.push('no schema validator supplied')
+    else {
+      const results = blocks.map(b => ctx.validateSchema({ schema: b }))
+      const valid = blocks.filter((_, i) => results[i].valid)
+      if (!valid.length) failures.push(`no valid schema in answer: ${results.flatMap(r => r.errors).join('; ')}`)
+      const keys = new Set(valid.flatMap(b => [...collectKeys(b)]))
+      for (const k of q.schemaForbiddenKeys || []) if (keys.has(k)) failures.push(`schema uses forbidden key: ${k}`)
+    }
   }
   return { id: q.id, pass: failures.length === 0, failures }
 }
