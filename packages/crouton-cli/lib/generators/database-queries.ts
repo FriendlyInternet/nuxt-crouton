@@ -1,6 +1,8 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -556,15 +558,16 @@ function buildArrayRefProcessing(
 // pagination. When `limit` is provided the function returns { items, total }
 // (total via a parallel count(*)); otherwise it returns the bare array — so
 // existing non-paginated callers are unaffected (enforced by the overloads).
-function buildGetAllOpts(filterFields: string[], tableName: string): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
-  const fkTypeFields = filterFields.map(f => `${f}?: string`).join('; ')
+function buildGetAllOpts(filterFields: string[], tableName: string, own = false): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
+  // list: 'own' adds an ownerId option (callers pass it for non-admins only)
+  const fkTypeFields = [...filterFields.map(f => `${f}?: string`), ...(own ? ['ownerId?: string'] : [])].join('; ')
   return {
     overload1Opts: `opts?: {${fkTypeFields ? ` ${fkTypeFields} ` : ''}}`,
     overload2Opts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit: number; offset?: number }`,
     implOpts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit?: number; offset?: number } = {}`,
     filterConditions: filterFields
       .map(f => `\n  if (opts.${f}) conditions.push(eq(tables.${tableName}.${f}, opts.${f}))`)
-      .join('')
+      .join('') + (own ? `\n  if (opts.ownerId) conditions.push(eq(tables.${tableName}.owner, opts.ownerId))` : '')
   }
 }
 
@@ -588,6 +591,7 @@ interface QueryTemplateContext {
   overload2Opts: string
   implOpts: string
   filterConditions: string
+  own: boolean
 }
 
 // Imports + schema imports header of the generated queries file
@@ -643,7 +647,7 @@ ${ctx.jsonFieldProcessing}${ctx.postQueryProcessing}
 function buildGetByIdsQuery(ctx: QueryTemplateContext): string {
   return `
 
-export async function get${ctx.prefixedPascalCasePlural}ByIds(teamId: string, ${ctx.camelCase}Ids: string[]) {
+export async function get${ctx.prefixedPascalCasePlural}ByIds(teamId: string, ${ctx.camelCase}Ids: string[]${ctx.own ? ', ownerId?: string' : ''}) {
   const db = useDB()
 ${ctx.aliasDefinitions}
   const ${ctx.camelCasePlural} = await (db as any)
@@ -652,7 +656,8 @@ ${ctx.aliasDefinitions}
     .where(
       and(
         eq(tables.${ctx.tableName}.teamId, teamId),
-        inArray(tables.${ctx.tableName}.id, ${ctx.camelCase}Ids)
+        inArray(tables.${ctx.tableName}.id, ${ctx.camelCase}Ids)${ctx.own ? `,
+        ...(ownerId ? [eq(tables.${ctx.tableName}.owner, ownerId)] : [])` : ''}
       )
     )${ctx.orderByClause ? `
     .orderBy(${ctx.orderByClause})` : ''}
@@ -800,7 +805,7 @@ export function generateQueries(
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
-  const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
+  const ascImport = hasSortable ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
     ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
@@ -813,7 +818,15 @@ export function generateQueries(
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName)
+  const access = resolveAccess(data)
+  const own = access.list === 'own'
+  // The runtime registry reads this to refuse public exposure of 'own' collections (#3380)
+  const accessExport = Object.keys(access).length === 0
+    ? ''
+    : `
+
+export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const`
+  const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
     tableName,
@@ -833,8 +846,21 @@ export function generateQueries(
     overload1Opts,
     overload2Opts,
     implOpts,
-    filterConditions
+    filterConditions,
+    own
   }
+
+  // Team-scoped reference check (#3378) — only emitted when the collection has such refs
+  const teamRefFields = collectTeamRefFields(data)
+  const assertRefsQuery = teamRefFields.length === 0
+    ? ''
+    : `
+
+export async function assert${prefixedPascalCase}References(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.${getTargetLayerCamelCase(f.refTarget)}${pascal(f.refTarget)}, value: data.${f.name} },`).join('\n')}
+  ])
+}`
 
   return buildFileHeader(ctx)
     + buildGetAllQuery(ctx)
@@ -842,6 +868,8 @@ export function generateQueries(
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + accessExport
+    + assertRefsQuery
     + treeQueries
     + sortableQueries
 }

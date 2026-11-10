@@ -69,7 +69,7 @@ export function getAllRooms(): Map<string, CollabRoomData> {
  * to trigger real-time UI refreshes without going through the client.
  */
 export function signalCollectionChange(teamId: string, collection: string): void {
-  const roomId = `team:${teamId}:sync`
+  const roomId = `${teamId}:team:${teamId}:sync`
   const room = getRoom('sync', roomId)
   if (!room) return
 

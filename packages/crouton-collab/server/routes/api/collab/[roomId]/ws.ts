@@ -15,7 +15,7 @@ import { encodeStateAsUpdate, applyUpdate } from 'yjs'
 import { useNitroApp } from 'nitropack/runtime'
 import { getOrCreateRoom } from '../../../../utils/collabRoomStore'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
-import { getMembership } from '@fyit/crouton-auth/server/utils/team'
+import { getMembership, getTeamById, getTeamBySlug } from '@fyit/crouton-auth/server/utils/team'
 import type { H3Event } from 'h3'
 
 /**
@@ -139,9 +139,9 @@ export default defineWebSocketHandler({
     const pathParts = url.pathname.split('/')
     // URL pattern: /api/collab/[roomId]/ws
     const collabIndex = pathParts.indexOf('collab')
-    const roomId = pathParts[collabIndex + 1] || 'default'
+    const rawRoomId = pathParts[collabIndex + 1] || 'default'
     const roomType = url.searchParams.get('type') || 'generic'
-    const teamId = url.searchParams.get('teamId') || null
+    const teamIdent = url.searchParams.get('teamId') || null
 
     // --- Auth check: require a valid session ---
     if (!peer.request) {
@@ -157,14 +157,20 @@ export default defineWebSocketHandler({
       return
     }
 
-    // --- Team membership check ---
-    if (teamId) {
-      const membership = await getMembership(event, teamId, session.user.id)
-      if (!membership) {
-        peer.close(4403, 'Forbidden')
-        return
-      }
+    // --- Team membership check (team is required; rooms are team-scoped, #3134) ---
+    if (!teamIdent) {
+      peer.close(4400, 'teamId required')
+      return
     }
+    const team = (await getTeamById(event, teamIdent)) ?? (await getTeamBySlug(event, teamIdent))
+    const membership = team ? await getMembership(event, team.id, session.user.id) : null
+    if (!team || !membership) {
+      peer.close(4403, 'Forbidden')
+      return
+    }
+    const teamId = team.id
+    // Team-prefixed so two teams never share a room
+    const roomId = `${teamId}:${rawRoomId}`
 
     const room = getOrCreateRoom(roomType, roomId)
     const wasEmpty = room.peers.size === 0

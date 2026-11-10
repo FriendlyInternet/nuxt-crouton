@@ -46,7 +46,6 @@ const _mainVenuesConfig = {
   name: 'mainVenues',
   layer: 'main',
   apiPath: 'main-venues',
-  componentName: 'MainVenuesForm',
   defaultValues: {
     name: '',
     street: '',

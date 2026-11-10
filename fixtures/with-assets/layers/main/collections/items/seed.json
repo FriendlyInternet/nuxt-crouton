@@ -1,0 +1,18 @@
+{
+  "table": "main_items",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "done": true
+    },
+    {
+      "name": "Sample name 2",
+      "done": false
+    },
+    {
+      "name": "Sample name 3",
+      "done": true
+    }
+  ]
+}

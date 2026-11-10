@@ -47,7 +47,7 @@ export function deriveApps({ changedFiles = [], apps = [], text = '' } = {}) {
 }
 
 const NO_APP_LINE = 'Nothing to open: this changes how GitHub and the pipeline behave. Check it on the epic itself.'
-const METADATA_LINE = /^(?:Blocked-by:|Dedup-checked:|Packages-approved:|Workflow-change:|Parent:|Refs\s+#|Closes\s+#|<!--)/i
+const METADATA_LINE = /^(?:Blocked-by:|Unblocks:|Dedup-checked:|Packages-approved:|Workflow-change:|Parent:|Refs\s+#|Closes\s+#|<!--)/i
 
 export function sectionChecks(body, heading) {
   const re = new RegExp(`^#{2,4}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,4}\\s|\\n---|$(?![\\s\\S]))`, 'im')
@@ -63,6 +63,11 @@ export function sectionChecks(body, heading) {
 /** True when the body has at least one step under a `How to test` heading (not the `Done when` fallback). */
 export function hasTestSteps(body = '') {
   return sectionChecks(body, '(?:🧪\\s*)?How to test').length > 0
+}
+
+/** One line for a PR body pointing at the issue's 🧪 steps; says so when there are none (#3036). */
+export function howToTestPointer(issue, body = '') {
+  return hasTestSteps(body) ? `How to test: see #${issue} → 🧪` : `How to test: #${issue} has no 🧪 steps`
 }
 
 /**

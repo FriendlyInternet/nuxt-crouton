@@ -15,6 +15,7 @@ import { ref, watch, type Ref } from 'vue'
 import { tryOnScopeDispose } from '@vueuse/core'
 import type { CollabAwarenessState } from '../types/collab'
 import { generateUserColor } from '../utils/avatar'
+import { useCollabTeamId } from './useCollabTeamId'
 
 export interface FormCollabConnection {
   stateId: string
@@ -100,9 +101,13 @@ export function useFormCollabPresence(): UseFormCollabPresenceReturn {
     const roomId = `${collection}-${itemId}`
     const roomType = collection
 
+    // Rooms are team-scoped; without a team there is no room to join
+    const teamId = useCollabTeamId()
+    if (!teamId) return
+
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/api/collab/${roomId}/ws?type=${roomType}`
+      const url = `${protocol}//${window.location.host}/api/collab/${roomId}/ws?type=${roomType}&teamId=${encodeURIComponent(teamId)}`
 
       const ws = new WebSocket(url)
 
@@ -184,6 +189,29 @@ export function useFormCollabPresence(): UseFormCollabPresenceReturn {
     activeConnections.value.clear()
   }
 
+  // Connect presence for open edit states; drop connections for closed ones
+  // fallow-ignore-next-line complexity
+  function syncStates(states: any) {
+    if (!states) return
+    const activeStateIds = new Set<string>()
+
+    for (const state of states) {
+      if (!isActiveEdit(state)) continue
+      activeStateIds.add(state.id)
+      if (!activeConnections.value.has(state.id)) {
+        setupPresence(state.id, state.collection, state.activeItem.id)
+      }
+    }
+
+    for (const [stateId] of activeConnections.value) {
+      if (!activeStateIds.has(stateId)) cleanupConnection(stateId)
+    }
+  }
+
+  function isActiveEdit(state: any): boolean {
+    return state.action === 'update' && !!state.isOpen && !!state.activeItem?.id && !!state.collection
+  }
+
   // Watch for crouton states - only if useCrouton is available
   try {
     const crouton = useCrouton()
@@ -192,31 +220,7 @@ export function useFormCollabPresence(): UseFormCollabPresenceReturn {
       // Watch for slideover state changes
       watch(
         () => crouton.croutonStates.value,
-        (states) => {
-          if (!states) return
-
-          // Find active edit states and their IDs to track what should be connected
-          const activeStateIds = new Set<string>()
-
-          for (const state of states) {
-            // Only track update actions with an active item ID
-            if (state.action === 'update' && state.isOpen && state.activeItem?.id && state.collection) {
-              activeStateIds.add(state.id)
-
-              // Set up presence if not already connected
-              if (!activeConnections.value.has(state.id)) {
-                setupPresence(state.id, state.collection, state.activeItem.id)
-              }
-            }
-          }
-
-          // Clean up connections for states that are no longer active
-          for (const [stateId] of activeConnections.value) {
-            if (!activeStateIds.has(stateId)) {
-              cleanupConnection(stateId)
-            }
-          }
-        },
+        syncStates,
         { deep: true, immediate: true }
       )
     }

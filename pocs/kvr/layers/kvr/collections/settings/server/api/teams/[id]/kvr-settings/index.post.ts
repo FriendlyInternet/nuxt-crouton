@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)
 
   // Exclude id field to let the database generate it
-  const { id, ...dataWithoutId } = body
+  const dataWithoutId = { ...body }
 
   const dbTimer = timing.start('db')
   const result = await createKvrSetting({

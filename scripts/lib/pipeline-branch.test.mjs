@@ -103,3 +103,34 @@ test('every workflow the fix-bot listens to actually exists by that name', () =>
     assert.ok(realNames.has(name), `fix-ci-on-failure listens for "${name}", which no workflow is named — it would never fire`)
   }
 })
+
+/* ── #3305: the trigger's `branches:` filter must cover the job guard ──────────
+ * A branch filter that is narrower than `isPipelineBranch` silently drops runs (#2089). */
+function globToRe(g) {
+  const re = g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*')
+  return new RegExp(`^${re}$`)
+}
+function branchFilter() {
+  const src = readFileSync(join(repoRoot, '.github/workflows/fix-ci-on-failure.yml'), 'utf8')
+  const m = src.match(/^\s+branches:\s*\[([^\]]+)\]/m)
+  assert.ok(m, 'fix-ci-on-failure.yml workflow_run needs a `branches:` filter')
+  return m[1].split(',').map((s) => s.trim().replace(/^["']|["']$/g, ''))
+}
+const matches = (ref) => branchFilter().some((g) => globToRe(g).test(ref))
+
+test('workflow_run branches filter has a `<prefix>**` pattern for every pipeline prefix', () => {
+  const pats = branchFilter()
+  for (const p of PIPELINE_BRANCH_PREFIXES) assert.ok(pats.includes(`${p}**`), `missing '${p}**'`)
+})
+
+test('filter accepts pipeline branches (incl. slashes) and rejects the rest', () => {
+  for (const r of ['work-3111', 'work-12/x']) assert.equal(matches(r), true, r)
+  for (const r of ['main', 'epic/1-x', 'fix/work-1']) assert.equal(matches(r), false, r)
+})
+
+test('filter is a superset of the job guard (isPipelineBranch)', () => {
+  for (const r of ['work-1', 'work-12/x', 'work-abc']) {
+    assert.equal(isPipelineBranch(r), true)
+    assert.equal(matches(r), true, `${r} passes the guard but not the filter`)
+  }
+})

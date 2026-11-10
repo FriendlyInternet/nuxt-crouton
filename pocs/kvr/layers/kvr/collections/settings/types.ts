@@ -44,7 +44,7 @@ export interface KvrSetting {
 }
 
 export type KvrSettingFormData = z.infer<typeof kvrSettingSchema>
-export type NewKvrSetting = Omit<KvrSetting, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>
+export type NewKvrSetting = Omit<KvrSetting, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id?: string, createdBy?: string, updatedBy?: string }
 
 // Props type for the Form component
 export interface KvrSettingFormProps {

@@ -149,6 +149,7 @@ export function useCollectionSyncSignal(
     const connection = useCollabConnection({
       roomId,
       roomType: 'sync',
+      teamId: id,
       autoConnect: false  // We'll connect manually
     })
 

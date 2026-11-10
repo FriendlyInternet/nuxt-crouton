@@ -13,7 +13,7 @@ const AUTHOR = /^(app\/)?(claude|nuxt-harness)(\[bot\])?$/
 export function isPipelinePr(pr) {
   return (
     /^work-\d+$/.test(pr?.headRefName ?? '') &&
-    /^epic\//.test(pr?.baseRefName ?? '') &&
+    /^(epic\/|main$)/.test(pr?.baseRefName ?? '') &&
     pr?.state === 'OPEN' &&
     pr?.isDraft !== true &&
     AUTHOR.test(pr?.author?.login ?? '')

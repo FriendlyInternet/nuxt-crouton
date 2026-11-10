@@ -85,6 +85,8 @@ export default {
     // Build a new URL that the DO expects: /{action}?{original query params}
     const doUrl = new URL(request.url)
     doUrl.pathname = `/${action}`
+    // The DO trusts only the path-derived key (overwrites anything the client sent)
+    doUrl.searchParams.set('roomKey', roomKey)
 
     // Forward the request to the Durable Object
     const doRequest = new Request(doUrl.toString(), request)

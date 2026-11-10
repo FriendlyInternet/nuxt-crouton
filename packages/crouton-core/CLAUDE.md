@@ -48,6 +48,7 @@ export default defineNuxtConfig({
 | `shared/seed/` | Composable seeding contract + runner core (`SeedProvider`, `SeedContext`, `buildUpsert`, `seedId`, `collectSeedSql`) — exported at `@fyit/crouton-core/shared/seed` |
 | `shared/utils/query-registry.ts` | The process-wide server query registry (#2309): `registerCollectionQueries` (a package's Nitro plugin merges its collections in), `resolveQueryRegistry` (package entries + the app's generated `queryRegistry`, app wins), `collectionQueries` (one entry from a lazy queries import + the `getAll<Name>`/`get<Name>ByIds` stem). Exported at `@fyit/crouton-core/shared/utils/query-registry`; consumed by crouton-pages' public collection endpoints |
 | `server/utils/encryption.ts` | AES-256-GCM encryption for storing third-party secrets at rest |
+| `server/utils/teamRefs.ts` | `assertRefsInTeam(db, teamId, refs)` — 400 `Invalid reference: <field>` when a referenced id (single or array) is missing or belongs to another team; generated queries expose `assert<X>References` that calls it, and generated POST/PATCH call that before the write (#3378) |
 | `server/utils/tiptap-renderer.ts` | Server-side TipTap JSON to HTML conversion (auto-imported by Nitro) |
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
@@ -73,6 +74,7 @@ export default defineNuxtConfig({
 | `app/components/TabsPanel.vue` | `CroutonTabsPanel` — **the** shell for a tabbed admin section (#2380); use it instead of hand-rolling `UDashboardPanel` + `UDashboardNavbar` + `UNavigationMenu`. Props: `title`, `tabs` (`NavigationMenuItem[]`, flat or grouped), `maxWidth?` (default `max-w-5xl`, left-aligned), `fill?` (default `false`; opt-in — bounds the body to the panel height with `overflow-hidden` so the page owns its scrolling; used only by the bookings overview). Default slot = the tab's page (`<NuxtPage />`). One top-bar row: sidebar toggle/collapse, title (screen-reader only on phones), full-label tabs that swipe sideways and auto-scroll the active tab into view. **Gutter convention:** the body adds no padding — each tab page owns it with `p-4 sm:p-6` (16/24px = the top bar's inset; `CroutonCollectionViewer` already matches). Consumers: crouton-admin `team.vue`, crouton-bookings `bookings.vue`, crouton-sales `sales.vue`. |
 | `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. On mobile the detail opens in a full-screen `USlideover`; the shell renders a **back bar** to dismiss it (there's no tappable backdrop). A consumer that folds its own back affordance into the detail (pages' editor toolbar) sets **`content-provides-back`** to suppress that bar and uses the **`onClose`** content-slot prop to deselect. |
 | `app/layouts/admin.vue`, `super-admin.vue` | Mount `<CroutonUserPill placement="fixed" />` (crouton-auth; no-op stub in core) top-right; on phones the layouts add end padding to navbar roots (`[data-slot=root]:has(>[data-slot=right])`) so the pill never covers page tabs (#2466). The old bottom `AdminStatusBar`, `useAdminStatusBar()` and the sidebar `UserMenu` footer are gone (#2424) — status comes from `useCroutonStatus()` / `useNotify()`. |
+| `app/composables/useCroutonStatus.ts` | Status feed. `refreshTeamEvents(force)` merges crouton-events rows into the feed (returns the count of new teammate rows, `null` when skipped/failed). With collab, `onRemoteChange()` (fed by `crouton:remoteChange`, debounced 1 s) refreshes at once and retries once after 2 s only if no new teammate row came back (never on request errors). `mergeTeamEvents(..., ownFloor)` keeps 3 of the 5 feed slots for own changes (own = local entries + fetched rows of the current user); with collab a separate 3-row own fetch runs beside the team fetch. |
 | `app/composables/useNotify.ts` | The ONE notification sink (#2465). Every level goes to the status feed when the app has the pill (`appConfig.crouton.status === 'pill'`, set by crouton-auth) — decided from config, never from mount state; no pill → toast; `target: 'toast'` opts out. `useNotify().add()` is a drop-in for `useToast().add()`: success/info/warning/error/primary-coloured toasts without `actions` go to the feed, anything else (neutral, action buttons) stays a toast. Don't call `useToast().add()` for status messages. |
 | `app/composables/useTeamContext.ts` | Team context access (teamId, teamSlug from route or auth) |
 | `app/composables/useImageCrop.ts` | Cropperjs v2 composable for image cropping |
@@ -98,11 +100,11 @@ export default defineNuxtConfig({
 | `app/composables/useCroutonRedirects.ts` | Built-in redirects collection config, Zod schema, columns |
 | `app/components/RedirectsList.vue` | `CroutonRedirectsList` — Admin list with path display and status badge |
 | `app/components/RedirectsForm.vue` | `CroutonRedirectsForm` — Create/edit form for redirects |
-| `server/middleware/redirects.ts` | Server middleware — matches incoming paths against active redirects |
+| `server/middleware/redirects.ts` | Server middleware — team-scoped: team from custom domain or `/<slug>` (looked up per request, no slug cache), falling back to `auth.teams.defaultTeamSlug` for single-team apps; only same-site targets |
 | `server/utils/redirectCache.ts` | In-memory redirect cache with thundering herd protection |
 | `server/database/schema/redirects.ts` | Drizzle schema for `crouton_redirects` table |
 | `server/database/queries/redirects.ts` | CRUD queries + `getActiveCroutonRedirects()` for cache |
-| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API for managing redirects |
+| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — admin-only (`requireTeamAdmin`); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
 | `types/redirects.ts` | `CroutonRedirect`, `CroutonRedirectFormData`, `NewCroutonRedirect` types |
 
 ## Architecture
@@ -233,6 +235,9 @@ collection:{name}:{queryJSON}     # List queries
 collection-item:{name}:{id}       # Single items
 ```
 
+The list key is a reactive `computed`, so changing a query on one instance changes
+that instance's key (two lists with different filters never share data).
+
 Mutations invalidate ALL cache keys for the collection.
 
 ## Server Pagination
@@ -249,7 +254,7 @@ const { items, page, pageSize, total, pageCount, paginationData, setPage }
 ```
 
 - `page`/`pageSize` are writable refs folded into the request query (changing `pageSize`
-  resets to page 1). They become part of the cache key, so each page caches separately.
+  resets to page 1). They become part of the cache key, so the key changes with the page and each page caches separately.
 - `total` prefers the server's `{ total }`, falling back to array length (so it also works
   against a non-paginated endpoint). `pageCount = ceil(total / pageSize)`.
 - `paginationData` is shaped for `<CroutonCollection :pagination-data>` and is `null` when

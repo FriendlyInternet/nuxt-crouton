@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { createMainGallery } from '../../../../database/queries'
+import { createMainGallery, assertMainGalleryReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { z } from 'zod'
 
@@ -17,6 +17,9 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
+
+  // Referenced records must belong to this team (#3378)
+  await assertMainGalleryReferences(team.id, body)
 
   // body is the validated payload (id is not part of the schema) — the database generates the id
   const dataWithoutId = body

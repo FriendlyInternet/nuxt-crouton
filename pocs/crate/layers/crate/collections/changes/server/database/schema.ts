@@ -27,7 +27,9 @@ export const crateChanges = sqliteTable('crate_changes', {
   teamId: text('teamId').notNull(),
   owner: text('owner').notNull(),
   groupId: text('groupId').notNull(),
-  trackId: text('trackId').notNull(),
+  // A change touches a track (tags) or a pile (#2211: name/place snapshot) — exactly one is set.
+  trackId: text('trackId'),
+  pileId: text('pileId'),
   before: jsonColumn('before').$default(() => (null)),
   after: jsonColumn('after').$default(() => (null)),
   summary: text('summary'),

@@ -16,11 +16,14 @@
  *   emailsSent?: number
  * }
  */
-import { eq, and, gte, lte, sum } from 'drizzle-orm'
+import { eq, and, gte, lte, sum, sql, inArray } from 'drizzle-orm'
+import { nanoid } from 'nanoid'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
-import { FULL_DAY_ID, fullDayConflict } from '../../../../../app/utils/full-day'
+import { fullDayConflict } from '../../../../../app/utils/full-day'
+import { fitsCapacity } from '../../../../../app/utils/capacity'
+import { dayRange, validateSelection, guardSql, guardedInsert, runAtomic, parseSlots, type Selection } from '../../../../utils/booking-capacity'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../../../../collections/locations/server/database/schema'
 import { isBookingEmailEnabled, resolveTranslatedField, resolveSlotLabels } from '../../../../utils/booking-emails'
@@ -34,6 +37,8 @@ interface CartItem {
   locationId: string
   locationTitle: string
   date: string
+  /** Calendar day the customer picked (YYYY-MM-DD); wins over `date` */
+  day?: string
   slotIds?: string[]
   slotLabels?: string[]
   groupId?: string | null
@@ -71,6 +76,15 @@ export default defineEventHandler(async (event) => {
 
   // --- Monthly booking limit enforcement ---
   // Collect unique (locationId, month) pairs from the cart items
+  const bookingTz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
+  // The picked calendar day wins over the browser-local instant (#3379)
+  const ranges = new Map<CartItem, NonNullable<ReturnType<typeof dayRange>>>()
+  for (const item of body.bookings) {
+    const r = dayRange(item.day || item.date, bookingTz)
+    if (!r) throw createError({ status: 400, statusText: 'Invalid date' })
+    ranges.set(item, r)
+    item.date = new Date(r.storedTs * 1000).toISOString()
+  }
   const locationMonthPairs = new Map<string, Set<string>>()
   for (const item of body.bookings) {
     const itemDate = new Date(item.date)
@@ -96,6 +110,9 @@ export default defineEventHandler(async (event) => {
           translations: bookingsLocations.translations,
           slots: bookingsLocations.slots,
           maxBookingsPerMonth: bookingsLocations.maxBookingsPerMonth,
+          quantity: bookingsLocations.quantity,
+          offerFullDay: bookingsLocations.offerFullDay,
+          inventoryMode: bookingsLocations.inventoryMode,
         })
         .from(bookingsLocations)
         .where(
@@ -105,6 +122,20 @@ export default defineEventHandler(async (event) => {
         )
     : []
   const dbLocationMap = new Map(allLocations.map((l: any) => [l.id, l]))
+
+  // --- Validate items (#3139, #3379): known team location, sane quantity, real slots ---
+  const selections = new Map<CartItem, Selection>()
+  for (const item of body.bookings) {
+    const dbLocation = dbLocationMap.get(item.locationId) as any
+    if (!dbLocation) {
+      throw createError({ status: 404, statusText: 'Location not found' })
+    }
+    const sel = validateSelection(dbLocation, item.slotIds, item.quantity)
+    selections.set(item, sel)
+    item.quantity = sel.quantity
+    item.isInventoryMode = sel.inventory
+    item.slotIds = sel.slot ?? []
+  }
 
   // Check limits for each location
   if (locationIds.length > 0) {
@@ -224,46 +255,6 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // --- Full-day exclusivity (#2261) ---
-  // The built-in full day can't share a location+date with any other slot —
-  // whether booked already or earlier in this same batch.
-  const slotItems = body.bookings.filter(item => item.slotIds?.length && !item.slotIds.includes('inventory'))
-  if (slotItems.some(item => item.slotIds!.includes(FULL_DAY_ID))) {
-    const takenByKey = new Map<string, string[]>()
-    for (const item of slotItems) {
-      const key = `${item.locationId}|${item.date}`
-      if (!takenByKey.has(key)) {
-        const rows = await db
-          .select({ slot: bookingsBookings.slot })
-          .from(bookingsBookings)
-          .where(
-            and(
-              eq(bookingsBookings.location as any, item.locationId),
-              eq(bookingsBookings.status as any, 'active'),
-              eq(bookingsBookings.date as any, new Date(item.date)),
-            ),
-          )
-        const existing: string[] = []
-        for (const row of rows) {
-          if (typeof row.slot === 'string') {
-            try { existing.push(...JSON.parse(row.slot)) } catch { existing.push(row.slot) }
-          } else if (Array.isArray(row.slot)) {
-            existing.push(...(row.slot as string[]))
-          }
-        }
-        takenByKey.set(key, existing)
-      }
-      const taken = takenByKey.get(key)!
-      if (fullDayConflict(item.slotIds!, taken)) {
-        throw createError({
-          status: 409,
-          statusText: 'The full day can\'t be combined with another slot on this date',
-        })
-      }
-      taken.push(...item.slotIds!)
-    }
-  }
-
   // Transform cart items to database records (one row per cart item, quantity stored on the row)
   const now = new Date()
   const bookingsToInsert = body.bookings.map((item) => ({
@@ -283,11 +274,47 @@ export default defineEventHandler(async (event) => {
   }))
 
   try {
-    // Insert all bookings in a single transaction
+  // Read-only pre-check so the 409 can name the location and date. It counts the
+  // cart's own earlier items too. The SQL guard below is what holds under races.
+  const dayCache = new Map<string, { quantity: number, slotIds: string[] }[]>()
+  for (const item of body.bookings) {
+    const r = ranges.get(item)!
+    const sel = selections.get(item)!
+    const dbLocation = dbLocationMap.get(item.locationId) as any
+    const key = `${item.locationId}|${r.dayStartTs}`
+    if (!dayCache.has(key)) {
+      const found = await db.all(sql`SELECT quantity, slot FROM bookings_bookings WHERE teamId = ${team.id} AND location = ${item.locationId} AND date >= ${r.dayStartTs} AND date < ${r.dayEndTs} AND status <> 'cancelled'`) as { quantity: number, slot: string }[]
+      dayCache.set(key, found.map(f => ({ quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
+    }
+    const taken = dayCache.get(key)!
+    const clash = !sel.inventory && fullDayConflict(sel.slotIds, taken.flatMap(t => t.slotIds ?? []).filter(Boolean))
+    if (clash || !fitsCapacity(sel.plan, taken, sel.quantity)) {
+      throw createError({ status: 409, statusText: `No room left at "${dbLocation.title}" on ${item.day || item.date}` })
+    }
+    taken.push({ quantity: sel.quantity, slotIds: sel.slotIds })
+  }
+
+  // One atomic batch: every row goes in through a statement that checks capacity
+  // itself (two requests racing for the last place can't both win, #3139), and
+  // if any row is refused the whole cart rolls back (#3379).
+  const nowTs = Math.floor(now.getTime() / 1000)
+  const ids: string[] = []
+  const statements = bookingsToInsert.map((row, i) => {
+    const item = body.bookings[i]!
+    const id = nanoid()
+    ids.push(id)
+    const sel = selections.get(item)!
+    const guard = guardSql({ teamId: team.id, locationId: item.locationId, range: ranges.get(item)!, selection: sel })
+    return guardedInsert({
+      id, teamId: team.id, owner: user.id, location: row.location, storedTs: ranges.get(item)!.storedTs,
+      slot: sel.slot, group: row.group, quantity: row.quantity, status: row.status, by: user.id, nowTs,
+    }, guard)
+  })
+  await runAtomic(db, statements, 'No room left for one of the bookings; nothing was booked')
     const created = await db
-      .insert(bookingsBookings)
-      .values(bookingsToInsert as any)
-      .returning()
+      .select()
+      .from(bookingsBookings)
+      .where(inArray(bookingsBookings.id as any, ids))
 
     const nitroApp = useNitroApp()
 
@@ -399,11 +426,11 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
-    console.error('Failed to create batch bookings:', msg, error)
+    if ((error as any)?.statusCode || (error as any)?.status) throw error
+    console.error('Failed to create batch bookings:', error)
     throw createError({
       status: 500,
-      statusText: `Failed to create bookings: ${msg}`,
+      statusText: 'Failed to create bookings',
     })
   }
 })

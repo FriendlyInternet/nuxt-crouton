@@ -33,10 +33,12 @@ interface ManifestConfigOption {
   description?: string
   default: unknown
   options?: Array<{ value: string; label: string }>
+  runtimeConfig?: 'public' | 'server' | 'both'
 }
 
 interface Manifest {
   id: string
+  runtimeConfigKey?: string
   configuration?: Record<string, ManifestConfigOption>
 }
 
@@ -49,6 +51,8 @@ export interface PromptedConfig {
   runtimeConfig?: { server: Record<string, unknown>; public: Record<string, unknown> }
   /** .env hints to display after generation */
   envHints?: string[]
+  /** Non-fatal notes, e.g. the package did not declare its runtimeConfig key */
+  warnings?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -156,21 +160,53 @@ async function promptForConfiguration(
 }
 
 /**
+ * The package declares the key it reads; only guess when it does not (#3398).
+ */
+function resolveRuntimeConfigKey(featureKey: string, manifest?: Manifest): { rtKey: string; warnings: string[] } {
+  if (manifest?.runtimeConfigKey) return { rtKey: manifest.runtimeConfigKey, warnings: [] }
+  const rtKey = toRuntimeConfigKey(featureKey)
+  const msg = `[crouton] ${manifest?.id ?? featureKey} declares configuration but no runtimeConfigKey — writing runtimeConfig.${rtKey}; declare runtimeConfigKey in its crouton.manifest.ts`
+  console.warn(msg)
+  return { rtKey, warnings: [msg] }
+}
+
+/**
+ * Each setting goes where the package reads it (default: both sides).
+ */
+function placeRuntimeConfig(
+  rtKey: string,
+  inner: Record<string, unknown>,
+  manifest?: Manifest,
+): { server: Record<string, unknown>; public: Record<string, unknown> } {
+  const server: Record<string, unknown> = {}
+  const pub: Record<string, unknown> = {}
+  for (const [dotPath, option] of Object.entries(manifest?.configuration ?? {})) {
+    const value = getNestedValue(inner, dotPath)
+    if (value === undefined) continue
+    const placement = option.runtimeConfig ?? 'both'
+    if (placement !== 'public') setNestedValue(server, dotPath, value)
+    if (placement !== 'server') setNestedValue(pub, dotPath, value)
+  }
+  return {
+    server: Object.keys(server).length ? { [rtKey]: server } : {},
+    public: Object.keys(pub).length ? { [rtKey]: pub } : {},
+  }
+}
+
+/**
  * Build runtimeConfig and .env hints from a prompted config object.
  */
-function buildRuntimeAndEnvHints(
+export function buildRuntimeAndEnvHints(
   featureKey: string,
   configObj: Record<string, unknown>,
-): Pick<PromptedConfig, 'runtimeConfig' | 'envHints'> {
-  const rtKey = toRuntimeConfigKey(featureKey)
+  manifest?: Manifest,
+): Pick<PromptedConfig, 'runtimeConfig' | 'envHints' | 'warnings'> {
   const inner = configObj.config as Record<string, unknown> | undefined
 
   if (!inner) return {}
 
-  const runtimeConfig = {
-    server: { [rtKey]: inner },
-    public: { [rtKey]: inner },
-  }
+  const { rtKey, warnings } = resolveRuntimeConfigKey(featureKey, manifest)
+  const runtimeConfig = placeRuntimeConfig(rtKey, inner, manifest)
 
   const envHints: string[] = []
 
@@ -182,7 +218,11 @@ function buildRuntimeAndEnvHints(
     )
   }
 
-  return { runtimeConfig, envHints: envHints.length > 0 ? envHints : undefined }
+  return {
+    runtimeConfig,
+    envHints: envHints.length > 0 ? envHints : undefined,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  }
 }
 
 /** The manifest's default answers, used when nobody can be asked (CI). */
@@ -233,9 +273,50 @@ export async function applyManifestConfiguration(config: CroutonConfig, extended
       featureKey,
       manifestId: manifest.id,
       configObject: configObj,
-      ...buildRuntimeAndEnvHints(featureKey, configObj),
+      ...buildRuntimeAndEnvHints(featureKey, configObj, manifest),
     })
   }
 
   return promptedConfigs
+}
+
+/** Character ranges of `//` and block comments in JS source (string-aware). */
+function commentRanges(src: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    const n = src[i + 1]
+    if (c === '"' || c === '\'' || c === '`') {
+      i++
+      while (i < src.length && src[i] !== c) i += src[i] === '\\' ? 2 : 1
+      i++
+    } else if (c === '/' && n === '/') {
+      const end = src.indexOf('\n', i)
+      const e = end === -1 ? src.length : end
+      ranges.push([i, e])
+      i = e
+    } else if (c === '/' && n === '*') {
+      const end = src.indexOf('*/', i + 2)
+      const e = end === -1 ? src.length : end + 2
+      ranges.push([i, e])
+      i = e
+    } else {
+      i++
+    }
+  }
+  return ranges
+}
+
+/**
+ * Rewrite `<featureKey>: true` into `<featureKey>: <configObject>` in
+ * crouton.config.js source — real properties only, never text inside comments.
+ */
+export function replaceFeatureFlag(source: string, featureKey: string, configObject: unknown): string {
+  const comments = commentRanges(source)
+  const configStr = JSON.stringify(configObject, null, 2).replace(/\n/g, '\n    ')
+  const pattern = new RegExp(`(\\b${featureKey}\\s*:\\s*)true`, 'g')
+  return source.replace(pattern, (match, prefix: string, offset: number) =>
+    comments.some(([s, e]) => offset >= s && offset < e) ? match : `${prefix}${configStr}`
+  )
 }
