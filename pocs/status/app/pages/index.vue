@@ -36,7 +36,8 @@ const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
 
-const loginHref = (app: string, i: ToTestItem) => loginHrefFor({ ...i, app })
+const origin = useRequestURL().origin
+const loginHref = (app: string, i: ToTestItem) => loginHrefFor({ ...i, app }, origin)
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })

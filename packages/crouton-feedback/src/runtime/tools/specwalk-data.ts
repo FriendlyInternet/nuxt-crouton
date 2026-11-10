@@ -83,12 +83,12 @@ export function selectorFor(hook: string): string {
 }
 
 /**
- * The sign-off you paste back to the agent: a `lgtm <id>` line for every ✅
- * (the C1 sign-off tokens the done-rule derives from), then the ⚠️ issues with
+ * The sign-off you paste back to the agent: an `ok <id>` line for every ✅
+ * (the sign-off tokens the done-rule derives from), then the ⚠️ issues with
  * their notes. Empty state is explicit so the export never reads as "all good".
  */
 export function exportText(walk: WalkEntry[], verdicts: VerdictMap, env = ''): string {
-  const ok = walk.filter(e => verdicts[e.id]?.verdict === 'works').map(e => `lgtm ${e.id}`)
+  const ok = walk.filter(e => verdicts[e.id]?.verdict === 'works').map(e => `ok ${e.id}`)
   const issues = walk
     .filter(e => verdicts[e.id]?.verdict === 'issue')
     .map(e => `⚠️ ${e.id}${verdicts[e.id]?.note ? ` — ${verdicts[e.id]!.note}` : ''}`)
@@ -102,6 +102,8 @@ export interface AdhocWalk {
   title: string
   app: string
   ref: string
+  /** Where Send result posts to (declared by the link); '' when absent or not a safe URL. */
+  result: string
   entries: WalkEntry[]
 }
 
@@ -116,6 +118,83 @@ function djb2(s: string): string {
 }
 
 const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
+
+const LOCAL = new Set(['localhost', '127.0.0.1'])
+
+/** `https:` URL (or `http:` on localhost) → itself; anything else → ''. */
+function safeResultUrl(v: unknown): string {
+  const raw = clip(v, 300)
+  try {
+    const u = new URL(raw)
+    if (u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL.has(u.hostname))) return u.href
+  } catch { /* not a URL */ }
+  return ''
+}
+
+/**
+ * Is it safe for THIS page to send the walk's notes to `resultUrl`? Only a sibling host
+ * (same last two labels: status.pmcp.dev ↔ velo.pmcp.dev) or local-to-local — a crafted
+ * link can't make the page post your notes to an outside host.
+ */
+export function isSendTarget(resultUrl: string, pageHostname: string): boolean {
+  let host: string
+  try { host = new URL(resultUrl).hostname } catch { return false }
+  if (LOCAL.has(host) && LOCAL.has(pageHostname)) return true
+  if (LOCAL.has(host) || LOCAL.has(pageHostname)) return false
+  const tail = (h: string) => h.split('.').slice(-2).join('.')
+  return tail(host) === tail(pageHostname)
+}
+
+export interface WalkResultPayload {
+  ref: string
+  steps: Array<{ text: string, verdict: Verdict, note?: string }>
+}
+
+/**
+ * The raw per-step verdicts for the status app's `buildWalkReply` (it owns the ok / not ok
+ * wording — not re-implemented here). null when the walk has no `ref`.
+ */
+export function walkResultPayload(entries: WalkEntry[], verdicts: VerdictMap, ref: string): WalkResultPayload | null {
+  if (!ref) return null
+  return {
+    ref,
+    steps: entries.map((e) => {
+      const v = verdicts[e.id]
+      return { text: e.behaviour, verdict: v?.verdict as Verdict, ...(v?.note ? { note: v.note } : {}) }
+    })
+  }
+}
+
+export interface SendOutcome { url?: string, error?: string, status?: number }
+
+/**
+ * One sender per walk: a second tap while sending, or after success, returns the first
+ * outcome without a second request. An error allows a retry.
+ */
+export function createResultSender(fetchImpl: typeof fetch = fetch) {
+  let inflight: Promise<SendOutcome> | null = null
+  return function send(url: string, payload: WalkResultPayload): Promise<SendOutcome> {
+    if (inflight) return inflight
+    const p: Promise<SendOutcome> = (async () => {
+      try {
+        const res = await fetchImpl(url, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        const body = await res.json().catch(() => null) as any
+        if (!res.ok) return { error: body?.statusMessage || body?.message || `HTTP ${res.status}`, status: res.status }
+        return { url: body?.data?.url || '' }
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) }
+      }
+    })()
+    inflight = p
+    p.then((r) => { if (r.error && inflight === p) inflight = null })
+    return p
+  }
+}
 
 /**
  * Parse + validate the `walk` URL param: base64url JSON `{ title, app, ref,
@@ -150,7 +229,7 @@ export function parseWalkParam(raw: unknown): AdhocWalk | null {
     })
   }
   if (!entries.length) return null
-  return { title: clip(data.title, 80) || 'Walk', app: clip(data.app, 60), ref: clip(data.ref, 60), entries }
+  return { title: clip(data.title, 80) || 'Walk', app: clip(data.app, 60), ref: clip(data.ref, 60), result: safeResultUrl(data.result), entries }
 }
 
 /**

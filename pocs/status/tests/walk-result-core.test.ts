@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildWalkReply } from '../server/utils/walk-result-core'
+import { buildWalkReply, allowedWalkOrigins } from '../server/utils/walk-result-core'
 
 describe('buildWalkReply', () => {
   it('all works → ok on the ref epic', () => {
@@ -21,5 +21,18 @@ describe('buildWalkReply', () => {
   it('rejects a bad ref and unmarked steps', () => {
     expect(buildWalkReply({ ref: 'abc', steps: [{ text: 'a', verdict: 'works' }] }).error).toBeTruthy()
     expect(buildWalkReply({ ref: '#1', steps: [{ text: 'a' }] }).error).toBeTruthy()
+  })
+})
+
+describe('allowedWalkOrigins', () => {
+  const cfg = { velo: { stagingUrl: 'https://velo.pmcp.dev/x' }, status: { stagingUrl: 'https://status.pmcp.dev' }, bad: { stagingUrl: 'nope' }, none: {} }
+  it('lists exact staging origins, never a wildcard', () => {
+    const o = allowedWalkOrigins(cfg)
+    expect(o).toEqual(['https://velo.pmcp.dev', 'https://status.pmcp.dev'])
+    expect(o.join()).not.toContain('*')
+  })
+  it('adds localhost only in dev', () => {
+    expect(allowedWalkOrigins(cfg).some(x => x.includes('localhost'))).toBe(false)
+    expect(allowedWalkOrigins(cfg, { dev: true })).toContain('http://localhost:3000')
   })
 })
