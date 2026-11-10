@@ -40,6 +40,7 @@
       "automerge-epic-subpr.yml",
       "handoff-sweep.yml",
       "on-pr-close.yml",
+      "owner-quiz.yml",
       "status.yml"
     ],
     "deploys": [

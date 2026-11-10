@@ -16,6 +16,7 @@ name: On comment
 #   close-epic      close-epic               close-epic-on-comment.yml
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
+#   quiz-reply      quiz-reply               NEW (#3715): the owner's answer to an epic quiz (owner-quiz.yml)
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
@@ -1170,6 +1171,33 @@ jobs:
           COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs
+
+  # (#3715) The owner's reply to an epic quiz: `1B 2A 3C` → a result comment; `2 code` → a dated
+  # line in the epic's `## Decisions`. Never resumes, approves or re-plans; changes no label.
+  quiz-reply:
+    needs: route
+    if: needs.route.outputs.kind == 'quiz-reply'
+    concurrency:
+      group: owner-quiz-reply-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+        with:
+          script: |
+            const { reply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/owner-quiz-run.mjs`)
+            await reply({ github, context, core }, { owner: process.env.OWNER_LOGIN })
 
   # Not routed by `kind`: a decision comment ("Decision: …", or "ok: <reason>" on a held plan) is
   # recognised by format in scripts/lib/decision-line.mjs and copied into the ticket's
