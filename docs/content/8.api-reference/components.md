@@ -533,6 +533,75 @@ WorkspaceSidebar - Generic sidebar for workspace layout Shows a searchable list 
 | `items` | `any[]` | no |  |
 | `pending` | `boolean` | no |  |
 
+## CroutonCollabEditingBadge
+
+CollabEditingBadge Stub No-op placeholder component when crouton-collab is not installed. Gets overridden by the real component from @fyit/crouton-collab. This prevents Vue warnings about unresolved components.
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `roomId` | `string` | no |  |
+| `roomType` | `string` | no |  |
+| `pollInterval` | `number` | no |  |
+| `size` | `string` | no |  |
+| `variant` | `string` | no |  |
+| `currentUserId` | `string` | no |  |
+
+## CroutonAssetsPicker
+
+CroutonAssetsPicker Stub Fallback when @fyit/crouton-assets is not installed. Renders nothing — the v-if/v-else in consumers switches to CroutonImageUpload. The real component (Picker.vue) is provided by crouton-assets with higher priority. Detection: use hasApp('assets') from useCroutonApps() — not resolveComponent().
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `modelValue` | `string` | no |  |
+| `collection` | `string` | no |  |
+| `crop` | `boolean \| { aspectRatio?: number }` | no |  |
+
+## CroutonEditorPreview
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | `string \| Record<string, any> \| null` | no |  |
+
+## CroutonEditorSimple
+
+CroutonEditorSimple Stub Fallback when nuxt-crouton-editor is not installed. Provides basic UEditor with toolbar.
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `modelValue` | `string \| null` | no |  |
+| `placeholder` | `string` | no |  |
+| `contentType` | `'html' \| 'markdown' \| 'json'` | no |  |
+| `editable` | `boolean` | no |  |
+| `showToolbar` | `boolean` | no |  |
+
+## CroutonMapsMap
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `center` | `[number, number]` | no |  |
+| `zoom` | `number` | no |  |
+| `style` | `string` | no |  |
+| `height` | `string` | no |  |
+| `width` | `string` | no |  |
+
+## CroutonMapsPreview
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `location` | `string \| { lat?: number; lng?: number; address?: string } \| null` | no |  |
+
+## CroutonUserPill
+
+CroutonUserPill Stub Fallback when @fyit/crouton-auth is not installed. Renders nothing — the real component is provided by crouton-auth at default priority.
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `showStatus` | `boolean` | no |  |
+| `compact` | `'auto' \| 'always' \| 'never'` | no |  |
+| `placement` | `'fixed' \| 'inline'` | no |  |
+| `extraItems` | `unknown[]` | no |  |
+| `useModal` | `boolean` | no |  |
+
 ## Components without props
 
 - `CroutonCollection`
@@ -545,3 +614,4 @@ WorkspaceSidebar - Generic sidebar for workspace layout Shows a searchable list 
 - `CroutonTableActions`
 - `CroutonTablePagination`
 - `CroutonTableSearch`
+- `CroutonAuthRouteModal`

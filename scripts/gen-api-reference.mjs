@@ -97,11 +97,15 @@ function propsOf(file) {
 
 function genComponents() {
   const dir = 'packages/crouton-core/app/components'
-  const files = readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.vue')).sort()
+  const files = [
+    ...readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.vue')),
+    ...readdirSync(join(ROOT, dir, 'stubs')).filter(f => f.endsWith('.vue')).map(f => 'stubs/' + f)
+  ].sort()
   let out = `---\ntitle: Components\ndescription: Props of every crouton-core component (generated from the code)\nicon: i-lucide-layout-grid\n---\n\n${HEADER(dir + '/*.vue')}\n# Components\n\nAuto-imported with the \`Crouton\` prefix (\`Table.vue\` → \`<CroutonTable>\`). Components without props are listed by name only.\n`
   const bare = []
   for (const f of files) {
-    const name = 'Crouton' + f.replace(/\.vue$/, '')
+    const base = f.replace(/\.vue$/, '').replace(/^stubs\//, '')
+    const name = base.startsWith('Crouton') ? base : 'Crouton' + base
     const r = propsOf(`${dir}/${f}`)
     if (!r || !r.props.length) { bare.push(name); continue }
     out += `\n## ${name}\n\n`
@@ -114,15 +118,47 @@ function genComponents() {
 }
 
 // ── composables ────────────────────────────────────────────────────────
-const isExported = st => ts.isFunctionDeclaration(st) && st.name && st.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)
-const exportedFunctions = s => s.statements.filter(isExported)
-function composableEntry(s, st, dir, f) {
+const hasMod = (st, kind) => st.modifiers?.some(m => m.kind === kind)
+const KW = ts.SyntaxKind
+// Exported functions, default-exported anonymous functions (named after the file),
+// `export default useX` and `export const useX = () => ...`.
+function exportedFunctions(s, file) {
+  const base = file.replace(/\.ts$/, '')
+  const out = []
+  const decls = new Map()
+  for (const st of s.statements) {
+    if (ts.isFunctionDeclaration(st) && st.name) decls.set(st.name.text, { name: st.name.text, node: st })
+    if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) decls.set(d.name.text, { name: d.name.text, node: d.initializer, doc: st })
+      }
+    }
+  }
+  const seen = new Set()
+  const add = (name, node, doc) => { if (!seen.has(name)) { seen.add(name); out.push({ name, node, doc: doc ?? node }) } }
+  for (const st of s.statements) {
+    if (ts.isFunctionDeclaration(st) && hasMod(st, KW.ExportKeyword)) {
+      add(st.name?.text ?? base, st)
+    } else if (ts.isVariableStatement(st) && hasMod(st, KW.ExportKeyword)) {
+      for (const d of st.declarationList.declarations) {
+        const e = decls.get(d.name.getText(s))
+        if (e && /^use[A-Z]/.test(e.name)) add(e.name, e.node, st)
+      }
+    } else if (ts.isExportAssignment(st) && ts.isIdentifier(st.expression)) {
+      const e = decls.get(st.expression.text)
+      if (e) add(e.name, e.node, e.doc)
+    }
+  }
+  return out
+}
+function composableEntry(s, e, dir, f) {
+  const st = e.node
   const params = st.parameters.map(p => p.getText(s).replace(/\s+/g, ' ')).join(', ')
   const ret = st.type ? `: ${st.type.getText(s).replace(/\s+/g, ' ')}` : ''
-  let out = `\n## ${st.name.text}\n\n`
-  const d = jsdoc(st)
+  let out = `\n## ${e.name}\n\n`
+  const d = jsdoc(e.doc)
   if (d) out += d.split('\n').filter(l => !l.trim().startsWith('@')).join('\n').trim().split(/\n\n/)[0] + '\n\n'
-  return out + `\`\`\`ts\n${st.name.text}(${params})${ret}\n\`\`\`\n\n_Source: \`${dir}/${f}\`_\n`
+  return out + `\`\`\`ts\n${e.name}(${params})${ret}\n\`\`\`\n\n_Source: \`${dir}/${f}\`_\n`
 }
 function genComposables() {
   const dir = 'packages/crouton-core/app/composables'
@@ -130,7 +166,7 @@ function genComposables() {
   let out = `---\ntitle: Composables\ndescription: Every exported crouton-core composable (generated from the code)\nicon: i-lucide-box\n---\n\n${HEADER(dir + '/*.ts')}\n# Composables\n\nAuto-imported. Signatures are read from the source; the description is the JSDoc above each function.\n`
   for (const f of files) {
     const s = sf(f, rd(`${dir}/${f}`))
-    for (const st of exportedFunctions(s)) out += composableEntry(s, st, dir, f)
+    for (const e of exportedFunctions(s, f)) out += composableEntry(s, e, dir, f)
   }
   return out
 }

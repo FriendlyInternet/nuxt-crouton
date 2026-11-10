@@ -71,22 +71,6 @@ useCollectionMutation(collection: K): CollectionMutationReturn<K>
 
 _Source: `packages/crouton-core/app/composables/useCollectionMutation.ts`_
 
-## useCollectionMutation
-
-```ts
-useCollectionMutation(collection: string): CollectionMutationReturnUntyped
-```
-
-_Source: `packages/crouton-core/app/composables/useCollectionMutation.ts`_
-
-## useCollectionMutation
-
-```ts
-useCollectionMutation(collection: string): CollectionMutationReturnUntyped
-```
-
-_Source: `packages/crouton-core/app/composables/useCollectionMutation.ts`_
-
 ## useCollectionQuery
 
 Query-based data fetching for collections
@@ -94,22 +78,6 @@ Replaces the old global state pattern with Nuxt's built-in cache
 
 ```ts
 useCollectionQuery(collection: K, options?: CollectionQueryOptions): Promise<CollectionQueryReturn<CollectionItem<K>>>
-```
-
-_Source: `packages/crouton-core/app/composables/useCollectionQuery.ts`_
-
-## useCollectionQuery
-
-```ts
-useCollectionQuery(collection: string, options?: CollectionQueryOptions): Promise<CollectionQueryReturn<any>>
-```
-
-_Source: `packages/crouton-core/app/composables/useCollectionQuery.ts`_
-
-## useCollectionQuery
-
-```ts
-useCollectionQuery(collection: string, options: CollectionQueryOptions = {}): Promise<CollectionQueryReturn<any>>
 ```
 
 _Source: `packages/crouton-core/app/composables/useCollectionQuery.ts`_
@@ -165,6 +133,14 @@ useCollections()
 ```
 
 _Source: `packages/crouton-core/app/composables/useCollections.ts`_
+
+## useCrouton
+
+```ts
+useCrouton()
+```
+
+_Source: `packages/crouton-core/app/composables/useCrouton.ts`_
 
 ## useCroutonApps
 
@@ -234,6 +210,14 @@ useCroutonCollectionsNav()
 
 _Source: `packages/crouton-core/app/composables/useCroutonCollectionsNav.ts`_
 
+## useCroutonError
+
+```ts
+useCroutonError()
+```
+
+_Source: `packages/crouton-core/app/composables/useCroutonError.ts`_
+
 ## useCroutonMutate
 
 Convenience wrapper for quick mutations without setup
@@ -252,6 +236,14 @@ useCroutonPagination()
 ```
 
 _Source: `packages/crouton-core/app/composables/useCroutonPagination.ts`_
+
+## useCroutonRedirects
+
+```ts
+useCroutonRedirects()
+```
+
+_Source: `packages/crouton-core/app/composables/useCroutonRedirects.ts`_
 
 ## useCroutonShortcuts
 

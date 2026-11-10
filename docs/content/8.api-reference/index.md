@@ -31,7 +31,11 @@ Complete reference documentation for all Nuxt Crouton APIs.
   Low-level APIs for advanced customization.
   ::
 
-  ::card{title="useCollectionItem" to="/api-reference/composables" icon="i-lucide-file"}
-  Single item fetching and management composable.
+  ::card{title="Field types" to="/api-reference/field-types" icon="i-lucide-database"}
+  Schema field types and the meta keys they accept, generated from the code.
+  ::
+
+  ::card{title="CLI" to="/api-reference/cli" icon="i-lucide-terminal"}
+  Every crouton CLI command and flag, generated from the code.
   ::
 ::

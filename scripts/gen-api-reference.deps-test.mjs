@@ -25,3 +25,10 @@ test('--check fails when a component prop is renamed', () => {
     writeFileSync(f, orig)
   }
 })
+
+test('composables page lists default-exported composables', () => {
+  const page = readFileSync(new URL('../docs/content/8.api-reference/composables.md', import.meta.url), 'utf8')
+  for (const n of ['useCrouton', 'useCroutonError', 'useCroutonRedirects', 'useCollections']) {
+    assert.match(page, new RegExp(`^## ${n}$`, 'm'))
+  }
+})
