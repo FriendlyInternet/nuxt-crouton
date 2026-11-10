@@ -20,4 +20,5 @@ jobs:
       - name: Redeploy the loop-station page with the new data
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # no checkout → gh can't infer the repo (#3672)
         run: gh workflow run deploy-pocs.yml --ref main -f app=loop-station -f refresh=true

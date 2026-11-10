@@ -33,7 +33,7 @@ concurrency:
 jobs:
   usage:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write # open an auto-merge data PR for usage.jsonl (#3490)
       actions: write  # list + download trace artifacts
@@ -55,37 +55,12 @@ jobs:
         with:
           node-version: 22
 
-      # List this window's trace artifacts. `gh api` exits non-zero on API
-      # failure → the job fails loudly instead of recording a false quiet week.
-      - name: List trace artifacts (last 7 days)
+      # Lists (stops at the cutoff, retries bad pages) + downloads 8 at a time. A listing
+      # failure exits non-zero → the job fails loudly instead of recording a false quiet week.
+      - name: Fetch trace artifacts (last 7 days)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-            --jq ".artifacts[] | select((.name | startswith(\"loop-station-trace-\")) or (.name | startswith(\"pi-telemetry-\"))) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
-            > artifacts.txt
-          echo "$(wc -l < artifacts.txt) artifact(s) in window (cutoff ${CUTOFF})"
-
-      # Zero artifacts is fine (meta-only record downstream); download failures
-      # of individual artifacts are tolerated (an expired/corrupt one shouldn't
-      # sink the week), but we log what was dropped.
-      - name: Download traces
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p traces
-          COUNT=0; DROPPED=0
-          while read -r id name; do
-            [ -z "$id" ] && continue
-            if gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "traces/${name}.zip" \
-               && unzip -o -q "traces/${name}.zip" -d "traces/${name}"; then
-              COUNT=$((COUNT+1))
-            else
-              DROPPED=$((DROPPED+1)); echo "::warning::could not fetch artifact ${name} (${id})"
-            fi
-          done < artifacts.txt
-          echo "downloaded ${COUNT}, dropped ${DROPPED}"
+        run: node scripts/fetch-artifacts.mjs --prefix loop-station-trace- --prefix pi-telemetry- --days 7 --out traces
 
       - name: Aggregate into one usage record
         run: |
@@ -150,34 +125,11 @@ jobs:
         with:
           node-version: 22
 
-      # List recent candidate artifacts. A listing failure fails the job loudly
-      # (an outage must not read as "no defects"), mirroring the usage rollup.
-      - name: List finding-candidate artifacts (last 14 days)
+      # A listing failure fails the job loudly (an outage must not read as "no defects").
+      - name: Fetch finding-candidate artifacts (last 14 days)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          CUTOFF=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-            --jq ".artifacts[] | select(.name | startswith(\"loop-station-finding-\")) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
-            > artifacts.txt
-          echo "$(wc -l < artifacts.txt) candidate artifact(s) in window (cutoff ${CUTOFF})"
-
-      - name: Download candidates
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p candidates
-          COUNT=0; DROPPED=0
-          while read -r id name; do
-            [ -z "$id" ] && continue
-            if gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "candidates/${name}.zip" \
-               && unzip -o -q "candidates/${name}.zip" -d "candidates/${name}"; then
-              COUNT=$((COUNT+1))
-            else
-              DROPPED=$((DROPPED+1)); echo "::warning::could not fetch artifact ${name} (${id})"
-            fi
-          done < artifacts.txt
-          echo "downloaded ${COUNT}, dropped ${DROPPED}"
+        run: node scripts/fetch-artifacts.mjs --prefix loop-station-finding- --days 14 --out candidates
 
       # Resolve each candidate's PR merge state → a { "<pr>": "merged|closed|open" } map.
       - name: Build PR status map
