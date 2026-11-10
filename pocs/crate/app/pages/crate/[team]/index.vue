@@ -218,6 +218,10 @@ function pick(track: CrateTrack) {
   listOpen.value = false
   show(track, true)
 }
+/** Recent changes → put that track on the deck (no autoplay). */
+function pickRecent(id: string) {
+  pickRecentTrack(id, tracks.value, t => show(t, false), () => toast.add({ title: 'That track is gone' }))
+}
 const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : { inbox: 'Inbox', unchecked: 'To check', uploads: 'Uploads' }[topTray.value])
 
 // ── Your uploads (#2237): rename or delete the track on the deck ──
@@ -376,7 +380,7 @@ function startNewPile() {
       {{ ghost.name }}
     </div>
 
-    <CrateRecentChanges v-model:open="recentOpen" :api="crate.api" @pick="(id) => { const t = tracks.find(x => x.id === id); if (t) show(t, false); else toast.add({ title: 'That track is gone' }) }" />
+    <CrateRecentChanges v-model:open="recentOpen" :api="crate.api" @pick="pickRecent" />
 
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
 
