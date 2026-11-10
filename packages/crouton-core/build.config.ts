@@ -6,14 +6,14 @@ export default defineBuildConfig({
       input: 'app/composables',
       outDir: 'dist/app/composables',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     {
       input: 'server/database/schema',
       outDir: 'dist/server/database/schema',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     }
   ],

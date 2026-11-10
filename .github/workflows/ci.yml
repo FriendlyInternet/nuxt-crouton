@@ -101,6 +101,13 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
+      # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
+      - name: Run scripts/*.deps-test.mjs
+        run: node --test scripts/*.deps-test.mjs
+
+      - name: Check package dist ships no test files
+        run: node scripts/check-dist-no-tests.mjs
+
       # tar, not a glob upload: a multi-path glob artifact's root depends on the least common
       # ancestor, a tarball extracts to exactly packages/*/dist every time.
       - name: Pack dist
@@ -498,7 +505,7 @@ jobs:
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)

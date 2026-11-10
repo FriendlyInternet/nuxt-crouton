@@ -10,7 +10,9 @@
 // Pure and Node-core-only; the workflow fetches the facts (PR head/base/draft) and passes them in.
 //
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
-//   issue: /close-epic → close-epic · slash/rocket command → dispatch · `ok`/`not ok:` on a
+//   issue: /close-epic → close-epic · slash/rocket command → dispatch · quiz-shaped owner reply
+//          (`1B 2A 3C`, `2 code`) → quiz-reply (before test-card/resume, so a quiz answer never
+//          resumes, approves or re-plans anything; #3715) · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
 //          status:blocked → resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
@@ -25,10 +27,11 @@ import { pathToFileURL } from 'node:url'
 import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
+import { isQuizReply } from './owner-quiz.mjs'
 
 export const KINDS = [
   'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
-  'dispatch', 'interpret', 'resume', 'revise', 'test-card', 'none',
+  'dispatch', 'interpret', 'quiz-reply', 'resume', 'revise', 'test-card', 'none',
 ]
 
 const COLLABORATORS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
@@ -46,10 +49,14 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
 }
 
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, collab, issue, out }) {
+function routeIssue({ body, assoc, collab, issue, out }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
+  if (isQuizReply(body)) {
+    // owner-quiz-run.mjs reply() also checks the login is the pipeline owner; no quiz on the issue → it logs and exits.
+    return OWNERS.has(assoc) ? out('quiz-reply', 'a reply to an owner quiz') : out('none', 'quiz-shaped reply from a non-owner')
+  }
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
@@ -113,7 +120,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, assoc, collab, issue, out })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })

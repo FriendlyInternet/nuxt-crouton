@@ -9,7 +9,7 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 10)
+  assert.equal(KINDS.length, 11)
 })
 
 test('close-epic: /close-epic on an issue', () => {
@@ -118,4 +118,25 @@ test('interpret: never for an app-posted comment, only revise via **Worker:**', 
   assert.equal(kind({ comment: viaClaude, issue: issue() }), 'none')
   const viaOther = { ...viaClaude, performedViaGithubApp: 'Some App' }
   assert.equal(kind({ comment: viaOther, issue: issue() }), 'none')
+})
+
+// Owner quiz (#3715) — cases 3 and 7 of the agreed list, through the real router.
+test('quiz-reply: an owner answer line routes to its own kind; others and bots are ignored (case 3)', () => {
+  assert.equal(kind({ comment: c('1B 2a 3?'), issue: issue(['epic']) }), 'quiz-reply')
+  assert.equal(kind({ comment: c('1B 2a 3?', 'MEMBER'), issue: issue() }), 'quiz-reply')
+  assert.equal(kind({ comment: c('2 code'), issue: issue() }), 'quiz-reply')
+  assert.equal(kind({ comment: c('1B 2a 3?', 'COLLABORATOR'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('1B 2a 3?', 'CONTRIBUTOR'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('1B 2a 3?', 'OWNER', 'Bot'), issue: issue() }), 'none')
+})
+
+test('quiz-reply: on a blocked, pipeline-owned epic it never resumes (case 3)', () => {
+  const held = { ...issue(['status:blocked', 'epic', 'work-this']), body: '<!-- pipeline: epic=1 -->' }
+  assert.equal(kind({ comment: c('1B 2A 3C'), issue: held }), 'quiz-reply')
+  assert.equal(kind({ comment: c('2 code'), issue: { ...issue(['status:to-test']) } }), 'quiz-reply')
+})
+
+test('quiz-reply: `ok` on a blocked epic still resumes, as before (case 7)', () => {
+  assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'epic']) }), 'resume')
+  assert.equal(kind({ comment: c('ok'), issue: issue() }), 'resume')
 })
