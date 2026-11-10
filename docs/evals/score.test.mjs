@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { scoreAnswer, summarize, extractCliCommands } from './score.mjs'
+import { scoreAnswer, summarize, extractCliCommands, extractJsonBlocks } from './score.mjs'
 
 const { questions } = JSON.parse(readFileSync(new URL('./questions.json', import.meta.url), 'utf8'))
 // Stand-in validator (node core only here); the REAL one is exercised in scripts/eval-score.deps-test.mjs.
@@ -45,6 +45,12 @@ test('unknown CLI command is flagged, known one is not', () => {
   assert.deepEqual(extractCliCommands('Run `crouton frobnicate` or\n```bash\ncrouton config\n```'), ['frobnicate', 'config'])
   assert.equal(scoreAnswer(q, 'Run `crouton config`', { cliCommands: ['config'] }).pass, true)
   assert.equal(scoreAnswer(q, 'Run `crouton frobnicate`', { cliCommands: ['config'] }).pass, false)
+})
+
+test('extractJsonBlocks parses json fences and skips unparseable ones', () => {
+  const a = '```json\n{"a":1}\n```\ntext\n```json\nnot json\n```\n```\n[2]\n```'
+  assert.deepEqual(extractJsonBlocks(a), [{ a: 1 }, [2]])
+  assert.deepEqual(extractJsonBlocks('no fences here'), [])
 })
 
 test('summarize', () => {

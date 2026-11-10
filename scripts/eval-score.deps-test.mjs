@@ -8,7 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scoreAnswer } from '../docs/evals/score.mjs'
-import { handleValidateSchema } from '../packages/crouton-mcp/dist/tools/validate-schema.js'
+// Built output, resolved at runtime (dist is not in the static import graph)
+const validator = new URL('../packages/crouton-mcp/dist/tools/validate-schema.js', import.meta.url).href
+const { handleValidateSchema } = await import(validator)
 
 const { questions } = JSON.parse(readFileSync(new URL('../docs/evals/questions.json', import.meta.url), 'utf8'))
 const bike = questions.find(q => q.id === 'bike-rental-schema')

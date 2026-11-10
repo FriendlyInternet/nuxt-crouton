@@ -27,6 +27,38 @@ export function extractCliCommands(text) {
   return out
 }
 
+function checkMentions(q, answer, failures) {
+  for (const n of q.mustMention || []) if (!has(answer, n)) failures.push(`missing: ${n}`)
+  for (const n of q.mustNotMention || []) if (has(answer, n)) failures.push(`forbidden: ${n}`)
+}
+
+function checkCliCommands(answer, ctx, failures) {
+  if (ctx.cliCommands) {
+    for (const c of new Set(extractCliCommands(answer))) {
+      if (!ctx.cliCommands.includes(c)) failures.push(`unknown CLI command: crouton ${c}`)
+    }
+  }
+}
+
+function checkValidSchemas(q, blocks, ctx, failures) {
+  const results = blocks.map(b => ctx.validateSchema({ schema: b }))
+  const valid = blocks.filter((_, i) => results[i].valid)
+  if (!valid.length) failures.push(`no valid schema in answer: ${results.flatMap(r => r.errors).join('; ')}`)
+  const keys = new Set(valid.flatMap(b => [...collectKeys(b)]))
+  for (const k of q.schemaForbiddenKeys || []) if (keys.has(k)) failures.push(`schema uses forbidden key: ${k}`)
+}
+
+function checkSchema(q, answer, ctx, failures) {
+  if (q.kind === 'schema') {
+    const blocks = extractJsonBlocks(answer).filter(b => b && typeof b === 'object' && !Array.isArray(b))
+    if (!blocks.length) failures.push('no parseable JSON schema in answer')
+    else if (typeof ctx.validateSchema !== 'function') failures.push('no schema validator supplied')
+    else {
+      checkValidSchemas(q, blocks, ctx, failures)
+    }
+  }
+}
+
 /**
  * @param ctx.validateSchema real validator (handleValidateSchema from crouton-mcp); required for kind:'schema'
  * @param ctx.cliCommands real CLI command names; when given, every `crouton <cmd>` in the answer must be one
@@ -34,25 +66,9 @@ export function extractCliCommands(text) {
  */
 export function scoreAnswer(q, answer, ctx = {}) {
   const failures = []
-  for (const n of q.mustMention || []) if (!has(answer, n)) failures.push(`missing: ${n}`)
-  for (const n of q.mustNotMention || []) if (has(answer, n)) failures.push(`forbidden: ${n}`)
-  if (ctx.cliCommands) {
-    for (const c of new Set(extractCliCommands(answer))) {
-      if (!ctx.cliCommands.includes(c)) failures.push(`unknown CLI command: crouton ${c}`)
-    }
-  }
-  if (q.kind === 'schema') {
-    const blocks = extractJsonBlocks(answer).filter(b => b && typeof b === 'object' && !Array.isArray(b))
-    if (!blocks.length) failures.push('no parseable JSON schema in answer')
-    else if (typeof ctx.validateSchema !== 'function') failures.push('no schema validator supplied')
-    else {
-      const results = blocks.map(b => ctx.validateSchema({ schema: b }))
-      const valid = blocks.filter((_, i) => results[i].valid)
-      if (!valid.length) failures.push(`no valid schema in answer: ${results.flatMap(r => r.errors).join('; ')}`)
-      const keys = new Set(valid.flatMap(b => [...collectKeys(b)]))
-      for (const k of q.schemaForbiddenKeys || []) if (keys.has(k)) failures.push(`schema uses forbidden key: ${k}`)
-    }
-  }
+  checkMentions(q, answer, failures)
+  checkCliCommands(answer, ctx, failures)
+  checkSchema(q, answer, ctx, failures)
   return { id: q.id, pass: failures.length === 0, failures }
 }
 

@@ -26,7 +26,9 @@ function realCliCommands() {
 // The same validator behind the MCP validate_schema tool (needs `pnpm --filter @fyit/crouton-mcp build`).
 const ctx = { cliCommands: realCliCommands() }
 if (questions.some(q => q.kind === 'schema')) {
-  ctx.validateSchema = (await import('../../packages/crouton-mcp/dist/tools/validate-schema.js')).handleValidateSchema
+  // Built output, resolved at runtime (dist is not in the static import graph)
+  const validator = new URL('../../packages/crouton-mcp/dist/tools/validate-schema.js', import.meta.url).href
+  ctx.validateSchema = (await import(validator)).handleValidateSchema
 }
 
 async function ask(question) {
