@@ -14,7 +14,7 @@ Auto-imported with the `Crouton` prefix (`Table.vue` → `<CroutonTable>`). Comp
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `context` | `'team' \| 'super'` | no | The type of admin context: 'team' for team admin, 'super' for super admin |
+| `context` | `"team" \| "super"` | no | The type of admin context: 'team' for team admin, 'super' for super admin |
 
 ## CroutonBlockFrame
 
@@ -39,21 +39,21 @@ Shared chrome for editor-block NodeViews (#2414): selected border, label row, ed
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `date` | `Date \| number \| null` | no |  |
+| `date` | `number \| Date \| null` | no |  |
 | `range` | `boolean` | no |  |
-| `startDate` | `Date \| number \| null` | no |  |
-| `endDate` | `Date \| number \| null` | no |  |
-| `color` | `'primary' \| 'secondary' \| 'success' \| 'info' \| 'warning' \| 'error' \| 'neutral'` | no |  |
-| `variant` | `'solid' \| 'outline' \| 'soft' \| 'subtle'` | no |  |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | no |  |
+| `startDate` | `number \| Date \| null` | no |  |
+| `endDate` | `number \| Date \| null` | no |  |
+| `color` | `"primary" \| "secondary" \| "success" \| "info" \| "warning" \| "error" \| "neutral"` | no |  |
+| `variant` | `"solid" \| "outline" \| "soft" \| "subtle"` | no |  |
+| `size` | `"md" \| "xs" \| "sm" \| "lg" \| "xl"` | no |  |
 | `disabled` | `boolean` | no |  |
-| `minDate` | `Date \| number \| null` | no |  |
-| `maxDate` | `Date \| number \| null` | no |  |
+| `minDate` | `number \| Date \| null` | no |  |
+| `maxDate` | `number \| Date \| null` | no |  |
 | `monthControls` | `boolean` | no |  |
 | `yearControls` | `boolean` | no |  |
 | `numberOfMonths` | `number` | no |  |
-| `year` | `boolean \| number` | no |  |
-| `isDateDisabled` | `(date: Date) => boolean` | no |  |
+| `year` | `number \| boolean` | no |  |
+| `isDateDisabled` | `((date: Date) => boolean)` | no |  |
 | `ui` | `Record<string, unknown>` | no |  |
 | `picker` | `boolean` | no |  |
 | `placeholder` | `string` | no |  |
@@ -63,7 +63,28 @@ Shared chrome for editor-block NodeViews (#2414): selected border, label row, ed
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `collection` | `string` | yes |  |
-| `layout` | `'list' \| 'grid'` | no |  |
+| `layout` | `"list" \| "grid"` | no |  |
+
+## CroutonCollection
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `layout` | `string \| ResponsiveLayout` | no |  |
+| `columns` | `TableColumn[]` | no |  |
+| `rows` | `any[]` | no |  |
+| `collection` | `string` | yes |  |
+| `serverPagination` | `boolean` | no |  |
+| `paginationData` | `PaginationData \| null` | no |  |
+| `refreshFn` | `(() => Promise<void> \| null)` | no |  |
+| `create` | `boolean` | no |  |
+| `hierarchy` | `HierarchyConfig` | no |  |
+| `card` | `string` | no |  |
+| `cardComponent` | `any` | no | Direct card component (skips name resolution, for stateless mode) |
+| `sortable` | `boolean \| SortableOptions` | no | Enable drag-and-drop row reordering (table layout only) |
+| `gridSize` | `GridSize` | no | Grid size for grid layout - compact: 4 columns, tight spacing (old 'grid' layout) - comfortable: 3 columns, medium spacing (default) - spacious: 2 columns, generous spacing (old 'cards' layout) |
+| `hideDefaultColumns` | `{ select?: boolean \| undefined; createdAt?: boolean \| undefined; updatedAt?: boolean \| undefined; createdBy?: boolean \| undefined; updatedBy?: boolean \| undefined; presence?: boolean \| undefined; actions?: boolean \| undefined; }` | no |  |
+| `stateless` | `boolean` | no | Stateless mode: no config lookup, no mutations, just renders data |
+| `showCollabPresence` | `boolean \| CollabPresenceConfig` | no | Show collaboration presence badges per row Requires |
 
 ## CroutonCollectionSkeleton
 
@@ -79,7 +100,7 @@ CroutonCollectionSkeleton Layout-aware loading placeholder for the collection vi
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `collectionName` | `string` | yes |  |
-| `defaultLayout` | `'table' \| 'list' \| 'grid' \| 'cards' \| 'tree' \| 'kanban' \| 'workspace'` | no |  |
+| `defaultLayout` | `"list" \| "grid" \| "table" \| "tree" \| "kanban" \| "workspace" \| "cards"` | no |  |
 
 ## CroutonConfirmButton
 
@@ -97,7 +118,7 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg'` | no |  |
+| `size` | `"md" \| "xs" \| "sm" \| "lg"` | no |  |
 
 ## CroutonDate
 
@@ -110,7 +131,7 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `item` | `any` | yes |  |
-| `layout` | `'list' \| 'grid'` | yes |  |
+| `layout` | `"list" \| "grid"` | yes |  |
 | `collection` | `string` | yes |  |
 | `size` | `GridSize` | no | Grid size variant (only used when layout='grid') |
 | `stateless` | `boolean` | no | When true, hides action buttons (stateless/preview mode) |
@@ -157,10 +178,10 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 | --- | --- | --- | --- |
 | `collection` | `string` | yes | Collection name |
 | `rows` | `any[]` | yes | Data rows to export |
-| `formats` | `('csv' \| 'json')[]` | no | Available export formats |
+| `formats` | `("csv" \| "json")[]` | no | Available export formats |
 | `options` | `ExportOptions` | no | Export options passed to composable |
-| `variant` | `'solid' \| 'outline' \| 'ghost' \| 'soft' \| 'link' \| 'subtle'` | no | Button variant |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | no | Button size |
+| `variant` | `"solid" \| "outline" \| "soft" \| "subtle" \| "link" \| "ghost"` | no | Button variant |
+| `size` | `"md" \| "xs" \| "sm" \| "lg" \| "xl"` | no | Button size |
 | `color` | `any` | no | Button color |
 | `disabled` | `boolean` | no | Disable the button |
 
@@ -179,7 +200,7 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `modelValue` | `string` | no |  |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | no |  |
+| `size` | `"md" \| "xs" \| "sm" \| "lg" \| "xl"` | no |  |
 | `presets` | `string[]` | no |  |
 | `placeholder` | `string` | no |  |
 
@@ -231,6 +252,16 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 | `dependentField` | `string` | yes |  |
 | `cardVariant` | `string` | no |  |
 
+## CroutonFormDynamicLoader
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `unknown[]` | no |  |
+| `activeItem` | `Record<string, any>` | no |  |
+| `collection` | `string` | no |  |
+| `loading` | `string` | no |  |
+| `action` | `string` | no |  |
+
 ## CroutonFormLayout
 
 | Prop | Type | Required | Description |
@@ -264,7 +295,7 @@ Two-click inline confirmation button. First click shows a confirm state ("Sure?"
 | `showEdit` | `boolean` | no |  |
 | `inlineCreate` | `boolean` | no | Type-to-create: an unmatched search term shows an "Add \"<term>\"" row that creates the item inline (labelKey = term, plus createInitialData) and selects it — no slideover. Opt-in: only enable for collections where a bare label is a valid create payload. |
 | `multiple` | `boolean` | no |  |
-| `query` | `ComputedRef<Record<string, any>> \| Ref<Record<string, any>>` | no |  |
+| `query` | `ComputedRef<Record<string, any>> \| Ref<Record<string, any>, Record<string, any>>` | no |  |
 | `createInitialData` | `Record<string, any>` | no |  |
 
 ## CroutonFormRepeater
@@ -289,7 +320,7 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `modelValue` | `string` | no |  |
-| `size` | `'sm' \| 'md'` | no |  |
+| `size` | `"md" \| "sm"` | no |  |
 | `placeholder` | `string` | no |  |
 | `collections` | `string[]` | no |  |
 
@@ -305,18 +336,19 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `crop` | `boolean \| { aspectRatio?: number \| AspectRatioPreset, circular?: boolean }` | no |  |
-| `fit` | `'cover' \| 'contain'` | no | Preview fit: 'cover' (default, photos) or 'contain' (logos — show the whole image) |
+| `crop` | `boolean \| { aspectRatio?: number \| AspectRatioPreset \| undefined; circular?: boolean \| undefined; }` | no |  |
+| `fit` | `"cover" \| "contain"` | no | Preview fit: 'cover' (default, photos) or 'contain' (logos — show the whole image) |
+| `modelValue` | `string` | no |  |
 
 ## CroutonImportButton
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `collection` | `string` | yes | Collection name |
-| `formats` | `('csv' \| 'json')[]` | no | Available import formats |
-| `variant` | `'solid' \| 'outline' \| 'ghost' \| 'soft' \| 'link' \| 'subtle'` | no | Button variant |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | no | Button size |
-| `color` | `'error' \| 'info' \| 'success' \| 'warning' \| 'primary' \| 'secondary' \| 'neutral'` | no | Button color |
+| `formats` | `("csv" \| "json")[]` | no | Available import formats |
+| `variant` | `"solid" \| "outline" \| "soft" \| "subtle" \| "link" \| "ghost"` | no | Button variant |
+| `size` | `"md" \| "xs" \| "sm" \| "lg" \| "xl"` | no | Button size |
+| `color` | `"primary" \| "secondary" \| "success" \| "info" \| "warning" \| "error" \| "neutral"` | no | Button color |
 | `disabled` | `boolean` | no | Disable the button |
 
 ## CroutonImportPreviewModal
@@ -325,6 +357,25 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | --- | --- | --- | --- |
 | `collection` | `string` | yes |  |
 | `file` | `File \| null` | yes |  |
+| `open` | `boolean` | no |  |
+
+## CroutonItemButtonsMini
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `delete` | `boolean` | no |  |
+| `disabled` | `boolean` | no |  |
+| `view` | `boolean` | no |  |
+| `update` | `boolean` | no |  |
+| `buttonClasses` | `string` | no |  |
+| `containerClasses` | `string` | no |  |
+| `viewTooltip` | `string` | no |  |
+| `updateTooltip` | `string` | no |  |
+| `deleteTooltip` | `string` | no |  |
+| `viewLoading` | `boolean` | no |  |
+| `updateLoading` | `boolean` | no |  |
+| `deleteLoading` | `boolean` | no |  |
+| `disabledTooltip` | `string` | no |  |
 
 ## CroutonItemCardMini
 
@@ -380,6 +431,16 @@ QR Code (`<CroutonQrCode />`) Renders any string (typically a URL) as a scannabl
 | `data` | `string` | yes | The string to encode (a URL, in most cases). |
 | `size` | `number` | no | Rendered size in pixels (square). |
 
+## CroutonRedirectsForm
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `string[]` | yes |  |
+| `activeItem` | `CroutonRedirect \| Record<string, never>` | yes |  |
+| `collection` | `string` | yes |  |
+| `loading` | `string` | yes |  |
+| `action` | `"delete" \| "create" \| "update"` | yes |  |
+
 ## CroutonRedirectsList
 
 | Prop | Type | Required | Description |
@@ -406,11 +467,41 @@ CroutonSubBar — a thin, presentational secondary bar that sits under a primary
 | `autoHide` | `boolean` | no | Hide the bar while scrolling DOWN and reveal it immediately on scroll UP (the mobile-toolbar behaviour). Implies sticky — a non-pinned bar has nothing to hide. No-op on the server. |
 | `flush` | `boolean` | no | Bleed out of a host that pads its scroll container (the standard `p-4` pane) so the bar spans the FULL width edge-to-edge — content stays inset to line up with the padded siblings. Use when the bar sits inside a padded scroll area; omit when the host has no horizontal padding (the bar is already full-width then). |
 
+## CroutonTable
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `layout` | `string \| ResponsiveLayout` | no |  |
+| `columns` | `TableColumn[]` | no |  |
+| `rows` | `any[]` | no |  |
+| `collection` | `string` | yes |  |
+| `serverPagination` | `boolean` | no |  |
+| `paginationData` | `PaginationData \| null` | no |  |
+| `refreshFn` | `(() => Promise<void> \| null)` | no |  |
+| `create` | `boolean` | no |  |
+| `hierarchy` | `HierarchyConfig` | no |  |
+| `card` | `string` | no |  |
+| `cardComponent` | `any` | no | Direct card component (skips name resolution, for stateless mode) |
+| `sortable` | `boolean \| SortableOptions` | no | Enable drag-and-drop row reordering (table layout only) |
+| `gridSize` | `GridSize` | no | Grid size for grid layout - compact: 4 columns, tight spacing (old 'grid' layout) - comfortable: 3 columns, medium spacing (default) - spacious: 2 columns, generous spacing (old 'cards' layout) |
+| `hideDefaultColumns` | `{ select?: boolean \| undefined; createdAt?: boolean \| undefined; updatedAt?: boolean \| undefined; createdBy?: boolean \| undefined; updatedBy?: boolean \| undefined; presence?: boolean \| undefined; actions?: boolean \| undefined; }` | no |  |
+| `stateless` | `boolean` | no | Stateless mode: no config lookup, no mutations, just renders data |
+| `showCollabPresence` | `boolean \| CollabPresenceConfig` | no | Show collaboration presence badges per row Requires |
+
+## CroutonTableActions
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `selectedRows` | `any[]` | yes |  |
+| `collection` | `string` | yes |  |
+| `table` | `any` | no |  |
+| `onColumnVisibilityChange` | `((column: string, visible: boolean) => void)` | no |  |
+
 ## CroutonTableCheckbox
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `modelValue` | `boolean \| 'indeterminate'` | no |  |
+| `modelValue` | `boolean \| "indeterminate"` | no |  |
 
 ## CroutonTableHeader
 
@@ -422,6 +513,24 @@ CroutonSubBar — a thin, presentational secondary bar that sits under a primary
 | `exportButton` | `boolean` | no |  |
 | `importButton` | `boolean` | no |  |
 | `rows` | `any[]` | no |  |
+
+## CroutonTablePagination
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `page` | `number` | yes |  |
+| `pageCount` | `number` | yes |  |
+| `totalItems` | `number` | yes |  |
+| `loading` | `boolean` | no |  |
+| `pageSizes` | `number[]` | no |  |
+
+## CroutonTableSearch
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `modelValue` | `string` | yes |  |
+| `placeholder` | `string` | no |  |
+| `debounceMs` | `number` | no |  |
 
 ## CroutonTabsPanel
 
@@ -449,7 +558,7 @@ CroutonTabsPanel — the shared shell for a tabbed admin section (Team, Bookings
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `item` | `TreeNodeType` | yes |  |
+| `item` | `TreeNode` | yes |  |
 | `depth` | `number` | no |  |
 | `labelKey` | `string` | no |  |
 | `collection` | `string` | yes |  |
@@ -486,7 +595,7 @@ CroutonTabsPanel — the shared shell for a tabbed admin section (Team, Bookings
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `tabErrors` | `Record<string, number>` | yes |  |
-| `navigationItems` | `Array<{ label: string, value: string }>` | yes |  |
+| `navigationItems` | `{ label: string; value: string; }[]` | yes |  |
 
 ## CroutonWorkspace
 
@@ -554,7 +663,7 @@ CroutonAssetsPicker Stub Fallback when @fyit/crouton-assets is not installed. Re
 | --- | --- | --- | --- |
 | `modelValue` | `string` | no |  |
 | `collection` | `string` | no |  |
-| `crop` | `boolean \| { aspectRatio?: number }` | no |  |
+| `crop` | `boolean \| { aspectRatio?: number \| undefined; }` | no |  |
 
 ## CroutonEditorPreview
 
@@ -570,7 +679,7 @@ CroutonEditorSimple Stub Fallback when nuxt-crouton-editor is not installed. Pro
 | --- | --- | --- | --- |
 | `modelValue` | `string \| null` | no |  |
 | `placeholder` | `string` | no |  |
-| `contentType` | `'html' \| 'markdown' \| 'json'` | no |  |
+| `contentType` | `"json" \| "html" \| "markdown"` | no |  |
 | `editable` | `boolean` | no |  |
 | `showToolbar` | `boolean` | no |  |
 
@@ -580,7 +689,6 @@ CroutonEditorSimple Stub Fallback when nuxt-crouton-editor is not installed. Pro
 | --- | --- | --- | --- |
 | `center` | `[number, number]` | no |  |
 | `zoom` | `number` | no |  |
-| `style` | `string` | no |  |
 | `height` | `string` | no |  |
 | `width` | `string` | no |  |
 
@@ -588,7 +696,7 @@ CroutonEditorSimple Stub Fallback when nuxt-crouton-editor is not installed. Pro
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `location` | `string \| { lat?: number; lng?: number; address?: string } \| null` | no |  |
+| `location` | `string \| { lat?: number \| undefined; lng?: number \| undefined; address?: string \| undefined; } \| null` | no |  |
 
 ## CroutonUserPill
 
@@ -597,21 +705,13 @@ CroutonUserPill Stub Fallback when @fyit/crouton-auth is not installed. Renders 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `showStatus` | `boolean` | no |  |
-| `compact` | `'auto' \| 'always' \| 'never'` | no |  |
-| `placement` | `'fixed' \| 'inline'` | no |  |
+| `compact` | `"auto" \| "always" \| "never"` | no |  |
+| `placement` | `"fixed" \| "inline"` | no |  |
 | `extraItems` | `unknown[]` | no |  |
 | `useModal` | `boolean` | no |  |
 
 ## Components without props
 
-- `CroutonCollection`
 - `CroutonForm`
-- `CroutonFormDynamicLoader`
-- `CroutonItemButtonsMini`
 - `CroutonLoading`
-- `CroutonRedirectsForm`
-- `CroutonTable`
-- `CroutonTableActions`
-- `CroutonTablePagination`
-- `CroutonTableSearch`
 - `CroutonAuthRouteModal`

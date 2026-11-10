@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 const run = () => spawnSync('node', ['scripts/gen-api-reference.mjs', '--check'], { encoding: 'utf8' })
 
-// Needs `typescript` + `@vue/compiler-sfc`, so it runs in a job that installs packages (not the bare-Node set).
+// Needs `typescript` + `vue-component-meta`, so it runs in a job that installs packages (not the bare-Node set).
 // Print stderr on a wrong exit code: the status alone hid the real error in CI.
 const expectStatus = (r, want) => assert.equal(r.status, want, `exit ${r.status}, wanted ${want}. stderr:\n${r.stderr}`)
 
