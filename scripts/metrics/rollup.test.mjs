@@ -128,3 +128,31 @@ test('in a git checkout, committing latest.json does not change data_commit or t
   assert.equal(one, readFileSync(join(d, 'metrics', 'latest.json'), 'utf8'))
   assert.equal(g('status', '--porcelain').trim(), '')
 })
+
+test('data_commit needs full history: a --depth 1 clone reports the newest commit, a full clone the last data commit', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const src = fixtureDir()
+  const g = (dir, ...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { encoding: 'utf8' }).trim()
+  g(src, 'init', '-q')
+  g(src, 'add', '.')
+  g(src, 'commit', '-q', '-m', 'data')
+  writeFileSync(join(src, 'metrics', 'runs', 'extra.jsonl'), '')
+  g(src, 'add', '.')
+  g(src, 'commit', '-q', '-m', 'run record')
+  const dataCommit = g(src, 'rev-parse', 'HEAD')
+  runRollup(src)
+  g(src, 'add', '.')
+  g(src, 'commit', '-q', '-m', 'rollup')
+  const newest = g(src, 'rev-parse', 'HEAD')
+  assert.notEqual(dataCommit, newest)
+
+  const shallow = mkdtempSync(join(tmpdir(), 'rollup-shallow-'))
+  execFileSync('git', ['clone', '-q', '--depth', '1', `file://${src}`, shallow])
+  // Expected: the shallow clone only has the newest (rollup) commit, so git log -1 returns it — the bug fetch-depth: 0 avoids.
+  assert.equal(runRollup(shallow).data_commit, newest)
+
+  const full = mkdtempSync(join(tmpdir(), 'rollup-full-'))
+  execFileSync('git', ['clone', '-q', `file://${src}`, full])
+  // Expected: the full clone skips the rollup commit and returns the last commit that touched metrics data.
+  assert.equal(runRollup(full).data_commit, dataCommit)
+})
