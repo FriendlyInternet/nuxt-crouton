@@ -101,6 +101,10 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
+      # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
+      - name: Run scripts/*.deps-test.mjs
+        run: node --test scripts/*.deps-test.mjs
+
       # tar, not a glob upload: a multi-path glob artifact's root depends on the least common
       # ancestor, a tarball extracts to exactly packages/*/dist every time.
       - name: Pack dist
