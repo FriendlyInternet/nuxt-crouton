@@ -87,110 +87,139 @@ export function parseCrons(text) {
 const readJsonl = (p) => (existsSync(p) ? readFileSync(p, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [])
 const writeJsonl = (p, rows) => writeFileSync(p, rows.map(r => `${JSON.stringify(r)}\n`).join(''))
 
-/**
- * @param {{ data:string, workflowsDir?:string, repo:string, fetchImpl:(url:string)=>Promise<{status:number,headers:Record<string,string>,json:any}>,
- *   nowMs?:number, maxCalls?:number, reserve?:number, remaining?:number|null, days?:number, log?:(s:string)=>void }} o
- */
-export async function collect(o) {
-  const { data, repo, fetchImpl } = o
-  const nowMs = o.nowMs ?? Date.now()
-  const maxCalls = o.maxCalls ?? 1500, reserve = o.reserve ?? 1500
-  const log = o.log || console.log
-  const m = join(data, 'metrics')
-  for (const d of ['runs', 'jobs', 'schedules']) mkdirSync(join(m, d), { recursive: true })
-  const statePath = join(m, 'state.json')
-  const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {}
-  state.runs_fetched_at ??= {}
-  const st = { used: 0, remaining: o.remaining ?? null, runsDays: 0, jobsAdded: 0, error: null }
+const sortByName = (x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0)
 
-  const api = async (path) => {
-    st.used++
-    const res = await fetchImpl(path.startsWith('http') ? path : `/repos/${repo}${path}`)
-    const rem = Number(res.headers?.['x-ratelimit-remaining'])
-    if (Number.isFinite(rem)) st.remaining = rem
-    if (res.status >= 400) throw Object.assign(new Error(`HTTP ${res.status} ${path}`), { status: res.status })
-    return res
-  }
-  const overBudget = () => planBatch(1, { remaining: st.remaining, reserve, used: st.used, maxCalls }) < 1
-
-  // schedule snapshot (once a day)
-  const today = dayOf(nowMs)
+/** Write today's cron snapshot from the workflow files (once a day). */
+function snapshotSchedules(o, m, today) {
   const schedPath = join(m, 'schedules', `${today}.json`)
-  if (o.workflowsDir && !existsSync(schedPath)) {
-    const map = {}
-    for (const f of readdirSync(o.workflowsDir).filter(f => f.endsWith('.yml')).sort()) {
-      const crons = parseCrons(readFileSync(join(o.workflowsDir, f), 'utf8'))
-      if (crons.length) map[f] = crons
-    }
-    writeFileSync(schedPath, `${JSON.stringify(map)}\n`)
+  if (!o.workflowsDir || existsSync(schedPath)) return
+  const map = {}
+  for (const f of readdirSync(o.workflowsDir).filter(f => f.endsWith('.yml')).sort()) {
+    const crons = parseCrons(readFileSync(join(o.workflowsDir, f), 'utf8'))
+    if (crons.length) map[f] = crons
   }
+  writeFileSync(schedPath, `${JSON.stringify(map)}\n`)
+}
 
-  // runs
+/** Fetch every run in one UTC day (split into windows under the 1000-row cap) and write it. */
+async function fetchRunDay(ctx, day) {
+  const { api, m } = ctx
+  const from = Date.parse(`${day}T00:00:00Z`) / 1000
+  const count = async (a, b) => (await api(`/actions/runs?created=${a}..${b}&per_page=1`)).json.total_count ?? 0
+  const rows = new Map()
+  for (const w of await splitWindow({ from, to: from + 86399 }, count)) {
+    const { items } = await fetchAllPages(async (u) => {
+      const r = await api(u)
+      return { data: r.json.workflow_runs, link: r.headers?.link }
+    }, `/actions/runs?created=${iso(w.from)}..${iso(w.to)}&per_page=100`, { maxPages: 10 })
+    for (const r of items) rows.set(r.id, toRunRow(r))
+  }
+  writeJsonl(join(m, 'runs', `${day}.jsonl`), [...rows.values()].sort((a, b) => a.id - b.id))
+}
+
+async function fetchRuns(ctx, o, state) {
+  const { st, nowMs, overBudget } = ctx
   try {
     for (const day of selectRunDays({ nowMs, fetchedAt: state.runs_fetched_at, days: o.days ?? 90 })) {
       if (overBudget()) break
-      const from = Date.parse(`${day}T00:00:00Z`) / 1000
-      const count = async (a, b) => (await api(`/actions/runs?created=${a}..${b}&per_page=1`)).json.total_count ?? 0
-      const wins = await splitWindow({ from, to: from + 86399 }, count)
-      const rows = new Map()
-      for (const w of wins) {
-        const { items } = await fetchAllPages(async (u) => {
-          const r = await api(u)
-          return { data: r.json.workflow_runs, link: r.headers?.link }
-        }, `/actions/runs?created=${iso(w.from)}..${iso(w.to)}&per_page=100`, { maxPages: 10 })
-        for (const r of items) rows.set(r.id, toRunRow(r))
-      }
-      writeJsonl(join(m, 'runs', `${day}.jsonl`), [...rows.values()].sort((a, b) => a.id - b.id))
+      await fetchRunDay(ctx, day)
       state.runs_fetched_at[day] = new Date(nowMs).toISOString()
       st.runsDays++
     }
   } catch (e) { st.error = String(e.message || e) }
-  writeFileSync(statePath, `${JSON.stringify(state)}\n`)
+}
 
-  // jobs
+/** Jobs for one run; a run whose jobs are gone (404/410) records an empty list. */
+async function fetchJobsFor(ctx, run) {
+  try {
+    const { items } = await fetchAllPages(async (u) => {
+      const r = await ctx.api(u)
+      return { data: r.json.jobs, link: r.headers?.link }
+    }, `/actions/runs/${run.id}/attempts/${run.attempt}/jobs?per_page=100`, { maxPages: 5 })
+    return items.map(toJobRow).sort(sortByName)
+  } catch (e) {
+    if (e.status !== 404 && e.status !== 410) throw e
+    return []
+  }
+}
+
+/** Merge a batch of new jobs lines into the per-day files. */
+function flushBatch(ctx, jobsByDay, batch) {
+  for (const day of new Set(batch.map(b => b.day))) {
+    const add = batch.filter(b => b.day === day).map(b => b.line)
+    const ids = new Set(add.map(l => l.run_id))
+    jobsByDay[day] = [...(jobsByDay[day] || []).filter(l => !ids.has(l.run_id)), ...add].sort((a, b) => a.run_id - b.run_id)
+    writeJsonl(join(ctx.m, 'jobs', `${day}.jsonl`), jobsByDay[day])
+  }
+  ctx.st.jobsAdded += batch.length
+}
+
+/** Fill the jobs work list batch by batch; returns how many runs were handled. */
+async function fetchJobs(ctx, work, jobsByDay) {
+  const { st, overBudget } = ctx
+  let i = 0
+  try {
+    while (i < work.length && !overBudget()) {
+      const batch = []
+      try {
+        while (batch.length < BATCH && i < work.length && !overBudget()) {
+          const { day, run } = work[i]
+          batch.push({ day, line: { run_id: run.id, attempt: run.attempt, jobs: await fetchJobsFor(ctx, run) } })
+          i++
+        }
+      } finally { flushBatch(ctx, jobsByDay, batch) }
+    }
+  } catch (e) { st.error = String(e.message || e) }
+  return i
+}
+
+function loadDays(m) {
   const runsByDay = {}, jobsByDay = {}
   for (const f of readdirSync(join(m, 'runs')).filter(f => f.endsWith('.jsonl')).sort()) {
     const day = f.slice(0, -6)
     runsByDay[day] = readJsonl(join(m, 'runs', f))
     jobsByDay[day] = readJsonl(join(m, 'jobs', f))
   }
-  const work = jobsWorkList(runsByDay, jobsByDay)
-  let done = 0
-  if (!st.error) {
-    try {
-      for (let i = 0; i < work.length && !overBudget();) {
-        const batch = []
-        const flush = () => {
-          const touched = new Set(batch.map(b => b.day))
-          for (const day of touched) {
-            const add = batch.filter(b => b.day === day).map(b => b.line)
-            const ids = new Set(add.map(l => l.run_id))
-            jobsByDay[day] = [...(jobsByDay[day] || []).filter(l => !ids.has(l.run_id)), ...add].sort((a, b) => a.run_id - b.run_id)
-            writeJsonl(join(m, 'jobs', `${day}.jsonl`), jobsByDay[day])
-          }
-          st.jobsAdded += batch.length
-          batch.length = 0
-        }
-        try {
-          while (batch.length < BATCH && i < work.length && !overBudget()) {
-            const { day, run } = work[i]
-            let jobs = []
-            try {
-              const { items } = await fetchAllPages(async (u) => {
-                const r = await api(u)
-                return { data: r.json.jobs, link: r.headers?.link }
-              }, `/actions/runs/${run.id}/attempts/${run.attempt}/jobs?per_page=100`, { maxPages: 5 })
-              jobs = items.map(toJobRow).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-            } catch (e) {
-              if (e.status !== 404 && e.status !== 410) throw e
-            }
-            batch.push({ day, line: { run_id: run.id, attempt: run.attempt, jobs } })
-            i++; done++
-          }
-        } finally { flush() }
-      }
-    } catch (e) { st.error = String(e.message || e) }
+  return { runsByDay, jobsByDay }
+}
+
+function makeCtx(o, m, nowMs) {
+  const maxCalls = o.maxCalls ?? 1500, reserve = o.reserve ?? 1500
+  const st = { used: 0, remaining: o.remaining ?? null, runsDays: 0, jobsAdded: 0, error: null }
+  const api = async (path) => {
+    st.used++
+    const res = await o.fetchImpl(path.startsWith('http') ? path : `/repos/${o.repo}${path}`)
+    const rem = Number(res.headers?.['x-ratelimit-remaining'])
+    if (Number.isFinite(rem)) st.remaining = rem
+    if (res.status >= 400) throw Object.assign(new Error(`HTTP ${res.status} ${path}`), { status: res.status })
+    return res
   }
+  const overBudget = () => planBatch(1, { remaining: st.remaining, reserve, used: st.used, maxCalls }) < 1
+  return { st, api, overBudget, m, nowMs }
+}
+
+/**
+ * @param {{ data:string, workflowsDir?:string, repo:string, fetchImpl:(url:string)=>Promise<{status:number,headers:Record<string,string>,json:any}>,
+ *   nowMs?:number, maxCalls?:number, reserve?:number, remaining?:number|null, days?:number, log?:(s:string)=>void }} o
+ */
+export async function collect(o) {
+  const nowMs = o.nowMs ?? Date.now()
+  const log = o.log || console.log
+  const m = join(o.data, 'metrics')
+  for (const d of ['runs', 'jobs', 'schedules']) mkdirSync(join(m, d), { recursive: true })
+  const statePath = join(m, 'state.json')
+  const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {}
+  state.runs_fetched_at ??= {}
+  const ctx = makeCtx(o, m, nowMs)
+  const { st } = ctx
+
+  snapshotSchedules(o, m, dayOf(nowMs))
+  await fetchRuns(ctx, o, state)
+  writeFileSync(statePath, `${JSON.stringify(state)}\n`)
+
+  const { runsByDay, jobsByDay } = loadDays(m)
+  const work = jobsWorkList(runsByDay, jobsByDay)
+  const done = st.error ? 0 : await fetchJobs(ctx, work, jobsByDay)
   const pending = work.length - done
   const oldest = pending ? work[done].day : 'none'
   log(`::notice::collect: runs days written ${st.runsDays}, jobs lines added ${st.jobsAdded}, jobs pending ${pending} (oldest pending day ${oldest}), calls used ${st.used}${st.error ? `, stopped on error: ${st.error}` : ''}`)

@@ -60,10 +60,10 @@ jobs:
         run: node scripts/metrics/collect.mjs --data data --workflows .github/workflows --max-calls "$MAX_CALLS"
 
       - name: Publish collected files
-        run: node scripts/metrics/publish.mjs --data data --message "data(metrics): collect"
+        run: 'node scripts/metrics/publish.mjs --data data --message "data(metrics): collect"'
 
       - name: Roll up
         run: node scripts/metrics/rollup.mjs --data data
 
       - name: Publish roll-up
-        run: node scripts/metrics/publish.mjs --data data --message "data(metrics): rollup"
+        run: 'node scripts/metrics/publish.mjs --data data --message "data(metrics): rollup"'

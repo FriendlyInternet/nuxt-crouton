@@ -31,36 +31,45 @@ export function isoWeek(t) {
   return `${y}-W${String(wk).padStart(2, '0')}`
 }
 
+function parseRange(range, stepS, min, max) {
+  if (range === '*') return [min, max]
+  const [a, b] = range.split('-')
+  const lo = Number(a)
+  return [lo, b === undefined ? (stepS ? max : lo) : Number(b)]
+}
+
 function parseField(f, min, max) {
   const out = new Set()
   for (const part of f.split(',')) {
     const [range, stepS] = part.split('/')
     const step = stepS ? Number(stepS) : 1
-    let lo = min, hi = max
-    if (range !== '*') {
-      const [a, b] = range.split('-')
-      lo = Number(a); hi = b === undefined ? (stepS ? max : lo) : Number(b)
-    }
+    const [lo, hi] = parseRange(range, stepS, min, max)
     for (let v = lo; v <= hi; v += step) out.add(v)
   }
   return out
 }
 
-/** Slots (ms, UTC) of a 5-field cron in [fromMs, toMs). Supports `*`, lists, ranges, steps. */
-export function expandCron(expr, fromMs, toMs) {
+/** Predicate over a Date for a 5-field cron (vixie day-of-month/day-of-week OR rule). */
+function cronMatcher(expr) {
   const f = expr.trim().split(/\s+/)
   if (f.length !== 5) throw new Error(`bad cron: ${expr}`)
   const min = parseField(f[0], 0, 59), hour = parseField(f[1], 0, 23)
   const dom = parseField(f[2], 1, 31), mon = parseField(f[3], 1, 12)
   const dow = new Set([...parseField(f[4], 0, 7)].map(v => v % 7))
-  const domAny = f[2] === '*', dowAny = f[4] === '*'
+  const bothDays = f[2] === '*' || f[4] === '*'
+  return (d) => {
+    if (!min.has(d.getUTCMinutes()) || !hour.has(d.getUTCHours()) || !mon.has(d.getUTCMonth() + 1)) return false
+    const domOk = dom.has(d.getUTCDate()), dowOk = dow.has(d.getUTCDay())
+    return bothDays ? domOk && dowOk : domOk || dowOk
+  }
+}
+
+/** Slots (ms, UTC) of a 5-field cron in [fromMs, toMs). Supports `*`, lists, ranges, steps. */
+export function expandCron(expr, fromMs, toMs) {
+  const matches = cronMatcher(expr)
   const out = []
   for (let t = Math.ceil(fromMs / 60000) * 60000; t < toMs; t += 60000) {
-    const d = new Date(t)
-    if (!min.has(d.getUTCMinutes()) || !hour.has(d.getUTCHours()) || !mon.has(d.getUTCMonth() + 1)) continue
-    const domOk = dom.has(d.getUTCDate()), dowOk = dow.has(d.getUTCDay())
-    const dayOk = domAny || dowAny ? domOk && dowOk : domOk || dowOk
-    if (dayOk) out.push(t)
+    if (matches(new Date(t))) out.push(t)
   }
   return out
 }
@@ -73,26 +82,29 @@ const bump = (obj, key, failed) => {
 }
 const finish = (obj) => { for (const e of Object.values(obj)) e.rate = rate(e.failed, e.runs) }
 
+const newWeek = () => ({ slots: 0, missed: 0, failed_runs: 0, total: 0 })
+
+/** All cron slots (ms, ascending) for a workflow, using the schedule snapshot in force each day. */
+function slotsFor(wf, snapshots, firstMs, asOfMs) {
+  const slots = []
+  for (let d = Math.floor(firstMs / DAY) * DAY; d <= asOfMs; d += DAY) {
+    const date = new Date(d).toISOString().slice(0, 10)
+    const snap = [...snapshots].reverse().find(s => s.date <= date) || snapshots[0]
+    const set = new Set()
+    for (const c of snap?.map[wf] || []) for (const s of expandCron(c, d, d + DAY)) set.add(s)
+    slots.push(...set)
+  }
+  return slots.sort((a, b) => a - b)
+}
+
 /** Slots → { weekKey: {slots, missed} } and schedule runs → failed_runs, per workflow. */
 function scheduleStats(wf, runs, snapshots, firstMs, asOfMs) {
   const sched = runs.filter(r => r.event === 'schedule' && r.started).sort((a, b) => Date.parse(a.started) - Date.parse(b.started))
-  const slots = []
-  const dayStart = Math.floor(firstMs / DAY) * DAY
-  for (let d = dayStart; d <= asOfMs; d += DAY) {
-    const date = new Date(d).toISOString().slice(0, 10)
-    const snap = [...snapshots].reverse().find(s => s.date <= date) || snapshots[0]
-    const crons = snap?.map[wf]
-    if (!crons) continue
-    const set = new Set()
-    for (const c of crons) for (const s of expandCron(c, d, d + DAY)) set.add(s)
-    slots.push(...set)
-  }
-  slots.sort((a, b) => a - b)
   const used = new Set()
   const weeks = {}
-  for (const s of slots) {
+  for (const s of slotsFor(wf, snapshots, firstMs, asOfMs)) {
     if (s + SLOT_GRACE > asOfMs) continue // not judgeable yet
-    const w = (weeks[isoWeek(s)] ??= { slots: 0, missed: 0, failed_runs: 0, total: 0 })
+    const w = (weeks[isoWeek(s)] ??= newWeek())
     w.slots++
     const hit = sched.findIndex((r, i) => !used.has(i) && Date.parse(r.started) >= s && Date.parse(r.started) < s + SLOT_GRACE)
     if (hit >= 0) used.add(hit)
@@ -100,11 +112,59 @@ function scheduleStats(wf, runs, snapshots, firstMs, asOfMs) {
   }
   for (const r of sched) {
     if (!r.conclusion || r.conclusion === 'success' || r.conclusion === 'skipped') continue
-    const w = (weeks[isoWeek(r.created)] ??= { slots: 0, missed: 0, failed_runs: 0, total: 0 })
-    w.failed_runs++
+    ;(weeks[isoWeek(r.created)] ??= newWeek()).failed_runs++
   }
   for (const w of Object.values(weeks)) w.total = w.missed + w.failed_runs
   return weeks
+}
+
+const newWeekBucket = () => ({ workflows: {}, jobs: {}, jobs_coverage: { eligible_runs: 0, runs_with_jobs: 0 }, schedules: {}, lines: {} })
+
+function tallyRuns(runs, jobs, wk) {
+  const withJobs = new Set(jobs.map(j => `${j.run_id}:${j.attempt}`))
+  for (const r of runs) {
+    const w = wk(isoWeek(r.created))
+    if (COUNTED.has(r.conclusion)) bump(w.workflows, r.workflow, FAIL.has(r.conclusion))
+    if (r.status === 'completed' && r.conclusion !== 'skipped') {
+      w.jobs_coverage.eligible_runs++
+      if (withJobs.has(`${r.id}:${r.attempt}`)) w.jobs_coverage.runs_with_jobs++
+    }
+  }
+}
+
+function tallyJobs(runs, jobs, wk) {
+  const byRun = new Map(runs.map(r => [r.id, r]))
+  for (const line of jobs) {
+    const r = byRun.get(line.run_id)
+    if (!r || r.attempt !== line.attempt) continue
+    const w = wk(isoWeek(r.created))
+    for (const j of line.jobs) if (COUNTED.has(j.conclusion)) bump(w.jobs, `${r.workflow}/${j.name}`, FAIL.has(j.conclusion))
+  }
+}
+
+function tallySchedules(runs, snaps, asOfMs, weeks, wk) {
+  const byWf = new Map()
+  for (const r of runs) (byWf.get(r.workflow) ?? byWf.set(r.workflow, []).get(r.workflow)).push(r)
+  const scheduled = new Set(snaps.flatMap(s => Object.keys(s.map)))
+  for (const wf of [...scheduled].sort()) {
+    const rs = byWf.get(wf) || []
+    if (!rs.length) continue
+    const firstMs = Math.min(...rs.map(r => Date.parse(r.created)))
+    for (const [k, v] of Object.entries(scheduleStats(wf, rs, snaps, firstMs, asOfMs))) if (weeks[k]) wk(k).schedules[wf] = v
+  }
+}
+
+function tallyLines(weeks, lines) {
+  const lineOf = new Map()
+  for (const [l, wfs] of Object.entries(lines)) for (const f of wfs) lineOf.set(f, l)
+  const bucket = (acc, f) => (acc[lineOf.get(f) || 'unmapped'] ??= { runs: 0, failed: 0, schedule_total: 0 })
+  for (const w of Object.values(weeks)) {
+    finish(w.workflows); finish(w.jobs)
+    const acc = Object.fromEntries(Object.keys(lines).map(l => [l, { runs: 0, failed: 0, schedule_total: 0 }]))
+    for (const [f, e] of Object.entries(w.workflows)) { const l = bucket(acc, f); l.runs += e.runs; l.failed += e.failed }
+    for (const [f, s] of Object.entries(w.schedules)) bucket(acc, f).schedule_total += s.total
+    for (const [l, e] of Object.entries(acc)) w.lines[l] = { workflow_rate: rate(e.failed, e.runs), runs: e.runs, failed: e.failed, schedule_total: e.schedule_total }
+  }
 }
 
 /**
@@ -115,52 +175,12 @@ export function rollup({ runs, jobs, schedules = [], lines, dataCommit = null, a
   const sortedSnaps = [...schedules].sort((a, b) => (a.date < b.date ? -1 : 1))
   const asOfIso = asOf || runs.reduce((m, r) => (r.created > m ? r.created : m), '') || null
   const asOfMs = asOfIso ? Date.parse(asOfIso) : 0
-  const byRun = new Map(runs.map(r => [r.id, r]))
   const weeks = {}
-  const wk = (k) => (weeks[k] ??= { workflows: {}, jobs: {}, jobs_coverage: { eligible_runs: 0, runs_with_jobs: 0 }, schedules: {}, lines: {} })
-  const withJobs = new Set(jobs.map(j => `${j.run_id}:${j.attempt}`))
-
-  for (const r of runs) {
-    const w = wk(isoWeek(r.created))
-    if (COUNTED.has(r.conclusion)) bump(w.workflows, r.workflow, FAIL.has(r.conclusion))
-    if (r.status === 'completed' && r.conclusion !== 'skipped') {
-      w.jobs_coverage.eligible_runs++
-      if (withJobs.has(`${r.id}:${r.attempt}`)) w.jobs_coverage.runs_with_jobs++
-    }
-  }
-  for (const line of jobs) {
-    const r = byRun.get(line.run_id)
-    if (!r || r.attempt !== line.attempt) continue
-    const w = wk(isoWeek(r.created))
-    for (const j of line.jobs) if (COUNTED.has(j.conclusion)) bump(w.jobs, `${r.workflow}/${j.name}`, FAIL.has(j.conclusion))
-  }
-
-  const byWf = new Map()
-  for (const r of runs) (byWf.get(r.workflow) ?? byWf.set(r.workflow, []).get(r.workflow)).push(r)
-  const scheduled = new Set(sortedSnaps.flatMap(s => Object.keys(s.map)))
-  for (const wf of [...scheduled].sort()) {
-    const rs = byWf.get(wf) || []
-    if (!rs.length) continue
-    const firstMs = Math.min(...rs.map(r => Date.parse(r.created)))
-    const st = scheduleStats(wf, rs, sortedSnaps, firstMs, asOfMs)
-    for (const [k, v] of Object.entries(st)) if (weeks[k]) wk(k).schedules[wf] = v
-  }
-
-  const lineOf = new Map()
-  for (const [l, wfs] of Object.entries(lines)) for (const f of wfs) lineOf.set(f, l)
-  for (const w of Object.values(weeks)) {
-    finish(w.workflows); finish(w.jobs)
-    const acc = Object.fromEntries(Object.keys(lines).map(l => [l, { runs: 0, failed: 0, schedule_total: 0 }]))
-    for (const [f, e] of Object.entries(w.workflows)) {
-      const l = (acc[lineOf.get(f) || 'unmapped'] ??= { runs: 0, failed: 0, schedule_total: 0 })
-      l.runs += e.runs; l.failed += e.failed
-    }
-    for (const [f, s] of Object.entries(w.schedules)) {
-      const l = (acc[lineOf.get(f) || 'unmapped'] ??= { runs: 0, failed: 0, schedule_total: 0 })
-      l.schedule_total += s.total
-    }
-    for (const [l, e] of Object.entries(acc)) w.lines[l] = { workflow_rate: rate(e.failed, e.runs), runs: e.runs, failed: e.failed, schedule_total: e.schedule_total }
-  }
+  const wk = (k) => (weeks[k] ??= newWeekBucket())
+  tallyRuns(runs, jobs, wk)
+  tallyJobs(runs, jobs, wk)
+  tallySchedules(runs, sortedSnaps, asOfMs, weeks, wk)
+  tallyLines(weeks, lines)
   return stable({ data_commit: dataCommit, as_of: asOfIso, weeks })
 }
 
