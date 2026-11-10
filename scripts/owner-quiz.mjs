@@ -128,6 +128,16 @@ function shuffle(choices, answerIndex, seed) {
   return { choices: p.map(i => choices[i]), answer: LETTERS[p.indexOf(answerIndex)] }
 }
 
+/** The statement, three distinct non-empty choices and the right index — or null. */
+function questionText(q) {
+  if (!q || typeof q !== 'object') return null
+  const statement = String(q.statement || '').replace(/\s+/g, ' ').trim()
+  const choices = Array.isArray(q.choices) ? q.choices.map(c => String(c ?? '').replace(/\s+/g, ' ').trim()) : []
+  const ai = LETTERS.indexOf(String(q.answer || '').trim().toUpperCase())
+  if (!statement || choices.length !== 3 || choices.some(c => !c) || new Set(choices).size !== 3 || ai < 0) return null
+  return { statement, choices, ai }
+}
+
 /**
  * Validate the model's quiz. Bad questions are dropped; fewer than 3 valid → null (post nothing).
  * @param {string} text  the model's raw output
@@ -140,11 +150,9 @@ export function parseQuiz(text, { exists, lineCount, seed = 0 } = {}) {
   if (!Array.isArray(raw)) return null
   const out = []
   for (const q of raw) {
-    if (!q || typeof q !== 'object') continue
-    const statement = String(q.statement || '').replace(/\s+/g, ' ').trim()
-    const choices = Array.isArray(q.choices) ? q.choices.map(c => String(c ?? '').replace(/\s+/g, ' ').trim()) : []
-    const ai = LETTERS.indexOf(String(q.answer || '').trim().toUpperCase())
-    if (!statement || choices.length !== 3 || choices.some(c => !c) || new Set(choices).size !== 3 || ai < 0) continue
+    const parsed = questionText(q)
+    if (!parsed) continue
+    const { statement, choices, ai } = parsed
     const code = checkLocation(q.code, { exists, lineCount })
     if (!code) continue
     const doc = checkLocation(q.doc, { exists, lineCount })
