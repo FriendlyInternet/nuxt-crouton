@@ -42,6 +42,7 @@ export const ALLOW = [
   ['loop-station-refresh.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
+  ['epic-version.mjs', '--add-label', 'stamps the pipeline:v1 version marker on an epic; it starts no stage and a missed stamp is re-derived from the default'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
 

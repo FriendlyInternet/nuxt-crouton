@@ -501,12 +501,16 @@ function buildParentPickerSection(hasHierarchy: boolean, parentField: string, la
 
 // Add CroutonI18nInput if there are translatable fields
 // Use fallback to empty string to ensure string type compatibility
-function buildTranslationField(hasTranslations: boolean, translatableFieldNames: string[], translatableFields: Record<string, any>[], plural: string): string {
+export function buildTranslationField(hasTranslations: boolean, translatableFieldNames: string[], translatableFields: Record<string, any>[], plural: string): string {
   // Build fieldComponents map for translatable fields with custom components
   const fieldComponentsMap: Record<string, string> = {}
   translatableFields.forEach((field) => {
     if (field.meta?.component) {
       fieldComponentsMap[field.name] = resolveComponentName(field.meta.component)
+    }
+    else if (field.component && !['UInput', 'UTextarea'].includes(field.component)) {
+      // Manifest-declared rich control (e.g. richText → editor); plain inputs are the I18nInput default
+      fieldComponentsMap[field.name] = resolveComponentName(field.component)
     }
   })
   const hasFieldComponents = Object.keys(fieldComponentsMap).length > 0

@@ -20,6 +20,7 @@ edited diagram back to `FriendlyInternet/nuxt-crouton`. It touches **two systems
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Which account to deploy into | identifier (not sensitive) | GitHub Actions repo secret / env | **Existing** |
 | `GITHUB_APP_PRIVATE_KEY` | GitHub App | Signs a JWT to mint installation tokens at runtime | the **Crouton App** private key (PEM) | **Cloudflare Worker secret** (`wrangler secret put`) | **From #519** — the App's one durable secret, shared by all Tier-2 Workers |
 | `GITHUB_APP_ID` | GitHub App | Identifies the App when signing | not sensitive | Worker **var** (or secret) | from #519 |
+| `OWNER_TOKEN_SECRET` | derived | HMAC key for the owner-only save token (#3261) | `sha256("$REVIEW_SEED_SECRET:ticket-editor:owner-token")` hex | Worker secret, **set by CI** (`deploy-ticket-editor.yml`); the status app derives the same key from its `reviewSeedSecret` | **Nothing to set by hand** |
 | `GITHUB_APP_INSTALLATION_ID` | GitHub App | The install on `FriendlyInternet/nuxt-crouton` to scope the token to | not sensitive | Worker **var** (or secret) | from #519 |
 
 **No PAT.** The old `GITHUB_TOKEN` (fine-grained PAT, Contents: R/W) is **retired** for this Worker —

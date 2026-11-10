@@ -47,6 +47,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "reka-ui": "2.10.5"
+  },
   "peerDependencies": {
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-core": "workspace:*",

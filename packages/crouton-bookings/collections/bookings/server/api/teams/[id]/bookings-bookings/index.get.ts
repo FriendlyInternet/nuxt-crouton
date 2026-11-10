@@ -3,14 +3,17 @@
 import { getAllBookingsBookings, getBookingsBookingsByIds } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 
-export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+const isAdmin = (role?: string) => role === 'admin' || role === 'owner'
 
+export default defineEventHandler(async (event) => {
+  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+
+  const scope = isAdmin(membership?.role) ? undefined : { ownerId: user.id }
   const query = getQuery(event)
   if (query.ids) {
     const ids = String(query.ids).split(',')
-    return await getBookingsBookingsByIds(team.id, ids)
+    return await getBookingsBookingsByIds(team.id, ids, scope)
   }
 
-  return await getAllBookingsBookings(team.id)
+  return await getAllBookingsBookings(team.id, scope)
 })
