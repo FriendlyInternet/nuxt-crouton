@@ -14,10 +14,12 @@ test('committed api-reference pages match the code', () => {
 })
 
 test('--check fails when a component prop is renamed', () => {
-  const f = 'packages/crouton-core/app/components/ConfirmButton.vue'
+  // Not ConfirmButton: check-doc-claims.deps-test.mjs reads its props and runs in parallel with this
+  // file (`node --test scripts/*.deps-test.mjs`), so renaming its prop here made that test flaky.
+  const f = 'packages/crouton-core/app/components/ShortcutHint.vue'
   const orig = readFileSync(f, 'utf8')
   try {
-    writeFileSync(f, orig.replace('confirmLabel?: string', 'confirmText?: string'))
+    writeFileSync(f, orig.replace('subtle?: boolean', 'faint?: boolean'))
     const r = run()
     expectStatus(r, 1)
     assert.match(r.stderr, /components\.md/)
