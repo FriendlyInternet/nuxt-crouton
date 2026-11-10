@@ -120,31 +120,43 @@ const hasMod = (st, kind) => st.modifiers?.some(m => m.kind === kind)
 const KW = ts.SyntaxKind
 // Exported functions, default-exported anonymous functions (named after the file),
 // `export default useX` and `export const useX = () => ...`.
-function exportedFunctions(s, file) {
-  const base = file.replace(/\.ts$/, '')
-  const out = []
+function localFunctions(s) {
   const decls = new Map()
   for (const st of s.statements) {
     if (ts.isFunctionDeclaration(st) && st.name) decls.set(st.name.text, { name: st.name.text, node: st })
-    if (ts.isVariableStatement(st)) {
-      for (const d of st.declarationList.declarations) {
-        if (ts.isIdentifier(d.name) && d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) decls.set(d.name.text, { name: d.name.text, node: d.initializer, doc: st })
-      }
+    if (!ts.isVariableStatement(st)) continue
+    for (const d of st.declarationList.declarations) {
+      const init = d.initializer
+      if (ts.isIdentifier(d.name) && init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) decls.set(d.name.text, { name: d.name.text, node: init, doc: st })
     }
   }
+  return decls
+}
+// The functions one top-level statement exports, as `[name, node, doc]` tuples.
+function exportsOfStatement(st, s, base, decls) {
+  if (ts.isFunctionDeclaration(st) && hasMod(st, KW.ExportKeyword)) return [[st.name?.text ?? base, st]]
+  if (ts.isVariableStatement(st) && hasMod(st, KW.ExportKeyword)) {
+    return st.declarationList.declarations
+      .map(d => decls.get(d.name.getText(s)))
+      .filter(e => e && /^use[A-Z]/.test(e.name))
+      .map(e => [e.name, e.node, st])
+  }
+  if (ts.isExportAssignment(st) && ts.isIdentifier(st.expression)) {
+    const e = decls.get(st.expression.text)
+    return e ? [[e.name, e.node, e.doc]] : []
+  }
+  return []
+}
+function exportedFunctions(s, file) {
+  const base = file.replace(/\.ts$/, '')
+  const decls = localFunctions(s)
   const seen = new Set()
-  const add = (name, node, doc) => { if (!seen.has(name)) { seen.add(name); out.push({ name, node, doc: doc ?? node }) } }
+  const out = []
   for (const st of s.statements) {
-    if (ts.isFunctionDeclaration(st) && hasMod(st, KW.ExportKeyword)) {
-      add(st.name?.text ?? base, st)
-    } else if (ts.isVariableStatement(st) && hasMod(st, KW.ExportKeyword)) {
-      for (const d of st.declarationList.declarations) {
-        const e = decls.get(d.name.getText(s))
-        if (e && /^use[A-Z]/.test(e.name)) add(e.name, e.node, st)
-      }
-    } else if (ts.isExportAssignment(st) && ts.isIdentifier(st.expression)) {
-      const e = decls.get(st.expression.text)
-      if (e) add(e.name, e.node, e.doc)
+    for (const [name, node, doc] of exportsOfStatement(st, s, base, decls)) {
+      if (seen.has(name)) continue
+      seen.add(name)
+      out.push({ name, node, doc: doc ?? node })
     }
   }
   return out
