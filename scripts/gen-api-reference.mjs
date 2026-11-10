@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generate docs/content/8.api-reference/{components,composables,field-types,cli}.md from the code.
+ * Generate docs/content/8.api-reference/{components,composables,field-types,cli,config-keys,types,server}.md
+ * from the code.
  *
  *   node scripts/gen-api-reference.mjs            # write the pages
  *   node scripts/gen-api-reference.mjs --check    # exit 1 if any page is stale (CI)
@@ -11,6 +12,9 @@
  *   - field types: packages/{crouton-core,crouton-editor}/crouton.manifest.ts `fieldTypes`,
  *                  plus ALLOWED_META_KEYS in crouton-cli/lib/utils/load-fields.ts
  *   - CLI:         packages/crouton-cli/bin/crouton-generate.js `defineCommand({...})` calls
+ *   - config keys: every packages/<pkg>/crouton.manifest.ts `configuration` + `runtimeConfigKey`
+ *   - types:       packages/crouton-core/app/types/<file>.ts (exported interfaces, type aliases, other exports)
+ *   - server:      packages/{crouton-core,crouton-auth}/server/utils/<file>.ts (functions, types, other exports)
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -119,7 +123,7 @@ function genComponents() {
 const hasMod = (st, kind) => st.modifiers?.some(m => m.kind === kind)
 const KW = ts.SyntaxKind
 // Exported functions, default-exported anonymous functions (named after the file),
-// `export default useX` and `export const useX = () => ...`.
+// `export default useX` and `export const useX = () => ...`, and local `export { a, b }` lists.
 function localFunctions(s) {
   const decls = new Map()
   for (const st of s.statements) {
@@ -132,8 +136,17 @@ function localFunctions(s) {
   }
   return decls
 }
+const isLocalExportList = st => ts.isExportDeclaration(st) && !st.moduleSpecifier && !!st.exportClause && ts.isNamedExports(st.exportClause)
+// `export { a, b as c }` — the elements that name a local function.
+function listExports(st, decls) {
+  return st.exportClause.elements
+    .map(el => [el.name.text, decls.get((el.propertyName ?? el.name).text)])
+    .filter(([, e]) => e)
+    .map(([n, e]) => [n, e.node, e.doc])
+}
 // The functions one top-level statement exports, as `[name, node, doc]` tuples.
 function exportsOfStatement(st, s, base, decls) {
+  if (isLocalExportList(st)) return listExports(st, decls)
   if (ts.isFunctionDeclaration(st) && hasMod(st, KW.ExportKeyword)) return [[st.name?.text ?? base, st]]
   if (ts.isVariableStatement(st) && hasMod(st, KW.ExportKeyword)) {
     return st.declarationList.declarations
@@ -230,11 +243,131 @@ function genCli() {
   return out
 }
 
+// ── config keys ────────────────────────────────────────────────────────
+function manifestOf(file) {
+  const s = sf(file, rd(file))
+  let o = null
+  walk(s, (n) => {
+    if (ts.isCallExpression(n) && n.expression.getText(s) === 'defineCroutonManifest') o = evalLiteral(n.arguments[0])
+  })
+  return o
+}
+const configRow = ([k, v]) => `| ${code(k)} | ${v.type ?? ''} | ${v.default !== undefined ? code(JSON.stringify(v.default)) : ''} | ${v.runtimeConfig ?? ''} | ${(v.options ?? []).map(o => code(o.value)).join(', ')} | ${oneLine(v.description ?? '')} |\n`
+function configSection(o) {
+  const rc = o.runtimeConfigKey ? code(`runtimeConfig.${o.runtimeConfigKey}`) : '`runtimeConfig` (not declared — the CLI guesses `crouton<Feature>`)'
+  let out = `\n## ${o.id}\n\nAnswers land in ${code('crouton.config.js → features.<alias>')} and ${rc}.\n\n`
+  out += '| Key | Type | Default | Runtime config | Options | Description |\n| --- | --- | --- | --- | --- | --- |\n'
+  return out + Object.entries(o.configuration).map(configRow).join('')
+}
+function genConfigKeys() {
+  const files = readdirSync(join(ROOT, 'packages')).sort()
+    .map(d => `packages/${d}/crouton.manifest.ts`)
+    .filter(f => existsSync(join(ROOT, f)))
+  let out = `---\ntitle: Config keys\ndescription: Per-package settings an app can set (generated from the code)\nicon: i-lucide-settings-2\n---\n\n${HEADER('packages/*/crouton.manifest.ts')}\n# Config keys\n\nThe per-package settings an app can set: each package's manifest \`configuration\`. \`crouton config\` asks for them when the app extends the package (defaults in CI). For the top-level \`crouton.config.js\` shape (\`collections\`, \`targets\`, \`dialect\`) see the [CLI reference](/generation/cli-reference).\n`
+  for (const f of files) {
+    const o = manifestOf(f)
+    if (o?.configuration && Object.keys(o.configuration).length) out += configSection(o)
+  }
+  return out
+}
+
+// ── types + server ─────────────────────────────────────────────────────
+const isExported = st => hasMod(st, KW.ExportKeyword)
+// Free JSDoc text: escape `<` so `<ClientOnly>` in prose is not parsed as a component by Nuxt Content.
+// (Only outside code spans: inside one, `&lt;` would show literally.)
+const prose = t => t.split('`').map((p, i) => (i % 2 ? p : p.replace(/</g, '&lt;'))).join('`')
+const firstParagraph = d => prose(d.split(/\n\n/)[0].trim())
+function memberName(m, s) {
+  if (m.name) return m.name.getText(s)
+  if (ts.isIndexSignatureDeclaration(m)) return `[${m.parameters.map(p => p.getText(s)).join(', ')}]`
+  return '(call)'
+}
+function memberType(m, s) {
+  if (ts.isPropertySignature(m) || ts.isIndexSignatureDeclaration(m)) return m.type?.getText(s) ?? ''
+  return m.getText(s)
+}
+const memberRow = (m, s) => `| ${code(memberName(m, s))} | ${code(oneLine(memberType(m, s)))} | ${m.questionToken ? 'no' : 'yes'} | ${prose(oneLine(jsdoc(m)))} |\n`
+function interfaceSection(st, s, level) {
+  let out = `\n${level} ${st.name.text}\n\n`
+  const d = jsdoc(st)
+  if (d) out += firstParagraph(d) + '\n\n'
+  const ext = (st.heritageClauses ?? []).flatMap(h => h.types.map(t => code(t.getText(s))))
+  if (ext.length) out += `Extends: ${ext.join(', ')}\n\n`
+  if (!st.members.length) return out
+  out += '| Member | Type | Required | Description |\n| --- | --- | --- | --- |\n'
+  return out + st.members.map(m => memberRow(m, s)).join('') + '\n'
+}
+function aliasSection(st, s, level) {
+  let out = `\n${level} ${st.name.text}\n\n`
+  const d = jsdoc(st)
+  if (d) out += firstParagraph(d) + '\n\n'
+  const tp = st.typeParameters ? `<${st.typeParameters.map(p => p.getText(s)).join(', ')}>` : ''
+  return out + `\`\`\`ts\ntype ${st.name.text}${tp} = ${st.type.getText(s)}\n\`\`\`\n\n`
+}
+const typeDecls = s => s.statements.filter(st => isExported(st) && (ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st)))
+/** One section per exported interface / type alias of a file. */
+function typeSections(s, f, level) {
+  return typeDecls(s).map(st => (ts.isInterfaceDeclaration(st) ? interfaceSection(st, s, level) : aliasSection(st, s, level)) + `_Source: \`${f}\`_\n`).join('')
+}
+function reexportText(st, s) {
+  const m = st.moduleSpecifier.text
+  if (!st.exportClause) return `everything from ${code(m.replace(/^\.\//, '') + '.ts')}`
+  const names = st.exportClause.elements.filter(el => !el.isTypeOnly).map(el => code(el.name.text))
+  return `${names.join(', ')} (re-exported from ${code(m)})`
+}
+// Names (as text) one statement exports that are not interfaces / type aliases.
+function valueExports(st, s) {
+  if (ts.isVariableStatement(st) && isExported(st)) return st.declarationList.declarations.map(d => d.name.getText(s))
+  if (ts.isFunctionDeclaration(st) && st.name && isExported(st)) return [st.name.text]
+  if (isLocalExportList(st) && !st.isTypeOnly) return st.exportClause.elements.filter(el => !el.isTypeOnly).map(el => el.name.text)
+  return []
+}
+/** `**Also exported from …**` line: constants, unlisted functions, re-exports. */
+function otherExports(s, f, listed) {
+  const seen = new Set(listed)
+  const items = []
+  for (const st of s.statements) {
+    if (ts.isExportDeclaration(st) && st.moduleSpecifier && !st.isTypeOnly) { items.push(reexportText(st, s)); continue }
+    for (const n of valueExports(st, s)) if (!seen.has(n)) { seen.add(n); items.push(code(n)) }
+  }
+  return items.length ? `\n**Also exported from \`${f}\`:** ${items.join(', ')}\n` : ''
+}
+const tsFiles = dir => readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.ts')).sort()
+function genTypes() {
+  const dir = 'packages/crouton-core/app/types'
+  let out = `---\ntitle: Types\ndescription: Exported crouton-core types and interfaces (generated from the code)\nicon: i-lucide-square-code\n---\n\n${HEADER(dir + '/*.ts')}\n# Types\n\nEvery interface and type alias exported from \`${dir}\`. The description is the JSDoc above each declaration.\n`
+  for (const f of tsFiles(dir)) {
+    const s = sf(f, rd(`${dir}/${f}`))
+    out += typeSections(s, `${dir}/${f}`, '##') + otherExports(s, `${dir}/${f}`, [])
+  }
+  return out
+}
+function serverFile(dir, f) {
+  const s = sf(f, rd(`${dir}/${f}`))
+  const fns = exportedFunctions(s, f)
+  let out = fns.map(e => composableEntry(s, e, dir, f)).join('')
+  const types = typeSections(s, `${dir}/${f}`, '###')
+  if (types) out += `\n### Types in \`${f}\`\n` + types
+  return out + otherExports(s, `${dir}/${f}`, fns.map(e => e.name))
+}
+function genServer() {
+  const dirs = ['packages/crouton-core/server/utils', 'packages/crouton-auth/server/utils']
+  let out = `---\ntitle: Server\ndescription: Server utilities and their types from crouton-core and crouton-auth (generated from the code)\nicon: i-lucide-server\n---\n\n${HEADER(dirs.map(d => d + '/*.ts').join(', '))}\n# Server\n\nAuto-imported in server routes of an app that extends the package (Nitro \`server/utils\`). Signatures are read from the source; the description is the JSDoc above each function.\n`
+  for (const dir of dirs) {
+    out += `\n## ${dir.split('/')[1]}\n`
+    for (const f of tsFiles(dir)) out += serverFile(dir, f)
+  }
+  return out
+}
+
 const PAGES = {
   'components.md': genComponents,
   'composables.md': genComposables,
   'field-types.md': genFieldTypes,
-  'cli.md': genCli
+  'cli.md': genCli,
+  'config-keys.md': genConfigKeys,
+  'types.md': genTypes,
+  'server.md': genServer
 }
 
 const check = process.argv.includes('--check')

@@ -20,15 +20,15 @@ Complete reference documentation for all Nuxt Crouton APIs.
   ::
 
   ::card{title="Types" to="/api-reference/types" icon="i-lucide-square-code"}
-  TypeScript types and interfaces for collections, schemas, and configurations.
+  Exported crouton-core types and interfaces, generated from the code.
   ::
 
   ::card{title="Server" to="/api-reference/server" icon="i-lucide-server"}
-  Server-side utilities, API handlers, and database helpers.
+  Server utilities and their types from crouton-core and crouton-auth, generated from the code.
   ::
 
-  ::card{title="Internal API" to="/api-reference/internal-api" icon="i-lucide-wrench"}
-  Low-level APIs for advanced customization.
+  ::card{title="Config keys" to="/api-reference/config-keys" icon="i-lucide-settings-2"}
+  Per-package settings an app can set, generated from the code.
   ::
 
   ::card{title="Field types" to="/api-reference/field-types" icon="i-lucide-database"}
