@@ -1,5 +1,5 @@
-// Round-trip tests for the Excalidraw PNG scene codec (#3692) — the part that stays once the
-// draw.io spike (and its embedTextChunk helper) is removed.
+// Round-trip tests for the Excalidraw PNG scene codec (#3692): a scene embedded with
+// embedScene must come back unchanged from extractScene.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import zlib from 'node:zlib'
