@@ -135,7 +135,7 @@ export function removeNode(root: LayoutNode | null, path: NodePath): LayoutNode 
   return replaceAt(root, path, null)
 }
 
-/** Persist reka-ui resize results: set each child's `defaultSize` on a split. */
+/** Persist USplitter resize results: set each child's `defaultSize` on a split. */
 export function applySizes(
   root: LayoutNode,
   path: NodePath,
