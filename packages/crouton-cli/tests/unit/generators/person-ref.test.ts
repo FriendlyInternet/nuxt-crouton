@@ -140,6 +140,40 @@ describe('person field wiring', () => {
     expect(generatePostEndpoint(d, minimalConfig as any)).not.toContain('TeamMembers')
   })
 
+  it('plain local ref list cell still uses CroutonItemCardMini', () => {
+    const d = mk([nameField, { name: 'categoryId', type: 'string', refTarget: 'categories', meta: {} }])
+    const out = generateListComponent(d, minimalConfig as any)
+    expect(out).toContain('#categoryId-cell="{ row }"')
+    expect(out).toMatch(/<CroutonItemCardMini[^>]*:id="row\.original\.categoryId"[^>]*collection="mainCategories"/s)
+    expect(out).not.toContain('row.original.categoryIdUser')
+    expect(out).not.toContain('teamMemberItems')
+  })
+
+  it('adapter ref is unchanged: Form, List and POST keep the adapter path', () => {
+    const adapter = { name: 'clientId', type: 'string', refTarget: 'supersaasUsers', refScope: 'adapter', meta: {} }
+    const d = mk([nameField, adapter])
+    const form = generateFormComponent(d, minimalConfig as any)
+    expect(form).toMatch(/<CroutonFormReferenceSelect[^>]*collection="supersaasUsers"/s)
+    expect(form).not.toContain('teamMemberItems')
+    expect(form).not.toContain('useTeam()')
+    const list = generateListComponent(d, minimalConfig as any)
+    expect(list).toMatch(/<CroutonItemCardMini[^>]*:id="row\.original\.clientId"[^>]*collection="supersaasUsers"/s)
+    expect(list).not.toContain('row.original.clientIdUser')
+    const post = generatePostEndpoint(d, minimalConfig as any)
+    expect(post).not.toContain('TeamMembers')
+    expect(post).not.toContain('References(team.id, body)')
+    expect(generateQueries(d, null, 'main', new Map(), new Map())).not.toContain('getMembership')
+  })
+
+  it('an adapter ref to users is not a person field', () => {
+    // Only refScope external + refTarget users is a person; adapter users stay on the adapter path.
+    const adapterUsers = { name: 'clientId', type: 'string', refTarget: 'users', refScope: 'adapter', meta: {} }
+    expect(isPersonRef(adapterUsers)).toBe(false)
+    const d = mk([nameField, adapterUsers])
+    expect(generateListComponent(d, minimalConfig as any)).toMatch(/<CroutonItemCardMini[^>]*collection="users"/s)
+    expect(generatePostEndpoint(d, minimalConfig as any)).not.toContain('TeamMembers')
+  })
+
   it('seed fixture lists person fields and the runner fills a member subquery', () => {
     const fixture = generateSeedFixture(mk([nameField, person]))!
     expect(fixture.personFields).toEqual(['assigneeId'])
