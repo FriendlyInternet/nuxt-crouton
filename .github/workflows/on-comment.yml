@@ -69,9 +69,18 @@ jobs:
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
               pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
             }
+            // A plan held after two reviewer rejections (#3272): same rule the re-plan path uses (#3116).
+            const labels = (i.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            let planHeld = false
+            if (!isPr && labels.includes('status:blocked')) {
+              const { isPlanHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`)
+              const thread = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: i.number, per_page: 100 }))
+                .map(x => ({ body: x.body, userType: x.user && x.user.type }))
+              planHeld = isPlanHold({ comments: thread, labels })
+            }
             const d = routeComment({
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
-              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              issue: { number: i.number, isPr, body: i.body, labels, planHeld },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
@@ -392,6 +401,70 @@ jobs:
             await github.rest.issues.createComment({ owner, repo, issue_number,
               body: `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
+
+  # Owner override of a plan held after two reviewer rejections (#3272). `ok: <reason>` posts the
+  # reason AS THE BOT (the only record the build trusts), logs a dated line on the parent epic,
+  # lifts the hold and adds `plan:approved` (removed first so the label event always fires).
+  # Checkout is the default branch: the scripts a write-token step imports are trusted ones.
+  approve-plan:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { parseOverride, decisionLine, appendDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`)
+            const { overrideComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            const c = context.payload.comment
+            const issue_number = context.payload.issue.number
+            const reason = parseOverride({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            if (!reason) return core.setFailed('routed to approve-plan but no ok: <reason> found')
+            // 1. The bot's record first, so the build can never start before its reason exists.
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: overrideComment({ reason, date: c.created_at, url: c.html_url }) })
+            // 2. A dated line on the parent epic (epic=N in the ticket's hidden marker).
+            const epic = /<!--\s*pipeline:[^>]*\bepic=(\d+)/.exec(context.payload.issue.body || '')?.[1]
+            if (epic && Number(epic) !== issue_number) {
+              const { data: e } = await github.rest.issues.get({ ...context.repo, issue_number: Number(epic) })
+              const line = decisionLine({ text: `owner override of a twice-rejected plan on #${issue_number}: ${reason}`, date: c.created_at, url: c.html_url })
+              const next = appendDecision(e.body, line, c.html_url)
+              if (next !== e.body) await github.rest.issues.update({ ...context.repo, issue_number: Number(epic), body: next })
+            }
+            // 3. Lift the hold and approve; remove-then-add so an existing label still fires the event.
+            for (const name of ['status:blocked', 'plan:approved']) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch (e) {}
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['plan:approved'] })
+            core.info(`#${issue_number}: plan approved by owner override`)
+
+  plan-needs-reason:
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
+              body: '> 🤖 **pi.dev harness** · agent pipeline (CI) · _owner override (#3272)_\n\n'
+                + 'The plan was rejected twice, so I need a reason to build it anyway. Reply `ok: <why the reviewers\' point does not matter>` and I will build from the newest plan. The hold stays until then.' })
 
   resume:
     needs: route

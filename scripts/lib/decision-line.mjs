@@ -45,3 +45,13 @@ export function appendDecision(issueBody, line, url) {
   const section = body.slice(start, end).replace(/\s+$/, '')
   return `${body.slice(0, start)}${section}\n${line}\n${end < body.length ? '\n' : ''}${body.slice(end)}`
 }
+
+/**
+ * The owner's `ok: <reason>` on a plan held after two rejections (#3272): the reason, or null.
+ * Only the `ok:` form — a `Decision:` comment records but does not approve.
+ */
+export function parseOverride(args = {}) {
+  const first = stripGeneratedTrailer(String(args.body || '')).split('\n').filter(l => !/^\s*>/.test(l)).find(l => l.trim())
+  if (!first || !OK_REASON.test(first)) return null
+  return parseDecision({ ...args, held: true })
+}
