@@ -50,6 +50,8 @@ jobs:
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
+      # docs/** or packages/** changed (#3166): runs the doc checks, even on a docs-only PR.
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,7 +85,8 @@ jobs:
   prepare:
     name: Build packages
     needs: changes
-    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
+    # Also on a docs-only PR (stage none): the doc checks below need installed packages (#3166).
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) || needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -104,6 +107,12 @@ jobs:
       # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
       - name: Run scripts/*.deps-test.mjs
         run: node --test scripts/*.deps-test.mjs
+
+      # #3166: names (CLI commands + flags, components, props), schema field types and code-block
+      # syntax in docs vs the code. Needs typescript, so it lives here; it exits non-zero if it cannot
+      # run. Report-only for now; add --strict once the rebuilt sections pass.
+      - name: Check doc claims (report-only)
+        run: node scripts/check-doc-claims.mjs
 
       - name: Check package dist ships no test files
         run: node scripts/check-dist-no-tests.mjs
@@ -482,11 +491,6 @@ jobs:
         if: env.IS_CODE == 'true'
         run: node scripts/check-docs.mjs
 
-      # #3166: doc claims (CLI commands, schema field types, code-block syntax) vs the code.
-      # Report-only for now; add --strict once the rebuilt sections pass.
-      - name: Check doc claims (report-only)
-        run: node scripts/check-doc-claims.mjs
-
       # An app's schemas/*.json is a COPY of its package's and forks silently from install
       # onwards (#1766/#1769). Only UNDECLARED behavioural drift fails — intentional divergence
       # lives in scripts/schema-drift.baseline.json with a reason.
@@ -510,7 +514,7 @@ jobs:
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)

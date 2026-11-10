@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { detect } from './ci-detect.mjs'
 import { loadStages } from './harness-stages.mjs'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const model = await loadStages()
 const apps = [
@@ -54,4 +56,30 @@ test('infra (scripts, lockfile, ci.yml) is full; push to main is all apps', () =
 test('docs-only: stage none', () => {
   const r = run(['docs/x.md'])
   assert.equal(r.stage, 'none')
+})
+
+test('docs flag (#3166): docs/** or packages/** changes set it, an app-only change does not', () => {
+  assert.equal(run(['docs/content/1.getting-started/x.md']).docs, true)
+  assert.equal(run(['packages/crouton-core/app/x.ts']).docs, true)
+  assert.equal(run(['apps/velo/app/pages/index.vue']).docs, false)
+})
+
+test('docs-only PR through the real CLI prints docs=true (what the changes job hands on)', () => {
+  const out = execFileSync('node', ['scripts/ci-detect.mjs'], {
+    encoding: 'utf8',
+    env: { ...process.env, FILES: 'docs/content/1.getting-started/x.md', EVENT: 'pull_request', GITHUB_OUTPUT: '' }
+  })
+  assert.match(out, /^stage=none$/m)
+  assert.match(out, /^docs=true$/m)
+})
+
+// The workflow rule itself: ci.yml must hand `docs` on and run the doc checks in the installing job.
+const job = (yml, name) => yml.slice(yml.indexOf(`\n  ${name}:\n`) + 1).split(/\n {2}[a-z][\w-]*:\n/)[0]
+test('ci.yml: a docs-only PR runs the doc checks in the Build packages job (#3166)', () => {
+  const yml = readFileSync('.github/workflows/ci.yml', 'utf8')
+  assert.match(job(yml, 'changes'), /docs: \$\{\{ steps\.filter\.outputs\.docs \}\}/)
+  const prepare = job(yml, 'prepare')
+  assert.match(prepare.match(/^ {4}if: (.*)$/m)[1], /needs\.changes\.outputs\.docs == 'true'/)
+  assert.match(prepare, /run: node scripts\/check-doc-claims\.mjs/)
+  assert.doesNotMatch(job(yml, 'node-checks'), /check-doc-claims/, 'bare Node job has no typescript: the check would not run')
 })

@@ -6,8 +6,15 @@
  * pass --strict to exit 1 on any finding (flip the CI step to --strict once the rebuilt
  * sections pass).
  *
- *   1. names     — `crouton <command>` named in a page exists in the CLI; <CroutonX> components
- *                  and useCroutonX composables exist in packages/ (props, flags, config keys: not yet checked)
+ * The code-side lists (component props, CLI commands + flags, field types) come from the
+ * api-reference generator (scripts/gen-api-reference.mjs, #3661) — this script does not parse
+ * that code a second time. Needs `typescript` + `vue-component-meta`, so it runs in the CI job
+ * that installs packages; without them the import fails and the run exits non-zero
+ * ("could not run" is never a pass).
+ *
+ *   1. names     — `crouton <command>` and its `--flags` exist in the CLI; <CroutonX> components
+ *                  and useCroutonX composables exist in packages/; props passed to a crouton-core
+ *                  component exist on it (config keys: follow once #3702 adds that list)
  *   2. schemas   — every ```json block that looks like a collection schema uses known field types
  *   3. code      — ```ts / ```js blocks parse (syntax only; blocks containing `...` or `// ...`
  *                  are fragments and skipped, or mark a block `<!-- doc-check: skip -->` above it)
@@ -20,8 +27,10 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf } from './gen-api-reference.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ts = createRequire(import.meta.url)('typescript')
 
 // ---------- parsing ----------
 
@@ -55,25 +64,10 @@ export function extractBlocks(md) {
 }
 
 const isFragment = (code) => /(^|\s)\.\.\.(\s|$)|\/\/\s*\.\.\./.test(code)
+const camel = s => s.replace(/-(\w)/g, (_, c) => c.toUpperCase())
 
-// ---------- code-side facts ----------
-
-export function cliCommands(src) {
-  const names = new Set()
-  for (const m of src.matchAll(/meta:\s*\{\s*name:\s*'([\w-]+)'/g)) names.add(m[1])
-  for (const m of src.matchAll(/^\s*'?([\w-]+)'?:\s*\w+Cmd\b/gm)) names.add(m[1])
-  return names
-}
-
-export function snapshotFieldTypes(src) {
-  const start = src.indexOf('FIELD_TYPES_SNAPSHOT')
-  const types = new Set()
-  // top-level keys are indented exactly 2 spaces inside the object literal
-  for (const m of src.slice(start).matchAll(/^ {2}"([\w-]+)": \{/gm)) types.add(m[1])
-  return types
-}
-
-/** Every identifier-ish word in package sources (ts/vue/js/mjs) + Nuxt path-derived component names. */
+/** Every identifier-ish word in package sources (ts/vue/js/mjs) + Nuxt path-derived component names.
+ *  Existence only, across ALL packages — the generator lists crouton-core alone. */
 export function sourceWords(pkgDir) {
   const words = new Set()
   const visit = (d, parts) => {
@@ -95,12 +89,52 @@ export function sourceWords(pkgDir) {
   return words
 }
 
+/** `<Tag attr="v" :x='y' @e="z">` starting at `i` (the `<`): attribute names + the index after `>`. */
+export function readTag(text, i) {
+  const attrs = []
+  const nameEnd = text.slice(i).search(/[\s/>]/) // past the tag name
+  let j = nameEnd < 0 ? text.length : i + nameEnd
+  while (j < text.length) {
+    while (/\s/.test(text[j] ?? '')) j++
+    if (text[j] === '>' || text[j] === undefined) break
+    if (text[j] === '/') { j++; continue }
+    if (text.startsWith('<!--', j)) { const end = text.indexOf('-->', j); j = end < 0 ? text.length : end + 3; continue } // a comment between attributes
+    const start = j
+    while (j < text.length && !/[\s=/>]/.test(text[j])) j++
+    const name = text.slice(start, j)
+    if (!name) { j++; continue }
+    while (/\s/.test(text[j] ?? '')) j++
+    if (text[j] === '=') {
+      j++
+      while (/\s/.test(text[j] ?? '')) j++
+      const q = text[j]
+      if (q === '"' || q === "'") { const end = text.indexOf(q, j + 1); j = end < 0 ? text.length : end + 1 } else while (j < text.length && !/[\s>]/.test(text[j])) j++
+    }
+    attrs.push({ name, index: start })
+  }
+  return { attrs, end: j }
+}
+
+const FALLTHROUGH = new Set(['class', 'style', 'key', 'ref', 'id', 'is'])
+/** The prop an attribute sets, or null when it is not a prop (events, slots, directives, html attrs). */
+export function propOfAttr(attr) {
+  if (/^(@|#|v-on:|v-slot)/.test(attr)) return null
+  if (attr === 'v-model' || /^v-model\./.test(attr)) return 'modelValue'
+  const vm = attr.match(/^v-model:([\w-]+)/)
+  if (vm) return camel(vm[1])
+  if (attr.startsWith('v-') && !attr.startsWith('v-bind:')) return null
+  const name = attr.replace(/^(:|v-bind:)/, '').split('.')[0]
+  if (!name || FALLTHROUGH.has(name) || /^(data|aria)-/.test(name)) return null
+  return camel(name)
+}
+
 // ---------- checks ----------
+
+const lineAt = (text, index) => text.slice(0, index).split('\n').length
 
 /** `<CroutonFoo` components and `useCroutonFoo()` composables named in a page must exist in package code. */
 export function checkSymbols(file, md, facts) {
   const hits = []
-  if (!facts.words) return hits
   md.split('\n').forEach((text, i) => {
     for (const m of text.matchAll(/<(Crouton[A-Za-z0-9]+)|\b(useCrouton[A-Za-z0-9]*)\s*\(/g)) {
       const n = m[1] ?? m[2]
@@ -110,15 +144,50 @@ export function checkSymbols(file, md, facts) {
   return hits
 }
 
-export function checkNames(file, md, facts) {
+/** Props passed to a crouton-core component must be props of it (read by the generator's propsOf). */
+export function checkProps(file, md, facts) {
+  const hits = []
+  for (const m of md.matchAll(/<(Crouton[A-Za-z0-9]+)(?=[\s/>])/g)) {
+    const comp = facts.components.get(m[1])
+    if (!comp) continue // not a crouton-core component: existence is checkSymbols' job
+    const { attrs } = readTag(md, m.index)
+    for (const a of attrs) {
+      const prop = propOfAttr(a.name)
+      if (prop && !comp.props().has(prop)) hits.push({ file, line: lineAt(md, a.index), check: 'names', msg: `\`<${m[1]}>\` has no prop \`${prop}\` (from \`${a.name}\`)` })
+    }
+  }
+  return hits
+}
+
+const GLOBAL_FLAGS = new Set(['help', 'version', 'h', 'v'])
+/** Is `flag` (e.g. `--dry-run`, `--no-db`, `-f`) an argument of `cmd`? */
+export function flagExists(cmd, flag) {
+  const args = cmd.args
+  const short = flag.match(/^-([A-Za-z])$/)
+  if (short) return GLOBAL_FLAGS.has(short[1]) || Object.values(args).some(a => a.alias === short[1])
+  const name = flag.replace(/^--/, '')
+  if (GLOBAL_FLAGS.has(name)) return true
+  const key = camel(name)
+  const negated = key.replace(/^no([A-Z])/, (_, c) => c.toLowerCase())
+  return key in args || (key !== negated && args[negated]?.type === 'boolean')
+}
+
+/** `crouton <command>` invocations: the command must exist, and every flag on it must be one of its args. */
+export function checkCli(file, md, facts) {
   const hits = []
   md.split('\n').forEach((text, i) => {
     for (const m of text.matchAll(/\bcrouton\s+([a-z][a-z-]+)\b/g)) {
-      const cmd = m[1]
+      const name = m[1]
       // only judge the CLI binary invocation: preceded by npx/pnpm/`$` or start of a code span/line
       const before = text.slice(0, m.index)
       if (!/(npx\s+|pnpm\s+(dlx\s+)?|^\s*\$?\s*|`)$/.test(before)) continue
-      if (!facts.commands.has(cmd)) hits.push({ file, line: i + 1, check: 'names', msg: `CLI command \`crouton ${cmd}\` does not exist` })
+      const cmd = facts.commands.get(name)
+      if (!cmd) { hits.push({ file, line: i + 1, check: 'names', msg: `CLI command \`crouton ${name}\` does not exist` }); continue }
+      // the rest of this invocation: up to the end of the code span, a pipe/&&/;, or the line
+      const rest = text.slice(m.index + m[0].length).split(/`|&&|\|\||[|;#]/)[0]
+      for (const f of rest.matchAll(/(?:^|\s)(--?[A-Za-z][\w-]*)/g)) {
+        if (!flagExists(cmd, f[1])) hits.push({ file, line: i + 1, check: 'names', msg: `\`crouton ${name}\` has no flag \`${f[1]}\`` })
+      }
     }
   })
   return hits
@@ -150,7 +219,7 @@ export function checkSchemas(file, blocks, facts) {
   return hits
 }
 
-export function checkCode(file, blocks, ts) {
+export function checkCode(file, blocks) {
   const hits = []
   for (const b of blocks) {
     if (b.skip || !['ts', 'typescript', 'js', 'javascript', 'tsx'].includes(b.lang) || isFragment(b.code)) continue
@@ -166,22 +235,30 @@ export function checkCode(file, blocks, ts) {
 
 // ---------- main ----------
 
+/** The code-side lists, all from the generator except the all-packages existence word list. */
 export function loadFacts() {
-  const cli = readFileSync(join(root, 'packages/crouton-cli/bin/crouton-generate.js'), 'utf8')
-  const snap = readFileSync(join(root, 'packages/crouton-mcp/src/utils/field-types.snapshot.ts'), 'utf8')
-  return { commands: cliCommands(cli), fieldTypes: snapshotFieldTypes(snap), words: sourceWords(join(root, 'packages')) }
+  const components = new Map()
+  // stubs/ are placeholders the real package (maps, editor, ...) overrides: their props are not the real ones
+  for (const f of componentFiles().filter(f => !f.startsWith('stubs/'))) {
+    let props
+    // propsOf runs the Vue checker, so only pay for components a page actually passes props to
+    components.set(componentName(f), { props: () => (props ??= new Set(propsOf(`${COMPONENTS_DIR}/${f}`).props.map(p => p.name))) })
+  }
+  const fieldTypes = new Set(fieldTypesOf().flatMap(t => [t.name, ...(t.def.aliases ?? [])]))
+  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, words: sourceWords(join(root, 'packages')) }
 }
 
-export function run(docsDir, facts, ts) {
+export function run(docsDir, facts) {
   const per = { names: [], schemas: [], code: [], tutorials: [] }
   for (const f of walk(docsDir)) {
     const md = readFileSync(f, 'utf8')
     const rel = relative(root, f)
     const blocks = extractBlocks(md)
-    per.names.push(...checkNames(rel, md, facts))
+    per.names.push(...checkCli(rel, md, facts))
     per.names.push(...checkSymbols(rel, md, facts))
+    per.names.push(...checkProps(rel, md, facts))
     per.schemas.push(...checkSchemas(rel, blocks, facts))
-    if (ts) per.code.push(...checkCode(rel, blocks, ts))
+    per.code.push(...checkCode(rel, blocks))
   }
   return per
 }
@@ -189,20 +266,18 @@ export function run(docsDir, facts, ts) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const docsDir = args.find(a => !a.startsWith('--')) ?? join(root, 'docs/content')
-  let ts = null
-  try { ts = createRequire(import.meta.url)('typescript') } catch { /* reported below */ }
   if (!existsSync(docsDir)) { console.error(`no such dir: ${docsDir}`); process.exit(2) }
   const facts = loadFacts()
-  if (!facts.commands.size || !facts.fieldTypes.size) {
-    console.error('could not read CLI commands / field types from code — refusing to report "all clear"')
+  if (!facts.commands.size || !facts.fieldTypes.size || !facts.components.size) {
+    console.error('could not read CLI commands / field types / components from code — refusing to report "all clear"')
     process.exit(2)
   }
-  const per = run(docsDir, facts, ts)
+  const per = run(docsDir, facts)
   if (args.includes('--json')) console.log(JSON.stringify(per, null, 2))
   else {
     console.log('# Doc checks')
     for (const k of ['names', 'schemas', 'code']) {
-      console.log(`\n## ${k}: ${per[k].length} finding(s)${k === 'code' && !ts ? ' (typescript not installed — NOT RUN)' : ''}`)
+      console.log(`\n## ${k}: ${per[k].length} finding(s)`)
       for (const h of per[k]) console.log(`  ${h.file}:${h.line}  ${h.msg}`)
     }
     console.log('\n## tutorials: not run (needs a network install in an empty folder)')
