@@ -1191,7 +1191,7 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        continue-on-error: true
+        continue-on-error: true # quiz replies are advisory (#3715): a failed answer must not turn the comment run red
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
