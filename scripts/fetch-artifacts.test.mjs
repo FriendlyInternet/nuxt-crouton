@@ -51,11 +51,18 @@ test('a page that keeps failing rejects with where it got to', async () => {
       fetchPage: async (n) => { if (n === 3) throw new Error('boom'); return pages[n - 1] },
       cutoff, prefixes: PREFIXES
     }),
-    /failed at page 3/
+    /listed 2 pages \/ 200 artifacts, failed at page 3/
   )
 })
 
 test('zero matches is [] not an error', async () => {
   const got = await listArtifacts({ fetchPage: async () => [], cutoff, prefixes: PREFIXES })
   assert.deepEqual(got, [])
+})
+
+test('edge: a jittered artifact just older than the cutoff is excluded, one just inside is kept', async () => {
+  const mk = (id, ms) => ({ id, name: 'pi-telemetry-x', expired: false, created_at: new Date(cutoff.getTime() + ms).toISOString() })
+  const page = [mk(1, 60000), mk(2, 1000), mk(3, -1000), mk(4, -H)]
+  const got = await listArtifacts({ fetchPage: async n => (n === 1 ? page : []), cutoff, prefixes: PREFIXES })
+  assert.deepEqual(got.map(a => a.id), [1, 2])
 })

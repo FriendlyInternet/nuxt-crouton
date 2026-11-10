@@ -60,6 +60,24 @@ export function planCounts(names) {
   }))
 }
 
+/** Run one COUNT per table; a failing table is recorded (with its error), not fatal. */
+export function countTables(dbName, tables, query) {
+  return planCounts(tables).map(({ table, sql }) => {
+    try {
+      const rows = query(sql)
+      return { table, n: Number(rows[0]?.n ?? 0) }
+    } catch (err) {
+      return { table, n: 0, error: String(err.message).split('\n').slice(0, 6).join(' | ') }
+    }
+  })
+}
+
+/** Throw naming every failed table, so the script still exits 1. */
+export function assertNoFailures(results) {
+  const failed = results.filter(r => r.error)
+  if (failed.length) throw new Error(`${failed.length} table(s) failed: ${failed.map(r => r.table).join(', ')}`)
+}
+
 /** Append a markdown table to GITHUB_STEP_SUMMARY when running in Actions. */
 function writeSummary(lines) {
   const file = process.env.GITHUB_STEP_SUMMARY
@@ -101,16 +119,7 @@ async function main() {
     return
   }
 
-  // One statement per table; a failing table is recorded, not fatal.
-  const results = planCounts(tables).map(({ table, sql }) => {
-    try {
-      const rows = queryD1Json(db.name, sql, { cwd: repoRoot })
-      return { table, n: Number(rows[0]?.n ?? 0) }
-    } catch (err) {
-      return { table, n: 0, error: String(err.message).split('\n').slice(0, 6).join(' | ') }
-    }
-  })
-  const failed = results.filter(r => r.error)
+  const results = countTables(db.name, tables, (sql) => queryD1Json(db.name, sql, { cwd: repoRoot }))
 
   const pad = Math.max(...tables.map(t => t.length), 5)
   let total = 0
@@ -131,7 +140,7 @@ async function main() {
     ...results.map(r => `| \`${r.table}\` | ${r.error ? `error: ${r.error}` : r.n} |`),
     `| **total** | **${total}** |`
   ])
-  if (failed.length) throw new Error(`${failed.length} table(s) failed: ${failed.map(r => r.table).join(', ')}`)
+  assertNoFailures(results)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
