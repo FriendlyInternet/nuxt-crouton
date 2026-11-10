@@ -18,28 +18,40 @@ function setup(opts = {}) {
   const calls = []
   const puts = []
   let putCount = 0
+  // One small handler per route (kept flat so the mock stays under the complexity gate).
+  const branchRef = () => {
+    if (opts.refErr) throw opts.refErr
+    if (!opts.branchExists) throw httpErr(404, 'Not Found')
+    return 'branchsha'
+  }
+  const createRef = () => { if (opts.createErr) throw opts.createErr; return '' }
+  const getFile = () => {
+    if (!opts.fileExists) throw httpErr(404, 'Not Found')
+    return `filesha${putCount}`
+  }
+  const putFile = args => {
+    putCount++
+    puts.push(JSON.parse(readFileSync(args[args.indexOf('--input') + 1], 'utf8')))
+    if (opts.putFails && putCount <= opts.putFails) throw httpErr(409, 'Conflict')
+    return ''
+  }
+  const routes = {
+    [`repos/${R}/git/ref/heads/diagrams`]: branchRef,
+    [`repos/${R}`]: () => 'main',
+    [`repos/${R}/git/ref/heads/main`]: () => 'mainsha',
+    [`repos/${R}/git/refs`]: createRef,
+  }
+  const route = (url, args) => {
+    if (args.includes('PUT')) return putFile
+    if (url.startsWith(`repos/${R}/contents/`)) return getFile
+    return routes[url]
+  }
   const exec = (bin, args) => {
     calls.push([bin, ...args])
     const url = args.find(a => String(a).startsWith('repos/'))
-    if (url === `repos/${R}/git/ref/heads/diagrams`) {
-      if (opts.refErr) throw opts.refErr
-      if (!opts.branchExists) throw httpErr(404, 'Not Found')
-      return 'branchsha'
-    }
-    if (url === `repos/${R}`) return 'main'
-    if (url === `repos/${R}/git/ref/heads/main`) return 'mainsha'
-    if (url === `repos/${R}/git/refs`) { if (opts.createErr) throw opts.createErr; return '' }
-    if (url.startsWith(`repos/${R}/contents/`) && !args.includes('PUT')) {
-      if (!opts.fileExists) throw httpErr(404, 'Not Found')
-      return `filesha${putCount}`
-    }
-    if (args.includes('PUT')) {
-      putCount++
-      puts.push(JSON.parse(readFileSync(args[args.indexOf('--input') + 1], 'utf8')))
-      if (opts.putFails && putCount <= opts.putFails) throw httpErr(409, 'Conflict')
-      return ''
-    }
-    throw new Error(`unexpected call ${args.join(' ')}`)
+    const handler = route(url, args)
+    if (!handler) throw new Error(`unexpected call ${args.join(' ')}`)
+    return handler(args)
   }
   return { tmpDir, file, calls, puts, exec }
 }
