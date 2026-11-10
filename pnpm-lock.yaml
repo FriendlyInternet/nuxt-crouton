@@ -896,6 +896,9 @@ importers:
       consola:
         specifier: ^3.4.0
         version: 3.4.2
+      exsolve:
+        specifier: ^1.1.3
+        version: 1.1.3
       jiti:
         specifier: ^2.6.0
         version: 2.7.0
@@ -1324,6 +1327,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../crouton-core
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.7

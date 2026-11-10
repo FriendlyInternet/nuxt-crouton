@@ -160,10 +160,12 @@ pnpm --filter <app> db:generate   # → server/db/migrations/sqlite/NNNN_*.sql +
 pnpm --filter <app> db:migrate    # apply locally
 ```
 
-One behaviour worth knowing (#1457): on a **cold scaffold** `crouton config` does not
-produce the migration in the same run — it prints
+One behaviour worth knowing (#1457/#1742): in the monorepo `crouton config` produces
+the migration in the same run (import-only layers resolve since #1742). Only an app
+outside the monorepo with deps not installed soft-defers: it prints
 `↻ Migration deferred — resolve the app's layers first, then re-run: pnpm db:generate`
-and exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
+mid-log, repeats it as numbered step 1 in the closing `Next steps:` summary, and
+exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
 `packages/crouton-cli/CLAUDE.md`), not a failure. Run `db:generate` and carry on.
 
 ### The build-first gotcha — LEGACY scaffolds only (`pocs/kvr`, `pocs/notes`; no launched app)

@@ -7,12 +7,9 @@
 // deployed app comes up with sample rows — its public surfaces aren't empty
 // (#298). Rows are auto-derived from the schema; edit seed.json to replace them
 // with real content.
-import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from '../utils/system-fields.ts'
+import { AUTO_FIELDS } from '../utils/system-fields.ts'
 import { toSnakeCase } from '../utils/helpers.ts'
-
-// Auto-generated columns the runner injects (id, teamId, audit, timestamps) and
-// hierarchy columns — never authored in the fixture.
-const AUTO_FIELDS = new Set([...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy])
+import { isPersonRef } from '../utils/team-ref-fields.ts'
 
 export interface SeedFixture {
   /** Physical table name (e.g. `blog_posts`). */
@@ -21,6 +18,8 @@ export interface SeedFixture {
   key: string | null
   /** Sample rows — user fields only; the runner injects id/teamId/audit/timestamps. */
   rows: Array<Record<string, unknown>>
+  /** Person fields (#1958): no literal value; the runner fills a real team member at seed time. */
+  personFields?: string[]
 }
 
 /** Derive a plausible literal sample value for a field at row `i`. */
@@ -83,5 +82,9 @@ export function generateSeedFixture(data: Record<string, any>, count = 3): SeedF
     return row
   })
 
-  return { table, key, rows }
+  const personFields = (fields as Array<Record<string, any>>)
+    .filter(f => isPersonRef(f) && !AUTO_FIELDS.has(f.name) && f.type !== 'array')
+    .map(f => f.name)
+
+  return personFields.length > 0 ? { table, key, rows, personFields } : { table, key, rows }
 }

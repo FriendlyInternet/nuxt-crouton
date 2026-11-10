@@ -8,7 +8,9 @@
 //   metrics/state.json             {runs_fetched_at:{day:iso}} — fetch bookkeeping only
 //
 // Runs hourly and resumes: jobs lines are merged to disk after every batch, and the run
-// stops cleanly when the call budget or the rate-limit reserve is reached.
+// stops cleanly when the call budget, the time budget or the rate-limit reserve is reached.
+// History starts from today (no backfill, #3723); one call that does not answer within its
+// time limit stops the run like any failed call.
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -51,7 +53,7 @@ export async function splitWindow(win, countFn) {
 }
 
 /** Days to (re)fetch: never fetched, or not final and last fetched >6h ago. Final = fetched >48h after the day ended. */
-export function selectRunDays({ nowMs, fetchedAt, days = 90 }) {
+export function selectRunDays({ nowMs, fetchedAt, days = 1 }) {
   const out = []
   const today = Math.floor(nowMs / DAY) * DAY
   for (let d = today - days * DAY; d <= today; d += DAY) {
@@ -75,7 +77,7 @@ export function jobsWorkList(runsByDay, jobsByDay) {
 }
 
 /** How many lookups this run may still make. */
-export function planBatch(pending, { remaining, reserve, used, maxCalls }) {
+function planBatch(pending, { remaining, reserve, used, maxCalls }) {
   const room = Math.min(maxCalls - used, remaining === null ? Infinity : remaining - reserve)
   return Math.max(0, Math.min(pending, room))
 }
@@ -115,18 +117,20 @@ async function fetchRunDay(ctx, day) {
     for (const r of items) rows.set(r.id, toRunRow(r))
   }
   writeJsonl(join(m, 'runs', `${day}.jsonl`), [...rows.values()].sort((a, b) => a.id - b.id))
+  return rows.size
 }
 
 async function fetchRuns(ctx, o, state) {
   const { st, nowMs, overBudget } = ctx
   try {
-    for (const day of selectRunDays({ nowMs, fetchedAt: state.runs_fetched_at, days: o.days ?? 90 })) {
+    for (const day of selectRunDays({ nowMs, fetchedAt: state.runs_fetched_at, days: o.days ?? 1 })) {
       if (overBudget()) break
-      await fetchRunDay(ctx, day)
+      const n = await fetchRunDay(ctx, day)
       state.runs_fetched_at[day] = new Date(nowMs).toISOString()
       st.runsDays++
+      ctx.log(`collect: ${day} runs ${n} fetched, calls used ${st.used}`)
     }
-  } catch (e) { st.error = String(e.message || e) }
+  } catch (e) { st.error = String(e.message || e); st.stopReason = `error: ${st.error}` }
 }
 
 /** Jobs for one run; a run whose jobs are gone (404/410) records an empty list. */
@@ -154,22 +158,29 @@ function flushBatch(ctx, jobsByDay, batch) {
   ctx.st.jobsAdded += batch.length
 }
 
-/** Fill the jobs work list batch by batch; returns how many runs were handled. */
-async function fetchJobs(ctx, work, jobsByDay) {
+/**
+ * Fill the jobs work list batch by batch, one progress line per finished (or stopped) day;
+ * returns how many runs were handled.
+ */
+async function fetchJobs(ctx, work, jobsByDay, runsByDay) {
   const { st, overBudget } = ctx
-  let i = 0
+  let i = 0, cur = work[0]?.day, touched = false
+  const progress = (day) => ctx.log(`collect: ${day} runs ${(runsByDay[day] || []).length}, jobs ${(jobsByDay[day] || []).length}, calls used ${st.used}`)
   try {
     while (i < work.length && !overBudget()) {
       const batch = []
       try {
-        while (batch.length < BATCH && i < work.length && !overBudget()) {
+        while (batch.length < BATCH && i < work.length && work[i].day === cur && !overBudget()) {
           const { day, run } = work[i]
+          touched = true
           batch.push({ day, line: { run_id: run.id, attempt: run.attempt, jobs: await fetchJobsFor(ctx, run) } })
           i++
         }
       } finally { flushBatch(ctx, jobsByDay, batch) }
+      if (i >= work.length || work[i].day !== cur) { progress(cur); touched = false; cur = work[i]?.day }
     }
-  } catch (e) { st.error = String(e.message || e) }
+  } catch (e) { st.error = String(e.message || e); st.stopReason = `error: ${st.error}` }
+  if (touched) progress(cur)
   return i
 }
 
@@ -183,24 +194,44 @@ function loadDays(m) {
   return { runsByDay, jobsByDay }
 }
 
-function makeCtx(o, m, nowMs) {
+function makeCtx(o, m, nowMs, log) {
   const maxCalls = o.maxCalls ?? 1500, reserve = o.reserve ?? 1500
-  const st = { used: 0, remaining: o.remaining ?? null, runsDays: 0, jobsAdded: 0, error: null }
+  const maxMs = o.maxMs ?? 20 * 60000, callTimeoutMs = o.callTimeoutMs ?? 30000
+  const clock = o.clock || Date.now
+  const start = clock()
+  const st = { used: 0, remaining: o.remaining ?? null, runsDays: 0, jobsAdded: 0, error: null, stopReason: null }
   const api = async (path) => {
     st.used++
-    const res = await o.fetchImpl(path.startsWith('http') ? path : `/repos/${o.repo}${path}`)
+    const url = path.startsWith('http') ? path : `/repos/${o.repo}${path}`
+    // Race the call against its own timer, so even a fetch that ignores the signal is cut off.
+    let timer
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timeout after ${callTimeoutMs / 1000}s ${path}`)), callTimeoutMs)
+    })
+    let res
+    try {
+      res = await Promise.race([o.fetchImpl(url, { signal: AbortSignal.timeout(callTimeoutMs) }), timeout])
+    } finally { clearTimeout(timer) }
     const rem = Number(res.headers?.['x-ratelimit-remaining'])
     if (Number.isFinite(rem)) st.remaining = rem
     if (res.status >= 400) throw Object.assign(new Error(`HTTP ${res.status} ${path}`), { status: res.status })
     return res
   }
-  const overBudget = () => planBatch(1, { remaining: st.remaining, reserve, used: st.used, maxCalls }) < 1
-  return { st, api, overBudget, m, nowMs }
+  const overBudget = () => {
+    if (planBatch(1, { remaining: st.remaining, reserve, used: st.used, maxCalls }) < 1) {
+      st.stopReason ??= st.used >= maxCalls ? 'call budget' : 'rate-limit reserve'
+    } else if (clock() - start >= maxMs) st.stopReason ??= 'time budget'
+    else return false
+    return true
+  }
+  return { st, api, overBudget, m, nowMs, log }
 }
 
 /**
- * @param {{ data:string, workflowsDir?:string, repo:string, fetchImpl:(url:string)=>Promise<{status:number,headers:Record<string,string>,json:any}>,
- *   nowMs?:number, maxCalls?:number, reserve?:number, remaining?:number|null, days?:number, log?:(s:string)=>void }} o
+ * @param {{ data:string, workflowsDir?:string, repo:string,
+ *   fetchImpl:(url:string, init?:{signal?:AbortSignal})=>Promise<{status:number,headers:Record<string,string>,json:any}>,
+ *   nowMs?:number, maxCalls?:number, reserve?:number, remaining?:number|null, days?:number,
+ *   maxMs?:number, callTimeoutMs?:number, clock?:()=>number, log?:(s:string)=>void }} o
  */
 export async function collect(o) {
   const nowMs = o.nowMs ?? Date.now()
@@ -210,7 +241,7 @@ export async function collect(o) {
   const statePath = join(m, 'state.json')
   const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {}
   state.runs_fetched_at ??= {}
-  const ctx = makeCtx(o, m, nowMs)
+  const ctx = makeCtx(o, m, nowMs, log)
   const { st } = ctx
 
   snapshotSchedules(o, m, dayOf(nowMs))
@@ -219,10 +250,10 @@ export async function collect(o) {
 
   const { runsByDay, jobsByDay } = loadDays(m)
   const work = jobsWorkList(runsByDay, jobsByDay)
-  const done = st.error ? 0 : await fetchJobs(ctx, work, jobsByDay)
+  const done = st.error ? 0 : await fetchJobs(ctx, work, jobsByDay, runsByDay)
   const pending = work.length - done
   const oldest = pending ? work[done].day : 'none'
-  log(`::notice::collect: runs days written ${st.runsDays}, jobs lines added ${st.jobsAdded}, jobs pending ${pending} (oldest pending day ${oldest}), calls used ${st.used}${st.error ? `, stopped on error: ${st.error}` : ''}`)
+  log(`::notice::collect: runs days written ${st.runsDays}, jobs lines added ${st.jobsAdded}, jobs pending ${pending} (oldest pending day ${oldest}), calls used ${st.used}, stopped: ${st.stopReason || 'done'}`)
   return { ...st, pending, oldestPending: oldest }
 }
 
@@ -235,8 +266,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const token = process.env.GH_TOKEN, repo = process.env.REPO
   if (!token || !repo) { console.error('GH_TOKEN and REPO are required'); process.exit(2) }
   const base = process.env.GITHUB_API_URL || 'https://api.github.com'
-  const fetchImpl = async (u) => {
+  const fetchImpl = async (u, init = {}) => {
     const res = await fetch(u.startsWith('http') ? u : `${base}${u}`, {
+      signal: init.signal,
       headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' },
     })
     const headers = {}
@@ -249,6 +281,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const out = await collect({
     data: arg('data'), workflowsDir: arg('workflows'), repo, fetchImpl,
     maxCalls: Number(arg('max-calls', 1500)), remaining: 'remaining' in rl ? rl.remaining : null,
+    days: Number(arg('days', 1)), maxMs: Number(arg('max-minutes', 20)) * 60000,
+    callTimeoutMs: Number(arg('call-timeout-seconds', 30)) * 1000,
   })
   if (out.error && !out.runsDays && !out.jobsAdded) process.exit(1)
 }

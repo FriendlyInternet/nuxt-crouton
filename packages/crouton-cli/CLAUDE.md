@@ -181,7 +181,14 @@ Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
   naming both files → the CLI exits **non-zero**.
 - **Unresolvable `extends`** (e.g. an out-of-monorepo scaffold whose deps aren't
   installed, so a layer can't resolve) → **defers** softly: `{ generated: false,
-  reason: 'deferred', recipe }`, the caller prints `manualMigrationSteps()`.
+  reason: 'deferred', cause: 'unresolved-layers', recipe, unresolved }`, the caller prints `manualMigrationSteps()`
+  mid-log and the closing summary repeats it as numbered next step 1
+  (`formatClosingSummary`, both `crouton config` and `crouton generate`, #1742).
+  Bare `extends` specs resolve with ESM conditions (`exsolve`), so import-only
+  layers like `@fyit/crouton-admin` no longer trigger a false deferral.
+- **No `db:generate` script** in the app's `package.json` (apps not scaffolded by
+  `crouton init`, e.g. most `fixtures/*`) → also **defers** softly, exit 0, with
+  `cause: 'no-db-generate-script'`; the summary's step 1 says to add the script.
 - **drizzle-kit error** → `{ reason: 'generate-failed', detail }` → non-zero.
 
 The scaffolded `drizzle.config.ts` (`tmplDrizzleConfig`) calls
@@ -462,8 +469,14 @@ it against the collection list only ever produces a false refusal. Omitting `ref
 `users` target still fails — that's the #1825 chores case, where the generator took the
 collection path and wrote an import to a `users` collection nobody created.
 
-Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
-raw id) in the generated List. The join works today; the UI half does not.
+**Person field (#1958)** — the same spelling also drives the whole surface (predicate:
+`isPersonRef` in `lib/utils/team-ref-fields.ts`):
+
+- **Form**: a team-scoped `USelectMenu` fed by `useTeam().loadMembers()` (`multiple` for `type: "array"`).
+- **List**: `CroutonUsersCardMini` on the joined `<field>User` row (single refs; array person fields keep the generic cell).
+- **API**: POST/PATCH call `assert<X>TeamMembers(event, team.id, body)` (built on crouton-auth `getMembership`), so an id from another team gets a 400.
+- **Seed**: `seed.json` records `personFields`; `seed-app.ts` fills a real member of the seeded team via a `member` subquery (NULL when none exists yet).
+- No FK to `user.id` (same as `owner`), and no separate `person` field type.
 
 ### Field Meta Properties
 

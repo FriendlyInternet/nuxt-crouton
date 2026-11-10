@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { splitWindow, toRunRow, toJobRow, selectRunDays, jobsWorkList, planBatch, collect, parseCrons } from './collect.mjs'
+import { splitWindow, toRunRow, toJobRow, selectRunDays, jobsWorkList, collect, parseCrons } from './collect.mjs'
 
 const NOW = Date.parse('2026-11-10T12:00:00Z')
 const apiRun = (id, o = {}) => ({
@@ -50,7 +50,7 @@ test('first failed step is the first step with conclusion failure', () => {
   assert.equal(toJobRow({ name: 'j', steps: [steps[0]] }).failed_step, null)
 })
 
-test('runs day selection: backfill, re-fetch a non-final day after 6h, leave final days alone', () => {
+test('runs day selection: fetch a never-fetched day, re-fetch a non-final day after 6h, leave final days alone', () => {
   const fetchedAt = {
     '2026-11-10': '2026-11-10T11:00:00Z', // fetched 1h ago → leave
     '2026-11-09': '2026-11-10T04:00:00Z', // non-final, fetched 8h ago → refetch
@@ -58,7 +58,7 @@ test('runs day selection: backfill, re-fetch a non-final day after 6h, leave fin
   }
   const days = selectRunDays({ nowMs: NOW, fetchedAt, days: 10 })
   assert.ok(days.includes('2026-11-09') && !days.includes('2026-11-10') && !days.includes('2026-11-01'))
-  assert.ok(days.includes('2026-11-05')) // never fetched → backfill
+  assert.ok(days.includes('2026-11-05')) // never fetched → fetch it
 })
 
 test('jobs work list: completed non-skipped runs without a line, oldest first; a raised attempt is fetched again', () => {
@@ -105,12 +105,82 @@ test('parseCrons reads cron lines and skips comments', () => {
   assert.deepEqual(parseCrons("on:\n  schedule:\n    - cron: '17 * * * *'   # hourly\n    # - cron: '1 1 1 1 1'\n"), ['17 * * * *'])
 })
 
-test('the backlog shrinks at the measured peak', () => {
-  let pending = 59773
-  for (let day = 1; day <= 3; day++) {
-    pending += 5918
-    for (let hour = 0; hour < 24; hour++) pending -= planBatch(pending, { remaining: 5000, reserve: 1500, used: 0, maxCalls: 1500 })
-    if (pending === 0) return
+test('default run on a fresh data folder asks only for today and yesterday', async () => {
+  assert.deepEqual(selectRunDays({ nowMs: NOW, fetchedAt: {} }), ['2026-11-09', '2026-11-10'])
+  const data = mkdtempSync(join(tmpdir(), 'collect-'))
+  const s = stub(2)
+  const seen = new Set()
+  const fetchImpl = (url, init) => {
+    const m = /created=(\d{4}-\d{2}-\d{2})/.exec(url)
+    if (m) seen.add(m[1])
+    return s.fetchImpl(url, init)
   }
-  assert.equal(pending, 0)
+  const { days, ...rest } = opts(data, fetchImpl)
+  assert.equal(days, 0)
+  await collect(rest)
+  assert.deepEqual([...seen].sort(), ['2026-11-09', '2026-11-10'])
+})
+
+/** A clock that moves forward 1 s per API call. */
+function slowClock(s) {
+  let t = NOW
+  const fetchImpl = async (url, init) => { t += 1000; return s.fetchImpl(url, init) }
+  return { fetchImpl, clock: () => t }
+}
+
+test('slow calls hit the time budget: stops, says why, finished days on disk', async () => {
+  const data = mkdtempSync(join(tmpdir(), 'collect-'))
+  const s = stub(5)
+  const { fetchImpl, clock } = slowClock(s)
+  const log = []
+  const out = await collect(opts(data, fetchImpl, { clock, maxMs: 5000, log: (l) => log.push(l) }))
+  assert.equal(out.stopReason, 'time budget')
+  assert.ok(out.used <= 5, `used ${out.used}`)
+  assert.ok(log.some(l => l.startsWith('::notice::') && l.includes('stopped: time budget')))
+  assert.ok(existsSync(join(data, 'metrics/runs/2026-11-10.jsonl')))
+  assert.equal(lines(data).length, s.calls.jobs)
+  assert.ok(out.pending > 0)
+})
+
+test('a call that never answers stops after its time limit and keeps data so far', async () => {
+  const data = mkdtempSync(join(tmpdir(), 'collect-'))
+  const s = stub(5)
+  let jobsCalls = 0
+  const fetchImpl = (url, init) => {
+    if (/\/jobs/.test(url) && ++jobsCalls >= 3) return new Promise(() => {})
+    return s.fetchImpl(url, init)
+  }
+  const out = await collect(opts(data, fetchImpl, { callTimeoutMs: 50 }))
+  assert.match(out.error, /timeout/)
+  assert.equal(lines(data).length, 2)
+  assert.ok(existsSync(join(data, 'metrics/state.json')))
+})
+
+test('second run continues where the first stopped; nothing fetched twice', async () => {
+  const data = mkdtempSync(join(tmpdir(), 'collect-'))
+  const recorder = (s) => {
+    const jobs = [], runsLists = []
+    const fetchImpl = (url, init) => {
+      if (/\/jobs/.test(url)) jobs.push(url)
+      else runsLists.push(url)
+      return s.fetchImpl(url, init)
+    }
+    return { jobs, runsLists, fetchImpl }
+  }
+  const base = { days: undefined }
+  const r1 = recorder(stub(5))
+  const c1 = slowClock({ fetchImpl: r1.fetchImpl })
+  // 4 runs-list calls (count + page for 2 days), then 2 jobs calls before 6 s run out.
+  const first = await collect(opts(data, c1.fetchImpl, { ...base, clock: c1.clock, maxMs: 6000 }))
+  assert.equal(first.stopReason, 'time budget')
+  assert.ok(r1.jobs.length > 0 && r1.jobs.length < 5, `run 1 jobs ${r1.jobs.length}`)
+  const r2 = recorder(stub(5))
+  const log = []
+  const second = await collect(opts(data, r2.fetchImpl, { ...base, nowMs: NOW + 60000, log: (l) => log.push(l) }))
+  assert.equal(r2.runsLists.length, 0)
+  assert.ok(!r2.jobs.some(u => r1.jobs.includes(u)))
+  assert.equal(r1.jobs.length + r2.jobs.length, 5)
+  assert.equal(second.pending, 0)
+  assert.equal(lines(data).length, 5)
+  assert.ok(log.some(l => /^collect: 2026-11-10 runs \d+, jobs \d+, calls used \d+$/.test(l)), log.join('\n'))
 })

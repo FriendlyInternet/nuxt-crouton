@@ -175,8 +175,11 @@ test('later ticks keep the reviews block', () => {
   assert.equal(slice(b2), slice(b))
 })
 
-test('plan-review.yml makes a verdict-only call before the case', () => {
-  const w = wf('plan-review.yml')
+test('on-comment.yml plan-review job makes a verdict-only call before the case', () => {
+  // The plan review was folded into on-comment.yml (#3313); read only its job, not the whole file.
+  const all = wf('on-comment.yml')
+  const w = all.slice(all.indexOf('\n  plan-review:\n'), all.indexOf('\n  plan-review-outcome:\n'))
+  assert.ok(w.length > 100, 'plan-review job not found in on-comment.yml')
   assert.match(w, /flow-checklist\.mjs "\$ISSUE" --verdict plan /)
   assert.ok(w.indexOf('flow-checklist.mjs "$ISSUE" --verdict plan') < w.indexOf('case "$VERDICT" in'))
 })
