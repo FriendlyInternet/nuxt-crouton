@@ -103,6 +103,7 @@ import { useCollectionQuery } from '../useCollectionQuery'
 describe('useCollectionQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    remoteHooks.clear()
     mockRoute = {
       path: '/dashboard/test-team/products',
       params: { team: 'test-team' }
@@ -530,6 +531,25 @@ describe('useCollectionQuery', () => {
       await useCollectionQuery('products')
       for (const fn of remoteHooks) await fn({ collection: 'products' })
       expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not throw when a remote change arrives while the first load is pending', async () => {
+      let resolveFetch!: (v: any) => void
+      mockUseFetch.mockImplementationOnce(() => new Promise(r => { resolveFetch = r }) as any)
+      const pending = useCollectionQuery('products')
+      await Promise.resolve()
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(0)
+      resolveFetch(mockFetchState)
+      await pending
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores remote changes for another collection', async () => {
+      await useCollectionQuery('products')
+      for (const fn of remoteHooks) await fn({ collection: 'posts' })
+      expect(mockFetchState.refresh).not.toHaveBeenCalled()
     })
   })
 

@@ -139,3 +139,40 @@ test('collectApprovalLines copies Packages-approved lines from epic + children, 
   assert.deepEqual(collectApprovalLines([a, b, null]), ['Packages-approved: owner ok #1', 'Packages-approved: other'])
   assert.deepEqual(collectApprovalLines(['nothing']), [])
 })
+
+// ── buildEpicMainPr (#3619) ──
+import { buildEpicMainPr } from './epic-ready.mjs'
+const noCarry = { packagesPrs: [], approved: [], unapproved: [], line: null }
+const mk = o => buildEpicMainPr({ epicNumber: 7, epicBranch: 'epic/7-x', epicTitle: 'Epic: Thing', subIssues: [{ number: 1, title: 'a' }], carry: noCarry, declared: [], owner: 'pmcp', ...o })
+
+test('buildEpicMainPr: no packages, no declared → plain body with footer', () => {
+  const { title, body } = mk()
+  assert.equal(title, 'Epic #7: Thing')
+  assert.ok(!body.includes('Packages-approved') && !body.includes('🔒'))
+  assert.ok(body.endsWith('<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @pmcp</sub>'))
+  assert.ok(body.includes('**Children (1):**\n- #1 a\n\n'))
+})
+test('buildEpicMainPr: carry.line is embedded', () => {
+  const line = 'Packages-approved: owner approved #3 (sub-PR sign-off carried by epic-ready-pr, #2494)'
+  assert.ok(mk({ carry: { packagesPrs: [3], approved: [3], unapproved: [], line } }).body.includes(`\n\n${line}\n`))
+})
+test('buildEpicMainPr: unapproved packages PRs list the 🔒 section', () => {
+  const { body } = mk({ carry: { packagesPrs: [1, 2], approved: [], unapproved: [1, 2], line: null } })
+  assert.ok(body.includes('## 🔒 Shared code not yet signed off'))
+  assert.ok(body.includes('#1, #2'))
+})
+test('buildEpicMainPr: declared line equal to carry.line appears once', () => {
+  const line = 'Packages-approved: owner approved #3 (sub-PR sign-off carried by epic-ready-pr, #2494)'
+  const { body } = mk({ carry: { packagesPrs: [3], approved: [3], unapproved: [], line }, declared: [line, 'Packages-approved: x'] })
+  assert.equal(body.split(line).length - 1, 1)
+  assert.ok(body.includes('Packages-approved: x'))
+})
+test('buildEpicMainPr: title strips Epic: and is cut to 250', () => {
+  const { title } = mk({ epicTitle: 'EPIC: ' + 'z'.repeat(400) })
+  assert.equal(title.length, 250)
+  assert.ok(title.startsWith('Epic #7: zzz'))
+})
+test('buildEpicMainPr: solo-leaf child renders "undefined" title', () => {
+  // quirk preserved — see #3619
+  assert.ok(mk({ subIssues: [{ number: 9, state: 'closed' }] }).body.includes('- #9 undefined'))
+})
