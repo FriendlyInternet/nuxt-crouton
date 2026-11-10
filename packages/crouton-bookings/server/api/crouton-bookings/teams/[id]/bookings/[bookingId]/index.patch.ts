@@ -1,10 +1,11 @@
 /**
- * Update a booking - allows any team member to update bookings
- * (not restricted to owner like the generated CRUD endpoint)
+ * Update a booking - the owner or a team admin (#3135). Other members get 403.
  */
 import { z } from 'zod'
+import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { patchBookingGuarded } from '../../../../../../utils/booking-capacity'
+import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
 
 const updateSchema = z.object({
@@ -16,7 +17,7 @@ const updateSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
   const bookingId = getRouterParam(event, 'bookingId')
@@ -25,6 +26,15 @@ export default defineEventHandler(async (event) => {
       status: 400,
       statusText: 'Booking ID is required',
     })
+  }
+
+  const isAdmin = membership?.role === 'admin' || membership?.role === 'owner'
+  if (!isAdmin) {
+    const [existing] = await db.select({ owner: bookingsBookings.owner }).from(bookingsBookings)
+      .where(and(eq(bookingsBookings.id as any, bookingId), eq(bookingsBookings.teamId as any, team.id)))
+    if (existing && existing.owner !== user.id) {
+      throw createError({ status: 403, statusText: 'Not your booking' })
+    }
   }
 
   // Validate body
@@ -49,6 +59,7 @@ export default defineEventHandler(async (event) => {
     teamId: team.id,
     bookingId,
     userId: user.id,
+    ownerId: isAdmin ? undefined : user.id,
     tz,
     patch: parsed.data,
   })
