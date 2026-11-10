@@ -22,7 +22,7 @@
 // lgtm-on-an-epic-PR double merge.
 
 import { pathToFileURL } from 'node:url'
-import { isApproval, parseTestReply } from './approval.mjs'
+import { isApproval, isPreviewPin, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
 
@@ -107,6 +107,11 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   const assoc = comment.authorAssociation
   const collab = COLLABORATORS.has(assoc)
 
+  // A staging pin is posted by the feedback App (a bot): on a to-test/failed epic it is a not-ok (#3052).
+  if (!issue.isPr && isPreviewPin(body) && (comment.userType === 'Bot' || COLLABORATORS.has(assoc))
+    && (issue.labels || []).some(l => l === 'status:to-test' || l === 'status:failed')) {
+    return out('test-card', 'a preview pin on a tested epic')
+  }
   if (comment.userType === 'Bot') return out('none', 'posted by a bot')
   // An App acting under a user identity is a bot too — except the Claude app, which the
   // interactive agent uses to post `**Worker:**` change requests as the owner (#3029).

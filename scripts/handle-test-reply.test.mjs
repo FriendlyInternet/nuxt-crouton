@@ -45,3 +45,46 @@ test('epic close: open sub-issue stays open and is named', () => {
   assert.equal(r.close, false)
   assert.match(r.comment, /#4/)
 })
+
+// ── preview pins (#3052) ──────────────────────────────────────────────────────
+import { decidePin, buildPinIssue, appendPin, PIN_MARKER } from './handle-test-reply.mjs'
+import { routeComment } from './comment-route.mjs'
+import { readFileSync } from 'node:fs'
+
+const PIN = '🎯 **Preview feedback**\n\n- **Component:** `a/B.vue`\n\n> too tight'
+const bot = { labels: ['epic', 'status:to-test'], body: PIN, userType: 'Bot', association: 'NONE' }
+
+test('first pin on a to-test epic → pin-first', () => {
+  assert.equal(decidePin(bot).result, 'pin-first')
+})
+test('later pin (epic failed, pin issue exists) → pin-more', () => {
+  const d = decidePin({ ...bot, labels: ['epic', 'status:failed'], pinIssue: { number: 9 } })
+  assert.equal(d.result, 'pin-more')
+})
+test('pin on an epic that is not under test is ignored', () => {
+  assert.equal(decidePin({ ...bot, labels: ['epic'] }).act, false)
+  assert.equal(decidePin({ ...bot, labels: ['epic', 'status:failed'] }).act, false)
+})
+test('pin from a stranger (not bot, not collaborator) is ignored', () => {
+  assert.equal(decidePin({ ...bot, userType: 'User' }).act, false)
+})
+test('pin issue carries the pins and append splices before the end marker', () => {
+  const { title, body } = buildPinIssue({ epicNumber: 7, pins: [PIN] })
+  assert.match(title, /#7/)
+  assert.ok(body.includes(PIN_MARKER))
+  const b2 = appendPin(body, '🎯 **Preview feedback**\n\n> second')
+  assert.match(b2, /> > second\n<!-- \/preview-pins -->/)
+  assert.match(b2, /too tight/)
+})
+test('routing: a bot pin on a to-test epic reaches the test-card job; elsewhere it does not', () => {
+  const r = (labels, userType = 'Bot') => routeComment({ comment: { body: PIN, authorAssociation: 'NONE', userType }, issue: { number: 7, isPr: false, labels } }).kind
+  assert.equal(r(['status:to-test']), 'test-card')
+  assert.equal(r(['status:failed']), 'test-card')
+  assert.equal(r([]), 'none')
+  assert.equal(r(['status:to-test'], 'User'), 'none')
+})
+test('workflow: the route job admits a pin, and the test-card step passes the commenter type', () => {
+  const y = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
+  assert.match(y, /startsWith\(github\.event\.comment\.body, '🎯 \*\*Preview feedback\*\*'\)/)
+  assert.match(y, /COMMENT_USER_TYPE: \$\{\{ github\.event\.comment\.user\.type \}\}/)
+})
