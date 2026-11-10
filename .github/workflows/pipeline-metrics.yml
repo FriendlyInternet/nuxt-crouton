@@ -3,6 +3,7 @@ name: Pipeline metrics (collect + roll up run history)
 # Copies workflow-run and job history into the `pipeline-data` branch under metrics/ and
 # rolls it up into metrics/latest.json (#3679). Hourly because a busy day adds ~6,000 job
 # lookups; each run is capped and picks up where the last stopped. See scripts/metrics/README.md.
+# History starts from today; collect stops on calls or 20 minutes, and publish runs even after an early stop (#3723).
 # Workflow-change: new hourly metrics collector (owner merges).
 
 on:
@@ -55,6 +56,9 @@ jobs:
           node-version: 22
 
       - name: Collect run + job history
+        id: collect
+        # Backstop under the job limit: a step timeout fails this step but lets publish run.
+        timeout-minutes: 30
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -62,6 +66,7 @@ jobs:
         run: node scripts/metrics/collect.mjs --data data --workflows .github/workflows --max-calls "$MAX_CALLS"
 
       - name: Publish collected files
+        if: ${{ !cancelled() && steps.collect.outcome != 'skipped' }}
         run: 'node scripts/metrics/publish.mjs --data data --message "data(metrics): collect"'
 
       - name: Roll up
