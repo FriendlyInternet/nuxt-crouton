@@ -9,7 +9,7 @@
  * dispatch runs on the new model, no workflow change.
  *
  * PURE CORE + THIN CLI, so the resolution rule is unit-tested without the fs:
- *   resolveModel(config, tier)  — 'light' | 'default' | 'hard' | 'review' | 'plan' | 'decompose' → the model id from the config.
+ *   resolveModel(config, tier)  — 'light' | 'default' | 'hard' | 'review' | 'plan' | 'decompose' | 'build' → the model id from the config.
  * The CLI reads .claude/pipeline-models.json (repo-relative to cwd — the checkout root in CI
  * and the repo root locally) and prints the model. On ANY failure it exits non-zero and prints
  * nothing to stdout, so the calling workflow step fails loudly rather than an empty or stale
@@ -19,11 +19,12 @@
  *   node scripts/resolve-pipeline-model.mjs default   → prints e.g. claude-sonnet-5
  *   node scripts/resolve-pipeline-model.mjs hard      → prints e.g. claude-opus-4-8
  *   node scripts/resolve-pipeline-model.mjs decompose → prints e.g. claude-opus-5-5
+ *   node scripts/resolve-pipeline-model.mjs build     → prints e.g. claude-opus-5-5
  */
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const VALID_TIERS = ['light', 'default', 'hard', 'review', 'plan', 'decompose']
+export const VALID_TIERS = ['light', 'default', 'hard', 'review', 'plan', 'decompose', 'build']
 
 /** PURE. Given the parsed config + a tier, return the model id. Throws on anything unusable. */
 export function resolveModel(config, tier) {

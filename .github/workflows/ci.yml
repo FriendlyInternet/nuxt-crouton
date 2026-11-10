@@ -101,6 +101,10 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
+      # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
+      - name: Run scripts/*.deps-test.mjs
+        run: node --test scripts/*.deps-test.mjs
+
       - name: Check package dist ships no test files
         run: node scripts/check-dist-no-tests.mjs
 
