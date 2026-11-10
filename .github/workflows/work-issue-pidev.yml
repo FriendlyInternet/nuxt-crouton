@@ -630,7 +630,7 @@ jobs:
               # a decision comment by the Harness bot posted after the newest plan, nothing else.
               # A failed fetch/parse must not abort the build (no override is the safe default), but it is
               # logged, so a dropped owner reason is visible in the run rather than silent.
-              OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" | node scripts/plan-held.mjs --decision)" || {
+              OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" --jq '.[] | @json' | node scripts/plan-held.mjs --decision)" || {
                 echo "::warning::could not read the owner override for #${ISSUE}; building without one"
                 OVERRIDE=""
               }
