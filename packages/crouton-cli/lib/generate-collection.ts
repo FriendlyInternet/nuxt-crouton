@@ -21,6 +21,8 @@ import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type Ow
 import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
+import { pruneDanglingCollectionRefs } from './utils/prune-dangling-collections.ts'
+import { getAllLayers, getAllCollectionsInLayer } from './utils/layer-discovery.ts'
 import { loadFields } from './utils/load-fields.ts'
 import { validateConfig } from './utils/validate-config.ts'
 import { updateLayerRootConfig, setupLayerI18n } from './utils/layer-config.ts'
@@ -50,6 +52,7 @@ import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
 import { generateCollectionTypesRegistry } from './generators/collection-types-registry.ts'
 import { generateQueryRegistryFile } from './generators/query-registry.ts'
+import { isDependentField } from './utils/list-fields.ts'
 
 // ---------------------------------------------------------------------------
 // Generation History
@@ -378,9 +381,9 @@ export function buildFieldsSchema(params: {
   const regularFieldsSchema = fields
     .filter(f => f.name !== 'id' && !translatableFieldNames.includes(f.name) && !hierarchyFieldNames.includes(f.name))
     .map((f) => {
-      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+      const dependent = isDependentField(f)
       const hasRepeaterProperties = f.type === 'repeater' && (f.meta?.translatableProperties || f.meta?.properties)
-      let baseZod = isDependentField ? 'z.array(z.string())' : f.zod
+      let baseZod = dependent ? 'z.array(z.string())' : f.zod
       // Dates arrive as ISO strings (forms/JSON) — coerce so validation accepts them.
       if (f.type === 'date') baseZod = 'z.coerce.date()'
       if (hasRepeaterProperties) {
@@ -390,7 +393,7 @@ export function buildFieldsSchema(params: {
       }
       if (f.meta?.required) {
         // Manifest zod as-is; only dependent arrays and text get a non-empty check.
-        if (isDependentField || f.type === 'string' || f.type === 'text') {
+        if (dependent || f.type === 'string' || f.type === 'text') {
           return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
         }
         return `${f.name}: ${baseZod}`
@@ -463,8 +466,8 @@ function buildFieldsDefault(params: {
   const { fields, config, hierarchy, cases } = params
   const hierarchyDefaultNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
   let fieldDefaults = fields.filter(f => f.name !== 'id' && !hierarchyDefaultNames.includes(f.name)).map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    if (isDependentField) {
+    const dependent = isDependentField(f)
+    if (dependent) {
       return `${f.name}: null`
     }
     return `${f.name}: ${f.default}`
@@ -499,8 +502,8 @@ export function buildFieldsTypes(params: {
   const { fields, config, hierarchy, cases } = params
   const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
   const typeLines = fields.filter(f => f.name !== 'id').map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    let tsType = isDependentField ? 'string[] | null' : f.tsType
+    const dependent = isDependentField(f)
+    let tsType = dependent ? 'string[] | null' : f.tsType
     if (f.meta?.required) {
       // Required ⇒ the zod schema enforces a present, non-null value, so the
       // interface must not widen to null (some tsTypes, e.g. date, default to
@@ -1689,6 +1692,24 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
   // Track all collections for batch db:generate
   const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
 
+  // Drop references to collection folders that were deleted (#226) — the stale
+  // barrel would otherwise crash the migration step below.
+  await pruneDanglingCollectionRefs({ dryRun: config.flags?.dryRun || false })
+
+  // Collections on disk but absent from the config stay wired up — warn, never delete.
+  if (!config._onlyCollection) {
+    const configured = new Set<string>(
+      config.targets.flatMap((t: any) => t.collections.map((c: string) => `${t.layer}/${c}`))
+    )
+    for (const layer of await getAllLayers()) {
+      for (const name of await getAllCollectionsInLayer(layer)) {
+        if (!configured.has(`${layer}/${name}`)) {
+          console.log(`! ${layer}/${name} is on disk but not in crouton.config — it stays wired up. To remove it: crouton rollback ${layer} ${name}`)
+        }
+      }
+    }
+  }
+
   // Process each target
   for (const target of config.targets) {
     for (const collectionName of target.collections) {
@@ -1828,6 +1849,9 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
   } catch (error: any) {
     throw new Error(`Error loading schema: ${error.message}`, { cause: error })
   }
+
+  // Drop references to deleted collection folders before the migration step loads the barrel (#226)
+  await pruneDanglingCollectionRefs({ dryRun: args.dryRun })
 
   // Proceed with generation
   await writeScaffold({ ...args, fields })

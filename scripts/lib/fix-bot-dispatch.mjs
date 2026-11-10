@@ -29,7 +29,7 @@ export function pickFailedRun(runs = []) {
 }
 
 // ── #3373: ONE "will the fix-bot try?" decision, shared by fix-ci-on-failure.yml (the gate) and
-// status.yml (the red ping), so the owner is @mentioned only when the bot will NOT handle a failure.
+// scripts/lib/pr-status-io.mjs (the red ping, posted by status.yml), so the red ping's wording reflects whether the bot will handle a failure (never a mention, #3622).
 // Keep FIX_BOT_WORKFLOWS in lockstep with the `workflow_run.workflows` list in fix-ci-on-failure.yml
 // (a test enforces it).
 export const FIX_BOT_WORKFLOWS = ['CI', 'E2E', 'Deploy Apps (Cloudflare Workers)']
@@ -71,8 +71,8 @@ export function expectedRunConclusion({ runConclusion, checkConclusion }) {
   return runConclusion ?? checkConclusion
 }
 
-/** Heading + "What's needed" for the red ping. The @mention exists ONLY on the `owner` path. */
-export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, list = '', head = '', base = '' }) {
+/** Heading + "What's needed" for the red ping. Never @mentions anyone (#3622). */
+export function redPingHeading({ who, reason, attempts = 0, count = 0, list = '', head = '', base = '' }) {
   const n = `${count} failing check${count === 1 ? '' : 's'}`
   if (who === 'bot') {
     return {
@@ -88,13 +88,13 @@ export function redPingHeading({ who, owner, reason, attempts = 0, count = 0, li
   }
   if (base === 'main' && head.startsWith('epic/')) {
     return {
-      heading: `🔴 **@${owner} — CI failed on this epic PR** (${n}): ${list}.`,
+      heading: `🔴 **CI failed on this epic PR** (${n}): ${list}.`,
       needed: `**What's needed:** this epic PR won't merge while CI is red. Push a fix to \`${head}\`, ` +
         `or reply \`ok\` and the CI fix runs and it merges when green.`,
     }
   }
   return {
-    heading: `🔴 **@${owner} — CI failed on this pipeline PR** (${n}): ${list}.`,
+    heading: `🔴 **CI failed on this pipeline PR — the auto-fix won't take it** (${n}): ${list}.`,
     needed: `The auto-fix bot won't try: ${reason}.\n\n**What's needed:** read the failure, then either push a fix to \`${head}\` ` +
       `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
       `epic, so it sits until one of those happens — **it does not mean the work is ` +

@@ -41,6 +41,7 @@ jobs:
       contents: read
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
+      held: ${{ steps.post.outputs.held }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -235,6 +236,7 @@ jobs:
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict
+        id: post
         if: ${{ !cancelled() && steps.pr.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -298,16 +300,54 @@ jobs:
             && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" --verdict build "$VERDICT" --round "$ROUND" || true
           case "$VERDICT" in
             go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
-            needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
+            needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT" ;;
             no-go)
               if [ "$ROUND" -ge 2 ]; then
-                gh issue edit "$ISSUE" --add-label "status:blocked"
+                gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT"
               else
                 CID="${COMMENT_URL##*issuecomment-}"
                 node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c}}')"
               fi
               ;;
           esac
+
+  # ── Re-check traffic when a PR becomes held (#3583) ────────────────────────────────────
+  # A held PR (needs-owner / rejected twice) waits on the owner, not on a build, so tickets
+  # parked behind it can start. Runs trusted default-branch code, never the PR head.
+  release-traffic:
+    name: Release parked tickets
+    needs: [review]
+    if: ${{ always() && needs.review.outputs.held == '1' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts
+            .claude
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+              const released = await releaseWaiting({ github, context })
+              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+            } catch (e) {
+              core.warning(`traffic release failed: ${e.message}`)
+            }
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
@@ -316,7 +356,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [review]
+    needs: [review, release-traffic]
     if: ${{ always() && needs.review.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5

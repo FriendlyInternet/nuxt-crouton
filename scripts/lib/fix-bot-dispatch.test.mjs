@@ -79,17 +79,21 @@ test('expectedRunConclusion', () => {
   assert.equal(expectedRunConclusion({ runConclusion: 'success', checkConclusion: 'failure' }), 'success')
 })
 
-test('redPingHeading: mention only on the owner path', () => {
-  const t = (o) => { const r = redPingHeading({ owner: 'pmcp', count: 1, list: '`x`', head: 'work-1', reason: 'because', ...o }); return r.heading + r.needed }
-  assert.ok(!t({ who: 'bot' }).includes('@'))
-  assert.ok(!t({ who: 'gave-up' }).includes('@'))
-  const o = t({ who: 'owner' })
-  assert.equal(o.split('@pmcp').length - 1, 1); assert.match(o, /because/)
+test('redPingHeading: never @mentions (#3622)', () => {
+  for (const who of ['bot', 'gave-up', 'owner', 'none']) {
+    for (const r of [{ head: 'work-1', base: 'epic/1-x' }, { head: 'epic/3-x', base: 'main' }]) {
+      const x = redPingHeading({ who, count: 1, list: '`x`', reason: 'because', ...r })
+      assert.ok(!(x.heading + x.needed).includes('@'), `${who} ${r.head}`)
+    }
+  }
+  const o = redPingHeading({ who: 'owner', count: 1, list: '`x`', head: 'work-1', base: 'epic/1-x', reason: 'because' })
+  assert.match(o.needed, /because/)
 })
 
 // Lockstep with the workflows (read as text)
 const fixYml = readFileSync(new URL('../../.github/workflows/fix-ci-on-failure.yml', import.meta.url), 'utf8')
 const statusYml = readFileSync(new URL('../../.github/workflows/status.yml', import.meta.url), 'utf8')
+const statusSrc = readFileSync(new URL('./pr-status-io.mjs', import.meta.url), 'utf8') // the red ping moved here (#3617)
 test('lockstep: trigger workflows list equals FIX_BOT_WORKFLOWS', () => {
   const m = /^\s*workflows:\s*\[(.*)\]/m.exec(fixYml)
   assert.deepEqual(JSON.parse(`[${m[1]}]`), FIX_BOT_WORKFLOWS)
@@ -101,16 +105,18 @@ test('lockstep: gate has no second copy of the decision', () => {
   assert.ok(fixYml.includes('fixBotWillTry('))
   for (const s of ['const MAX =', 'attempts >= MAX', "labels.includes('status:blocked')"]) assert.ok(!fixYml.includes(s), s)
 })
-test('lockstep: status.yml uses the shared decision and builder', () => {
-  assert.ok(statusYml.includes('fixBotWillTry(')); assert.ok(statusYml.includes('redPingHeading('))
-  assert.ok(!statusYml.includes('`🔴 **@${OWNER} — CI failed '))
+test('lockstep: the status red ping (pr-status-io.mjs) uses the shared decision and builder', () => {
+  assert.ok(statusSrc.includes('fixBotWillTry(')); assert.ok(statusSrc.includes('redPingHeading('))
+  assert.ok(!statusSrc.includes('`🔴 **@${OWNER} — CI failed '))
+  assert.ok(!statusSrc.includes("'mentioned @' + OWNER"))
+  assert.ok(!statusYml.includes('`🔴 **@${OWNER} — CI failed '), 'no second heading copy in status.yml either')
 })
 
 test('redPingHeading: epic → main wording', async () => {
   const { redPingHeading } = await import('./fix-bot-dispatch.mjs')
   const h = redPingHeading({ who: 'owner', owner: 'pmcp', base: 'main', head: 'epic/3-x', count: 1, list: '`A`' })
   const all = h.heading + h.needed
-  assert.ok(all.includes('@pmcp'))
+  assert.ok(!all.includes('@'))
   assert.ok(all.includes("won't merge"))
   assert.ok(!all.includes('sub-PR'))
 })
