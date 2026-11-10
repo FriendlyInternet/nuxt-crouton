@@ -1472,6 +1472,8 @@ async function composeDefaultLayoutStep(allCollections: Array<{ name: string; la
     if (layoutResult.written) {
       console.log(`✓ Composed default layout (${layoutResult.pattern}${layoutResult.viable ? ', viable' : ', NOT viable — review minWidths'})`)
       console.log(`  → ${layoutResult.path}`)
+    } else if (layoutResult.reason === 'layout not enabled') {
+      console.log('– Skipped default layout (layout not enabled — app does not extend @fyit/crouton-layout)')
     } else {
       console.log(`⚠ Skipped default layout (${layoutResult.reason})`)
     }

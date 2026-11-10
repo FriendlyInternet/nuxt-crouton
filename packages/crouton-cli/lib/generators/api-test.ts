@@ -41,7 +41,20 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
  */
 import { resolveAccess } from './api-endpoints.ts'
 import { isListField } from '../utils/list-fields.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
+
+/**
+ * Query mocks that only exist for some collections (reference checks, tree/sort helpers).
+ * Split out of generateApiTest to keep it small.
+ */
+function optionalQueryExports(data: Record<string, any>, S: string, P: string, hierarchy: boolean, hasReorder: boolean): string[] {
+  const out: string[] = []
+  if (collectTeamRefFields(data).length > 0) out.push(`assert${S}References: vi.fn()`)
+  if (collectPersonRefFields(data).length > 0) out.push(`assert${S}TeamMembers: vi.fn()`)
+  if (hierarchy) out.push(`updatePosition${S}: vi.fn()`)
+  if (hasReorder) out.push(`reorderSiblings${P}: vi.fn()`)
+  return out
+}
 
 /**
  * Same-team reference test cases for POST/PATCH (#3378/#3424), split out of generateApiTest to keep it small.
@@ -140,9 +153,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     `update${S}: vi.fn()`,
     `delete${S}: vi.fn()`,
   ]
-  if (collectTeamRefFields(data).length > 0) queryExports.push(`assert${S}References: vi.fn()`)
-  if (hierarchy) queryExports.push(`updatePosition${S}: vi.fn()`)
-  if (hasReorder) queryExports.push(`reorderSiblings${P}: vi.fn()`)
+  queryExports.push(...optionalQueryExports(data, S, P, hierarchy, hasReorder))
 
   // Named imports we assert against.
   const queryImports = [`getAll${P}`, `create${S}`, `update${S}`, `delete${S}`]

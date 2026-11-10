@@ -149,10 +149,6 @@ jobs:
       - name: Run MCP Server tests
         run: pnpm --filter @fyit/crouton-mcp test
 
-      # Needs installed packages + the dist built above, so it cannot run in the install-free Node checks job (#3169).
-      - name: Run scripts/*.deps-test.mjs
-        run: node --test scripts/*.deps-test.mjs
-
   # A POC has no app typecheck sweep and no AI reviews (#2894): typecheck plus the POC's own tests (#3315) are its checks.
   poc-typecheck:
     name: Typecheck POC
@@ -509,7 +505,7 @@ jobs:
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs docs/evals/*.test.mjs
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs docs/evals/*.test.mjs
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)

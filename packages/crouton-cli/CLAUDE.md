@@ -462,8 +462,14 @@ it against the collection list only ever produces a false refusal. Omitting `ref
 `users` target still fails — that's the #1825 chores case, where the generator took the
 collection path and wrote an import to a `users` collection nobody created.
 
-Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
-raw id) in the generated List. The join works today; the UI half does not.
+**Person field (#1958)** — the same spelling also drives the whole surface (predicate:
+`isPersonRef` in `lib/utils/team-ref-fields.ts`):
+
+- **Form**: a team-scoped `USelectMenu` fed by `useTeam().loadMembers()` (`multiple` for `type: "array"`).
+- **List**: `CroutonUsersCardMini` on the joined `<field>User` row (single refs; array person fields keep the generic cell).
+- **API**: POST/PATCH call `assert<X>TeamMembers(event, team.id, body)` (built on crouton-auth `getMembership`), so an id from another team gets a 400.
+- **Seed**: `seed.json` records `personFields`; `seed-app.ts` fills a real member of the seeded team via a `member` subquery (NULL when none exists yet).
+- No FK to `user.id` (same as `owner`), and no separate `person` field type.
 
 ### Field Meta Properties
 
@@ -714,7 +720,7 @@ and **error paths** (invalid body → rejected before any write, missing id para
 
 ## Default Layout (generate → POC, #709)
 
-After collections are generated, `runPostGeneration` runs the **deterministic
+After collections are generated, `runPostGeneration` runs, **for an app that extends `@fyit/crouton-layout`**, the **deterministic
 layout pass** (`lib/compose-layout.ts` → `@fyit/crouton-layout`'s `composeDefaultLayout`)
 and writes **`crouton.layout.json`** at the app root: a `layout_configs`-format
 tree that arranges the generated collections into a good default — **calendar-primary**
@@ -727,9 +733,9 @@ side-by-side split falls back to a vertical stack.
 (row id `default`), so a freshly seeded POC boots with a real, data-bound layout
 instead of a blank canvas — editable in `CroutonLayout` (the layout is **data**,
 not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
-The seed only does this for an app that **extends `@fyit/crouton-layout`** — the generator
-writes `crouton.layout.json` for every app, but the table exists only where that layer is
-migrated, so for any other app the file is skipped with a log line (#2249).
+The seed only does this for an app that **extends `@fyit/crouton-layout`** — both halves
+are opt-in: the generator writes `crouton.layout.json` only for such an app (otherwise it prints
+`Skipped default layout (layout not enabled)`), and the seed skips any leftover file (#2249, #2282).
 
 ## Output Location
 
