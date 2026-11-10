@@ -63,6 +63,7 @@ jobs:
       - name: App collection drift
         id: drift
         if: steps.gate.outputs.send == 'true'
+        # A broken report must not kill the other digest sections; it still shows as a failed step and a "could not run" line.
         continue-on-error: true
         run: |
           pnpm --filter @fyit/crouton-auth build
