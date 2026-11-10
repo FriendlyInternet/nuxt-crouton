@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { isSchemaChange, parseStatements, listTargets, evaluateMigrationGuard } from './migration-guard.mjs'
+import { isSchemaChange, isAppSchemaChange, parseStatements, listTargets, evaluateMigrationGuard } from './migration-guard.mjs'
 
 const SALES = ['packages/crouton-sales/server/db/schema.ts']
 const names = { 'apps/kassa': 'kassa', 'pocs/gallery': 'gallery' }
@@ -100,4 +100,22 @@ test('incident replay #2726 (kassa team_id)', () => {
   const r = evaluateMigrationGuard(fx)
   assert.equal(r.status, 'fail')
   assert.ok(r.missing[0].statements.includes('ALTER TABLE `sales_sync_status` ADD `team_id` text;'))
+})
+
+test('app schema/migration files involve the guard; report says app-caused, not package-caused', () => {
+  for (const f of [
+    'apps/crouton-builder/server/db/schema.ts',
+    'pocs/gallery/server/db/schema.ts',
+    'pocs/gallery/layers/x/collections/y/server/database/schema.ts',
+    'apps/crouton-builder/server/db/migrations/0003_a.sql',
+    'pocs/gallery/drizzle.config.ts',
+  ]) assert.equal(isAppSchemaChange([f]), true, f)
+  assert.equal(isAppSchemaChange(['apps/kassa/app/app.vue']), false)
+  const bad = evaluateMigrationGuard({ changedFiles: ['apps/kassa/server/db/schema.ts'], results: { 'apps/kassa': { statements: stmt } }, names })
+  assert.equal(bad.status, 'fail')
+  assert.match(bad.markdown, /changes an app schema/)
+  const ok = evaluateMigrationGuard({ changedFiles: ['apps/kassa/server/db/schema.ts'], results: { 'apps/kassa': { statements: [] } }, names })
+  assert.equal(ok.status, 'pass')
+  const pkg = evaluateMigrationGuard({ changedFiles: SALES, results: { 'apps/kassa': { statements: stmt } }, names })
+  assert.match(pkg.markdown, /changes a package schema/)
 })
