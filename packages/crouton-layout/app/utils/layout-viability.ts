@@ -210,7 +210,7 @@ export function resolveVariant(registry: CroutonLayoutBlockRegistry, blockId: st
 }
 
 /**
- * The `min-size` (percent) a reka-ui `SplitterPanel` should get so the block(s)
+ * The `minSize` (percent) a USplitter pane should get so the block(s)
  * inside it can't be dragged below their `minWidth` contract (#706 / #710).
  *
  * Only a HORIZONTAL parent constrains width, so we convert the child subtree's
@@ -218,7 +218,7 @@ export function resolveVariant(registry: CroutonLayoutBlockRegistry, blockId: st
  * isn't divided) we keep the child's authored `minSize` (a height %). Falls back
  * to the authored `minSize` when the container hasn't measured yet (px ≤ 0) so
  * SSR / first paint stays stable. Capped at 90% so a single panel can't claim
- * the whole group (reka-ui also clamps, but we keep the sum sane).
+ * the whole group (the splitter also clamps, but we keep the sum sane).
  */
 export function panelMinSizePct(
   parentDirection: 'horizontal' | 'vertical',

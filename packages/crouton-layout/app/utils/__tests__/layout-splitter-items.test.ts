@@ -3,6 +3,9 @@ import {
   composeSplitterItems,
   editorSplitterItems,
   splitterHandleClass,
+  rendererSplitterItems,
+  rendererHandleClass,
+  collapseAction,
 } from '../layout-splitter-items'
 import { panelMinSizePct } from '../layout-viability'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
@@ -82,5 +85,90 @@ describe('splitterHandleClass', () => {
     expect(splitterHandleClass('vertical', '1')).toContain('h-1')
     expect(splitterHandleClass('horizontal', '1')).toBe('w-1')
     expect(splitterHandleClass('vertical', 'px')).toBe('h-px')
+  })
+})
+
+describe('rendererSplitterItems', () => {
+  const minWidthFor = (id: string) => (id === 'wide' ? 300 : 0)
+  const floor = (c: LayoutNode) => panelMinSizePct('horizontal', c, 1000, minWidthFor)
+
+  it('without a collapse context: editor sizes + floors, no collapse keys', () => {
+    const s = split([leaf('wide', { defaultSize: 40 }), leaf('b', { minSize: 5 })])
+    const items = rendererSplitterItems(s, floor, null)
+    expect(items.map(i => i.defaultSize)).toEqual([40, 50])
+    expect(items.map(i => i.minSize)).toEqual([30, 5])
+    for (const item of items) {
+      expect('collapsible' in item).toBe(false)
+      expect('collapsedSize' in item).toBe(false)
+      expect('id' in item).toBe(false)
+      expect(item.class).toBe('overflow-hidden')
+      expect(item.ui?.panel).toBe('block')
+      expect(item.slot).toBe('pane')
+    }
+  })
+
+  it('in-place collapse: the collapsed child is pinned to pct, all are collapsible with the style class', () => {
+    const s = split([leaf('wide', { defaultSize: 40 }), leaf('b', { defaultSize: 60, minSize: 5 })])
+    const items = rendererSplitterItems(s, floor, { collapsed: [true, false], pct: 6, style: 'spring-drawer' })
+    expect(items[0]).toMatchObject({ defaultSize: 6, minSize: 6, collapsible: true, collapsedSize: 6 })
+    expect(items[1]).toMatchObject({ defaultSize: 60, minSize: 5, collapsible: true, collapsedSize: 6 })
+    for (const item of items) {
+      expect(item.class).toContain('mq-co-spring-drawer')
+      expect(item.class).toContain('overflow-hidden')
+    }
+  })
+
+  it('in-place with nothing collapsed: sizes + floors equal the no-collapse case (expand-back)', () => {
+    const s = split([leaf('wide', { defaultSize: 40 }), leaf('b', { minSize: 5 })])
+    const plain = rendererSplitterItems(s, floor, null)
+    const items = rendererSplitterItems(s, floor, { collapsed: [false, false], pct: 6, style: 'iris-portal' })
+    expect(items.map(i => i.defaultSize)).toEqual(plain.map(i => i.defaultSize))
+    expect(items.map(i => i.minSize)).toEqual(plain.map(i => i.minSize))
+    for (const item of items) {
+      expect(item.collapsible).toBe(true)
+      expect(item.collapsedSize).toBe(6)
+    }
+  })
+
+  it('returns new objects each call', () => {
+    const s = split([leaf('a'), leaf('b')])
+    const ctx = { collapsed: [false, false], pct: 6, style: 'spring-drawer' }
+    const first = rendererSplitterItems(s, () => 0, ctx)
+    first[0]!.ui!.panel = 'flex'
+    const second = rendererSplitterItems(s, () => 0, ctx)
+    expect(second[0]!.ui?.panel).toBe('block')
+    expect(second[0]!.ui).not.toBe(first[0]!.ui)
+  })
+})
+
+describe('rendererHandleClass', () => {
+  it('interactive: the 1px bordered divider per orientation', () => {
+    const h = rendererHandleClass('horizontal', true)
+    expect(h).toContain('w-px')
+    expect(h).toContain('bg-border')
+    expect(h).toContain('hover:bg-primary')
+    expect(rendererHandleClass('vertical', true)).toContain('h-px')
+  })
+
+  it('not interactive: hidden in both directions (view-only in-place collapse has no seam)', () => {
+    expect(rendererHandleClass('horizontal', false)).toBe('hidden')
+    expect(rendererHandleClass('vertical', false)).toBe('hidden')
+    // View-only in-place collapse still gets collapsible items (paired with the hidden handle).
+    const items = rendererSplitterItems(split([leaf('a'), leaf('b')]), () => 0, { collapsed: [true, false], pct: 6, style: 'crt-power-down' })
+    expect(items.every(i => i.collapsible === true && i.collapsedSize === 6)).toBe(true)
+  })
+})
+
+describe('collapseAction', () => {
+  it('collapses / expands only when the wanted state differs from the live one', () => {
+    expect(collapseAction(true, false)).toBe('collapse')
+    expect(collapseAction(false, true)).toBe('expand')
+    expect(collapseAction(true, true)).toBeNull()
+    expect(collapseAction(false, false)).toBeNull()
+  })
+
+  it('never touches a panel with no collapse context', () => {
+    expect(collapseAction(undefined, true)).toBeNull()
+    expect(collapseAction(undefined, false)).toBeNull()
   })
 })
