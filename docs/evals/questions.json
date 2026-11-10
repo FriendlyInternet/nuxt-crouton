@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "status": "DRAFT - awaiting owner lgtm on #3169",
+  "questions": [
+    { "id": "bike-rental-schema", "kind": "schema", "question": "Write a crouton collection schema JSON for a bike rental shop: bikes with a name, a type (city, mountain, e-bike), a daily price and an available flag.", "mustMention": ["optionsSelect"], "mustNotMention": ["readonly", "children"], "schemaForbiddenKeys": ["readonly", "children"] },
+    { "id": "select-field", "kind": "prose", "question": "How do I make a field a dropdown with fixed options in a crouton schema?", "mustMention": ["meta.options", "optionsSelect"], "mustNotMention": [] },
+    { "id": "field-types", "kind": "prose", "question": "Which field types can I use in a crouton schema JSON?", "mustMention": ["string", "text", "number", "boolean", "date"], "mustNotMention": [] },
+    { "id": "generate-command", "kind": "prose", "question": "What command generates CRUD code from my schema files?", "mustMention": ["crouton config"], "mustNotMention": [] },
+    { "id": "validate-schema", "kind": "prose", "question": "How can I check a schema is valid before generating?", "mustMention": ["validate"], "mustNotMention": [] },
+    { "id": "required-field", "kind": "prose", "question": "How do I mark a field as required?", "mustMention": ["required"], "mustNotMention": [] },
+    { "id": "reference-field", "kind": "prose", "question": "How do I link one collection to another (e.g. a booking points to a bike)?", "mustMention": ["refTarget"], "mustNotMention": [] },
+    { "id": "dialect", "kind": "prose", "question": "Which database dialect does crouton generate by default?", "mustMention": ["sqlite"], "mustNotMention": [] },
+    { "id": "rollback", "kind": "prose", "question": "How do I remove a generated collection again?", "mustMention": ["rollback"], "mustNotMention": [] },
+    { "id": "naming", "kind": "prose", "question": "What name will the generated files get for a collection called 'bikes' in layer 'rental'?", "mustMention": ["rental"], "mustNotMention": [] }
+  ]
+}
