@@ -25,10 +25,11 @@ import { pathToFileURL } from 'node:url'
 import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
+import { parseOverride } from './lib/decision-line.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
-  'dispatch', 'interpret', 'resume', 'revise', 'test-card', 'none',
+  'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
+  'dispatch', 'interpret', 'plan-needs-reason', 'resume', 'revise', 'test-card', 'none',
 ]
 
 const COLLABORATORS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
@@ -45,14 +46,24 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
   return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l))
 }
 
+/** Owner override on a plan held by two no-go verdicts (#3272): `ok: <reason>` approves; a bare approval asks for the reason. */
+function routeHeldPlan({ body, issue, out, comment }) {
+  if (!(out.blocked && issue.planHeld && OWNERS.has(comment.authorAssociation))) return null
+  if (parseOverride({ body, authorAssociation: comment.authorAssociation, userType: comment.userType })) return out('approve-plan', 'owner ok: <reason> on a held plan')
+  if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a held plan')
+  return null
+}
+
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, collab, issue, out }) {
+function routeIssue({ body, collab, issue, out, comment = {} }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
+  const held = routeHeldPlan({ body, issue, out, comment })
+  if (held) return held
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
   // resume job (it explains), any other owner comment falls through to `interpret`.
   if (out.blocked && (isPipelineOwned({ body: issue.body, labels }) || isApproval(body))) {
@@ -113,7 +124,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, collab, issue, out, comment })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })

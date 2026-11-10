@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { routeComment, KINDS } from './comment-route.mjs'
+import { isPlanHold } from './plan-hold.mjs'
 
 const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
@@ -9,7 +10,7 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 10)
+  assert.equal(KINDS.length, 12)
 })
 
 test('close-epic: /close-epic on an issue', () => {
@@ -118,4 +119,26 @@ test('interpret: never for an app-posted comment, only revise via **Worker:**', 
   assert.equal(kind({ comment: viaClaude, issue: issue() }), 'none')
   const viaOther = { ...viaClaude, performedViaGithubApp: 'Some App' }
   assert.equal(kind({ comment: viaOther, issue: issue() }), 'none')
+})
+
+test('#3272 owner override on a plan held after two rejections', () => {
+  const held = { ...issue(['status:blocked', 'delegate-pi']), planHeld: true }
+  assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('lgtm'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('ok: why', 'CONTRIBUTOR'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('please also cover the mobile case'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('ok: why'), issue: { ...held, planHeld: false } }), 'resume')
+})
+
+test('#3272 planHeld worked out from a real thread, as on-comment.yml does', () => {
+  const NOGO = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n🔴 **Plan rejected**'
+  const PLAN = '<!-- pipeline-plan:v1 -->\nplan'
+  const thread = [PLAN, NOGO, PLAN, NOGO].map((body) => ({ body, userType: 'Bot' }))
+  const labels = ['status:blocked', 'delegate-pi']
+  const planHeld = isPlanHold({ comments: thread, labels })
+  assert.equal(planHeld, true)
+  const held = { ...issue(labels), planHeld }
+  assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
 })
