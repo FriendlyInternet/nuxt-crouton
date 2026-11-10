@@ -475,6 +475,11 @@ jobs:
         if: env.IS_CODE == 'true'
         run: node scripts/check-docs.mjs
 
+      # #3166: doc claims (CLI commands, schema field types, code-block syntax) vs the code.
+      # Report-only for now; add --strict once the rebuilt sections pass.
+      - name: Check doc claims (report-only)
+        run: node scripts/check-doc-claims.mjs
+
       # An app's schemas/*.json is a COPY of its package's and forks silently from install
       # onwards (#1766/#1769). Only UNDECLARED behavioural drift fails — intentional divergence
       # lives in scripts/schema-drift.baseline.json with a reason.
