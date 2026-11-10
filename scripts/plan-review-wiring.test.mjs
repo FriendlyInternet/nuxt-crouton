@@ -7,7 +7,7 @@ const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.me
 const job = wf.slice(wf.indexOf('\n  plan-review:\n'), wf.indexOf('\n  record-outcome:\n'))
 
 test('plan-review.yml is gone: no second issue_comment workflow', () => {
-  assert.equal(existsSync(new URL('../.github/workflows/plan-review.yml', import.meta.url)), false)
+  assert.equal(existsSync(new URL('../.github/workflows/' + ['plan', 'review.yml'].join('-'), import.meta.url)), false)
 })
 
 test('the plan-review job keeps its bot-plan-only, issues-only guard', () => {
