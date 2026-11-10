@@ -111,7 +111,7 @@ function scheduleStats(wf, runs, snapshots, firstMs, asOfMs) {
     else w.missed++
   }
   for (const r of sched) {
-    if (!r.conclusion || r.conclusion === 'success' || r.conclusion === 'skipped') continue
+    if (!r.conclusion || r.conclusion === 'success') continue
     ;(weeks[isoWeek(r.created)] ??= newWeek()).failed_runs++
   }
   for (const w of Object.values(weeks)) w.total = w.missed + w.failed_runs
@@ -199,7 +199,7 @@ export function loadData(dataDir) {
 }
 
 function gitHead(dir) {
-  try { return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() } catch { return null }
+  try { return execFileSync('git', ['-C', dir, 'log', '-1', '--format=%H', '--', 'metrics/runs', 'metrics/jobs', 'metrics/schedules'], { encoding: 'utf8' }).trim() || null } catch { return null }
 }
 
 export function runRollup(dataDir, linesPath = join(HERE, 'lines.json')) {

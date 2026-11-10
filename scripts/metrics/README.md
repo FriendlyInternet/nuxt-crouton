@@ -24,9 +24,9 @@ Only numbers, ids, names, branches, times and conclusions are stored — no acto
 ## Metrics in `latest.json` (per ISO week, Mon–Sun UTC, e.g. `2026-W46`)
 - `workflows[wf]` — `runs` = success + failure + timed_out; `failed` = failure + timed_out; `rate` = failed ÷ runs. Cancelled, skipped and unfinished runs are left out.
 - `jobs["wf/job"]` — the same per job. `jobs_coverage` = `eligible_runs` vs `runs_with_jobs`: while the backfill runs, a week's job numbers rest on only part of its runs.
-- `schedules[wf]` — `slots` = cron times in the week (UTC) that could be judged (≥2 h before `as_of`), counted from the UTC day of the workflow's first run seen. A slot is met by a `schedule` run started within 2 h after it. `missed` = unmet slots; `failed_runs` = schedule runs that ended in anything but success/skipped; `total` = both.
+- `schedules[wf]` — `slots` = cron times in the week (UTC) that could be judged (≥2 h before `as_of`), counted from the UTC day of the workflow's first run seen. A slot is met by a `schedule` run started within 2 h after it. `missed` = unmet slots; `failed_runs` = schedule runs that ended in anything but success; `total` = both.
 - `lines[line]` — summed over the line's workflows: `runs`, `failed`, `workflow_rate`, plus `schedule_total`.
-- `data_commit` — the `pipeline-data` commit the numbers were computed from.
+- `data_commit` — the last `pipeline-data` commit that touched `metrics/runs|jobs|schedules` (not HEAD, so rollup's own commit does not change it).
 
 ## Volume (measured 10 Nov 2026)
 115,684 runs in the last 90 days, 59,773 not skipped → 59,773 job lookups to backfill. Busiest day 5,918 lookups. Hourly × 1,500 calls = up to 36,000 lookups a day, so the backfill clears in ~2–3 days if the shared allowance has room; a busy hour only slows it.
