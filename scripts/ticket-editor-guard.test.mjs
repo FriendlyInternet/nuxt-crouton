@@ -151,3 +151,44 @@ test('save with a real issue → files committed and a comment posted', async ()
   assert.equal(puts(calls).length, 2)
   assert.ok(calls.some((c) => c.method === 'POST' && c.url.endsWith('/issues/5/comments')))
 })
+
+// ── refused tokens / targets through the save endpoint: 401/403, never a GitHub write ──────────
+async function saveWith(tok, body = {}, s = stub()) {
+  const orig = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => (url.endsWith('/access_tokens') ? new Response(JSON.stringify({ token: 'inst' }), { status: 201 }) : s.impl(url, init))
+  try {
+    const res = await worker.fetch(new Request('https://d/api/save', { method: 'POST', headers: { authorization: 'Bearer ' + tok }, body: JSON.stringify({ slug: 'x', scene: {}, png: 'AAAA', branch: 'diagram-test', ...body }) }), ENV)
+    return { res, writes: s.calls.filter((c) => c.method !== 'GET') }
+  } finally { globalThis.fetch = orig }
+}
+
+test('save with an expired token → 401, no write', async () => {
+  const { res, writes } = await saveWith(await signEditorToken(SECRET, now - 11 * 60 * 1000))
+  assert.equal(res.status, 401)
+  assert.equal(writes.length, 0)
+})
+
+test('save with a wrong-audience (correctly signed) token → 401, no write', async () => {
+  const payload = Buffer.from(JSON.stringify({ aud: 'other', exp: Math.floor(now / 1000) + 60 })).toString('base64url')
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = Buffer.from(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))).toString('base64url')
+  const { res, writes } = await saveWith(`${payload}.${sig}`)
+  assert.equal(res.status, 401)
+  assert.equal(writes.length, 0)
+})
+
+test('save with an overlong token → 401, no write', async () => {
+  const good = await signEditorToken(SECRET, now)
+  const { res, writes } = await saveWith(good + 'A'.repeat(2100))
+  assert.equal(res.status, 401)
+  assert.equal(writes.length, 0)
+})
+
+test('save with an issue that is not a real ticket (404 / junk) → 403, no write', async () => {
+  for (const issue of [999, 'abc', '5; drop']) {
+    const tok = await signEditorToken(SECRET, Date.now())
+    const { res, writes } = await saveWith(tok, { issue })
+    assert.equal(res.status, 403, 'issue ' + issue)
+    assert.equal(writes.length, 0)
+  }
+})
