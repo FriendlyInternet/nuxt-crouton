@@ -45,6 +45,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@fyit/crouton-core": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
