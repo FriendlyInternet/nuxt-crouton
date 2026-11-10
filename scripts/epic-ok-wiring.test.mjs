@@ -25,3 +25,9 @@ test('fix-ci-on-failure can be started by hand and hands back with the branch', 
 test('the sweep decides epic → main with decideEpicMerge', () => {
   assert.match(read('automerge-epic-subpr.yml'), /decideEpicMerge\(\{ pr, checkRuns, go \}\)/)
 })
+
+test('test-card runs one at a time per issue (concurrency group, no cancel)', () => {
+  const j = job(read('on-comment.yml'), 'test-card', 'record-decision')
+  assert.ok(j.length > 200)
+  assert.match(j, /concurrency:\s*\n\s+group: test-card-\$\{\{ github\.event\.issue\.number \}\}\s*\n\s+cancel-in-progress: false/)
+})

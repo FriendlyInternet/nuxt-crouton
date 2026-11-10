@@ -89,6 +89,11 @@ export function approvalKind(body) {
 const TEST_NOT_OK = /^[ \t]*not[ \t]+ok(?![\w-])[ \t]*[:\-—]?[ \t]*(.*)$/im
 const TEST_OK = /^[ \t]*ok(?![\w-])/im
 
+/** A `🎯 **Preview feedback**` pin posted by the review overlay (crouton-feedback). */
+export function isPreviewPin(body) {
+  return /^\s*🎯 \*\*Preview feedback\*\*/u.test(String(body || ''))
+}
+
 /**
  * Parse a reply to a test card.
  * @param {string} body Raw Markdown of the comment.
