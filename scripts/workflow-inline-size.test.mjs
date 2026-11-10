@@ -1,10 +1,10 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { inlineBlocks, check, scan, loadBaseline, blocksToMap, scanAtRev, LIMIT } from './workflow-inline-size.mjs'
+import { inlineBlocks, check, scan, loadBaseline, blocksToMap, scanAtRev, baselineRaises, raiseApproved, baselineAtRev, LIMIT } from './workflow-inline-size.mjs'
 
 const body = (n, pad = '          ') => Array.from({ length: n }, (_, i) => `${pad}echo ${i}`).join('\n')
 const wf = (n, extra = '') => `name: x
@@ -126,6 +126,7 @@ test('base mode: new block over the limit fails', () => {
   assert.equal(failures.length, 1)
   assert.match(failures[0], /new inline block of 50 lines/)
 })
+// check() lets the PR's own raised baseline cover growth; the raise itself is caught by baselineRaises (#3615).
 test('base mode: growth covered by a raised baseline passes', () => {
   assert.deepEqual(check(head(55), { [key(50)]: 55 }, LIMIT, base(50)).failures, [])
 })
@@ -156,4 +157,72 @@ test('rule: a PR that grows the block still fails', () => {
 })
 test('scanAtRev: unknown rev throws', () => {
   assert.throws(() => scanAtRev('no-such-rev', tmp))
+})
+
+test('raise: a number that goes up is reported', () => {
+  const r = baselineRaises({ k: 571 }, { k: 570 })
+  assert.equal(r.length, 1)
+  assert.match(r[0], /raised from 570 to 571/)
+})
+test('raise: a new entry is reported', () => {
+  const r = baselineRaises({ k: 50 }, {})
+  assert.equal(r.length, 1)
+  assert.match(r[0], /new baseline entry/)
+})
+test('raise: lowered or removed entries pass', () => {
+  assert.deepEqual(baselineRaises({ k: 560 }, { k: 570, j: 60 }), [])
+})
+test('raise: unchanged passes', () => {
+  assert.deepEqual(baselineRaises({ k: 570 }, { k: 570 }), [])
+})
+test('approval: line in body approves', () => {
+  assert.equal(raiseApproved('Closes #1\n\nBaseline-raise-approved: ok from owner, 9 Nov'), true)
+  assert.equal(raiseApproved(''), false)
+  assert.equal(raiseApproved(undefined), false)
+  assert.equal(raiseApproved('Baseline-raise-approved:   '), false)
+  assert.equal(raiseApproved('Baseline-raise-approved:\nother text'), false)
+})
+
+// End to end: the real CLI in a throwaway repo, base commit vs a PR commit that edits the baseline.
+{
+  const e2e = mkdtempSync(join(tmpdir(), 'wis-e2e-'))
+  after(() => rmSync(e2e, { recursive: true, force: true }))
+  const g = (...a) => execFileSync('git', ['-C', e2e, ...a], { stdio: 'pipe' })
+  const bf = join(e2e, 'scripts/workflow-inline-size.baseline.json')
+  const run = (env = {}) => {
+    try {
+      const out = execFileSync('node', [join(e2e, 'scripts/workflow-inline-size.mjs'), '--base', 'base'], { cwd: e2e, encoding: 'utf8', stdio: 'pipe', env: { ...process.env, PR_BODY: '', ...env } })
+      return { code: 0, out }
+    } catch (e) { return { code: e.status, out: String(e.stdout) + String(e.stderr) } }
+  }
+  const key = '.github/workflows/a.yml#build/step'
+  const setup = () => {
+    g('init', '-q'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't')
+    mkdirSync(join(e2e, '.github/workflows'), { recursive: true }); mkdirSync(join(e2e, 'scripts'), { recursive: true })
+    writeFileSync(join(e2e, 'scripts/workflow-inline-size.mjs'), readFileSync(new URL('./workflow-inline-size.mjs', import.meta.url)))
+    writeFileSync(join(e2e, '.github/workflows/a.yml'), wf(60))
+    const probe = inlineBlocks(wf(60), '.github/workflows/a.yml')[0]
+    writeFileSync(bf, JSON.stringify({ limit: 40, blocks: { [probe.key]: probe.lines } }))
+    g('add', '-A'); g('commit', '-qm', 'base'); g('tag', 'base')
+    return probe
+  }
+  test('e2e: raised baseline fails, passes with approval line, and editing limit cannot hide it', () => {
+    const probe = setup()
+    writeFileSync(join(e2e, '.github/workflows/a.yml'), wf(61))
+    writeFileSync(bf, JSON.stringify({ limit: 40, blocks: { [probe.key]: probe.lines + 1 } }))
+    g('add', '-A'); g('commit', '-qm', 'pr')
+    const bad = run()
+    assert.equal(bad.code, 1); assert.match(bad.out, /baseline raised from/)
+    assert.equal(run({ PR_BODY: 'Baseline-raise-approved: owner ok' }).code, 0)
+    writeFileSync(bf, JSON.stringify({ limit: 600, blocks: { [probe.key]: probe.lines + 1 } }))
+    const sneaky = run()
+    assert.equal(sneaky.code, 1); assert.match(sneaky.out, /baseline raised from/)
+  })
+}
+test('baselineAtRev: reads the committed baseline; undefined when absent', () => {
+  assert.equal(baselineAtRev('HEAD', tmp), undefined)
+  mkdirSync(join(tmp, 'scripts'), { recursive: true })
+  writeFileSync(join(tmp, 'scripts/workflow-inline-size.baseline.json'), JSON.stringify({ blocks: { k: 45 } }))
+  commit('baseline')
+  assert.deepEqual(baselineAtRev('HEAD', tmp), { k: 45 })
 })
