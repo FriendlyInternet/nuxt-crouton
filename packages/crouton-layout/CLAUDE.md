@@ -34,7 +34,7 @@ empty layer; subsequent PRs move the code in:
 | Workstream | Moves in |
 |------------|----------|
 | #753 scaffold ✅ | package.json · nuxt.config.ts · this CLAUDE.md · `pkg:crouton-layout` label · package-catalog entry |
-| #757 default-on ✅ (pulled early) | `crouton.manifest.ts` (`bundled: true`) · `layout` feature flag in `CroutonOptions` · `@fyit/crouton-layout` added to every app/fixture/poc `extends` + deps. **Empty layer wired into the graph first** so the code-moves below stay clean one-way + green. |
+| #757 default-on ✅ (pulled early) | `crouton.manifest.ts` (`bundled: true`) · `layout` feature flag in `CroutonOptions` · `@fyit/crouton-layout` added to every app/fixture/poc `extends` + deps. **Empty layer wired into the graph first** so the code-moves below stay clean one-way + green. — reversed to opt-in by #2282 |
 | #754 + #755 utils + components + composables ✅ | `app/utils/layout-{compose,viability,edit}.ts` + `app/composables/useCroutonLayout{Blocks,Edit,Store}.ts` + the `Layout*` components + the `croutonLayoutBlocks` defaults (`app/app.config.ts`) (+ tests). CLI repointed to `@fyit/crouton-layout/app/utils/layout-compose`. **Combined** (the relative `../utils/layout-*` imports make them inseparable without a backward shim). |
 | #756 server side ✅ | `layout_configs` schema (`server/database/schema/layoutConfigs.ts`) + `crouton-layouts/[layoutId].{get,put}` API + `/admin/[team]/layout` page + `app/utils/layout-tree.ts` (migration continuity — **since moved back to crouton-core, #1618**) |
 | #758 prove it | full boot + e2e proof; doc sweep (core CLAUDE.md row surgery, skills); port the mobile slideover (#749) + loading-state UX fixes into the core page |
@@ -79,7 +79,7 @@ empty layer; subsequent PRs move the code in:
 | *List ↔ Form link (#2598)* | `CroutonLayoutCollection` routes its rows' open / new / delete to the same selection (`provideSelectionItemActions`). The PAGE that hosts a layout calls `provideCollectionSelections()` once (done in `/admin/[team]/layout`; the builder POC's board + served page do the same). A layout without a Form block for that collection (e.g. a phone breakpoint that leaves it out) opens rows in the collection's overlay, as before — decided by what is on screen, never by viewport width. |
 | `app/components/LayoutSpikeStats.vue` | `CroutonLayoutSpikeStats` — generic KPI demo block, registered as `stats`. |
 | `app/app.config.ts` | The default `croutonLayoutBlocks` registry (collection-list / entity-form / stats), defu-merged across layers (packages add their own, e.g. bookings' `bookings-calendar`). |
-| `crouton.manifest.ts` | Declares `bundled: true`, which the CLI reads as "core already provides it" (`crouton init` / `doctor` skip it) — so add the layer to `extends` by hand. |
+| `crouton.manifest.ts` | Declares `bundled: false` (opt-in, #2282): `crouton init --features layout` adds it to `extends` + deps and `doctor` checks the dep. |
 
 ## Key Files
 
