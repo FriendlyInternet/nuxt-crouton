@@ -62,7 +62,7 @@ on:
         required: true
         type: string
       model:
-        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge)."
+        description: "Model for pi. Blank = the `build` tier (plan mode: the `plan` tier) in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge)."
         required: false
         default: ""
         type: string
@@ -417,11 +417,11 @@ jobs:
       # silently run a stale model; a broken config now fails this step loudly instead.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
+          BUILD="$(node scripts/resolve-pipeline-model.mjs build)"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
           echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT plan=$PLAN (from .claude/pipeline-models.json)"
+          echo "pipeline models — build=$BUILD plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -525,7 +525,7 @@ jobs:
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here.
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -818,7 +818,7 @@ jobs:
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail
@@ -1636,7 +1636,7 @@ jobs:
           ISSUE: "${{ inputs.issue || github.event.issue.number }}"
           BRANCH: "${{ inputs.branch }}"
           STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && (needs.work-pi.outputs.conflict == '1' && 'conflict' || 'revise') || 'work') }}"
-          MODEL_TIER: default
+          MODEL_TIER: "${{ inputs.mode == 'plan' && 'plan' || 'build' }}"
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.work-pi.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
