@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), 'check-doc-claims.mjs')
@@ -35,7 +36,11 @@ test('valid schema block passes; skip marker is honoured', () => {
   assert.equal(run('<!-- doc-check: skip -->\n```json\n{ "t": { "type": "nonsense" } }\n```\n', '--strict').status, 0)
 })
 
-test('ts block with a syntax error is reported; fragments are skipped', () => {
+// The Node-checks CI job installs no deps, so `typescript` may be absent there; the script
+// then reports the code check as NOT RUN (visible in its output). Skip with that reason.
+const hasTs = (() => { try { createRequire(import.meta.url)('typescript'); return true } catch { return false } })()
+
+test('ts block with a syntax error is reported; fragments are skipped', { skip: hasTs ? false : 'typescript not installed in this job' }, () => {
   assert.equal(run('```ts\nconst = ;\n```\n', '--strict').status, 1)
   assert.equal(run('```ts\nconst = ...\n```\n', '--strict').status, 0)
 })
