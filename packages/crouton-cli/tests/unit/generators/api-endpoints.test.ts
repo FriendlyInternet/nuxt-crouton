@@ -238,3 +238,35 @@ describe('API Endpoint Generators', () => {
     })
   })
 })
+
+describe('team reference checks (#3378)', () => {
+  const withRefs: AnyConfig = {
+    ...apiEndpointData,
+    fields: [
+      ...apiEndpointData.fields,
+      { name: 'categoryId', type: 'string', refTarget: 'categories', zod: 'z.string()', meta: {} },
+      { name: 'ownerRef', type: 'string', refTarget: 'users', refScope: 'external', zod: 'z.string()', meta: {} },
+    ],
+  }
+
+  it('POST asserts references before create', () => {
+    const code = generatePostEndpoint(withRefs, minimalConfig as AnyConfig)
+    const a = code.indexOf('await assert')
+    expect(a).toBeGreaterThan(-1)
+    expect(code).toContain('(team.id, body)')
+    expect(code.indexOf('await create')).toBeGreaterThan(a)
+    expect(code).toMatch(/import \{ create\w+, assert\w+References \}/)
+  })
+
+  it('PATCH asserts references before update', () => {
+    const code = generatePatchEndpoint(withRefs, minimalConfig as AnyConfig)
+    const a = code.indexOf('await assert')
+    expect(a).toBeGreaterThan(-1)
+    expect(code.indexOf('await update')).toBeGreaterThan(a)
+  })
+
+  it('emits nothing without team-scoped references', () => {
+    expect(generatePostEndpoint(apiEndpointData, minimalConfig as AnyConfig)).not.toContain('References')
+    expect(generatePatchEndpoint(apiEndpointData, minimalConfig as AnyConfig)).not.toContain('References')
+  })
+})

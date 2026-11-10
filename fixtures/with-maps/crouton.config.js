@@ -6,7 +6,7 @@ export default {
   features: {
     maps: {
       "config": {
-        "style": "liberty",
+        "style": "positron",
         "geocodingUrl": "https://nominatim.openstreetmap.org"
       }
     }

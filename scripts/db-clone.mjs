@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createInterface } from 'node:readline'
-import { PROD_ENVS, resolveAppDb, runWrangler, queryD1Json } from './lib/wrangler-d1.mjs'
+import { PROD_ENVS, resolveAppDb, runWrangler, queryD1Json, isUserTable } from './lib/wrangler-d1.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -95,7 +95,7 @@ function printCmd(args) {
 /** List the db's user tables (so we can drop them for a clean mirror). */
 function listTables(dbName) {
   const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-  return queryD1Json(dbName, sql, { cwd: repoRoot }).map(r => r.name)
+  return queryD1Json(dbName, sql, { cwd: repoRoot }).map(r => r.name).filter(isUserTable)
 }
 
 function confirmTyped(expected) {

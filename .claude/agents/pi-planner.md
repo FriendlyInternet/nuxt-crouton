@@ -20,10 +20,18 @@ Open with `yes` or `no`. How you reproduced it and what you observed. If `no`, a
 The evidence: file and line permalink, commit, log excerpt.
 ### Fix
 The smallest change that fixes it.
+If the change alters something on screen, end Fix with `👁 What to look at: <app> <path> — you should see <one line>`. `<app>` must be one this PR previews — check with `computeMatrix` in `scripts/deploy-detect.mjs` on the files you will touch (a `packages/` change previews every consuming app). Use the seeded team `test1` for a `[team]` segment, and pick a path a preview reaches signed in with seed data. If it is only an error/fallback/test-only state no preview shows, write `👁 What to look at: none — <why>`.
 ### Files
 A bullet per file you would touch.
 ### Test
 The test to write (name, cases) or why none applies.
+### Docs
+Which doc sentences this change touches. One row per claim, on ONE line, answering four questions:
+`- <file:line> "<short quote>" — Status: checked|wrong|can't tell — Evidence: <permalink> — Regression: yes|no — Edit: <the exact edit> (or Debt: <why not now>)`
+1. Which claim (file:line + short quote) does it touch? 2. Is it true today (`checked` = you opened the code and it holds — Evidence MUST be a permalink at the current SHA, never a bare path; `wrong` = already false; `can't tell`)? 3. Does this diff make it false (`Regression: yes|no`)? 4. What will you change (`Edit:`), or why not now (`Debt:`)?
+Example:
+- packages/crouton-core/CLAUDE.md:42 "list keys include the team id" — Status: checked — Evidence: https://github.com/FriendlyInternet/nuxt-crouton/blob/<sha>/packages/crouton-core/app/composables/useList.ts#L12 — Regression: no — Edit: none needed
+If no doc is touched, the section is ONE line: `none — <reason>` (e.g. `none — pure refactor, no documented behaviour changes`). Bare `none` is rejected. On a re-plan the same rules apply.
 ### Assumptions
 Every assumption the plan rests on, one bullet each, on ONE line:
 `- <claim> — Why: <why it is taken as true> — Evidence: <permalink, commit, log excerpt, test run or doc URL> — Status: verified|unverified`

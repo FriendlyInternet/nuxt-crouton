@@ -17,21 +17,21 @@ const BRANCH = 'epic/1685-single-use-pipeline'
 
 test('parse reads a full wrapped block', () => {
   const body = `Some issue text.\n\n<!-- pipeline: epic=1685 depth=2 epic_branch=${BRANCH} -->`
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null, base: null })
 })
 
 test('parse tolerates extra whitespace and key order', () => {
   const body = `<!--   pipeline:   epic_branch=${BRANCH}    epic=42   depth=0   -->`
-  assert.deepEqual(parsePipelineBlock(body), { epic: 42, depth: 0, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 42, depth: 0, epic_branch: BRANCH, dispatch: null, base: null })
 })
 
 test('parse returns nulls for a subset / absent keys', () => {
   assert.deepEqual(parsePipelineBlock('<!-- pipeline: epic_branch=main -->'),
-    { epic: null, depth: null, epic_branch: 'main', dispatch: null })
+    { epic: null, depth: null, epic_branch: 'main', dispatch: null, base: null })
   assert.deepEqual(parsePipelineBlock('no block here'),
-    { epic: null, depth: null, epic_branch: null, dispatch: null })
-  assert.deepEqual(parsePipelineBlock(''), { epic: null, depth: null, epic_branch: null, dispatch: null })
-  assert.deepEqual(parsePipelineBlock(undefined), { epic: null, depth: null, epic_branch: null, dispatch: null })
+    { epic: null, depth: null, epic_branch: null, dispatch: null, base: null })
+  assert.deepEqual(parsePipelineBlock(''), { epic: null, depth: null, epic_branch: null, dispatch: null, base: null })
+  assert.deepEqual(parsePipelineBlock(undefined), { epic: null, depth: null, epic_branch: null, dispatch: null, base: null })
 })
 
 test('parse reads the legacy bare `pipeline:` line WS1 emitted (back-compat)', () => {
@@ -41,7 +41,7 @@ test('parse reads the legacy bare `pipeline:` line WS1 emitted (back-compat)', (
 
 test('parse ignores unknown keys and bad ints', () => {
   assert.deepEqual(parsePipelineBlock('<!-- pipeline: epic=notanint depth=3 wave=2 -->'),
-    { epic: null, depth: 3, epic_branch: null, dispatch: null })
+    { epic: null, depth: 3, epic_branch: null, dispatch: null, base: null })
 })
 
 test('depth=0 is preserved, not dropped as falsy', () => {
@@ -60,7 +60,7 @@ test('format emits only present keys in a stable order', () => {
 test('write appends a block to a body that has none', () => {
   const out = writePipelineBlock('Issue body.', { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
   assert.match(out, /^Issue body\.\n\n<!-- pipeline: epic=1685 depth=1 epic_branch=/)
-  assert.deepEqual(parsePipelineBlock(out), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(out), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null, base: null })
 })
 
 test('write is idempotent — same context twice is byte-identical', () => {
@@ -74,7 +74,7 @@ test('write replaces an existing block in place (no duplication)', () => {
   const start = writePipelineBlock('Body', { epic: 1, depth: 0, epic_branch: 'main' })
   const updated = writePipelineBlock(start, { depth: 1, epic_branch: BRANCH })
   // epic preserved from the merge, depth+branch updated, still exactly one block.
-  assert.deepEqual(parsePipelineBlock(updated), { epic: 1, depth: 1, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(updated), { epic: 1, depth: 1, epic_branch: BRANCH, dispatch: null, base: null })
   assert.equal((updated.match(/<!-- pipeline:/g) || []).length, 1)
 })
 
@@ -94,7 +94,7 @@ test('a partial update with explicit nulls preserves siblings (the CLI write pat
   // parseTokens yields null for absent keys; `write depth=1` must NOT wipe epic/epic_branch.
   const start = writePipelineBlock('Body', { epic: 1685, depth: 0, epic_branch: BRANCH })
   const updated = writePipelineBlock(start, { epic: null, depth: 1, epic_branch: null })
-  assert.deepEqual(parsePipelineBlock(updated), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(updated), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null, base: null })
 })
 
 // ── #1923: `dispatch` — the trigger label a blocked child should be released with ────
@@ -121,7 +121,7 @@ test('a partial update does not clobber a recorded dispatch', () => {
 // carrying one: the worker got epic_branch=… and its finish step died on `origin/…`.
 test('a block shown in a code span or fence is an example, not the issue\'s context', () => {
   const quoted = 'Each child needs the hidden `<!-- pipeline: epic=N depth=1 epic_branch=… -->` block.'
-  assert.deepEqual(parsePipelineBlock(quoted), { epic: null, depth: null, epic_branch: null, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(quoted), { epic: null, depth: null, epic_branch: null, dispatch: null, base: null })
   const fenced = 'Format:\n```\n<!-- pipeline: epic=1 epic_branch=epic/1-x -->\n```\n'
   assert.equal(parsePipelineBlock(fenced).epic_branch, null)
 })
@@ -142,4 +142,9 @@ test('a placeholder branch value reads as absent', () => {
     assert.equal(parsePipelineBlock(`<!-- pipeline: epic=1 epic_branch=${v} -->`).epic_branch, null, v)
   }
   assert.equal(parsePipelineBlock('<!-- pipeline: epic_branch=epic/12-a.b_c -->').epic_branch, 'epic/12-a.b_c')
+})
+
+test('base=main parses and formats (#3504)', () => {
+  assert.equal(parsePipelineBlock('<!-- pipeline: epic=1 base=main -->').base, 'main')
+  assert.equal(formatPipelineBlock({ epic: 1, base: 'main' }), '<!-- pipeline: epic=1 base=main -->')
 })

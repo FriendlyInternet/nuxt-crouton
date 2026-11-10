@@ -3,6 +3,7 @@ import type { CroutonAuthConfig } from '../../../types/config'
 
 // Import after mocks
 import {
+  buildOrganizationConfig,
   createAuth,
   isTwoFactorEnabled,
   getTwoFactorInfo,
@@ -386,5 +387,36 @@ describe('Configuration patterns (flag-based)', () => {
       expect(config.teams?.autoCreateOnSignup).toBe(true)
       expect(config.teams?.allowCreate).toBe(false)
     })
+  })
+})
+
+describe('allowCreate: superAdmin mapping', () => {
+  const resolve = (allowCreate: boolean | 'superAdmin') =>
+    (buildOrganizationConfig({ teams: { allowCreate } } as CroutonAuthConfig) as {
+      allowUserToCreateOrganization: boolean | ((u: unknown) => boolean)
+    }).allowUserToCreateOrganization
+
+  it('refuses a stranger', () => {
+    const fn = resolve('superAdmin') as (u: unknown) => boolean
+    expect(fn({ role: 'user' })).toBe(false)
+    expect(fn(null)).toBe(false)
+  })
+  it('allows role admin', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'admin' })).toBe(true)
+  })
+  it('allows superAdmin: true with role user', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'user', superAdmin: true })).toBe(true)
+  })
+  it('leaves true/false unchanged', () => {
+    expect(resolve(true)).toBe(true)
+    expect(resolve(false)).toBe(false)
+  })
+  it('unset allowCreate defaults to true', () => {
+    const cfg = buildOrganizationConfig({ teams: {} } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(true)
+  })
+  it('unset allowCreate with defaultTeamSlug defaults to false', () => {
+    const cfg = buildOrganizationConfig({ teams: { defaultTeamSlug: 'acme' } } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(false)
   })
 })

@@ -9,7 +9,7 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | File | Purpose |
 |------|---------|
 | `nuxt.config.ts` | Layer configuration, component registration, i18n setup |
-| `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one; the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
+| `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, `calendarView` (week/month), and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one (or takes the page's via its `store` prop — `provideBookingsStore(src, existing?)` — so inline + full-screen Panels on the admin page share it); the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
 | `app/composables/useBookingAvailability.ts` | Check slot/inventory availability |
 | `app/composables/useBookingCart.ts` | Shopping cart for bookings |
 | `app/composables/useBookingsSettings.ts` | Team booking settings |
@@ -19,7 +19,9 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | `app/types/booking.ts` | TypeScript type definitions |
 | `server/api/crouton-bookings/` | API endpoints |
 | `server/utils/booking-emails.ts` | Email utilities |
-| `collections/<name>/` | **The 5 bookings collections, owned end to end (#2278)** — `bookings`, `locations`, `settings`, `emailtemplates`, `emaillogs`: `server/database/{schema,queries}.ts`, `server/api/teams/[id]/bookings-<plural>/*`, `types.ts`, `app/composables/useBookings<Plural>.ts`, `app/components/List.vue` (+ `_Form.vue`, repeater inputs). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate. Moved verbatim from velo's generated layer, hand edits included. Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Importable: `@fyit/crouton-bookings/collections/<name>/types` and `…/server/database/{schema,queries}` |
+| `server/utils/email-service.ts` | Sends + logs booking emails. Reads `bookings_emailtemplates`/`bookings_emaillogs` from this package (not the app's `~~/server/db/schema`); a booking email is never sent without a log row, and a missing table is a `[booking-email]` console error |
+| `collections/<name>/` | **The 5 bookings collections, owned end to end (#2278)** — `bookings`, `locations`, `settings`, `emailtemplates`, `emaillogs`: `server/database/{schema,queries}.ts`, `server/api/teams/[id]/bookings-<plural>/*`, `types.ts`, `app/composables/useBookings<Plural>.ts`, `app/components/List.vue` (+ `_Form.vue`, repeater inputs). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate. Moved verbatim from velo's generated layer, hand edits included. Create/edit routes validate the body with hand-added zod schemas (#3377; unknown keys stripped, wrong types 400) — `scripts/check-collection-body-validation.mjs` catches drift. POST/PATCH of `bookings`, `emailtemplates`, `emaillogs` call `assertBookings<X>References` (queries.ts → crouton-core `assertRefsInTeam`) so a reference to another team's record is a 400 (#3378). Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Importable: `@fyit/crouton-bookings/collections/<name>/types` and `…/server/database/{schema,queries}` |
+| Route access (#3135) | **Writes to `locations`, `settings`, `emailtemplates`, all `emaillogs` routes, `bookings-bookings` POST and `admin-bookings` need `requireTeamAdmin`.** Members: `bookings-bookings` list returns only their own rows (no user emails); `bookings/[id]` PATCH and `resend-email` are owner-or-admin (403 otherwise). The customer calendar reads `calendar-bookings` (member-safe: id/location/date/slot/quantity/status only). Template `fromEmail` must be on the domain of `runtimeConfig.email.from` (`server/utils/sender-domain.ts`). Tests: `test/booking-authz.test.ts` |
 | `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps pick up the 5 collection tables in `db:generate` (velo: "No schema changes" after the move) |
 | `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
 | `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two slot-mode courts, one inventory-mode rental) + a few bookings, so previews open populated |
@@ -40,13 +42,13 @@ CroutonBooking
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
 │   ├── CalendarOnly.vue - CroutonBookingsLayoutCalendarOnly (`bookings-calendar-only`) — just the grid
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
-│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-view toggles kept local/inert)
+│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map, location cards)
 └── PanelMap.vue        - Map display
 ```
 
@@ -59,7 +61,8 @@ CroutonBooking
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
-| `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (any team member) |
+| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status) |
+| `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (owner or team admin; others get 403) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]/resend-email` | POST | Resend email (if enabled) |
 
 ### Booking Modes
@@ -267,3 +270,5 @@ API: /api/crouton-bookings/teams/[id]/[resource]
 Type: [Domain][Entity] (e.g., BookingWithRelations)
 Table: bookings[Collection] (e.g., bookingsBookings)
 ```
+
+**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.

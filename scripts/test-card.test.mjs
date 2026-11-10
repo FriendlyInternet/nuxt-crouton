@@ -2,7 +2,7 @@
 //   node --test scripts/test-card.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, CARD_MARKER, appsFromJobs, decideAppNotice, BROKEN_NOTICE, BACKUP_NOTICE, NOT_CHECKED_LINE } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, howToTestPointer, CARD_MARKER, appsFromJobs, decideAppNotice, BROKEN_NOTICE, BACKUP_NOTICE, NOT_CHECKED_LINE } from './test-card.mjs'
 
 const C = { state: 'closed' }
 const base = { subIssues: [C, C], labels: ['epic'], comments: [], deployed: true }
@@ -114,4 +114,10 @@ test('broken notice posts once; back-up notice only after a broken one', () => {
   assert.equal(decideAppNotice({ kind: 'back', comments: afterBroken }).body, BACKUP_NOTICE)
   assert.equal(decideAppNotice({ kind: 'back', comments: [...afterBroken, { body: BACKUP_NOTICE }] }).post, false)
   assert.equal(decideAppNotice({ kind: 'broken', comments: [...afterBroken, { body: BACKUP_NOTICE }] }).post, true)
+})
+
+test("howToTestPointer points at the issue's steps, or says there are none", () => {
+  assert.equal(howToTestPointer(2829, '## 🧪 How to test\n1. Open the page\n2. Tap save\n'), 'How to test: see #2829 → 🧪')
+  assert.equal(howToTestPointer(2829, '## Done when\n- it works\n'), 'How to test: #2829 has no 🧪 steps')
+  assert.equal(howToTestPointer(2829, ''), 'How to test: #2829 has no 🧪 steps')
 })

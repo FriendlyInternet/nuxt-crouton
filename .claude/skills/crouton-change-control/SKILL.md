@@ -76,6 +76,8 @@ The interactive flow (feature branch → `/commit` → PR `Closes #NN` → merge
 
 Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs auto-merge there when green (`automerge-epic-subpr.yml`, merge commit); gate PRs wait for §2. **The pipeline stops at the epic branch — nothing reaches `main` on its own**: the epic→`main` PR is a human act (the #686 lesson, from that epic's postmortem — cited, not reproduced). It also never deploys production (§5).
 
+When `main` turns green after being red, bring a waiting epic PR up to date with `gh api -X PUT repos/{o}/{r}/pulls/{n}/update-branch`. `rerun-failed-jobs` re-tests the stale merge ref and stays red (#3011, #3018).
+
 ## 5. The non-negotiables (rule → incident behind it)
 
 | Rule | Enforced by | Incident / evidence |
@@ -204,11 +206,12 @@ follows this rule and says so in its done comment.
 
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
-data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
 (#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
-`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+`plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
-differs, links the plan in its PR body and appends a row to
-`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+differs, links the plan in its PR body; the run's record step writes the ledger row to the
+`pipeline-data` branch under `plan-ledger/` (`scripts/plan-ledger.mjs --write`, #3457).
+`writeups/reports/plan-review-ledger.jsonl` stays on main as frozen history up to 6 Nov 2026. Chores and app-only
 tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).

@@ -1,7 +1,7 @@
 /** #3208 — `work-this` is the only human dispatch label. node --test scripts/dispatch-label-wiring.test.mjs */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const read = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
 const jobIf = (src, name) => {
@@ -13,24 +13,33 @@ const jobIf = (src, name) => {
 }
 const labelTriggers = cond => [...cond.matchAll(/label\.name == '([^']+)'/g)].map(m => m[1])
 
-test('work-this added → exactly one route run (worker job never takes the label directly for epics)', () => {
-  const y = read('work-issue-pidev.yml')
-  const routeIf = jobIf(y, 'route')
-  assert.deepEqual(labelTriggers(routeIf), ['work-this'])
-  assert.match(routeIf, /action == 'labeled'/)
+test('work-this added → exactly one router run; the pipeline workflows are dispatch-only (#3312)', () => {
+  const y = read('label-router.yml')
+  assert.match(y, /types: \[labeled\]/)
+  assert.ok(labelTriggers(jobIf(y, 'route')).includes('work-this'))
+  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
+    assert.doesNotMatch(read(f), /\n  issues:\n/, `${f} listens to no issue event`)
+  }
+  assert.ok(!readdirSync(new URL('../.github/workflows/', import.meta.url)).some((n) => n.startsWith('plan-approved')))
+  // dispatches keep the label-triggered done-note (TRIGGER === 'issues' in the pipeline workflows)
+  assert.match(y, /from_label:"true"/)
+  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
+    assert.match(read(f), /inputs\.from_label == 'true' && 'issues'/)
+  }
 })
 
-test('a human adding only delegate-pi starts nothing', () => {
-  const cond = jobIf(read('decompose-on-issue-pidev.yml'), 'decompose-pi')
+test('a human adding only delegate-pi / plan:approved starts nothing', () => {
+  const cond = jobIf(read('label-router.yml'), 'route')
   assert.match(cond, /github\.actor == 'nuxt-harness\[bot\]'/)
   assert.match(cond, /"delegate-pi"/)
-  // no branch fires on a label without the bot-actor guard
-  assert.doesNotMatch(cond, /label\.name == '[^']+'\)\s*\|\|/)
+  assert.match(cond, /"plan:approved"/)
+  // only `work-this` fires without the bot-actor guard
+  assert.deepEqual(labelTriggers(cond), ['work-this'])
 })
 
 const GONE = 'delegate-' + 'hard'
 test('a label named like the retired hard lane starts no run', () => {
-  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml']) {
+  for (const f of ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'label-router.yml']) {
     assert.doesNotMatch(read(f), new RegExp(GONE))
   }
   assert.doesNotMatch(readFileSync(new URL('../.github/labels.yml', import.meta.url), 'utf8'), new RegExp(GONE))

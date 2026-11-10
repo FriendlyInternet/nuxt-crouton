@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `teams.allowCreate: 'superAdmin'` — restrict team creation to super-admin users (`canCreateTeam` is false for everyone else)
+
 ## [0.1.0] - 2024-12-17
 
 ### Added

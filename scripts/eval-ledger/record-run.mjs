@@ -136,7 +136,7 @@ const safeJson = (s) => { try { return JSON.parse(s) } catch { return null } }
 
 /** Write one file via the contents API. Creates the orphan branch on first use. Retries 409/422. */
 // fallow-ignore-next-line complexity -- contents-API write with bounded 409/422 retry and first-use branch creation; the branches are the retry policy (#3251)
-export async function writeRecord({ repo, token, record, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function writeRecord({ repo, token, record, path: customPath, message, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const base = process.env.GITHUB_API_URL || 'https://api.github.com'
   const call = async (method, path, body) => {
     const res = await fetchImpl(`${base}${path}`, {
@@ -161,10 +161,10 @@ export async function writeRecord({ repo, token, record, fetchImpl = fetch, slee
     throw new Error(`could not read ${DATA_BRANCH}: HTTP ${ref.status}`)
   }
 
-  const path = `records/${record.started_at.slice(0, 10)}/${record.run_id}-${record.attempt}.json`
+  const path = customPath || `records/${record.started_at.slice(0, 10)}/${record.run_id}-${record.attempt}.json`
   const content = Buffer.from(JSON.stringify(record, null, 2) + '\n').toString('base64')
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const put = await call('PUT', `/repos/${repo}/contents/${path}`, { message: `data: run ${record.run_id} (${record.workflow})`, content, branch: DATA_BRANCH })
+    const put = await call('PUT', `/repos/${repo}/contents/${path}`, { message: message || `data: run ${record.run_id} (${record.workflow})`, content, branch: DATA_BRANCH })
     if (put.status < 300) return path
     if ((put.status === 409 || put.status === 422) && attempt < 3) { await sleep(200 + Math.random() * 800 * attempt); continue }
     throw new Error(`write ${path} failed: HTTP ${put.status}`)

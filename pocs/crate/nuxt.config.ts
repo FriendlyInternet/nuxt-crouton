@@ -20,6 +20,8 @@ export default defineNuxtConfig({
     // Generated collection layers must come last
     './layers/crate'
   ],
+  // Staging demo library (#3299) — on via NUXT_CRATE_DEMO_SEED (staging wrangler vars); off in production.
+  runtimeConfig: { crateDemoSeed: '' },
   hub: {
     db: 'sqlite',
     kv: true

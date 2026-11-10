@@ -17,7 +17,9 @@
  *  - `precheck(diff, ticket)` is DETERMINISTIC, read from `git diff -C --find-copies-harder`:
  *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits), item 3 fails on
  *    an edit to a quality gate (`.fallow*`, lint/test config, the CI workflow) or a newly skipped
- *    test — unless the ticket names that file.
+ *    test — unless the ticket names that file. Exemptions (#3550): a workflow file when the ticket
+ *    says `Workflow-change: yes`; a copied drizzle `meta/NNNN_snapshot.json`; skip-like text inside a
+ *    same-line string literal.
  *  - `decide(diff, ticket, verdict)` merges both: a precheck FAIL overrides the model's PASS.
  *
  *   node scripts/lib/build-verdict.mjs <diff-file> <ticket-file> <verdict-file> → JSON decision
@@ -37,7 +39,7 @@ export const RUBRIC = [
   { id: '4', name: 'Scope (matches the ticket and plan; nothing extra)' },
   { id: '5', name: 'Plan followed (where a plan was approved, the diff does what it said)' },
   { id: '6', name: 'Every ticket step done (each numbered step and acceptance line is done, or dropped with the reason stated in the PR)' },
-  { id: '7', name: 'Docs table (the CLAUDE.md "Maintaining AI Documentation" row for this change type is updated)' },
+  { id: '7', name: 'Docs (the CLAUDE.md "Maintaining AI Documentation" row is followed, and every doc edit the plan\'s Docs section names is made or marked as debt)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 
@@ -49,6 +51,11 @@ const GATE_PATTERNS = [
   /^\.github\/workflows\/ci\.yml$/,
 ]
 const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)tests?\//
+const WORKFLOW_CHANGE = /\bWorkflow-change:\s*\**\s*yes\b/i
+const WORKFLOW_FILE = /^\.github\/workflows\//
+const MIGRATION_SNAPSHOT = /\/migrations\/.*\/meta\/\d+_snapshot\.json$/
+// Drop same-line string literals so skip-like text in test data is not read as a skipped test.
+const stripStrings = (l) => l.replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, '""')
 const SKIP = /\b(?:it|test|describe)\.(?:skip|todo)\s*\(|\bx(?:it|describe)\s*\(/
 
 const section = (body, name) => {
@@ -104,13 +111,13 @@ export function precheck(diff, ticket = '') {
     return null
   }
   const touched = new Set(files.filter((f) => f.status !== 'copied' && f.status !== 'added').map((f) => scopeOf(f.from)).filter(Boolean))
-  const copies = files.filter((f) => f.status === 'copied' && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
+  const copies = files.filter((f) => f.status === 'copied' && !MIGRATION_SNAPSHOT.test(f.path) && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
   if (copies.length) {
     fails['2'] = { pass: false, evidence: `copied, original left behind: ${copies.map((f) => `${f.from} → ${f.path}`).join('; ')}` }
   }
   const named = (p) => ticket.includes(p) || ticket.includes(p.split('/').pop())
-  const gates = files.filter((f) => f.status !== 'added' && GATE_PATTERNS.some((re) => re.test(f.path)) && !named(f.path))
-  const skips = files.filter((f) => TEST_FILE.test(f.path) && f.added.some((l) => SKIP.test(l)))
+  const gates = files.filter((f) => f.status !== 'added' && GATE_PATTERNS.some((re) => re.test(f.path)) && !named(f.path) && !(WORKFLOW_FILE.test(f.path) && WORKFLOW_CHANGE.test(ticket)))
+  const skips = files.filter((f) => TEST_FILE.test(f.path) && f.added.some((l) => SKIP.test(stripStrings(l))))
   const bits = []
   if (gates.length) bits.push(`quality gate edited: ${gates.map((f) => f.path).join(', ')}`)
   if (skips.length) bits.push(`test skipped/todo'd: ${skips.map((f) => f.path).join(', ')}`)
@@ -149,7 +156,7 @@ export function renderComment(d, { round = 1, model = '', okAgain = '' } = {}) {
     'no-go': final
       ? `🔴 **Build rejected twice** — ${d.failed.length} problem(s) remain. Held for you.\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.${okAgain ? `\n${okAgain}` : ''}`
       : `🔴 **Build sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.length} problem(s) found.\n**Worker:** fix these, then push again:\n${reasons}`,
-    'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
+    'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.`,
   }[d.verdict]
   return `${REVIEW_MARKER}\n${final ? `${FINAL_MARKER}\n` : ''}<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }

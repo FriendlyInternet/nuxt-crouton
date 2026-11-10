@@ -160,3 +160,7 @@ pocs/snippets/.data
 pocs/crate/.data
 # Generator history, written per app by `crouton config`; read by crouton-devtools (#2290)
 .crouton-generation-history.json
+
+# Nuxt test env writes this inside the runtime-test project
+packages/crouton-core/tests/nuxt-runtime/.nuxtrc
+packages/crouton-core/tests/nuxt-runtime/.nuxt

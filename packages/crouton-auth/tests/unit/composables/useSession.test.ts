@@ -160,6 +160,21 @@ describe('useSession', () => {
       expect(user.value?.image).toBeNull()
       expect(user.value?.emailVerified).toBe(false)
     })
+
+    it('carries role and superAdmin through to the session user', () => {
+      mockUseStateValues['crouton-auth-user'] = ref({
+        id: 'user-1',
+        email: 'test@example.com',
+        role: 'admin',
+        superAdmin: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z'
+      })
+
+      const { user } = useSession()
+      expect(user.value?.role).toBe('admin')
+      expect(user.value?.superAdmin).toBe(true)
+    })
   })
 
   describe('organization mapping', () => {

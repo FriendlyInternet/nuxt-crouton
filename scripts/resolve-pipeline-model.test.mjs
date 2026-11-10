@@ -44,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the five the workflows use', () => {
-  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan'])
+test('VALID_TIERS is exactly the six the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan', 'decompose'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file
@@ -74,5 +74,27 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
   assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
   assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
-  assert.match(wf, /handoff-exec\.mjs dispatch[^\n]*work-issue-pidev\.yml[^\n]*mode:"plan"/)
+  assert.match(readFileSync('.github/workflows/label-router.yml', 'utf8'), /dispatch work-issue-pidev\.yml[^\n]*mode:"plan"/)
+})
+
+test('decompose tier resolves to its configured model (#3670)', () => {
+  assert.equal(resolveModel({ decompose: 'claude-opus-5-5' }, 'decompose'), 'claude-opus-5-5')
+  assert.throws(() => resolveModel({ decompose: 'x' }, 'decomposer'), /tier must be one of/)
+})
+
+test('the committed config resolves decompose to claude-opus-5-5 (#3670)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const cfg = JSON.parse(readFileSync('.claude/pipeline-models.json', 'utf8'))
+  assert.equal(resolveModel(cfg, 'decompose'), 'claude-opus-5-5')
+})
+
+test('decomposer PI_MODEL and run record both read the decompose tier (#3670)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { tierModel } = await import('./eval-ledger/record-run.mjs')
+  const wf = readFileSync('.github/workflows/decompose-on-issue-pidev.yml', 'utf8')
+  assert.match(wf, /PI_MODEL: \$\{\{ inputs\.model \|\| steps\.model\.outputs\.decompose \}\}/)
+  assert.match(wf, /resolve-pipeline-model\.mjs decompose/)
+  assert.match(wf, /MODEL_TIER: decompose\b/)
+  assert.doesNotMatch(wf, /MODEL_TIER: default\b/)
+  assert.equal(tierModel('decompose'), 'claude-opus-5-5')
 })

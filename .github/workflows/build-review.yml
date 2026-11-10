@@ -24,6 +24,9 @@ on:
       pr:
         description: 'PR number to (re-)review'
         required: true
+      reason:
+        description: "'body' = re-review because only the PR description changed (#3432)"
+        required: false
 
 concurrency:
   group: build-review-${{ github.event.inputs.pr || github.event.workflow_run.head_branch }}
@@ -38,6 +41,7 @@ jobs:
       contents: read
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
+      held: ${{ steps.post.outputs.held }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -84,6 +88,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           INPUT_PR: ${{ github.event.inputs.pr }}
+          INPUT_REASON: ${{ github.event.inputs.reason }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
@@ -107,12 +112,22 @@ jobs:
             if [ "$OK" = 0 ]; then echo "CI Gate not green for $SHA yet — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           fi
           # One review per head commit: a CI re-run on the same sha does not re-spend the model.
-          if gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-sha:$SHA -->"; then
+          # A description-only edit (#3432) gets one re-review per distinct body, not per commit.
+          BODY_KEY=""
+          if [ "$INPUT_REASON" = "body" ]; then
+            BODY_KEY="$(gh pr view "$PR" --json body -q .body | node scripts/lib/revise-outcome.mjs key)"
+          fi
+          if [ -n "$BODY_KEY" ]; then
+            if gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-body:$SHA:$BODY_KEY -->"; then
+              echo "already reviewed this description on $SHA — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          elif gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-sha:$SHA -->"; then
             echo "already reviewed $SHA — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           {
             echo "skip=false"; echo "pr=$PR"; echo "sha=$SHA"; echo "base=$BASE"
             echo "issue=${REF#work-}"
+            echo "body_key=$BODY_KEY"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -221,6 +236,7 @@ jobs:
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict
+        id: post
         if: ${{ !cancelled() && steps.pr.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -230,6 +246,7 @@ jobs:
           ISSUE: ${{ steps.pr.outputs.issue }}
           PR: ${{ steps.pr.outputs.pr }}
           SHA: ${{ steps.pr.outputs.sha }}
+          BODY_KEY: ${{ steps.pr.outputs.body_key }}
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         run: |
           set -uo pipefail
@@ -273,26 +290,64 @@ jobs:
               if (r) process.stdout.write(r.text)
             ' 2>/dev/null)" || OKAGAIN=""
           fi
-          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
+          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; [ -n "$BODY_KEY" ] && printf '<!-- build-review-body:%s:%s -->\n' "$SHA" "$BODY_KEY"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
           # remove-then-add: re-adding a label the PR already carries fires no event.
           gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
           # #3210 — tick "Build review" from the trusted default-branch copy (the checkout is the PR head). Cosmetic.
           git show "origin/${{ github.event.repository.default_branch }}:scripts/flow-checklist.mjs" > "$RUNNER_TEMP/trusted/flow-checklist.mjs" 2>/dev/null \
-            && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" || true
+            && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" --verdict build "$VERDICT" --round "$ROUND" || true
           case "$VERDICT" in
             go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
-            needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
+            needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT" ;;
             no-go)
               if [ "$ROUND" -ge 2 ]; then
-                gh issue edit "$ISSUE" --add-label "status:blocked"
+                gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT"
               else
                 CID="${COMMENT_URL##*issuecomment-}"
                 node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" dispatch "$(jq -nc --argjson i "$ISSUE" --arg c "$CID" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),feedback:$c}}')"
               fi
               ;;
           esac
+
+  # ── Re-check traffic when a PR becomes held (#3583) ────────────────────────────────────
+  # A held PR (needs-owner / rejected twice) waits on the owner, not on a build, so tickets
+  # parked behind it can start. Runs trusted default-branch code, never the PR head.
+  release-traffic:
+    name: Release parked tickets
+    needs: [review]
+    if: ${{ always() && needs.review.outputs.held == '1' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts
+            .claude
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+              const released = await releaseWaiting({ github, context })
+              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+            } catch (e) {
+              core.warning(`traffic release failed: ${e.message}`)
+            }
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
@@ -301,7 +356,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [review]
+    needs: [review, release-traffic]
     if: ${{ always() && needs.review.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5

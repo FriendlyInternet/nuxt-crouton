@@ -30,15 +30,18 @@ test('final marker and legacy first-heading hold → final', () => {
   const legacy = verdict('bbb', 'no-go', '', '🔴 **Build rejected twice** — 1 problem(s) remain. Held for you.')
   assert.equal(st([bot(legacy, '2026-11-01T10:00:00Z')]).kind, 'final')
 })
-test('needs-owner / go → other; newest comment for the SHA wins', () => {
-  assert.equal(st([bot(verdict('bbb', 'needs-owner'), '2026-11-01T10:00:00Z')]).kind, 'other')
+test('needs-owner → needs-owner with at; go → other; newest comment for the SHA wins', () => {
+  const n = st([bot(verdict('bbb', 'needs-owner'), '2026-11-01T10:00:00Z')])
+  assert.equal(n.kind, 'needs-owner')
+  assert.equal(n.at, '2026-11-01T10:00:00Z')
   const cs = [bot(verdict('bbb', 'no-go'), '2026-11-01T10:00:00Z'), bot(verdict('bbb', 'go'), '2026-11-01T11:00:00Z')]
   assert.equal(st(cs).kind, 'other')
 })
-test('needs-owner verdict + owner ok → no approval (no merge) and no reply', () => {
+test('3428: needs-owner verdict + owner ok after it → merge', () => {
   const state = st([bot(verdict('bbb', 'needs-owner'), '2026-11-01T10:00:00Z')])
-  assert.equal(state.kind, 'other')
-  const d = decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go: { go: true, at: '2026-11-01T11:00:00Z' }, finalHold: null, red: false, ciGate: 'success', mergeableState: 'clean' })
-  assert.equal(d.merge, false)
+  assert.equal(state.kind, 'needs-owner')
+  const d = decideLeafMerge({ baseRef: 'epic/1-x', headRef: 'work-2', labels: [], go: { go: true, approvedAt: '2026-11-01T11:00:00Z' }, ownerHold: state, red: false, ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(d.merge, true)
+  assert.equal(d.reason, 'owner ok after needs-owner')
   assert.equal(chooseOkReply({ state, ownerOk: true }), null)
 })

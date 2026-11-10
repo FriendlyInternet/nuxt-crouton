@@ -7,6 +7,7 @@
 // reported is "wait", not "pass" (the #1698 presence rule).
 
 import { isApproval } from './approval.mjs'
+import { isDone } from './lib/required-check-state.mjs'
 
 export const REQUIRED_GATES = ['CI Gate', 'E2E Gate']
 const OWNER_ASSOCIATIONS = new Set(['OWNER', 'MEMBER'])
@@ -18,7 +19,7 @@ function gateState(runs, name) {
   // Latest run wins (a re-run supersedes the earlier attempt).
   mine.sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')))
   const r = mine[0]
-  if (r.status !== 'completed') return 'pending'
+  if (!isDone(r)) return 'pending'
   return r.conclusion === 'success' ? 'success' : 'failure'
 }
 

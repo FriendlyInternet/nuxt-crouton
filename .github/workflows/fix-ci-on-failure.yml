@@ -9,7 +9,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}',
 # Guard rails (the whole point — provably no runaway):
 #   - Scope: only pipeline head branches `work-*` (pi worker,
 #     #2157). Human PRs are never touched.
-#   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
+#   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at FIX_BOT_MAX_ATTEMPTS (3, scripts/lib/fix-bot-dispatch.mjs). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
 #     it, the agent stops and blocks instead (same as the auto-merge guard, #339).
@@ -34,6 +34,10 @@ on:
     # fires, which is the exact bug #2089 is about.
     workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
+    # #3305: start only for pipeline head branches (the job `if` below stays as the guard —
+    # workflow_dispatch has no branch). `**` so `work-12/x` isn't dropped; `*` doesn't cross `/`.
+    # Must cover every PIPELINE_BRANCH_PREFIXES entry (scripts/lib/pipeline-branch.test.mjs).
+    branches: ['work-**']
   # #3105: started by the owner's `ok` on a RED epic → main PR (on-comment.yml approve-epic). The
   # workflow_run path above never sees an `epic/*` head, so this is the only way in for one. The
   # gate step requires the PR open and the owner's ok still standing.
@@ -115,7 +119,7 @@ jobs:
             // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
             // #3105: the decision (pipeline head, open, and — for an epic → main PR — a standing
             // owner ok) lives in scripts/lib/fix-bot-dispatch.mjs. `go` is only computed for epic heads.
-            const { fixBotWillTry, pickFailedRun } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
+            const { fixBotWillTry, pickFailedRun, FIX_BOT_MAX_ATTEMPTS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-dispatch.mjs`)
             let go
             if (/^epic\//.test(full.head.ref)) {
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
@@ -209,7 +213,7 @@ jobs:
             core.setOutput('run_url', run.html_url)
             core.setOutput('packages_allowed', packagesAllowed)
             core.setOutput('packages_names', pkgNames)
-            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
+            core.info(`Fix attempt ${next}/${FIX_BOT_MAX_ATTEMPTS} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a
@@ -295,7 +299,12 @@ jobs:
                `pnpm lint`, or the failing test/e2e) to see the actual error. Read the failing job's logs if you need to.
             2. Diagnose the root cause and make the MINIMAL fix on this branch. Keep it tightly
                scoped to the failure — do not refactor, do not touch unrelated files.
-               NEVER make CI green by DELETING the worker's new code (#2719). If a symbol/menu
+               NEVER remove code this PR added to make a check pass (#2719, #3336). A complexity
+               finding (e.g. Fallow cognitive/cyclomatic on a new function) -> split it into smaller
+               functions with no behaviour change. A dead-code/unused finding on code the linked issue
+               asked for -> wire it up where the issue says it is used, or hand back (comment, @pmcp,
+               `status:blocked`). Example: #3333 — Fallow flagged `removedTests` as too complex; the
+               right fix is to extract helpers, not delete it. If a symbol/menu
                group/key/route is referenced but undefined, IMPLEMENT the missing piece, taking the
                intent from the linked issue (`gh issue view ${{ steps.gate.outputs.issue_number }}`)
                and the latest owner/orchestrator comments on the PR and issue — not just the log. If
@@ -344,6 +353,39 @@ jobs:
       # gets the lines listed, and the pi worker is re-run with the CI failure as feedback (the
       # revise path, #2446). Otherwise the fix is pushed as before. Attempt cap and packages/ rules
       # are untouched.
+      # #3336: quote the failing job's own log in a hand-back, not the aggregate CI Gate's JSON.
+      # Helpers come from the default branch (trusted; the PR branch may predate them).
+      - name: Copy log helpers from the default branch
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/lib"
+          for s in failed-job-logs log-tail; do git show "origin/$DEFAULT_BRANCH:scripts/lib/$s.mjs" > "$RUNNER_TEMP/lib/$s.mjs"; done
+
+      - name: Read the failing job logs
+        if: steps.gate.outputs.proceed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ steps.gate.outputs.run_id }}
+        with:
+          script: |
+            const fs = require('fs')
+            const out = `${process.env.RUNNER_TEMP}/failed-job-logs.md`
+            try {
+              const { pickFailedJobs, renderFailedJobLogs } = await import(`${process.env.RUNNER_TEMP}/lib/failed-job-logs.mjs`)
+              const { owner, repo } = context.repo
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
+                { owner, repo, run_id: Number(process.env.RUN_ID), filter: 'latest', per_page: 100 })
+              const md = await renderFailedJobLogs(pickFailedJobs(jobs), async job_id => {
+                const res = await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id })
+                return typeof res.data === 'string' ? res.data : String(res.data || '')
+              })
+              fs.writeFileSync(out, md)
+            } catch (e) { core.warning(`failed-job logs: ${e.message}`) }
+
       - name: Guard and push the fix
         if: steps.gate.outputs.proceed == 'true'
         id: guard
@@ -406,7 +448,7 @@ jobs:
             gh pr comment "$PR" --body "$UNDONE_NOTE"
           fi
           LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
-          ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
+          ERR="$(cat "$RUNNER_TEMP/failed-job-logs.md" 2>/dev/null || echo '(could not read the failed job logs — see the failing run)')"
           {
             echo "<!-- pipeline-note -->"
             echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
@@ -418,9 +460,7 @@ jobs:
             echo
             echo "<details><summary>CI failure (\`$RUN_NAME\`) the worker should fix</summary>"
             echo
-            echo '```'
             echo "$ERR"
-            echo '```'
             echo "[failing run]($RUN_URL)"
             echo "</details>"
             echo

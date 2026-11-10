@@ -247,6 +247,8 @@ crouton init scratch --out sandboxes/scratch
 
 ## Rollback Command (`crouton rollback`)
 
+**Removing a collection:** `crouton config` never deletes generated files. It does clean up *dangling* references (schema barrel, `app.config`, layer/root `extends`) to collection or layer folders that no longer exist (`lib/utils/prune-dangling-collections.ts`, exact matching). A collection that is still on disk but missing from `crouton.config` stays wired up and gets a warning; remove it with `crouton rollback <layer> <collection>`.
+
 Removes a generated collection — files, schema-index re-export, `app.config.ts`
 entry, and layer/root `extends`. Two things WS4 (#1445) got right:
 
@@ -374,6 +376,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | File | Purpose |
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
+| `lib/utils/prune-dangling-collections.ts` | `pruneDanglingCollectionRefs` — removes barrel/app.config/`extends` entries whose collection or layer folder is gone; runs at the start of `config` and `generate` |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
 | `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
 | `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
@@ -381,7 +384,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
 | `lib/generators/*.ts` | Template generators (16 files) |
 | `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. Opt-in with `--tests` (#785, off by default since #2286). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
-| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths. Same `--tests` gate (#791) |
+| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths, and (for collections with reference fields) same-team reference cases: other-team id / missing id → 400 with no write, same-team + null → ok, optional single and list refs (#3424, #3600). Same `--tests` gate (#791) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -390,6 +393,8 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold`. Also `ownedRefTargets` / `ownedRefTargetNames` — the package-owned collections an app may `refTarget` (plural dir → layer + package schema export), limited to packages the app EXTENDS; a dir two extended packages both ship (`locations`: sales + bookings) is ambiguous and registers for neither (#2311) |
 | `lib/utils/ref-collection.ts` | `resolveRefCollectionKey(refTarget, currentLayer, collectionLayerMap)` — the registered collection KEY a reference points the UI at (`croutonAssets`, `bookingsLocations`), via the TARGET's layer. Used by the form picker, the list cell and the asset detector, which used to prefix the current layer (`mainAssets`) (#2311) |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
+| `lib/utils/team-ref-fields.ts` | Which fields are team-scoped references; the generator emits `assertXReferences` (queries) + calls in create/update routes, backed by crouton-core `assertRefsInTeam` (#3378) |
+| `lib/utils/list-fields.ts` | `isDependentField` / `isListField` — the one rule for "this field's body value is a list" (dependent fields, `z.array(` zod, `array` type), shared by the schema generator and the generated tests (#3600) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
@@ -759,7 +764,7 @@ Drizzle schema, queries, routes, list, composable, form — from its own layer (
   `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
 
 The package's manifest `configuration` questions (bookings: email) are **still asked** for a package
-the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The CLI
+the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The answers are written under the manifest's `runtimeConfigKey` (the key the package reads), each setting on the side its `runtimeConfig: 'public'|'server'|'both'` names; an undeclared key falls back to `crouton<Feature>` with a warning (#3398). The CLI
 no longer merges manifest `collections` into the app config at all: every package that listed them owns
 them, so that path was removed (#2316). Answers land
 under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.config.ts` as before.
@@ -823,6 +828,7 @@ export default {
     // Access (optional; absent = output unchanged). create/reorder: 'member'|'admin'
     // (reorder also guards [id]/move); list: 'team'|'own' ('own' filters list AND ?ids= for non-admins)
     { name: 'notes', fieldsFile: './schemas/notes.json', access: { create: 'admin', list: 'own' } }
+    // Generator also emits an `<X>Access` export in queries.ts and registers it as `access` in the query registry (read by crouton-pages public endpoints)
   ],
   dialect: 'sqlite',
   seed: {
@@ -931,8 +937,8 @@ When modifying the generator, **always check if examples need updating**:
 4. Call generator in appropriate step
 
 ### Add a new field type
-1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `drizzle`,
-   `zod`, `tsType`, `defaultValue`, **and `component`** (the form control). That row is the
+1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `sqlite`,
+   `zod`, `tsType`, `defaultValue`, **`component`** (the form control), and `translatable: true` if collection-level `translatable` should auto-translate it (string, text, richText). That row is the
    single source: `getTypeMapping()` (`lib/utils/manifest-loader.ts`) flattens it and `loadFields`
    attaches `zod` / `default` / `tsType` / `component` to every field (#285, #2286).
 2. The generated `_Form.vue` renders `field.component` as-is (`renderDefaultTypeField` in
@@ -940,7 +946,7 @@ When modifying the generator, **always check if examples need updating**:
    bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
    → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
    *type* because they describe the value, not the widget.
-3. Add the SQLite column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+3. Add the SQLite column in `lib/generators/database-schema.ts` if the `sqlite` column kind is new.
 4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
    attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
    are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
@@ -1107,7 +1113,7 @@ npx nuxt typecheck
 | `lib/generators/types.ts` | TypeScript type generation (snapshot) |
 | `lib/generators/composable.ts` | Composable generation (snapshot) |
 | `lib/generators/collection-test.ts` | Schema-smoke test emission — import path, per-type sample derivation, valid/invalid cases (#785) |
-| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791) |
+| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791), same-team reference cases (#3424) |
 
 ## Seed Data Generation
 
