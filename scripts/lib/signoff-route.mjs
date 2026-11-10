@@ -16,7 +16,7 @@ export const SIGNOFF_MARKER = '<!-- design-signoff-hold -->'
 export const HOLD_HEADING = '## 🎨 Design sign-off needed before building'
 const HEADING_OWN_LINE = new RegExp(`^${HOLD_HEADING}\\s*$`, 'm')
 
-/** The run of leading HTML-comment lines of a comment body (the way plan-review.yml reads markers). */
+/** The run of leading HTML-comment lines of a comment body (the way on-comment.yml's plan-review job reads markers). */
 const leadingLines = (body = '') => {
   const out = []
   for (const line of String(body).split('\n')) {
