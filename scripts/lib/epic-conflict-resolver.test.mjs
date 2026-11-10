@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mergeableState, startConflictResolver, resolverReply } from './epic-conflict-resolver.mjs'
+import { mergeableState, startConflictResolver, resolverReply, replyIfConflicting } from './epic-conflict-resolver.mjs'
 
 const pr = { head: { sha: 'abc', ref: 'epic/12-x' } }
 function fake({ comments = [], fail = false } = {}) {
@@ -45,6 +45,18 @@ test('unknown then dirty → retried, then dispatch', async () => {
   const { state } = await mergeableState({ github, owner: 'o', repo: 'r', pull_number: 5, sleep: async () => {} })
   assert.equal(state, 'dirty'); assert.equal(i, 3)
   const f = fake(); assert.equal((await go(f, state)).status, 'started')
+})
+test('replyIfConflicting: unknown then dirty → resolver once, "merging main in first" reply', async () => {
+  const seq = ['unknown', 'dirty']; let i = 0
+  const f = fake()
+  f.github.rest.pulls = { get: async () => ({ data: { state: 'open', merged: false, mergeable_state: seq[i++], head: pr.head } }) }
+  const said = []
+  const done = await replyIfConflicting({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, handoffGuard: guard, say: async m => said.push(m), sleep: async () => {} })
+  assert.equal(done, true)
+  assert.equal(f.calls.dispatch.length, 1)
+  assert.equal(said.length, 1)
+  assert.match(said[0], /merging `main` in first/)
+  assert.doesNotMatch(said[0], /when the checks finish/)
 })
 test('both workflows call the shared helper (real YAML)', () => {
   for (const [file, job] of [['automerge-epic-subpr.yml', 'startConflictResolver'], ['on-comment.yml', 'replyIfConflicting']]) {
