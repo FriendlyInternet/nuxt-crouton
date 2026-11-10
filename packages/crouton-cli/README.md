@@ -28,7 +28,7 @@ npx @fyit/crouton-cli <command>
 
 ## Quick Start
 
-The tested path from nothing to a working app (canonical copy: `docs/content/1.getting-started/0.start-here.md`, which the release clean-room check runs):
+The tested path from nothing to a working app (canonical copy: [Start here](/getting-started/start-here), which the release clean-room check runs):
 
 ```bash
 npx @fyit/crouton-cli init my-app --out my-app
