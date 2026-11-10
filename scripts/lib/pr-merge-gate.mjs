@@ -1,4 +1,4 @@
-import { decideSharedCodeHold } from '../shared-code-hold.mjs'
+import { decideSharedCodeHold } from './shared-code-hold-core.mjs'
 import { isV1Base } from './pipeline-version.mjs'
 // The leaf merge rules for a PR the automerge workflow is about to merge (#3103) live in THIS FILE (#3491, #3461):
 //   decideReview()         who said yes (owner ok / build:approved on the reviewed head) — review only, no CI facts.

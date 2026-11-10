@@ -21,7 +21,7 @@ function isCiFixCommit(k) {
   return k.commit?.committer?.name === 'claude[bot]'
 }
 
-import { isAgentComment, isApproval } from '../approval.mjs'
+import { isAgentComment, isApproval } from './approval-core.mjs'
 
 /**
  * @param {{ comments: Array<{user?: {login?: string, type?: string}, body?: string, created_at: string}>,
