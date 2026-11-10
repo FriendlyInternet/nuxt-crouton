@@ -11,6 +11,8 @@
  *   - field types: packages/{crouton-core,crouton-editor}/crouton.manifest.ts `fieldTypes`,
  *                  plus ALLOWED_META_KEYS in crouton-cli/lib/utils/load-fields.ts
  *   - CLI:         packages/crouton-cli/bin/crouton-generate.js `defineCommand({...})` calls
+ *
+ * The readers are exported for scripts/check-doc-claims.mjs (#3166); importing this file writes nothing.
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -74,7 +76,8 @@ function leadDoc(text) {
 }
 // Props come from vue-component-meta (the Volar checker) — no hand-rolled prop parsing.
 let checker
-function propsOf(file) {
+/** `{ props: [{ name, type, required, doc }], doc }` of one component; `file` is relative to the repo root. */
+export function propsOf(file) {
   checker ??= createCheckerByJson(join(ROOT, 'packages/crouton-core'), {
     include: [join(ROOT, COMPONENTS_DIR, '**/*.vue')],
     compilerOptions: { strict: true, skipLibCheck: true, module: 'esnext', moduleResolution: 'bundler', target: 'esnext' }
@@ -85,12 +88,12 @@ function propsOf(file) {
   return { props, doc: leadDoc(rd(file)) }
 }
 
-const COMPONENTS_DIR = 'packages/crouton-core/app/components'
-const componentFiles = () => [
+export const COMPONENTS_DIR = 'packages/crouton-core/app/components'
+export const componentFiles = () => [
   ...readdirSync(join(ROOT, COMPONENTS_DIR)).filter(f => f.endsWith('.vue')),
   ...readdirSync(join(ROOT, COMPONENTS_DIR, 'stubs')).filter(f => f.endsWith('.vue')).map(f => 'stubs/' + f)
 ].sort()
-const componentName = (f) => {
+export const componentName = (f) => {
   const base = f.replace(/\.vue$/, '').replace(/^stubs\//, '')
   return base.startsWith('Crouton') ? base : 'Crouton' + base
 }
@@ -147,7 +150,7 @@ function exportsOfStatement(st, s, base, decls) {
   }
   return []
 }
-function exportedFunctions(s, file) {
+export function exportedFunctions(s, file) {
   const base = file.replace(/\.ts$/, '')
   const decls = localFunctions(s)
   const seen = new Set()
@@ -182,22 +185,23 @@ function genComposables() {
 }
 
 // ── field types ────────────────────────────────────────────────────────
-function genFieldTypes() {
-  const manifests = ['packages/crouton-core/crouton.manifest.ts', 'packages/crouton-editor/crouton.manifest.ts']
-  let out = `---\ntitle: Field types\ndescription: Field types a collection schema can use, and the meta keys they accept (generated from the code)\nicon: i-lucide-database\n---\n\n${HEADER(manifests.join(', ') + ', packages/crouton-cli/lib/utils/load-fields.ts')}\n# Field types\n\nThe \`type\` of each field in a schema JSON. Some types only exist when the providing package is extended.\n\n| Type | Aliases | Provided by | SQLite column | TypeScript | Form component | Description |\n| --- | --- | --- | --- | --- | --- | --- |\n`
-  for (const m of manifests) {
+const FIELD_TYPE_MANIFESTS = ['packages/crouton-core/crouton.manifest.ts', 'packages/crouton-editor/crouton.manifest.ts']
+/** Every field type in the manifests, in order: `{ name, provider, def }` (`def` = the manifest entry). */
+export function fieldTypesOf() {
+  const types = []
+  for (const m of FIELD_TYPE_MANIFESTS) {
     const s = sf(m, rd(m))
-    let id = ''
     walk(s, (n) => {
       if (ts.isCallExpression(n) && n.expression.getText(s) === 'defineCroutonManifest') {
         const o = evalLiteral(n.arguments[0])
-        id = o.id
-        for (const [k, v] of Object.entries(o.fieldTypes ?? {})) {
-          out += `| ${code(k)} | ${(v.aliases ?? []).map(code).join(', ')} | ${id} | ${code(v.db ?? '')} | ${code(v.tsType ?? '')} | ${code(v.component ?? '')} | ${oneLine(v.description ?? '')} |\n`
-        }
+        for (const [k, v] of Object.entries(o.fieldTypes ?? {})) types.push({ name: k, provider: o.id, def: v })
       }
     })
   }
+  return types
+}
+/** ALLOWED_META_KEYS from crouton-cli's load-fields.ts. */
+export function metaKeysOf() {
   const lf = sf('load-fields.ts', rd('packages/crouton-cli/lib/utils/load-fields.ts'))
   let keys = []
   walk(lf, (n) => {
@@ -205,28 +209,44 @@ function genFieldTypes() {
       walk(n, (m) => { if (ts.isArrayLiteralExpression(m)) keys = evalLiteral(m) })
     }
   })
+  return keys
+}
+function genFieldTypes() {
+  let out = `---\ntitle: Field types\ndescription: Field types a collection schema can use, and the meta keys they accept (generated from the code)\nicon: i-lucide-database\n---\n\n${HEADER(FIELD_TYPE_MANIFESTS.join(', ') + ', packages/crouton-cli/lib/utils/load-fields.ts')}\n# Field types\n\nThe \`type\` of each field in a schema JSON. Some types only exist when the providing package is extended.\n\n| Type | Aliases | Provided by | SQLite column | TypeScript | Form component | Description |\n| --- | --- | --- | --- | --- | --- | --- |\n`
+  for (const { name: k, provider: id, def: v } of fieldTypesOf()) {
+    out += `| ${code(k)} | ${(v.aliases ?? []).map(code).join(', ')} | ${id} | ${code(v.db ?? '')} | ${code(v.tsType ?? '')} | ${code(v.component ?? '')} | ${oneLine(v.description ?? '')} |\n`
+  }
+  const keys = metaKeysOf()
   out += `\n## Allowed \`meta\` keys\n\nAny other key on a field's \`meta\` is rejected at generate time.\n\n${keys.map(k => '- ' + code(k)).join('\n')}\n`
   return out
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────
-function genCli() {
-  const file = 'packages/crouton-cli/bin/crouton-generate.js'
-  const s = sf(file, rd(file))
-  let out = `---\ntitle: CLI\ndescription: crouton CLI commands and flags (generated from the code)\nicon: i-lucide-terminal\n---\n\n${HEADER(file)}\n# CLI\n\nRun with \`npx crouton <command>\`.\n`
+const CLI_FILE = 'packages/crouton-cli/bin/crouton-generate.js'
+/** Every named `defineCommand({...})` in the CLI, in source order: `{ name, description, args }`. */
+export function cliCommandsOf() {
+  const s = sf(CLI_FILE, rd(CLI_FILE))
+  const cmds = []
   walk(s, (n) => {
     if (!(ts.isCallExpression(n) && n.expression.getText(s) === 'defineCommand')) return
     const o = evalLiteral(n.arguments[0])
     if (!o?.meta?.name) return
-    out += `\n## ${o.meta.name}\n\n${o.meta.description ?? ''}\n\n`
-    const args = Object.entries(o.args ?? {})
-    if (!args.length) return
+    cmds.push({ name: o.meta.name, description: o.meta.description, args: o.args ?? {} })
+  })
+  return cmds
+}
+function genCli() {
+  let out = `---\ntitle: CLI\ndescription: crouton CLI commands and flags (generated from the code)\nicon: i-lucide-terminal\n---\n\n${HEADER(CLI_FILE)}\n# CLI\n\nRun with \`npx crouton <command>\`.\n`
+  for (const c of cliCommandsOf()) {
+    out += `\n## ${c.name}\n\n${c.description ?? ''}\n\n`
+    const args = Object.entries(c.args)
+    if (!args.length) continue
     out += '| Argument | Type | Alias | Default | Description |\n| --- | --- | --- | --- | --- |\n'
     for (const [k, a] of args) {
       const flag = a.type === 'positional' ? `<${k}>` : `--${k}`
       out += `| ${code(flag)} | ${a.type ?? ''} | ${a.alias ? code('-' + a.alias) : ''} | ${a.default !== undefined ? code(a.default) : ''} | ${oneLine(a.description ?? '')} |\n`
     }
-  })
+  }
   return out
 }
 
@@ -237,20 +257,22 @@ const PAGES = {
   'cli.md': genCli
 }
 
-const check = process.argv.includes('--check')
-let stale = 0
-for (const [name, gen] of Object.entries(PAGES)) {
-  const path = join(OUT_DIR, name)
-  const next = gen().replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
-  const cur = existsSync(path) ? readFileSync(path, 'utf8') : null
-  if (cur === next) continue
-  if (check) { stale++; console.error(`stale: docs/content/8.api-reference/${name}`) } else {
-    mkdirSync(OUT_DIR, { recursive: true })
-    writeFileSync(path, next)
-    console.log(`wrote docs/content/8.api-reference/${name}`)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const check = process.argv.includes('--check')
+  let stale = 0
+  for (const [name, gen] of Object.entries(PAGES)) {
+    const path = join(OUT_DIR, name)
+    const next = gen().replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
+    const cur = existsSync(path) ? readFileSync(path, 'utf8') : null
+    if (cur === next) continue
+    if (check) { stale++; console.error(`stale: docs/content/8.api-reference/${name}`) } else {
+      mkdirSync(OUT_DIR, { recursive: true })
+      writeFileSync(path, next)
+      console.log(`wrote docs/content/8.api-reference/${name}`)
+    }
   }
-}
-if (check) {
-  if (stale) { console.error('Run: node scripts/gen-api-reference.mjs'); process.exit(1) }
-  console.log('api-reference pages are up to date')
+  if (check) {
+    if (stale) { console.error('Run: node scripts/gen-api-reference.mjs'); process.exit(1) }
+    console.log('api-reference pages are up to date')
+  }
 }

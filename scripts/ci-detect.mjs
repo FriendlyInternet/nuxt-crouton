@@ -15,6 +15,8 @@
  *   pocs          JSON list of changed pocs/*
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
  *   workflows     'true' when .github/(workflows|actions) changed
+ *   docs          'true' when docs/** or packages/** changed — the doc checks (#3166) run then, even
+ *                 on a docs-only PR whose stage is 'none'
  *
  *   EVENT=pull_request FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
  */
@@ -63,7 +65,8 @@ export function detect({ files = [], event = '', apps = [], readPkg = () => null
     packages: [...packages].sort(),
     pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
-    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f))
+    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f)),
+    docs: files.some(f => /^(docs|packages)\//.test(f))
   }
 }
 
