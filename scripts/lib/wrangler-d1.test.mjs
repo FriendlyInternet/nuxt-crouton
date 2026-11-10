@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isAlreadyGone, isUserTable } from './wrangler-d1.mjs'
+import { isAlreadyGone, isUserTable, wranglerError } from './wrangler-d1.mjs'
 
 test('Worker already gone — the real CF phrasing (#1056)', () => {
   assert.equal(isAlreadyGone('This Worker does not exist on your account. [code: 10007]'), true)
@@ -36,4 +36,16 @@ test('a genuine failure is NOT treated as already-gone', () => {
 test('isUserTable skips SQLite/Cloudflare internals, keeps app tables (#3416)', () => {
   for (const n of ['_cf_KV', '_cf_METADATA', 'sqlite_sequence']) assert.equal(isUserTable(n), false, n)
   for (const n of ['user', 'auth_email_log', 'd1_migrations', 'bookings_bookings', 'xcfy_table', 'a_cf_b', 'cf_notes']) assert.equal(isUserTable(n), true, n)
+})
+
+test('wranglerError surfaces stdout JSON errors (stderr empty)', () => {
+  const m = wranglerError({ status: 1, stderr: '', stdout: '{"error":{"text":"D1_ERROR: boom"}}' }, ['wrangler', 'd1'])
+  assert.match(m, /D1_ERROR: boom/)
+})
+
+test('wranglerError keeps both streams; null on success', () => {
+  const m = wranglerError({ status: 1, stderr: 'E-ERR', stdout: 'O-OUT' }, ['wrangler'])
+  assert.match(m, /E-ERR/)
+  assert.match(m, /O-OUT/)
+  assert.equal(wranglerError({ status: 0, stderr: 'x', stdout: 'y' }, ['wrangler']), null)
 })

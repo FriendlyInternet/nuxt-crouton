@@ -15,6 +15,13 @@
       "when": 1793955340418,
       "tag": "0001_email_log_provider_id",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794260080052,
+      "tag": "0002_fuzzy_skrulls",
+      "breakpoints": true
     }
   ]
 }
