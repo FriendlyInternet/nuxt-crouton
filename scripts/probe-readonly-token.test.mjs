@@ -1,4 +1,4 @@
-// Tests the "reviewer token is read-only" probe step of build-review.yml / on-comment.yml (plan-review job) (#3057).
+// Tests the "reviewer token is read-only" probe step of build-review.yml / plan-review.yml (#3057).
 // The step runs under `bash -e`; it must decide on gh's exit code, not abort and not grep the body.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

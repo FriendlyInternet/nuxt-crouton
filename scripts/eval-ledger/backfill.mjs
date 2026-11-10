@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url'
 import { buildRecord, writeRecord, DATA_BRANCH } from './record-run.mjs'
 import { parseArgs } from '../lib/cli-args.mjs'
 
-const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'plan-review.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml', 'on-comment.yml']
+const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml', 'on-comment.yml']
 
 /** Subject from a job log or the head branch: `ISSUE: 123`, `EPIC: 123`, `PR: 123`, or branch `work-123`. */
 export function subjectFromLog(text, headBranch = '') {

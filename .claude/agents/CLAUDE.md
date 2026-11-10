@@ -49,7 +49,7 @@ a strong signal, not proof; the #865 eval scoreboard is where this gets validate
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
 data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
-(#2755) → `on-comment.yml` (plan-review job) has an independent top-model reviewer grade it (#2756) → on
+(#2755) → the `plan-review` job in `on-comment.yml` has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
 differs, links the plan in its PR body; the run's record step writes the ledger row to the
@@ -155,7 +155,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   opened, the file written — before you say it's done or end your turn. Describing the plan
   ("the worker is now creating the schemas…") is **not** doing it: that exact no-op (a run
   that exits `success` having produced nothing) is what the **artifact-gate** in
-  `decompose-on-issue.yml` now turns into a **red** run. Do the work, then prove it landed.
+  `decompose-on-issue-pidev.yml` (logic: `scripts/lib/decompose-artifact-gate.mjs`) now turns into a **red** run. Do the work, then prove it landed.
   **One first-class PASS shape worth knowing (#1076):** a PR opened this run + a
   `.github/workflows/**` patch embedded in its body for a human to apply (the token can't write
   there — see `task-worker.md` → "`.github/workflows/` boundary") already satisfies the gate via
@@ -300,7 +300,7 @@ package). Threaded through `epic_branch` in the agent contract:
 ### Claude-action workflow standard (any `anthropics/claude-code-action` workflow)
 
 When you add or copy a workflow that runs `anthropics/claude-code-action` (the event→agent
-glue like `claude.yml` / `decompose-on-issue.yml` / `on-comment.yml`), it MUST carry
+glue like `claude.yml` / `on-comment.yml`), it MUST carry
 all of these by **default** — they're not optional extras; each one has burned us:
 
 - **`id-token: write` at the JOB level.** Job-level `permissions` *fully overrides* (does

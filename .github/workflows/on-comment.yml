@@ -19,8 +19,7 @@ name: On comment
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
-#   (bot plan)      plan-review              plan-review.yml (#3313; the bot-posted plan comment is the one
-#                                            comment `route` ignores, so this job gates itself)
+#   (bot plan)      plan-review              plan-review.yml (#3313; the worker's plan comment, own `if`)
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
@@ -593,15 +592,18 @@ jobs:
           github-token: ${{ steps.app-token-early.outputs.token }}
           script: |
             const issue_number = context.payload.issue.number
-            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            // A pi design-hold (#3238): see isDesignHold — a real hold comment (own-line heading or marker,
+            // not a quote), no children yet, and an epic or the hold is still the newest question.
+            const { pathToFileURL } = require('node:url')
+            const { isDesignHold } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/lib/signoff-route.mjs`).href)
             const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
-            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            const labels = (context.payload.issue.labels || []).map(l => typeof l === 'string' ? l : l.name)
             let noChildren = true
             try {
               const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
               noChildren = subs.length === 0
             } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
-            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            if (!isDesignHold({ labels, comments: comments.map(c => ({ body: c.body || '' })), noChildren })) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
             // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
@@ -615,9 +617,9 @@ jobs:
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
-      # An issue held after the plan reviewer rejected twice (plan-review job below) is not a gate PR or a
+      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
       # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
-      # Detect the hold the way the plan-review job makes it (two no-go verdicts, newest a no-go; the job
+      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
       # guard already requires status:blocked) and re-run the planner with the reply as feedback.
       # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
       - name: Re-plan a held plan from the reply
@@ -1494,63 +1496,18 @@ jobs:
               await say(`🛠 ${opener}. Starting it now (\`${label}\`).`)
             }
 
-  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
-  # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
-  # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
-  # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
-  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
-  record-outcome:
-    name: Record run outcome
-    needs: [rl-start, route, interpret-read, interpret-decide, interpret-review, interpret-act]
-    if: ${{ always() && needs.interpret-read.result != 'skipped' }}
-    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        continue-on-error: true
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: |
-            scripts
-            .claude/pipeline-models.json
-          persist-credentials: false
-      - name: Write the run record (never fails the run)
-        continue-on-error: true
-        env:
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          WORKFLOW_FILE: on-comment.yml
-          ISSUE: "${{ github.event.issue.number }}"
-          STAGE: interpret
-          MODEL_TIER: default
-          NEEDS_JSON: ${{ toJSON(needs) }}
-          RL_START: ${{ needs.rl-start.outputs.rl_start }}
-          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: node scripts/eval-ledger/record-run.mjs
-
-  # ── Plan review (#2756), folded in from plan-review.yml (#3313) ─────────────────────────
+  # Plan review (#2756, folded in from plan-review.yml, #3313). The only job here that wants a BOT
+  # comment (the worker's plan), so it has its own `if`; `route` and `rl-start` skip bots.
   plan-review:
     # Only a bot-posted plan on a plain issue (not a PR) — a human cannot start an expensive run
     # by pasting the marker.
-    # Folded in from plan-review.yml (#3313): the plan comment is bot-posted, so it is the one
-    # comment `route`/`rl-start` ignore; this job is its own entry point and runs alone.
-    concurrency:
-      group: plan-review-${{ github.event.issue.number }}
-      cancel-in-progress: false
     if: >-
       ${{ !github.event.issue.pull_request
       && github.event.comment.user.login == 'nuxt-harness[bot]'
       && startsWith(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
+    concurrency:
+      group: plan-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
@@ -1715,6 +1672,8 @@ jobs:
           gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
           REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
+          ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold; }
+          node scripts/flow-checklist.mjs "$ISSUE" --verdict plan "$VERDICT" --round "$ROUND" --link "$REVIEW_URL" ${ROUTE:+--route "$ROUTE"} || true
           case "$VERDICT" in
             go)
               node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$ISSUE" '{issue:$i,label:"plan:approved"}')"
@@ -1723,7 +1682,6 @@ jobs:
               gh issue edit "$ISSUE" --add-label "status:blocked"
               ;;
             no-go)
-              ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold
               if [ "$ROUTE" = hold ]; then
                 gh issue edit "$ISSUE" --add-label "status:blocked"
               else
@@ -1738,10 +1696,10 @@ jobs:
   # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
   # `<!-- pipeline-note -->` comments, and the API allowance it spent. Read-only against
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
-  record-plan-review:
+  record-outcome:
     name: Record run outcome
-    needs: [plan-review]
-    if: ${{ always() && needs.plan-review.result != 'skipped' }}
+    needs: [rl-start, route, plan-review, interpret-read, interpret-decide, interpret-review, interpret-act]
+    if: ${{ always() && (needs.interpret-read.result != 'skipped' || needs.plan-review.result != 'skipped') }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
@@ -1768,10 +1726,10 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
           WORKFLOW_FILE: on-comment.yml
           ISSUE: "${{ github.event.issue.number }}"
-          STAGE: plan-review
-          MODEL_TIER: review
+          STAGE: ${{ needs.plan-review.result != 'skipped' && 'plan-review' || 'interpret' }}
+          MODEL_TIER: ${{ needs.plan-review.result != 'skipped' && 'review' || 'default' }}
           NEEDS_JSON: ${{ toJSON(needs) }}
-          RL_START: ${{ needs.plan-review.outputs.rl_start }}
+          RL_START: ${{ needs.plan-review.outputs.rl_start || needs.rl-start.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           DATA_TOKEN: ${{ steps.app-token.outputs.token }}

@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { summarizeRuns } from '../lib/run-outcome.mjs'
 import { parseArgs } from '../lib/cli-args.mjs'
 
-const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'plan-review.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml', 'on-comment.yml']
+const WORKFLOWS = ['work-issue-pidev.yml', 'decompose-on-issue-pidev.yml', 'build-review.yml', 'ticket-review.yml', 'fix-ci-on-failure.yml', 'on-comment.yml']
 const gh = (...a) => execFileSync('gh', a, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 
 export function render(summary) {
