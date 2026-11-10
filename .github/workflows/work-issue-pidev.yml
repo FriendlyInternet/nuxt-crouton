@@ -628,7 +628,12 @@ jobs:
               } >> "$PROMPT_FILE"
               # #3272: an owner override of a twice-rejected plan. Read ONLY via plan-held.mjs, which trusts
               # a decision comment by the Harness bot posted after the newest plan, nothing else.
-              OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" | node scripts/plan-held.mjs --decision || true)"
+              # A failed fetch/parse must not abort the build (no override is the safe default), but it is
+              # logged, so a dropped owner reason is visible in the run rather than silent.
+              OVERRIDE="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments?per_page=100" | node scripts/plan-held.mjs --decision)" || {
+                echo "::warning::could not read the owner override for #${ISSUE}; building without one"
+                OVERRIDE=""
+              }
               if [ -n "$OVERRIDE" ]; then
                 printf '\n\n--- OWNER OVERRIDE (the owner approved this plan over the reviewers objection; their reason binds you) ---\n%s\n' "$OVERRIDE" >> "$PROMPT_FILE"
               fi
