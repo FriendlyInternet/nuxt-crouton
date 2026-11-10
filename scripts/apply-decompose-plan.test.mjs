@@ -382,3 +382,89 @@ test('#3238 (8) ticket does not ask → leaf unchanged', () => {
   const leaf = { leaf: true, children: [] }
   assert.equal(applySignoffFallback(leaf, { text: 'plain', comments: [] }), leaf)
 })
+
+// ── #3690: every posted hold diagram gets an ✏️ Edit link, saved to `diagrams`, never `main` ──
+import { renderSignoffHoldBody } from './apply-decompose-plan.mjs'
+import { diagramEditUrl } from './lib/diagram-edit-link.mjs'
+import { mkdtempSync, mkdirSync as mkdirS, writeFileSync as writeF } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join as joinP } from 'node:path'
+
+const HOLD = { summary: 'why we hold', questions: ['which?'] }
+const ART = { images: [{ label: 'Diagram', path: 'writeups/diagrams/s.png' }], schemaMd: '', errors: {} }
+const RAW = 'https://raw.githubusercontent.com/o/r/epic/1--v1-x'
+
+test('#3690 renderSignoffHoldBody: Edit link under the diagram when editUrl is set, never at main', () => {
+  const body = renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: RAW, editUrl: diagramEditUrl({ slug: 's', branch: 'diagrams', issue: 7 }) })
+  assert.match(body, /✏️ Edit/)
+  for (const s of ['slug=s', 'branch=diagrams', 'issue=7']) assert.ok(body.includes(s), s)
+  assert.ok(!body.includes('branch=main'))
+  assert.ok(body.startsWith(SIGNOFF_MARKER))
+})
+
+test('#3690 renderSignoffHoldBody: no editUrl → no link; no epic branch → no images and no link', () => {
+  assert.ok(!renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: RAW, editUrl: null }).includes('✏️ Edit'))
+  const noBranch = renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: null, editUrl: null })
+  assert.ok(!noBranch.includes('### Rendered'))
+  assert.ok(!noBranch.includes('✏️ Edit'))
+})
+
+// Drive the real runActions in a temp cwd: the mock generator writes the png + scene, the mock gh
+// answers the diagrams-branch REST calls. `putFails` makes every scene PUT throw.
+function runDiagramHold({ epic_branch, putFails = false }) {
+  const uniq = `hold-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+  const dir = mkdtempSync(joinP(tmpdir(), 'apply-3690-'))
+  const prev = process.cwd()
+  const calls = []
+  const logs = []
+  let body = ''
+  const exec = (file, args) => {
+    calls.push([file, ...args])
+    if (file === 'node' && String(args[0]).endsWith('ticket-excalidraw.mjs')) {
+      mkdirS('writeups/diagrams', { recursive: true })
+      writeF(`writeups/diagrams/${uniq}.png`, 'png')
+      writeF(`writeups/diagrams/${uniq}.excalidraw`, '{"elements":[]}')
+      return ''
+    }
+    if (file === 'git') throw new Error('exit 1') // check-ignore: not ignored
+    const url = args.find(a => String(a).startsWith('repos/')) || ''
+    if (url.endsWith('/git/ref/heads/diagrams')) return 'sha'
+    if (url.includes('/contents/') && !args.includes('PUT')) throw new Error('gh: Not Found (HTTP 404)')
+    if (args.includes('PUT')) { if (putFails) throw new Error('gh: Conflict (HTTP 409)'); return '' }
+    return ''
+  }
+  const acts = planToActions(parsePlan({ signoff: { ...HOLD, diagram: { slug: uniq, nodes: [], edges: [] } } }), { ...CTX, epic_branch })
+  let summary
+  process.chdir(dir)
+  try {
+    summary = runActions(acts, { repo: 'o/r', exec, log: m => logs.push(m), writeBody: (t, b) => { if (t.startsWith('signoff')) body = b; return `/tmp/${t}` } })
+  } finally { process.chdir(prev) }
+  return { uniq, calls, logs, body, summary }
+}
+
+test('#3690 runActions hold: --excalidraw, scene PUT to diagrams, Edit link posted, scene not an epic artifact', () => {
+  const r = runDiagramHold({ epic_branch: 'epic/1--v1-x' })
+  assert.ok(r.calls.some(c => String(c[1]).endsWith('ticket-excalidraw.mjs') && c.includes('--excalidraw')))
+  assert.ok(r.calls.some(c => c.includes('PUT') && c.includes(`repos/o/r/contents/writeups/diagrams/${r.uniq}.excalidraw`)))
+  assert.ok(r.body.includes('branch=diagrams'))
+  assert.ok(r.summary.artifacts.includes(`writeups/diagrams/${r.uniq}.png`))
+  assert.ok(!r.summary.artifacts.some(p => p.endsWith('.excalidraw')))
+  assert.equal(r.summary.held[0].diagramEdit, true)
+})
+
+test('#3690 runActions hold: a failed scene save still posts the hold, without the link', () => {
+  const r = runDiagramHold({ epic_branch: 'epic/1--v1-x', putFails: true })
+  assert.equal(r.calls.filter(c => c.includes('PUT')).length, 2, 'one retry, then give up')
+  assert.ok(r.calls.some(c => c.includes('repos/o/r/issues/1706/comments')))
+  assert.ok(r.calls.some(c => c.includes('labels[]=status:blocked')))
+  assert.ok(!r.body.includes('✏️ Edit'))
+  assert.equal(r.summary.held[0].diagramEdit, false)
+  assert.ok(r.logs.some(m => /diagram scene save failed/.test(m)))
+})
+
+test('#3690 runActions hold: no epic branch → no diagrams-branch calls and no link', () => {
+  const r = runDiagramHold({ epic_branch: '' })
+  assert.ok(!r.calls.some(c => c.some(a => /git\/ref|\/contents\//.test(String(a)))))
+  assert.ok(!r.body.includes('✏️ Edit'))
+  assert.equal(r.summary.held[0].diagramEdit, false)
+})
