@@ -15,6 +15,9 @@ export async function mergeableState({ github, owner, repo, pull_number, tries =
   return { pr, state: pr?.mergeable_state }
 }
 
+/** The pipeline's own bot accounts: the ONE list (the sweep imports it too). */
+export const PIPELINE_BOTS = ['claude[bot]', 'nuxt-harness[bot]']
+
 /**
  * If `state` is `dirty`, start the resolver once per head. Returns
  * `{ status }`: not-dirty | started | already | recent | error (+ `error`).
@@ -22,6 +25,8 @@ export async function mergeableState({ github, owner, repo, pull_number, tries =
  */
 export async function startConflictResolver({ github, owner, repo, pull_number, pr, state, handoffGuard, now = Date.now() }) {
   if (state !== 'dirty') return { status: 'not-dirty' }
+  // The branch name goes into a worker shell line: only a pipeline-authored `epic/…` PR may start it.
+  if (!PIPELINE_BOTS.includes(pr.user?.login) || !/^epic\/\d+-[\w.\/-]*$/.test(pr.head.ref)) return { status: 'not-pipeline' }
   const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
   const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
   // Concurrent callers all see "no marker yet" for the same head (#2914), so also hold off
@@ -44,6 +49,7 @@ export async function startConflictResolver({ github, owner, repo, pull_number, 
 export function resolverReply({ status, error }, head) {
   if (status === 'started') return '🔧 **Approved — this PR conflicts with `main`, so the pipeline is merging `main` in first.** It merges itself once the checks pass after that, while your `ok` stands.'
   if (status === 'already' || status === 'recent') return `🔧 **Approved — this PR conflicts with \`main\`, and the pipeline is already merging \`main\` in** (a resolver note on \`${head}\` is recent). It merges itself once the checks pass after that.`
+  if (status === 'not-pipeline') return '🔴 **Approved, but this PR conflicts with `main` and it is not a pipeline PR — resolve the conflict by hand.** Nothing was started; your `ok` stands.'
   return `🔴 **Approved, but this PR conflicts with \`main\` and the resolver could not be started** (${error || 'unknown error'}). Checks cannot run until the conflict is resolved; your \`ok\` stands.`
 }
 

