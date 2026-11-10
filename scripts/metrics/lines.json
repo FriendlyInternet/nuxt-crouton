@@ -51,6 +51,7 @@
       "deploy-pocs.yml",
       "deploy-sandbox.yml",
       "deploy-themes-playground.yml",
+      "deploy-ticket-editor.yml",
       "release-venue-bundle.yml",
       "teardown-app.yml",
       "teardown-on-removal.yml"
