@@ -9,6 +9,7 @@
     "review": { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "independent plan reviewer (#2756) — strongest model, read-only, never edits code" },
     "plan":   { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "plan-mode run (#3343) — investigation + the plan comment, strongest model" },
     "decompose": { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "event-driven epic splitter (#3670) — once per epic, strongest model" },
+    "build":  { "claude": "opus", "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "pi issue worker / reviser (#3693) — builds the code, Opus trial" },
     "large":  { "claude": "opus",   "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
