@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import type { CratePile } from '~/composables/useCrate'
+import type { CratePile, CrateTrack } from '~/composables/useCrate'
 import type { HintSource, HintWord } from '~/composables/useCrateHints'
 
 defineProps<{
+  track: CrateTrack
   sources: HintSource[]
   suggestions: CratePile[]
   pathLabel: (p: CratePile) => string
   isInPile: (pileId: string) => boolean
   empty: boolean
 }>()
-const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile], hold: [pile: CratePile], listen: [], new: [] }>()
+const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile], hold: [pile: CratePile], listen: [], new: [], researched: [] }>()
 </script>
 
 <template>
@@ -37,5 +38,6 @@ const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile], hold
       <ULink :to="s.url ?? undefined" target="_blank" class="shrink-0 ps-1 text-muted underline-offset-2 hover:underline">{{ s.label }}</ULink>
       <CrateHintWord v-for="w in s.words" :key="w.word" :word="w" :ticked="!!w.pileId && isInPile(w.pileId)" class="shrink-0" @pick="emit('word', w)" />
     </CrateScrollRow>
+    <CrateAskClaude :track="track" @researched="emit('researched')" />
   </div>
 </template>
