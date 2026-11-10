@@ -94,17 +94,21 @@ function stripJsonComments(s) {
   return s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/[^"\n]*$/gm, '')
 }
 
+function parseSchemaFields(b) {
+  if (b.lang !== 'json' || b.skip) return null
+  let obj
+  try { obj = JSON.parse(stripJsonComments(b.code)) } catch { return null } // not valid JSON → fragment
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
+  const entries = Object.entries(obj)
+  const isField = ([, v]) => v && typeof v === 'object' && typeof v.type === 'string' && Object.keys(v).every(k => SCHEMA_KEYS.has(k))
+  const fields = entries.filter(isField)
+  return entries.length && fields.length === entries.length ? fields : null // else not a collection schema
+}
+
 export function checkSchemas(file, blocks, facts) {
   const hits = []
   for (const b of blocks) {
-    if (b.lang !== 'json' || b.skip) continue
-    let obj
-    try { obj = JSON.parse(stripJsonComments(b.code)) } catch { continue } // not valid JSON → fragment
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) continue
-    const entries = Object.entries(obj)
-    const fields = entries.filter(([, v]) => v && typeof v === 'object' && typeof v.type === 'string' && Object.keys(v).every(k => SCHEMA_KEYS.has(k)))
-    if (!entries.length || fields.length !== entries.length) continue // not a collection schema
-    for (const [name, f] of fields) {
+    for (const [name, f] of parseSchemaFields(b) ?? []) {
       if (!facts.fieldTypes.has(f.type)) hits.push({ file, line: b.line, check: 'schemas', msg: `field "${name}" uses unknown type "${f.type}"` })
     }
   }
