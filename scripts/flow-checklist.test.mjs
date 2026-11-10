@@ -175,8 +175,8 @@ test('later ticks keep the reviews block', () => {
   assert.equal(slice(b2), slice(b))
 })
 
-test('plan-review.yml makes a verdict-only call before the case', () => {
-  const w = wf('plan-review.yml')
+test('on-comment.yml (plan review) makes a verdict-only call before the case', () => {
+  const w = wf('on-comment.yml')
   assert.match(w, /flow-checklist\.mjs "\$ISSUE" --verdict plan /)
   assert.ok(w.indexOf('flow-checklist.mjs "$ISSUE" --verdict plan') < w.indexOf('case "$VERDICT" in'))
 })
