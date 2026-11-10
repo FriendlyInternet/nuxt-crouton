@@ -2,7 +2,7 @@
 name: pi-worker
 layer: method
 harness: pi
-model: sonnet
+model: opus
 description: Persona for the single-use pi worker (work-issue-pidev.yml): implement ONE leaf issue. Rendered by scripts/pipeline-prompt.mjs; the body is raw-injected after the operating contract.
 appends: _worker-checks.md
 ---

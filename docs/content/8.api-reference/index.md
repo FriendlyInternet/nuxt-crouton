@@ -12,11 +12,11 @@ Complete reference documentation for all Nuxt Crouton APIs.
 
 ::card-group
   ::card{title="Composables" to="/api-reference/composables" icon="i-lucide-box"}
-  Data fetching, mutations, forms, and utility composables.
+  Every exported composable, generated from the code.
   ::
 
   ::card{title="Components" to="/api-reference/components" icon="i-lucide-layout-grid"}
-  Table, form, modal, layout, and utility components.
+  Props of every component, generated from the code.
   ::
 
   ::card{title="Types" to="/api-reference/types" icon="i-lucide-square-code"}
@@ -31,7 +31,11 @@ Complete reference documentation for all Nuxt Crouton APIs.
   Low-level APIs for advanced customization.
   ::
 
-  ::card{title="useCollectionItem" to="/api-reference/use-collection-item" icon="i-lucide-file"}
-  Single item fetching and management composable.
+  ::card{title="Field types" to="/api-reference/field-types" icon="i-lucide-database"}
+  Schema field types and the meta keys they accept, generated from the code.
+  ::
+
+  ::card{title="CLI" to="/api-reference/cli" icon="i-lucide-terminal"}
+  Every crouton CLI command and flag, generated from the code.
   ::
 ::
