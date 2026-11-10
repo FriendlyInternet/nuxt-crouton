@@ -511,7 +511,7 @@ jobs:
         run: |
           if [ "$EVENT" = "pull_request" ]; then
             git fetch --no-tags origin "$BASE_REF"
-            # Live body (not the event payload): a re-run must see an approval line added after the push (#3615).
+            # Live body (not the event payload): a re-run must see an approval line added after the push (#3615). A failed gh call may be ignored: an empty body means no approval, so the check fails closed.
             PR_BODY="$(gh pr view "$PR_NUMBER" --json body --jq .body || true)"; export PR_BODY
             node scripts/workflow-inline-size.mjs --base "$(git merge-base "origin/$BASE_REF" HEAD)"
           else
