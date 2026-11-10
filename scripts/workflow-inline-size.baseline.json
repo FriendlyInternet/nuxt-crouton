@@ -1,5 +1,5 @@
 {
-  "$comment": "Inline run:/script: blocks over 40 lines that predate #3452. Logic belongs in scripts/*.mjs with a test. New blocks over the limit fail CI; baselined ones may not grow. Regenerate: node scripts/workflow-inline-size.mjs --update",
+  "$comment": "Inline run:/script: blocks over 40 lines that predate #3452. Logic belongs in scripts/*.mjs with a test. New blocks over the limit fail CI; baselined ones may not grow, and a raised number needs `Baseline-raise-approved:` in the PR body (#3615). Regenerate: node scripts/workflow-inline-size.mjs --update",
   "limit": 40,
   "blocks": {
     ".github/actions/gate-outage-check/action.yml › runs › classify › run": 45,

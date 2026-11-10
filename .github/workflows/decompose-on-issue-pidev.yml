@@ -73,7 +73,7 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Blank = the `decompose` tier in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
         default: ""
         type: string
@@ -307,9 +307,9 @@ jobs:
       # silently run a stale model; a broken config now fails this step loudly instead.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT (from .claude/pipeline-models.json)"
+          DECOMPOSE="$(node scripts/resolve-pipeline-model.mjs decompose)"
+          echo "decompose=$DECOMPOSE" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — decompose=$DECOMPOSE (from .claude/pipeline-models.json)"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -324,7 +324,7 @@ jobs:
           # claude-bridge spawns; the CLI is installed + preflighted by setup-pi (#2119).
           # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
           # hardcoded literal — switch a model there, not here.
-          PI_MODEL: ${{ inputs.model || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.decompose }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -603,7 +603,7 @@ jobs:
           WORKFLOW_FILE: decompose-on-issue-pidev.yml
           ISSUE: "${{ inputs.issue || github.event.issue.number }}"
           STAGE: decompose
-          MODEL_TIER: default
+          MODEL_TIER: decompose
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.decompose-pi.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
