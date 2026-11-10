@@ -92,7 +92,7 @@ export async function decomposeArtifactGate({ github, context, core, env = proce
   // lands on a CHILD issue, invisible to the checks above (the #1050 false-fail:
   // pi merged a real PR on child #1053 and this gate still went red). Scan the
   // sub-issue tree for the same fresh-since-t0 signals. Only runs when the
-  // primary checks found nothing. Kept in sync with decompose-on-issue.yml.
+  // primary checks found nothing. Kept in sync with decompose-on-issue-pidev.yml.
   const childDeliverable = await findChildDeliverable({ github, context, core, issue_number, since, sinceMs })
   if (childDeliverable) {
     core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
@@ -108,7 +108,7 @@ export async function decomposeArtifactGate({ github, context, core, env = proce
   // ── Classify WHY there was no deliverable (#1004 piece 3) ──────────────────
   // pi emits no structured execution_file like claude-code-action — it emits the
   // plain-text run log we tee'd to PI_EXEC_LOG. Grep it for the known causes so the
-  // failure comment names the actual problem + fix (mirrors decompose-on-issue.yml's
+  // failure comment names the actual problem + fix (mirrors decompose-on-issue-pidev.yml's
   // billing/error/underspecified buckets). The most likely first-run cause is an
   // out-of-credit PI_PROVIDER_KEY, so detect that explicitly.
   const failed = env.CLAUDE_CONCLUSION === 'failure'
