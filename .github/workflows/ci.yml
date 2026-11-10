@@ -505,7 +505,7 @@ jobs:
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)
