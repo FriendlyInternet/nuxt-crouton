@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
 
@@ -65,7 +65,8 @@ test('plan-review: an owner reply routes as before and starts no review', () => 
 
 test('plan-review: one review per issue at a time; plan-review.yml is gone (one listener)', () => {
   assert.match(jobBlock('plan-review'), /\n    concurrency:\n      group: plan-review-\$\{\{ github\.event\.issue\.number \}\}\n      cancel-in-progress: false\n/)
-  assert.equal(existsSync(new URL('../.github/workflows/plan-review.yml', import.meta.url)), false)
+  const workflows = readdirSync(new URL('../.github/workflows/', import.meta.url))
+  assert.equal(workflows.includes('plan-review.yml'), false)
 })
 
 test('record-outcome still tolerates a skipped rl-start', () => {
