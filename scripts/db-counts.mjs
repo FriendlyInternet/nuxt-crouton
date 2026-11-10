@@ -13,7 +13,7 @@
  * Discovers the db NAME from the app's wrangler.jsonc (apps/pocs/workers). A real
  * run needs CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN; --dry-run needs neither.
  */
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { appendFileSync } from 'node:fs'
 import { resolveAppDb, queryD1Json, isUserTable } from './lib/wrangler-d1.mjs'
@@ -52,6 +52,14 @@ Options:
 
 const listTablesSql = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
 
+/** One `SELECT COUNT(*)` statement per user table (a single UNION ALL let one bad table sink the report). */
+export function planCounts(names) {
+  return names.filter(isUserTable).map(t => ({
+    table: t,
+    sql: `SELECT COUNT(*) AS n FROM "${t.replace(/"/g, '""')}"`
+  }))
+}
+
 /** Append a markdown table to GITHUB_STEP_SUMMARY when running in Actions. */
 function writeSummary(lines) {
   const file = process.env.GITHUB_STEP_SUMMARY
@@ -79,7 +87,7 @@ async function main() {
   console.log(`\n  db-counts: ${args.app} / ${args.env} → ${db.name}${db.isProd ? '  (prod)' : ''}\n`)
   console.log('  Read-only — runs SELECT COUNT(*) per table:')
   console.log(`    $ npx wrangler d1 execute ${db.name} --remote --json --command "<list tables>"`)
-  console.log(`    $ npx wrangler d1 execute ${db.name} --remote --json --command "SELECT COUNT(*) … UNION ALL …"\n`)
+  console.log(`    $ npx wrangler d1 execute ${db.name} --remote --json --command "SELECT COUNT(*) AS n FROM \"<table>\""\n`)
 
   if (args.dryRun) {
     console.log('  --dry-run: no query run.\n')
@@ -93,21 +101,24 @@ async function main() {
     return
   }
 
-  // One round-trip: COUNT(*) for every table via UNION ALL.
-  const countSql = tables
-    .map(t => `SELECT '${t.replace(/'/g, `''`)}' AS tbl, COUNT(*) AS n FROM "${t}"`)
-    .join(' UNION ALL ')
-  const rows = queryD1Json(db.name, countSql, { cwd: repoRoot })
-  const counts = new Map(rows.map(r => [r.tbl, Number(r.n)]))
+  // One statement per table; a failing table is recorded, not fatal.
+  const results = planCounts(tables).map(({ table, sql }) => {
+    try {
+      const rows = queryD1Json(db.name, sql, { cwd: repoRoot })
+      return { table, n: Number(rows[0]?.n ?? 0) }
+    } catch (err) {
+      return { table, n: 0, error: String(err.message).split('\n').slice(0, 6).join(' | ') }
+    }
+  })
+  const failed = results.filter(r => r.error)
 
   const pad = Math.max(...tables.map(t => t.length), 5)
   let total = 0
   console.log(`  ${'table'.padEnd(pad)}  rows`)
   console.log(`  ${'-'.repeat(pad)}  ----`)
-  for (const t of tables) {
-    const n = counts.get(t) ?? 0
-    total += n
-    console.log(`  ${t.padEnd(pad)}  ${n}`)
+  for (const r of results) {
+    total += r.n
+    console.log(`  ${r.table.padEnd(pad)}  ${r.error ? `ERROR: ${r.error}` : r.n}`)
   }
   console.log(`  ${'-'.repeat(pad)}  ----`)
   console.log(`  ${'TOTAL'.padEnd(pad)}  ${total}\n`)
@@ -117,12 +128,15 @@ async function main() {
     '',
     '| table | rows |',
     '|---|---:|',
-    ...tables.map(t => `| \`${t}\` | ${counts.get(t) ?? 0} |`),
+    ...results.map(r => `| \`${r.table}\` | ${r.error ? `error: ${r.error}` : r.n} |`),
     `| **total** | **${total}** |`
   ])
+  if (failed.length) throw new Error(`${failed.length} table(s) failed: ${failed.map(r => r.table).join(', ')}`)
 }
 
-main().catch((err) => {
-  console.error(`\n  db-counts failed: ${err.message}\n`)
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`\n  db-counts failed: ${err.message}\n`)
+    process.exit(1)
+  })
+}
