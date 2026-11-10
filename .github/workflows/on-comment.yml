@@ -1151,6 +1151,9 @@ jobs:
   test-card:
     needs: route
     if: needs.route.outputs.kind == 'test-card'
+    concurrency:
+      group: test-card-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
