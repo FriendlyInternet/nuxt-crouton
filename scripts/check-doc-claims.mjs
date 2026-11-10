@@ -6,8 +6,8 @@
  * pass --strict to exit 1 on any finding (flip the CI step to --strict once the rebuilt
  * sections pass).
  *
- *   1. names     — `crouton <command>` named in a page exists in the CLI; `refTarget`-style
- *                  field "type" values and <Component>/useComposable names exist in code
+ *   1. names     — `crouton <command>` named in a page exists in the CLI; <CroutonX> components
+ *                  and useCroutonX composables exist in packages/ (props, flags, config keys: not yet checked)
  *   2. schemas   — every ```json block that looks like a collection schema uses known field types
  *   3. code      — ```ts / ```js blocks parse (syntax only; blocks containing `...` or `// ...`
  *                  are fragments and skipped, or mark a block `<!-- doc-check: skip -->` above it)
@@ -73,7 +73,42 @@ export function snapshotFieldTypes(src) {
   return types
 }
 
+/** Every identifier-ish word in package sources (ts/vue/js/mjs) + Nuxt path-derived component names. */
+export function sourceWords(pkgDir) {
+  const words = new Set()
+  const visit = (d, parts) => {
+    for (const e of readdirSync(d)) {
+      if (['node_modules', 'dist', '.nuxt', '.output', '.git'].includes(e)) continue
+      const p = join(d, e)
+      if (statSync(p).isDirectory()) { visit(p, [...parts, e]); continue }
+      if (!/\.(ts|vue|js|mjs|json)$/.test(e)) continue
+      for (const m of readFileSync(p, 'utf8').matchAll(/\b(?:Crouton|use)[A-Za-z0-9]+/g)) words.add(m[0])
+      if (e.endsWith('.vue')) {
+        const i = parts.lastIndexOf('components')
+        const pas = (x) => x.replace(/(^|[-_.])(\w)/g, (_, __, c) => c.toUpperCase())
+        if (i >= 0) words.add(pas([...parts.slice(i + 1), e.replace('.vue', '')].join('-')))
+        words.add(pas(e.replace('.vue', '')))
+      }
+    }
+  }
+  visit(pkgDir, [])
+  return words
+}
+
 // ---------- checks ----------
+
+/** `<CroutonFoo` components and `useCroutonFoo()` composables named in a page must exist in package code. */
+export function checkSymbols(file, md, facts) {
+  const hits = []
+  if (!facts.words) return hits
+  md.split('\n').forEach((text, i) => {
+    for (const m of text.matchAll(/<(Crouton[A-Za-z0-9]+)|\b(useCrouton[A-Za-z0-9]*)\s*\(/g)) {
+      const n = m[1] ?? m[2]
+      if (!facts.words.has(n) && !facts.words.has(n.replace(/^Crouton/, ''))) hits.push({ file, line: i + 1, check: 'names', msg: `${m[1] ? 'component' : 'composable'} \`${n}\` not found in packages/` })
+    }
+  })
+  return hits
+}
 
 export function checkNames(file, md, facts) {
   const hits = []
@@ -134,7 +169,7 @@ export function checkCode(file, blocks, ts) {
 export function loadFacts() {
   const cli = readFileSync(join(root, 'packages/crouton-cli/bin/crouton-generate.js'), 'utf8')
   const snap = readFileSync(join(root, 'packages/crouton-mcp/src/utils/field-types.snapshot.ts'), 'utf8')
-  return { commands: cliCommands(cli), fieldTypes: snapshotFieldTypes(snap) }
+  return { commands: cliCommands(cli), fieldTypes: snapshotFieldTypes(snap), words: sourceWords(join(root, 'packages')) }
 }
 
 export function run(docsDir, facts, ts) {
@@ -144,6 +179,7 @@ export function run(docsDir, facts, ts) {
     const rel = relative(root, f)
     const blocks = extractBlocks(md)
     per.names.push(...checkNames(rel, md, facts))
+    per.names.push(...checkSymbols(rel, md, facts))
     per.schemas.push(...checkSchemas(rel, blocks, facts))
     if (ts) per.code.push(...checkCode(rel, blocks, ts))
   }

@@ -48,3 +48,11 @@ test('ts block with a syntax error is reported; fragments are skipped', { skip: 
 test('report-only by default (exit 0 with findings)', () => {
   assert.equal(run('`npx crouton frobnicate`\n').status, 0)
 })
+
+test('missing component / composable is reported with page and line; real ones pass', () => {
+  const r = run('# T\n\nUse <CroutonDoesNotExistXyz /> here\n', '--strict')
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /page\.md:3 .*CroutonDoesNotExistXyz/)
+  assert.equal(run('Call useCroutonNopeXyz() now\n', '--strict').status, 1)
+  assert.equal(run('Call useCrouton() or <CroutonFormLayout /> now\n', '--strict').status, 0)
+})
