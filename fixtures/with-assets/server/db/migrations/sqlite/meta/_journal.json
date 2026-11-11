@@ -36,6 +36,13 @@
       "when": 1794330345130,
       "tag": "0004_bitter_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794437178339,
+      "tag": "0005_auth_rate_limit",
+      "breakpoints": true
     }
   ]
 }
