@@ -1,5 +1,6 @@
 /**
- * #2559 — the bookings blocks offered in Builder.
+ * #2559 — the bookings blocks offered in Builder (under the Bookings group; the
+ * demo builderBookings list reads "Gigs · List").
  *
  * Runs the REAL merge Nuxt does at build time: `.nuxt/app.config.mjs` is
  * `defuFn(app, core, auth, layout, flow, bookings, …)`, highest layer first. The
@@ -38,10 +39,9 @@ beforeAll(async () => {
 })
 
 const PACKAGE_BLOCKS = {
-  'bookings-calendar-only': { name: 'Reservations · Calendar', component: 'CroutonBookingsLayoutCalendarOnly' },
-  'bookings-filters': { name: 'Reservations · Filters', component: 'CroutonBookingsLayoutFilters' },
-  'bookings-locations': { name: 'Reservations · Locations', component: 'CroutonBookingsLayoutLocations' },
-  'bookings-package-list': { name: 'Reservations · List', component: 'CroutonBookingsLayoutList' },
+  'bookings-calendar-only': { name: 'Bookings · Calendar', component: 'CroutonBookingsLayoutCalendarOnly' },
+  'bookings-locations': { name: 'Bookings · Locations', component: 'CroutonBookingsLayoutLocations' },
+  'bookings-package-list': { name: 'Bookings · Bookings list', component: 'CroutonBookingsLayoutList' },
 } as const
 
 // `CroutonBookings` + path under app/components (the package's component prefix).
@@ -49,7 +49,7 @@ const componentFile = (component: string) =>
   resolve(pkg('crouton-bookings'), 'app/components', component.replace(/^CroutonBookings/, '').replace(/^Layout(?=[A-Z])/, 'Layout/') + '.vue')
 
 describe('bookings blocks in the Builder block row (#2559)', () => {
-  it('offers the four atomic package blocks, labelled "Reservations · …", on the package components', () => {
+  it('offers the three atomic package blocks, labelled "Bookings · …", on the package components', () => {
     const offered = paletteBlocksOf(Object.values(registry))
     for (const [id, want] of Object.entries(PACKAGE_BLOCKS)) {
       const block = offered.find(b => b.id === id)
@@ -78,9 +78,17 @@ describe('bookings blocks in the Builder block row (#2559)', () => {
     expect(registry['bookings-calendar']?.component).toBe('CroutonBookingsLayoutCalendar')
   })
 
-  it('leaves the demo "Bookings · List" block as it was — its own two options, no package scope leaking in', () => {
+  it('leaves the Filters block out of the row but keeps it registered and renderable', () => {
+    // In a layout it shows only its ⚙️ menu (location cards need viewToggles, which the
+    // layout block turns off) — Bookings · Locations already filters (#2559, #2561).
+    expect(paletteBlocksOf(Object.values(registry)).some(b => b.id === 'bookings-filters')).toBe(false)
+    expect(registry['bookings-filters']?.component).toBe('CroutonBookingsLayoutFilters')
+    expect(existsSync(componentFile('CroutonBookingsLayoutFilters'))).toBe(true)
+  })
+
+  it('leaves the demo list block as it was, relabelled "Gigs · List" — its own two options, no package scope leaking in', () => {
     const demo = registry['bookings-list']!
-    expect(demo.name).toBe('Bookings · List')
+    expect(demo.name).toBe('Gigs · List')
     expect(demo.defaultConfig).toEqual({ collection: 'builderBookings', heading: 'Bookings' })
     expect((demo.configSchema ?? []).map(f => f.name)).toEqual(['collection', 'heading'])
     expect(paletteBlocksOf(Object.values(registry)).some(b => b.id === 'bookings-list')).toBe(true)

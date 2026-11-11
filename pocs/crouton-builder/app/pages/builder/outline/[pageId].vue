@@ -157,7 +157,7 @@ const palette = [
   { blockId: 'artists-list', label: 'Artists · List', icon: 'i-lucide-list', collection: 'builderArtists', heading: 'Artists' },
   { blockId: 'artists-form', label: 'Artists · New', icon: 'i-lucide-square-pen', collection: 'builderArtists', heading: 'New artist' },
   { blockId: 'artists-stats', label: 'Artists · Stats', icon: 'i-lucide-gauge', collection: 'builderArtists', heading: 'Artists' },
-  { blockId: 'bookings-list', label: 'Bookings · List', icon: 'i-lucide-list', collection: 'builderBookings', heading: 'Bookings' },
+  { blockId: 'bookings-list', label: 'Gigs · List', icon: 'i-lucide-list', collection: 'builderBookings', heading: 'Bookings' },
   { blockId: 'spacer', label: 'Spacer', icon: 'i-lucide-square-dashed' },
 ]
 type PaletteItem = (typeof palette)[number]

@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { defuFn } from 'defu'
 import { fileURLToPath } from 'node:url'
 import { groupPaletteBlocks, offerable } from '../app/utils/palette-groups'
+import { paletteBlocksOf } from '../app/utils/palette-blocks'
 import { parseLayoutTree } from '../../../packages/crouton-layout/app/utils/layout-serialize'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 
@@ -30,16 +31,21 @@ const shape = (list: CroutonLayoutBlockDefinition[]) =>
   groupPaletteBlocks(list).map(g => [g.label, g.items.map(i => i.label)])
 
 describe('groupPaletteBlocks — Builder block row (#3748)', () => {
-  it('groups Builder\'s real blocks into Artists, Bookings, Reservations, Layout (in that order)', () => {
-    // Reservations = @fyit/crouton-bookings' atomic blocks (#2559); its compound
-    // all-in-one Calendar is not offered.
-    expect(shape(blocksList)).toEqual([
+  it('groups Builder\'s real blocks into Artists, Bookings, Gigs, Layout (in that order)', () => {
+    // Bookings = @fyit/crouton-bookings' atomic blocks (#2559); its compound all-in-one
+    // Calendar and its Filters block are not offered. Gigs = the demo builderBookings.
+    // Same input the editor's row gets: groupPaletteBlocks(paletteBlocksOf(blocksList)).
+    expect(shape(paletteBlocksOf(blocksList))).toEqual([
       ['Artists', ['List', 'Form', 'Stats']],
-      ['Bookings', ['List']],
-      ['Reservations', ['Calendar', 'Locations', 'Filters', 'List']],
+      ['Bookings', ['Calendar', 'Locations', 'Bookings list']],
+      ['Gigs', ['List']],
       ['Layout', ['Top bar', 'Bottom nav', 'Spacer']],
     ])
-    expect(groupPaletteBlocks(blocksList).flatMap(g => g.items.map(i => i.blockId))).not.toContain('bookings-calendar')
+    const ids = groupPaletteBlocks(paletteBlocksOf(blocksList)).flatMap(g => g.items.map(i => i.blockId))
+    expect(ids).not.toContain('bookings-calendar')
+    expect(ids).not.toContain('bookings-filters')
+    // Both stay registered, so a saved page that holds one still renders.
+    expect(blocksList.map(b => b.id)).toEqual(expect.arrayContaining(['bookings-calendar', 'bookings-filters']))
   })
 
   it('leaves the unlinked generic blocks and the drop preview out of the row', () => {
@@ -54,17 +60,17 @@ describe('groupPaletteBlocks — Builder block row (#3748)', () => {
     const artists = groups.find(g => g.label === 'Artists')!
     expect(artists.collection).toBe('builderArtists')
     expect(artists.icon).toBe('i-lucide-list')
-    expect(groups.find(g => g.label === 'Bookings')!.collection).toBe('builderBookings')
+    expect(groups.find(g => g.label === 'Gigs')!.collection).toBe('builderBookings')
     expect(groups.find(g => g.label === 'Layout')!.collection).toBeNull()
   })
 
   it('every block offered is linked to a collection or is a layout piece', () => {
-    // Exception: the bookings package's blocks (#2559) fetch their own data and have
+    // Exception: the bookings package's blocks (#2559, the Bookings group) fetch their own data and have
     // no `collection` field at all — self-contained, like Artists · Stats.
     const byId = new Map(blocksList.map(b => [b.id, b]))
     for (const g of groupPaletteBlocks(blocksList)) {
       if (g.label === 'Layout') continue
-      if (g.label === 'Reservations') {
+      if (g.label === 'Bookings') {
         for (const i of g.items) expect(byId.get(i.blockId)!.configSchema?.some(f => f.name === 'collection'), i.blockId).toBe(false)
         continue
       }
