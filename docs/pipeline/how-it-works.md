@@ -49,7 +49,9 @@ exact word they reply.
    never merges by itself), a PR the build review held after two rejected rounds, and a PR where the
    build review asked a `needs-owner` question (step 5). On a v1 epic branch the workflow only
    writes the `Merge decision` check, and GitHub merges once `CI Gate` + `Merge decision` are green —
-   see [the pipeline v1 guide](./README.md).
+   see [the pipeline v1 guide](./README.md). A `work-*` PR straight into `main` merges on the
+   owner's `ok`, or by itself when every changed file is in the incubator stage and the build review
+   said go on its current commit (#3757); the merge check logs the reason.
 7. **Epic → `main`.** The epic PR merges only on **the owner's `ok`**, and only when both `CI Gate`
    and `E2E Gate` have passed (the `approve-epic` job in `on-comment.yml`, decided by
    `scripts/epic-merge-decision.mjs`).
