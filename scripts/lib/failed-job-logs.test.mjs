@@ -59,5 +59,19 @@ test('(f) fetch throw or empty -> could-not-fetch, others rendered', async () =>
 test('(g) fences and mentions neutralised', async () => {
   const md = await renderFailedJobLogs([job(1, 'A')], async () => 'x ``` @pmcp\n##[error]bad')
   assert.match(md, /x ''' @pmcp/)
-  assert.equal(md.split('```').length, 3)
+  // two fences: the Stopped-at block for `##[error]bad` (#3666) and the tail; the log's own ``` is neutralised
+  assert.equal(md.split('```').length, 5)
+})
+
+test('(h) a not ok line is quoted first as Stopped at: (#3666)', async () => {
+  const log = ['2026-11-05T10:00:00.0000000Z ok 2 - y', '2026-11-05T10:00:00.0000000Z not ok 3 - x', '2026-11-05T10:00:01.0000000Z ##[error]Process completed with exit code 1.'].join('\n')
+  const md = await renderFailedJobLogs([job(1, 'A')], async () => log)
+  assert.ok(md.startsWith('### A\nStopped at:\n```\n2: not ok 3 - x\n```\n```\n'), md)
+  assert.ok(md.indexOf('Stopped at:') < md.indexOf('ok 2 - y'))
+})
+
+test('(i) no cause line -> no Stopped at: block', async () => {
+  const md = await renderFailedJobLogs([job(1, 'Fallow Audit')], async () => FALLOW)
+  assert.doesNotMatch(md, /Stopped at:/)
+  assert.ok(md.startsWith('### Fallow Audit\n```\n'))
 })

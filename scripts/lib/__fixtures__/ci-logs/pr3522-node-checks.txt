@@ -1,0 +1,79 @@
+# #3666 fixture: trimmed raw log of job 128191515744 (PR #3522, Node checks); ESC rendered as ^[
+2026-11-06T22:27:44.5527246Z   ...
+2026-11-06T22:27:44.5527590Z # Subtest: validate rejects a non-boolean editGuard
+2026-11-06T22:27:44.5527914Z ok 564 - validate rejects a non-boolean editGuard
+2026-11-06T22:27:44.5528261Z   ---
+2026-11-06T22:27:44.5528440Z   duration_ms: 0.415381
+2026-11-06T22:27:44.5528582Z   type: 'test'
+2026-11-06T22:27:44.5528715Z   ...
+2026-11-06T22:27:44.5529025Z # Subtest: validate rejects an unknown gate id
+2026-11-06T22:27:44.5529309Z ok 565 - validate rejects an unknown gate id
+2026-11-06T22:27:44.5529440Z   ---
+2026-11-06T22:27:44.5529595Z   duration_ms: 0.269216
+2026-11-06T22:27:44.5529735Z   type: 'test'
+2026-11-06T22:27:44.5529870Z   ...
+2026-11-06T22:27:44.5530147Z # Subtest: labels.yml parses to a real list
+2026-11-06T22:27:44.5530421Z ok 566 - labels.yml parses to a real list
+2026-11-06T22:27:44.5530560Z   ---
+2026-11-06T22:27:44.5530706Z   duration_ms: 1.28758
+2026-11-06T22:27:44.5530847Z   type: 'test'
+2026-11-06T22:27:44.5530978Z   ...
+2026-11-06T22:27:44.5531433Z # Subtest: every label description fits GitHub's 100-character limit
+2026-11-06T22:27:44.5531911Z not ok 567 - every label description fits GitHub's 100-character limit
+2026-11-06T22:27:44.5532040Z   ---
+2026-11-06T22:27:44.5532201Z   duration_ms: 1.880455
+2026-11-06T22:27:44.5532349Z   type: 'test'
+2026-11-06T22:27:44.5532942Z   location: '/home/runner/work/nuxt-crouton/nuxt-crouton/scripts/labels-yml.test.mjs:39:1'
+2026-11-06T22:27:44.5533167Z   failureType: 'testCodeFailure'
+2026-11-06T22:27:44.5533334Z   error: |-
+2026-11-06T22:27:44.5533759Z     GitHub rejects these and the label sync stops: pipeline:v1 (179 chars)
+2026-11-06T22:27:44.5533921Z     + actual - expected
+2026-11-06T22:27:44.5534056Z     
+2026-11-06T22:27:44.5534187Z     + [
+2026-11-06T22:27:44.5534391Z     +   'pipeline:v1 (179 chars)'
+2026-11-06T22:27:44.5534525Z     + ]
+2026-11-06T22:27:44.5534664Z     - []
+2026-11-06T22:27:44.5534990Z     
+2026-11-06T22:27:44.5535149Z   code: 'ERR_ASSERTION'
+2026-11-06T22:27:44.5535317Z   name: 'AssertionError'
+2026-11-06T22:27:44.5535453Z   expected:
+2026-11-06T22:27:44.5535591Z   actual:
+2026-11-06T22:27:44.5535796Z     0: 'pipeline:v1 (179 chars)'
+2026-11-06T22:27:44.5535967Z   operator: 'deepStrictEqual'
+…trimmed…
+2026-11-06T22:27:49.1309444Z # todo 0
+2026-11-06T22:27:49.1309689Z # duration_ms 8372.860272
+2026-11-06T22:27:49.1382793Z ##[error]Process completed with exit code 1.
+2026-11-06T22:27:49.1538514Z Post job cleanup.
+2026-11-06T22:27:49.2425584Z [command]/usr/bin/git version
+…trimmed…
+2026-11-06T22:27:49.2529940Z Temporarily overriding HOME='/home/runner/work/_temp/a6296c26-d14a-4036-9adb-53d43e04a971' before making global git config changes
+2026-11-06T22:27:49.2531756Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-06T22:27:49.2535181Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-06T22:27:49.2572770Z Removing SSH command configuration
+2026-11-06T22:27:49.2579936Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-06T22:27:49.2636625Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-06T22:27:49.2954689Z Removing HTTP extra header
+2026-11-06T22:27:49.2961711Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-06T22:27:49.3004413Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-06T22:27:49.3331055Z Removing includeIf entries pointing to credentials config files
+2026-11-06T22:27:49.3339437Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-06T22:27:49.3367927Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-06T22:27:49.3368835Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-06T22:27:49.3369402Z includeif.gitdir:/github/workspace/.git.path
+2026-11-06T22:27:49.3369852Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-06T22:27:49.3376760Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-06T22:27:49.3403407Z /home/runner/work/_temp/git-credentials-7485f030-957a-49e9-b18e-1faab9c6cb02.config
+2026-11-06T22:27:49.3416946Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-7485f030\-957a\-49e9\-b18e\-1faab9c6cb02\.config
+2026-11-06T22:27:49.3457937Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-06T22:27:49.3484132Z /home/runner/work/_temp/git-credentials-7485f030-957a-49e9-b18e-1faab9c6cb02.config
+2026-11-06T22:27:49.3495338Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-7485f030\-957a\-49e9\-b18e\-1faab9c6cb02\.config
+2026-11-06T22:27:49.3531659Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-06T22:27:49.3556038Z /github/runner_temp/git-credentials-7485f030-957a-49e9-b18e-1faab9c6cb02.config
+2026-11-06T22:27:49.3566218Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-7485f030\-957a\-49e9\-b18e\-1faab9c6cb02\.config
+2026-11-06T22:27:49.3599306Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-06T22:27:49.3623504Z /github/runner_temp/git-credentials-7485f030-957a-49e9-b18e-1faab9c6cb02.config
+2026-11-06T22:27:49.3631871Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-7485f030\-957a\-49e9\-b18e\-1faab9c6cb02\.config
+2026-11-06T22:27:49.3667089Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-06T22:27:49.3966528Z Removing credentials config '/home/runner/work/_temp/git-credentials-7485f030-957a-49e9-b18e-1faab9c6cb02.config'
+2026-11-06T22:27:49.4153953Z Cleaning up orphan processes
