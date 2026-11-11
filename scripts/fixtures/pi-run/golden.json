@@ -1,0 +1,193 @@
+{
+ "worker": {
+  "agent": "pi-worker",
+  "vars": {
+   "issue": "1",
+   "branch_instr": "branch off main and target the PR at main"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": []
+ },
+ "worker-epic": {
+  "agent": "pi-worker",
+  "vars": {
+   "issue": "1",
+   "branch_instr": "branch off the integration branch 'epic/1--x' and target the PR THERE (not main)"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": []
+ },
+ "worker-approved": {
+  "agent": "pi-worker",
+  "vars": {
+   "issue": "1",
+   "branch_instr": "branch off main and target the PR at main"
+  },
+  "tail": "\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment 200, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test\n",
+  "files": {
+   "approved-plan.txt": "<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test\n"
+  },
+  "leftover": [
+   "approved-plan.txt",
+   "approved-section.txt"
+  ]
+ },
+ "revise": {
+  "agent": "pi-reviser",
+  "vars": {
+   "pr": "55",
+   "issue": "1",
+   "feedback": "@feedback.txt"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": [
+   "feedback.txt"
+  ]
+ },
+ "conflict": {
+  "agent": "pi-conflict-resolver",
+  "vars": {
+   "pr": "77",
+   "issue": "1",
+   "branch": "epic/1--x",
+   "task": "@conflict-task.txt",
+   "feedback": "@feedback.txt"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": [
+   "conflict-task.txt",
+   "feedback.txt"
+  ]
+ },
+ "plan": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "1"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": []
+ },
+ "plan-bot": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "1"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (by the plan reviewer). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n",
+  "files": {
+   "feedback.txt": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "plan-owner": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "1"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (the OWNER replied with guidance on a held plan - treat their comment as authoritative direction). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\nPlease also cover the revise mode.\n\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n",
+  "files": {
+   "feedback.txt": "Please also cover the revise mode.\n\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "plan-fresh": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "1"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (the OWNER replied with guidance on a held plan - treat their comment as authoritative direction). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\nThis went the wrong way. Let's START FRESH with a smaller scope.\n\n\nThe feedback says START FRESH: discard the previous plan, write a new one, and check it with `--revised --fresh`.\n",
+  "files": {
+   "feedback.txt": "This went the wrong way. Let's START FRESH with a smaller scope.\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "plan-decisions": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "2"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (by the plan reviewer). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n## Decisions  \n- 2026-11-01 keep the jq file → why\n- 2026-11-02 no new deps\n### Decisions (sub)\nstill inside\n",
+  "files": {
+   "feedback.txt": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "fail-user-type": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "2"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (the OWNER replied with guidance on a held plan - treat their comment as authoritative direction). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n## Decisions  \n- 2026-11-01 keep the jq file → why\n- 2026-11-02 no new deps\n### Decisions (sub)\nstill inside\n",
+  "files": {
+   "feedback.txt": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "fail-prev-plan": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "2"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (by the plan reviewer). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n## Decisions  \n- 2026-11-01 keep the jq file → why\n- 2026-11-02 no new deps\n### Decisions (sub)\nstill inside\n",
+  "files": {
+   "feedback.txt": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "fail-decisions": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "2"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (by the plan reviewer). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n",
+  "files": {
+   "feedback.txt": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "fail-pr-lookup": {
+  "agent": "pi-reviser",
+  "vars": {
+   "pr": "",
+   "issue": "1",
+   "feedback": "@feedback.txt"
+  },
+  "tail": "",
+  "files": {},
+  "leftover": [
+   "feedback.txt"
+  ]
+ }
+}

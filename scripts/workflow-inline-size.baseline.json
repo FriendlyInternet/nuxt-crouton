@@ -33,7 +33,6 @@
     ".github/workflows/warn-closes-blocked.yml › warn › #0 › script": 64,
     ".github/workflows/work-issue-pidev.yml › work-pi › conflict › run": 59,
     ".github/workflows/work-issue-pidev.yml › work-pi › finish › run": 570,
-    ".github/workflows/work-issue-pidev.yml › work-pi › pi › run": 123,
     ".github/workflows/work-issue-pidev.yml › work-pi › revise › run": 73
   }
 }

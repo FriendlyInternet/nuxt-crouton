@@ -218,8 +218,13 @@ test('on-comment.yml has a job per new router choice and passes planHeld from pl
   assert.match(onComment, /NEEDS_REASON/)
 })
 test('work-issue-pidev.yml builds the approved section through plan-held.mjs', () => {
-  assert.match(build, /node scripts\/plan-held\.mjs --approved-prompt --plan-id "\$APPROVED_PLAN_ID" --plan-file "\$RUNNER_TEMP\/approved-plan\.txt" --issue "\$ISSUE" > "\$RUNNER_TEMP\/approved-section\.txt"/)
-  assert.match(build, /cat "\$RUNNER_TEMP\/approved-section\.txt" >> "\$PROMPT_FILE"/)
-  assert.match(build, /--jq \.body > "\$RUNNER_TEMP\/approved-plan\.txt"/)
+  // #3620: the step calls scripts/pi-run.mjs, which fetches the plan into approved-plan.txt and
+  // renders the section with plan-held.mjs's approvedPromptSection (no inline header text anywhere).
+  const piRun = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
+  assert.match(build, /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  assert.match(piRun, /const \{ approvedPromptSection \} = await import\('\.\/plan-held\.mjs'\)/)
+  assert.match(piRun, /join\(tmp, 'approved-plan\.txt'\)/)
+  assert.match(piRun, /'--jq', '\.body'\]\)\)/)
   assert.equal(build.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
+  assert.equal(piRun.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
 })

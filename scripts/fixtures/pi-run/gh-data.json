@@ -1,0 +1,20 @@
+{
+  "comments": {
+    "100": { "id": 100, "body": "<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n", "user": { "type": "Bot" } },
+    "101": { "id": 101, "body": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case", "user": { "type": "Bot" } },
+    "102": { "id": 102, "body": "Please also cover the revise mode.\n", "user": { "type": "User" } },
+    "103": { "id": 103, "body": "This went the wrong way. Let's START FRESH with a smaller scope.", "user": { "type": "User" } },
+    "200": { "id": 200, "body": "<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test", "user": { "type": "Bot" } }
+  },
+  "issues": {
+    "1": {
+      "body": "## Hypothesis\nWe think that\n\n## 🧪 How to test\n1. run it",
+      "comments": [100, 101, 102, 103]
+    },
+    "2": {
+      "body": "## Hypothesis\nWe think that\n\n## Decisions  \n- 2026-11-01 keep the jq file → why\n- 2026-11-02 no new deps\n### Decisions (sub)\nstill inside\n## 🧪 How to test\n1. run it",
+      "comments": [100, 101]
+    }
+  },
+  "prs": { "work-1": 55, "epic/1--x": 77 }
+}
