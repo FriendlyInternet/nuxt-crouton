@@ -60,4 +60,21 @@ describe('empty board (#3808)', () => {
     expect(next?.root).toEqual(leaf)
     expect(next?.breakpoints?.find(b => b.minWidth === 768)?.root).toBeUndefined()
   })
+
+  it('a chosen width with no layout of its own: removing the only block leaves an empty board', () => {
+    const oneLeafTree: LayoutTree = { renderer: 'panes', root: leaf }
+    expect(editRoot(oneLeafTree, removeNode(leaf, []), 390)).toBeNull()
+    // a width-only breakpoint that sets no root (e.g. collapsed blocks) doesn't hold the arrangement
+    const collapsedOnly: LayoutTree = { renderer: 'panes', root: leaf, breakpoints: [{ minWidth: 768, collapsed: ['artists-list'] }] }
+    expect(editRoot(collapsedOnly, null, 1024)).toBeNull()
+  })
+
+  it('a chosen width above an override: removing the last block drops that override', () => {
+    const tree: LayoutTree = { renderer: 'panes', root: leaf, breakpoints: [{ minWidth: 768, root: other }] }
+    const next = editRoot(tree, null, 1024)
+    expect(next).not.toBeNull()
+    expect(next).not.toEqual(tree)
+    expect(next?.root).toEqual(leaf)
+    expect(next?.breakpoints).toBeUndefined()
+  })
 })

@@ -14,15 +14,21 @@ export interface BoardVariant { id: string, name: string, tree: LayoutTree | nul
  * Apply an edit's new root to the variant's tree.
  * - empty board: the first block becomes the base layout (whatever the width);
  * - base layout (`writeTarget` null): no root left ⇒ the board is empty;
- * - at a width: no root left ⇒ that width stops overriding the arrangement and
- *   shows the base layout again (the breakpoint goes if `root` was all it held).
+ * - at a width: no root left ⇒ the arrangement in view goes. That is the nearest
+ *   breakpoint at or below the width that sets a `root` (it stops overriding and the
+ *   layout below shows again; the breakpoint goes if `root` was all it held) — or,
+ *   when no breakpoint sets one, the base layout, so the board is empty.
  */
 export function editRoot(tree: LayoutTree | null, next: LayoutNode | null, writeTarget: number | null): LayoutTree | null {
   if (!tree) return next ? { renderer: 'panes', root: next } : null
   if (writeTarget === null) return next ? { ...tree, root: next } : null
   if (next) return patchBreakpoint(tree, writeTarget, { root: next })
+  const source = (tree.breakpoints ?? [])
+    .filter(b => b.root !== undefined && b.minWidth <= writeTarget)
+    .reduce<number | null>((max, b) => (max === null || b.minWidth > max ? b.minWidth : max), null)
+  if (source === null) return null
   const list = (tree.breakpoints ?? []).flatMap((b) => {
-    if (b.minWidth !== writeTarget) return [b]
+    if (b.minWidth !== source) return [b]
     const { root: _drop, ...rest } = b
     return Object.keys(rest).length > 1 ? [rest] : []
   })
