@@ -162,7 +162,7 @@ jobs:
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
             const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-            const { decideLeafMerge, withoutMergeDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideLeafMerge, withoutMergeDecision, changedPaths /* #3757: renames keep their old path */ } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { isV1Base, v1Enabled } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
             const { runV1, v1OffSwitch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/v1-merge-io.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
@@ -353,7 +353,7 @@ jobs:
                 if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                if (leafToMain && !go.go && reviewSt.kind === 'other') fileNames = (await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })).map(f => f.filename)
+                if (leafToMain && !go.go && reviewSt.kind === 'other') fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number }))
                 gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, files: fileNames, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
@@ -373,7 +373,7 @@ jobs:
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
               // workflows, but a workflow change never self-merges.
-              if (!fileNames) fileNames = (await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })).map(f => f.filename) // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
+              if (!fileNames) fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })) // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
               const { decideSharedCodeHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/shared-code-hold.mjs`)
               const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: fileNames })
               const sharedCode = hold.held

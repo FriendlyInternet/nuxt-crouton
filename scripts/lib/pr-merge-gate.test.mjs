@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly, changedPaths } from './pr-merge-gate.mjs'
+import { readFileSync } from 'node:fs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -469,6 +470,27 @@ test('3757-9. stage is read from the model, not the folder name', () => {
   assert.equal(isIncubatorOnly(['spikes/a.ts'], model), true)
   assert.equal(isIncubatorOnly(['pocs/a.ts'], model), false)
   assert.equal(isIncubatorOnly(['pocs/a.ts']), true)
+})
+
+test('3757-10. a rename out of packages/ into pocs/ counts the old path too → no-ok hold', () => {
+  const entries = [
+    { filename: 'pocs/crouton-builder/x.ts', previous_filename: 'packages/x.ts', status: 'renamed' },
+    { filename: 'pocs/crouton-builder/y.vue', status: 'modified' },
+  ]
+  assert.deepEqual(changedPaths(entries), ['pocs/crouton-builder/x.ts', 'packages/x.ts', 'pocs/crouton-builder/y.vue'])
+  assert.equal(inc({ files: changedPaths(entries) }).code, 'no-ok')
+  // a rename that stays inside the incubator still merges
+  assert.equal(inc({ files: changedPaths([{ filename: 'pocs/a/x.ts', previous_filename: 'pocs/b/x.ts' }]) }).merge, true)
+})
+test('3757-11. the workflow builds every changed-file list with changedPaths (renames keep their old path)', () => {
+  const yml = readFileSync(new URL('../../.github/workflows/automerge-epic-subpr.yml', import.meta.url), 'utf8')
+  const lists = yml.split('\n').filter((l) => l.includes('pulls.listFiles'))
+  assert.ok(lists.length >= 2)
+  for (const l of lists) {
+    assert.match(l, /changedPaths\(await github\.paginate\(github\.rest\.pulls\.listFiles/)
+    assert.doesNotMatch(l, /\.map\(f => f\.filename\)/)
+  }
+  assert.match(yml, /const \{ decideLeafMerge, withoutMergeDecision, changedPaths\b[^}]*\} = await import/)
 })
 
 test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {

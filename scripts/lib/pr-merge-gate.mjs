@@ -15,7 +15,7 @@ import { stages, unstaged } from '../../harness.config.mjs'
 //   work-* → main  : the owner's `ok` IS the review (the reviewer only labels epic-based PRs, so a
 //                    `build:approved` requirement could never be met and `ok` merged nothing)
 //   work-* → main, every file in the incubator stage + build review go on the current head → merges
-//                    without the owner's ok (#3757); `files` is the PR's changed-file list
+//                    without the owner's ok (#3757); `files` is changedPaths() of the PR's listFiles (a rename counts its old path too)
 //   epic/* → main  : not decided here — scripts/epic-merge-decision.mjs owns it (#3105)
 //   work-* → epic/*: `build:approved`, OR the owner's `ok` given AFTER the reviewer's final "rejected
 //                    twice" hold on this commit (#3173) — `ownerHold` is {kind, at} from reviewState() when kind is final or needs-owner (#3428), else null
@@ -44,6 +44,12 @@ const preflight = ({ baseRef, head, red, ciGate, mergeableState }) => {
 // An empty or missing list never counts (`[].every()` is true).
 export function isIncubatorOnly(files, model = { stages, unstaged }) {
   return Array.isArray(files) && files.length > 0 && files.every((f) => stageForPath(f, model).stage.deploy === 'preview')
+}
+
+// #3757: every path a PR touches, from GitHub's listFiles entries — a rename counts BOTH its new name and its
+// old one (`previous_filename`), so moving packages/x.ts → pocs/x.ts is not seen as incubator-only.
+export function changedPaths(entries = []) {
+  return [...new Set(entries.flatMap((f) => [f.filename, f.previous_filename]).filter(Boolean))]
 }
 
 const mainDecision = ({ go, ownerHold, short, headReview, reviewedGo, files, ok }) => {
