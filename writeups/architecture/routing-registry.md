@@ -20,6 +20,7 @@ Default tier: **medium**
 | Agent / flow | Current tier | Claude model | pi / local | $out/Mtok | Proposed | Why |
 |---|---|---|---|---|---|---|
 | `ticket-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent ticket review before an epic starts (#2776) — reads the epic, its tickets and the code they name, returns go / no-go / needs-owner per ticket; never edits. Same tier and model as plan-reviewer |
+| `ticket-reviser` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | rewrites sent-back tickets from the ticket review's findings (#3787); never adds/removes approval lines |
 | `build-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits |
 | `plan-reviewer` | review | claude-opus-5-5 | claude-opus-5-5 | $75 | — | independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27 |
 | `task-worker` | large | claude-opus-5-5 | claude-opus-5-5 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
