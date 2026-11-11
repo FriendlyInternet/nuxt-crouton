@@ -212,6 +212,9 @@ function teamDb({ locations, bookings }) {
   d.exec(`
     CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
     CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    -- #3141: an existing review user now has its password reset before sign-in
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
+    INSERT INTO "account" VALUES ('a1', 'u1', 'credential', 'hash(old)');
     CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
     CREATE TABLE "bookings_locations" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
     CREATE TABLE "bookings_bookings" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
@@ -328,6 +331,108 @@ test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break
   assert.equal(row.role, 'owner')
   assert.ok(d.prepare('SELECT 1 FROM "member" WHERE "id" = ?').get('keep'), 'bystander row survives')
   assert.equal(d.prepare('SELECT count(*) AS n FROM "member"').get().n, 2)
+})
+
+// ── #3141 (R4): look the account up first — the review login survives e-mail verification ──
+// In an app with crouton-email, sign-up of an existing address returns 200 with no
+// session (not 422), and a new account gets no session until it is verified. These run
+// the real script against a real sqlite file and a fake Worker that enforces both rules.
+import { reviewerExistsSql } from './seed-review-login.mjs'
+
+const R4_EMAIL = 'review+t@example.com'
+
+function r4Db({ withUser }) {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-3141-'))
+  const file = join(dir, 'sqlite.db')
+  const d = new DatabaseSync(file)
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
+  `)
+  if (withUser) {
+    d.exec(`INSERT INTO "user" VALUES ('u1', '${R4_EMAIL}', 0);
+      INSERT INTO "account" VALUES ('a1', 'u1', 'credential', 'hash-of-an-old-password');`)
+  }
+  d.close()
+  return file
+}
+
+const row = (file, sql) => {
+  const d = new DatabaseSync(file)
+  try { return d.prepare(sql).get() } finally { d.close() }
+}
+
+async function runR4(file, handle) {
+  const calls = []
+  const server = createServer(async (req, res) => {
+    calls.push({ url: req.url, cookie: req.headers.cookie || '' })
+    const { status = 200, body = {}, headers = {} } = (await handle(req.url)) || {}
+    res.writeHead(status, { 'content-type': 'application/json', ...headers })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const result = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', R4_EMAIL, '--password', 'pw', '--sqlite', file],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  return { ...result, calls }
+}
+
+const SESSION_COOKIE = { 'set-cookie': 'better-auth.session_token=tok; Path=/; HttpOnly' }
+
+test('R4 existing review account whose password changed still gets a working login', async () => {
+  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+  const { verifyPassword } = await import(req.resolve('better-auth/crypto'))
+  const file = r4Db({ withUser: true })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-up/email') return { body: { token: null } } // verification on: hides "exists"
+    if (path === '/api/auth/sign-in/email') {
+      const { password } = row(file, `SELECT "password" FROM "account" WHERE "userId" = 'u1'`)
+      const ok = await verifyPassword({ hash: password, password: 'pw' }).catch(() => false)
+      return ok ? { body: { token: 'tok' }, headers: SESSION_COOKIE } : { status: 401, body: { code: 'INVALID_EMAIL_OR_PASSWORD' } }
+    }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u1' }, session: {} } }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.notEqual(row(file, `SELECT "password" FROM "account" WHERE "id" = 'a1'`).password, 'hash-of-an-old-password')
+  assert.equal(row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u1'`).v, 1)
+  assert.equal(r.calls.filter(c => c.url === '/api/auth/sign-up/email').length, 0, 'sign-up is never called')
+})
+
+test('R4 new account in an app that requires verification', async () => {
+  const file = r4Db({ withUser: false })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-up/email') {
+      const d = new DatabaseSync(file)
+      d.exec(`INSERT INTO "user" VALUES ('u9', '${R4_EMAIL}', 0)`)
+      d.close()
+      return { body: { token: null, user: { id: 'u9' } } } // no cookie: verification required
+    }
+    if (path === '/api/auth/sign-in/email') {
+      const { v } = row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u9'`)
+      return v ? { body: { token: 'tok' }, headers: SESSION_COOKIE } : { status: 403, body: { code: 'EMAIL_NOT_VERIFIED' } }
+    }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u9' }, session: {} } }
+    if (path === '/api/auth/organization/create') return { status: 403 }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u9'`).v, 1)
+  const session = r.calls.find(c => c.url === '/api/auth/get-session')
+  assert.ok(session, 'get-session was called')
+  assert.match(session.cookie, /better-auth\.session_token=tok/)
+})
+
+test('R4 reviewerExistsSql: matches regardless of letter case; quotes cannot break out', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT);
+    INSERT INTO "user" VALUES ('u1', 'review+velo-main@example.com');`)
+  assert.equal(d.prepare(reviewerExistsSql('Review+Velo-Main@Example.com')).get().n, 1)
+  assert.equal(d.prepare(reviewerExistsSql('nobody@example.com')).get().n, 0)
+  assert.equal(d.prepare(reviewerExistsSql("x' OR '1'='1")).get().n, 0)
 })
 
 test('#3533 memberUpsertSql: re-running updates the same row (idempotent)', () => {

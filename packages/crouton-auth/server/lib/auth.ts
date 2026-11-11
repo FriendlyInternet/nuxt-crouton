@@ -69,6 +69,23 @@ export interface CreateAuthOptions {
   baseURL: string
   /** Optional Drizzle schema for custom table names */
   schema?: Record<string, unknown>
+  /**
+   * Require a verified e-mail before password sign-in, and send the
+   * verification e-mail on sign-up (#3141). Default `false`. `useServerAuth`
+   * sets it from `isEmailVerificationRequired(runtimeConfig)` — on exactly when
+   * the app can send e-mail (crouton-email installed).
+   */
+  requireEmailVerification?: boolean
+}
+
+/**
+ * Can this app send e-mail? True only when the crouton-email layer is installed —
+ * it is the only package that defines `runtimeConfig.public.crouton.email` (#3141).
+ * Apps without it keep instant sign-up, since a verification e-mail could never
+ * arrive there.
+ */
+export function isEmailVerificationRequired(runtimeConfig: unknown): boolean {
+  return !!(runtimeConfig as { public?: { crouton?: { email?: unknown } } } | undefined)?.public?.crouton?.email
 }
 
 /**
@@ -77,7 +94,9 @@ export interface CreateAuthOptions {
  * This factory function creates a Better Auth instance with:
  * - Drizzle adapter for database operations
  * - Session configuration from @crouton/auth config
- * - Email/password authentication (configurable)
+ * - Email/password authentication (configurable); a password reset signs out
+ *   every session, and with `requireEmailVerification` sign-up needs a
+ *   verified e-mail before password sign-in (#3141)
  * - Base configuration that can be extended with plugins
  *
  * @param options - Configuration options
@@ -90,7 +109,8 @@ export function createAuth(options: CreateAuthOptions) {
     provider = 'sqlite',
     secret,
     baseURL,
-    schema
+    schema,
+    requireEmailVerification = false
   } = options
 
   // Build Better Auth configuration
@@ -108,9 +128,9 @@ export function createAuth(options: CreateAuthOptions) {
     secret,
 
     // Email and password configuration
-    emailAndPassword: buildEmailPasswordConfig(config),
+    emailAndPassword: buildEmailPasswordConfig(config, requireEmailVerification),
 
-    // Email verification (required for changeEmail)
+    // Email verification (changeEmail; and, with crouton-email, sign-up — #3141)
     emailVerification: {
       sendVerificationEmail: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
         if (config.debug) {
@@ -125,7 +145,14 @@ export function createAuth(options: CreateAuthOptions) {
           userName: user.name
         }).catch(() => {})
       },
-      sendOnSignUp: false
+      // Must follow the signal: better-auth uses `sendOnSignUp ?? requireEmailVerification`,
+      // so a hard-coded `false` would require verification but never send the e-mail.
+      sendOnSignUp: requireEmailVerification,
+      // An unverified user who tries to sign in gets a fresh link — the resend
+      // button on /auth/verify-email needs a session they cannot get.
+      sendOnSignIn: requireEmailVerification,
+      // The link signs them in and lands on the sign-up callbackURL (e.g. an invite page).
+      autoSignInAfterVerification: true
     },
 
     // User configuration (changeEmail)
@@ -182,7 +209,10 @@ export function createAuth(options: CreateAuthOptions) {
 /**
  * Build email/password configuration from @crouton/auth config
  */
-function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions['emailAndPassword'] {
+function buildEmailPasswordConfig(
+  config: CroutonAuthConfig,
+  requireEmailVerification = false
+): BetterAuthOptions['emailAndPassword'] {
   const passwordConfig = config.methods?.password
 
   // Check if password auth is enabled
@@ -196,6 +226,9 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
       enabled: true,
       autoSignIn: true,
       minPasswordLength: 8,
+      requireEmailVerification,
+      // A reset signs out every session, everywhere (#3141).
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
         if (config.debug) {
           console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
@@ -218,6 +251,9 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
     enabled: customConfig.enabled !== false,
     autoSignIn: true,
     minPasswordLength: customConfig.minLength ?? 8,
+    requireEmailVerification,
+    // A reset signs out every session, everywhere (#3141).
+    revokeSessionsOnPasswordReset: true,
     // Password reset
     sendResetPassword: customConfig.resetEnabled !== false
       ? async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {

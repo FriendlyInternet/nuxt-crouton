@@ -231,6 +231,10 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
 
+### Sign-up & password reset (#3141)
+
+E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.public.crouton.email` exists (only crouton-email defines it). It is read once, in `useServerAuth` via `isEmailVerificationRequired(config)`, and passed to `createAuth({ requireEmailVerification })`, which then sets `requireEmailVerification` + `sendOnSignUp` + `sendOnSignIn` (never a hard-coded `sendOnSignUp: false` — that would require verification but never send the mail). The verify link signs the user in (`autoSignInAfterVerification`) and lands on the sign-up `callbackURL` (`register({ callbackURL })`, sanitized), so an invitee returns to the invite page. `register()` returns `{ requiresVerification }`; the register modal then shows "check your email" instead of signing in. Apps without crouton-email keep instant sign-up. A password reset always revokes every session (`revokeSessionsOnPasswordReset`). Existing users were backfilled as verified (migration `*_verify_existing_users` in every app/POC/fixture). The staging review login (`scripts/seed-review-login.mjs`) looks the account up first and resets + verifies it server-side before signing in.
+
 ### Custom Domain Claims
 
 `domain` rows are unique per `(organizationId, domain)`, so a team's unverified (pending) claim never blocks another team. Only one team can hold a *verified* domain (partial unique index `domain_verified_uniq`). `POST /api/teams/[id]/domains` refuses a domain only if another team already has it verified; `.../domains/[domainId]/verify` refuses to verify if another team verified it first (409). Apps need migration `domain_per_team_pending` (kassa 0008, velo 0004).

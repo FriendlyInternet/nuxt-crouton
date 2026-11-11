@@ -23,7 +23,7 @@ This document details the security measures implemented in @crouton/auth and pro
 - Session tokens are hashed before storage (SHA-256)
 - Default expiry: 7 days (configurable)
 - Automatic session refresh on activity
-- Session invalidation on password change
+- A password reset signs out every session (`revokeSessionsOnPasswordReset`)
 
 ### CSRF Protection
 
@@ -49,6 +49,7 @@ croutonAuth: {
 
 - Passwords are hashed using Argon2id (memory-hard, resistant to GPU attacks)
 - Minimum password length: 8 characters (configurable)
+- When `@fyit/crouton-email` is installed, sign-up sends a verification e-mail and password sign-in is refused until it is clicked; apps without it sign up as before
 - Password reset tokens expire after 1 hour
 - Account lockout after failed attempts (configurable)
 

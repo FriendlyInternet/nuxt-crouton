@@ -43,6 +43,13 @@
       "when": 1794394238234,
       "tag": "0005_bookings_package",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794436394764,
+      "tag": "0006_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

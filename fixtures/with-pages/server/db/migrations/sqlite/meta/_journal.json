@@ -29,6 +29,13 @@
       "when": 1794330316513,
       "tag": "0003_moaning_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794436394764,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }
