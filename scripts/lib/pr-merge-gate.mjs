@@ -1,5 +1,7 @@
 import { decideSharedCodeHold } from '../shared-code-hold.mjs'
 import { isV1Base } from './pipeline-version.mjs'
+import { stageForPath } from '../harness-stages.mjs'
+import { stages, unstaged } from '../../harness.config.mjs'
 // The leaf merge rules for a PR the automerge workflow is about to merge (#3103) live in THIS FILE (#3491, #3461):
 //   decideReview()         who said yes (owner ok / build:approved on the reviewed head) — review only, no CI facts.
 //   decideLeafMerge()      preflight (red check, CI Gate, mergeable) + first-run rule + decideReview(); what today's workflow uses.
@@ -12,6 +14,8 @@ import { isV1Base } from './pipeline-version.mjs'
 //   `build:approved` only counts when the head itself was reviewed `go` (the label outlives a new push).
 //   work-* → main  : the owner's `ok` IS the review (the reviewer only labels epic-based PRs, so a
 //                    `build:approved` requirement could never be met and `ok` merged nothing)
+//   work-* → main, every file in the incubator stage + build review go on the current head → merges
+//                    without the owner's ok (#3757); `files` is the PR's changed-file list
 //   epic/* → main  : not decided here — scripts/epic-merge-decision.mjs owns it (#3105)
 //   work-* → epic/*: `build:approved`, OR the owner's `ok` given AFTER the reviewer's final "rejected
 //                    twice" hold on this commit (#3173) — `ownerHold` is {kind, at} from reviewState() when kind is final or needs-owner (#3428), else null
@@ -35,7 +39,15 @@ const preflight = ({ baseRef, head, red, ciGate, mergeableState }) => {
   return null
 }
 
-const mainDecision = ({ go, ownerHold, short, headReview, reviewedGo, ok }) => {
+// #3757: true only when there IS a file list and every file resolves to the incubator stage —
+// identified by `deploy: 'preview'`, never the stage key, so a poc→spike rename keeps working.
+// An empty or missing list never counts (`[].every()` is true).
+export function isIncubatorOnly(files, model = { stages, unstaged }) {
+  return Array.isArray(files) && files.length > 0 && files.every((f) => stageForPath(f, model).stage.deploy === 'preview')
+}
+
+const mainDecision = ({ go, ownerHold, short, headReview, reviewedGo, files, ok }) => {
+  if (!go?.go && reviewedGo && isIncubatorOnly(files)) return ok(`incubator-only, review go on ${short}`)
   if (!go?.go) return hold('no-ok', "waits for the owner's ok")
   if (go.mergeSince && !reviewedGo && !okAfter(go, ownerHold)) {
     return hold('head-unreviewed', `a base merge landed after the owner's ok — waits for the build review of ${short} (now: ${headReview?.kind})`)
@@ -54,18 +66,18 @@ const epicDecision = ({ labels, go, ownerHold, short, reviewedGo, ok }) => {
   return hold('no-review', "no 'build:approved' yet")
 }
 
-export function decideReview({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' } }) {
+export function decideReview({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, files }) {
   const ok = (r) => ({ merge: true, code: 'merge', reason: r })
-  const ctx = { labels, go, ownerHold, headReview, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
+  const ctx = { labels, go, ownerHold, headReview, files, ok, reviewedGo: headReview?.kind === 'other', short: String(headSha || '').slice(0, 8) }
   return baseRef === 'main' ? mainDecision(ctx) : epicDecision(ctx)
 }
 
-export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, red = false, firstRun = [], ciGate, mergeableState }) {
+export function decideLeafMerge({ baseRef, headRef, labels = [], go, ownerHold = null, headSha = '', headReview = { kind: 'pending' }, files, red = false, firstRun = [], ciGate, mergeableState }) {
   const blocked = preflight({ baseRef, head: String(headRef), red, ciGate, mergeableState })
   if (blocked) return blocked
   const names = firstRun.join(', ')
   if (firstRun.length && !go?.go) return hold('first-run-no-ok', `first-run check ${names} waits for the owner's ok`)
-  const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview })
+  const r = decideReview({ baseRef, headRef, labels, go, ownerHold, headSha, headReview, files })
   if (r.merge && firstRun.length) return { ...r, reason: `${r.reason}; first-run check ${names} ignored after owner ok`, firstRun }
   return r
 }

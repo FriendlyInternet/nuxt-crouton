@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly } from './pr-merge-gate.mjs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -418,6 +418,59 @@ test('mergeDecisionCheck owner-held title', () => {
   assert.equal(c.status, 'in_progress')
   assert.equal(c.conclusion, undefined)
 })
+// ---- #3757: a POC-only work-* → main PR merges on a build-review go, without the owner's ok ----
+const HEAD3757 = 'ae8ea0fd1234567890'
+const POC = ['pocs/crouton-builder/app/pages/index.vue', 'pocs/crouton-builder/package.json']
+const inc = (o = {}) => leaf({ go: { go: false }, headSha: HEAD3757, headReview: { kind: 'other' }, files: POC, ...o })
+test('3757-1. incubator-only: all files under pocs/crouton-builder/ + review go on head + green → merge, reason names incubator', () => {
+  const r = inc()
+  assert.equal(r.merge, true)
+  assert.match(r.reason, /incubator-only/)
+  assert.ok(r.reason.includes('ae8ea0fd'))
+})
+test('3757-2. incubator-only: one file outside pocs/ → no-ok hold', () => {
+  for (const f of ['packages/x.ts', '.github/workflows/x.yml', 'scripts/x.mjs', 'apps/velo/x.vue', 'pnpm-lock.yaml']) {
+    assert.equal(inc({ files: [...POC, f] }).code, 'no-ok', f)
+  }
+})
+test('3757-3. incubator-only but review not go on head → hold', () => {
+  for (const kind of ['round1', 'pending', 'failed']) assert.equal(inc({ headReview: { kind } }).merge, false, kind)
+  const goOld = { user: { login: 'app[bot]', type: 'Bot' }, created_at: '2026-11-10T10:00:00Z',
+    body: '<!-- build-review-sha:OLD -->\n<!-- build-review-verdict:go -->\n\n✅ go\n' }
+  const st = reviewState({ comments: [goOld], headSha: 'NEW', bots: ['app[bot]'] })
+  assert.equal(st.kind, 'pending')
+  assert.equal(inc({ headSha: 'NEW', headReview: st }).merge, false)
+})
+test('3757-4. incubator-only + review go but a red check / CI Gate pending / first-run → hold', () => {
+  assert.equal(inc({ red: true }).code, 'red')
+  assert.equal(inc({ ciGate: 'pending' }).code, 'ci-pending')
+  assert.equal(inc({ firstRun: ['x'] }).code, 'first-run-no-ok')
+})
+test('3757-5. incubator-only with ownerHold (rejected twice / needs-owner) → still waits', () => {
+  for (const kind of ['final', 'needs-owner']) {
+    const h = { kind, at: '2026-11-10T10:00:00Z' }
+    assert.equal(inc({ headReview: h, ownerHold: h }).merge, false, kind)
+  }
+})
+test('3757-6. draft POC-only PR → hold (the workflow draft gate runs before decideLeafMerge)', () => {
+  assert.deepEqual(skipBeforeReads({ draft: true, authorIsPipeline: true, baseRef: 'main', headRef: 'work-1' }), { skip: true, code: 'draft' })
+})
+test('3757-7. owner ok still merges any PR', () => {
+  const r = leaf({ go: okGo, files: ['packages/x.ts'], headReview: { kind: 'pending' } })
+  assert.equal(r.merge, true)
+  assert.equal(r.reason, 'owner ok')
+})
+test('3757-8. missing or empty file list never counts as incubator-only', () => {
+  assert.equal(inc({ files: undefined }).code, 'no-ok')
+  assert.equal(inc({ files: [] }).code, 'no-ok')
+})
+test('3757-9. stage is read from the model, not the folder name', () => {
+  const model = { stages: { spike: { paths: ['spikes/'], deploy: 'preview' } }, unstaged: { deploy: 'none' } }
+  assert.equal(isIncubatorOnly(['spikes/a.ts'], model), true)
+  assert.equal(isIncubatorOnly(['pocs/a.ts'], model), false)
+  assert.equal(isIncubatorOnly(['pocs/a.ts']), true)
+})
+
 test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {
   const r = decideLeafMerge({ draft: false, authorIsPipeline: true, baseRef: 'epic/12-slug', headRef: 'work-5', labels: [], go: { go: false },
     ownerHold: { kind: 'final', at: HOLD_AT }, headReview: { kind: 'final', at: HOLD_AT }, headSha: SHA, files: ['scripts/a.mjs'], ciGate: 'success', mergeableState: 'clean' })
