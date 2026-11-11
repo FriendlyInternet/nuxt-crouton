@@ -525,6 +525,10 @@ jobs:
             node scripts/workflow-inline-size.mjs
           fi
 
+      # (#3730) No `if: IS_CODE`: a workflow-only PR is the one that adds or renames a workflow.
+      - name: Pipeline map up to date (#3730)
+        run: node scripts/gen-pipeline-map.mjs --check
+
       - name: Extract each `run:` block and lint it
         run: |
           set -uo pipefail

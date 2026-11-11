@@ -55,3 +55,10 @@ test('docs-only: stage none', () => {
   const r = run(['docs/x.md'])
   assert.equal(r.stage, 'none')
 })
+
+test('pipeline map edit runs node-checks', () => {
+  const r = run(['docs/pipeline/how-it-works.md'])
+  assert.equal(r.stage, 'none')
+  assert.equal(r.workflows, true)
+  assert.equal(run(['docs/x.md']).workflows, false)
+})

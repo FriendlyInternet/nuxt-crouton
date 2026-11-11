@@ -367,7 +367,7 @@ Chromium is pre-installed at `/opt/pw-browsers`; `npx playwright install` fails 
 
 UI-touching → `ui-proposal` · collection schema → `schema-review` · `packages/*` logic → `test-review`. Which gate fires, each gate's scope, and what counts as approval (a reply that is only `ok`): `crouton-change-control`. Pipeline lane: `.claude/agents/task-worker.md`; plan→review→build for bugs/`packages/` work: `.claude/plan-routing.json`.
 
-**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing.
+**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing. The whole flow, step by step with each workflow file: `docs/pipeline/how-it-works.md` (its workflow table is generated — `node scripts/gen-pipeline-map.mjs`).
 
 ## Documentation Organization
 

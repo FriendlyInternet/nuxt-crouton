@@ -1,5 +1,7 @@
 # Pipeline v1 — a plain guide
 
+> **New here?** Start with [How a ticket becomes a merged change](./how-it-works.md). This page covers only pipeline v1 merging.
+
 > **Read this first:** this guide is part of [#3458 — pipeline versions](https://github.com/FriendlyInternet/nuxt-crouton/issues/3458).
 
 ## What it is
