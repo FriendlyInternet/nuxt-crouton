@@ -178,6 +178,30 @@ function onChipClick(blockId: string) {
   writeRoot(applyPaneDrop(r, { path: selected.value ?? [], edge }, newLeaf(blockId)))
 }
 
+// Grouped row (#3748): one chip per collection + Layout, each opening a menu of
+// its blocks. Unlinked generic blocks stay registered but aren't offered here.
+const paletteGroups = computed(() => groupPaletteBlocks(blocksList.value))
+const openGroup = ref<string | null>(null)
+// Once a held item arms a drag, the menu goes see-through so the board under the
+// finger receives it; it closes when the drag ends. (Unmounting it mid-gesture
+// would drop the touch's target and let the browser scroll instead.)
+const menuDragging = ref(false)
+watch(dragPayload, (p) => {
+  if (p && openGroup.value) menuDragging.value = true
+  else if (!p && menuDragging.value) {
+    menuDragging.value = false
+    openGroup.value = null
+  }
+})
+function setGroupOpen(key: string, open: boolean) {
+  if (open) openGroup.value = key
+  else if (openGroup.value === key && !menuDragging.value) openGroup.value = null
+}
+function onItemClick(blockId: string) {
+  openGroup.value = null
+  onChipClick(blockId)
+}
+
 // ── Save ───────────────────────────────────────────────────────────────────────
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
@@ -223,20 +247,43 @@ async function viewPage() {
       <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="sm" aria-label="View page" :disabled="!page?.slug || saveState === 'saving'" data-handoff="view-page" @click="viewPage" />
     </header>
 
-    <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
+    <!-- Palette strip: a chip per collection + Layout; its menu's blocks tap to add
+         beside the selection, or hold-and-drag onto a pane edge. -->
     <nav class="flex gap-2 overflow-x-auto border-b border-default px-2 py-2" data-handoff="palette">
-      <button
-        v-for="b in blocksList"
-        :key="b.id"
-        type="button"
-        class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
-        :data-block="b.id"
-        @pointerdown="onChipDown($event, b.id)"
-        @click="onChipClick(b.id)"
+      <UPopover
+        v-for="g in paletteGroups"
+        :key="g.key"
+        :open="openGroup === g.key"
+        :content="{ align: 'start' }"
+        :ui="{ content: menuDragging && openGroup === g.key ? 'opacity-0 pointer-events-none' : '' }"
+        @update:open="setGroupOpen(g.key, $event)"
       >
-        <UIcon :name="b.icon ?? 'i-lucide-box'" class="size-3.5" />
-        {{ b.name }}
-      </button>
+        <button
+          type="button"
+          class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs select-none"
+          :data-group="g.key"
+        >
+          <UIcon :name="g.icon" class="size-3.5" />
+          {{ g.label }}
+          <UIcon name="i-lucide-chevron-down" class="size-3 text-muted" />
+        </button>
+        <template #content>
+          <ul class="flex min-w-36 flex-col p-1" :data-handoff="`palette-menu-${g.key}`">
+            <li v-for="item in g.items" :key="item.blockId">
+              <button
+                type="button"
+                class="board-chip flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-elevated cursor-grab active:cursor-grabbing select-none"
+                :data-block="item.blockId"
+                @pointerdown="onChipDown($event, item.blockId)"
+                @click="onItemClick(item.blockId)"
+              >
+                <UIcon :name="item.icon" class="size-4" />
+                {{ item.label }}
+              </button>
+            </li>
+          </ul>
+        </template>
+      </UPopover>
     </nav>
 
     <!-- Board: the page at the chosen width, scaled to fit when wider than the screen. -->
