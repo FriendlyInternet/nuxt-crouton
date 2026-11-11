@@ -15,7 +15,8 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
-import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
+import { deriveSizing, minWidthResolver } from '@fyit/crouton-layout/app/utils/layout-viability'
+import { boardPaneMinPct } from '../../utils/board-pane-min'
 import { useElementSize } from '@vueuse/core'
 
 defineOptions({ name: 'BoardTree' })
@@ -40,16 +41,32 @@ const visibleChildren = computed(() =>
     ? props.node.children.map((child, i) => ({ child, i })).filter(({ child }) => !isSubtreeCollapsed(child, props.hidden))
     : [],
 )
-const panelMin = (child: LayoutNode) => child.minSize ?? 10
+const { blocks } = useCroutonLayoutBlocks()
+const splitEl = ref<HTMLElement | null>(null)
+const { width: splitWidth } = useElementSize(splitEl)
+
+// Floor each pane at its block's minWidth — the same floor the served page uses (#3746).
+const minWidthFor = computed(() => minWidthResolver(blocks.value))
+const panelMin = (child: LayoutNode) => props.node.type === 'split'
+  ? boardPaneMinPct(props.node.direction, child, splitWidth.value, visibleChildren.value.length - 1, minWidthFor.value)
+  : 10
 const panelDefault = (child: LayoutNode, n: number) => child.defaultSize ?? 100 / n
+
+// Only a user resize edits the page (#3746): reka re-reports the min-width clamp on
+// mount / width change, and that must not mark the board unsaved or overwrite the base.
+const userResizing = ref(false)
+function onHandleKey() {
+  userResizing.value = true
+  setTimeout(() => (userResizing.value = false), 0)
+}
+function onLayout(sizes: number[]) {
+  if (userResizing.value) emit('resize', props.path, sizes)
+}
 
 // Stack like the page does (#2523): the served page stacks a horizontal split once its
 // container is narrower than the split's derived soft floor (a container query in the
 // renderer). The board measures the same width against the same threshold, so what you
 // see on a phone is what the page shows — one under the other, no resize handles.
-const { blocks } = useCroutonLayoutBlocks()
-const splitEl = ref<HTMLElement | null>(null)
-const { width: splitWidth } = useElementSize(splitEl)
 const stackThreshold = computed(() => (
   props.node.type === 'split' && props.node.direction === 'horizontal'
     ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth)
@@ -83,13 +100,15 @@ const stacked = computed(() => stackThreshold.value > 0 && splitWidth.value > 0 
       :key="visibleChildren.map(v => v.i).join('-')"
       :direction="node.direction"
       class="h-full w-full"
-      @layout="sizes => emit('resize', path, sizes)"
+      @layout="onLayout"
+      @keydown.capture="onHandleKey"
     >
       <template v-for="({ child, i }, vi) in visibleChildren" :key="i">
         <SplitterResizeHandle
           v-if="vi > 0"
           class="relative shrink-0 bg-border hover:bg-primary data-[state=drag]:bg-primary transition-colors data-[orientation=horizontal]:w-1.5 data-[orientation=vertical]:h-1.5"
           data-handoff="pane-resize-handle"
+          @dragging="(d: boolean) => (userResizing = d)"
         />
         <SplitterPanel :default-size="panelDefault(child, visibleChildren.length)" :min-size="panelMin(child)" class="overflow-hidden">
           <BoardTree
