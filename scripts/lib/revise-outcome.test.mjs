@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bodyKey, reviseOutcome } from './revise-outcome.mjs'
+import { bodyKey, reviseOutcome, requestFailed } from './revise-outcome.mjs'
 
 test('head moved, body unchanged', () => {
   assert.deepEqual(reviseOutcome({ headMoved: true }), { revised: true, noop: false, rereview: false, note: 'commit', message: '' })
@@ -59,6 +59,26 @@ test('reply without baseOnly -> empty message (today: no extra comment)', () => 
 })
 test('nothing, no base merge -> the old "produced no change" text', () => {
   assert.match(reviseOutcome({ from: 'u' }).message, /\[Your comment\]\(u\) produced no change and no answer\.\*\* Nothing was pushed/)
+})
+test('requestFailed: 0 / empty / missing = ok, anything else = the code (#3775)', () => {
+  assert.equal(requestFailed('0'), null); assert.equal(requestFailed(''), null); assert.equal(requestFailed(undefined), null)
+  assert.equal(requestFailed('1'), '1'); assert.equal(requestFailed(' 137 '), '137')
+})
+test('worker failed (rc!=0) even with a commit -> not revised, no "rephrase", names the exit code (#3775)', () => {
+  for (const input of [{ headMoved: true }, { baseOnly: true }, { baseOnly: true, replied: true }, { bodyChanged: true }, {}]) {
+    const r = reviseOutcome({ ...input, requestRc: '137', from: 'https://x/c1' })
+    assert.equal(r.revised, false); assert.equal(r.noop, false); assert.equal(r.note, 'worker-failed')
+    assert.equal(r.output, 'request_failed=137')
+    assert.match(r.error, /exit 137/)
+    assert.match(r.message, /^<!-- pipeline-note -->/)
+    assert.match(r.message, /worker failed \(exit 137\)/)
+    assert.doesNotMatch(r.message, /Rephrase/i)
+  }
+})
+test('rc 0 changes nothing: the usual verdicts stand (#3775)', () => {
+  assert.equal(reviseOutcome({ headMoved: true, requestRc: '0' }).note, 'commit')
+  const r = reviseOutcome({ baseOnly: true, requestRc: '0' })
+  assert.equal(r.note, 'noop'); assert.equal(r.output, 'revise_noop=1')
 })
 test('bodyKey normalises and handles empty', () => {
   assert.equal(bodyKey('a\r\nb\n'), bodyKey('a\nb'))

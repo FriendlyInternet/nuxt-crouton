@@ -840,6 +840,8 @@ jobs:
           # #2941: the revise step already pushed a clean base merge (counts as delivered when pi adds nothing).
           BASE_PUSHED: ${{ steps.revise.outputs.base_pushed }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
+          # #3775: the owner-request pass's exit code (empty when it did not run) — non-zero = worker failure.
+          REQUEST_RC: ${{ steps.pi-request.outputs.rc }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
           PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
@@ -1023,7 +1025,7 @@ jobs:
           if [ -n "${REV_START:-}" ]; then
             RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             # #3775: only a commit AFTER the base merge (RUN_START) is the requested change.
-            if [ "$HAVE_COMMITS" = "1" ] && [ "$(git rev-parse HEAD)" != "$RUN_START" ]; then
+            if [ "$HAVE_COMMITS" = "1" ] && [ "$(git rev-parse HEAD)" != "$RUN_START" ] && node "$RUNNER_TEMP/revise-outcome.mjs" ok "${REQUEST_RC:-}"; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
@@ -1036,7 +1038,7 @@ jobs:
               [ -n "${REV_BODY_KEY:-}" ] && [ -n "$BODY_NOW" ] && [ "$BODY_NOW" != "$REV_BODY_KEY" ] && BODY_CHANGED=true
               LAST_V="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -o 'build-review-verdict:[a-z-]*' | tail -1 | sed 's/.*://' || true)"
               ROUND_N="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -c '<!-- build-review-verdict:no-go -->' || true)"
-              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "$(jq -nc --argjson b "$BODY_CHANGED" --argjson o "$BASE_ONLY" --argjson r "$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false)" --arg v "$LAST_V" --argjson n "${ROUND_N:-0}" --arg base "$BASE" --arg from "${FEEDBACK_FROM:-}" '{bodyChanged:$b,baseOnly:$o,replied:$r,verdict:$v,round:$n,base:$base,from:$from}')")"
+              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "$(jq -nc --argjson b "$BODY_CHANGED" --argjson o "$BASE_ONLY" --argjson r "$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false)" --arg v "$LAST_V" --argjson n "${ROUND_N:-0}" --arg base "$BASE" --arg from "${FEEDBACK_FROM:-}" --arg rc "${REQUEST_RC:-}" '{bodyChanged:$b,baseOnly:$o,replied:$r,verdict:$v,round:$n,base:$base,from:$from,requestRc:$rc}')")"
               MSG="$(echo "$OUT" | jq -r .message)"
               NOTE="$(echo "$OUT" | jq -r .note)"; REREVIEW="$(echo "$OUT" | jq -r .rereview)"
               if [ "$NOTE" = "body" ]; then
@@ -1051,8 +1053,8 @@ jobs:
                 echo "revise: answered on the PR without a code change"
                 echo "revised=1" >> "$GITHUB_OUTPUT"  # no base merge pushed: the reply is the answer (#3775)
               else
-                echo "::error::revise produced no commit after the base merge and no reply (#2446/#3775)"
-                echo "revise_noop=1" >> "$GITHUB_OUTPUT"
+                echo "::error::$(echo "$OUT" | jq -r .error)"
+                echo "$OUT" | jq -r .output >> "$GITHUB_OUTPUT"  # revise_noop=1, or request_failed=<rc> (#3775)
                 [ -n "$RPR" ] && gh pr comment "$RPR" --body "$MSG" 2>&1 | tail -1 || true  # MSG opens with <!-- pipeline-note --> (revise-outcome.mjs)
               fi
             fi
@@ -1515,6 +1517,7 @@ jobs:
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          REQUEST_FAILED: ${{ steps.finish.outputs.request_failed }}  # #3775: the owner-request worker exited non-zero (code), explained on the PR
           MERGE_REFUSED: ${{ steps.finish.outputs.merge_refused }}  # #3704: the finish step refused a worker-left merge and explained it on the PR
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.

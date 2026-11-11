@@ -259,3 +259,37 @@ test('11 merge only + a worker reply claiming a fix (#3756 shape) -> not made, r
   assert.match(x.comments, /described a change, but no commit with it was pushed/)
   assert.doesNotMatch(x.comments, /the worker answered above/)
 })
+
+test('12 conflict + requested edit, but the worker exited 1 -> not revised, worker failure names the code, no "rephrase" (#3775)', () => {
+  const fx = fixture({ epicConflict: true })
+  const merge = conflictMerge(fx)
+  fx.put('w.txt', 'w\nepic w\npartial\n')
+  const x = runStep(fx, { slice: SLICE_5B, env: { REV_BASE: merge, REV_CONFLICT: '1', BASE_MERGED: merge, REQUEST_RC: '1' } })
+  assert.equal(x.r.status, 0, x.out)
+  assert.doesNotMatch(x.outputs, /^revised=1$/m)
+  assert.doesNotMatch(x.outputs, /^revise_noop=1$/m)
+  assert.match(x.outputs, /^request_failed=1$/m)
+  assert.match(x.out, /::error::the worker failed \(exit 1\)/)
+  assert.equal(count(x.comments, '----'), 1, x.comments)
+  assert.match(x.comments, /worker failed \(exit 1\)/)
+  assert.doesNotMatch(x.comments, /Revised from|Rephrase/)
+})
+
+test('13 conflict, no edit, the worker exited 137 -> worker failure, not the "rephrase your comment" note (#3775)', () => {
+  const fx = fixture({ epicConflict: true })
+  const merge = conflictMerge(fx)
+  const x = runStep(fx, { slice: SLICE_5B, comments: '1', env: { REV_BASE: merge, REV_CONFLICT: '1', BASE_MERGED: merge, REQUEST_RC: '137' } })
+  assert.equal(x.r.status, 0, x.out)
+  assert.doesNotMatch(x.outputs, /^revised=1$/m)
+  assert.doesNotMatch(x.outputs, /^revise_noop=1$/m)
+  assert.match(x.outputs, /^request_failed=137$/m)
+  assert.equal(count(x.comments, '----'), 1, x.comments)
+  assert.match(x.comments, /worker failed \(exit 137\)/)
+  assert.doesNotMatch(x.comments, /Rephrase|was not made/)
+})
+
+test('14 the finish step and the artifact-gate read the pi-request exit code (#3775)', () => {
+  const env = (anchor) => { const i = YML.findIndex((l) => l.includes(anchor)); return YML.slice(i, i + 60).join('\n') }
+  assert.match(env('- id: finish'), /REQUEST_RC: \$\{\{ steps\.pi-request\.outputs\.rc \}\}/)
+  assert.match(env('- name: Artifact-gate'), /REQUEST_FAILED: \$\{\{ steps\.finish\.outputs\.request_failed \}\}/)
+})
