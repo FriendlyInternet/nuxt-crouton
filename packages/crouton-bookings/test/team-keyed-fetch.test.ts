@@ -20,7 +20,7 @@ vi.mock('../app/composables/useBookingAvailability', () => ({
   }),
 }))
 
-interface FetchCall { url: () => string | null, opts: { key?: unknown } }
+interface FetchCall { url: () => string | null, opts: { key?: unknown, dedupe?: string }, refreshArgs: unknown[] }
 
 const states = new Map<string, any>()
 let calls: FetchCall[] = []
@@ -37,8 +37,9 @@ beforeEach(() => {
   g.useI18n = () => ({ locale: ref('en') })
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
   g.useFetch = (url: any, opts: any = {}) => {
-    calls.push({ url, opts })
-    return { data: ref(opts.default ? opts.default() : null), pending: ref(false), error: ref(null), status: ref('idle'), refresh: async () => {} }
+    const call: FetchCall = { url, opts, refreshArgs: [] }
+    calls.push(call)
+    return { data: ref(opts.default ? opts.default() : null), pending: ref(false), error: ref(null), status: ref('idle'), refresh: async (arg?: unknown) => { call.refreshArgs.push(arg) } }
   }
 })
 
@@ -106,5 +107,57 @@ describe('bookings fetch keys carry the team id (#3751)', () => {
     currentTeam.value = { id: 't2' }
     const t2 = calls.map(keyOf)
     t1.forEach((k, i) => expect(t2[i]).not.toBe(k))
+  })
+})
+
+// #3789: several blocks own the same key and EACH re-runs it when the team arrives. With Nuxt's
+// default dedupe 'cancel' every owner aborted the one before it (~a dozen cancelled requests per
+// load of the blocks page). The fetches join a running request ('defer'); explicit refreshes still
+// force fresh data ('cancel') so a save is never answered from a stale in-flight request.
+describe('shared bookings fetches join, not cancel (#3789)', () => {
+  const CANCEL = { dedupe: 'cancel' }
+
+  it('every useFetch in useBookingsList (team + personal), useBookingCart and useBookingOptions sets dedupe: defer', async () => {
+    const { useBookingsList, useBookingCart, useBookingOptions } = await loadAll()
+    const counts: number[] = []
+    for (const run of [
+      () => useBookingsList({ scope: 'team' }),
+      () => useBookingsList({ scope: 'personal' }),
+      () => useBookingCart(),
+      () => useBookingOptions(),
+    ]) {
+      const start = calls.length
+      run()
+      counts.push(calls.length - start)
+    }
+    expect(counts).toEqual([3, 4, 3, 1])
+    expect(calls.every(c => c.opts.dedupe === 'defer')).toBe(true)
+  })
+
+  it('useBookingsList().refresh() forces fresh data', async () => {
+    const { useBookingsList } = await loadAll()
+    const { refresh } = useBookingsList({ scope: 'personal' })
+    await refresh()
+    expect(calls).toHaveLength(4)
+    calls.forEach(c => expect(c.refreshArgs).toEqual([CANCEL]))
+  })
+
+  it('useBookingCart refreshMyBookings / refreshLocations force fresh data', async () => {
+    const { useBookingCart } = await loadAll()
+    const cart = useBookingCart()
+    await cart.refreshMyBookings()
+    await cart.refreshLocations()
+    const mine = calls.find(c => urlOf(c).endsWith('/customer-bookings') || keyOf(c).includes('customer-bookings'))!
+    const locs = calls.find(c => keyOf(c).includes('cart-locations'))!
+    expect(mine.refreshArgs).toEqual([CANCEL])
+    expect(locs.refreshArgs).toEqual([CANCEL])
+  })
+
+  it('useBookingOptions refresh forces fresh data', async () => {
+    const { useBookingOptions } = await loadAll()
+    const { refresh } = useBookingOptions()
+    await refresh()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.refreshArgs).toEqual([CANCEL])
   })
 })
