@@ -1,4 +1,10 @@
 {
   "stagingUrl": "https://booking-demo.pmcp.dev",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback"
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback",
+  "smoke": {
+    "reads": [
+      { "path": "/api/crouton-bookings/teams/{teamId}/customer-locations", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" },
+      { "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" }
+    ]
+  }
 }
