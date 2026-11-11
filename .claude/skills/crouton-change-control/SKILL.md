@@ -210,7 +210,9 @@ data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
 (#2755) → the `plan-review` job in `on-comment.yml` has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
-instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
+instruction (`plan` input). After two reviewer rejections the plan holds; the owner can push it
+forward with `ok: <reason>` (recorded as a bot decision comment and an epic Decisions line, then
+`plan:approved`); a bare `ok` is asked for the reason (#3272). The build implements exactly that plan, stops and says why if reality
 differs, links the plan in its PR body; the run's record step writes the ledger row to the
 `pipeline-data` branch under `plan-ledger/` (`scripts/plan-ledger.mjs --write`, #3457).
 `writeups/reports/plan-review-ledger.jsonl` stays on main as frozen history up to 6 Nov 2026. Chores and app-only

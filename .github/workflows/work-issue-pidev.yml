@@ -606,10 +606,8 @@ jobs:
             # The worker implements exactly that plan, (the ledger row is written by record-outcome, #3457).
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
-              {
-                printf '\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n' "$APPROVED_PLAN_ID"
-                cat "$RUNNER_TEMP/approved-plan.txt"
-              } >> "$PROMPT_FILE"
+              node scripts/plan-held.mjs --approved-prompt --plan-id "$APPROVED_PLAN_ID" --plan-file "$RUNNER_TEMP/approved-plan.txt" --issue "$ISSUE" > "$RUNNER_TEMP/approved-section.txt"
+              cat "$RUNNER_TEMP/approved-section.txt" >> "$PROMPT_FILE"
             fi
           fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
