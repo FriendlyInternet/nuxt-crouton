@@ -4,7 +4,7 @@
 // When an agent blocks with a scannable handoff (the `ask-human` skill, #1189), the owner
 // may answer *in the medium the question came in*: a top-level reply, an inline PR *review*
 // comment on a schema `.md`, a `🎯 Preview feedback` comment from crouton-feedback, or an
-// edited Excalidraw diagram. `resume-on-comment.yml` fires on the reply but, by default, the
+// edited Excalidraw diagram (a `📐 Diagram saved` comment, #3691). `on-comment.yml` fires on the reply but, by default, the
 // resuming agent only sees the top-level thread — so an in-medium answer is invisible to it.
 //
 // This gathers the answer from EVERY surface and prints a compact markdown payload the resume
@@ -15,6 +15,8 @@
 // Usage (from the workflow):  node scripts/resume-answer-payload.mjs <issue> > .resume-answer.md
 //   env: GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY=owner/repo
 //   arg: issue number (falls back to $ISSUE)
+
+import { isOwnerScreenSource, parseDiagramSave } from './lib/owner-screens.mjs'
 
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ''
 const repo = process.env.GITHUB_REPOSITORY || 'FriendlyInternet/nuxt-crouton'
@@ -51,9 +53,12 @@ if (!token) emit(['_No token available — resume from the top-level thread only
 try {
   const out = []
 
-  // (1) The latest human (non-bot) issue comment = the trigger / plain-text answer.
+  // (1) The latest human (non-bot) issue comment = the trigger / plain-text answer. An
+  // owner-screen comment (🎯/📐 from our app, #3691) counts as the owner's too — the source check,
+  // not the label one: the design-hold step may already have removed status:blocked.
+  const isOwnerScreen = (c) => isOwnerScreenSource({ comment: { body: c.body, userType: c.user?.type, appSlug: c.performed_via_github_app?.slug, userLogin: c.user?.login } })
   const comments = await gh(`/repos/${owner}/${name}/issues/${issue}/comments?per_page=100`)
-  const humanComments = comments.filter((c) => c.user && c.user.type !== 'Bot')
+  const humanComments = comments.filter((c) => c.user && (c.user.type !== 'Bot' || isOwnerScreen(c)))
   const latest = humanComments[humanComments.length - 1]
   if (latest) {
     out.push(`**Latest reply — @${latest.user.login}:**`, '', `> ${clip(latest.body).replace(/\n/g, '\n> ')}`, '')
@@ -69,7 +74,16 @@ try {
     ),
   ]
 
-  let diagramEdited = ''
+  // (4) Edited diagram (#3691): the newest 📐 save comment, on the issue or a linked PR. Its hidden
+  // line names the scene; its body quotes the text the owner added as their note.
+  let diagram = null
+  const pickDiagram = (list) => {
+    for (const c of list) {
+      const d = parseDiagramSave(c.body)
+      if (d && isOwnerScreen(c) && (!diagram || String(c.created_at) >= String(diagram.at))) diagram = { ...d, at: c.created_at }
+    }
+  }
+  pickDiagram(comments)
   for (const n of prNums) {
     // (2) Inline PR *review* comments (e.g. on a committed schema `.md`) — the resume agent
     // does NOT read these by default; surface path + line + body.
@@ -98,18 +112,12 @@ try {
       out.push('')
     }
 
-    // (4) Edited-diagram flag: an Excalidraw round-trip re-attaches a PNG / bumps the
-    // `.graph.json`. Heuristic — if any surface references an excalidraw/diagram artifact,
-    // tell the resume to decode it via ticket-excalidraw-import.
-    const haystack = [...humanReviews, ...feedback].map((c) => c.body || '').join('\n')
-    if (/excalidraw|\.graph\.json|ticket-diagram|edited the diagram/i.test(haystack)) {
-      diagramEdited = `an Excalidraw diagram looks edited on PR #${n}`
-    }
+    pickDiagram(prComments)
   }
 
   out.push(
-    diagramEdited
-      ? `**Edited diagram:** ${diagramEdited} — run \`node scripts/ticket-excalidraw-import.mjs <attached-png>\` to decode the scene before acting on it.`
+    diagram
+      ? `**Edited diagram (📐):** \`${diagram.slug}\` on \`${diagram.branch}\` @ ${String(diagram.sha).slice(0, 7)} — scene \`${diagram.path}\` (the owner's note is quoted in that comment)`
       : `**Edited diagram:** none detected.`
   )
 

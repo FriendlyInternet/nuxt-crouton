@@ -26,7 +26,8 @@ name: On comment
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
 # The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no
-# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment.
+# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment,
+# and owner-screen comments (scripts/lib/owner-screens.mjs, #3691): a 🎯/📐 from the Nuxt Harness app on a status:blocked item.
 
 on:
   issue_comment:
@@ -38,9 +39,13 @@ jobs:
     name: Read API allowance at start
     # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       contains(github.event.issue.labels.*.name, 'status:blocked') &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
@@ -71,12 +76,18 @@ jobs:
     # `performed_via_github_app` also catches an App acting under a user-typed identity, except the
     # Claude app: the interactive agent posts `**Worker:**` change requests through it as the owner
     # (user.type == User), and dropping those silently ignored them (#3029). No flow
-    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
-    # and consumed by reading the thread (revise), not by this trigger.
+    # needs a bot comment to trigger a workflow — with ONE exception (#3691): an owner-screen comment
+    # (first line 🎯/📐/🚶/🗳, from the Nuxt Harness app, on a status:blocked item) is the owner
+    # answering from our screens. The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
+    # by scripts/on-comment-bot-filter.test.mjs; scripts/comment-route.mjs decides what it means.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       contains(github.event.issue.labels.*.name, 'status:blocked') &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -102,10 +113,10 @@ jobs:
             let pr
             if (isPr) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
-              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, labels: (p.labels || []).map(l => l.name) }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login },
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
@@ -541,7 +552,7 @@ jobs:
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
@@ -704,14 +715,16 @@ jobs:
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
+          allowed_bots: "nuxt-harness[bot]"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
             question came in — this run collected it across every surface into `.resume-answer.md`
             (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
-            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
-            treat it as their answer; if it flags an edited diagram, run
-            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            and a 📐 line if a diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it names an edited diagram, read its `.excalidraw` at the
+            given sha (`git show <sha>:<path>`) and treat the quoted note as the owner's words.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
@@ -1118,8 +1131,8 @@ jobs:
             const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
             const c = context.payload.comment
             const route = routePrComment({
-              pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              pr: { headRef: pr.head.ref, state: pr.state, labels: pr.labels.map(l => l.name) },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login },
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {

@@ -11,6 +11,7 @@
 import { pathToFileURL } from 'node:url'
 import { isApproval } from './approval.mjs'
 import { parseCommand } from './comment-command.mjs'
+import { isOwnerScreenComment } from './lib/owner-screens.mjs'
 
 /** The skip reason a 🛠 action comment gets a "not sent to the worker" reply for (#2707). */
 export const IGNORED_AGENT_REASON = 'an interactive-agent comment without a **Worker:** line'
@@ -36,10 +37,17 @@ export function epicIssueFromRef(ref) {
  * @param {string} c.body               the comment text
  * @param {string} [c.authorAssociation] OWNER / MEMBER / COLLABORATOR / …
  * @param {string} [c.userType]          'User' or 'Bot'
+ * @param {string} [c.appSlug]           performed_via_github_app.slug
+ * @param {string} [c.userLogin]         the comment author's login
+ * @param {string[]} [c.labels]          the item's labels (an owner-screen comment needs status:blocked)
  * @returns {{ revise: boolean, reason: string, reply?: boolean }}
  */
-export function shouldRevise({ body, authorAssociation, userType } = {}) {
+export function shouldRevise({ body, authorAssociation, userType, appSlug, userLogin, labels } = {}) {
   const text = String(body || '').trim()
+  // A 🎯/📐 comment from our own screens on a waiting item is the owner's feedback (#3691).
+  if (isOwnerScreenComment({ comment: { body, userType, appSlug, userLogin }, issue: { labels: labels || [] } })) {
+    return { revise: true, reason: 'an owner-screen comment on a waiting item' }
+  }
   if (userType === 'Bot') return { revise: false, reason: 'posted by a bot' }
   if (!COLLABORATOR.has(authorAssociation)) return { revise: false, reason: 'not a repo collaborator' }
   if (!text) return { revise: false, reason: 'empty comment' }
@@ -76,7 +84,7 @@ export function routePrComment({ pr = {}, comment = {} } = {}) {
   const branch = epic ? pr.headRef : ''
   if (!issue) return { revise: false, issue: null, branch, reason: `head \`${pr.headRef}\` is not a pi worker or epic branch`, reply: false }
   if (pr.state !== 'open') return { revise: false, issue, branch, reason: 'the PR is not open', reply: false }
-  const d = shouldRevise(comment)
+  const d = shouldRevise({ ...comment, labels: comment.labels ?? pr.labels })
   return { revise: d.revise, issue, branch, reason: d.reason, reply: Boolean(d.reply) }
 }
 

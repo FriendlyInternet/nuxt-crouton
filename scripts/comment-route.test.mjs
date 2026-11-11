@@ -136,6 +136,42 @@ test('quiz-reply: on a blocked, pipeline-owned epic it never resumes (case 3)', 
   assert.equal(kind({ comment: c('2 code'), issue: { ...issue(['status:to-test']) } }), 'quiz-reply')
 })
 
+// #3691 — owner-screen comments (🎯/📐 from the Nuxt Harness app on a waiting item).
+const app = (body) => ({ body, authorAssociation: 'NONE', userType: 'Bot', performedViaGithubApp: 'Nuxt Harness', appSlug: 'nuxt-harness', userLogin: 'nuxt-harness[bot]' })
+const SAVE = '📐 Diagram saved — continuing from your edit\n<!-- owner-screen:diagram slug=f branch=work-7 sha=a path=writeups/diagrams/f.excalidraw -->'
+const heldIssue = { ...issue(['status:blocked', 'work-this']), body: '<!-- pipeline: base=main -->' }
+const heldPr = { number: 7, isPr: true, labels: ['status:blocked'] }
+
+test('owner screen: 📐 on a blocked pipeline-owned issue resumes', () => {
+  const d = routeComment({ comment: app(SAVE), issue: heldIssue })
+  assert.deepEqual([d.kind, d.blocked], ['resume', true])
+  assert.equal(kind({ comment: app(SAVE), issue: issue(['status:blocked']) }), 'none') // not pipeline-owned
+})
+
+test('owner screen: 🎯 on a blocked work-N PR revises', () => {
+  assert.equal(kind({ comment: app('🎯 **Preview feedback**\n\n> move it left'), issue: heldPr, pr: pr({ labels: ['status:blocked'] }) }), 'revise')
+})
+
+test('owner screen: unblocked, no emoji, a quote or another app → none', () => {
+  assert.equal(kind({ comment: app(SAVE), issue: { ...heldIssue, labels: ['work-this'] } }), 'none')
+  assert.equal(kind({ comment: app('> 🤖 **pi.dev harness** · x'), issue: heldIssue }), 'none')
+  assert.equal(kind({ comment: app('> 📐 Diagram saved'), issue: heldIssue }), 'none')
+  assert.equal(kind({ comment: { ...app(SAVE), appSlug: 'github-actions', userLogin: 'github-actions[bot]', performedViaGithubApp: 'GitHub Actions' }, issue: heldIssue }), 'none')
+})
+
+test('owner screen: 📐/🎯 containing ok never approves or merges', () => {
+  const bodies = [SAVE + '\nok', '🎯 **Preview feedback**\n\n> ok', '🎯 x\nlgtm']
+  const prs = [pr({ draft: true }), pr(), pr({ headRef: 'epic/9-x', baseRef: 'main' })]
+  for (const body of bodies) {
+    for (const p of prs) {
+      for (const labels of [['status:blocked'], []]) {
+        const k = kind({ comment: { ...app(body), authorAssociation: 'OWNER' }, issue: { ...heldPr, labels }, pr: { ...p, labels } })
+        assert.ok(!['approve-draft', 'approve-epic', 'automerge-go'].includes(k), `${body} → ${k}`)
+      }
+    }
+  }
+})
+
 test('quiz-reply: `ok` on a blocked epic still resumes, as before (case 7)', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'epic']) }), 'resume')
   assert.equal(kind({ comment: c('ok'), issue: issue() }), 'resume')
