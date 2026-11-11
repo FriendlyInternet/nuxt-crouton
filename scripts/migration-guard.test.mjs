@@ -102,6 +102,15 @@ test('incident replay #2726 (kassa team_id)', () => {
   assert.ok(r.missing[0].statements.includes('ALTER TABLE `sales_sync_status` ADD `team_id` text;'))
 })
 
+test('incident replay #2850 (kassa sync visibility tables missing)', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/migration-guard-2850.json', import.meta.url), 'utf8'))
+  const r = evaluateMigrationGuard(fx)
+  assert.equal(r.status, 'fail')
+  assert.equal(r.missing[0].app, 'apps/kassa')
+  assert.ok(r.markdown.includes('pnpm --filter kassa db:generate'))
+  assert.equal(evaluateMigrationGuard({ ...fx, body: 'Migration-not-needed: x' }).status, 'notice')
+})
+
 test('app schema/migration files involve the guard; report says app-caused, not package-caused', () => {
   for (const f of [
     'apps/crouton-builder/server/db/schema.ts',
