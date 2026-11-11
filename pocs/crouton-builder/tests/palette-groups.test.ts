@@ -1,32 +1,51 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import type { CroutonLayoutBlockDefinition, CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
 import { existsSync } from 'node:fs'
+import { defuFn } from 'defu'
 import { fileURLToPath } from 'node:url'
 import { groupPaletteBlocks, offerable } from '../app/utils/palette-groups'
+import { paletteBlocksOf } from '../app/utils/palette-blocks'
 import { parseLayoutTree } from '../../../packages/crouton-layout/app/utils/layout-serialize'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 
-// Builder's REAL block list: crouton-layout's defaults merged with Builder's own
-// registry, as the running app sees them (useCroutonLayoutBlocks → blocksList).
+// Builder's REAL block list, as the running app sees it (useCroutonLayoutBlocks →
+// blocksList): the same `defuFn(app, core, layout, bookings)` merge Nuxt writes into
+// `.nuxt/app.config.mjs` (see bookings-blocks.test.ts). A plain spread isn't enough —
+// Builder's config overrides some package blocks by name only and uses the function
+// form for one `configSchema`, which only the real merge resolves (#2559).
 let blocksList: CroutonLayoutBlockDefinition[] = []
 
 beforeAll(async () => {
   ;(globalThis as Record<string, unknown>).defineAppConfig = (c: unknown) => c
-  const layout = (await import('../../../packages/crouton-layout/app/app.config')).default as { croutonLayoutBlocks: CroutonLayoutBlockRegistry }
-  const builder = (await import('../app/app.config')).default as { croutonLayoutBlocks: CroutonLayoutBlockRegistry }
-  blocksList = Object.values({ ...layout.croutonLayoutBlocks, ...builder.croutonLayoutBlocks })
+  const layers = await Promise.all([
+    import('../app/app.config'),
+    import('../../../packages/crouton-core/app/app.config'),
+    import('../../../packages/crouton-layout/app/app.config'),
+    import('../../../packages/crouton-bookings/app/app.config'),
+  ])
+  const merged = defuFn(...(layers.map(m => m.default) as [object, ...object[]])) as { croutonLayoutBlocks: CroutonLayoutBlockRegistry }
+  blocksList = Object.values(merged.croutonLayoutBlocks)
 })
 
 const shape = (list: CroutonLayoutBlockDefinition[]) =>
   groupPaletteBlocks(list).map(g => [g.label, g.items.map(i => i.label)])
 
 describe('groupPaletteBlocks — Builder block row (#3748)', () => {
-  it('groups Builder\'s real blocks into Artists, Bookings, Layout (in that order)', () => {
-    expect(shape(blocksList)).toEqual([
+  it('groups Builder\'s real blocks into Artists, Bookings, Gigs, Layout (in that order)', () => {
+    // Bookings = @fyit/crouton-bookings' atomic blocks (#2559); its compound all-in-one
+    // Calendar and its Filters block are not offered. Gigs = the demo builderBookings.
+    // Same input the editor's row gets: groupPaletteBlocks(paletteBlocksOf(blocksList)).
+    expect(shape(paletteBlocksOf(blocksList))).toEqual([
       ['Artists', ['List', 'Form', 'Stats']],
-      ['Bookings', ['List']],
+      ['Bookings', ['Calendar', 'Locations', 'Bookings list']],
+      ['Gigs', ['List']],
       ['Layout', ['Top bar', 'Bottom nav', 'Spacer']],
     ])
+    const ids = groupPaletteBlocks(paletteBlocksOf(blocksList)).flatMap(g => g.items.map(i => i.blockId))
+    expect(ids).not.toContain('bookings-calendar')
+    expect(ids).not.toContain('bookings-filters')
+    // Both stay registered, so a saved page that holds one still renders.
+    expect(blocksList.map(b => b.id)).toEqual(expect.arrayContaining(['bookings-calendar', 'bookings-filters']))
   })
 
   it('leaves the unlinked generic blocks and the drop preview out of the row', () => {
@@ -41,13 +60,21 @@ describe('groupPaletteBlocks — Builder block row (#3748)', () => {
     const artists = groups.find(g => g.label === 'Artists')!
     expect(artists.collection).toBe('builderArtists')
     expect(artists.icon).toBe('i-lucide-list')
-    expect(groups.find(g => g.label === 'Bookings')!.collection).toBe('builderBookings')
+    expect(groups.find(g => g.label === 'Gigs')!.collection).toBe('builderBookings')
     expect(groups.find(g => g.label === 'Layout')!.collection).toBeNull()
   })
 
   it('every block offered is linked to a collection or is a layout piece', () => {
+    // Exception: the bookings package's blocks (#2559, the Bookings group) fetch their own data and have
+    // no `collection` field at all — self-contained, like Artists · Stats.
+    const byId = new Map(blocksList.map(b => [b.id, b]))
     for (const g of groupPaletteBlocks(blocksList)) {
-      if (g.label !== 'Layout') expect(g.collection).toBeTruthy()
+      if (g.label === 'Layout') continue
+      if (g.label === 'Bookings') {
+        for (const i of g.items) expect(byId.get(i.blockId)!.configSchema?.some(f => f.name === 'collection'), i.blockId).toBe(false)
+        continue
+      }
+      expect(g.collection, g.label).toBeTruthy()
     }
   })
 
