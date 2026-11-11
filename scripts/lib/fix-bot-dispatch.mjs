@@ -35,13 +35,29 @@ export function pickFailedRun(runs = []) {
 export const FIX_BOT_WORKFLOWS = ['CI', 'E2E', 'Deploy Apps (Cloudflare Workers)']
 export const FIX_BOT_MAX_ATTEMPTS = 3
 
+const attemptsFrom = (labels = []) => {
+  const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
+  return { attemptLabel, attempts: attemptLabel ? Number(attemptLabel.split(':')[1]) : 0 }
+}
+
+/**
+ * #3667: after one fix try, a watched check that is red again gets a 🩺 diagnosis, not another fix.
+ * `diagnose` when the PR carries `ci-fix-attempts:N` (N ≥ 1) and a FIX_BOT_WORKFLOWS run failed; else `fix`.
+ * @returns {'fix'|'diagnose'}
+ */
+export function fixOrDiagnose({ labels = [], failures = [] } = {}) {
+  if (attemptsFrom(labels).attempts < 1) return 'fix'
+  const red = failures.some(f => f && FIX_BOT_WORKFLOWS.includes(f.workflow) && f.conclusion === 'failure')
+  return red ? 'diagnose' : 'fix'
+}
+
 /**
  * @param {{ head:string, base:string, state:string, go?:any, manual?:boolean, labels?:string[],
  *   failures?:{ workflow:string|null, conclusion:string|null }[] }} p
- * @returns {{ who:'bot'|'gave-up'|'owner'|'none', code:string, reason:string, attempts:number, attemptLabel:string|undefined }}
+ * @returns {{ who:'bot'|'gave-up'|'owner'|'none', code:string, reason:string, attempts:number, attemptLabel:string|undefined, mode:'fix'|'diagnose' }}
  */
 export function fixBotWillTry({ head, base, state, go, manual = false, labels = [], failures = [] }) {
-  const out = (who, code, reason, attempts = 0, attemptLabel) => ({ who, code, reason, attempts, attemptLabel })
+  const out = (who, code, reason, attempts = 0, attemptLabel, mode = 'fix') => ({ who, code, reason, attempts, attemptLabel, mode })
   const h = String(head || '')
   if (!manual && !h.startsWith('work-')) {
     return out('owner', 'not-eligible', 'the auto-fix only runs on its own on work-* branches')
@@ -60,10 +76,9 @@ export function fixBotWillTry({ head, base, state, go, manual = false, labels = 
   if (odd) {
     return out('owner', 'not-failure', `the auto-fix only starts on a plain failure; \`${odd.workflow}\` ended \`${odd.conclusion}\``)
   }
-  const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
-  const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
+  const { attemptLabel, attempts } = attemptsFrom(labels)
   if (attempts >= FIX_BOT_MAX_ATTEMPTS) return out('gave-up', 'gave-up', `auto-fix gave up after ${attempts} tries`, attempts, attemptLabel)
-  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel)
+  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel, fixOrDiagnose({ labels, failures }))
 }
 
 /** The conclusion the bot's workflow_run event will carry. A still-running run (null) is predicted from its red check. */
@@ -72,8 +87,14 @@ export function expectedRunConclusion({ runConclusion, checkConclusion }) {
 }
 
 /** Heading + "What's needed" for the red ping. Never @mentions anyone (#3622). */
-export function redPingHeading({ who, reason, attempts = 0, count = 0, list = '', head = '', base = '' }) {
+export function redPingHeading({ who, reason, attempts = 0, count = 0, list = '', head = '', base = '', mode = 'fix' }) {
   const n = `${count} failing check${count === 1 ? '' : 's'}`
+  if (who === 'bot' && mode === 'diagnose') {
+    return {
+      heading: `🔴 **CI failed on this pipeline PR** (${n}): ${list}.`,
+      needed: "**What's needed:** nothing yet — the same check is red again after a fix try, so the fix-bot writes a 🩺 diagnosis instead of another fix. The PR waits after it; send it on with a `**Worker:**` comment.",
+    }
+  }
   if (who === 'bot') {
     return {
       heading: `🔴 **CI failed on this pipeline PR** (${n}): ${list}.`,

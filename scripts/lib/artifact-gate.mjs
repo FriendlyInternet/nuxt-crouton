@@ -15,6 +15,7 @@ export async function artifactGate({ github, context, core, env = process.env, f
   if (env.PLAN_EXPLAINED === '1') { core.setFailed('Plan malformed — explained on the issue by the plan step (#3028).'); return }
   if (env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
   if (env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
+  if (env.MERGE_REFUSED === '1') { core.info('Nothing pushed: the worker left a merge in progress — explained on the PR (#3704).'); return }
   const rs = parseRunStart(env.RUN_START)
   if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
   const since = rs.since
