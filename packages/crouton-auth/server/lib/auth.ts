@@ -137,11 +137,39 @@ export function createAuth(options: CreateAuthOptions) {
     // Session configuration
     session: buildSessionConfig(config.session),
 
+    // Rate limiting (#3142): one counter per client IP in the shared D1 table, so
+    // every Worker isolate sees the same count. better-auth's built-in limits are
+    // returned unchanged.
+    // - The three session/org READS the app makes on every page (SSR + client) are
+    //   not counted: each counted request costs a D1 read + write, and a 429 there
+    //   turns into a null session (the user looks signed out). They carry no
+    //   credentials, so they aren't a password-guessing target.
+    // - A request without cf-connecting-ip (local dev, e2e, self-hosted without
+    //   Cloudflare) is never limited, so those requests don't all share one counter.
+    // Order matters: better-auth uses the FIRST key that matches, so the exact
+    // read paths must come before '/**'.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      customRules: {
+        '/get-session': false,
+        '/organization/get-full-organization': false,
+        '/organization/list': false,
+        '/**': (request: Request, current: { window: number, max: number }) =>
+          request.headers.get('cf-connecting-ip') ? current : false
+      }
+    },
+
     // Advanced options
     advanced: {
       // Generate secure IDs - moved to database config in Better Auth 1.4.x
       database: {
         generateId: () => crypto.randomUUID()
+      },
+      // Real client IP (#3142): Cloudflare sets cf-connecting-ip and a client
+      // can't forge it. x-forwarded-for is deliberately not trusted.
+      ipAddress: {
+        ipAddressHeaders: ['cf-connecting-ip']
       }
     },
 

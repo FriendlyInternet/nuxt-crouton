@@ -29,6 +29,13 @@
       "when": 1793955340418,
       "tag": "0003_email_log_provider_id",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794437299541,
+      "tag": "0004_auth_rate_limit",
+      "breakpoints": true
     }
   ]
 }

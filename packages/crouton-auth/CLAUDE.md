@@ -230,6 +230,7 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `twoFactor` - 2FA settings
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
+- `rateLimit` - better-auth rate-limit counters (key = ip|path), shared across instances
 
 ### Custom Domain Claims
 
@@ -310,9 +311,11 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
 
 **Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
-## Rate Limiting (Recommended)
+## Rate Limiting
 
-Authentication endpoints are prime targets for abuse. We recommend using `nuxthub-ratelimit` for rate limiting.
+Built in: better-auth's limiter runs with `storage: 'database'` (the `rateLimit` table, shared across Worker instances), keyed on `cf-connecting-ip`; sign-in/sign-up allow 3 tries per 10 s and password-reset/verification-email 3 per 60 s per IP; other auth endpoints 100 per 10 s. Not counted: requests without `cf-connecting-ip` (local dev, e2e — and so any deployment not behind Cloudflare has no auth limit) and the page-load reads `/get-session`, `/organization/get-full-organization`, `/organization/list`. Config: `rateLimit` + `advanced.ipAddress` in `server/lib/auth.ts`; behaviour test: `tests/unit/server/rate-limit.test.ts`. Apps need migration `auth_rate_limit` (#3142).
+
+### Optional: broader per-route limits (`nuxthub-ratelimit`)
 
 ### Installation
 
@@ -541,7 +544,7 @@ emailed to the owner). Never write a password into a seed: this repo is public.
 - **Extends**: None (standalone module/layer)
 - **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
 - **Core deps**: better-auth, @better-auth/passkey
-- **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
+- **Optional**: nuxthub-ratelimit (extra per-route limits; auth endpoints are already limited by better-auth's database store)
 
 ## Testing
 

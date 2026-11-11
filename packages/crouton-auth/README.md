@@ -804,6 +804,7 @@ export * from '@crouton/auth/server/database/schema/auth'
 | `invitation` | Pending invitations |
 | `passkey` | WebAuthn credentials |
 | `twoFactor` | 2FA settings |
+| `rateLimit` | Rate-limit counters for auth endpoints |
 | `subscription` | Stripe subscriptions |
 
 ### Generate Migrations
