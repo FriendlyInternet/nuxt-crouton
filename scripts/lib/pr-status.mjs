@@ -1,7 +1,7 @@
 // Pure rendering + decision helpers for the status.yml `pr-comment` job (#3617). No GitHub calls —
 // scripts/lib/pr-status-io.mjs does the I/O and calls these. Moved verbatim out of the inline
 // workflow script; scripts/lib/pr-status-io.test.mjs pins the rendered bodies.
-import { logTail } from './log-tail.mjs'
+import { logTail, failingLines, stoppedAtBlock } from './log-tail.mjs'
 import { expectedRunConclusion } from './fix-bot-dispatch.mjs'
 
 export const PR_STICKY = '<!-- crouton-pipeline-status -->'
@@ -95,13 +95,27 @@ export function failureExcerpts(entries) {
     : ''
 }
 
-/** One fenced "log tail" block for a failing job (#2677), or null when the log is empty. */
+/** A cause line made safe for a one-line `<summary>`: capped, no backticks, HTML-escaped (#3666). */
+function summaryCause(text) {
+  return text.slice(0, 120).replace(/`/g, "'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * One fenced "log tail" block for a failing job (#2677), or null when the log is empty. When the
+ * log names its real failing lines, they come first as `Stopped at:` and the first one is in the
+ * summary (#3666) — the tail alone anchors on the exit-code line, far below a test failure.
+ */
 export function logTailBlock({ name, raw, budget }) {
-  const { text, truncated } = logTail(raw, { maxLines: 80, maxBytes: Math.min(4096, budget) })
+  const cap = Math.min(4096, budget)
+  let causes = failingLines(raw)
+  if (stoppedAtBlock(causes).length >= cap) causes = [] // no room: keep today's plain tail
+  const stop = stoppedAtBlock(causes)
+  const { text, truncated } = logTail(raw, { maxLines: 80, maxBytes: cap - stop.length })
   if (!text) return null
   const tail = text.replace(/```/g, "'''") // fenced, so no @mention in a log can ping
   const cut = truncated ? ' (truncated)' : ''
-  return { used: tail.length, block: `\n\n<details><summary>log tail — ${name}${cut}</summary>\n\n\`\`\`\n${tail}\n\`\`\`\n</details>` }
+  const at = causes.length ? ` — stopped at: ${summaryCause(causes[0].text)}` : ''
+  return { used: tail.length + stop.length, block: `\n\n<details><summary>log tail — ${name}${cut}${at}</summary>\n\n${stop}\`\`\`\n${tail}\n\`\`\`\n</details>` }
 }
 
 /** The fix-bot's view of each failing check: which workflow run it came from and how it ended. */
