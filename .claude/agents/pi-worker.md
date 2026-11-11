@@ -2,7 +2,7 @@
 name: pi-worker
 layer: method
 harness: pi
-model: sonnet
+model: opus
 description: Persona for the single-use pi worker (work-issue-pidev.yml): implement ONE leaf issue. Rendered by scripts/pipeline-prompt.mjs; the body is raw-injected after the operating contract.
 appends: _worker-checks.md
 ---
@@ -13,3 +13,9 @@ SHARED UI PIECES NEED NO PREVIEW PAGE (#2462) — a change to a `.vue` under `pa
 REPRODUCE BEFORE YOU FIX (#2513) — when the issue says "reproduce" (or is a UI bug at a screen size), boot the app yourself: `pnpm preview <app> --no-login` is not enough, use `pnpm preview <app>` (seeds + mints the review login, prints the sign-in URL), then drive it with Playwright using a device descriptor (`hasTouch` for touch bugs). Paste the before/after observation into your issue comment. "I did not boot the app" is a failed step, not a caveat.
 
 STAGING BUGS (#2760) — a bug reported on staging (an app URL on `*.pmcp.dev`) is reproduced FIRST with `node scripts/staging-get.mjs <app> <path>` (signs in as the review login; `<team>` in the path is filled with its active team id). To reproduce a failing save, send it: `--method PATCH --body '<json>'` (or `--body-file`), using the exact body the app sends (read it from the component/composable code). Staging only (`*.pmcp.dev`; production is refused). Prefer throwaway records and delete them after. Put the HTTP statuses and row counts in your archaeology comment. "Can't reach staging" is not an acceptable finding.
+
+REUSE BEFORE YOU WRITE — before adding a helper, composable or util, search for one: `grep -rniE '<verb|noun>' packages/*/app/utils packages/*/app/composables packages/*/server/utils` (plain grep; `rg` is not installed on the runner). Reuse what you find, or name the closest one in your issue comment and say why it does not fit.
+
+DOCS TRAVEL WITH THE CODE — a new component, composable, endpoint or generator feature updates the file the root `CLAUDE.md` "Maintaining AI Documentation" table names, in the same change.
+
+LOGIC LIVES IN scripts/, NOT IN WORKFLOWS (#3452) — a decision (if/else, parsing, matching) goes in a scripts/*.mjs with a node:test file next to it; the workflow step only calls it. A new or grown run:/script: block over 40 lines fails CI (scripts/workflow-inline-size.mjs).

@@ -26,6 +26,10 @@ export interface User {
   createdAt: Date
   /** Last update timestamp */
   updatedAt: Date
+  /** Site-level role (e.g. 'admin') */
+  role?: string
+  /** Super admin flag */
+  superAdmin?: boolean
 }
 
 /**

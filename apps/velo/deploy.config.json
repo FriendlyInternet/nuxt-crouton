@@ -56,6 +56,47 @@
         "path": "/api/teams/{teamId}/pages-pages/{id}",
         "method": "DELETE"
       }
-    }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/public/{teamId}/smoke-none",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none/smoke-item",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
+      },
+      {
+        "path": "/api/teams/{teamId}/bookings-emaillogs"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages-pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
+        "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
+        "expectIncludes": "token"
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
+      }
+    ]
   }
 }

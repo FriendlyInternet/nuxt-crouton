@@ -4,7 +4,7 @@
  * Used by CollabEditingBadge for presence polling.
  * URL: /api/collab/[roomId]/users?type=[roomType]&teamId=[teamId]
  *
- * Auth: Requires a valid session. Team membership is verified when teamId is provided.
+ * Auth: Requires a valid session and a teamId the user is a member of (rooms are team-scoped).
  *
  * Example response:
  * {
@@ -14,7 +14,7 @@
  */
 import { getRoomUsers } from '../../../../utils/collabRoomStore'
 import { getServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
-import { getMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamMember } from '../../../../utils/collabTeamAccess'
 
 export default defineEventHandler(async (event) => {
   // --- Auth check: require a valid session ---
@@ -26,29 +26,25 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const roomId = getRouterParam(event, 'roomId')
+  const rawRoomId = getRouterParam(event, 'roomId')
   const query = getQuery(event)
   const roomType = (query.type as string) || 'page'
-  const teamId = (query.teamId as string) || null
+  const teamIdent = (query.teamId as string) || ''
 
-  if (!roomId) {
+  if (!rawRoomId) {
     throw createError({
       status: 400,
       message: 'Missing roomId parameter'
     })
   }
 
-  // --- Team membership check ---
-  if (teamId) {
-    const membership = await getMembership(event, teamId, session.user.id)
-    if (!membership) {
-      throw createError({
-        status: 403,
-        message: 'Forbidden'
-      })
-    }
+  // --- Team membership check (required) ---
+  if (!teamIdent) {
+    throw createError({ status: 400, message: 'Missing teamId' })
   }
+  const team = await requireTeamMember(event, teamIdent, session.user.id)
 
+  const roomId = `${team.id}:${rawRoomId}`
   const users = getRoomUsers(roomType, roomId)
 
   return {

@@ -12,7 +12,9 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
   const bookingsEndpoint = scope === 'team' ? 'admin-bookings' : 'customer-bookings'
 
   // Fetch bookings (client-only, depends on auth context)
-  // Use same key as useBookingCart to share cache (scope-specific)
+  // Use same key as useBookingCart to share cache (scope-specific). Every key carries the
+  // team id, so the team arriving after mount re-runs the fetch (#3751) — a fixed key
+  // turns off Nuxt's re-fetch on URL change.
   const {
     data: bookingsData,
     pending: bookingsLoading,
@@ -23,7 +25,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       ? `/api/crouton-bookings/teams/${currentTeam.value.id}/${bookingsEndpoint}`
       : null as any,
     {
-      key: `crouton-booking-sidebar-${bookingsEndpoint}`,
+      key: () => `crouton-booking-sidebar-${bookingsEndpoint}-${currentTeam.value?.id ?? 'none'}`,
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -40,7 +42,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       ? `/api/teams/${currentTeam.value.id}/bookings-settings`
       : null as any,
     {
-      key: `crouton-booking-list-settings-${scope}`,
+      key: () => `crouton-booking-list-settings-${scope}-${currentTeam.value?.id ?? 'none'}`,
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -57,7 +59,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       ? `/api/crouton-bookings/teams/${currentTeam.value.id}/customer-locations`
       : null as any,
     {
-      key: `crouton-booking-list-locations-${scope}`,
+      key: () => `crouton-booking-list-locations-${scope}-${currentTeam.value?.id ?? 'none'}`,
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -71,10 +73,10 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
   if (scope === 'personal') {
     const { data, refresh: refreshAll } = useFetch<Booking[]>(
       () => currentTeam.value?.id
-        ? `/api/crouton-bookings/teams/${currentTeam.value.id}/admin-bookings`
+        ? `/api/crouton-bookings/teams/${currentTeam.value.id}/calendar-bookings`
         : null as any,
       {
-        key: 'crouton-booking-calendar-all',
+        key: () => `crouton-booking-calendar-all-${currentTeam.value?.id ?? 'none'}`,
         default: () => [],
         server: false,
       },

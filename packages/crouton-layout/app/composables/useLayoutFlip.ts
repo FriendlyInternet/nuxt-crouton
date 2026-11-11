@@ -2,7 +2,7 @@
  * useLayoutFlip (#943) — the DOM half of FLIP-animating a split's panes when its
  * children change. Paired with the pure helpers in `utils/layout-flip`.
  *
- * Purely additive and self-cleaning: it never changes keys, `default-size`, reka-ui
+ * Purely additive and self-cleaning: it never changes keys, `default-size`, splitter
  * registration, or sizing — only the panes' `transform`, set for one frame and tweened
  * back to identity. A static layout (no structural change) gets zero added transforms,
  * and `prefers-reduced-motion: reduce` makes it a no-op. So every app that renders a

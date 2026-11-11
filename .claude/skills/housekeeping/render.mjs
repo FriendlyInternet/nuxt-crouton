@@ -12,6 +12,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { renderStuckSections } from './stuck-render.mjs'
+import { renderDriftLines } from '../../../scripts/app-collection-drift.mjs'
 // Brand identity SSOT — shared with crouton-email. Plain ESM, no install needed.
 import { BRAND_NAME, BRAND_URL } from '../../../packages/crouton-email/brand/email-brand.mjs'
 
@@ -133,6 +135,8 @@ if (data.idlePRs?.length) {
   ])
 }
 
+sections.push(...renderStuckSections(data))
+
 // 📚 Skill freshness (#1100 WS3) — knowledge skills whose cited paths drifted or whose
 // `verified:` stamp aged out. Report-only; a re-verified/re-stamped skill drops off next run.
 const sf = data.skillFreshness
@@ -153,6 +157,10 @@ if (sf && (sf.flagged?.length || sf.malformed?.length)) {
   lines.push('', `_Re-run \`node scripts/skill-freshness.mjs --pretty\` locally; re-verify the facts, then bump the \`verified:\` stamp._`)
   sections.push(['📚 Skill freshness', lines])
 }
+
+// 🧬 Generated collections behind the generator (#3407) — report-only.
+const driftLines = renderDriftLines(data.appCollectionDrift)
+if (driftLines) sections.push(['🧬 Generated collections behind the generator', driftLines])
 
 if (data.retiredProjects?.length) {
   // Past-threshold entries get a direct link to the teardown-app workflow_dispatch

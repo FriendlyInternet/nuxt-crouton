@@ -29,12 +29,11 @@
  *      + /set-active so the reviewer lands INSIDE the app. Apps with
  *      autoCreateOnSignup / defaultTeamSlug already have an active org → skipped.
  *
- * Best-effort by contract: an auth-level hiccup prints a warning and exits 0 so it
- * can't fail a deploy. Two exits are non-zero: a usage error (missing
- * --url/--email/--password), and an existing account that still refuses the given
- * password after the reset attempt — the caller only advertises a login on exit 0
- * (#1369), so a login known NOT to work must not exit 0 (#2358). The deploy step
- * wraps this in `if`, so neither fails the deploy.
+ * Exit 0 <=> a working review login exists (#1369, #2358, #3474). Anything else is
+ * non-zero: usage error (2); an invalid --url, an unreachable Worker, a sign-up that
+ * still fails after retries (the fresh Worker may not see its auth secret for a few
+ * seconds), or an existing account that refuses the password (1). The caller only
+ * advertises a login on exit 0.
  *
  * Staging only — the caller (deploy-app.yml) gates this to environment != production.
  */
@@ -55,8 +54,43 @@ function parseArgs(argv) {
     else if (a === '--seed-team') out.seedTeam = argv[++i]
     else if (a === '--db') out.db = argv[++i]
     else if (a === '--sqlite') out.sqlite = argv[++i]
+    else if (a === '--require-data') out.requireData = String(argv[++i] || '').split(',').map(s => s.trim()).filter(Boolean)
   }
   return out
+}
+
+/**
+ * #3751: the SQL that counts a seeded team's rows in one table. Crouton collection
+ * tables scope rows by a `teamId` column. The table name is interpolated, so it must
+ * be a plain identifier — anything else throws rather than reaching the database.
+ */
+export function teamDataCountSql(table, orgId) {
+  if (!/^[A-Za-z0-9_]+$/.test(String(table))) throw new Error(`invalid table name: ${table}`)
+  return `SELECT COUNT(*) AS "n" FROM "${table}" WHERE "teamId"=${sqlStr(orgId)};`
+}
+
+/**
+ * #3751: given `{ table: count | null }` (null = the query failed), the tables that
+ * leave the review login without data. Empty array ⇔ the team has everything.
+ */
+export function missingTeamData(counts) {
+  return Object.entries(counts).filter(([, n]) => !(Number(n) > 0)).map(([t]) => t)
+}
+
+/** Run one read query and return its first row's `n` (same two transports as execSeedSql). */
+function querySeedCount(args, sql) {
+  if (args.sqlite) {
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+    const db = new DatabaseSync(args.sqlite)
+    try { return Number(db.prepare(sql).get()?.n ?? 0) } finally { db.close() }
+  }
+  const out = execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--json', '--yes'], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+    env: process.env
+  }).toString()
+  // wrangler --json prints `[{ results: [{ n }], success, meta }]`.
+  const parsed = JSON.parse(out.slice(out.indexOf('[')))
+  return Number(parsed?.[0]?.results?.[0]?.n ?? 0)
 }
 
 /**
@@ -99,6 +133,29 @@ function execSeedSql(args, sql) {
  * `review+<app>-<key>@example.com` decodes as a SPACE unencoded, so a hand-built
  * link logs in as the wrong address.
  */
+export const SIGNUP_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 15000, 15000]
+
+export function isMissingSecretError(code) {
+  return /BETTER_AUTH_SECRET is required/i.test(String(code ?? ''))
+}
+
+/** 'ok' | 'exists' | 'retry' | 'give-up' for one sign-up attempt. */
+export function signUpDecision({ ok, status, code, threw, attempt, maxAttempts }) {
+  if (ok) return 'ok'
+  if (!threw && (status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code ?? '')))) return 'exists'
+  if ((threw || isMissingSecretError(code)) && attempt < maxAttempts) return 'retry'
+  return 'give-up'
+}
+
+export function retryDelays(env = process.env) {
+  const raw = env.SEED_SIGNUP_RETRY_DELAYS_MS
+  if (raw) {
+    const parts = raw.split(',').map(x => x.trim())
+    if (parts.every(x => /^\d+$/.test(x))) return parts.map(Number)
+  }
+  return SIGNUP_RETRY_DELAYS_MS
+}
+
 export function buildLoginUrl({ url, email, password, landing }) {
   const q = new URLSearchParams({ email, password })
   if (landing) q.set('redirect', landing)
@@ -148,6 +205,22 @@ export async function resetPasswordSql(email, password, hashPassword) {
     `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
 }
 
+/**
+ * SQL that closes the "stranger pre-registered the predictable review address" hole
+ * (#3162). The feedback guard only trusts a VERIFIED email, and sign-up leaves it
+ * unverified. Run it ONLY after the seed proved the account holds the seed password
+ * (sign-up succeeded, or sign-in with the seed password worked) and after the seed's
+ * own API calls. (a) an unverified account's sessions are dropped (could be a
+ * stranger's); (b) it is then marked verified. On redeploy the row is already
+ * verified, so (a) matches nothing — no session is revoked.
+ */
+export function markReviewerVerifiedSql(email) {
+  const e = sqlStr(String(email).toLowerCase())
+  return `DELETE FROM "session" WHERE "userId" IN ` +
+    `(SELECT "id" FROM "user" WHERE lower("email") = ${e} AND "emailVerified" = 0); ` +
+    `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -179,7 +252,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const { url, email, password } = args
   if (!url || !email || !password) {
-    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>)]')
+    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>) [--require-data <table,table>]]')
     process.exit(2)
   }
 
@@ -187,8 +260,8 @@ async function main() {
   try {
     origin = new URL(url).origin
   } catch {
-    warn(`invalid --url "${url}" — skipping seed.`)
-    process.exit(0)
+    warn(`invalid --url "${url}" — no login created.`)
+    process.exit(1)
   }
   const base = origin
   const name = args.name || 'Review Tester'
@@ -223,41 +296,55 @@ async function main() {
     return { res, json }
   }
 
-  // 1. Sign up (autoSignIn returns a session cookie on success).
+  // 1. Sign up (autoSignIn returns a session cookie on success). A brand-new Worker
+  //    may not see its just-uploaded auth secret for a few seconds → retry (#3474).
+  const delays = retryDelays()
+  const maxAttempts = delays.length + 1
   let signedUp = false
-  try {
-    const { res, json } = await post('/api/auth/sign-up/email', { name, email, password })
-    if (res.ok) {
+  for (let attempt = 1; ; attempt++) {
+    let res = null
+    let json = null
+    let threw = null
+    try {
+      ;({ res, json } = await post('/api/auth/sign-up/email', { name, email, password }))
+    } catch (e) {
+      threw = e
+    }
+    const code = threw ? (threw?.message || String(threw)) : (json?.code || json?.message || `HTTP ${res.status}`)
+    const decision = signUpDecision({ ok: !!res?.ok, status: res?.status, code, threw: !!threw, attempt, maxAttempts })
+    if (decision === 'ok') {
       signedUp = true
       info(`signed up ${email}`)
-    } else {
-      const code = json?.code || json?.message || `HTTP ${res.status}`
-      if (res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))) {
-        info(`user ${email} already exists — already seeded, reusing.`)
-        // Re-establish a session for the org check below.
-        let { res: si } = await post('/api/auth/sign-in/email', { email, password })
-        if (!si.ok && (args.db || args.sqlite)) {
-          // The account holds an old password (secret rotated, #2358) — reset it, retry.
-          info('existing user refuses this password — resetting it to the current one.')
-          try {
-            execSeedSql(args, await resetPasswordSql(email, password))
-            ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
-          } catch (e) {
-            warn(`password reset failed: ${e?.message || e}`)
-          }
-        }
-        if (!si.ok) {
-          warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
-          process.exit(1)
-        }
-      } else {
-        warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)
-        process.exit(0)
-      }
+      break
     }
-  } catch (e) {
-    warn(`sign-up request error: ${e?.message || e} — skipping.`)
-    process.exit(0)
+    if (decision === 'retry') {
+      const wait = delays[attempt - 1]
+      info(`sign-up: Worker not ready (${isMissingSecretError(code) ? 'no auth secret yet' : 'request error'}) — retrying in ${Math.round(wait / 1000)}s (attempt ${attempt}/${maxAttempts})`)
+      await new Promise(r => setTimeout(r, wait))
+      continue
+    }
+    if (decision === 'exists') {
+      info(`user ${email} already exists — already seeded, reusing.`)
+      // Re-establish a session for the org check below.
+      let { res: si } = await post('/api/auth/sign-in/email', { email, password })
+      if (!si.ok && (args.db || args.sqlite)) {
+        // The account holds an old password (secret rotated, #2358) — reset it, retry.
+        info('existing user refuses this password — resetting it to the current one.')
+        try {
+          execSeedSql(args, await resetPasswordSql(email, password))
+          ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+        } catch (e) {
+          warn(`password reset failed: ${e?.message || e}`)
+        }
+      }
+      if (!si.ok) {
+        warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+        process.exit(1)
+      }
+      break
+    }
+    warn(`could not create the review login after ${attempt} attempt(s) (${code}) — NOT advertising it.`)
+    process.exit(1)
   }
 
   // 2. Capture the review user's id + whether the session already has an active org
@@ -320,6 +407,33 @@ async function main() {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
   }
 
+  // 3c. --require-data (#3751): the login is only worth advertising if the seeded team
+  //     actually holds the demo data. Count each named table for that team, log the
+  //     counts, and exit non-zero (→ no login advertised, #1369) if any is empty or the
+  //     count fails. A silent seed failure left booking-demo's login in an empty team.
+  if (args.requireData?.length) {
+    if (!args.seedTeam || !(args.db || args.sqlite)) {
+      warn('--require-data needs --seed-team and --db/--sqlite — cannot check the team\'s data.')
+      process.exit(1)
+    }
+    const orgId = seedOrgId(args.seedTeam)
+    const counts = {}
+    for (const table of args.requireData) {
+      try {
+        counts[table] = querySeedCount(args, teamDataCountSql(table, orgId))
+      } catch (e) {
+        warn(`count of ${table} for ${orgId} failed: ${e?.message || e}`)
+        counts[table] = null
+      }
+    }
+    info(`team ${orgId} data: ${Object.entries(counts).map(([t, n]) => `${t}=${n ?? 'error'}`).join(', ')}`)
+    const missing = missingTeamData(counts)
+    if (missing.length) {
+      warn(`seeded team ${orgId} has no rows in ${missing.join(', ')} — the demo seed did not reach it; not a working review login.`)
+      process.exit(1)
+    }
+  }
+
   // 3b. No active org yet → create a fresh one so the reviewer lands inside the
   //     app, not at a create-team wall (also the fallback when 3a couldn't attach).
   if (signedUp && !hasActiveOrg) {
@@ -340,6 +454,17 @@ async function main() {
       }
     } catch (e) {
       warn(`team create error: ${e?.message || e} — login still works; reviewer may need to pick a team.`)
+    }
+  }
+
+  // 4. Verify the reviewer address (#3162) — last, so the seed's own session survived
+  //    every call above. Only reached when the account holds the seed password.
+  if (args.db || args.sqlite) {
+    try {
+      execSeedSql(args, markReviewerVerifiedSql(email))
+      info(`marked ${email} verified.`)
+    } catch (e) {
+      warn(`could not mark ${email} verified: ${e?.message || e} — feedback pins will be refused.`)
     }
   }
 

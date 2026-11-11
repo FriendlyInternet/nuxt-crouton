@@ -14,6 +14,13 @@ import {builderBookingsConfig} from '../layers/builder/collections/bookings/app/
 // Add — the builder composes REAL data). Sizing (#986, typed) drives intrinsic
 // sizing: a Top bar / Bottom nav declare `height: 'hug'` → a short pill wherever
 // they land; `deriveSizing` folds these bottom-up for the floor readout.
+// The demo `Gigs · List` options — see the `bookings-list` entry below for why
+// they're held in a function.
+const BUILDER_BOOKINGS_LIST_FIELDS: NonNullable<CroutonLayoutBlockRegistry[string]['configSchema']> = [
+  { name: 'collection', type: 'text', label: 'Collection', default: 'builderBookings' },
+  { name: 'heading', type: 'text', label: 'Heading', default: 'Bookings' },
+]
+
 const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   // Artists · List — real rows of builderArtists; `variants` are the bounded
   // display options (the `display-variants` spec Add), surfaced as a first-class
@@ -65,11 +72,13 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
       { name: 'heading', type: 'text', label: 'Heading', default: 'Artist' },
     ],
   },
-  // Bookings · List — real rows of builderBookings (content for the chart-style block).
+  // Gigs · List — real rows of builderBookings (artists' gigs; content for the chart-style
+  // block). Labelled "Gigs" so it never reads as the bookings package's blocks (#2559);
+  // the id and collection name stay, so saved pages keep working.
   'bookings-list': {
     id: 'bookings-list',
-    name: 'Bookings · List',
-    description: 'Live rows of the bookings collection',
+    name: 'Gigs · List',
+    description: 'Live rows of the gigs collection',
     icon: 'i-lucide-calendar-days',
     component: 'CroutonLayoutCollection',
     kind: 'atomic',
@@ -78,9 +87,44 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
     defaultConfig: { collection: 'builderBookings', heading: 'Bookings' },
+    // @fyit/crouton-bookings registers its own `bookings-list` (#2559) and app config
+    // merges with defu, which CONCATENATES arrays — the package's `scope` field would
+    // leak into this demo block's options. The function form (Nuxt app.config merge
+    // strategy) replaces the lower layer's array instead of appending to it.
+    configSchema: (() => BUILDER_BOOKINGS_LIST_FIELDS) as unknown as typeof BUILDER_BOOKINGS_LIST_FIELDS,
+  },
+  // ── @fyit/crouton-bookings blocks (#2559) ──
+  // The package's calendar / filters / locations come straight from its app.config
+  // (category 'bookings'). Its list shares the id `bookings-list` with the demo block
+  // above, which wins the merge — so the package's list is offered here under its own
+  // id, same component + options as the package registers it.
+  // Labels: the package's blocks go under "Bookings · …"; the demo collection's list
+  // reads "Gigs · List". App config wins the merge on these scalar names; component,
+  // sizing and options stay the package's own. The package's Filters block is not
+  // offered in the row (see palette-blocks.ts), so it keeps its own name.
+  'bookings-calendar-only': { name: 'Bookings · Calendar' } as CroutonLayoutBlockRegistry[string],
+  'bookings-locations': { name: 'Bookings · Locations' } as CroutonLayoutBlockRegistry[string],
+  'bookings-package-list': {
+    id: 'bookings-package-list',
+    name: 'Bookings · Bookings list',
+    description: 'Live list of bookings (respects the shared filter)',
+    icon: 'i-lucide-list',
+    component: 'CroutonBookingsLayoutList',
+    kind: 'atomic',
+    category: 'bookings',
+    minWidth: 300,
+    defaultSize: 40,
     configSchema: [
-      { name: 'collection', type: 'text', label: 'Collection', default: 'builderBookings' },
-      { name: 'heading', type: 'text', label: 'Heading', default: 'Bookings' },
+      {
+        name: 'scope',
+        type: 'select',
+        label: 'Scope',
+        default: 'team',
+        options: [
+          { label: 'All team bookings', value: 'team' },
+          { label: 'My bookings', value: 'personal' },
+        ],
+      },
     ],
   },
   // Artists · Stats — KPI cards (fluid, modest floor).

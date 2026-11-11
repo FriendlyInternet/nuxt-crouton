@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     ensureBlob(file, {
-      maxSize: '20MB',
+      maxSize: '16MB',
       types: [
         'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif',
         'application/pdf',

@@ -1,0 +1,3 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } }
+}

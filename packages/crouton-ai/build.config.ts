@@ -14,7 +14,7 @@ export default defineBuildConfig({
       input: 'server/utils/providers',
       outDir: 'dist/server/utils/providers',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // App composables
@@ -22,7 +22,7 @@ export default defineBuildConfig({
       input: 'app/composables',
       outDir: 'dist/app/composables',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // App types
@@ -30,7 +30,7 @@ export default defineBuildConfig({
       input: 'app/types',
       outDir: 'dist/app/types',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     }
   ],

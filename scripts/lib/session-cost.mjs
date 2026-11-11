@@ -36,6 +36,29 @@ export function parseUsageLine(line) {
   return usage ? { usage, model: m?.model ?? j.model ?? null, id: m?.id ?? null } : null
 }
 
+/**
+ * Price a pi usage object ({input,output,cacheRead,cacheWrite}) via the Anthropic table.
+ * Used when pi reports cost 0 (subscription bridge) but kept token counts — an ESTIMATE.
+ */
+export function costForPiUsage(usage, model) {
+  const u = usage || {}
+  return costForUsage(
+    {
+      input_tokens: u.input ?? u.input_tokens ?? 0,
+      output_tokens: u.output ?? u.output_tokens ?? 0,
+      cache_read_input_tokens: u.cacheRead ?? u.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens: u.cacheWrite ?? u.cache_creation_input_tokens ?? 0,
+    },
+    model
+  )
+}
+
+/** Token count of a pi-shaped usage (input/output/cacheRead/cacheWrite); 0 for claude shape. */
+function piTokens(u) {
+  const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return n(u?.input) + n(u?.output) + n(u?.cacheRead) + n(u?.cacheWrite)
+}
+
 /** Yield each billable assistant turn from raw NDJSON text. */
 export function* usageTurns(text) {
   for (const line of String(text).split('\n')) {
@@ -50,7 +73,7 @@ export function* usageTurns(text) {
  */
 // fallow-ignore-next-line complexity -- linear accumulation over turns; the branch count is the exact-vs-computed pick + the dedup guard, not nesting. Covered by session-cost.test.mjs (#1268)
 export function costFromText(text) {
-  let usd = 0, tokens = 0, turns = 0, model = null, exact = true
+  let usd = 0, estimatedUsd = 0, tokens = 0, turns = 0, model = null, exact = true
   const seen = new Set() // dedup claude's repeated message.id logs; pi turns have no id → always count
   for (const { usage, model: m, id } of usageTurns(text)) {
     if (id) {
@@ -58,16 +81,24 @@ export function costFromText(text) {
       seen.add(id)
     }
     const reported = usage.cost?.total
-    if (typeof reported === 'number') usd += reported
-    else {
-      usd += costForUsage(usage, m || model)
+    if (typeof reported === 'number' && !(reported === 0 && tokensForUsage(usage) + piTokens(usage) > 0)) usd += reported
+    else if (typeof reported === 'number') {
+      // pi on a subscription reports 0 but keeps token counts → computed estimate
+      const est = costForPiUsage(usage, m || model)
+      usd += est
+      estimatedUsd += est
+      exact = false
+    } else {
+      const est = costForUsage(usage, m || model)
+      usd += est
+      estimatedUsd += est
       exact = false
     }
-    tokens += tokensForUsage(usage)
+    tokens += tokensForUsage(usage) + piTokens(usage)
     turns++
     model = m || model
   }
-  return { usd: Math.round(usd * 1e6) / 1e6, tokens, turns, model, exact }
+  return { usd: Math.round(usd * 1e6) / 1e6, estimatedUsd: Math.round(estimatedUsd * 1e6) / 1e6, tokens, turns, model, exact }
 }
 
 /** Same as costFromText but reads the file (returns a zero row on any read error). */
@@ -76,7 +107,7 @@ export function costFromFile(file) {
   try {
     text = fs.readFileSync(file, 'utf8')
   } catch {
-    return { usd: 0, tokens: 0, turns: 0, model: null, exact: true }
+    return { usd: 0, estimatedUsd: 0, tokens: 0, turns: 0, model: null, exact: true }
   }
   return costFromText(text)
 }

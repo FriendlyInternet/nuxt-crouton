@@ -1,5 +1,5 @@
 import { desc, eq, gte, lte, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { croutonOperations } from '../../../../database/schema'
 
 /**
@@ -17,7 +17,7 @@ import { croutonOperations } from '../../../../database/schema'
  *   pageSize  — results per page (default 50, max 200)
  */
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team } = await requireTeamAdmin(event)
   const db = useDB()
   const q = getQuery(event)
 

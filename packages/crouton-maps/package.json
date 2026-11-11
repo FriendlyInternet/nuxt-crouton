@@ -42,5 +42,8 @@
   "peerDependencies": {
     "nuxt": "^4.0.0",
     "@nuxt/ui": "^4.3.0"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }

@@ -19,6 +19,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
   assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
+  bookings-fullscreen.smoke.spec.ts # with-bookings only: full screen → inline keeps week/filter/day/view (#3079)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 
@@ -76,11 +77,14 @@ pnpm typecheck:fixtures                            # all fixtures (root script)
 ```
 
 CI (`.github/workflows/e2e.yml`) **regenerates each fixture from its committed
-schemas, then type-checks it** before the Playwright smoke — so a generator
-template regression (the class of bug behind #195) turns CI red instead of only
-surfacing when someone scaffolds a new app. Keep the committed fixture output in
-sync: after changing a generator template, regenerate the fixtures
-(`cd fixtures/<name> && crouton config --force`) and commit the result.
+schemas, fails if the result differs from what is committed** (changed or new
+files — `scripts/fixture-drift.mjs`, #3152)**, then type-checks and lints it**
+before the Playwright smoke — so a generator template regression (the class of
+bug behind #195) turns CI red instead of only surfacing when someone scaffolds a
+new app. Keep the committed fixture output in sync: after changing a generator
+template, regenerate the fixtures (`cd fixtures/<name> && crouton config --force`)
+and commit the result. A generator PR that changes output is red until the
+regenerated fixtures are committed with it.
 
 ## How it works
 
@@ -186,6 +190,7 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
     {
       "name": "pages workspace renders",         // test title
       "path": "/admin/{team}/workspace",          // route; {team} -> active team slug
+      "click": ["[aria-label='Create Page']"],  // optional: selector (or list, in order) clicked after load, before asserting
       "expect": { "visible": "[id$='-panel-pages-sidebar']" }  // CSS selector that must be visible
       // or: "expect": { "heading": "Workspace" } // a role=heading name (case-insensitive)
       // add "a11y": false inside "expect" to opt this surface OUT of the axe-core scan

@@ -1,7 +1,7 @@
 /**
  * #2757 (epic #2754) — should a `work-this` issue start in PLAN mode (plan → review → build)?
  *
- * Plan first when ANY of: label `plan-first`; a `type:fix` label; the title/body names a path under
+ * Plan first when ANY of: label `plan-first`; a `type:fix` or `workflow` label; the text names a pipeline path (.github/workflows, scripts/, .claude/); the title/body names a path under
  * `packages/`; or the title/body touches auth / sync / scoped-access / pairing / team-filtered data.
  * Label `no-plan` always wins (the manual skip). Everything else builds directly.
  * The lists live in .claude/plan-routing.json so they can grow without a workflow edit.
@@ -26,11 +26,13 @@ export function routeIssue({ labels = [], text = '' }, config = loadConfig()) {
   if (l) return { mode: 'plan', reason: `label ${l}` }
   const pkg = text.match(new RegExp(config.packagePathPattern))
   if (pkg) return { mode: 'plan', reason: `names a shared-package path (${pkg[0]})` }
+  const pipe = config.pipelinePathPattern && text.match(new RegExp(config.pipelinePathPattern))
+  if (pipe) return { mode: 'plan', reason: `names a pipeline path (${pipe[0]})` }
   for (const p of config.sensitivePatterns || []) {
     const m = text.match(new RegExp(p, 'i'))
     if (m) return { mode: 'plan', reason: `touches auth/sync/team-scoped code (matched "${m[0].trim()}")` }
   }
-  return { mode: 'build', reason: 'no bug label, no packages/ path, no auth/sync/team-scoped code' }
+  return { mode: 'build', reason: 'no bug/workflow label, no packages/ or pipeline path, no auth/sync/team-scoped code' }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

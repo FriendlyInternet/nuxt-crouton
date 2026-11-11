@@ -103,8 +103,8 @@ If a leaf's work needs a workflow-file change (new trigger, path filter, job):
 
 - **Manual:** run `/task-decompose "<task>"` or `/task-decompose #NN` in any Claude Code
   session (CLI, web, desktop, mobile app).
-- **Automatic — issue opt-in:** add the **`delegate`** label to any issue and
-  `.github/workflows/decompose-on-issue.yml` runs `/task-decompose #NN` for you (no
+- **Automatic — issue opt-in:** add the **`work-this`** label to any issue (`delegate*` labels are bot-only, #3208) and
+  the pipeline (router in `work-issue-pidev.yml`) runs `/task-decompose #NN` for you (no
   command needed). Gate is the label, so only opted-in issues fire.
 - **By comment (mobile-friendly):** comment **`/delegate`** (or **`/deploy`**) on an issue —
   `.github/workflows/comment-dispatch.yml` applies the `delegate` label for you (via a PAT, so
@@ -119,13 +119,12 @@ If a leaf's work needs a workflow-file change (new trigger, path filter, job):
 - **Interactive runs (you typing `/task-decompose` in a CLI / web / app session)** run on
   **whatever your session is logged into** — a **Claude Pro/Max subscription is fine**;
   this is ordinary interactive Claude Code use.
-- **The automated workflows are headless/unattended, so they MUST use an
-  `ANTHROPIC_API_KEY`** repo secret (same as `claude.yml`) — pay-per-token. **Do NOT wire
-  them to a subscription `CLAUDE_CODE_OAUTH_TOKEN`.** Per Anthropic's Legal & Compliance
-  terms, subscription OAuth is for *ordinary, individual, interactive* use of Claude Code,
-  **not** CI / Agent-SDK / headless automation (which bills at standard API rates). Using a
-  subscription token to drive these workflows would be against the terms.
-- Cost is therefore a real factor on the automated path — see the model split in
+- **The automated workflows run on the Claude subscription** —
+  `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}` for `claude-code-action`,
+  claude-bridge for pi workers (owner decision 2026-10-29, #3121; the owner knows subscription
+  use in CI is a grey area and kept it). Do not switch a workflow to `anthropic_api_key`
+  without an owner decision.
+- Usage limits are still a real factor on the automated path — see the model split in
   `.claude/agents/CLAUDE.md` (Sonnet for the issue-only agents, Opus only for the worker)
   and the `MAX_DEPTH`/`MAX_CHILDREN` caps that bound fan-out.
 
@@ -229,3 +228,17 @@ To change who gets pinged, edit `NOTIFY_HANDLE` here and in `.claude/agents/CLAU
   workflow; the agents enforce those rules themselves.
 - Sub-PRs may auto-merge into the **epic branch** (a staging area). The final
   **epic→`main`** PR is **not** auto-merged — that's the human review/merge gate.
+
+## Pipeline overview (moved from root CLAUDE.md, #3350)
+
+For a big/fuzzy initiative, you can let agents do the epic→sub-issue breakdown **and** the work. `/task-decompose "<task>"` (or `/task-decompose #NN` to reuse an existing epic) creates the epic, then spawns a recursive agent pipeline that builds out the whole issue tree and works the leaves:
+
+```
+/task-decompose '<task>'
+  └─ task-orchestrator (depth 0)   reads epic → 2–6 sub-issues → spawns a decomposer per child
+       └─ task-decomposer (depth 1+, RECURSIVE)   LEAF TEST one issue:
+            ├─ leaf / at depth cap → spawn task-worker (worktree) → PR (Closes #N)
+            └─ too big            → create sub-issues → spawn a decomposer per child (recurse)
+```
+
+**Stop-conditions** (so it can't run away): `MAX_DEPTH = 3`, `MAX_CHILDREN = 6`, and a four-part **LEAF TEST** (single coherent change · bounded files · clear/testable acceptance · doable in one focused run). All four true ⇒ build it, don't split. Tune in `.claude/agents/task-decomposer.md`. Everything persists as real GitHub issues (it obeys the same `github-tasks` + `/commit` + no-squash rules); it does **not** auto-merge. Details: `.claude/skills/task-decompose/SKILL.md` and `.claude/agents/CLAUDE.md`. (Epic #249.)

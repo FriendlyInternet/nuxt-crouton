@@ -39,7 +39,7 @@ const props = defineProps<Props>()
         :icon="card.icon"
         :title="card.title"
         :description="card.description"
-        :to="card.to"
+        :to="safeUrl(card.to)"
         :highlight="card.highlight"
         :highlight-color="card.highlightColor"
       />

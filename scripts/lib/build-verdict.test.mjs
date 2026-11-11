@@ -4,14 +4,26 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDiff, precheck, decide, renderComment, parseVerdict } from './build-verdict.mjs'
+import { parseDiff, precheck, decide, renderComment, parseVerdict, stopLine } from './build-verdict.mjs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const TICKET = 'Move the events routes under [id]. Rule: a team-B row is never reachable by id from team A.'
 
-const copiedDiff = `diff --git a/server/api/[teamId]/events.get.ts b/server/api/[id]/events.get.ts
+const copiedDiff = `diff --git a/packages/a/server/api/[teamId]/events.get.ts b/packages/a/server/api/[id]/events.get.ts
 similarity index 100%
-copy from server/api/[teamId]/events.get.ts
-copy to server/api/[id]/events.get.ts
+copy from packages/a/server/api/[teamId]/events.get.ts
+copy to packages/a/server/api/[id]/events.get.ts
+diff --git a/packages/a/plugin.ts b/packages/a/plugin.ts
+index 1..2 100644
+--- a/packages/a/plugin.ts
++++ b/packages/a/plugin.ts
+@@ -1 +1 @@
+-a
++b
 diff --git a/.fallow-health-baseline.json b/.fallow-health-baseline.json
 index 111..222 100644
 --- a/.fallow-health-baseline.json
@@ -44,7 +56,7 @@ Is the wider scope intended? Recommend yes.
 test('parseDiff reads copies, renames and added lines', () => {
   const f = parseDiff(copiedDiff)
   assert.equal(f[0].status, 'copied')
-  assert.equal(f[0].from, 'server/api/[teamId]/events.get.ts')
+  assert.equal(f[0].from, 'packages/a/server/api/[teamId]/events.get.ts')
   assert.deepEqual(parseDiff(cleanDiff).map((x) => x.status), ['renamed', 'added'])
 })
 
@@ -110,5 +122,125 @@ test('golden fixtures (#2966, #2935, #3005, #3007) parse to the expected verdict
     assert.equal(d.verdict, want.verdict, n)
     assert.deepEqual(d.failed, want.failed, n)
     if (want.evidence) assert.match(d.items[want.failed[0]].evidence, new RegExp(want.evidence), n)
+  }
+})
+
+const cp = (from, to) => `diff --git a/${from} b/${to}
+similarity index 100%
+copy from ${from}
+copy to ${to}
+`
+const mod = (p) => `diff --git a/${p} b/${p}
+index 1..2 100644
+--- a/${p}
++++ b/${p}
+@@ -1 +1 @@
+-a
++b
+`
+
+test('#3160: copy of an untouched file outside the ticket and edited packages passes item 2', () => {
+  const d = cp('packages/canary-target/vitest.config.ts', 'packages/crouton-devtools/vitest.config.ts') + mod('packages/crouton-devtools/a.ts')
+  assert.equal(precheck(d, 'see packages/crouton-feedback/vitest.config.ts and vitest.config.ts')['2'], undefined)
+})
+test('#3160: copy within an edited package fails item 2', () => {
+  const d = cp('packages/a/src/x.ts', 'packages/a/src/utils/x.ts') + mod('packages/a/src/plugin.ts')
+  assert.equal(precheck(d, '')['2'].pass, false)
+})
+test('#3160: copy whose full source path is in the ticket fails item 2', () => {
+  assert.equal(precheck(cp('packages/a/x.ts', 'packages/b/x.ts'), 'move packages/a/x.ts')['2'].pass, false)
+})
+test('#3160: bare file name in ticket and unrelated scope passes item 2', () => {
+  assert.equal(precheck(cp('packages/a/x.ts', 'packages/b/x.ts'), 'mention x.ts')['2'], undefined)
+})
+test('#3160: no copies leaves item 2 untouched', () => {
+  assert.equal(precheck(mod('packages/a/x.ts'), '')['2'], undefined)
+})
+
+test('#3173: only the final hold carries the final marker, the ok wording and the optional ok-again line', () => {
+  const d = decide(copiedDiff, TICKET, verdict('go', {}))
+  const final = renderComment(d, { round: 2, okAgain: 'AGAIN-LINE' })
+  assert.match(final, /<!-- build-review-final -->/)
+  assert.match(final, /reply `ok` to merge as is/)
+  assert.match(final, /^AGAIN-LINE$/m)
+  assert.doesNotMatch(renderComment(d, { round: 2 }), /AGAIN-LINE/)
+  const first = renderComment(d, { round: 1, okAgain: 'AGAIN-LINE' })
+  assert.doesNotMatch(first, /build-review-final|AGAIN-LINE/)
+})
+
+test('3428: a needs-owner comment says ok merges', () => {
+  const d = decide(cleanDiff, TICKET, verdict('needs-owner', {}))
+  assert.equal(d.verdict, 'needs-owner')
+  assert.match(renderComment(d), /reply `ok` to merge as is/)
+})
+
+const SK = (k) => ['it', k].join('.')
+const addTest = (line) => `diff --git a/tests/a.test.ts b/tests/a.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/a.test.ts
+@@ -0,0 +1 @@
++${line}
+`
+const SNAP = 'apps/velo/server/db/migrations/sqlite/meta/'
+
+test('#3550 workflow gate: a ci.yml edit passes item 3 when the ticket has a Workflow-change: yes line', () => {
+  const d = mod('.github/workflows/ci.yml')
+  assert.equal(precheck(d, "the CI step reports only. Workflow-change: yes, if the step's failure mode changes.")['3'], undefined)
+  assert.equal(precheck(d, '- Workflow-change: yes.')['3'], undefined)
+})
+test('#3550 workflow gate: a ci.yml edit without Workflow-change: yes and without the path still fails item 3', () => {
+  const d = mod('.github/workflows/ci.yml')
+  assert.match(precheck(d, TICKET)['3'].evidence, /ci\.yml/)
+  assert.match(precheck(d, 'Workflow-change: no')['3'].evidence, /ci\.yml/)
+})
+test('#3550 workflow gate: Workflow-change: yes does not exempt a non-workflow gate', () => {
+  assert.match(precheck(mod('.fallowrc.json'), 'Workflow-change: yes.')['3'].evidence, /\.fallowrc\.json/)
+})
+test('#3550 migration snapshot: a new meta/NNNN_snapshot.json copied from the previous one passes item 2', () => {
+  const d = cp(`${SNAP}0003_snapshot.json`, `${SNAP}0004_snapshot.json`) + mod('apps/velo/server/db/schema.ts')
+  assert.equal(precheck(d, TICKET)['2'], undefined)
+})
+test('#3550 migration snapshot: a copied .ts in the same scope still fails item 2', () => {
+  const d = cp(`${SNAP}0003_snapshot.json`, `${SNAP}0004_snapshot.json`) + cp('apps/velo/server/a.ts', 'apps/velo/server/b.ts') + mod('apps/velo/server/db/schema.ts')
+  const ev = precheck(d, TICKET)['2'].evidence
+  assert.match(ev, /b\.ts/)
+  assert.doesNotMatch(ev, /snapshot/)
+})
+test('#3550 skip text: it.skip inside a string literal in a test file passes item 3', () => {
+  assert.equal(precheck(addTest(`const src = "${SK('skip')}('x', () => {})"`), TICKET)['3'], undefined)
+  assert.equal(precheck(addTest(`const a = ["${['test', 'skip'].join('.')}('s', () => {})", '${SK('only')}']`), TICKET)['3'], undefined)
+})
+// #3696 — "produced no verdict" names the line pi stopped at.
+const VERDICT_CLI = fileURLToPath(new URL('./build-verdict.mjs', import.meta.url))
+const stopCli = (file) => execFileSync(process.execPath, [VERDICT_CLI, 'stop-line', file], { encoding: 'utf8' })
+
+test('#3696 stopLine: pi\'s own Error line wins over the runner\'s later ##[error] line', () => {
+  const log = 'starting pi\nError: Unknown provider "claude-bridge". Use --list-models to see available providers/models.\n##[error]Process completed with exit code 1.\n'
+  assert.equal(stopLine(log), 'Error: Unknown provider "claude-bridge". Use --list-models to see available providers/models.')
+})
+
+test('#3696 stopLine: no error word → the last non-empty line', () => {
+  assert.equal(stopLine('one\ntwo finished early\n\n  \n'), 'two finished early')
+})
+
+test('#3696 stopLine: empty log → \'\'; the CLI on a missing file says pi printed nothing and exits 0', () => {
+  assert.equal(stopLine(''), '')
+  assert.equal(stopCli(join(tmpdir(), 'no-such-pi-log-3696.log')), ' — pi printed nothing')
+})
+
+test('#3696 stopLine: ANSI codes and backticks stripped, long lines capped at 300', (t) => {
+  const esc = String.fromCharCode(27)
+  assert.equal(stopLine(`${esc}[31mError: bad \`thing\`${esc}[0m`), "Error: bad 'thing'")
+  assert.equal(stopLine('x'.repeat(1000)).length, 300)
+  const dir = mkdtempSync(join(tmpdir(), 'stop-line-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  writeFileSync(join(dir, 'pi.log'), 'Error: boom\n')
+  assert.equal(stopCli(join(dir, 'pi.log')), ' — it stopped at: `Error: boom`')
+})
+
+test('#3550 skip text: a real it.skip / describe.skip / xit call still fails item 3', () => {
+  for (const l of [`${SK('skip')}('x', () => {})`, `${['describe', 'skip'].join('.')}('x', () => {})`, `${'x' + 'it'}('x', () => {})`]) {
+    assert.match(precheck(addTest(l), TICKET)['3'].evidence, /skipped/)
   }
 })

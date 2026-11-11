@@ -65,20 +65,20 @@ const { data: flow, pending: flowPending, refresh: refreshFlow } = await useFetc
     : '',
   {
     default: () => null as any,
-    immediate: !!(selectedFlowId.value && teamId.value),
+    enabled: () => !!(selectedFlowId.value && teamId.value),
     watch: [selectedFlowId]
   }
 )
 
 // Fetch collection rows when not in sync mode — gated until a non-sync flow
 // is loaded (the empty branch also avoids dereferencing a null flow).
-const { data: rows, pending: rowsPending } = await useFetch(
+const { data: rows, pending: rowsPending } = await useFetch<Record<string, unknown>[]>(
   () => flow.value && !flow.value.syncEnabled && teamId.value
     ? `/api/teams/${teamId.value}/${flow.value.collection}`
     : '',
   {
     default: () => [] as any[],
-    immediate: !!(flow.value && !flow.value.syncEnabled && teamId.value),
+    enabled: () => !!(flow.value && !flow.value.syncEnabled && teamId.value),
     watch: [flow]
   }
 )

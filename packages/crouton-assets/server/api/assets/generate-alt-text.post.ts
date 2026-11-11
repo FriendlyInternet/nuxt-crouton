@@ -9,7 +9,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'Image data is required' })
   }
 
-  // @ts-expect-error Nitro auto-import from crouton-ai
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore Optional Nitro auto-import from crouton-ai: unresolved when assets loads alone, resolved when both layers load
   const ai = createAIProvider(event)
   const modelId = ai.getDefaultModel()
 

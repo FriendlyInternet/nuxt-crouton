@@ -16,6 +16,7 @@ import {
   getNestedLayout,
   replaceNestedLayout,
   findNestedNodes,
+  applyPaneDrop,
 } from '../layout-edit'
 import type { LayoutNode, LayoutLeaf, LayoutSplit, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockDefinition } from '@fyit/crouton-core/app/types/layout-block'
@@ -407,5 +408,150 @@ describe('nestInside — dwell-to-drop creates a nested app (WS2 nesting)', () =
     }
     const next = nestInside(root, [0], leaf('guest')) as LayoutSplit
     expect((next.children[0] as LayoutNode).defaultSize).toBe(70)
+  })
+})
+
+// ── #3737: a remove/detach keeps every split adding up to 100 ──────────────────────────────
+
+function row(sizes: (number | undefined)[], direction: 'horizontal' | 'vertical' = 'horizontal'): LayoutSplit {
+  return {
+    type: 'split',
+    direction,
+    children: sizes.map((s, i) => leaf(`b${i}`, s === undefined ? {} : { defaultSize: s })),
+  }
+}
+const sizesOf = (n: LayoutNode | null) => (n as LayoutSplit).children.map(c => c.defaultSize)
+const idsOf = (n: LayoutNode | null) => (n as LayoutSplit).children.map(c => (c as LayoutLeaf).blockId)
+
+function expectSizes(n: LayoutNode | null, expected: number[]) {
+  const sizes = sizesOf(n)
+  expect(sizes).toHaveLength(expected.length)
+  expected.forEach((e, i) => expect(sizes[i]).toBeCloseTo(e, 1))
+  expect(sizes.reduce((a: number, b) => a + (b ?? 0), 0)).toBeCloseTo(100, 5)
+}
+
+/** Every split's children are all unset, or add up to 100 ± 0.5. Names the offender. */
+function assertSplitsSum100(node: LayoutNode | null, path: number[] = []) {
+  if (!node || node.type !== 'split') return
+  const sizes = node.children.map(c => c.defaultSize)
+  if (!sizes.every(s => s === undefined)) {
+    const sum = sizes.reduce((a: number, b) => a + (b ?? NaN), 0)
+    expect(Math.abs(sum - 100) <= 0.5, `split at [${path.join(',')}] sizes ${JSON.stringify(sizes)}`).toBe(true)
+  }
+  node.children.forEach((c, i) => assertSplitsSum100(c, [...path, i]))
+}
+
+function mulberry32(seed: number) {
+  let a = seed
+  return () => {
+    a |= 0
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function leafPaths(node: LayoutNode, base: number[] = []): number[][] {
+  if (node.type !== 'split') return [base]
+  return node.children.flatMap((c, i) => leafPaths(c, [...base, i]))
+}
+
+describe('removeNode / detachNode — every split still adds up to 100 (#3737)', () => {
+  it('1. removing the 40 from 10/20/30/40 rescales to 16.7/33.3/50, order kept', () => {
+    const next = removeNode(row([10, 20, 30, 40]), [3])
+    expectSizes(next, [16.7, 33.3, 50])
+    expect(idsOf(next)).toEqual(['b0', 'b1', 'b2'])
+  })
+  it('2. detaching the 10 from 10/20/30/40 rescales to 22.2/33.3/44.5', () => {
+    const { root, detached } = detachNode(row([10, 20, 30, 40]), [0])
+    expectSizes(root, [22.2, 33.3, 44.5])
+    expect((detached as LayoutLeaf).blockId).toBe('b0')
+  })
+  it('3. a split with no sizes stays unsized', () => {
+    const next = removeNode(row([undefined, undefined, undefined]), [1])
+    expect(sizesOf(next)).toEqual([undefined, undefined])
+  })
+  it('4. nested: only the inner split is rescaled', () => {
+    const root: LayoutSplit = {
+      type: 'split',
+      direction: 'horizontal',
+      children: [leaf('a', { defaultSize: 30 }), { ...row([20, 30, 50], 'vertical'), defaultSize: 70 }],
+    }
+    const next = removeNode(root, [1, 2]) as LayoutSplit
+    expect(sizesOf(next)).toEqual([30, 70])
+    expectSizes(next.children[1]!, [40, 60])
+  })
+  it('5. two panes: the survivor takes the parent’s size', () => {
+    const next = removeNode({ ...masterDetail(), defaultSize: 70 }, [0])
+    expect(next).toMatchObject({ type: 'leaf', blockId: 'form', defaultSize: 70 })
+  })
+  it('6. Builder wrap shape: a lone survivor under an unsized split sheds its stale size', () => {
+    const sized: LayoutSplit = { type: 'split', direction: 'horizontal', children: [leaf('a', { defaultSize: 30 }), leaf('b', { defaultSize: 70 })] }
+    const w = dropNode(sized, [], leaf('c'), 'bottom')
+    const next = removeNode(w, [0, 1]) as LayoutSplit
+    expect(next).toMatchObject({ type: 'split', direction: 'vertical' })
+    expect(idsOf(next)).toEqual(['a', 'c'])
+    expect(sizesOf(next)).toEqual([undefined, undefined])
+  })
+  it('7. property: 100 seeded random trees, every split all-unset or summing to 100', () => {
+    const rand = mulberry32(3737)
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1))
+    let n = 0
+    const build = (depth: number): LayoutNode => {
+      if (depth >= 3 || rand() < 0.35) return leaf(`l${n++}`)
+      const count = int(2, 5)
+      const children = Array.from({ length: count }, () => build(depth + 1))
+      if (rand() < 0.5) {
+        const w = children.map(() => 1 + rand() * 9)
+        const total = w.reduce((a, b) => a + b, 0)
+        let used = 0
+        children.forEach((c, i) => {
+          const s = i === count - 1 ? 100 - used : (w[i]! / total) * 100
+          used += s
+          c.defaultSize = s
+        })
+      }
+      return { type: 'split', direction: rand() < 0.5 ? 'horizontal' : 'vertical', children }
+    }
+    const strip = (t: LayoutNode): LayoutNode => {
+      const c = { ...t }
+      delete c.defaultSize
+      return c
+    }
+    for (let i = 0; i < 100; i++) {
+      const t = strip(build(0))
+      assertSplitsSum100(t)
+      const paths = leafPaths(t)
+      assertSplitsSum100(removeNode(t, paths[int(0, paths.length - 1)]!))
+      const wrapped = dropNode(t, [], leaf('x'), 'bottom')
+      const wpaths = leafPaths(wrapped)
+      assertSplitsSum100(removeNode(wrapped, wpaths[int(0, wpaths.length - 1)]!))
+    }
+  })
+})
+
+describe('detachNode — tracks a second pane across the detach (#3737)', () => {
+  it('8. move inside a sized row lands where dropped, no marker left behind', () => {
+    const { root, detached, trackedPath } = detachNode(row([10, 20, 30, 40]), [0], [2])
+    expect(trackedPath).toEqual([1])
+    expect((getNode(root, [1]) as LayoutLeaf).blockId).toBe('b2')
+    const moved = applyPaneDrop(root!, { path: trackedPath!, edge: 'right' }, detached!)
+    expect(idsOf(moved)).toEqual(['b1', 'b2', 'b0', 'b3'])
+    expect(JSON.stringify(moved)).not.toContain('__croutonMoveTarget')
+  })
+  it('9. collapse: the tracked survivor becomes the root', () => {
+    const { root, trackedPath } = detachNode(masterDetail(), [0], [1])
+    expect(trackedPath).toEqual([])
+    expect(JSON.stringify(root)).not.toContain('__croutonMoveTarget')
+  })
+  it('10. tracking the detached node or inside it, or not tracking, gives null', () => {
+    const r = row([10, 20, 30, 40])
+    expect(detachNode(r, [1], [1]).trackedPath).toBeNull()
+    const nested: LayoutSplit = { type: 'split', direction: 'vertical', children: [row([50, 50]), leaf('z')] }
+    expect(detachNode(nested, [0], [0, 1]).trackedPath).toBeNull()
+    const plain = detachNode(r, [1])
+    expect(plain.trackedPath).toBeNull()
+    expect(plain.root).toEqual(removeNode(r, [1]))
   })
 })

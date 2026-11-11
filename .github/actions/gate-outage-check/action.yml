@@ -1,7 +1,7 @@
 # Gate outage classifier (#1037, epic #1034).
 #
-# The agent gates are deliberately FAIL-OPEN (an agent flake must not red-flag every
-# PR), but fail-open must never be INVISIBLE: a depleted API key (billing_error) and
+# The calling gate decides pass/fail (review.yml fails closed, #3070), but a no-verdict run must
+# never be INVISIBLE: a depleted API key (billing_error) and
 # a tool-permission denial (error_max_turns) used to produce the exact same plain
 # green as a genuinely clean scan. This step makes the no-verdict case loud: it
 # classifies WHY no verdict exists — from the agent's session transcript (the same
@@ -79,12 +79,12 @@ runs:
         esac
 
         echo "classification=$CLS" >> "$GITHUB_OUTPUT"
-        echo "::warning title=$GATE agent outage ($CLS)::$GATE produced no verdict: $DETAIL. The check passes FAIL-OPEN — this run did NOT actually scan anything."
+        echo "::warning title=$GATE agent outage ($CLS)::$GATE produced no verdict: $DETAIL. This run did NOT actually scan anything; the calling gate decides whether that fails the check."
         {
           echo "### ⚠️ $GATE — agent outage (\`$CLS\`)"
           echo ""
           echo "$DETAIL."
           echo ""
-          echo "The gate is fail-open by design (an agent flake must not block every PR), but this green does **not** mean \"scanned and clean\" — it means \"never ran\". (#1037)"
+          echo "The reviewer never ran, so no scan happened; the calling gate decides whether that fails the check. (#1037, #3070)"
         } >> "$GITHUB_STEP_SUMMARY"
         exit 0

@@ -22,13 +22,13 @@
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
 //   PR_BODY (env): the PR body, read for review-surface markers (#2433).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
 //   shoot is derived from them (#2698).
 //
-// Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
-// Prints `captured=<file>` per kept shot (the workflow commits them). NEVER exits non-zero on a
+// Output: screenshots/review-captures/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
+// Prints `captured=<file>` per kept shot (the workflow publishes them to a non-branch ref + PR comment, #3351). NEVER exits non-zero on a
 // capture miss — a missing capture just means no evidence, and the sign-off gate withholds.
 
 import { resolve } from 'node:path'
@@ -83,11 +83,24 @@ const SEEDED_TEAM = 'test1'
 
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
- *  - a page file (`…/app/pages/**.vue`) → its route, with a `[team]`-style segment → the seeded team;
+ *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`-style segment → the seeded team;
  *    pages with any other dynamic segment are skipped (no data to open them with);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
+// The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
+function pageSurface(file, pagePath, app) {
+  const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
+  if (owner && owner[1] !== app) return null
+  if (pagePath.startsWith('__review')) return null
+  const segs = pagePath.split('/').filter(s => s !== 'index')
+  const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
+  if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  return { route, label: segs.join('-') || 'index' }
+}
+
 export function deriveSurfaces({ changedFiles, app }) {
   const out = []
   const add = (path, label) => {
@@ -101,12 +114,8 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      if (page[1].startsWith('__review')) continue
-      const segs = page[1].split('/').filter(s => s !== 'index')
-      const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
-      if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) continue
-      const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
-      add(route, segs.join('-') || 'index')
+      const surface = pageSurface(file, page[1], app)
+      if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
     }
@@ -201,7 +210,7 @@ async function main() {
     process.exit(2)
   }
   const origin = String(args.url).replace(/\/$/, '')
-  const outDir = args.out || 'writeups/ui-proposals'
+  const outDir = args.out || 'screenshots/review-captures'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
   const app = args.app || ''
   const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app, changedFiles: (process.env.CHANGED_FILES || '').split('\n') })

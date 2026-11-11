@@ -48,8 +48,8 @@ copies drift. Make portable, don't fork.
    GLM or per-role routing, add **claude-code-router / LiteLLM** as an *optional* proxy.
    Keep it optional, not load-bearing.
 
-Headless automation must use an **API key** (not subscription OAuth) per Anthropic terms
-— interactive use on a subscription is fine. (See `.claude/skills/task-decompose` auth note.)
+Headless automation runs on the **Claude subscription** (owner decision 2026-10-29, #3121):
+`claude_code_oauth_token` for `claude-code-action`, claude-bridge for pi workers. (See `.claude/skills/task-decompose` auth note.)
 
 ## ThinkGraph IP worth harvesting (then archive the infra)
 

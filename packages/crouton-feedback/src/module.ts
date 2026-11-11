@@ -292,7 +292,9 @@ export default defineNuxtModule<FeedbackModuleOptions>({
       githubAppInstallationId: gh.installationId ?? '',
       githubToken: gh.token ?? '',
       githubRepository: gh.repository ?? '',
-      githubPr: gh.pr != null ? String(gh.pr) : ''
+      githubPr: gh.pr != null ? String(gh.pr) : '',
+      // Comma list of emails allowed to post when githubPr is set (#3162).
+      reviewerEmails: ''
     }
     addServerHandler({
       route: '/api/_feedback',

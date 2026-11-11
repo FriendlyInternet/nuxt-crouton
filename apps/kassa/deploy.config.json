@@ -11,7 +11,7 @@
         "path": "/api/teams/{teamId}/sales-categories",
         "method": "POST",
         "body": {
-          "eventId": "smoke-check",
+          "eventId": "seed:event:test1:vlaamsekermis",
           "title": "smoke-{rand}"
         }
       },
@@ -31,6 +31,37 @@
         "path": "/api/teams/{teamId}/sales-categories/{id}",
         "method": "DELETE"
       }
-    }
+    },
+    "required": true,
+    "reads": [
+      {
+        "path": "/api/public/{teamId}/smoke-none",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none/smoke-item",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/sync-status"
+      },
+      {
+        "path": "/api/crouton-sales/sync/pull",
+        "expectStatus": [403, 503]
+      },
+      {
+        "path": "/api/teams/{teamId}/sales-events"
+      },
+      {
+        "path": "/api/crouton-sales/teams/{teamId}/devices"
+      },
+      {
+        "path": "/admin/test1/sales/devices"
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
+      }
+    ]
   }
 }

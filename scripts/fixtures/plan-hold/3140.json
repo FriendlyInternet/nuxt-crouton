@@ -1,0 +1,72 @@
+{
+ "issue": 3140,
+ "labels": [
+  "status:blocked"
+ ],
+ "comments": [
+  {
+   "body": "<!-- work-run:3140 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/41478291951\n\nIts PR + preview land here when it finishes.",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes — by reading the handlers at `e01156021c` (no app booted; these are static auth gaps, each visible in source):\n- Feedback: [feedback.post.ts](https://github.com/FriendlyInternet/nuxt-crouton/blob/e01156021c508cf9e028ac1c90352e12791cdcc6/packages/crouton-feedback/src/runtime/server/api/feedback.post.ts#L22-L47) never looks at a session; any POST with `commentText, route, cssSelector` goes stra",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan sent back** (round 1 of 2) — 3 check(s) failed. The planner is re-run with these reasons.\n\n<details><summary>Review checklist</summary>\n\n- ❌ **1. Reproduced? (observed, not reasoned)** — The plan says itself \"no app booted\", and \"reproduced\" only means the handlers were read. Nothing was run. A handler-level test (POST to `/api/_crouton/operatio",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n**Rule that must stay true:** only the server (or a team admin) decides what goes into a team's activity log and interface text; no caller can write into, or read from, a team they don't administer; nothing unauthenticated reaches a paid/agent-facing sink.\n\n### Reproduced\nyes — run, not just read. At `e01156021c` I wrote a throwaway vitest in `packages/crouton-collab/tests/` (since deleted; `git status` clean),",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I re-ran it. A throwaway vitest in `/tmp`, outside the repo, called the real `packages/crouton-collab/server",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision, agreed in chat 2026-10-29 22:46_\n\nDecision: fix the evidence — `useCroutonStatus.ts` is in `crouton-core/app/composables` (L120); the event tracker also sends `timestamp`, `userId`, `userName` (`useCroutonEventTracker.ts:145-152`); the real change shape uses `fieldName` (`crouton-events/server/database/schema.ts:18-22`). Keep the `snapshotUserName` opt-out. Make every new test actually run (",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40960704673)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n**Rule that must stay true:** only the server (or a team admin) decides what goes into a team's activity log and interface text; no caller can write into, or read from, a team they don't administer; nothing unauthenticated reaches a paid or agent-facing sink.\n\n(Revised per the owner's 2026-10-29 decision. Per epic #3129, this comment names the files and the missing checks, not request recipes.)\n\n### Reproduced\n",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I ran the real `packages/crouton-collab/server/api/_crouton/operation.post.ts` (unchanged since `284e374c55`",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision — orchestrator guidance within the decisions already recorded, 2026-10-29 23:10_\n\nDecision: round-3 corrections. (1) Feedback endpoint: a login session is NOT enough (anyone can sign up on a preview). Require the preview's own review credential — the review-login account / `previewSessionToken` from `scripts/lib/review-login.mjs:64` — and refuse everyone else. (2) Activity events: members may",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40963396504)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n**Rule that must stay true:** a team's activity log and interface text are written only under the caller's own server-side identity (events) or by a team admin (interface text); the log is read only by admins; and nothing reaches the agent prompt except from the preview's own review account.\n\n(Round 3, applying the owner's two corrections of 2026-10-29. Per epic #3129 this names files and missing checks, not re",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔴 **Plan rejected twice** — the planner could not fix 3 check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — I re-ran the real `packages/crouton-collab/server/api/_crouton/operation.post.ts` myself (Node 22, only `rea",
+   "userType": "Bot"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner decision — orchestrator correction of its own round-3 guidance, 2026-10-29 23:20_\n\nDecision: two corrections. (1) The preview feedback endpoint moves out of this ticket into #3162 — drop it from the plan. (2) My round-3 line was wrong about `operation`: the server cannot derive it (events are tracked in the browser via `crouton:mutation`). Take `operation` from the body, checked against the allowed li",
+   "userType": "User"
+  },
+  {
+   "body": "> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n✅ **Resumed from your reply** — still iterating — the block stays on for your next reply. 🔗 [Run log](https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/40964864441)",
+   "userType": "Bot"
+  },
+  {
+   "body": "<!-- pipeline-plan:v1 -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n**Rule that must stay true:** a team's activity log and interface text are written only under the caller's own server-side identity (events) or by a team admin (interface text); the log is read only by admins; the internal collab bridge accepts only the collab Worker; nothing unauthenticated reaches the geocoder.\n\n(Revised per the owner's latest decision: the feedback endpoint is **out of scope here** — it move",
+   "userType": "Bot"
+  }
+ ]
+}
