@@ -39,7 +39,9 @@ test('verifyOwnerToken: valid, bad signature, expired, wrong aud, long lifetime,
   assert.equal(await verifyOwnerToken(good, SECRET + 'x', now), false)
   assert.equal(await verifyOwnerToken(good, '', now), false)
   assert.equal(await verifyOwnerToken(good, SECRET, now + 11 * 60 * 1000), false) // expired
-  assert.equal(await verifyOwnerToken(good.slice(0, -2) + 'AA', SECRET, now), false)
+  const [body, sigB64] = good.split('.')
+  const tampered = `${body}.${sigB64[0] === 'A' ? 'B' : 'A'}${sigB64.slice(1)}`
+  assert.equal(await verifyOwnerToken(tampered, SECRET, now), false)
   assert.equal(await verifyOwnerToken('', SECRET, now), false)
   // a token whose exp is far in the future is refused even if correctly signed
   const far = await signEditorToken(SECRET, now + 3600 * 1000)
