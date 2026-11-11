@@ -23,6 +23,7 @@ import {
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import { paletteBlocksOf } from '~/utils/palette-blocks'
 import { usePaletteMenu } from '~/utils/palette-menu'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
@@ -181,7 +182,8 @@ function onChipClick(blockId: string) {
 
 // Grouped row (#3748): one chip per collection + Layout, each opening a menu of
 // its blocks. Unlinked generic blocks stay registered but aren't offered here.
-const paletteGroups = computed(() => groupPaletteBlocks(blocksList.value))
+// Atomic blocks only (#2559): a compound block is a whole screen, its parts are offered instead.
+const paletteGroups = computed(() => groupPaletteBlocks(paletteBlocksOf(blocksList.value)))
 // Menu state (tap closes + adds; a held item's drag makes it see-through, then closes).
 const { openGroup, dragging: menuDragging, setGroupOpen, onItemClick } = usePaletteMenu(dragPayload, onChipClick)
 
