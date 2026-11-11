@@ -10,6 +10,7 @@ name: On PR close
 #   close-linked-issues  schedule-waves.yml             (PR path, #283)
 #   release-traffic      traffic-release.yml            (#2786)
 #   owner-quiz           NEW (#3715) → owner-quiz.yml (reusable; also dispatchable by hand)
+#   postmortem           NEW (#3425) → postmortem.yml (reusable; also dispatchable by hand)
 #
 # `clear-blocked` and on-issue-close.yml's `release` are the only two places that remove
 # `status:blocked`. Token rule unchanged: jobs whose writes must cascade use the Harness App
@@ -214,6 +215,23 @@ jobs:
     uses: ./.github/workflows/owner-quiz.yml
     with:
       pr: ${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  postmortem:
+    # (#3425) An epic → main PR merged → the pipeline writes the epic's postmortem, once.
+    # postmortem.yml decides (every sub-issue closed, no trusted marker yet) and never blocks.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'epic/')
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/postmortem.yml
+    with:
+      head_ref: ${{ github.event.pull_request.head.ref }}
     secrets: inherit
 
   release-traffic:
