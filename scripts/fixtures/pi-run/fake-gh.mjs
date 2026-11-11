@@ -9,36 +9,53 @@ import { fileURLToPath } from 'node:url'
 
 const after = (args, flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined }
 
+// One small handler per gh call shape (kept apart so no single function grows past the
+// fallow complexity gate). Each returns stdout, or undefined when the call isn't its shape.
+const COMMENT_FIELDS = { '.body': (c) => c.body, '.user.type': (c) => c.user.type }
+
+function apiComment(data, id, jq) {
+  const c = data.comments[id]
+  if (!c) throw new Error(`fake gh: no comment ${id}`)
+  const field = COMMENT_FIELDS[jq]
+  if (!field) throw new Error(`fake gh: unsupported --jq ${jq}`)
+  return `${field(c)}\n`
+}
+
+function apiCommentList(data, issue, jq) {
+  const list = (data.issues[issue]?.comments || []).map((id) => data.comments[id])
+  if (jq === '.[] | @json') return list.map((c) => `${JSON.stringify(c)}\n`).join('')
+  return JSON.stringify(list)
+}
+
+function api(data, args) {
+  const path = args.find((a) => a.startsWith('repos/')) || ''
+  const jq = after(args, '--jq')
+  let m
+  if ((m = /\/issues\/comments\/(\d+)$/.exec(path))) return apiComment(data, m[1], jq)
+  if ((m = /\/issues\/(\d+)\/comments(\?.*)?$/.exec(path))) return apiCommentList(data, m[1], jq)
+  return undefined
+}
+
+function issueView(data, args) {
+  const i = data.issues[args[2]]
+  if (!i) throw new Error(`fake gh: no issue ${args[2]}`)
+  return `${i.body}\n`
+}
+
+function prList(data, args) {
+  const n = data.prs[after(args, '--head')]
+  return n ? `${n}\n` : '\n'
+}
+
+const HANDLERS = { api, 'issue view': issueView, 'pr list': prList }
+
 export function fakeGh(data, failRe) {
   return (args) => {
     if (failRe && new RegExp(failRe).test(args.join(' '))) throw Object.assign(new Error(`fake gh: forced failure: ${args.join(' ')}`), { status: 1 })
-    if (args[0] === 'api') {
-      const path = args.find((a) => a.startsWith('repos/')) || ''
-      const jq = after(args, '--jq')
-      let m
-      if ((m = /\/issues\/comments\/(\d+)$/.exec(path))) {
-        const c = data.comments[m[1]]
-        if (!c) throw new Error(`fake gh: no comment ${m[1]}`)
-        if (jq === '.body') return `${c.body}\n`
-        if (jq === '.user.type') return `${c.user.type}\n`
-        throw new Error(`fake gh: unsupported --jq ${jq}`)
-      }
-      if ((m = /\/issues\/(\d+)\/comments(\?.*)?$/.exec(path))) {
-        const list = (data.issues[m[1]]?.comments || []).map((id) => data.comments[id])
-        if (jq === '.[] | @json') return list.map((c) => `${JSON.stringify(c)}\n`).join('')
-        return JSON.stringify(list)
-      }
-    }
-    if (args[0] === 'issue' && args[1] === 'view') {
-      const i = data.issues[args[2]]
-      if (!i) throw new Error(`fake gh: no issue ${args[2]}`)
-      return `${i.body}\n`
-    }
-    if (args[0] === 'pr' && args[1] === 'list') {
-      const n = data.prs[after(args, '--head')]
-      return n ? `${n}\n` : '\n'
-    }
-    throw new Error(`fake gh: unsupported call: ${args.join(' ')}`)
+    const handler = HANDLERS[args[0]] || HANDLERS[`${args[0]} ${args[1]}`]
+    const out = handler ? handler(data, args) : undefined
+    if (out === undefined) throw new Error(`fake gh: unsupported call: ${args.join(' ')}`)
+    return out
   }
 }
 
