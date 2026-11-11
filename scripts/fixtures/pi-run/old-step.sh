@@ -31,6 +31,7 @@ if [ -n "${PLAN:-}" ]; then
     } >> "$PROMPT_FILE"
   fi
 elif [ -n "${REVISE:-}" ]; then
+  # Frozen as live: a failed PR lookup is tolerated — PRN stays empty and the persona renders without a PR number.
   PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
   if [ "${REV_CONFLICT:-}" = "1" ]; then
     # #3002: the base merge conflicted — the task is the merge, with its own persona (the
