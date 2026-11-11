@@ -303,3 +303,39 @@ test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-d
   const cfg = JSON.parse(readFileSync(new URL('../pocs/booking-demo/deploy.config.json', import.meta.url), 'utf8'))
   assert.deepEqual(cfg.reviewLogin.requireData, ['bookings_locations', 'bookings_bookings'])
 })
+
+// ── #3533: member upsert quote escaping ──
+// The --seed-team member upsert used to be built inline in main(), so no test could
+// reach it. Runs the real SQL against an in-memory SQLite db.
+import { memberUpsertSql } from './seed-review-login.mjs'
+
+function memberDb() {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "member" VALUES ('keep', 'u2', 'seed:org:test1', 'owner', 1);
+  `)
+  return d
+}
+
+test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break out', () => {
+  const d = memberDb()
+  const userId = 'u\'); DELETE FROM "member"; --'
+  d.exec(memberUpsertSql({ memberId: "m'1", userId, orgId: "o'x", createdAt: 1 }))
+  const row = d.prepare('SELECT * FROM "member" WHERE "id" = ?').get("m'1")
+  assert.equal(row.userId, userId)
+  assert.equal(row.organizationId, "o'x")
+  assert.equal(row.role, 'owner')
+  assert.ok(d.prepare('SELECT 1 FROM "member" WHERE "id" = ?').get('keep'), 'bystander row survives')
+  assert.equal(d.prepare('SELECT count(*) AS n FROM "member"').get().n, 2)
+})
+
+test('#3533 memberUpsertSql: re-running updates the same row (idempotent)', () => {
+  const d = memberDb()
+  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'first', orgId: 'seed:org:test1', createdAt: 100 }))
+  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'second', orgId: 'seed:org:test1', createdAt: 200 }))
+  const rows = d.prepare('SELECT * FROM "member" WHERE "id" = ?').all('m1')
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].userId, 'second')
+  assert.equal(rows[0].createdAt, 100)
+})

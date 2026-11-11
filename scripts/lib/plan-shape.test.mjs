@@ -65,12 +65,35 @@ test('an assumption with no evidence is malformed', () => {
 })
 
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
-  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
+  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /checkable proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
 })
 
 test('status must be verified or unverified', () => {
   assert.ok(parseAssumptions('- c — Why: w — Evidence: https://x.dev — Status: probably').errors.some((e) => /Status/.test(e)))
+})
+
+// #3271 — Status is its first word; verified evidence may be a link, a commit SHA or path:line / path#Lnn.
+const pa = (ev, st) => parseAssumptions(`- c — Why: w — Evidence: ${ev} — Status: ${st}`)
+
+test('Status reads first word; trailing reason allowed', () => {
+  const r = pa('no staging access', 'unverified (could not reach staging)')
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.items[0].status, 'unverified')
+  assert.ok(pa('x', 'maybe').errors.some((e) => /Status/.test(e)))
+})
+
+test('verified evidence forms', () => {
+  assert.ok(pa('I looked at it', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.ok(pa('defaced', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs:74', 'verified').errors, [])
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs#L74', 'verified').errors, [])
+  assert.deepEqual(pa('commit dd1b002a4', 'verified').errors, [])
+  assert.deepEqual(pa('https://x.dev/a', 'verified').errors, [])
+})
+
+test('unverified needs no evidence form', () => {
+  assert.deepEqual(pa('could not check', 'unverified').errors, [])
 })
 
 // #3149 — a re-plan (--revised) must carry a "Ticket re-read" section.
