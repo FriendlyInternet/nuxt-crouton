@@ -972,8 +972,13 @@ jobs:
           # #1369: never advertise creds for a seed that failed (no `|| true`); warn loudly and
           # emit NO login — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
+          # #3751: an app can name the tables its seeded team must have rows in
+          # (`reviewLogin.requireData` in deploy.config.json). The script logs the counts and
+          # fails if any is empty, so a login into an empty team is never advertised.
+          REQUIRE_DATA="$(jq -r '(.reviewLogin.requireData // []) | join(",")' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo '')"
+          REQUIRE_ARGS=(); [ -z "$REQUIRE_DATA" ] || REQUIRE_ARGS=(--require-data "$REQUIRE_DATA")
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-               --seed-team test1 --db "$SEED_DB"; then
+               --seed-team test1 --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
             # One-click link: crouton-auth prefills the login form from ?email=&password=
