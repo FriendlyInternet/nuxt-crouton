@@ -1692,6 +1692,9 @@ importers:
 
   pocs/crouton-builder:
     dependencies:
+      '@fyit/crouton-bookings':
+        specifier: workspace:*
+        version: link:../../packages/crouton-bookings
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../../packages/crouton-core
