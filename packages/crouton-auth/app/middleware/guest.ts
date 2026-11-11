@@ -13,6 +13,8 @@
  * </script>
  * ```
  */
+import { sanitizeRedirectUrl } from '../utils/security'
+
 export default defineNuxtRouteMiddleware(async (to) => {
   const config = useAuthConfig()
   const redirects = config?.ui?.redirects
@@ -33,7 +35,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
     const redirectQuery = to.query.redirect as string | undefined
     const defaultRedirect = redirects?.authenticated ?? '/'
 
-    const redirectPath = redirectQuery || defaultRedirect
+    // `?redirect` is user-controlled: only ever send them to this site (#3143).
+    const redirectPath = redirectQuery ? sanitizeRedirectUrl(redirectQuery) : defaultRedirect
 
     if (config?.debug) {
       console.log(`[@crouton/auth] Guest middleware: authenticated, redirecting to ${redirectPath}`)

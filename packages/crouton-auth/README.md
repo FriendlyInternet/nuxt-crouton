@@ -765,7 +765,7 @@ definePageMeta({
 
 ### `guest` Middleware
 
-Requires NO authentication. Redirects to home if authenticated.
+Requires NO authentication. Signed-in users are sent to the `?redirect=` target if it is on the same site (anything else falls back to `/`), otherwise to `ui.redirects.authenticated`.
 
 ```vue
 <script setup lang="ts">
