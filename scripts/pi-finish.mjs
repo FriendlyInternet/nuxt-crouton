@@ -74,8 +74,10 @@ export function verdict({ acceptance, testsMissing }) {
 // still 'neutral', never 'pass' (#1849). Pure functions: no fs, no shell, no gh.
 
 // `path(12,3): error TS2345: msg` or `path:12:3 - error TS2345: msg`, anywhere on the line (so a
-// `##[error]` or pnpm prefix doesn't break it). Path chars exclude whitespace, parens, brackets.
-const TS_ERR_RE = /([^\s()[\]]+?)(?:\((\d+),(\d+)\):|:(\d+):(\d+)\s+-)\s*error\s+(TS\d+):\s*(.*)$/;
+// `##[error]` or pnpm prefix doesn't break it). The path is one whitespace-free token and MAY
+// contain `[` `]` `(` `)` — Nuxt route files (`[app].get.ts`, `(auth)/login.vue`) do; a leading
+// GitHub `##[error]` annotation is stripped, not taken as part of the path.
+const TS_ERR_RE = /(?:^|\s)(?:##\[[a-z]+\])?(\S+?)(?:\((\d+),(\d+)\):|:(\d+):(\d+)\s+-)\s*error\s+(TS\d+):\s*(.*)$/;
 const ANY_TS_RE = /error TS[0-9]/;
 
 // → { errors: [{ file, line, col, code, text }], anyCount }. `errors` drops `../` paths (outside

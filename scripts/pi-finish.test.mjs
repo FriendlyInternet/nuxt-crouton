@@ -255,6 +255,33 @@ test('parseTsErrors: reads both the (l,c): and :l:c - forms; skips ../ paths but
   ]);
 });
 
+test('parseTsErrors: keeps [ ] and ( ) in Nuxt route paths, strips a ##[error] prefix', () => {
+  const log = [
+    'server/routes/login/[app].get.ts(5,2): error TS2322: bad',
+    '##[error]app/pages/(auth)/login.vue(3,1): error TS2345: bad',
+    'app/pages/admin/[team]/sales.vue:4:2 - error TS2322: bad',
+  ].join('\n');
+  assert.deepEqual(parseTsErrors(log).errors.map((e) => e.file), [
+    'server/routes/login/[app].get.ts',
+    'app/pages/(auth)/login.vue',
+    'app/pages/admin/[team]/sales.vue',
+  ]);
+});
+
+test('classifyTypeErrors: an error in a changed [bracket] or (group) route file fails', () => {
+  const bracket = classifyTypeErrors({
+    logText: 'server/routes/login/[app].get.ts(5,2): error TS2322: bad',
+    tcExit: 1, committedFiles: ['pocs/status/server/routes/login/[app].get.ts'], appDir: 'pocs/status',
+  });
+  assert.equal(bracket.acceptance, 'fail');
+  assert.equal(bracket.inDiff[0].file, 'pocs/status/server/routes/login/[app].get.ts');
+  const group = classifyTypeErrors({
+    logText: '##[error]app/pages/(auth)/login.vue(3,1): error TS2345: bad',
+    tcExit: 1, prFiles: ['apps/kassa/app/pages/(auth)/login.vue'], appDir: 'apps/kassa',
+  });
+  assert.equal(group.acceptance, 'fail');
+});
+
 test('formatAcceptanceLine: exact run-record string, with and without tickets, plus the not-ticketed suffix', () => {
   assert.equal(formatAcceptanceLine({ count: 2, issueNumbers: [12, 34] }), "acceptance: pass — 2 error(s) in files this PR didn't touch → #12, #34");
   assert.equal(formatAcceptanceLine({ count: 1 }), "acceptance: pass — 1 error(s) in files this PR didn't touch");
