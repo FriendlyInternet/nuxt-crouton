@@ -9,6 +9,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA,
   deriveWatchPaths, loadApps
@@ -134,6 +135,55 @@ test('#3475: a pocs/pins-only change previews pins only', () => {
     assert.deepEqual(pick(realApps, ['pocs/pins/app/app.vue'], ev), [])
   }
 })
+// ── POC push to main for a package-only change (#3734) ────────────────────────
+test('#3734: a package-only push to main redeploys only the POCs that use it', () => {
+  const file = ['packages/crouton-layout/app/components/Layout.vue']
+  const onPush = pick(realPocs, file, 'push')
+  assert.ok(onPush.includes('crouton-builder'))
+  assert.ok(!onPush.includes('loop-station'))
+  assert.ok(!onPush.includes('status'))
+  assert.deepEqual(onPush, pick(realPocs, file, 'pull_request'))
+})
+test('#3734: a workflow-only push gives an empty POC matrix, not a failure', () => {
+  const r = computeMatrix({ event: 'push', workspace: 'pocs', changedFiles: ['.github/workflows/deploy-app.yml'], apps: realPocs })
+  assert.deepEqual(r.include, [])
+  assert.equal(r.any, false)
+})
+
+// Line scanner (no YAML dep): the `- '<glob>'` items under `on.<trigger>.paths:`.
+function triggerPaths(yaml, trigger) {
+  const lines = yaml.split('\n')
+  const start = lines.findIndex(l => l === `  ${trigger}:`)
+  assert.ok(start >= 0, `no ${trigger}: trigger`)
+  const out = []
+  let inPaths = false
+  let itemIndent = -1
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i]
+    if (!l.trim() || l.trim().startsWith('#')) continue
+    const indent = l.length - l.trimStart().length
+    if (indent <= 2) break // next trigger / top-level key
+    if (!inPaths) { if (l.trim() === 'paths:') inPaths = true; continue }
+    if (itemIndent < 0) itemIndent = indent
+    if (indent < itemIndent) break
+    const m = l.trim().match(/^-\s+'([^']+)'/)
+    if (m) out.push(m[1])
+  }
+  return out.sort()
+}
+test('#3734: deploy-pocs.yml push.paths equals pull_request.paths', () => {
+  const y = readFileSync(new URL('../.github/workflows/deploy-pocs.yml', import.meta.url), 'utf8')
+  const push = triggerPaths(y, 'push')
+  assert.ok(push.includes('packages/**'))
+  assert.deepEqual(push, triggerPaths(y, 'pull_request'))
+})
+test('#3734: the scanner reads deploy-apps.yml, whose triggers also match', () => {
+  const y = readFileSync(new URL('../.github/workflows/deploy-apps.yml', import.meta.url), 'utf8')
+  const push = triggerPaths(y, 'push')
+  assert.ok(push.includes('packages/**'))
+  assert.deepEqual(push, triggerPaths(y, 'pull_request'))
+})
+
 test('#3475: every POC watches its own pocs/<name>/** folder', () => {
   assert.ok(realPocs.length > 0)
   for (const p of realPocs) {

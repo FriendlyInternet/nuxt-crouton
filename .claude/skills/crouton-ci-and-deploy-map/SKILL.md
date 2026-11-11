@@ -56,7 +56,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 |---|---|---|
 | `deploy-app.yml` | `workflow_call` only | THE reusable pipeline (#114) — see §2 |
 | `deploy-apps.yml` | push to main + PR (paths `apps/**, packages/**`, lockfile) + `workflow_dispatch(app, environment, review_pr)` | **The one generic caller for every `apps/*` app** (epic #481 WS2). An app opts in by committing `apps/<name>/deploy.config.json`. Replaced the per-app `deploy-<app>.yml` callers. Its `report-bumped-preview` job comments on a PR whose preview deploys were *cancelled* by queue-bumping (a sibling run took the shared per-app staging slot) — cancelled ≠ failed (#1150) |
-| `deploy-pocs.yml` | PR touching `pocs/**` or `packages/**` + dispatch(app, mode) | POC staging previews; `mode: version` = immutable Workers-version preview URL. Steps: `poc-deploy` skill |
+| `deploy-pocs.yml` | push to main + PR (paths `pocs/**, packages/**`, lockfile) + `workflow_dispatch(app, mode)` | POC staging deploys (trunk = staging; only POCs whose folder or a package they use changed) + POC staging previews; `mode: version` = immutable Workers-version preview URL. Steps: `poc-deploy` skill |
 | `deploy-docs.yml` | push to main (`docs/**`) / PR build-smoke / dispatch | Docs site — self-contained, NOT via deploy-app.yml |
 | `deploy-sandbox.yml` | dispatch | Manual `sandboxes/*` deploy |
 | `report-failed-deploy.yml` | `workflow_run[completed]` of the deploy workflows | On failure on `main`, opens exactly one issue per failing run (idempotency marker, #340). |
