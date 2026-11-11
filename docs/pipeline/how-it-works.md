@@ -16,7 +16,10 @@ exact word they reply.
      design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
      splitter, `decompose-on-issue-pidev.yml`. For an epic it writes sub-issues to
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
-     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). For a design
+     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the
+     failed tickets to `ticket-revise.yml`, which rewrites them from the review's findings
+     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds; a needs-owner verdict
+     or round 3 holds for the owner. For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
    - c. `scripts/lib/plan-route.mjs` says `plan` → `work-issue-pidev.yml` in plan mode (step 2).
@@ -79,6 +82,7 @@ The table below is generated from the workflow files and the grouping in
 | [on-issue-close.yml](../../.github/workflows/on-issue-close.yml) | On issue close | `issues`, `workflow_dispatch` |
 | [routing-registry.yml](../../.github/workflows/routing-registry.yml) | routing-registry | `pull_request`, `push` |
 | [ticket-review.yml](../../.github/workflows/ticket-review.yml) | Ticket review (independent reviewer — pi.dev) | `workflow_dispatch` |
+| [ticket-revise.yml](../../.github/workflows/ticket-revise.yml) | Ticket revise (rewrite sent-back tickets — pi.dev) | `workflow_dispatch` |
 | [warn-closes-blocked.yml](../../.github/workflows/warn-closes-blocked.yml) | Warn on a risky Closes | `pull_request` |
 
 #### planning
