@@ -38,6 +38,11 @@ signed-off behaviour); this file is the architecture and the decisions behind it
 - **Board drag is one pointer gesture** (`board-drag.ts`): hold-then-drag with `elementFromPoint`
   hit-testing and `touchmove` cancelled only while a drag is live. No HTML5 drag — it never starts
   on iOS. Width authoring is a scaled frame (`useBoardWidth`), presets plus a free drag.
+- **The block row is grouped by collection** (#3748, `utils/palette-groups.ts`): one chip per
+  collection (`Artists · Form` → group `Artists`, item `Form`) plus **Layout** for `chrome`
+  blocks, each opening a `UPopover` menu. Blocks with neither shape — crouton-layout's generic
+  `collection-list` / `entity-form` / `stats`, `__dropghost__` — stay registered (old pages
+  render) but aren't offered. A held menu item goes see-through while it drags, then closes.
 - Board panes are floored at the same floor the served page uses (`boardPaneMinPct` →
   `deriveSizing(...).hardMinWidth`: a block's `minWidth`, a nested split's widest block), so
   editor and page give each pane the same width (#3746, `tests/board-vs-preview.test.ts`).
