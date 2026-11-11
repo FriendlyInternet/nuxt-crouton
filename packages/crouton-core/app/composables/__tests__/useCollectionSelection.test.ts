@@ -120,14 +120,15 @@ describe('collection selection (#2598)', () => {
   it('two forms for the same collection can both be on screen (#3754)', async () => {
     const { selections } = setup()
     const s = selections.get('artists')
-    const runs = [0, 0]
+    let first = 0
+    let second = 0
     const scope = effectScope()
     expect(() => scope.run(() => {
-      watchEffect((c) => { runs[0]++; c(s.attachEditor()) })
-      watchEffect((c) => { runs[1]++; c(s.attachEditor()) })
+      watchEffect((c) => { first++; c(s.attachEditor()) })
+      watchEffect((c) => { second++; c(s.attachEditor()) })
     })).not.toThrow()
     await nextTick()
-    expect(runs).toEqual([1, 1])
+    expect([first, second]).toEqual([1, 1])
     expect(s.hasEditor.value).toBe(true)
     scope.stop()
   })
