@@ -31,6 +31,13 @@ definePageMeta({ layout: 'admin', middleware: ['auth'] })
 
 const SCOPE = { scope: 'team' } as const
 
+// Page-level owner of the shared bookings fetches, so the leaves remounting when the split
+// stacks on a phone never leaves a shared fetch ownerless (Nuxt aborts a request once its
+// last owner unmounts) (#3789). Same keys as the blocks (every block here is team scope).
+// The general version is the layout-owned store in #2561.
+useBookingsList(SCOPE)
+useBookingCart()
+
 // Static compose — the whole point of the test is that the arrangement is plain
 // data (a `LayoutTree`), not a bespoke Vue template. Reproduces the native
 // calendar-primary layout from the registered atomic blocks.

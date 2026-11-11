@@ -8,8 +8,9 @@
  *   GITHUB_TOKEN=... APPLY=true node scripts/label-ready-epics.mjs # actually mutate labels
  *
  * For every `is:issue is:open label:epic`:
- *   - all sub-issues closed (total > 0) AND a `postmortem:done` marker exists on a
- *     comment  → `status:ready-to-close`
+ *   - all sub-issues closed (total > 0) AND a `postmortem:done` (or `postmortem:skipped`,
+ *     #3425 — a failed run never blocks) marker exists on a TRUSTED comment (pipeline bot or
+ *     owner/member/collaborator; postmortemState in postmortem.mjs)  → `status:ready-to-close`
  *   - all sub-issues closed (total > 0) AND no postmortem marker
  *                                            → `status:needs-postmortem`
  *   - ≥1 sub-issue is `status:in-progress`   → `status:in-progress`  (opening side, #980)
@@ -27,6 +28,8 @@
  *   APPLY          "true" to write labels; anything else = dry-run (list only)
  */
 
+import { postmortemState } from './postmortem.mjs'
+
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
 const APPLY = process.env.APPLY === 'true' || process.argv.includes('--apply')
@@ -40,7 +43,6 @@ const READY = 'status:ready-to-close'
 const NEEDS = 'status:needs-postmortem'
 const INPROGRESS = 'status:in-progress'
 const MANAGED = [READY, NEEDS, INPROGRESS]
-const MARKER = 'postmortem:done'
 
 async function gh(path, init) {
   const res = await fetch('https://api.github.com' + path, {
@@ -68,12 +70,12 @@ async function subIssues(number) {
   }
 }
 
-// Has any comment on the epic carried the postmortem marker? (HTML-comment marker the
-// postmortem skill leads with — invisible when rendered, present in the raw body.)
+// Has a trusted comment on the epic carried the postmortem marker (done or skipped)? (HTML-comment
+// marker the postmortem skill leads with — invisible when rendered, present in the raw body.)
 async function hasPostmortem(number) {
   try {
     const comments = await gh(`/repos/${OWNER}/${NAME}/issues/${number}/comments?per_page=100`)
-    return (comments || []).some((c) => (c.body || '').includes(MARKER))
+    return postmortemState(comments || []) !== null
   } catch {
     return false
   }

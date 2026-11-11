@@ -25,15 +25,21 @@ export function useBookingCart() {
   // Read customer bookings from shared cache (useBookingsList owns the fetch).
   // The key carries the team id, so a team change (e.g. the team arriving after mount)
   // re-fetches once per key — no separate watch, so no cancellation cascade (#3751).
-  const { data: myBookings, status: myBookingsStatus, refresh: refreshMyBookings } = useFetch<BookingData[]>(
+  // dedupe: 'defer' on every fetch here: each owner of a shared key re-runs it when the key
+  // changes, and Nuxt's default 'cancel' would abort the other owners' request (#3789).
+  // The manual refreshers returned below pass 'cancel' so a save still gets fresh data.
+  const { data: myBookings, status: myBookingsStatus, refresh: rawRefreshMyBookings } = useFetch<BookingData[]>(
     () => teamId.value
       ? `/api/crouton-bookings/teams/${teamId.value}/customer-bookings`
       : null as any,
     {
       key: () => `crouton-booking-sidebar-customer-bookings-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
     },
   )
+
+  const refreshMyBookings = () => rawRefreshMyBookings({ dedupe: 'cancel' })
 
   // Count of upcoming bookings (future dates only)
   const upcomingBookingsCount = computed(() => {
@@ -68,6 +74,7 @@ export function useBookingCart() {
       : null as any,
     {
       key: () => `crouton-booking-cart-settings-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
     },
   )
@@ -111,16 +118,19 @@ export function useBookingCart() {
   })
 
   // Fetch allowed locations
-  const { data: locations, status: locationsStatus, refresh: refreshLocations } = useFetch<LocationData[]>(
+  const { data: locations, status: locationsStatus, refresh: rawRefreshLocations } = useFetch<LocationData[]>(
     () => teamId.value
       ? `/api/crouton-bookings/teams/${teamId.value}/customer-locations`
       : null as any,
     {
       key: () => `crouton-booking-cart-locations-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
       default: () => [],
     },
   )
+
+  const refreshLocations = () => rawRefreshLocations({ dedupe: 'cancel' })
 
   // Selected location object
   const selectedLocation = computed(() => {
