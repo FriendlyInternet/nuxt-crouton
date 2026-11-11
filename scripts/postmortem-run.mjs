@@ -8,7 +8,6 @@ import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parseEpicNumber } from './epic-ready.mjs'
 import { decidePostmortemRun, postmortemState, pendingClose, finalizeBody, renderSkipped, buildPostmortemPrompt } from './postmortem.mjs'
-import { decideEpicClose } from './handle-test-reply.mjs'
 
 const labelNames = ls => (ls || []).map(l => (typeof l === 'string' ? l : l.name))
 const listComments = ({ github, context }, issue_number) =>
@@ -99,27 +98,19 @@ export async function post({ github, context, core }, { epic, modelFile, runUrl,
   await safe(core, 'closing the pending epic', () => closePending({ github, context, core }, { n, comments, state }))
 }
 
-// The close the two close paths left waiting (#3425). Only a pipeline-authored pending marker arms it.
+// The close `/close-epic` left waiting (#3425). Only a pipeline-authored pending marker arms it.
+// A `verified` marker (written before #3012) no longer closes here: the `auto-close` job decides.
 async function closePending({ github, context, core }, { n, comments, state }) {
   const via = pendingClose(comments)
   if (!via) return core.info(`postmortem: no close is waiting on #${n}.`)
+  if (via !== 'close-epic') return core.info(`postmortem: #${n} pending via ${via} — the auto-close job decides.`)
   const repo = context.repo
   const issue = (await github.rest.issues.get({ ...repo, issue_number: n })).data
   if (issue.state !== 'open') return core.info(`postmortem: #${n} is already closed.`)
-  if (via === 'verified') {
-    const subIssues = await listSubIssues({ github, context }, n)
-    const pulls = (await github.rest.pulls.list({ ...repo, state: 'all', base: 'main', per_page: 100 })).data
-    const prs = pulls.filter(p => p.head.ref.startsWith(`epic/${n}-`))
-    const c = decideEpicClose({ subIssues, prs, postmortem: state })
-    if (!c.close) {
-      await github.rest.issues.createComment({ ...repo, issue_number: n, body: `<!-- pipeline-note -->\n${c.comment}` })
-      return core.info(`postmortem: #${n} left open — ${c.comment}`)
-    }
-  }
   await github.rest.issues.update({ ...repo, issue_number: n, state: 'closed', state_reason: 'completed' })
   const why = state === 'done' ? 'postmortem posted' : "postmortem didn't run, closing anyway"
   await github.rest.issues.createComment({ ...repo, issue_number: n,
-    body: `<!-- pipeline-note -->\n✅ **Closed — ${why}** (waiting since \`${via === 'verified' ? 'verified' : '/close-epic'}\`).` })
+    body: `<!-- pipeline-note -->\n✅ **Closed — ${why}** (waiting since \`/close-epic\`).` })
   core.info(`postmortem: closed #${n} (${via}).`)
 }
 

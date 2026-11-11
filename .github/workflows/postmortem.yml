@@ -8,10 +8,15 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('postmortem #{
 # Started by:
 #   on-pr-close.yml   an epic/<N>-… → main PR merged           (workflow_call, head_ref)
 #   on-issue-close.yml  a sub-issue closed (its parent is the epic) (workflow_call, closed_issue)
-#   /close-epic and the verified test card, when the postmortem is missing (workflow_dispatch,
-#     through handoffGuard / handoffExec). They leave a pipeline-authored close-pending marker;
-#     `post` closes the epic once the postmortem lands.
+#   /close-epic, when the postmortem is missing (workflow_dispatch, through handoffGuard). It leaves
+#     a pipeline-authored close-pending marker; `post` closes the epic once the postmortem lands.
+#   the test card's `ok` (workflow_dispatch through handoffExec, #3012) — always, so the close below
+#     runs on the App token.
 #   by hand: dispatch with `epic` (catch-up / retry; runs even after a skipped run).
+#
+# AUTO-CLOSE (#3012): the `auto-close` job runs after every start (merge, sub-issue close, the card's
+# `ok`, a posted postmortem) and closes the epic by itself once ALL hold: merged to main, its test
+# card ok'd (or it never gets one), its postmortem posted. Decision: scripts/epic-auto-close.mjs.
 #
 # NEVER BLOCKS: if the model run fails or writes nothing usable, `post` still runs and posts
 # `<!-- postmortem:skipped epic=#N -->` with the run link, and a waiting close still happens.
@@ -174,3 +179,38 @@ jobs:
             const { post } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             await post({ github, context, core }, { epic: process.env.EPIC, modelFile: `${process.env.RUNNER_TEMP}/postmortem/postmortem.md`, runUrl, writeResult: process.env.WRITE_RESULT })
+
+  auto-close:
+    # (#3012) Close the epic by itself once it is on main, its test card is ok'd (or it has none)
+    # and its postmortem is posted. Runs even when target said go=false (postmortem already there).
+    # A cancelled `write` means a newer run owns this epic (same rule as `post`).
+    needs: [target, write, post]
+    if: always() && needs.target.outputs.epic != '' && needs.write.result != 'cancelled'
+    concurrency:
+      group: epic-auto-close-${{ needs.target.outputs.epic }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - name: Close the epic if main + test card + postmortem all hold
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EPIC: ${{ needs.target.outputs.epic }}
+          VIA: ${{ github.event_name == 'workflow_dispatch' && 'dispatch' || (inputs.head_ref != '' && 'merge' || 'sub-issue') }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { runAutoClose } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-auto-close.mjs`)
+            await runAutoClose({ github, context, core }, { epic: process.env.EPIC, via: process.env.VIA })
