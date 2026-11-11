@@ -38,6 +38,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
 - **Board drag is one pointer gesture** (`board-drag.ts`): hold-then-drag with `elementFromPoint`
   hit-testing and `touchmove` cancelled only while a drag is live. No HTML5 drag — it never starts
   on iOS. Width authoring is a scaled frame (`useBoardWidth`), presets plus a free drag.
+- Board panes are floored at the same floor the served page uses (`boardPaneMinPct` →
+  `deriveSizing(...).hardMinWidth`: a block's `minWidth`, a nested split's widest block), so
+  editor and page give each pane the same width (#3746, `tests/board-vs-preview.test.ts`).
 
 ## Gotchas
 
@@ -47,7 +50,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   hidden list, the visible tree and every pane's rendered box, which is how the Safari zero-height
   bug was pinned (#2490).
 - reka's splitter re-reports stale proportions on a variant/width switch; the board ignores no-op
-  layout reports and remounts on `currentId:activeBreakpoint`.
+  layout reports and remounts on `currentId:activeBreakpoint`; BoardTree only forwards a layout
+  report during a handle drag or key press, so reka's min-width clamp on open/width change never
+  edits the page (#3746).
 - A `pocs/*` typecheck sweeps the whole monorepo and reports thousands of unrelated errors; the
   gate is `pnpm typecheck` (apps) after a package change.
 
