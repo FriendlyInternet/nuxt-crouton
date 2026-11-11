@@ -41,6 +41,7 @@
       "handoff-sweep.yml",
       "on-pr-close.yml",
       "owner-quiz.yml",
+      "postmortem.yml",
       "status.yml"
     ],
     "deploys": [
