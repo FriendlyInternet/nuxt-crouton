@@ -36,7 +36,7 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 CroutonBooking
 ├── Slot/
 │   └── Indicator.vue   - Visual slot indicator
-├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList)
+├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot to PanelFilters
 ├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
 ├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key per team ⇒ no dup calls; see *useFetch keys carry the team* below) + coordinates cross-pane via useBookingsLayoutFilters.
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
@@ -48,7 +48,7 @@ CroutonBooking
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map, location cards)
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map, location cards); a `#toolbar-end` slot renders after the fold button (the admin full-screen close, #3046)
 └── PanelMap.vue        - Map display
 ```
 

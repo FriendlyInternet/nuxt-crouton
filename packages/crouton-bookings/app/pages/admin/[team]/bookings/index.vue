@@ -160,20 +160,33 @@ async function handleBookingChange() {
       </UDropdownMenu>
     </div>
 
-    <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
+    <!-- Phone (below lg): no inline calendar, only the full-screen button (#3046).
+         max-lg:hidden, not hidden lg:flex — the Panel root already carries flex. -->
+    <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0 max-lg:hidden" />
 
+    <!-- #content drops the modal's title bar; title stays as the hidden
+         screen-reader title and the close X sits in the toolbar row (#3046). -->
     <UModal
       v-model:open="fullscreenOpen"
       fullscreen
-      close
       :title="t('bookings.admin.title')"
       :ui="{
-        content: 'bg-default pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
-        body: 'p-0 sm:p-0 flex-1 min-h-0 flex flex-col'
+        content: 'bg-default pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]'
       }"
     >
-      <template #body>
-        <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
+      <template #content="{ close }">
+        <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0">
+          <template #toolbar-end>
+            <UButton
+              size="sm"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :aria-label="t('bookings.admin.closeFullScreen')"
+              @click="close"
+            />
+          </template>
+        </CroutonBookingsPanel>
       </template>
     </UModal>
   </div>

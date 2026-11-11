@@ -22,7 +22,7 @@ interface Props {
   bookedColor?: string
   /** Color for cancelled slots */
   cancelledColor?: string
-  size?: 'xs' | 'sm' | 'md' | 'lg'
+  size?: '2xs' | 'xs' | 'sm' | 'md' | 'lg'
   /** 'dots' = fixed-size circles, 'bars' = flex-grow to fill width */
   variant?: 'dots' | 'bars'
 }
@@ -47,6 +47,7 @@ const emit = defineEmits<{
 const { parseSlotIds } = useBookingSlots()
 
 const dotSizeClasses = {
+  '2xs': 'size-1',
   xs: 'size-1.5',
   sm: 'size-2',
   md: 'size-3',
@@ -54,6 +55,7 @@ const dotSizeClasses = {
 }
 
 const barHeightClasses = {
+  '2xs': 'h-1',
   xs: 'h-1.5',
   sm: 'h-2',
   md: 'h-2.5',
@@ -61,6 +63,7 @@ const barHeightClasses = {
 }
 
 const gapClasses = {
+  '2xs': 'gap-px',
   xs: 'gap-[2px]',
   sm: 'gap-[3px]',
   md: 'gap-1',
