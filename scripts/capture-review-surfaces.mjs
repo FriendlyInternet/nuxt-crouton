@@ -83,7 +83,8 @@ const SEEDED_TEAM = 'test1'
 
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
- *  - a page file (`…/app/pages/**.vue`) → its route, with a `[team]`-style segment → the seeded team;
+ *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`-style segment → the seeded team;
  *    pages with any other dynamic segment are skipped (no data to open them with);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
@@ -101,6 +102,8 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
+      const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
+      if (owner && owner[1] !== app) continue
       if (page[1].startsWith('__review')) continue
       const segs = page[1].split('/').filter(s => s !== 'index')
       const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
