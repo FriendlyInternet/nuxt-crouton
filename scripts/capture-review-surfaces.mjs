@@ -89,6 +89,18 @@ const SEEDED_TEAM = 'test1'
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
+// The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
+function pageSurface(file, pagePath, app) {
+  const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
+  if (owner && owner[1] !== app) return null
+  if (pagePath.startsWith('__review')) return null
+  const segs = pagePath.split('/').filter(s => s !== 'index')
+  const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
+  if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  return { route, label: segs.join('-') || 'index' }
+}
+
 export function deriveSurfaces({ changedFiles, app }) {
   const out = []
   const add = (path, label) => {
@@ -102,14 +114,8 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
-      if (owner && owner[1] !== app) continue
-      if (page[1].startsWith('__review')) continue
-      const segs = page[1].split('/').filter(s => s !== 'index')
-      const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
-      if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) continue
-      const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
-      add(route, segs.join('-') || 'index')
+      const surface = pageSurface(file, page[1], app)
+      if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
     }
