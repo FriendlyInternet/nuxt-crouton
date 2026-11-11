@@ -36,6 +36,10 @@ const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pa
 useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 
 const { blocks, blocksList } = useCroutonLayoutBlocks()
+// The block row offers atomic blocks only: a compound block (bookings' all-in-one
+// `bookings-calendar`, #2559) is a whole screen in one pane — its parts are offered
+// as their own blocks instead. Saved pages that already hold one still render.
+const paletteBlocks = computed(() => blocksList.value.filter(b => b.kind !== 'compound'))
 const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consumeClick } = useBoardDrag()
 
 const selected = ref<NodePath | null>(null)
@@ -226,7 +230,7 @@ async function viewPage() {
     <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
     <nav class="flex gap-2 overflow-x-auto border-b border-default px-2 py-2" data-handoff="palette">
       <button
-        v-for="b in blocksList"
+        v-for="b in paletteBlocks"
         :key="b.id"
         type="button"
         class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"

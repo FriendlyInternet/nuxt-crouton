@@ -16,7 +16,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   // crouton-flow (Site level) rides Vue Flow; extended here (not default-on). No
   // flowId/sync used → no collab Durable Object binding needed (mirrors the demo POC).
-  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', './layers/builder'],
+  // crouton-bookings (#2559): its atomic layout blocks (calendar / filters / locations /
+  // list) join the block row, the same package booking-demo extends.
+  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', '@fyit/crouton-bookings', './layers/builder'],
 
   // View Transitions API — the graduated Page⇄Site morph (Replace: page-site-transition).
   // Matching `view-transition-name` on the flow card + the board makes the card grow
