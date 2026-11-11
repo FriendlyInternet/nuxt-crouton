@@ -123,7 +123,7 @@ test('#3475: the same PR previews only POCs that use crouton-sales', () => {
 })
 test('#3475: a crouton-bookings PR previews only bookings consumers', () => {
   assert.deepEqual(pick(realApps, ['packages/crouton-bookings/x.ts']), ['velo'])
-  assert.deepEqual(pick(realPocs, ['packages/crouton-bookings/x.ts']), ['booking-demo', 'gallery'])
+  assert.deepEqual(pick(realPocs, ['packages/crouton-bookings/x.ts']), ['booking-demo', 'crouton-builder', 'gallery'])
 })
 test('#3475: an apps/velo-only PR previews velo only', () => {
   assert.deepEqual(pick(realApps, ['apps/velo/app/x.vue']), ['velo'])
