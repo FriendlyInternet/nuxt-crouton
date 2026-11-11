@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { routeComment, KINDS } from './comment-route.mjs'
+import { sourceIssueFor } from './lib/owner-screens.mjs'
 
 const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
@@ -149,7 +150,30 @@ test('owner screen: 📐 on a blocked pipeline-owned issue resumes', () => {
 })
 
 test('owner screen: 🎯 on a blocked work-N PR revises', () => {
-  assert.equal(kind({ comment: app('🎯 **Preview feedback**\n\n> move it left'), issue: heldPr, pr: pr({ labels: ['status:blocked'] }) }), 'revise')
+  // "blocked" = the PR's source issue (`Closes #N`) carries the label — the PR itself does not.
+  assert.equal(kind({ comment: app('🎯 **Preview feedback**\n\n> move it left'), issue: { ...heldPr, labels: [] }, pr: pr({ sourceIssue: { number: 7, labels: ['status:blocked'] } }) }), 'revise')
+})
+
+// #3691 review hole 1 — held drafts (#3687, #3685) carry no status:blocked; their source issue does.
+const FB = '🎯 **Preview feedback**\n\n> move it left'
+const prBody = (n) => `Closes #${n}\n\nbody`
+const issueAt = (labels) => async () => ({ labels: labels.map(name => ({ name })) })
+const prFacts = async (body, labels) => pr({ draft: true, sourceIssue: await sourceIssueFor({ comment: app(FB), prBody: body, getIssue: issueAt(labels) }) })
+
+test('owner screen on a PR: source issue blocked + PR unlabelled → wakes (revise)', async () => {
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: [] }, pr: await prFacts(prBody(7), ['status:blocked']) }), 'revise')
+})
+
+test('owner screen on a PR: source issue not blocked → does not wake, even if the PR is labelled', async () => {
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: ['status:blocked'] }, pr: await prFacts(prBody(7), []) }), 'none')
+})
+
+test('owner screen on a PR: no linked issue → does not wake', async () => {
+  let fetched = false
+  const sourceIssue = await sourceIssueFor({ comment: app(FB), prBody: 'no link here; see `Closes #7` in code', getIssue: async () => { fetched = true; return { labels: [{ name: 'status:blocked' }] } } })
+  assert.equal(sourceIssue, null)
+  assert.equal(fetched, false)
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: ['status:blocked'] }, pr: pr({ draft: true, sourceIssue }) }), 'none')
 })
 
 test('owner screen: unblocked, no emoji, a quote or another app → none', () => {

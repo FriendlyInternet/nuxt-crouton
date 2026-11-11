@@ -79,8 +79,10 @@ test('#3691 an owner-screen comment on a waiting item revises; without the label
   const c = { body: '🎯 **Preview feedback**\n\n> move it', authorAssociation: 'NONE', userType: 'Bot', appSlug: 'nuxt-harness' }
   assert.equal(shouldRevise({ ...c, labels: ['status:blocked'] }).revise, true)
   assert.deepEqual(shouldRevise({ ...c, labels: [] }), { revise: false, reason: 'posted by a bot' })
-  assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open', labels: ['status:blocked'] }, comment: c }).revise, true)
-  assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open', labels: [] }, comment: c }).revise, false)
+  // On a PR the waiting item is its SOURCE issue (`Closes #N`), never the PR's own labels.
+  assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open', sourceIssue: { number: 7, labels: ['status:blocked'] } }, comment: c }).revise, true)
+  assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open', sourceIssue: { number: 7, labels: [] } }, comment: c }).revise, false)
+  assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open', labels: ['status:blocked'], sourceIssue: null }, comment: c }).revise, false)
 })
 
 test('#3060 generated-by trailer: free text still revises, owner ok does not', () => {

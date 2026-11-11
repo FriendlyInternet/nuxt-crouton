@@ -39,12 +39,13 @@ export function epicIssueFromRef(ref) {
  * @param {string} [c.userType]          'User' or 'Bot'
  * @param {string} [c.appSlug]           performed_via_github_app.slug
  * @param {string} [c.userLogin]         the comment author's login
- * @param {string[]} [c.labels]          the item's labels (an owner-screen comment needs status:blocked)
+ * @param {string[]} [c.labels]          the waiting item's labels (an owner-screen comment needs status:blocked)
  * @returns {{ revise: boolean, reason: string, reply?: boolean }}
  */
 export function shouldRevise({ body, authorAssociation, userType, appSlug, userLogin, labels } = {}) {
   const text = String(body || '').trim()
   // A 🎯/📐 comment from our own screens on a waiting item is the owner's feedback (#3691).
+  // `labels` are the WAITING item's: the issue's own, or a PR's source issue (routePrComment).
   if (isOwnerScreenComment({ comment: { body, userType, appSlug, userLogin }, issue: { labels: labels || [] } })) {
     return { revise: true, reason: 'an owner-screen comment on a waiting item' }
   }
@@ -75,16 +76,20 @@ export function shouldRevise({ body, authorAssociation, userType, appSlug, userL
 
 /**
  * The PR side: a comment on an OPEN PR whose head is `work-<N>` or `epic/<N>-…`.
+ * `pr.sourceIssue` ({number, labels}, from owner-screens `sourceIssueFor`) is the PR's `Closes #N` issue.
  * `branch` is set only for an epic head: the dispatch must name it, since it is not `work-<issue>`.
  * @returns {{ revise: boolean, issue: number|null, branch: string, reason: string, reply: boolean }}
  */
 export function routePrComment({ pr = {}, comment = {} } = {}) {
+  // (`comment.labels` is ignored here on purpose: the PR's waiting state is its source issue's.)
   const epic = epicIssueFromRef(pr.headRef)
   const issue = workIssueFromRef(pr.headRef) ?? epic
   const branch = epic ? pr.headRef : ''
   if (!issue) return { revise: false, issue: null, branch, reason: `head \`${pr.headRef}\` is not a pi worker or epic branch`, reply: false }
   if (pr.state !== 'open') return { revise: false, issue, branch, reason: 'the PR is not open', reply: false }
-  const d = shouldRevise({ ...comment, labels: comment.labels ?? pr.labels })
+  // An owner-screen comment on a PR waits on the PR's SOURCE issue (`Closes #N`), never the PR's
+  // own labels (#3691): held drafts carry no status:blocked. No resolved source issue → no labels.
+  const d = shouldRevise({ ...comment, labels: pr.sourceIssue?.labels || [] })
   return { revise: d.revise, issue, branch, reason: d.reason, reply: Boolean(d.reply) }
 }
 

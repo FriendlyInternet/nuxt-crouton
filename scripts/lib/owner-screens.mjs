@@ -11,9 +11,10 @@
 //
 // An owner-screen comment is FEEDBACK, never an approval: approval.mjs refuses it.
 //
-// Pure, Node core only.
+// Node core only. Pure except `sourceIssueFor` (takes the issue fetcher) and `readDiagramScene` (runs git).
 
 import { pathToFileURL } from 'node:url'
+import { execFileSync } from 'node:child_process'
 
 /** The screens. `reserved` ones are recognised now so a later screen needs no filter change. */
 export const OWNER_SCREENS = [
@@ -55,11 +56,36 @@ export function isOwnerScreenSource({ comment = {} } = {}) {
 }
 
 /**
- * An owner-screen comment on a WAITING item (the issue or PR carries `status:blocked`).
- * @param {{comment: object, issue: {labels?: string[]}}} input
+ * An owner-screen comment on a WAITING item. On an issue, the issue carries `status:blocked`.
+ * On a PR the hold label sits on the PR's SOURCE issue (its `Closes #N`), not on the PR — held
+ * drafts carry no `status:blocked` themselves — so a PR needs `pr.sourceIssue` (see
+ * `sourceIssueFor`) and THAT issue must be blocked; the PR's own labels don't count.
+ * @param {{comment: object, issue: {isPr?: boolean, labels?: string[]}, pr?: {sourceIssue?: {labels?: string[]}|null}}} input
  */
-export function isOwnerScreenComment({ comment = {}, issue = {} } = {}) {
-  return isOwnerScreenSource({ comment }) && (issue.labels || []).includes('status:blocked')
+export function isOwnerScreenComment({ comment = {}, issue = {}, pr } = {}) {
+  if (!isOwnerScreenSource({ comment })) return false
+  const labels = issue.isPr ? (pr?.sourceIssue?.labels || []) : (issue.labels || [])
+  return labels.includes('status:blocked')
+}
+
+/** The PR's source issue: the first `Closes #N` in its body, in prose only (not code). Else null. */
+export function linkedIssueNumber(prBody) {
+  const prose = String(prBody || '').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
+  const m = /\bCloses\s+#(\d+)/i.exec(prose)
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Resolve a PR's source issue `{number, labels}` for an owner-screen comment, else null. Fetches
+ * only when the comment IS an owner-screen comment, so ordinary comments cost no API call.
+ * @param {{comment: object, prBody?: string, getIssue: (n: number) => Promise<{labels?: Array<string|{name:string}>}>}} input
+ */
+export async function sourceIssueFor({ comment = {}, prBody, getIssue } = {}) {
+  if (!isOwnerScreenSource({ comment })) return null
+  const number = linkedIssueNumber(prBody)
+  if (!number) return null
+  const issue = await getIssue(number)
+  return { number, labels: (issue?.labels || []).map(l => (typeof l === 'string' ? l : l.name)) }
 }
 
 const DIAGRAM_LINE = /<!--\s*owner-screen:diagram\s+slug=(\S+)\s+branch=(\S+)\s+sha=(\S*)\s+path=(\S+)\s*-->/
@@ -73,6 +99,22 @@ export function parseDiagramSave(body) {
 /** The hidden line `parseDiagramSave` reads — written by the ticket-editor. */
 export function diagramSaveLine({ slug, branch, sha, path }) {
   return `<!-- owner-screen:diagram slug=${slug} branch=${branch} sha=${sha || ''} path=${path} -->`
+}
+
+/**
+ * The saved scene at `sha`. The resume job checks out ONE commit of main, and the editor saves on
+ * the ticket's branch — so fetch that commit first (`git fetch --depth=1 origin <sha>`), then read
+ * it. Returns the file text, or null when the sha/path is missing or the read fails.
+ * @param {{sha?: string, path?: string}} diagram
+ * @param {{cwd?: string, remote?: string}} [opts]
+ */
+export function readDiagramScene({ sha, path } = {}, { cwd = process.cwd(), remote = 'origin' } = {}) {
+  if (!/^[0-9a-f]{7,40}$/i.test(String(sha || '')) || !path || path.startsWith('-')) return null
+  const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
+  try {
+    try { git('cat-file', '-e', `${sha}^{commit}`) } catch { git('fetch', '--depth=1', '--no-tags', remote, sha) }
+    return git('show', `${sha}:${path}`)
+  } catch { return null }
 }
 
 // CLI: `node scripts/lib/owner-screens.mjs --is-source <body-file> <app-slug>` → exit 0 when the

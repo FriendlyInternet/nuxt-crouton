@@ -16,7 +16,11 @@
 //   env: GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY=owner/repo
 //   arg: issue number (falls back to $ISSUE)
 
-import { isOwnerScreenSource, parseDiagramSave } from './lib/owner-screens.mjs'
+import { writeFileSync } from 'node:fs'
+import { isOwnerScreenSource, parseDiagramSave, readDiagramScene } from './lib/owner-screens.mjs'
+
+/** Where the edited diagram's scene is written for the resume agent (#3691). */
+const SCENE_FILE = '.resume-diagram.excalidraw'
 
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ''
 const repo = process.env.GITHUB_REPOSITORY || 'FriendlyInternet/nuxt-crouton'
@@ -115,9 +119,17 @@ try {
     pickDiagram(prComments)
   }
 
+  // The job checks out one commit of main; the editor saved on another branch — readDiagramScene
+  // fetches that commit first, so the scene is readable here (#3691).
+  let scene = null
+  if (diagram) {
+    scene = readDiagramScene(diagram)
+    if (scene !== null) { try { writeFileSync(SCENE_FILE, scene) } catch { scene = null } }
+  }
   out.push(
     diagram
-      ? `**Edited diagram (📐):** \`${diagram.slug}\` on \`${diagram.branch}\` @ ${String(diagram.sha).slice(0, 7)} — scene \`${diagram.path}\` (the owner's note is quoted in that comment)`
+      ? `**Edited diagram (📐):** \`${diagram.slug}\` on \`${diagram.branch}\` @ ${String(diagram.sha).slice(0, 7)} — scene \`${diagram.path}\` (the owner's note is quoted in that comment)` +
+        (scene !== null ? ` — the scene at that sha is saved to \`${SCENE_FILE}\`.` : ` — could not read the scene at that sha; fetch it with \`git fetch --depth=1 origin ${diagram.sha}\`.`)
       : `**Edited diagram:** none detected.`
   )
 

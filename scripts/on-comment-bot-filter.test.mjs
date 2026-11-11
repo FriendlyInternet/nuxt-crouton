@@ -92,6 +92,37 @@ test('owner screen: 📐/🎯 from nuxt-harness on a blocked item starts route a
   }
 })
 
+// #3691 review hole 1 — a held PR carries no status:blocked (its source issue does), so the job
+// filter lets an owner-screen PR comment through and the route script checks the source issue.
+test('owner screen on a PR: route/rl-start start for an unlabelled PR; the scripts resolve its source issue', () => {
+  const onPr = (body, slug = 'nuxt-harness') => {
+    const e = screen(body, { slug, labels: [] })
+    return { ...e, issue: { ...e.issue, pull_request: { url: 'x' } } }
+  }
+  for (const job of ['route', 'rl-start']) {
+    assert.equal(evalIf(job, onPr('🎯 **Preview feedback**')), true, job)
+    assert.equal(evalIf(job, onPr('> 🤖 **pi.dev harness** · x')), false, job)
+    assert.equal(evalIf(job, onPr('🎯 x', 'github-actions')), false, job)
+  }
+  for (const job of ['route', 'revise']) {
+    const b = jobBlock(job)
+    assert.match(b, /import\(`\$\{process\.env\.GITHUB_WORKSPACE\}\/scripts\/lib\/owner-screens\.mjs`\)/, job)
+    assert.match(b, /sourceIssue: await sourceIssueFor\(\{ comment, prBody: p?r?\.body, getIssue \}\)/, job)
+    assert.match(b, /github\.rest\.issues\.get\(\{ \.\.\.context\.repo, issue_number: n \}\)/, job)
+    assert.doesNotMatch(b, /labels: \(?p?r?\.labels/, `${job} must not judge the PR's own labels`)
+  }
+})
+
+// #3691 review hole 2 — the resume prompt points at the scene the payload step fetched.
+test('owner screen: the resume prompt reads the fetched scene file, not git show on the main checkout', () => {
+  assert.match(wf, /node scripts\/resume-answer-payload\.mjs "\$ISSUE" > \.resume-answer\.md/)
+  assert.match(wf, /`\.resume-diagram\.excalidraw`/)
+  assert.doesNotMatch(wf, /git show <sha>:<path>/)
+  const payload = readFileSync(new URL('./resume-answer-payload.mjs', import.meta.url), 'utf8')
+  assert.match(payload, /readDiagramScene\(diagram\)/)
+  assert.match(payload, /const SCENE_FILE = '\.resume-diagram\.excalidraw'/)
+})
+
 test('owner screen: the if: emoji set and app slug match scripts/lib/owner-screens.mjs (drift guard)', () => {
   const expr = jobIf('route')
   const emoji = [...expr.matchAll(/startsWith\(github\.event\.comment\.body, '([^']+)'\)/g)].map(m => m[1])

@@ -43,7 +43,7 @@ jobs:
       (github.event.comment.performed_via_github_app == null ||
        github.event.comment.performed_via_github_app.name == 'Claude')) ||
       (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
-       contains(github.event.issue.labels.*.name, 'status:blocked') &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
        (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
         startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
@@ -78,14 +78,15 @@ jobs:
     # (user.type == User), and dropping those silently ignored them (#3029). No flow
     # needs a bot comment to trigger a workflow — with ONE exception (#3691): an owner-screen comment
     # (first line 🎯/📐/🚶/🗳, from the Nuxt Harness app, on a status:blocked item) is the owner
-    # answering from our screens. The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
+    # answering from our screens. On a PR the hold label sits on its SOURCE issue (`Closes #N`), not
+    # the PR, so a PR passes here and comment-route.mjs checks that issue (owner-screens sourceIssueFor). The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
     # by scripts/on-comment-bot-filter.test.mjs; scripts/comment-route.mjs decides what it means.
     if: >-
       (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
        github.event.comment.performed_via_github_app.name == 'Claude')) ||
       (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
-       contains(github.event.issue.labels.*.name, 'status:blocked') &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
        (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
         startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ubuntu-latest
@@ -107,16 +108,19 @@ jobs:
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             let pr
             if (isPr) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
-              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, labels: (p.labels || []).map(l => l.name) }
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, sourceIssue: await sourceIssueFor({ comment, prBody: p.body, getIssue }) }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login },
+              comment,
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
@@ -723,8 +727,9 @@ jobs:
             question came in — this run collected it across every surface into `.resume-answer.md`
             (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
             and a 📐 line if a diagram was edited). **Read `.resume-answer.md` first** and
-            treat it as their answer; if it names an edited diagram, read its `.excalidraw` at the
-            given sha (`git show <sha>:<path>`) and treat the quoted note as the owner's words.
+            treat it as their answer; if it names an edited diagram, its scene at the saved sha
+            (fetched from the editor's branch) is in `.resume-diagram.excalidraw` — read that file
+            and treat the quoted note as the owner's words.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
@@ -1127,12 +1132,15 @@ jobs:
         with:
           script: |
             const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const pull_number = context.payload.issue.number
             const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
             const c = context.payload.comment
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             const route = routePrComment({
-              pr: { headRef: pr.head.ref, state: pr.state, labels: pr.labels.map(l => l.name) },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login },
+              pr: { headRef: pr.head.ref, state: pr.state, sourceIssue: await sourceIssueFor({ comment, prBody: pr.body, getIssue }) },
+              comment,
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {
