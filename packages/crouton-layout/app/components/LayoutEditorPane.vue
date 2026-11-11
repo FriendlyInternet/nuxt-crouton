@@ -12,10 +12,10 @@
  */
 import { computed, inject, ref } from 'vue'
 import { useElementSize } from '@vueuse/core'
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { DropEdge } from '../utils/layout-edit'
 import { minWidthResolver, panelMinSizePct } from '../utils/layout-viability'
+import { editorSplitterItems, splitterHandleClass } from '../utils/layout-splitter-items'
 import { LAYOUT_EDIT_KEY, pathKey, type LayoutEditApi } from '../composables/useCroutonLayoutEdit'
 
 const props = defineProps<{ node: LayoutNode, path: number[] }>()
@@ -33,8 +33,9 @@ const def = computed(() => (props.node.type === 'leaf' ? getBlock(props.node.blo
 const selected = computed(() => editor.selectedPath.value === pathKey(props.path))
 
 // Min-width enforcement, same as the read-only renderer.
-const groupRef = ref<HTMLElement | null>(null)
-const { width: groupWidth } = useElementSize(groupRef)
+// USplitter's root element IS reka's SplitterGroup, so `$el` is what we measured before.
+const groupRef = ref<{ $el: HTMLElement } | null>(null)
+const { width: groupWidth } = useElementSize(computed(() => groupRef.value?.$el ?? null))
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 function panelMin(child: LayoutNode): number {
   if (props.node.type !== 'split') return 0
@@ -157,31 +158,23 @@ const zones: { edge: DropEdge, area: string, label: string }[] = [
     </div>
   </div>
 
-  <!-- Split: Splitter group, recursing -->
-  <SplitterGroup
+  <!-- Split: USplitter group, recursing -->
+  <USplitter
     v-else-if="node.type === 'split'"
     ref="groupRef"
-    :direction="node.direction"
+    :orientation="node.direction"
+    :items="editorSplitterItems(node, panelMin)"
     class="h-full w-full"
+    :ui="{ handle: `bg-border hover:bg-primary transition-colors ${splitterHandleClass(node.direction, '1')}` }"
     @layout="(sizes: number[]) => editor.resize(path, sizes)"
   >
-    <template
-      v-for="(child, i) in node.children"
-      :key="i"
-    >
-      <SplitterResizeHandle
-        v-if="i > 0"
-        class="bg-border hover:bg-primary transition-colors data-[orientation=horizontal]:w-1 data-[orientation=vertical]:h-1"
+    <template #pane="{ index }">
+      <CroutonLayoutEditorPane
+        :node="node.children[index]!"
+        :path="[...path, index]"
       />
-      <SplitterPanel
-        :default-size="child.defaultSize ?? (100 / node.children.length)"
-        :min-size="panelMin(child)"
-        class="overflow-hidden"
-      >
-        <CroutonLayoutEditorPane :node="child" :path="[...path, i]" />
-      </SplitterPanel>
     </template>
-  </SplitterGroup>
+  </USplitter>
 </template>
 
 <style scoped>

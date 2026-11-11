@@ -24,8 +24,7 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-layout'
  * crouton-pages) keep importing them from core and need no dep on this layer.
  * Blocks are contributed via the `croutonLayoutBlocks` app.config registry.
  *
- * Default-on: `@fyit/crouton` includes this (bundled manifest), the same way
- * core auto-includes i18n/auth/admin.
+ * Opt-in (#2282): an app gets the layout engine only by extending this layer.
  */
 export default defineNuxtConfig({
   // One-way dependency: extend core (which already pulls i18n/auth/admin).

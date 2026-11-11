@@ -114,23 +114,6 @@ function inflate(bytes) {
 }
 
 /**
- * Embed an arbitrary tEXt chunk (keyword + text) into a PNG — generic primitive used to embed
- * draw.io's `mxfile` payload (keyword "mxfile", URL-encoded XML) as well as our scene.
- */
-export function embedTextChunk(pngBuffer, keyword, text) {
-  const buf = Buffer.isBuffer(pngBuffer) ? pngBuffer : Buffer.from(pngBuffer)
-  const chunks = parseChunks(buf)
-  const data = Buffer.concat([Buffer.from(keyword, 'latin1'), Buffer.from([0]), Buffer.from(text, 'latin1')])
-  const textChunk = makeChunk('tEXt', data)
-  const out = [PNG_SIG]
-  for (const c of chunks) {
-    if (c.type === 'IEND') out.push(textChunk)
-    out.push(makeChunk(c.type, c.data))
-  }
-  return Buffer.concat(out)
-}
-
-/**
  * Embed a scene into a PNG buffer (inverse of extractScene) — used to self-test the codec
  * without a real Excalidraw export, and available for embedding scenes into our own renders.
  */
