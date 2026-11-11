@@ -307,7 +307,7 @@ test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-d
 // ── #3340: an invite-only app refuses public sign-up → create the login via SQL ───────
 // The real CLI against a real SQLite file, with a stand-in for the Worker's auth routes
 // that answers sign-up the way crouton-auth's invite-only gate does.
-import { createReviewAccountSql } from './seed-review-login.mjs'
+import { createReviewAccountSql, scryptHashPassword } from './seed-review-login.mjs'
 
 const INVITE_ONLY = { status: 403, body: { message: 'Sign-up is by invitation only', code: 'SIGNUP_INVITE_ONLY' } }
 
@@ -419,4 +419,21 @@ test('#3340 createReviewAccountSql: the default hasher is better-auth\'s, so sig
   const { password } = d.prepare('SELECT "password" FROM "account"').get()
   d.close()
   assert.equal(await verifyPassword({ hash: password, password: 'new-secret' }), true)
+})
+
+// CI's Node-only job has no `pnpm install`, so the seed falls back to its own scrypt
+// hash there — it must be one better-auth's sign-in accepts.
+test('#3340 scryptHashPassword (no-better-auth fallback) is verified by better-auth', async (t) => {
+  const hash = await scryptHashPassword('new-secret')
+  assert.match(hash, /^[0-9a-f]{32}:[0-9a-f]{128}$/)
+  let verifyPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    ;({ verifyPassword } = await import(req.resolve('better-auth/crypto')))
+  } catch {
+    t.skip('better-auth not installed in this checkout')
+    return
+  }
+  assert.equal(await verifyPassword({ hash, password: 'new-secret' }), true)
+  assert.equal(await verifyPassword({ hash, password: 'wrong' }), false)
 })

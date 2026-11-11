@@ -45,6 +45,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { randomBytes, scrypt } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 function parseArgs(argv) {
@@ -196,9 +197,25 @@ function sqlStr(v) {
  * so resolve it from crouton-auth — the package every crouton app's auth comes from.
  */
 async function loadHashPassword() {
-  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
-  const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
-  return hashPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
+    return hashPassword
+  } catch {
+    // No `pnpm install` in this checkout (e.g. CI's Node-only job, #3340): use the
+    // same scrypt hash better-auth's Node build makes, so sign-in still verifies it.
+    return scryptHashPassword
+  }
+}
+
+/** better-auth's Node password hash (`@better-auth/utils/password`): `<salt hex>:<key hex>`. */
+export function scryptHashPassword(password) {
+  const N = 16384, r = 16, p = 1
+  const salt = randomBytes(16).toString('hex')
+  return new Promise((resolve, reject) => {
+    scrypt(String(password).normalize('NFKC'), salt, 64, { N, r, p, maxmem: 128 * N * r * 2 },
+      (err, key) => err ? reject(err) : resolve(`${salt}:${key.toString('hex')}`))
+  })
 }
 
 /**
