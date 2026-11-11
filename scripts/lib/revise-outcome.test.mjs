@@ -40,10 +40,13 @@ test('baseOnly, no reply, no body change -> noop: brought up to date, change not
   assert.match(r.message, /\[your change\]\(https:\/\/x\/c1\) was not made/)
   assert.match(r.message, /^<!-- pipeline-note -->/)
 })
-test('baseOnly + reply -> reply with "no code change"', () => {
-  const r = reviseOutcome({ baseOnly: true, replied: true, base: 'main' })
-  assert.equal(r.note, 'reply'); assert.equal(r.revised, true)
-  assert.match(r.message, /no code change/)
+test('baseOnly + a worker reply claiming a fix, no commit -> noop with "described but not pushed" (#3775 test 2, #3756 shape)', () => {
+  const r = reviseOutcome({ baseOnly: true, replied: true, base: 'main', from: 'https://x/c1' })
+  assert.equal(r.note, 'noop'); assert.equal(r.noop, true); assert.equal(r.revised, false)
+  assert.match(r.message, /Brought up to date with `main`/)
+  assert.match(r.message, /\[your change\]\(https:\/\/x\/c1\) was not made/)
+  assert.match(r.message, /the worker described a change, but no commit with it was pushed/i)
+  assert.match(r.message, /^<!-- pipeline-note -->/)
 })
 test('real commit after the merge -> revised', () => {
   assert.equal(reviseOutcome({ headMoved: true, baseOnly: true }).note, 'commit')

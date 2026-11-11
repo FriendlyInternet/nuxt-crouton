@@ -758,7 +758,7 @@ jobs:
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -uo pipefail
-          PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"  # a failed lookup leaves pr= empty; the persona still gets issue=
           REQ_PROMPT="$RUNNER_TEMP/request-prompt.txt"
           node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$REQ_PROMPT"
           set +e
@@ -1049,8 +1049,7 @@ jobs:
                 fi
               elif [ "$NOTE" = "reply" ]; then
                 echo "revise: answered on the PR without a code change"
-                echo "revised=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && [ -n "$MSG" ] && gh pr comment "$RPR" --body "$MSG" 2>&1 | tail -1 || true
+                echo "revised=1" >> "$GITHUB_OUTPUT"  # no base merge pushed: the reply is the answer (#3775)
               else
                 echo "::error::revise produced no commit after the base merge and no reply (#2446/#3775)"
                 echo "revise_noop=1" >> "$GITHUB_OUTPUT"

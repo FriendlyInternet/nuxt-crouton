@@ -244,3 +244,18 @@ test('10 conflict and no requested edit -> merge only, not made, revise_noop=1 (
   assert.match(x.comments, /was not made/)
   assert.doesNotMatch(x.comments, /no other change/)
 })
+
+test('11 merge only + a worker reply claiming a fix (#3756 shape) -> not made, revise_noop=1, "described but not pushed" (#3775)', () => {
+  const fx = fixture({ epicConflict: true })
+  const merge = conflictMerge(fx)
+  // The gh api stub prints `comments`: "1" = one worker (non-pipeline-note) reply since the run began.
+  const x = runStep(fx, { slice: SLICE_5B, comments: '1', env: { REV_BASE: merge, REV_CONFLICT: '1', BASE_MERGED: merge } })
+  assert.equal(x.r.status, 0, x.out)
+  assert.equal(x.firstParent, 1, 'the merge only')
+  assert.match(x.outputs, /^revise_noop=1$/m)
+  assert.doesNotMatch(x.outputs, /^revised=1$/m)
+  assert.equal(count(x.comments, '----'), 1, x.comments)
+  assert.match(x.comments, /was not made/)
+  assert.match(x.comments, /described a change, but no commit with it was pushed/)
+  assert.doesNotMatch(x.comments, /the worker answered above/)
+})

@@ -22,12 +22,11 @@ export function reviseOutcome({ headMoved, baseOnly, bodyChanged, replied, verdi
   if (bodyChanged) {
     return { revised: true, noop: false, rereview: verdict === 'no-go' && Number(round) === 1, note: 'body', message: '' }
   }
-  if (replied) {
-    const message = baseOnly ? `${HDR}Brought up to date with \`${base}\`; **no code change** — the worker answered above.` : ''
-    return { revised: true, noop: false, rereview: false, note: 'reply', message }
-  }
+  // A reply with no commit beyond the base merge is narration, not proof (#3775 test 2, #1849):
+  // the #3756 worker replied "fixed" and pushed nothing. Only without a base merge is a reply an answer.
+  if (replied && !baseOnly) return { revised: true, noop: false, rereview: false, note: 'reply', message: '' }
   const message = baseOnly
-    ? `${HDR}Brought up to date with \`${base}\`; ⚠️ **${link('your change', from)} was not made** — that merge is the only commit pushed, and the worker posted no answer. Rephrase it as a concrete change (which file, what to do) and comment again.`
+    ? `${HDR}Brought up to date with \`${base}\`; ⚠️ **${link('your change', from)} was not made** — that merge is the only commit pushed${replied ? '. The worker described a change, but no commit with it was pushed.' : ', and the worker posted no answer.'} Rephrase it as a concrete change (which file, what to do) and comment again.`
     : `${HDR}⚠️ **${link('Your comment', from)} produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.`
   return { revised: false, noop: true, rereview: false, note: 'noop', message }
 }
