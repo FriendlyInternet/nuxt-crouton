@@ -8,6 +8,7 @@
  * opens in a slide-over instead, exactly like today.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { effectScope, watchEffect, nextTick } from 'vue'
 import { createCollectionSelections } from '../useCollectionSelection'
 
 const setup = () => {
@@ -112,5 +113,41 @@ describe('collection selection (#2598)', () => {
     const before = s.sessionKey.value
     s.act('update', ['a1'])
     expect(s.sessionKey.value).toBe(before + 1)
+  })
+
+  // #3754 — each Form block attaches inside a watchEffect (LayoutForm.vue). Two forms
+  // for the same collection used to re-trigger each other until Vue gave up.
+  it('two forms for the same collection can both be on screen (#3754)', async () => {
+    const { selections } = setup()
+    const s = selections.get('artists')
+    const runs = [0, 0]
+    const scope = effectScope()
+    expect(() => scope.run(() => {
+      watchEffect((c) => { runs[0]++; c(s.attachEditor()) })
+      watchEffect((c) => { runs[1]++; c(s.attachEditor()) })
+    })).not.toThrow()
+    await nextTick()
+    expect(runs).toEqual([1, 1])
+    expect(s.hasEditor.value).toBe(true)
+    scope.stop()
+  })
+
+  it('removing one of two forms keeps rows opening in the other', async () => {
+    const { open, selections } = setup()
+    const s = selections.get('artists')
+    const a = effectScope()
+    const b = effectScope()
+    a.run(() => watchEffect((c) => c(s.attachEditor())))
+    b.run(() => watchEffect((c) => c(s.attachEditor())))
+    await nextTick()
+    a.stop()
+    expect(s.hasEditor.value).toBe(true)
+    s.act('update', ['a1'])
+    expect(s.itemId.value).toBe('a1')
+    expect(open).not.toHaveBeenCalled()
+    b.stop()
+    expect(s.hasEditor.value).toBe(false)
+    s.act('update', ['a1'])
+    expect(open).toHaveBeenCalledWith('update', 'artists', ['a1'], 'slideover', undefined)
   })
 })
