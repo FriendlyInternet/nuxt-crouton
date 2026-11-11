@@ -151,25 +151,28 @@ test('#3734: a workflow-only push gives an empty POC matrix, not a failure', () 
 })
 
 // Line scanner (no YAML dep): the `- '<glob>'` items under `on.<trigger>.paths:`.
-function triggerPaths(yaml, trigger) {
+// Split into small helpers so each stays under the fallow complexity threshold.
+const indentOf = l => l.length - l.trimStart().length
+const isContent = l => l.trim() !== '' && !l.trim().startsWith('#')
+const until = (arr, stop) => { const end = arr.findIndex(stop); return end < 0 ? arr : arr.slice(0, end) }
+// Content lines of `on.<trigger>:`, ending at the next trigger / top-level key.
+function triggerBlock(yaml, trigger) {
   const lines = yaml.split('\n')
   const start = lines.findIndex(l => l === `  ${trigger}:`)
   assert.ok(start >= 0, `no ${trigger}: trigger`)
-  const out = []
-  let inPaths = false
-  let itemIndent = -1
-  for (let i = start + 1; i < lines.length; i++) {
-    const l = lines[i]
-    if (!l.trim() || l.trim().startsWith('#')) continue
-    const indent = l.length - l.trimStart().length
-    if (indent <= 2) break // next trigger / top-level key
-    if (!inPaths) { if (l.trim() === 'paths:') inPaths = true; continue }
-    if (itemIndent < 0) itemIndent = indent
-    if (indent < itemIndent) break
-    const m = l.trim().match(/^-\s+'([^']+)'/)
-    if (m) out.push(m[1])
-  }
-  return out.sort()
+  return until(lines.slice(start + 1).filter(isContent), l => indentOf(l) <= 2)
+}
+function triggerPaths(yaml, trigger) {
+  const block = triggerBlock(yaml, trigger)
+  const at = block.findIndex(l => l.trim() === 'paths:')
+  if (at < 0) return []
+  const items = block.slice(at + 1)
+  const itemIndent = items.length ? indentOf(items[0]) : 0
+  return until(items, l => indentOf(l) < itemIndent)
+    .map(l => l.trim().match(/^-\s+'([^']+)'/))
+    .filter(Boolean)
+    .map(m => m[1])
+    .sort()
 }
 test('#3734: deploy-pocs.yml push.paths equals pull_request.paths', () => {
   const y = readFileSync(new URL('../.github/workflows/deploy-pocs.yml', import.meta.url), 'utf8')
