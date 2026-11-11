@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { routeComment, KINDS } from './comment-route.mjs'
+import { sourceIssueFor } from './lib/owner-screens.mjs'
+import { isRejectedTwice } from './plan-hold.mjs'
 
 const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
@@ -9,7 +11,7 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 11)
+  assert.equal(KINDS.length, 13)
 })
 
 test('close-epic: /close-epic on an issue', () => {
@@ -134,6 +136,89 @@ test('quiz-reply: on a blocked, pipeline-owned epic it never resumes (case 3)', 
   const held = { ...issue(['status:blocked', 'epic', 'work-this']), body: '<!-- pipeline: epic=1 -->' }
   assert.equal(kind({ comment: c('1B 2A 3C'), issue: held }), 'quiz-reply')
   assert.equal(kind({ comment: c('2 code'), issue: { ...issue(['status:to-test']) } }), 'quiz-reply')
+})
+
+// #3691 — owner-screen comments (🎯/📐 from the Nuxt Harness app on a waiting item).
+const app = (body) => ({ body, authorAssociation: 'NONE', userType: 'Bot', performedViaGithubApp: 'Nuxt Harness', appSlug: 'nuxt-harness', userLogin: 'nuxt-harness[bot]' })
+const SAVE = '📐 Diagram saved — continuing from your edit\n<!-- owner-screen:diagram slug=f branch=work-7 sha=a path=writeups/diagrams/f.excalidraw -->'
+const heldIssue = { ...issue(['status:blocked', 'work-this']), body: '<!-- pipeline: base=main -->' }
+const heldPr = { number: 7, isPr: true, labels: ['status:blocked'] }
+
+test('owner screen: 📐 on a blocked pipeline-owned issue resumes', () => {
+  const d = routeComment({ comment: app(SAVE), issue: heldIssue })
+  assert.deepEqual([d.kind, d.blocked], ['resume', true])
+  assert.equal(kind({ comment: app(SAVE), issue: issue(['status:blocked']) }), 'none') // not pipeline-owned
+})
+
+test('owner screen: 🎯 on a blocked work-N PR revises', () => {
+  // "blocked" = the PR's source issue (`Closes #N`) carries the label — the PR itself does not.
+  assert.equal(kind({ comment: app('🎯 **Preview feedback**\n\n> move it left'), issue: { ...heldPr, labels: [] }, pr: pr({ sourceIssue: { number: 7, labels: ['status:blocked'] } }) }), 'revise')
+})
+
+// #3691 review hole 1 — held drafts (#3687, #3685) carry no status:blocked; their source issue does.
+const FB = '🎯 **Preview feedback**\n\n> move it left'
+const prBody = (n) => `Closes #${n}\n\nbody`
+const issueAt = (labels) => async () => ({ labels: labels.map(name => ({ name })) })
+const prFacts = async (body, labels) => pr({ draft: true, sourceIssue: await sourceIssueFor({ comment: app(FB), prBody: body, getIssue: issueAt(labels) }) })
+
+test('owner screen on a PR: source issue blocked + PR unlabelled → wakes (revise)', async () => {
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: [] }, pr: await prFacts(prBody(7), ['status:blocked']) }), 'revise')
+})
+
+test('owner screen on a PR: source issue not blocked → does not wake, even if the PR is labelled', async () => {
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: ['status:blocked'] }, pr: await prFacts(prBody(7), []) }), 'none')
+})
+
+test('owner screen on a PR: no linked issue → does not wake', async () => {
+  let fetched = false
+  const sourceIssue = await sourceIssueFor({ comment: app(FB), prBody: 'no link here; see `Closes #7` in code', getIssue: async () => { fetched = true; return { labels: [{ name: 'status:blocked' }] } } })
+  assert.equal(sourceIssue, null)
+  assert.equal(fetched, false)
+  assert.equal(kind({ comment: app(FB), issue: { ...heldPr, labels: ['status:blocked'] }, pr: pr({ draft: true, sourceIssue }) }), 'none')
+})
+
+test('owner screen: unblocked, no emoji, a quote or another app → none', () => {
+  assert.equal(kind({ comment: app(SAVE), issue: { ...heldIssue, labels: ['work-this'] } }), 'none')
+  assert.equal(kind({ comment: app('> 🤖 **pi.dev harness** · x'), issue: heldIssue }), 'none')
+  assert.equal(kind({ comment: app('> 📐 Diagram saved'), issue: heldIssue }), 'none')
+  assert.equal(kind({ comment: { ...app(SAVE), appSlug: 'github-actions', userLogin: 'github-actions[bot]', performedViaGithubApp: 'GitHub Actions' }, issue: heldIssue }), 'none')
+})
+
+test('owner screen: 📐/🎯 containing ok never approves or merges', () => {
+  const bodies = [SAVE + '\nok', '🎯 **Preview feedback**\n\n> ok', '🎯 x\nlgtm']
+  const prs = [pr({ draft: true }), pr(), pr({ headRef: 'epic/9-x', baseRef: 'main' })]
+  for (const body of bodies) {
+    for (const p of prs) {
+      for (const labels of [['status:blocked'], []]) {
+        const k = kind({ comment: { ...app(body), authorAssociation: 'OWNER' }, issue: { ...heldPr, labels }, pr: { ...p, labels } })
+        assert.ok(!['approve-draft', 'approve-epic', 'automerge-go'].includes(k), `${body} → ${k}`)
+      }
+    }
+  }
+})
+
+test('#3272 owner override on a plan held after two rejections', () => {
+  const held = { ...issue(['status:blocked', 'delegate-pi']), planHeld: true }
+  assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic', 'MEMBER'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('lgtm'), issue: held }), 'plan-needs-reason')
+  assert.equal(kind({ comment: c('ok: why', 'CONTRIBUTOR'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('please also cover the mobile case'), issue: held }), 'resume')
+  assert.equal(kind({ comment: c('ok: why'), issue: { ...held, planHeld: false } }), 'resume')
+  assert.equal(kind({ comment: c('1B 2A 3C'), issue: held }), 'quiz-reply')
+})
+
+test('#3272 planHeld worked out from a real thread (plan, no-go, plan, no-go)', () => {
+  const NOGO = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n🔴 **Plan rejected**'
+  const PLAN = '<!-- pipeline-plan:v1 -->\nplan'
+  const thread = [PLAN, NOGO, PLAN, NOGO].map((body) => ({ body, userType: 'Bot' }))
+  const labels = ['status:blocked', 'delegate-pi']
+  const planHeld = isRejectedTwice({ comments: thread, labels })
+  assert.equal(planHeld, true)
+  const held = { ...issue(labels), planHeld }
+  assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
 })
 
 test('quiz-reply: `ok` on a blocked epic still resumes, as before (case 7)', () => {

@@ -56,18 +56,41 @@ function replaceAt(
   const children = root.children.slice()
   if (replaced === null) {
     children.splice(head!, 1)
-    // A split with a single survivor collapses into that survivor, preserving
-    // the parent's own size so the layout doesn't jump.
+    // A split with a single survivor collapses into that survivor, taking the
+    // parent's own size so the layout doesn't jump — or no size when the parent
+    // had none, so it matches its (unsized) new siblings (#3737).
     if (children.length === 1) {
       const sole = children[0]!
-      return { ...sole, ...sizeOf(root) }
+      return { ...stripSize(sole), ...sizeOf(root) }
     }
     if (children.length === 0) return null
+    // ≥2 survivors: rescale so the split still adds up to 100 (#3737).
+    return { ...root, children: rescaleSurvivors(children, root.children.length) }
   }
   else {
     children[head!] = replaced
   }
   return { ...root, children }
+}
+
+/**
+ * Rescale the survivors of a removal so their `defaultSize` adds up to exactly 100,
+ * keeping their relative proportions. An unset size weighs `100 / originalCount`
+ * (the even share the renderer would give it). When no survivor has a size, they
+ * are returned unchanged — sizes are never invented. 1 dp; the remainder goes to
+ * the last survivor.
+ */
+function rescaleSurvivors(children: LayoutNode[], originalCount: number): LayoutNode[] {
+  if (!children.some(c => c.defaultSize !== undefined)) return children
+  const weights = children.map(c => c.defaultSize ?? 100 / originalCount)
+  const total = weights.reduce((a, b) => a + b, 0)
+  let used = 0
+  return children.map((c, i) => {
+    if (i === children.length - 1) return { ...c, defaultSize: Math.round((100 - used) * 10) / 10 }
+    const defaultSize = Math.round(weights[i]! / total * 1000) / 10
+    used += defaultSize
+    return { ...c, defaultSize }
+  })
 }
 
 /** Pull just the size fields off a node (for preserving them across rewrites). */
@@ -352,14 +375,24 @@ export function applyPaneDrop(
  * Detach the node at `path` — pop it out to a free card. Returns the removed node and
  * the remaining tree (the parent split collapses to its survivor, as with `removeNode`).
  * Detaching the root empties the tree. A bad path detaches nothing.
+ *
+ * Pass `track` to get that node's path back as `trackedPath` after the detach
+ * reshaped the tree (a collapse rewrites paths, and the resize rebuilds siblings, so
+ * they can't be re-found by reference — #3737). `trackedPath` is null without
+ * `track`, or when the tracked node is the detached one / inside it.
  */
 export function detachNode(
   root: LayoutNode | null,
   path: NodePath,
-): { root: LayoutNode | null, detached: LayoutNode | null } {
+  track?: NodePath,
+): { root: LayoutNode | null, detached: LayoutNode | null, trackedPath: NodePath | null } {
   const detached = getNode(root, path)
-  if (!root || !detached) return { root, detached: null }
-  return { root: removeNode(root, path), detached }
+  if (!root || !detached) return { root, detached: null, trackedPath: null }
+  if (!track || isPrefix(path, track) || !getNode(root, track)) {
+    return { root: removeNode(root, path), detached, trackedPath: null }
+  }
+  const after = removeNode(cloneMarking(root, track), path)
+  return { root: after && unmark(after), detached, trackedPath: findMark(after) }
 }
 
 /** The path to `node` (by reference) within `root`, or null if it isn't present. */

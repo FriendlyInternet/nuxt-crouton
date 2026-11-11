@@ -148,6 +148,7 @@ test('7: run titles match the run-name in each workflow file', () => {
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'build', feedback: '3' }), '#5 · build · revise')
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), '#5 · plan')
   assert.equal(handoffRunTitle('automerge-epic-subpr.yml', { pr: '7' }), 'automerge #7')
+  assert.equal(handoffRunTitle('ticket-revise.yml', { epic: 7 }), 'ticket-revise #7')
 })
 test('8: marker write falls back to the second token; both failing rethrows', async () => {
   const w = world({ failOn: (s, t) => (s.startsWith('workflow run') ? S500() : t === 'app' && s.includes('/comments') ? LIMIT() : null) })

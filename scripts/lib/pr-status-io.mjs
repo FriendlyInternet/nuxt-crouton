@@ -156,7 +156,7 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }
     }
     const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, reason: dec.reason,
-      attempts: dec.attempts, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
+      attempts: dec.attempts, mode: dec.mode, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
     const body = renderRedPing({ marker, hd, why, tails, pr })
     if (existing) {
       if ((existing.body || '').trim() === body.trim()) return // nothing new to say

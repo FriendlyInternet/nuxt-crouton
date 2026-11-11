@@ -10,12 +10,12 @@ const SECRET = await deriveEditorSecret('seed')
 const now = Date.now()
 
 
-/** Stub fetch: records calls; `branches` maps branch → protected flag. */
-function stub({ branchStatus = 200, issues = { 5: {} }, branches = { 'diagram-test': false } } = {}) {
+/** Stub fetch: records calls; `branches` maps branch → protected flag; `files` maps a contents path → its GET JSON (#3691). */
+function stub({ branchStatus = 200, issues = { 5: {} }, branches = { 'diagram-test': false }, files = {} } = {}) {
   const calls = []
   const impl = async (url, init = {}) => {
     const method = init.method || 'GET'
-    calls.push({ url, method })
+    calls.push({ url, method, body: init.body })
     const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s })
     let m
     if (url === 'https://api.github.com/repos/o/r') return j({ default_branch: 'main' })
@@ -25,6 +25,7 @@ function stub({ branchStatus = 200, issues = { 5: {} }, branches = { 'diagram-te
       return b in branches ? j({ protected: branches[b] }) : j({}, 404)
     }
     if ((m = url.match(/\/repos\/o\/r\/issues\/(\d+)$/))) return m[1] in issues ? j(issues[m[1]]) : j({}, 404)
+    if (method === 'GET' && (m = url.match(/\/contents\/([^?]+)/)) && m[1] in files) return j(files[m[1]])
     if (method === 'PUT') return j({ commit: { sha: 'abc', parents: [{ sha: 'p' }] } })
     if (method === 'POST') return j({})
     return j({}, 404)
@@ -38,7 +39,9 @@ test('verifyOwnerToken: valid, bad signature, expired, wrong aud, long lifetime,
   assert.equal(await verifyOwnerToken(good, SECRET + 'x', now), false)
   assert.equal(await verifyOwnerToken(good, '', now), false)
   assert.equal(await verifyOwnerToken(good, SECRET, now + 11 * 60 * 1000), false) // expired
-  assert.equal(await verifyOwnerToken(good.slice(0, -2) + 'AA', SECRET, now), false)
+  const [body, sigB64] = good.split('.')
+  const tampered = `${body}.${sigB64[0] === 'A' ? 'B' : 'A'}${sigB64.slice(1)}`
+  assert.equal(await verifyOwnerToken(tampered, SECRET, now), false)
   assert.equal(await verifyOwnerToken('', SECRET, now), false)
   // a token whose exp is far in the future is refused even if correctly signed
   const far = await signEditorToken(SECRET, now + 3600 * 1000)
@@ -150,6 +153,19 @@ test('save with a real issue → files committed and a comment posted', async ()
   assert.equal(res.status, 200)
   assert.equal(puts(calls).length, 2)
   assert.ok(calls.some((c) => c.method === 'POST' && c.url.endsWith('/issues/5/comments')))
+})
+
+test('save over an existing scene → the posted comment opens with 📐 and quotes only the added text (#3691)', async () => {
+  const prev = Buffer.from(JSON.stringify({ elements: [{ type: 'text', text: 'A' }] })).toString('base64')
+  const s = stub({ files: { 'writeups/diagrams/x.excalidraw': { sha: 'old', content: prev } } })
+  const scene = { elements: [{ type: 'text', text: 'A' }, { type: 'text', text: 'move login left' }] }
+  const { res, calls } = await ownerSave({ branch: 'diagram-test', issue: 5, scene }, s)
+  assert.equal(res.status, 200)
+  const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/issues/5/comments'))
+  const body = JSON.parse(post.body).body
+  assert.equal(body.split('\n')[0], '📐 Diagram saved — continuing from your edit')
+  assert.match(body, /\n> move login left\n/)
+  assert.doesNotMatch(body, /\n> A\n/)
 })
 
 // ── refused tokens / targets through the save endpoint: 401/403, never a GitHub write ──────────

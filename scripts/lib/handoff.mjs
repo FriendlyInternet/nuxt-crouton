@@ -44,6 +44,7 @@ export const RUN_NAME = {
   'fix-ci-on-failure.yml':
     "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}",
   'ticket-review.yml': 'ticket-review #${{ inputs.epic }}',
+  'ticket-revise.yml': 'ticket-revise #${{ inputs.epic }}',
   'automerge-epic-subpr.yml':
     "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}",
 }
@@ -60,6 +61,7 @@ export function handoffRunTitle(workflow, inputs = {}) {
     case 'build-review.yml': return `build-review #${i.pr}`
     case 'fix-ci-on-failure.yml': return `fix-ci #${i.pr}`
     case 'ticket-review.yml': return `ticket-review #${i.epic}`
+    case 'ticket-revise.yml': return `ticket-revise #${i.epic}`
     case 'automerge-epic-subpr.yml': return `automerge #${i.pr}`
     default: return null // no run-name: replay can't prove it, so it dispatches once more
   }

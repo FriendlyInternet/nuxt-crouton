@@ -11,11 +11,13 @@ name: On comment
 #   kind            job                      was
 #   approve-draft   approve-draft            approve-draft-pr.yml
 #   approve-epic    approve-epic             approve-epic-pr.yml
+#   approve-plan    approve-plan             NEW (#3272): owner `ok: <reason>` on a plan rejected twice
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
+#   plan-needs-reason plan-needs-reason      NEW (#3272): a bare `ok` on a plan rejected twice (asks why)
 #   quiz-reply      quiz-reply               NEW (#3715): the owner's answer to an epic quiz (owner-quiz.yml)
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
@@ -26,7 +28,8 @@ name: On comment
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
 # The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no
-# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment.
+# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment,
+# and owner-screen comments (scripts/lib/owner-screens.mjs, #3691): a 🎯/📐 from the Nuxt Harness app on a status:blocked item.
 
 on:
   issue_comment:
@@ -38,9 +41,13 @@ jobs:
     name: Read API allowance at start
     # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
@@ -71,12 +78,19 @@ jobs:
     # `performed_via_github_app` also catches an App acting under a user-typed identity, except the
     # Claude app: the interactive agent posts `**Worker:**` change requests through it as the owner
     # (user.type == User), and dropping those silently ignored them (#3029). No flow
-    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
-    # and consumed by reading the thread (revise), not by this trigger.
+    # needs a bot comment to trigger a workflow — with ONE exception (#3691): an owner-screen comment
+    # (first line 🎯/📐/🚶/🗳, from the Nuxt Harness app, on a status:blocked item) is the owner
+    # answering from our screens. On a PR the hold label sits on its SOURCE issue (`Closes #N`), not
+    # the PR, so a PR passes here and comment-route.mjs checks that issue (owner-screens sourceIssueFor). The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
+    # by scripts/on-comment-bot-filter.test.mjs; scripts/comment-route.mjs decides what it means.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -96,17 +110,22 @@ jobs:
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
+            const { planHeldFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             let pr
             if (isPr) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
-              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, sourceIssue: await sourceIssueFor({ comment, prBody: p.body, getIssue }) }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
-              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              comment,
+              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
+                planHeld: await planHeldFor({ github, repo: context.repo, issue: i }) },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
@@ -451,6 +470,54 @@ jobs:
               body: '<!-- pipeline-note -->\n' + `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
 
+  # Owner override of a plan held after two reviewer rejections (#3272). scripts/plan-held.mjs
+  # approvePlan posts the reason AS THE BOT (the only record the build trusts), logs a dated line on
+  # the parent epic, lifts the hold and adds `plan:approved`. The App token makes label-router.yml's
+  # actor check pass; the default-branch checkout keeps the imported script a trusted one.
+  approve-plan:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { approvePlan } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await approvePlan({ github, context, core })
+
+  # A bare approval on a twice-rejected plan (#3272): ask for the reason once; the hold stays.
+  plan-needs-reason:
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // NEEDS_REASON opens with the <!-- pipeline-note --> marker (#3251).
+            const { NEEDS_REASON } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number, body: NEEDS_REASON })
+
   resume:
     needs: route
     if: needs.route.outputs.kind == 'resume' && needs.route.outputs.blocked == 'true'
@@ -541,7 +608,7 @@ jobs:
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
@@ -704,14 +771,17 @@ jobs:
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
+          allowed_bots: "nuxt-harness[bot]"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
             question came in — this run collected it across every surface into `.resume-answer.md`
             (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
-            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
-            treat it as their answer; if it flags an edited diagram, run
-            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            and a 📐 line if a diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it names an edited diagram, its scene at the saved sha
+            (fetched from the editor's branch) is in `.resume-diagram.excalidraw` — read that file
+            and treat the quoted note as the owner's words.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
@@ -1114,12 +1184,15 @@ jobs:
         with:
           script: |
             const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const pull_number = context.payload.issue.number
             const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
             const c = context.payload.comment
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             const route = routePrComment({
-              pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              pr: { headRef: pr.head.ref, state: pr.state, sourceIssue: await sourceIssueFor({ comment, prBody: pr.body, getIssue }) },
+              comment,
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {

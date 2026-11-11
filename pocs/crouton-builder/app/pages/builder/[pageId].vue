@@ -23,6 +23,8 @@ import {
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import { paletteBlocksOf } from '~/utils/palette-blocks'
+import { usePaletteMenu } from '~/utils/palette-menu'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 definePageMeta({ middleware: ['auth'] })
@@ -140,17 +142,16 @@ function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
     if (edge === 'center') return writeRoot(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
     return writeRoot(applyPaneDrop(r, { path: at, edge }, newLeaf(payload.blockId)))
   }
-  // Moving a pane: remember the target by reference, lift the source out, find
-  // the target again in the shrunk tree, then land beside or inside it.
+  // Moving a pane: lift the source out while tracking the target's path (the
+  // detach can collapse a split and rebuilds resized siblings, so the target
+  // can't be re-found by reference — #3737), then land beside or inside it.
   if (!r) return
-  const target = getNode(r, at)
-  if (!target) return
-  const { root: lifted, detached } = detachNode(r, payload.path)
+  if (!getNode(r, at)) return
+  const { root: lifted, detached, trackedPath } = detachNode(r, payload.path, at)
   if (!detached) return
   if (!lifted) return writeRoot(detached)
-  const targetPath = findNodePath(lifted, target)
-  if (!targetPath) return
-  writeRoot(edge === 'center' ? nestInside(lifted, targetPath, detached) : applyPaneDrop(lifted, { path: targetPath, edge }, detached))
+  if (!trackedPath) return
+  writeRoot(edge === 'center' ? nestInside(lifted, trackedPath, detached) : applyPaneDrop(lifted, { path: trackedPath, edge }, detached))
 }
 registerDrop(onDrop)
 
@@ -178,6 +179,13 @@ function onChipClick(blockId: string) {
   const edge: DropEdge = import.meta.client && window.innerWidth < 640 ? 'bottom' : 'right'
   writeRoot(applyPaneDrop(r, { path: selected.value ?? [], edge }, newLeaf(blockId)))
 }
+
+// Grouped row (#3748): one chip per collection + Layout, each opening a menu of
+// its blocks. Unlinked generic blocks stay registered but aren't offered here.
+// Atomic blocks only (#2559): a compound block is a whole screen, its parts are offered instead.
+const paletteGroups = computed(() => groupPaletteBlocks(paletteBlocksOf(blocksList.value)))
+// Menu state (tap closes + adds; a held item's drag makes it see-through, then closes).
+const { openGroup, dragging: menuDragging, setGroupOpen, onItemClick } = usePaletteMenu(dragPayload, onChipClick)
 
 // ── Save ───────────────────────────────────────────────────────────────────────
 const { update } = useCollectionMutation('builderPages')
@@ -224,20 +232,43 @@ async function viewPage() {
       <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="sm" aria-label="View page" :disabled="!page?.slug || saveState === 'saving'" data-handoff="view-page" @click="viewPage" />
     </header>
 
-    <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
+    <!-- Palette strip: a chip per collection + Layout; its menu's blocks tap to add
+         beside the selection, or hold-and-drag onto a pane edge. -->
     <nav class="flex gap-2 overflow-x-auto border-b border-default px-2 py-2" data-handoff="palette">
-      <button
-        v-for="b in blocksList"
-        :key="b.id"
-        type="button"
-        class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
-        :data-block="b.id"
-        @pointerdown="onChipDown($event, b.id)"
-        @click="onChipClick(b.id)"
+      <UPopover
+        v-for="g in paletteGroups"
+        :key="g.key"
+        :open="openGroup === g.key"
+        :content="{ align: 'start' }"
+        :ui="{ content: menuDragging && openGroup === g.key ? 'opacity-0 pointer-events-none' : '' }"
+        @update:open="setGroupOpen(g.key, $event)"
       >
-        <UIcon :name="b.icon ?? 'i-lucide-box'" class="size-3.5" />
-        {{ b.name }}
-      </button>
+        <button
+          type="button"
+          class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs select-none"
+          :data-group="g.key"
+        >
+          <UIcon :name="g.icon" class="size-3.5" />
+          {{ g.label }}
+          <UIcon name="i-lucide-chevron-down" class="size-3 text-muted" />
+        </button>
+        <template #content>
+          <ul class="flex min-w-36 flex-col p-1" :data-handoff="`palette-menu-${g.key}`">
+            <li v-for="item in g.items" :key="item.blockId">
+              <button
+                type="button"
+                class="board-chip flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-elevated cursor-grab active:cursor-grabbing select-none"
+                :data-block="item.blockId"
+                @pointerdown="onChipDown($event, item.blockId)"
+                @click="onItemClick(item.blockId)"
+              >
+                <UIcon :name="item.icon" class="size-4" />
+                {{ item.label }}
+              </button>
+            </li>
+          </ul>
+        </template>
+      </UPopover>
     </nav>
 
     <!-- Board: the page at the chosen width, scaled to fit when wider than the screen. -->
