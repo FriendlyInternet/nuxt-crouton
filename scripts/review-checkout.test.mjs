@@ -21,7 +21,7 @@ const put = (root, file, text) => { mkdirSync(dirname(join(root, file)), { recur
 const commit = (cwd, msg) => { git(cwd, 'add', '-A'); git(cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', msg); return git(cwd, 'rev-parse', 'HEAD').trim() }
 
 /** origin with `main` (+ trusted .pi), and a head commit (built by `editHead`) pushed to refs/pull/7/head. */
-function setup(t, editHead, { mainPi = true } = {}) {
+function setup(t, editHead, { mainPi = true, headRef = 'refs/pull/7/head', git: gitImpl, sha: shaOverride } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'review-checkout-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const origin = join(root, 'origin.git')
@@ -48,15 +48,16 @@ function setup(t, editHead, { mainPi = true } = {}) {
   git(author, 'checkout', '-q', '-b', 'head', mainPi && editHead.fromMain ? 'main' : fork)
   editHead(author)
   const sha = commit(author, 'head change')
-  git(author, 'push', '-q', 'origin', 'HEAD:refs/pull/7/head')
+  git(author, 'push', '-q', 'origin', `HEAD:${headRef}`)
   git(root, 'clone', '-q', origin, work)
   // setup-pi installs main's packages into the untracked, ignored .pi/npm/ before the checkout.
   put(work, '.pi/npm/.gitignore', '*\n')
   put(work, '.pi/npm/installed.txt', 'pi-claude-bridge\n')
   const diffFile = join(root, 'diff.patch')
   const logs = []
-  const run = () => checkoutForReview({ cwd: work, base: 'main', pr: '7', sha, trusted: 'origin/main', diffFile, log: (l) => logs.push(l) })
-  return { work, sha, diffFile, logs, run }
+  const target = shaOverride ?? sha
+  const run = () => checkoutForReview({ cwd: work, base: 'main', pr: '7', sha: target, trusted: 'origin/main', diffFile, log: (l) => logs.push(l), ...(gitImpl ? { git: gitImpl } : {}) })
+  return { work, sha: target, diffFile, logs, run }
 }
 
 test('an old head (cut before claude-bridge) gets main\'s .pi but keeps its own files', (t) => {
@@ -105,6 +106,41 @@ test('build-review.yml checks out the head only through review-checkout.mjs, pin
   assert.doesNotMatch(wf, /git checkout --detach/, 'a raw checkout would bring the head\'s .pi/ back')
   assert.ok(wf.indexOf('review-checkout.mjs --base') < wf.indexOf('pi --print --approve'), 'the pin happens before pi starts')
   assert.match(wf, /fail "produced no verdict\$\(node "\$RUNNER_TEMP\/trusted\/build-verdict\.mjs" stop-line "\$D\/pi\.log"\)"/)
+})
+
+// #3796 — GitHub does not always create refs/pull/<n>/head; the head is fetched by its sha first.
+test('a head with no refs/pull/<n>/head (only its branch) is fetched by sha', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'hello from the branch\n'), { headRef: 'refs/heads/work-7' })
+  s.run()
+  assert.equal(git(s.work, 'rev-parse', 'HEAD').trim(), s.sha)
+  assert.match(readFileSync(s.diffFile, 'utf8'), /\+hello from the branch/)
+  assert.equal(readFileSync(join(s.work, '.pi/settings.json'), 'utf8'), MAIN_SETTINGS)
+})
+
+test('a failing sha fetch falls back to pull/<pr>/head', (t) => {
+  const fetches = []
+  let headSha
+  const wrapped = (args, opts) => {
+    if (args[0] === 'fetch') {
+      fetches.push(args)
+      if (args.includes(headSha)) throw new Error('simulated: sha fetch refused')
+    }
+    return execFileSync('git', args, { maxBuffer: 1024 * 1024 * 512, ...opts })
+  }
+  const s = setup(t, (dir) => put(dir, 'README.md', 'via pull ref\n'), { git: wrapped })
+  headSha = s.sha
+  s.run()
+  assert.equal(fetches.length, 2)
+  assert.ok(fetches[0].includes(s.sha), 'first fetch is by sha')
+  assert.ok(fetches[1].includes('pull/7/head'), 'second fetch is the pull ref')
+  assert.ok(!fetches[1].includes(s.sha))
+  assert.equal(git(s.work, 'rev-parse', 'HEAD').trim(), s.sha)
+  assert.ok(s.logs.some((l) => /falling back to pull\/7\/head/.test(l)))
+})
+
+test('a sha neither fetch can find fails loudly', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'x\n'), { headRef: 'refs/heads/work-7', sha: 'deadbeef'.repeat(5) })
+  assert.throws(s.run)
 })
 
 test('a trusted ref without .pi/settings.json refuses to pin', (t) => {
