@@ -9,7 +9,7 @@
  * "claude-bridge"`, and a PR's own extensions ran inside the reviewer.
  *
  * Steps, in order:
- *   1. git fetch --no-tags origin <base> pull/<pr>/head
+ *   1. git fetch --no-tags origin <base> <sha>   (fallback: pull/<pr>/head if the sha fetch fails, #3796)
  *   2. git checkout --detach <sha>
  *   3. write `git diff -C --find-copies-harder --no-color origin/<base>...<sha>` to <diff> — BEFORE
  *      touching `.pi`, so the head's own `.pi` changes stay visible as data
@@ -35,8 +35,16 @@ export function checkoutForReview({ cwd = process.cwd(), base, pr, sha, trusted,
   }
   const run = (args) => git(args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] })
 
-  run(['fetch', '--no-tags', 'origin', base, `pull/${pr}/head`])
+  // #3796 — GitHub does not always create refs/pull/<n>/head, so fetch the head by its sha first.
+  try {
+    run(['fetch', '--no-tags', 'origin', base, sha])
+  } catch {
+    log(`review-checkout: fetch by sha ${sha} failed — falling back to pull/${pr}/head`)
+    run(['fetch', '--no-tags', 'origin', base, `pull/${pr}/head`])
+  }
   run(['checkout', '--detach', sha])
+  const head = run(['rev-parse', 'HEAD']).toString('utf8').trim()
+  if (head !== sha) throw new Error(`review-checkout: HEAD is ${head}, expected ${sha}`)
   const diff = run(['diff', '-C', '--find-copies-harder', '--no-color', `origin/${base}...${sha}`])
   writeFileSync(diffFile, diff)
 

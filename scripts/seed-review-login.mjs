@@ -221,6 +221,18 @@ export function markReviewerVerifiedSql(email) {
     `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
 }
 
+/**
+ * Idempotent member upsert for the seeded team (conflict on the deterministic id →
+ * no dupes on redeploy; createdAt preserved). Every value goes through `sqlStr`, and
+ * `createdAt` is forced to a number, so no id can break out of its literal (#3533).
+ */
+export function memberUpsertSql({ memberId, userId, orgId, createdAt }) {
+  return `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
+    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${Number(createdAt)}) ` +
+    `ON CONFLICT("id") DO UPDATE SET ` +
+    `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -373,11 +385,7 @@ async function main() {
     const createdAt = Math.floor(Date.now() / 1000)
     // Idempotent member upsert (conflict on the deterministic id → no dupes on
     // redeploy; createdAt preserved). Mirrors crouton-auth/seed's `member` shape.
-    const sql =
-      `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-      `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${createdAt}) ` +
-      `ON CONFLICT("id") DO UPDATE SET ` +
-      `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+    const sql = memberUpsertSql({ memberId, userId, orgId, createdAt })
     try {
       execSeedSql(args, sql)
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
