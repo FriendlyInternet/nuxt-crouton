@@ -10,6 +10,11 @@
 // Pure and Node-core-only; the workflow fetches the facts (PR head/base/draft) and passes them in.
 //
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
+//   owner screen (#3691): a 🎯/📐 comment from the Nuxt Harness app on a waiting item — a
+//          status:blocked issue, or a PR whose SOURCE issue (`Closes #N`, passed in as
+//          `pr.sourceIssue`) is status:blocked (scripts/lib/owner-screens.mjs) → resume on a pipeline-owned issue / revise on a
+//          pi PR, else none. Checked BEFORE the bot drop, and it never reaches the approval,
+//          quiz, test-card or interpret routes — it is feedback, never an `ok`.
 //   issue: /close-epic → close-epic · slash/rocket command → dispatch · quiz-shaped owner reply
 //          (`1B 2A 3C`, `2 code`) → quiz-reply (before test-card/resume, so a quiz answer never
 //          resumes, approves or re-plans anything; #3715) · `ok`/`not ok:` on a
@@ -30,6 +35,7 @@ import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
 import { isQuizReply } from './owner-quiz.mjs'
+import { isOwnerScreenComment } from './lib/owner-screens.mjs'
 import { parseOverride } from './lib/decision-line.mjs'
 
 export const KINDS = [
@@ -97,9 +103,9 @@ function routePrApproval({ assoc, collab, pr, out }) {
 
 /**
  * @param {object} input
- * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null}} input.comment
+ * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null, appSlug?:string|null, userLogin?:string}} input.comment
  * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
- * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
+ * @param {{headRef:string, baseRef:string, draft:boolean, state:string, sourceIssue?:{number:number, labels:string[]}|null}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
  */
 export function routeComment(input = {}) {
@@ -121,6 +127,24 @@ function isInterpretable({ comment = {}, issue = {}, pr } = {}) {
   return true
 }
 
+/**
+ * An owner-screen comment: resume a pipeline-owned issue, revise a pi PR, else nothing. Never an
+ * approval. On a PR the wait is judged on `pr.sourceIssue` (the `Closes #N` issue), not the PR.
+ */
+function routeOwnerScreen({ comment, issue, pr, out }) {
+  if (!issue.isPr) {
+    return isPipelineOwned({ body: issue.body, labels: issue.labels || [] })
+      ? out('resume', 'an owner-screen comment on a status:blocked issue')
+      : out('none', "owner-screen comment on a ticket the pipeline doesn't own")
+  }
+  if (!pr) return out('none', 'PR facts missing')
+  const r = routePrComment({
+    pr: { headRef: pr.headRef, state: pr.state, sourceIssue: pr.sourceIssue ?? null },
+    comment: { body: comment.body, authorAssociation: comment.authorAssociation, userType: comment.userType, appSlug: comment.appSlug, userLogin: comment.userLogin },
+  })
+  return r.revise ? out('revise', r.reason) : out('none', r.reason)
+}
+
 function routeBase({ comment = {}, issue = {}, pr } = {}) {
   const number = issue.number ?? 0
   const blocked = (issue.labels || []).includes('status:blocked')
@@ -130,6 +154,8 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   const assoc = comment.authorAssociation
   const collab = COLLABORATORS.has(assoc)
 
+  // A 🎯/📐 owner-screen comment on a waiting item is the owner's answer (#3691) — before the bot drop.
+  if (isOwnerScreenComment({ comment, issue, pr })) return routeOwnerScreen({ comment, issue, pr, out })
   if (comment.userType === 'Bot') return out('none', 'posted by a bot')
   // An App acting under a user identity is a bot too — except the Claude app, which the
   // interactive agent uses to post `**Worker:**` change requests as the owner (#3029).
