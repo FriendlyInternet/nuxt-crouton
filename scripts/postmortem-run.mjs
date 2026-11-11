@@ -43,14 +43,35 @@ export async function target({ github, context, core }, { epic, headRef, closedI
   return out(d.go, n, d.reason)
 }
 
+/**
+ * The `write` job re-checks just before the model runs (#3425 review): runs started by different events
+ * queue on one epic, and the check in `target` happened before the queue — so a run that waited behind
+ * one which already posted must not spend another model run. Sets output `done` ('true' | 'false').
+ */
+export async function alreadyPosted({ github, context, core }, { epic }) {
+  const n = Number(epic)
+  const done = postmortemState(await listComments({ github, context }, n)) === 'done'
+  core.info(`postmortem: #${n} ${done ? 'already has a postmortem — skipping the model run' : 'has no postmortem yet'}.`)
+  core.setOutput('done', String(done))
+  return done
+}
+
 const safe = async (core, what, fn) => {
   try { return await fn() } catch (e) { core.warning(`postmortem: ${what} failed — ${e.message}`); return undefined }
 }
 
 /** Post the model's postmortem (or the skipped note), flip the labels, close a pending epic. */
-export async function post({ github, context, core }, { epic, modelFile, runUrl }) {
+export async function post({ github, context, core }, { epic, modelFile, runUrl, writeResult }) {
   const n = Number(epic)
   const repo = context.repo
+  // A cancelled `write` is a run that another start for the same epic replaced in the queue (GitHub
+  // keeps one waiting job per concurrency group), or a run a human cancelled. Either way another run
+  // owns this epic: posting "didn't run" + closing here would close it while the real postmortem is
+  // still being written. A model that hangs is a FAILURE, not a cancel: the step's own timeout fires
+  // before the job's, so the never-blocks path below still covers it.
+  if (writeResult === 'cancelled') {
+    return core.info(`postmortem: the model run for #${n} was cancelled (replaced by a newer run) — posting nothing, closing nothing.`)
+  }
   const say = body => github.rest.issues.createComment({ ...repo, issue_number: n, body })
   const comments = (await safe(core, 'reading comments', () => listComments({ github, context }, n))) || []
   let state = postmortemState(comments)

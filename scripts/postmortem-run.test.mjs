@@ -3,10 +3,10 @@
 //   node --test scripts/postmortem-run.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { target, post } from './postmortem-run.mjs'
+import { target, post, alreadyPosted } from './postmortem-run.mjs'
 import { renderPending, postmortemState } from './postmortem.mjs'
 
 const harness = body => ({ body, user: { login: 'nuxt-harness[bot]', type: 'Bot' }, author_association: 'NONE' })
@@ -106,6 +106,50 @@ test('post: a postmortem already there (race) → posts nothing new', async () =
   const w = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro')] })
   await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD), runUrl: 'u' })
   assert.ok(!w.calls.some(x => x[0] === 'comment'))
+})
+// One run per epic (#3425 review): three starts for one epic (sub-issue closed, epic → main merged,
+// `verified`) queue on write's concurrency group; GitHub cancels the middle one's `write`.
+test('post: a cancelled model run (replaced in the queue) posts nothing, flips no label, closes nothing', async () => {
+  const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  await post(w.ctx, { epic: '7', modelFile: modelFile(null), runUrl: 'u', writeResult: 'cancelled' })
+  assert.deepEqual(w.calls, [])
+})
+test('post: a failed model run still records skipped and closes the waiting epic (never blocks)', async () => {
+  const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  await post(w.ctx, { epic: '7', modelFile: modelFile(null), runUrl: 'u', writeResult: 'failure' })
+  assert.ok(w.calls.some(x => x[0] === 'comment' && /postmortem:skipped/.test(x[1])))
+  assert.deepEqual(w.calls.find(x => x[0] === 'update'), ['update', 'closed', 'completed'])
+})
+test('alreadyPosted: a run that queued behind one which posted → done=true (the model step is skipped)', async () => {
+  const w = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro')] })
+  assert.equal(await alreadyPosted(w.ctx, { epic: '7' }), true)
+  assert.equal(w.outputs.done, 'true')
+})
+test('alreadyPosted: no postmortem, or only a skipped note → done=false (the model runs)', async () => {
+  for (const comments of [[], [harness('<!-- postmortem:skipped epic=#7 -->\nno run')], [outsider('<!-- postmortem:done epic=#7 -->')]]) {
+    const w = world({ comments })
+    assert.equal(await alreadyPosted(w.ctx, { epic: '7' }), false)
+    assert.equal(w.outputs.done, 'false')
+  }
+})
+test('postmortem.yml wiring: write re-checks after the queue, a hung model fails (not cancels), post gets the write result', () => {
+  const y = readFileSync(new URL('../.github/workflows/postmortem.yml', import.meta.url), 'utf8')
+  const job = (name, next) => y.slice(y.indexOf(`\n  ${name}:`), next ? y.indexOf(`\n  ${next}:`) : undefined)
+  const write = job('write', 'post')
+  const post_ = job('post')
+  assert.match(write, /concurrency:\s*\n\s*group: postmortem-write-\$\{\{ needs\.target\.outputs\.epic \}\}\s*\n\s*cancel-in-progress: false/)
+  // the re-check runs before the model, and the model step is gated on it
+  const check = write.indexOf('alreadyPosted(')
+  const model = write.indexOf('- name: Write the postmortem')
+  assert.ok(check > 0 && model > check, 're-check comes before the model step')
+  const modelStep = write.slice(model, write.indexOf('- uses:', model))
+  assert.match(modelStep, /if: steps\.check\.outputs\.done != 'true'/)
+  const stepTimeout = Number(modelStep.match(/timeout-minutes: (\d+)/)?.[1])
+  const jobTimeout = Number(write.match(/\n    timeout-minutes: (\d+)/)?.[1])
+  assert.ok(stepTimeout > 0 && stepTimeout < jobTimeout, `model step timeout ${stepTimeout} < job timeout ${jobTimeout}`)
+  assert.match(post_, /if: always\(\) && needs\.target\.outputs\.go == 'true'/)
+  assert.match(post_, /WRITE_RESULT: \$\{\{ needs\.write\.result \}\}/)
+  assert.match(post_, /writeResult: process\.env\.WRITE_RESULT/)
 })
 test('post: a GitHub error while posting still records skipped and closes (never blocks)', async () => {
   const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })

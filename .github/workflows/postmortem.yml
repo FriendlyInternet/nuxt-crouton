@@ -16,6 +16,11 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('postmortem #{
 # NEVER BLOCKS: if the model run fails or writes nothing usable, `post` still runs and posts
 # `<!-- postmortem:skipped epic=#N -->` with the run link, and a waiting close still happens.
 #
+# ONE RUN PER EPIC: starts for one epic queue on `write`'s concurrency group. GitHub keeps only one
+# waiting job per group, so a replaced run's `write` ends `cancelled` — its `post` then does nothing
+# (the newer run owns the epic). `write` re-checks for a posted postmortem after the queue, so a run
+# that waited behind one that posted skips the model.
+#
 # SPLIT BY TRUST (same as owner-quiz.yml): `write` runs the model, which has a shell, so it holds
 # only a read-only token and keeps no git credentials; `post` holds the Harness App token on a
 # fresh runner (so its close cascades into on-issue-close.yml) and receives only the model's text.
@@ -90,16 +95,29 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false # no token in .git/config
+      # Re-check after the queue: a run that waited behind one which already posted skips the model.
+      - id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { alreadyPosted } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
+            await alreadyPosted({ github, context, core }, { epic: process.env.EPIC })
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.check.outputs.done != 'true'
         with:
           node-version: 22
       - name: Set up pi + Claude CLI (subscription)
+        if: steps.check.outputs.done != 'true'
         uses: ./.github/actions/setup-pi
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       # Tier from .claude/pipeline-models.json only — no model literal here (#2161). Prompt on stdin (#3331).
       # GH_TOKEN is the job's read-only token: the model can read the epic, never write to it.
+      # Step timeout < job timeout: a hung model FAILS (→ skipped note, never blocks) instead of the
+      # job being cancelled, which `post` reads as "a newer run owns this epic".
       - name: Write the postmortem (review model)
+        if: steps.check.outputs.done != 'true'
+        timeout-minutes: 25
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -149,9 +167,10 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EPIC: ${{ needs.target.outputs.epic }}
+          WRITE_RESULT: ${{ needs.write.result }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { post } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            await post({ github, context, core }, { epic: process.env.EPIC, modelFile: `${process.env.RUNNER_TEMP}/postmortem/postmortem.md`, runUrl })
+            await post({ github, context, core }, { epic: process.env.EPIC, modelFile: `${process.env.RUNNER_TEMP}/postmortem/postmortem.md`, runUrl, writeResult: process.env.WRITE_RESULT })
