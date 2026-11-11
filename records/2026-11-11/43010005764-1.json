@@ -1,0 +1,39 @@
+{
+  "ts": "2026-11-11T11:22:35.874Z",
+  "flow": "work-issue-pidev.yml",
+  "skill": null,
+  "harness": "pi",
+  "model": "claude-opus-5-5",
+  "cost_usd": null,
+  "turns": null,
+  "wall_s": null,
+  "artifact_gate": "na",
+  "ci": "na",
+  "outcome": "pending",
+  "human": null,
+  "fix_rounds": null,
+  "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/43010005764",
+  "notes": null,
+  "issue": 3753,
+  "stage": "plan",
+  "run_id": "43010005764",
+  "attempt": "1",
+  "workflow": "work-issue-pidev.yml",
+  "started_at": "2026-11-11T11:12:25Z",
+  "ended_at": "2026-11-11T11:22:35.874Z",
+  "conclusion": "success",
+  "attribution": "exact",
+  "source": "live",
+  "rule": "marker",
+  "token": "app",
+  "produced": [
+    "comment",
+    "verdict"
+  ],
+  "produced_ids": [
+    6794407847,
+    6794480803
+  ],
+  "overlap": [],
+  "api_calls": 149
+}
