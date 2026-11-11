@@ -1191,10 +1191,11 @@ export function buildOrganizationConfig(
       role: string
       expiresAt: Date
     }) => {
+      // Never log the invitee's email or the invite id (#3143) — the id is the
+      // secret in the accept link.
       if (config.debug) {
-        console.log(`[crouton/auth] Invitation for ${data.email} to ${data.organization.name} (id: ${data.id})`)
+        console.log(`[crouton/auth] Invitation email requested for org "${data.organization.name}"`)
       }
-      console.log(`[crouton/auth] 📧 sendInvitationEmail called for ${data.email} to org "${data.organization.name}" (invitationId: ${data.id})`)
       let _event: any; try { _event = useEvent() } catch {}
       try {
         await useNitroApp().hooks.callHook('crouton:auth:email', {
@@ -1208,10 +1209,9 @@ export function buildOrganizationConfig(
           role: data.role,
           expiresAt: data.expiresAt
         })
-        console.log(`[crouton/auth] ✅ crouton:auth:email hook completed for ${data.email}`)
       }
       catch (err) {
-        console.error(`[crouton/auth] ❌ crouton:auth:email hook FAILED for ${data.email}:`, err)
+        console.error('[crouton/auth] crouton:auth:email hook FAILED for invitation:', err)
       }
     },
 
