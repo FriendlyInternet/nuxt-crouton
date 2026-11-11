@@ -7,8 +7,8 @@
 // nothing could exercise it before merge. This module ports the DECISION logic (not the git/`gh`
 // side effects, which stay in the workflow) into pure, unit-testable functions.
 //
-// Deliberately NOT wired into work-issue-pidev.yml yet (#1893 scope) — the pi worker cannot touch
-// .github/workflows/** (contract clause 4, policy #1076). The workflow rewiring is a follow-up.
+// `session`/`plan` are wired via the CLI (#1904); the type-error functions (#3248) are not wired
+// yet (#3249, polish list).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +64,101 @@ export function verdict({ acceptance, testsMissing }) {
   if (acceptance === 'fail') return { draft: true, reason: 'acceptance failed' };
   if (testsMissing) return { draft: true, reason: 'tests missing' };
   return { draft: false, reason: null };
+}
+
+// ── Type errors: in-diff vs pre-existing (#3248) ───────────────────────────────────────────
+// The acceptance gate used to fail on EVERY app-local `error TS` line, so a PR was held for an
+// error in a file it never touched (#3245: signin-link.post.ts, already broken on the base). The
+// rule now: only errors in files the PR changed — judged over the WHOLE PR, every round — fail.
+// Errors elsewhere pass and come back grouped, to be ticketed. A typecheck that never ran is
+// still 'neutral', never 'pass' (#1849). Pure functions: no fs, no shell, no gh.
+
+// `path(12,3): error TS2345: msg` or `path:12:3 - error TS2345: msg`, anywhere on the line (so a
+// `##[error]` or pnpm prefix doesn't break it). Path chars exclude whitespace, parens, brackets.
+const TS_ERR_RE = /([^\s()[\]]+?)(?:\((\d+),(\d+)\):|:(\d+):(\d+)\s+-)\s*error\s+(TS\d+):\s*(.*)$/;
+const ANY_TS_RE = /error TS[0-9]/;
+
+// → { errors: [{ file, line, col, code, text }], anyCount }. `errors` drops `../` paths (outside
+// the app — the shell's OWN rule); `anyCount` counts every `error TS` line (the shell's ANY).
+export function parseTsErrors(logText) {
+  const errors = [];
+  let anyCount = 0;
+  for (const raw of String(logText || '').split('\n')) {
+    if (!ANY_TS_RE.test(raw)) continue;
+    anyCount += 1;
+    const m = TS_ERR_RE.exec(raw);
+    if (!m) continue;
+    const file = m[1];
+    if (file.startsWith('../')) continue;
+    errors.push({
+      file,
+      line: Number(m[2] ?? m[4]),
+      col: Number(m[3] ?? m[5]),
+      code: m[6],
+      text: m[7].trim(),
+    });
+  }
+  return { errors, anyCount };
+}
+
+function toRepoPath(file, appDir) {
+  const f = String(file).replace(/^(\.\/)+/, '');
+  return appDir ? `${String(appDir).replace(/\/+$/, '')}/${f}` : f;
+}
+
+// → { acceptance: 'pass'|'fail'|'neutral', inDiff, notInDiff, message }. Same order as the shell:
+// auto-import misses (TS2304 Cannot find name) → neutral; any in-diff error → fail; only
+// not-in-diff → pass; none app-local → pass if it ran (exit 0 or any TS line), else neutral.
+// The diff is the union of `committedFiles` (this run) and `prFiles` (the whole PR), like
+// planTestsGate. Every error's `file` is returned in repo-root form.
+export function classifyTypeErrors({ logText, tcExit, committedFiles, prFiles, appDir } = {}) {
+  const diff = new Set([...(committedFiles || []), ...(prFiles || [])]
+    .map((f) => String(f).trim().replace(/^(\.\/)+/, '')).filter(Boolean));
+  const { errors, anyCount } = parseTsErrors(logText);
+  const own = errors.map((e) => ({ ...e, file: toRepoPath(e.file, appDir) }));
+  const inDiff = own.filter((e) => diff.has(e.file));
+  const notInDiff = own.filter((e) => !diff.has(e.file));
+  const where = appDir || 'the app';
+  const autoImp = own.some((e) => e.code === 'TS2304' && e.text.startsWith('Cannot find name'));
+  if (own.length && autoImp) {
+    return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck env not prepared for ${where} (auto-imports unresolved) — not verified` };
+  }
+  if (inDiff.length) {
+    return { acceptance: 'fail', inDiff, notInDiff, message: `${inDiff.length} type error(s) in files this PR changed in ${where}` };
+  }
+  if (notInDiff.length) {
+    return { acceptance: 'pass', inDiff, notInDiff, message: `${notInDiff.length} error(s) in files this PR didn't touch` };
+  }
+  if (Number(tcExit) === 0 || anyCount > 0) {
+    return { acceptance: 'pass', inDiff, notInDiff, message: `${where} typechecks clean${anyCount > 0 ? ' (ignored pre-existing error(s) elsewhere)' : ''}` };
+  }
+  return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck could not run for ${where} — not verified` };
+}
+
+// Group not-in-diff errors by file + TS code, each with a stable dedup marker for its ticket.
+// Sorted count desc, then file, then code. → { toOpen: first maxTickets, rest }.
+export function groupPreexisting(notInDiff, { maxTickets = 3 } = {}) {
+  const map = new Map();
+  for (const e of notInDiff || []) {
+    const key = `${e.file}\u0000${e.code}`;
+    if (!map.has(key)) {
+      map.set(key, { file: e.file, code: e.code, count: 0, errors: [], marker: `<!-- preexisting-type-error:${e.file}:${e.code} -->` });
+    }
+    const g = map.get(key);
+    g.count += 1;
+    g.errors.push(e);
+  }
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const groups = [...map.values()].sort((a, b) => b.count - a.count || cmp(a.file, b.file) || cmp(a.code, b.code));
+  return { toOpen: groups.slice(0, maxTickets), rest: groups.slice(maxTickets) };
+}
+
+// The run-record line: `acceptance: pass — N error(s) in files this PR didn't touch → #A, #B`.
+export function formatAcceptanceLine({ count, issueNumbers = [], rest = [] } = {}) {
+  let line = `acceptance: pass — ${count} error(s) in files this PR didn't touch`;
+  if (issueNumbers.length) line += ` → ${issueNumbers.map((n) => `#${n}`).join(', ')}`;
+  if (rest.length) line += `; not ticketed: ${rest.map((g) => `${g.file}:${g.code}`).join(', ')}`;
+  return line;
 }
 
 // Read a newline-separated file list. Tolerates a missing file and an UNTERMINATED last line —
