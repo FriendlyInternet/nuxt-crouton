@@ -880,7 +880,7 @@ jobs:
             echo "::warning::base merge conflicted and was not committed as a merge — pushing nothing (#2914)"
             exit 0
           fi
-          # #3704: a merge the worker left in progress would be committed flat (one parent): refuse it, say why.
+          # #3704: refuse a worker-left merge (it'd commit flat); `|| true`: the PR lookup only picks where the comment goes, issue is the fallback.
           GPR="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
           GRC=0; node "$RUNNER_TEMP/revise-merge-guard.mjs" "$BASE" "${REV_START:-$(git rev-parse HEAD)}" "${GPR:-$ISSUE}" || GRC=$?
           if [ "$GRC" -eq 3 ]; then echo "merge_refused=1" >> "$GITHUB_OUTPUT"; exit 0; elif [ "$GRC" -ne 0 ]; then echo "::warning::merge guard crashed (exit $GRC) — pushing as usual (#3704)"; fi
