@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
-import { deriveSizing, minWidthResolver } from '@fyit/crouton-layout/app/utils/layout-viability'
+import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
 import { boardPaneMinPct, BOARD_HANDLE_PX } from '../app/utils/board-pane-min'
 
 // #3746 — the board floors each pane at its block's minWidth, the same floor the served page uses.
@@ -10,7 +10,8 @@ const registry = {
   'artists-form': { minWidth: 320 },
   'spacer': {},
 } as any
-const minWidthFor = minWidthResolver(registry)
+// boardPaneMinPct reads the block registry (deriveSizing's hardMinWidth, the page's floor)
+const minWidthFor = registry
 
 const leaf = (blockId: string, extra: Partial<LayoutNode> = {}): LayoutNode =>
   ({ type: 'leaf', id: blockId, blockId, ...extra } as any)

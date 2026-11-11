@@ -15,7 +15,7 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
-import { deriveSizing, minWidthResolver } from '@fyit/crouton-layout/app/utils/layout-viability'
+import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
 import { boardPaneMinPct } from '../../utils/board-pane-min'
 import { useElementSize } from '@vueuse/core'
 
@@ -45,10 +45,9 @@ const { blocks } = useCroutonLayoutBlocks()
 const splitEl = ref<HTMLElement | null>(null)
 const { width: splitWidth } = useElementSize(splitEl)
 
-// Floor each pane at its block's minWidth — the same floor the served page uses (#3746).
-const minWidthFor = computed(() => minWidthResolver(blocks.value))
+// Floor each pane at the same floor the served page gives it (#3746).
 const panelMin = (child: LayoutNode) => props.node.type === 'split'
-  ? boardPaneMinPct(props.node.direction, child, splitWidth.value, visibleChildren.value.length - 1, minWidthFor.value)
+  ? boardPaneMinPct(props.node.direction, child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
   : 10
 const panelDefault = (child: LayoutNode, n: number) => child.defaultSize ?? 100 / n
 

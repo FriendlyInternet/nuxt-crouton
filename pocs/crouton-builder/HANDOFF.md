@@ -38,8 +38,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
 - **Board drag is one pointer gesture** (`board-drag.ts`): hold-then-drag with `elementFromPoint`
   hit-testing and `touchmove` cancelled only while a drag is live. No HTML5 drag — it never starts
   on iOS. Width authoring is a scaled frame (`useBoardWidth`), presets plus a free drag.
-- Board panes are floored at their block's `minWidth` (`boardPaneMinPct`, the same floor the
-  served page uses), so editor and page give each pane the same width (#3746).
+- Board panes are floored at the same floor the served page uses (`boardPaneMinPct` →
+  `deriveSizing(...).hardMinWidth`: a block's `minWidth`, a nested split's widest block), so
+  editor and page give each pane the same width (#3746, `tests/board-vs-preview.test.ts`).
 
 ## Gotchas
 
