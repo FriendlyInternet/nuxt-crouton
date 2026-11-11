@@ -5,6 +5,8 @@
 // but ONLY while the PR is open and the owner's `ok` still stands (`go` = ownerMergeGo() result).
 // Pure; the workflow gathers the facts.
 
+import { effectiveAttempts } from './diagnosis-review.mjs'
+
 /** @returns {{ run: boolean, reason: string }} */
 export function decideFixBotDispatch({ head, base, state, go }) {
   const h = String(head || '')
@@ -35,18 +37,25 @@ export function pickFailedRun(runs = []) {
 export const FIX_BOT_WORKFLOWS = ['CI', 'E2E', 'Deploy Apps (Cloudflare Workers)']
 export const FIX_BOT_MAX_ATTEMPTS = 3
 
-const attemptsFrom = (labels = []) => {
+// #3277: with a `headCommit` the count only stands while the head is the fix-bot's own commit; any
+// other head (a worker commit, a base merge) is new code and starts again at 0. Without one (an
+// older caller) the label alone counts, as before. `attemptLabel` stays so the bump can replace it.
+const attemptsFrom = (labels = [], headCommit) => {
   const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
-  return { attemptLabel, attempts: attemptLabel ? Number(attemptLabel.split(':')[1]) : 0 }
+  const attempts = headCommit === undefined
+    ? (attemptLabel ? Number(attemptLabel.split(':')[1]) : 0)
+    : effectiveAttempts({ labels, headCommit })
+  return { attemptLabel, attempts }
 }
 
 /**
  * #3667: after one fix try, a watched check that is red again gets a 🩺 diagnosis, not another fix.
  * `diagnose` when the PR carries `ci-fix-attempts:N` (N ≥ 1) and a FIX_BOT_WORKFLOWS run failed; else `fix`.
+ * #3277: with `headCommit`, N only counts while the head is a fix-bot commit.
  * @returns {'fix'|'diagnose'}
  */
-export function fixOrDiagnose({ labels = [], failures = [] } = {}) {
-  if (attemptsFrom(labels).attempts < 1) return 'fix'
+export function fixOrDiagnose({ labels = [], failures = [], headCommit } = {}) {
+  if (attemptsFrom(labels, headCommit).attempts < 1) return 'fix'
   const red = failures.some(f => f && FIX_BOT_WORKFLOWS.includes(f.workflow) && f.conclusion === 'failure')
   return red ? 'diagnose' : 'fix'
 }
@@ -56,7 +65,7 @@ export function fixOrDiagnose({ labels = [], failures = [] } = {}) {
  *   failures?:{ workflow:string|null, conclusion:string|null }[] }} p
  * @returns {{ who:'bot'|'gave-up'|'owner'|'none', code:string, reason:string, attempts:number, attemptLabel:string|undefined, mode:'fix'|'diagnose' }}
  */
-export function fixBotWillTry({ head, base, state, go, manual = false, labels = [], failures = [] }) {
+export function fixBotWillTry({ head, base, state, go, manual = false, labels = [], failures = [], headCommit }) {
   const out = (who, code, reason, attempts = 0, attemptLabel, mode = 'fix') => ({ who, code, reason, attempts, attemptLabel, mode })
   const h = String(head || '')
   if (!manual && !h.startsWith('work-')) {
@@ -76,9 +85,9 @@ export function fixBotWillTry({ head, base, state, go, manual = false, labels = 
   if (odd) {
     return out('owner', 'not-failure', `the auto-fix only starts on a plain failure; \`${odd.workflow}\` ended \`${odd.conclusion}\``)
   }
-  const { attemptLabel, attempts } = attemptsFrom(labels)
+  const { attemptLabel, attempts } = attemptsFrom(labels, headCommit)
   if (attempts >= FIX_BOT_MAX_ATTEMPTS) return out('gave-up', 'gave-up', `auto-fix gave up after ${attempts} tries`, attempts, attemptLabel)
-  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel, fixOrDiagnose({ labels, failures }))
+  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel, fixOrDiagnose({ labels, failures, headCommit }))
 }
 
 /** The conclusion the bot's workflow_run event will carry. A still-running run (null) is predicted from its red check. */
@@ -92,7 +101,7 @@ export function redPingHeading({ who, reason, attempts = 0, count = 0, list = ''
   if (who === 'bot' && mode === 'diagnose') {
     return {
       heading: `🔴 **CI failed on this pipeline PR** (${n}): ${list}.`,
-      needed: "**What's needed:** nothing yet — the same check is red again after a fix try, so the fix-bot writes a 🩺 diagnosis instead of another fix. The PR waits after it; send it on with a `**Worker:**` comment.",
+      needed: "**What's needed:** nothing yet — the same check is red again after a fix try, so the fix-bot writes a 🩺 diagnosis instead of another fix; a second agent checks it; the fix starts only from an approved diagnosis.",
     }
   }
   if (who === 'bot') {

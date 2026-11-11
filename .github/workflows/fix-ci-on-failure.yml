@@ -11,10 +11,16 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}',
 #     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at FIX_BOT_MAX_ATTEMPTS (3, scripts/lib/fix-bot-dispatch.mjs). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
-#   - Repeat red (label ≥ 1) → diagnose mode: one 🩺 Diagnosis comment, no commit, no bump (#3667).
+#   - Repeat red (label ≥ 1, fix-bot head) → diagnose → review (max 2 rounds) → fix from the approved diagnosis, or an owner ask (#3667, #3668). Same failure on base → `main-red`, no try (#3270). The reviewer runs in its own job (review-1/review-2) that never mints the App token; only job `fix` commits or pushes.
+#   - The counter only counts while the head is the fix-bot's own commit; a stuck head pages the owner once (#3277).
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
 #     it, the agent stops and blocks instead (same as the auto-merge guard, #339).
 #   - The label also feeds the #337 sticky status note ("🔧 Auto-fix attempts: N").
+#
+# Jobs (#3668): fixbot (gate, logs, base check, round-1 diagnosis) → review-1 (read-only model
+# reviewer) → round-2 (route review 1; redo the diagnosis when rejected) → review-2 → fix (the ONLY
+# job that commits or pushes, behind the one `fixgo` decision) → record-outcome. Logic lives in
+# scripts/lib/diagnosis-review.mjs; scripts/lib/fix-ci-workflow-shape.test.mjs holds the layout.
 #
 # Trigger is `workflow_run` (completed) of the CI / E2E workflows — it carries the head
 # branch + conclusion, and a workflow_run job runs with write perms from the default branch.
@@ -73,9 +79,28 @@ jobs:
       id-token: write
       # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
       actions: write
+    # Every value a later job reads (#3668): a step output exists only inside its own job, so each
+    # one is carried here. fix-ci-workflow-shape.test.mjs checks every read is declared.
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       mode: ${{ steps.gate.outputs.mode }}
+      proceed: ${{ steps.gate.outputs.proceed }}
+      packages_allowed: ${{ steps.gate.outputs.packages_allowed }}
+      packages_names: ${{ steps.gate.outputs.packages_names }}
+      run_id: ${{ steps.gate.outputs.run_id }}
+      head_sha: ${{ steps.gate.outputs.head_sha }}
+      head_branch: ${{ steps.gate.outputs.head_branch }}
+      base_ref: ${{ steps.gate.outputs.base_ref }}
+      pr_number: ${{ steps.gate.outputs.pr_number }}
+      issue_number: ${{ steps.gate.outputs.issue_number }}
+      run_url: ${{ steps.gate.outputs.run_url }}
+      run_name: ${{ steps.gate.outputs.run_name }}
+      attempts: ${{ steps.gate.outputs.attempts }}
+      attempt_label: ${{ steps.gate.outputs.attempt_label }}
+      check: ${{ steps.gate.outputs.run_name }}
+      base_skip: ${{ steps.base.outputs.skip }}
+      main_red: ${{ steps.base.outputs.main_red }}
+      diagnosed: ${{ steps.diagcheck.outputs.diagnosed }}
     steps:
       # Default branch first (#3105): the gate imports trusted pure helpers (ownerMergeGo,
       # decideFixBotDispatch) from here, never from the PR head. The head is checked out later.
@@ -84,7 +109,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
 
-      # ── Gate: resolve the PR, enforce the attempt cap, bump the counter ──────────
+      # ── Gate: resolve the PR and decide fix / diagnose / gave-up (the bump is in job `fix`) ──
       - id: gate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -94,9 +119,6 @@ jobs:
             const { owner, repo } = context.repo
             const manual = context.eventName === 'workflow_dispatch'
             let run = context.payload.workflow_run
-            // Readable-on-mobile (epic #1336): messages lead with the problem + fix; this
-            // provenance/mechanism + run link is the footer.
-            const FOOTER = (url) => `\n\n<sub>🤖 Claude Code · fix-bot (#338) · <a href="${url}">failing run</a></sub>`
 
             // Resolve the open PR for this head branch (or, when started by hand, the PR number given).
             let pr
@@ -138,8 +160,10 @@ jobs:
               if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
             }
             // #3373: the single "will the bot try?" decision (shared with status.yml's red ping).
+            // #3277: the head commit decides whether the try counter still stands.
             const failures = run ? [{ workflow: run.name, conclusion: run.conclusion }] : []
-            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels, failures })
+            const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: full.head.sha })).data
+            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels, failures, headCommit })
             if (d.who === 'none') {
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
                 '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
@@ -149,26 +173,19 @@ jobs:
             if (d.who === 'owner') {
               core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('proceed', 'false'); return
             }
-            const attemptLabel = d.attemptLabel
             const attempts = d.attempts
             // The linked issue (from the pi worker's `work-<n>` branch) is the resume surface for resume-on-comment.
             const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
+            core.setOutput('pr_number', String(pr.number))
+            core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
+            core.setOutput('head_sha', full.head.sha)
+            core.setOutput('run_name', run.name)
+            core.setOutput('run_url', run.html_url)
+            core.setOutput('attempts', String(attempts))
 
-            if (d.who === 'gave-up') {
-              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
-                '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
-                `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
-                FOOTER(run.html_url) })
-              if (issueNumber) {
-                try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
-                await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
-                  '<!-- pipeline-note -->\n' + `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
-                  `**Fix:** take a look, then reply here and the pipeline resumes.` +
-                  FOOTER(run.html_url) })
-              }
-              core.setOutput('proceed', 'false'); return
-            }
+            // #3277: the page itself is the next step (`Page the owner once`), at most once per head.
+            if (d.who === 'gave-up') { core.setOutput('gave_up', 'true'); core.setOutput('proceed', 'false'); return }
 
             // #3667 diagnose mode: one 🩺 diagnosis per (head sha, check) — a job re-run never posts a second.
             if (d.mode === 'diagnose') {
@@ -176,10 +193,6 @@ jobs:
               const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
               if (hasDiagnosis(cs, { sha: full.head.sha, check: run.name })) { core.info(`Diagnosis already posted for ${run.name} on ${full.head.sha.slice(0, 7)}.`); core.setOutput('proceed', 'false'); return }
             }
-            // Bump the counter in fix mode only (addLabels auto-creates if absent; labels.yml predefines 1–3).
-            if (d.mode === 'fix' && attemptLabel) { try { await github.rest.issues.removeLabel({ owner, repo, issue_number: pr.number, name: attemptLabel }) } catch (e) {} }
-            const next = d.mode === 'fix' ? attempts + 1 : attempts
-            if (d.mode === 'fix') await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [`ci-fix-attempts:${next}`] })
 
             // #2163 (the #2157 packages/ follow-up): normally the fix-bot's prompt STOPS at a
             // packages/ change (the shared-code HARD GATE). But when the linked issue is a `pkg:*`
@@ -200,19 +213,44 @@ jobs:
             }
 
             core.setOutput('proceed', 'true')
-            core.setOutput('pr_number', String(pr.number))
-            core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
             core.setOutput('head_branch', full.head.ref)
             core.setOutput('base_ref', full.base.ref)
-            core.setOutput('attempt', String(next))
+            core.setOutput('attempt_label', d.attemptLabel || '')
             core.setOutput('run_id', String(run.id))
-            core.setOutput('run_name', run.name)
-            core.setOutput('run_url', run.html_url)
             core.setOutput('packages_allowed', packagesAllowed)
             core.setOutput('packages_names', pkgNames)
             core.setOutput('mode', d.mode)
-            core.setOutput('head_sha', full.head.sha)
-            core.info(`Mode ${d.mode}; fix attempt ${next}/${FIX_BOT_MAX_ATTEMPTS} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
+            core.info(`Mode ${d.mode}; ${attempts}/${FIX_BOT_MAX_ATTEMPTS} tries so far for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
+
+      # #3277: one page per stuck head. CI and E2E both red on one head start two runs; the re-list
+      # right before posting sees the first run's marker (they land ≥ 22 s apart on #3192).
+      - name: Page the owner once (gave up)
+        if: steps.gate.outputs.gave_up == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ steps.gate.outputs.pr_number }}
+          ISSUE: ${{ steps.gate.outputs.issue_number }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          RUN_NAME: ${{ steps.gate.outputs.run_name }}
+          RUN_URL: ${{ steps.gate.outputs.run_url }}
+          ATTEMPTS: ${{ steps.gate.outputs.attempts }}
+        with:
+          script: |
+            const { gaveUpPosted, gaveUpMarker } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/diagnosis-review.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, ISSUE, SHA, RUN_NAME, RUN_URL, ATTEMPTS } = process.env
+            const FOOTER = `\n\n<sub>🤖 Claude Code · fix-bot (#338, #3277) · <a href="${RUN_URL}">failing run</a></sub>`
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            if (gaveUpPosted(cs, { sha: SHA })) { core.info(`Already paged for this head (${SHA.slice(0, 7)}).`); return }
+            const mark = gaveUpMarker(SHA)
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body:
+              '<!-- pipeline-note -->\n' + mark + '\n' + `🔴 **@pmcp — auto-fix gave up after ${ATTEMPTS} tries; \`${RUN_NAME}\` is still failing** on \`${SHA.slice(0, 7)}\`.\n\n` +
+              `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` + FOOTER })
+            if (!ISSUE) return
+            try { await github.rest.issues.addLabels({ owner, repo, issue_number: Number(ISSUE), labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${ISSUE}: ${e.message}`) }
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(ISSUE), body:
+              '<!-- pipeline-note -->\n' + mark + '\n' + `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${PR} after ${ATTEMPTS} tries.**\n\n` +
+              `**Fix:** take a look, then reply here and the pipeline resumes.` + FOOTER })
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a
@@ -247,8 +285,8 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
-      # #2719: remember where the branch stood BEFORE the fix, so the guard below can diff the
-      # fix against it. The fixer commits but does not push — this workflow pushes (or refuses).
+      # #2719: remember where the branch stood when this run started (job `fix` records its own
+      # before it lets the fixer touch the branch).
       - name: Record pre-fix head
         if: steps.gate.outputs.proceed == 'true'
         id: prefix
@@ -265,9 +303,12 @@ jobs:
           set -euo pipefail
           git fetch -q origin "$DEFAULT_BRANCH"
           mkdir -p "$RUNNER_TEMP/lib"
-          for s in failed-job-logs log-tail diagnosis-marker; do git show "origin/$DEFAULT_BRANCH:scripts/lib/$s.mjs" > "$RUNNER_TEMP/lib/$s.mjs"; done
+          for s in failed-job-logs log-tail diagnosis-marker diagnosis-review ci-fix-commit; do git show "origin/$DEFAULT_BRANCH:scripts/lib/$s.mjs" > "$RUNNER_TEMP/lib/$s.mjs"; done
           git show "origin/$DEFAULT_BRANCH:.claude/prompts/diagnose.md" > "$RUNNER_TEMP/diagnose.md"
+          git show "origin/$DEFAULT_BRANCH:.claude/agents/diagnosis-reviewer.md" > "$RUNNER_TEMP/diagnosis-reviewer.md"
 
+      # Also keeps each failed job's RAW log + the job list (#3668): the base check, the miss check and
+      # the reviewer (job review-*, via the fixbot-inputs artifact) all read them.
       - name: Read the failing job logs
         if: steps.gate.outputs.proceed == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -277,14 +318,20 @@ jobs:
           script: |
             const fs = require('fs')
             const out = `${process.env.RUNNER_TEMP}/failed-job-logs.md`
+            const raw = `${process.env.RUNNER_TEMP}/raw-logs`
+            fs.mkdirSync(raw, { recursive: true })
             try {
               const { pickFailedJobs, renderFailedJobLogs } = await import(`${process.env.RUNNER_TEMP}/lib/failed-job-logs.mjs`)
               const { owner, repo } = context.repo
               const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
                 { owner, repo, run_id: Number(process.env.RUN_ID), filter: 'latest', per_page: 100 })
-              const md = await renderFailedJobLogs(pickFailedJobs(jobs), async job_id => {
+              const picked = pickFailedJobs(jobs)
+              fs.writeFileSync(`${raw}/jobs.json`, JSON.stringify(picked.map(j => ({ id: j.id, name: j.name }))))
+              const md = await renderFailedJobLogs(picked, async job_id => {
                 const res = await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id })
-                return typeof res.data === 'string' ? res.data : String(res.data || '')
+                const text = typeof res.data === 'string' ? res.data : String(res.data || '')
+                fs.writeFileSync(`${raw}/${job_id}.log`, text)
+                return text
               })
               fs.writeFileSync(out, md)
             } catch (e) { core.warning(`failed-job logs: ${e.message}`) }
@@ -300,12 +347,695 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
+      # #3270: the same failure on the base branch is not this PR's to fix. Newest completed base run
+      # of the same workflow (any result), job by job; the decision is baseVerdict (diagnosis-review.mjs).
+      - name: Same failure on base?
+        id: base
+        if: steps.gate.outputs.proceed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ steps.gate.outputs.run_id }}
+          BASE: ${{ steps.gate.outputs.base_ref }}
+          PR: ${{ steps.gate.outputs.pr_number }}
+          RUN_NAME: ${{ steps.gate.outputs.run_name }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { pickBaseRun, baseVerdict } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { owner, repo } = context.repo
+            const { RUN_ID, BASE, PR, RUN_NAME } = process.env
+            const dir = `${process.env.RUNNER_TEMP}/raw-logs`
+            const fetchLog = async (id) => String((await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: id })).data || '')
+            let prJobs = [], baseRun = null, branch = BASE, v
+            try {
+              prJobs = JSON.parse(fs.readFileSync(`${dir}/jobs.json`, 'utf8')).map(j => ({ name: j.name, raw: fs.readFileSync(`${dir}/${j.id}.log`, 'utf8') }))
+              if (!prJobs.length) return
+              const wf = (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: Number(RUN_ID) })).data.workflow_id
+              for (const b of [BASE, ...(/^epic\//.test(BASE) ? ['main'] : [])]) {
+                baseRun = pickBaseRun((await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: wf, branch: b, status: 'completed', per_page: 10 })).data.workflow_runs); branch = b
+                if (baseRun) break
+              }
+              const baseJobs = []
+              const jobs = baseRun && baseRun.conclusion !== 'success' ? await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner, repo, run_id: baseRun.id, filter: 'latest', per_page: 100 }) : []
+              for (const j of jobs.filter(j => j.conclusion === 'failure' && prJobs.some(p => p.name === j.name))) baseJobs.push({ name: j.name, conclusion: j.conclusion, raw: await fetchLog(j.id) })
+              v = baseVerdict({ prJobs, baseRun, baseJobs })
+            } catch (e) { core.warning(`base check skipped (the fix-bot treats the failure as this PR's): ${e.message}`); return }
+            core.info(`base ${branch}: ${JSON.stringify(v)}`)
+            if (!v.skip) { if (v.mainRed.length) core.setOutput('main_red', v.mainRed.join(', ')); return }
+            try { await github.rest.issues.removeLabel({ owner, repo, issue_number: Number(PR), name: 'main-red' }) } catch (e) { /* not there yet */ }
+            await github.rest.issues.addLabels({ owner, repo, issue_number: Number(PR), labels: ['main-red'] })
+            let known = 'not reported yet'
+            try {
+              const q = `repo:${owner}/${repo} is:issue is:open in:title "${RUN_NAME} failed on main (post-merge)"`
+              const hit = (await github.rest.search.issuesAndPullRequests({ q, sort: 'created', order: 'desc', per_page: 1 })).data.items[0]
+              if (hit) known = `reported in #${hit.number}`
+            } catch (e) { core.warning(`post-merge issue search: ${e.message}`) }
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body: '<!-- pipeline-note -->\n' +
+              `🟠 \`${v.mainRed.join('`, `')}\` fails the same way on \`${branch}\` ([run](${baseRun.html_url})), so the fix-bot skips it — not this PR's fault (${known}).\n\n<sub>🤖 fix-bot (#3270)</sub>` })
+            core.setOutput('skip', 'true')
+
+      # #3668: the same line red again after an approved fix is a MISS — noted (#3669 tallies it), then
+      # diagnosed again; a miss never jumps straight to another fix.
+      - name: Miss check
+        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ steps.gate.outputs.pr_number }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          CHECK: ${{ steps.gate.outputs.run_name }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { missOf, missMarker } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { failingLines } = await import(`${process.env.RUNNER_TEMP}/lib/log-tail.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, SHA, CHECK } = process.env
+            const dir = `${process.env.RUNNER_TEMP}/raw-logs`
+            let line = ''
+            try {
+              for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.log'))) line = line || (failingLines(fs.readFileSync(`${dir}/${f}`, 'utf8'), { max: 1 })[0]?.text || '')
+            } catch (e) { core.warning(`raw logs: ${e.message}`) }
+            if (!line) { core.info('No failing line to compare.'); return }
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            const prev = missOf({ comments: cs, check: CHECK, sha: SHA, failingLine: line })
+            if (!prev) { core.info('Not a miss.'); return }
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body: '<!-- pipeline-note -->\n' + missMarker({ sha: SHA, check: CHECK, prev }) + '\n' +
+              `🔁 **The approved fix for this line did not hold** (approved on \`${prev.slice(0, 7)}\`); diagnosing again.\n\n<sub>🤖 fix-bot · diagnosis review (#3668)</sub>` })
+
+      # ── Diagnose mode (#3667): the same check is red again after a fix try — write a 🩺 diagnosis,
+      # commit nothing. Same action + tokens as the fix step; the prompt lives in .claude/prompts/diagnose.md
+      # (copied from the default branch above). Round 1 of the review loop (#3668).
+      - name: Diagnose the repeat red
+        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        with:
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)' 'Bash(git commit:*)'"
+          show_full_output: true
+          prompt: |
+            Read `${{ runner.temp }}/diagnose.md` and follow it exactly. You are the fix-bot in diagnose mode.
+
+            Inputs:
+            - PR: #${{ steps.gate.outputs.pr_number }} (base `${{ steps.gate.outputs.base_ref }}`, head `${{ steps.gate.outputs.head_branch }}`)
+            - Head sha (goes in the marker): ${{ steps.gate.outputs.head_sha }}
+            - Check name (URL-encode it in the marker): ${{ steps.gate.outputs.run_name }}
+            - Round (goes in the marker): 1
+            - Failing run: ${{ steps.gate.outputs.run_url }} (run id ${{ steps.gate.outputs.run_id }})
+            - Linked issue: #${{ steps.gate.outputs.issue_number }}
+            - Failing lines of the failed job(s): `${{ runner.temp }}/failed-job-logs.md`
+            - The PR diff: `gh pr diff ${{ steps.gate.outputs.pr_number }}`
+
+            No edits to tracked files, no `git commit`, no `git push`, no label changes. Post exactly ONE PR comment.
+
+      # #3667: a silent diagnose agent would exit 0 and nobody would know — check the comment exists.
+      - name: Check the diagnosis was posted
+        id: diagcheck
+        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ steps.gate.outputs.pr_number }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          CHECK: ${{ steps.gate.outputs.run_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const { hasDiagnosis } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, SHA, CHECK, RUN_URL } = process.env
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            if (hasDiagnosis(cs, { sha: SHA, check: CHECK, round: 1 })) { core.info('Diagnosis posted.'); core.setOutput('diagnosed', 'true'); return }
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body:
+              '<!-- pipeline-note -->\n' + `🔴 **fix-bot was asked for a diagnosis of \`${CHECK}\` on \`${SHA.slice(0, 7)}\` and posted none** — see [the run](${RUN_URL}).` })
+            core.warning('No diagnosis comment found.')
+
+      # #3668: the reviewer has no token, so this trusted step hands it everything as files: the bot's
+      # round-1 diagnosis, the issues it links and the runs it cites (with their conclusions).
+      - name: Prepare review 1
+        if: steps.diagcheck.outputs.diagnosed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ steps.gate.outputs.pr_number }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          CHECK: ${{ steps.gate.outputs.run_name }}
+          ROUND: "1"
+        with:
+          script: |
+            const fs = require('fs')
+            const { isPipelineBot, linkedRefs } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { parseDiagnosisMarker } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, SHA, CHECK, ROUND } = process.env
+            const out = `${process.env.RUNNER_TEMP}/diagnosis-review/r${ROUND}`
+            fs.mkdirSync(`${out}/issues`, { recursive: true })
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            const d = cs.filter(isPipelineBot).filter(c => { const p = parseDiagnosisMarker(c.body); return p && p.sha === SHA && p.check === CHECK && p.round === Number(ROUND) }).pop()
+            if (!d) { core.warning(`No bot diagnosis for round ${ROUND}.`); return }
+            fs.writeFileSync(`${out}/diagnosis.md`, d.body)
+            const refs = linkedRefs(d.body)
+            for (const n of refs.issues) {
+              try { const i = (await github.rest.issues.get({ owner, repo, issue_number: n })).data; fs.writeFileSync(`${out}/issues/${n}.md`, `# #${n} ${i.title} (${i.state}${i.state_reason ? ', ' + i.state_reason : ''})\n\n${i.body || ''}`) } catch (e) { core.warning(`#${n}: ${e.message}`) }
+            }
+            const runs = []
+            for (const id of refs.runs) {
+              try { const r = (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: id })).data; runs.push({ id, name: r.name, branch: r.head_branch, sha: r.head_sha, conclusion: r.conclusion, created_at: r.created_at, url: r.html_url }) } catch (e) { runs.push({ id, error: e.message }) }
+            }
+            fs.writeFileSync(`${out}/runs.json`, JSON.stringify(runs, null, 2))
+
+      # Hand the inputs to the later jobs (a step output or a file never leaves its own job).
+      - name: Upload the fix-bot inputs
+        if: steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fixbot-inputs
+          path: |
+            ${{ runner.temp }}/raw-logs
+            ${{ runner.temp }}/failed-job-logs.md
+          if-no-files-found: warn
+          overwrite: true
+      - name: Upload the round-1 diagnosis
+        if: steps.diagcheck.outputs.diagnosed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnosis-r1
+          path: ${{ runner.temp }}/diagnosis-review/r1
+          if-no-files-found: warn
+          overwrite: true
+
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+
+  # ── Review 1 (#3668): an UNTRUSTED model reads the diagnosis — in its own job, which never mints the
+  # App token and keeps no credential on disk (a job that minted one leaves it readable in
+  # $RUNNER_TEMP for the whole job). Read-only: contents: read, every checkout persist-credentials: false.
+  review-1:
+    name: Review the diagnosis (round 1)
+    needs: fixbot
+    if: needs.fixbot.outputs.mode == 'diagnose' && needs.fixbot.outputs.base_skip != 'true' && needs.fixbot.outputs.diagnosed == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .claude
+            .github/actions/setup-pi
+            .pi
+            scripts
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fixbot.outputs.head_sha }}
+          path: head
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fixbot-inputs
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: diagnosis-r1
+          path: ${{ runner.temp }}/diagnosis-review/r1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Set up pi
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+      # Check the effect, not the setup: fail (= no verdict = reject) if any write credential is on disk.
+      - name: Assert no write credential on disk
+        run: |
+          set -uo pipefail
+          bad=0
+          for d in . head; do git -C "$d" config --name-only --get-regexp '^(http\..*extraheader|includeif\.)' && { echo "::error::git credential config in $d"; bad=1; }; done
+          # judge the OUTPUT: grep exits 2 when a match is found but a glob path is missing
+          found="$(grep -rlE 'ghs_[A-Za-z0-9]{20,}|x-access-token|AUTHORIZATION: (basic|bearer)' "$RUNNER_TEMP/_runner_file_commands" "$RUNNER_TEMP"/git-credentials-*.config .git/config head/.git/config 2>/dev/null || true)"
+          [ -n "$found" ] && { echo "::error::a GitHub credential is on disk: $found"; bad=1; }
+          exit "$bad"
+      - name: Review
+        id: review
+        continue-on-error: true
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          R="$RUNNER_TEMP/diagnosis-review"; mkdir -p "$R/review-r1"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/diagnosis-reviewer.md \
+            | sed -e "s#{{round}}#1#g" -e "s#{{verdict_file}}#$R/review-r1/verdict.md#g" -e "s#{{diagnosis_file}}#$R/r1/diagnosis.md#g" \
+                  -e "s#{{logs_dir}}#$RUNNER_TEMP/raw-logs#g" -e "s#{{failing_file}}#$RUNNER_TEMP/failed-job-logs.md#g" \
+                  -e "s#{{head_dir}}#$GITHUB_WORKSPACE/head#g" -e "s#{{context_dir}}#$R/r1#g" -e "s#{{points_file}}#(none in round 1)#g" > "$R/prompt-r1.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$R/prompt-r1.txt" 2>&1 | tee "$R/pi-r1.log"
+          exit "${PIPESTATUS[0]}"
+      # A missing verdict file is fine: the route step reads it as a reject.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: review-r1
+          path: ${{ runner.temp }}/diagnosis-review/review-r1
+          if-no-files-found: ignore
+          overwrite: true
+
+  # ── Route review 1; when rejected, redo the diagnosis (round 2). Trusted: App token, no model review.
+  round-2:
+    name: Route review 1 / diagnose round 2
+    needs: [fixbot, review-1]
+    if: always() && needs.review-1.result != 'skipped' && needs.fixbot.outputs.proceed == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    outputs:
+      next1: ${{ steps.route1.outputs.next }}
+      diagnosed2: ${{ steps.diagcheck2.outputs.diagnosed }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Copy helpers from the default branch
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lib"
+          for s in failed-job-logs log-tail diagnosis-marker diagnosis-review ci-fix-commit; do cp "scripts/lib/$s.mjs" "$RUNNER_TEMP/lib/"; done
+          cp .claude/prompts/diagnose.md "$RUNNER_TEMP/diagnose.md"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fixbot-inputs
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: diagnosis-r1
+          path: ${{ runner.temp }}/diagnosis-review/r1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: review-r1
+          path: ${{ runner.temp }}/diagnosis-review/review-r1
+      # precheck first (a fail rejects with no model verdict), then the verdict file, then the route.
+      - name: Route round 1
+        id: route1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+        run: |
+          set -euo pipefail
+          R="$RUNNER_TEMP/diagnosis-review"; L="$RUNNER_TEMP/lib/diagnosis-review.mjs"
+          node "$L" route 1 "$R/r1/diagnosis.md" "$R/review-r1/verdict.md" "$RUNNER_TEMP/raw-logs" > "$R/route-r1.json"
+          jq . "$R/route-r1.json"
+          mkdir -p "$R/r2"; jq -r '.points[]' "$R/route-r1.json" > "$R/r2/round1-points.md"
+          node "$L" render-review "$R/route-r1.json" "$SHA" "$CHECK" > "$R/review-r1.md"
+          # review-r1.md's first line is the <!-- pipeline-note --> marker (renderReview).
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$R/review-r1.md"
+          echo "next=$(jq -r .next "$R/route-r1.json")" >> "$GITHUB_OUTPUT"
+      - name: Check out the PR head for the redo
+        if: steps.route1.outputs.next == 'redo'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fixbot.outputs.head_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Resolve model
+        if: steps.route1.outputs.next == 'redo'
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs hard)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+      - name: Diagnose round 2
+        if: steps.route1.outputs.next == 'redo'
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        with:
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)' 'Bash(git commit:*)'"
+          show_full_output: true
+          prompt: |
+            Read `${{ runner.temp }}/diagnose.md` and follow it exactly, including its `## Redo (round 2)` section. You are the fix-bot in diagnose mode, round 2.
+
+            Inputs:
+            - PR: #${{ needs.fixbot.outputs.pr_number }} (base `${{ needs.fixbot.outputs.base_ref }}`, head `${{ needs.fixbot.outputs.head_branch }}`)
+            - Head sha (goes in the marker): ${{ needs.fixbot.outputs.head_sha }}
+            - Check name (URL-encode it in the marker): ${{ needs.fixbot.outputs.run_name }}
+            - Round (goes in the marker): 2
+            - The reviewer's points on your round-1 diagnosis: `${{ runner.temp }}/diagnosis-review/r2/round1-points.md`
+            - Your round-1 diagnosis: `${{ runner.temp }}/diagnosis-review/r1/diagnosis.md`
+            - Failing run: ${{ needs.fixbot.outputs.run_url }} (run id ${{ needs.fixbot.outputs.run_id }})
+            - Linked issue: #${{ needs.fixbot.outputs.issue_number }}
+            - Failing lines of the failed job(s): `${{ runner.temp }}/failed-job-logs.md`
+            - The PR diff: `gh pr diff ${{ needs.fixbot.outputs.pr_number }}`
+
+            No edits to tracked files, no `git commit`, no `git push`, no label changes. Post exactly ONE new PR comment.
+      - name: Check round 2 posted
+        id: diagcheck2
+        if: steps.route1.outputs.next == 'redo'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+        with:
+          script: |
+            const { hasDiagnosis } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, SHA, CHECK } = process.env
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            if (hasDiagnosis(cs, { sha: SHA, check: CHECK, round: 2 })) { core.info('Round-2 diagnosis posted.'); core.setOutput('diagnosed', 'true'); return }
+            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body:
+              '<!-- pipeline-note -->\n' + `🔴 **fix-bot was asked to redo the diagnosis of \`${CHECK}\` on \`${SHA.slice(0, 7)}\` and posted none** — no fix starts.` })
+            core.warning('No round-2 diagnosis comment found.')
+      - name: Prepare review 2
+        if: steps.diagcheck2.outputs.diagnosed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+          ROUND: "2"
+        with:
+          script: |
+            const fs = require('fs')
+            const { isPipelineBot, linkedRefs } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { parseDiagnosisMarker } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, SHA, CHECK, ROUND } = process.env
+            const out = `${process.env.RUNNER_TEMP}/diagnosis-review/r${ROUND}`
+            fs.mkdirSync(`${out}/issues`, { recursive: true })
+            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+            const d = cs.filter(isPipelineBot).filter(c => { const p = parseDiagnosisMarker(c.body); return p && p.sha === SHA && p.check === CHECK && p.round === Number(ROUND) }).pop()
+            if (!d) { core.warning(`No bot diagnosis for round ${ROUND}.`); return }
+            fs.writeFileSync(`${out}/diagnosis.md`, d.body)
+            const refs = linkedRefs(d.body)
+            for (const n of refs.issues) {
+              try { const i = (await github.rest.issues.get({ owner, repo, issue_number: n })).data; fs.writeFileSync(`${out}/issues/${n}.md`, `# #${n} ${i.title} (${i.state}${i.state_reason ? ', ' + i.state_reason : ''})\n\n${i.body || ''}`) } catch (e) { core.warning(`#${n}: ${e.message}`) }
+            }
+            const runs = []
+            for (const id of refs.runs) {
+              try { const r = (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: id })).data; runs.push({ id, name: r.name, branch: r.head_branch, sha: r.head_sha, conclusion: r.conclusion, created_at: r.created_at, url: r.html_url }) } catch (e) { runs.push({ id, error: e.message }) }
+            }
+            fs.writeFileSync(`${out}/runs.json`, JSON.stringify(runs, null, 2))
+      - name: Upload the round-2 diagnosis
+        if: steps.diagcheck2.outputs.diagnosed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnosis-r2
+          path: ${{ runner.temp }}/diagnosis-review/r2
+          if-no-files-found: warn
+          overwrite: true
+
+  # ── Review 2: same read-only, credential-free reviewer, on the redone diagnosis.
+  review-2:
+    name: Review the diagnosis (round 2)
+    needs: [fixbot, round-2]
+    if: always() && needs.round-2.outputs.next1 == 'redo' && needs.round-2.outputs.diagnosed2 == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .claude
+            .github/actions/setup-pi
+            .pi
+            scripts
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fixbot.outputs.head_sha }}
+          path: head
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fixbot-inputs
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: diagnosis-r2
+          path: ${{ runner.temp }}/diagnosis-review/r2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Set up pi
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+      - name: Assert no write credential on disk
+        run: |
+          set -uo pipefail
+          bad=0
+          for d in . head; do git -C "$d" config --name-only --get-regexp '^(http\..*extraheader|includeif\.)' && { echo "::error::git credential config in $d"; bad=1; }; done
+          # judge the OUTPUT: grep exits 2 when a match is found but a glob path is missing
+          found="$(grep -rlE 'ghs_[A-Za-z0-9]{20,}|x-access-token|AUTHORIZATION: (basic|bearer)' "$RUNNER_TEMP/_runner_file_commands" "$RUNNER_TEMP"/git-credentials-*.config .git/config head/.git/config 2>/dev/null || true)"
+          [ -n "$found" ] && { echo "::error::a GitHub credential is on disk: $found"; bad=1; }
+          exit "$bad"
+      - name: Review
+        id: review
+        continue-on-error: true
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          R="$RUNNER_TEMP/diagnosis-review"; mkdir -p "$R/review-r2"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/diagnosis-reviewer.md \
+            | sed -e "s#{{round}}#2#g" -e "s#{{verdict_file}}#$R/review-r2/verdict.md#g" -e "s#{{diagnosis_file}}#$R/r2/diagnosis.md#g" \
+                  -e "s#{{logs_dir}}#$RUNNER_TEMP/raw-logs#g" -e "s#{{failing_file}}#$RUNNER_TEMP/failed-job-logs.md#g" \
+                  -e "s#{{head_dir}}#$GITHUB_WORKSPACE/head#g" -e "s#{{context_dir}}#$R/r2#g" -e "s#{{points_file}}#$R/r2/round1-points.md#g" > "$R/prompt-r2.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$R/prompt-r2.txt" 2>&1 | tee "$R/pi-r2.log"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: review-r2
+          path: ${{ runner.temp }}/diagnosis-review/review-r2
+          if-no-files-found: ignore
+          overwrite: true
+
+  # ── Fix (#3668): the ONLY job that commits or pushes. First red (fix mode): straight after fixbot,
+  # as before. Repeat red: only from a bot-approved diagnosis. One decision (`fixgo`) gates every
+  # commit step, so nothing can commit before the review.
+  fix:
+    name: Fix
+    needs: [fixbot, review-1, round-2, review-2]
+    if: always() && needs.fixbot.outputs.proceed == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
+      actions: write
+    steps:
+      # App-token push so CI re-runs on the fix (see job fixbot for why, #626).
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+      # The head over it: the push needs this persisted App credential, and no model reviewer runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fixbot.outputs.head_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      # #2719: remember where the branch stood BEFORE the fix, so the guard below can diff the
+      # fix against it. The fixer commits but does not push — this workflow pushes (or refuses).
+      - name: Record pre-fix head
+        id: prefix
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Copy log helpers from the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/lib"
+          for s in failed-job-logs log-tail diagnosis-marker diagnosis-review ci-fix-commit; do git show "origin/$DEFAULT_BRANCH:scripts/lib/$s.mjs" > "$RUNNER_TEMP/lib/$s.mjs"; done
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: fixbot-inputs
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.review-2.result != 'skipped'
+        continue-on-error: true
+        with:
+          name: diagnosis-r2
+          path: ${{ runner.temp }}/diagnosis-review/r2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.review-2.result != 'skipped'
+        continue-on-error: true
+        with:
+          name: review-r2
+          path: ${{ runner.temp }}/diagnosis-review/review-r2
+
+      # A newer commit on the branch gets its own red run (and its own decision) — never fix an old head.
+      - name: Head unchanged?
+        id: head
+        env:
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$SHA" ]; then echo "::notice::a newer commit landed; its own red run handles it"; echo "moved=true" >> "$GITHUB_OUTPUT"; else echo "moved=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Route round 2
+        id: route2
+        if: needs.review-2.result != 'skipped'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+        run: |
+          set -euo pipefail
+          R="$RUNNER_TEMP/diagnosis-review"; L="$RUNNER_TEMP/lib/diagnosis-review.mjs"
+          node "$L" route 2 "$R/r2/diagnosis.md" "$R/review-r2/verdict.md" "$RUNNER_TEMP/raw-logs" > "$R/route-r2.json"
+          jq . "$R/route-r2.json"
+          node "$L" render-review "$R/route-r2.json" "$SHA" "$CHECK" > "$R/review-r2.md"
+          # review-r2.md's first line is the <!-- pipeline-note --> marker (renderReview).
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$R/review-r2.md"
+          echo "next=$(jq -r .next "$R/route-r2.json")" >> "$GITHUB_OUTPUT"
+
+      # Two rejections: the owner gets both views on the linked issue (ask-human shape). Nothing commits.
+      - name: Ask the owner
+        if: steps.route2.outputs.next == 'owner'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          ISSUE: ${{ needs.fixbot.outputs.issue_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { ownerAsk, isPipelineBot, parseReviewMarker } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { parseDiagnosisMarker } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
+            const { owner, repo } = context.repo
+            const { PR, ISSUE, SHA, CHECK } = process.env
+            const R = `${process.env.RUNNER_TEMP}/diagnosis-review`
+            const cs = (await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })).filter(isPipelineBot)
+            const url = (parse, round) => (cs.filter(c => { const p = parse(c.body); return p && p.sha === SHA && p.check === CHECK && p.round === round }).pop() || {}).html_url
+            const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return '' } }
+            const pts1 = read(`${R}/r2/round1-points.md`).split('\n').filter(Boolean)
+            const pts2 = (JSON.parse(read(`${R}/route-r2.json`) || '{}').points) || []
+            const rounds = [1, 2].map((n, i) => ({ diagnosisUrl: url(parseDiagnosisMarker, n), reviewUrl: url(parseReviewMarker, n), points: [pts1, pts2][i] }))
+            const target = Number(ISSUE || PR)
+            const ask = (await github.rest.issues.createComment({ owner, repo, issue_number: target, body: ownerAsk({ check: CHECK, sha: SHA, pr: PR, rounds }) })).data
+            if (ISSUE) { try { await github.rest.issues.addLabels({ owner, repo, issue_number: Number(ISSUE), labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${ISSUE}: ${e.message}`) } }
+            if (ISSUE) await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body: '<!-- pipeline-note -->\n' +
+              `🔀 **Diagnosis rejected twice — handed to the owner** ([the ask](${ask.html_url})). Nothing was committed.\n\n<sub>🤖 fix-bot · diagnosis review (#3668)</sub>` })
+
+      # THE rule (#3668): fix mode → from the log; diagnose mode → only from a bot-approved diagnosis,
+      # re-read from the PR thread, which also goes to a worker hand-back via failed-job-logs.md.
+      - name: Decide the fix
+        id: fixgo
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MODE: ${{ needs.fixbot.outputs.mode }}
+          BASE_SKIP: ${{ needs.fixbot.outputs.base_skip }}
+          MOVED: ${{ steps.head.outputs.moved }}
+          ROUTE1: ${{ needs.round-2.outputs.next1 }}
+          ROUTE2: ${{ steps.route2.outputs.next }}
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          SHA: ${{ needs.fixbot.outputs.head_sha }}
+          CHECK: ${{ needs.fixbot.outputs.check }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { fixGo, approvedDiagnosis, handoffLog } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-review.mjs`)
+            const { MODE, BASE_SKIP, MOVED, ROUTE1, ROUTE2, PR, SHA, CHECK } = process.env
+            const d = fixGo({ mode: MODE, baseSkip: BASE_SKIP, headMoved: MOVED, route1: ROUTE1, route2: ROUTE2 })
+            core.info(`fix go: ${d.go} — ${d.reason}`)
+            if (d.go && d.from === 'diagnosis') {
+              const { owner, repo } = context.repo
+              const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
+              const approved = approvedDiagnosis(cs, { sha: SHA, check: CHECK })
+              if (!approved) { core.warning('The route said fix, but no bot-approved diagnosis is in the thread — no fix.'); core.setOutput('go', 'false'); return }
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/approved-diagnosis.md`, approved)
+              const f = `${process.env.RUNNER_TEMP}/failed-job-logs.md`
+              let log = ''
+              try { log = fs.readFileSync(f, 'utf8') } catch (e) { /* no logs read */ }
+              fs.writeFileSync(f, handoffLog({ approved, failingLog: log }))
+            }
+            core.setOutput('go', String(d.go))
+
+      # Bump in this job, only when a fix really starts (addLabels auto-creates; labels.yml predefines 1–3).
+      - name: Bump the attempt counter
+        id: bump
+        if: steps.fixgo.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          OLD: ${{ needs.fixbot.outputs.attempt_label }}
+          ATTEMPTS: ${{ needs.fixbot.outputs.attempts }}
+        run: |
+          set -euo pipefail
+          N=$(( ${ATTEMPTS:-0} + 1 ))
+          if [ -n "$OLD" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$OLD" >/dev/null || true; fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" -f "labels[]=ci-fix-attempts:$N" >/dev/null
+          echo "attempt=$N" >> "$GITHUB_OUTPUT"
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — the `default` tier the
+      # fix attempt has always used.
+      - name: Resolve model
+        if: steps.fixgo.outputs.go == 'true'
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # ── The fix attempt ─────────────────────────────────────────────────────────
       # AUTH: headless/unattended → MUST use an API key (never a subscription OAuth token;
       # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - name: Fix attempt
-        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'fix'
+        if: steps.fixgo.outputs.go == 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           # Pipeline PRs are pushed by the harness bot, and the action refuses a bot-initiated
@@ -323,11 +1053,14 @@ jobs:
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
-            ${{ steps.gate.outputs.attempt }} of 3 for PR #${{ steps.gate.outputs.pr_number }}
-            (branch `${{ steps.gate.outputs.head_branch }}`, linked issue #${{ steps.gate.outputs.issue_number }}).
+            ${{ steps.bump.outputs.attempt }} of 3 for PR #${{ needs.fixbot.outputs.pr_number }}
+            (branch `${{ needs.fixbot.outputs.head_branch }}`, linked issue #${{ needs.fixbot.outputs.issue_number }}).
 
-            The failing workflow was "${{ steps.gate.outputs.run_name }}":
-            ${{ steps.gate.outputs.run_url }}
+            The failing workflow was "${{ needs.fixbot.outputs.run_name }}":
+            ${{ needs.fixbot.outputs.run_url }}
+
+            If `${{ runner.temp }}/approved-diagnosis.md` exists, fix THAT cause, not a new guess.
+            Leave these jobs alone, they fail on base too: `${{ needs.fixbot.outputs.main_red }}`
 
             Do this, and ONLY this:
             1. Reproduce the failure locally — run the relevant command (e.g. `pnpm -r --filter './apps/*' typecheck`,
@@ -341,21 +1074,21 @@ jobs:
                `status:blocked`). Example: #3333 — Fallow flagged `removedTests` as too complex; the
                right fix is to extract helpers, not delete it. If a symbol/menu
                group/key/route is referenced but undefined, IMPLEMENT the missing piece, taking the
-               intent from the linked issue (`gh issue view ${{ steps.gate.outputs.issue_number }}`)
+               intent from the linked issue (`gh issue view ${{ needs.fixbot.outputs.issue_number }}`)
                and the latest owner/orchestrator comments on the PR and issue — not just the log. If
                you cannot implement it confidently, do not commit and do NOT write the message file; comment on the issue, @mention
                @pmcp, apply `status:blocked`, and stop. A deterministic check after you rejects any
                commit that removes lines the worker added (blank lines and imports excepted).
             3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
-               - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
+               - packages_allowed for this run: ${{ needs.fixbot.outputs.packages_allowed }} (packages: ${{ needs.fixbot.outputs.packages_names }}).
                - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
                  correct fix would require one, STOP: do not commit and do NOT write the message file. Instead comment on issue
-                 #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
+                 #${{ needs.fixbot.outputs.issue_number }} explaining why, @mention @pmcp, apply the
                  `status:blocked` label to that issue, and end your run.
                - If packages_allowed is `true`: this is a `pkg:*` issue — the owner already approved
                  shared-code work by dispatching it, so you MAY edit ONLY the listed package(s). Before
                  your first edit under `packages/`, unlock the gate for exactly those packages, one per
-                 line: `for p in ${{ steps.gate.outputs.packages_names }}; do echo "$p" >> .claude/.package-edit-approved; done`.
+                 line: `for p in ${{ needs.fixbot.outputs.packages_names }}; do echo "$p" >> .claude/.package-edit-approved; done`.
                  Keep the change minimal and scoped to the failure; do NOT touch any other package. The
                  PR still holds for a human to merge (the shared-code merge guard), so you are producing
                  the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
@@ -367,59 +1100,13 @@ jobs:
                the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
-            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop. Do NOT write the message file.
-
-      # ── Diagnose mode (#3667): the same check is red again after a fix try — write a 🩺 diagnosis,
-      # commit nothing. Same action + tokens as the fix step; the prompt lives in .claude/prompts/diagnose.md
-      # (copied from the default branch above). A sibling step, so neither prompt hides in a ternary.
-      - name: Diagnose the repeat red
-        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
-        with:
-          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)' 'Bash(git commit:*)'"
-          show_full_output: true
-          prompt: |
-            Read `${{ runner.temp }}/diagnose.md` and follow it exactly. You are the fix-bot in diagnose mode.
-
-            Inputs:
-            - PR: #${{ steps.gate.outputs.pr_number }} (base `${{ steps.gate.outputs.base_ref }}`, head `${{ steps.gate.outputs.head_branch }}`)
-            - Head sha (goes in the marker): ${{ steps.gate.outputs.head_sha }}
-            - Check name (URL-encode it in the marker): ${{ steps.gate.outputs.run_name }}
-            - Failing run: ${{ steps.gate.outputs.run_url }} (run id ${{ steps.gate.outputs.run_id }})
-            - Linked issue: #${{ steps.gate.outputs.issue_number }}
-            - Failing lines of the failed job(s): `${{ runner.temp }}/failed-job-logs.md`
-            - The PR diff: `gh pr diff ${{ steps.gate.outputs.pr_number }}`
-
-            No edits to tracked files, no `git commit`, no `git push`, no label changes. Post exactly ONE PR comment.
-
-      # #3667: a silent diagnose agent would exit 0 and nobody would know — check the comment exists.
-      - name: Check the diagnosis was posted
-        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PR: ${{ steps.gate.outputs.pr_number }}
-          SHA: ${{ steps.gate.outputs.head_sha }}
-          CHECK: ${{ steps.gate.outputs.run_name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        with:
-          script: |
-            const { hasDiagnosis } = await import(`${process.env.RUNNER_TEMP}/lib/diagnosis-marker.mjs`)
-            const { owner, repo } = context.repo
-            const { PR, SHA, CHECK, RUN_URL } = process.env
-            const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(PR), per_page: 100 })
-            if (hasDiagnosis(cs, { sha: SHA, check: CHECK })) { core.info('Diagnosis posted.'); return }
-            await github.rest.issues.createComment({ owner, repo, issue_number: Number(PR), body:
-              '<!-- pipeline-note -->\n' + `🔴 **fix-bot was asked for a diagnosis of \`${CHECK}\` on \`${SHA.slice(0, 7)}\` and posted none** — see [the run](${RUN_URL}).` })
-            core.warning('No diagnosis comment found.')
+            issue #${{ needs.fixbot.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop. Do NOT write the message file.
 
       # #3104: the ONE commit is made here, not by the agent. The script is read from the default
       # branch (trusted — the PR branch can't alter it) and commits what the agent staged with the
       # agent's message + `CI-Fix: true`, under the fix-bot identity. No message file -> no commit.
       - name: Commit the staged fix
-        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'fix'
+        if: steps.fixgo.outputs.go == 'true'
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
@@ -433,20 +1120,21 @@ jobs:
       # of those lines (blank lines/imports aside) it is not pushed: the branch is reset, the PR
       # gets the lines listed, and the pi worker is re-run with the CI failure as feedback (the
       # revise path, #2446). Otherwise the fix is pushed as before. Attempt cap and packages/ rules
-      # are untouched. The failed-job logs it quotes were read before the agent step (above).
+      # are untouched. The failed-job logs it quotes (with the approved diagnosis first, #3668) were
+      # read in job fixbot and handed over in the fixbot-inputs artifact.
       - name: Guard and push the fix
-        if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'fix'
+        if: steps.fixgo.outputs.go == 'true'
         id: guard
         env:
           GH_TOKEN: ${{ github.token }}
           PRE: ${{ steps.prefix.outputs.sha }}
-          BASE: ${{ steps.gate.outputs.base_ref }}
-          BRANCH: ${{ steps.gate.outputs.head_branch }}
-          PR: ${{ steps.gate.outputs.pr_number }}
-          ISSUE: ${{ steps.gate.outputs.issue_number }}
-          RUN_URL: ${{ steps.gate.outputs.run_url }}
-          RUN_ID: ${{ steps.gate.outputs.run_id }}
-          RUN_NAME: ${{ steps.gate.outputs.run_name }}
+          BASE: ${{ needs.fixbot.outputs.base_ref }}
+          BRANCH: ${{ needs.fixbot.outputs.head_branch }}
+          PR: ${{ needs.fixbot.outputs.pr_number }}
+          ISSUE: ${{ needs.fixbot.outputs.issue_number }}
+          RUN_URL: ${{ needs.fixbot.outputs.run_url }}
+          RUN_ID: ${{ needs.fixbot.outputs.run_id }}
+          RUN_NAME: ${{ needs.fixbot.outputs.run_name }}
         run: |
           set -euo pipefail
           HEAD_NOW="$(git rev-parse HEAD)"
@@ -532,7 +1220,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [fixbot]
+    needs: [fixbot, review-1, round-2, review-2, fix]
     if: ${{ always() && needs.fixbot.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5

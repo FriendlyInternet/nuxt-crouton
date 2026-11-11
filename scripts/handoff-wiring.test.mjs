@@ -43,6 +43,7 @@ export const ALLOW = [
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
   ['epic-version.mjs', '--add-label', 'stamps the pipeline:v1 version marker on an epic; it starts no stage and a missed stamp is re-derived from the default'],
+  ['fix-ci-on-failure.yml', "labels: ['main-red']", 'state label (#3270): marks a failure the base branch also has; it starts no stage and the next red run re-derives it'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
 
