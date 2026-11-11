@@ -18,7 +18,6 @@
     ".github/workflows/fix-ci-on-failure.yml › fixbot › guard › run": 72,
     ".github/workflows/on-comment.yml › approve-draft › #2 › script": 49,
     ".github/workflows/on-comment.yml › approve-epic › #2 › script": 49,
-    ".github/workflows/on-comment.yml › close-epic › Close the epic › script": 55,
     ".github/workflows/on-comment.yml › dispatch › #2 › script": 54,
     ".github/workflows/on-comment.yml › interpret-act › Act on the decision (one action) › script": 54,
     ".github/workflows/on-comment.yml › resume › gate › script": 91,
