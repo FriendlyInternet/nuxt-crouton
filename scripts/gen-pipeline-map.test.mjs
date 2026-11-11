@@ -53,6 +53,19 @@ test('triggers per on: shape', () => {
   assert.ok(md.includes('`workflow_dispatch`, `push`'), md)
 })
 
+test('generated page shows the right triggers per row', () => {
+  const { wf, dir, args } = fixture()
+  writeFileSync(join(wf, 'c.yml'), 'name: Gamma\non:\n  workflow_dispatch:\n    inputs:\n      pr:\n        type: string\n        required: true\n  schedule:\n    - cron: "0 6 * * *"\njobs: {}\n')
+  writeFileSync(join(dir, 'lines.json'), JSON.stringify({ lines: { tickets: ['a.yml'], building: ['b.yml', 'c.yml'] } }))
+  assert.equal(cli(args).status, 0)
+  const page = readFileSync(join(dir, 'page.md'), 'utf8')
+  const row = f => page.split('\n').find(l => l.startsWith(`| [${f}]`))
+  assert.match(row('a.yml'), /\| Alpha \| `push` \|$/)
+  assert.match(row('b.yml'), /\| Beta \| `issue_comment` \|$/)
+  assert.match(row('c.yml'), /\| Gamma \| `workflow_dispatch`, `schedule` \|$/)
+  assert.doesNotMatch(page, /`inputs`|`pr`|`types`|`cron`/)
+})
+
 test('a stale page fails --check', () => {
   const { wf, dir, args } = fixture()
   writeFileSync(join(wf, 'a.yml'), 'name: Alpha renamed\non: [push]\njobs: {}\n')
