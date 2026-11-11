@@ -23,6 +23,7 @@ import {
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import { paletteBlocksOf } from '~/utils/palette-blocks'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 definePageMeta({ middleware: ['auth'] })
@@ -36,10 +37,8 @@ const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pa
 useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 
 const { blocks, blocksList } = useCroutonLayoutBlocks()
-// The block row offers atomic blocks only: a compound block (bookings' all-in-one
-// `bookings-calendar`, #2559) is a whole screen in one pane — its parts are offered
-// as their own blocks instead. Saved pages that already hold one still render.
-const paletteBlocks = computed(() => blocksList.value.filter(b => b.kind !== 'compound'))
+// The block row offers atomic blocks only (#2559) — see paletteBlocksOf.
+const paletteBlocks = computed(() => paletteBlocksOf(blocksList.value))
 const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consumeClick } = useBoardDrag()
 
 const selected = ref<NodePath | null>(null)
