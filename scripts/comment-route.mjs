@@ -14,6 +14,8 @@
 //          (`1B 2A 3C`, `2 code`) → quiz-reply (before test-card/resume, so a quiz answer never
 //          resumes, approves or re-plans anything; #3715) · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
+//          owner reply on a plan rejected twice → approve-plan (`ok: <reason>`) /
+//          plan-needs-reason (bare approval) (#3272; other replies fall through to the re-plan) ·
 //          status:blocked → resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
 //   PR:    approval on a draft → approve-draft · approval on a ready epic→main PR from the
@@ -28,10 +30,11 @@ import { isApproval, parseTestReply } from './approval.mjs'
 import { parseCommand, stripNonCommandRegions } from './comment-command.mjs'
 import { routePrComment } from './revise-route.mjs'
 import { isQuizReply } from './owner-quiz.mjs'
+import { parseOverride } from './lib/decision-line.mjs'
 
 export const KINDS = [
-  'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
-  'dispatch', 'interpret', 'quiz-reply', 'resume', 'revise', 'test-card', 'none',
+  'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
+  'dispatch', 'interpret', 'plan-needs-reason', 'quiz-reply', 'resume', 'revise', 'test-card', 'none',
 ]
 
 const COLLABORATORS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
@@ -48,8 +51,19 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
   return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|work-this)$/.test(l))
 }
 
+/**
+ * Owner override on a plan held by two no-go verdicts (#3272; `issue.planHeld` from plan-held.mjs
+ * planHeldFor): `ok: <reason>` approves; a bare approval asks for the reason; anything else → null.
+ */
+function routeHeldPlan({ body, assoc, issue, out, userType }) {
+  if (!(out.blocked && issue.planHeld && OWNERS.has(assoc))) return null
+  if (parseOverride({ body, authorAssociation: assoc, userType })) return out('approve-plan', 'owner ok: <reason> on a twice-rejected plan')
+  if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a twice-rejected plan')
+  return null
+}
+
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, assoc, collab, issue, out }) {
+function routeIssue({ body, assoc, collab, issue, out, userType }) {
   const labels = issue.labels || []
   if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
   if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
@@ -60,6 +74,8 @@ function routeIssue({ body, assoc, collab, issue, out }) {
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
+  const held = routeHeldPlan({ body, assoc, issue, out, userType })
+  if (held) return held
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
   // resume job (it explains), any other owner comment falls through to `interpret`.
   if (out.blocked && (isPipelineOwned({ body: issue.body, labels }) || isApproval(body))) {
@@ -120,7 +136,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, assoc, collab, issue, out })
+  if (!issue.isPr) return routeIssue({ body, assoc, collab, issue, out, userType: comment.userType })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })
