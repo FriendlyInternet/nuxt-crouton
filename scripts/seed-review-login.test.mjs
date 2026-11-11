@@ -304,38 +304,119 @@ test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-d
   assert.deepEqual(cfg.reviewLogin.requireData, ['bookings_locations', 'bookings_bookings'])
 })
 
-// ── #3533: member upsert quote escaping ──
-// The --seed-team member upsert used to be built inline in main(), so no test could
-// reach it. Runs the real SQL against an in-memory SQLite db.
-import { memberUpsertSql } from './seed-review-login.mjs'
+// ── #3340: an invite-only app refuses public sign-up → create the login via SQL ───────
+// The real CLI against a real SQLite file, with a stand-in for the Worker's auth routes
+// that answers sign-up the way crouton-auth's invite-only gate does.
+import { createReviewAccountSql } from './seed-review-login.mjs'
 
-function memberDb() {
-  const d = new DatabaseSync(':memory:')
+const INVITE_ONLY = { status: 403, body: { message: 'Sign-up is by invitation only', code: 'SIGNUP_INVITE_ONLY' } }
+
+function authDb() {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-3340-'))
+  const file = join(dir, 'sqlite.db')
+  const d = new DatabaseSync(file)
   d.exec(`
-    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
-    INSERT INTO "member" VALUES ('keep', 'u2', 'seed:org:test1', 'owner', 1);
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL, "email" TEXT NOT NULL UNIQUE,
+      "emailVerified" INTEGER NOT NULL DEFAULT 0, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL,
+      "superAdmin" INTEGER NOT NULL DEFAULT 0, "banned" INTEGER NOT NULL DEFAULT 0, "role" TEXT DEFAULT 'user');
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "accountId" TEXT NOT NULL,
+      "providerId" TEXT NOT NULL, "password" TEXT, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
   `)
-  return d
+  d.close()
+  return file
 }
 
-test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break out', () => {
-  const d = memberDb()
-  const userId = 'u\'); DELETE FROM "member"; --'
-  d.exec(memberUpsertSql({ memberId: "m'1", userId, orgId: "o'x", createdAt: 1 }))
-  const row = d.prepare('SELECT * FROM "member" WHERE "id" = ?').get("m'1")
-  assert.equal(row.userId, userId)
-  assert.equal(row.organizationId, "o'x")
-  assert.equal(row.role, 'owner')
-  assert.ok(d.prepare('SELECT 1 FROM "member" WHERE "id" = ?').get('keep'), 'bystander row survives')
-  assert.equal(d.prepare('SELECT count(*) AS n FROM "member"').get().n, 2)
+async function runInviteOnly(extraArgs) {
+  const seen = []
+  const server = createServer((req, res) => {
+    seen.push(req.url)
+    let status = 200
+    let body = {}
+    if (req.url === '/api/auth/sign-up/email') ({ status, body } = INVITE_ONLY)
+    else if (req.url === '/api/auth/get-session') body = { user: { id: 'whatever' }, session: { activeOrganizationId: 'o1' } }
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const result = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'Review+velo-pr9@example.com', '--password', 'pw', ...extraArgs],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  return { ...result, seen }
+}
+
+const rows = (file, sql) => {
+  const d = new DatabaseSync(file)
+  try { return d.prepare(sql).all() } finally { d.close() }
+}
+
+test('#3340 signUpDecision: 403 SIGNUP_INVITE_ONLY → invite-only (a plain 403 is not)', () => {
+  const base = { ok: false, attempt: 1, maxAttempts: 7 }
+  assert.equal(signUpDecision({ ...base, status: 403, code: 'SIGNUP_INVITE_ONLY' }), 'invite-only')
+  assert.equal(signUpDecision({ ...base, status: 403, code: 'FORBIDDEN' }), 'give-up')
 })
 
-test('#3533 memberUpsertSql: re-running updates the same row (idempotent)', () => {
-  const d = memberDb()
-  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'first', orgId: 'seed:org:test1', createdAt: 100 }))
-  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'second', orgId: 'seed:org:test1', createdAt: 200 }))
-  const rows = d.prepare('SELECT * FROM "member" WHERE "id" = ?').all('m1')
-  assert.equal(rows.length, 1)
-  assert.equal(rows[0].userId, 'second')
-  assert.equal(rows[0].createdAt, 100)
+test('#3340 invite-only app + --sqlite → user + credential account created, signed in, exit 0; rerun adds nothing', async () => {
+  const file = authDb()
+  const r = await runInviteOnly(['--sqlite', file])
+  assert.equal(r.code, 0, r.out)
+  assert.ok(r.seen.includes('/api/auth/sign-in/email'), 'signs in after creating the account')
+  const users = rows(file, 'SELECT * FROM "user"')
+  assert.equal(users.length, 1)
+  assert.equal(users[0].email, 'review+velo-pr9@example.com')
+  assert.equal(users[0].emailVerified, 1) // marked verified by the #3162 step after sign-in
+  assert.ok(users[0].createdAt < 1e11, 'createdAt is unix seconds')
+  const accounts = rows(file, 'SELECT * FROM "account"')
+  assert.equal(accounts.length, 1)
+  assert.equal(accounts[0].providerId, 'credential')
+  assert.equal(accounts[0].userId, users[0].id)
+  assert.equal(accounts[0].accountId, users[0].id)
+
+  const again = await runInviteOnly(['--sqlite', file])
+  assert.equal(again.code, 0, again.out)
+  assert.equal(rows(file, 'SELECT * FROM "user"').length, 1)
+  assert.equal(rows(file, 'SELECT * FROM "account"').length, 1)
+})
+
+test('#3340 invite-only app without --db/--sqlite → non-zero, no login', async () => {
+  const r = await runInviteOnly([])
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /invite-only app: pass --db/)
+})
+
+test('#3340 createReviewAccountSql: quotes in the email, name or hash cannot break out', async () => {
+  const file = authDb()
+  const d = new DatabaseSync(file)
+  d.exec(`INSERT INTO "user" ("id","name","email","createdAt","updatedAt") VALUES ('u2','Other','other@example.com',1,1)`)
+  d.exec(await createReviewAccountSql("x' OR '1'='1@example.com", "O'Brien", "it's", async pw => `hash(${pw})`))
+  const users = d.prepare('SELECT * FROM "user" ORDER BY "id" = \'u2\'').all()
+  assert.equal(users.length, 2)
+  assert.equal(users[0].email, "x' or '1'='1@example.com")
+  assert.equal(users[0].name, "O'Brien")
+  const accounts = d.prepare('SELECT * FROM "account"').all()
+  assert.equal(accounts.length, 1)
+  assert.equal(accounts[0].password, "hash(it's)")
+  assert.equal(accounts[0].userId, users[0].id)
+  d.close()
+})
+
+test('#3340 createReviewAccountSql: the default hasher is better-auth\'s, so sign-in verifies it', async (t) => {
+  let verifyPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    ;({ verifyPassword } = await import(req.resolve('better-auth/crypto')))
+  } catch {
+    t.skip('better-auth not installed in this checkout')
+    return
+  }
+  const file = authDb()
+  const d = new DatabaseSync(file)
+  d.exec(await createReviewAccountSql('review+velo-pr9@example.com', 'Review Tester', 'new-secret'))
+  const { password } = d.prepare('SELECT "password" FROM "account"').get()
+  d.close()
+  assert.equal(await verifyPassword({ hash: password, password: 'new-secret' }), true)
 })

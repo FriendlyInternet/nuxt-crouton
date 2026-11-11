@@ -418,6 +418,20 @@ export interface CroutonAuthConfig {
   appName?: string
 
   /**
+   * Who may create an account (#3340)
+   *
+   * - `'open'` (default) — anyone can sign up.
+   * - `'invite'` — only people with a pending invitation for their email can
+   *   create an account, on every path (email + password, magic link, OAuth
+   *   first sign-in). Enforced on the server in a `user.create.before` hook;
+   *   the UI also hides the "Create account" links. The site admin can still
+   *   create users (server-side `auth.api` calls are trusted).
+   *
+   * @default 'open'
+   */
+  signup?: 'open' | 'invite'
+
+  /**
    * Authentication methods configuration
    */
   methods?: AuthMethodsConfig
