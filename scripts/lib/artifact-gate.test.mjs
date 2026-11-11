@@ -60,6 +60,16 @@ test('conflict asked: OK without touching GitHub', async () => {
   void h
 })
 
+test('merge refused: OK without touching GitHub (#3704)', async () => {
+  const boom = () => { throw new Error('called GitHub') }
+  const calls = { failed: [], info: [], created: [] }
+  const github = { paginate: boom, rest: { issues: { listComments: boom, createComment: async (a) => calls.created.push(a.body) } } }
+  await artifactGate({ github, core: { setFailed: (m) => calls.failed.push(m), info: (m) => calls.info.push(m) }, context: { repo: {} }, env: { ...BASE, MERGE_REFUSED: '1' } })
+  assert.equal(calls.failed.length, 0)
+  assert.equal(calls.info.length, 1)
+  assert.equal(calls.created.length, 0)
+})
+
 test('decompose resume: a sub-issue closed after t0', async () => {
   const h = harness({ subs: [{ number: 11, state: 'closed', closed_at: AFTER, created_at: '2025-12-31T00:00:00Z', labels: [] }] })
   await h.run({})
