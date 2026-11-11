@@ -19,14 +19,20 @@ export function useBookingOptions() {
   const { currentTeam } = useTeam()
 
   // Fetch settings collection using team-scoped endpoint
-  const { data: settingsData, pending, error, refresh } = useFetch(
+  // dedupe: 'defer' — one card per booking owns this key; with Nuxt's default 'cancel'
+  // each owner aborts the others' request when the team arrives (#3789).
+  const { data: settingsData, pending, error, refresh: refreshSettings } = useFetch(
     () => currentTeam.value?.id ? `/api/teams/${currentTeam.value.id}/bookings-settings` : null as any,
     {
       key: () => `crouton-booking-options-settings-${currentTeam.value?.id ?? 'none'}`,
+      dedupe: 'defer',
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     }
   )
+
+  // An explicit refresh must get fresh data, so it cancels a request in flight (#3789).
+  const refresh = () => refreshSettings({ dedupe: 'cancel' })
 
   // Extract statuses from settings (already parsed by jsonColumn in schema)
   const statuses = computed<OptionItem[]>(() => {

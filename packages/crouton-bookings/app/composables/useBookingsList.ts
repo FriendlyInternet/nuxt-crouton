@@ -15,6 +15,10 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
   // Use same key as useBookingCart to share cache (scope-specific). Every key carries the
   // team id, so the team arriving after mount re-runs the fetch (#3751) — a fixed key
   // turns off Nuxt's re-fetch on URL change.
+  // dedupe: 'defer' — several blocks own the same key, and EACH owner re-runs it when the
+  // key changes; with Nuxt's default 'cancel' every owner aborts the one before it, so the
+  // blocks page sent ~a dozen cancelled requests per load (#3789). 'defer' joins the
+  // request already running. Manual refresh() below forces fresh data with 'cancel'.
   const {
     data: bookingsData,
     pending: bookingsLoading,
@@ -26,6 +30,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       : null as any,
     {
       key: () => `crouton-booking-sidebar-${bookingsEndpoint}-${currentTeam.value?.id ?? 'none'}`,
+      dedupe: 'defer',
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -43,6 +48,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       : null as any,
     {
       key: () => `crouton-booking-list-settings-${scope}-${currentTeam.value?.id ?? 'none'}`,
+      dedupe: 'defer',
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -60,6 +66,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
       : null as any,
     {
       key: () => `crouton-booking-list-locations-${scope}-${currentTeam.value?.id ?? 'none'}`,
+      dedupe: 'defer',
       default: () => [],
       server: false, // Avoid SSR hydration mismatch - team context is client-side
     },
@@ -77,12 +84,13 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
         : null as any,
       {
         key: () => `crouton-booking-calendar-all-${currentTeam.value?.id ?? 'none'}`,
+        dedupe: 'defer',
         default: () => [],
         server: false,
       },
     )
     calendarBookingsData = data as any
-    refreshCalendarBookings = refreshAll
+    refreshCalendarBookings = () => refreshAll({ dedupe: 'cancel' })
   }
 
   // Combined loading state (also loading if team not ready yet)
@@ -123,9 +131,11 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
     return bookings.value
   })
 
-  // Refresh all data
+  // Refresh all data — an explicit refresh (e.g. after a save) must get fresh data, so it
+  // cancels any request in flight instead of joining it (the fetches default to 'defer', #3789).
   async function refresh() {
-    await Promise.all([refreshBookings(), refreshSettings(), refreshLocations(), refreshCalendarBookings()])
+    const fresh = { dedupe: 'cancel' } as const
+    await Promise.all([refreshBookings(fresh), refreshSettings(fresh), refreshLocations(fresh), refreshCalendarBookings()])
   }
 
   return {
