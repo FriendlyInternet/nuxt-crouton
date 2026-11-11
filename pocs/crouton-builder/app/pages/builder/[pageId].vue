@@ -140,17 +140,16 @@ function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
     if (edge === 'center') return writeRoot(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
     return writeRoot(applyPaneDrop(r, { path: at, edge }, newLeaf(payload.blockId)))
   }
-  // Moving a pane: remember the target by reference, lift the source out, find
-  // the target again in the shrunk tree, then land beside or inside it.
+  // Moving a pane: lift the source out while tracking the target's path (the
+  // detach can collapse a split and rebuilds resized siblings, so the target
+  // can't be re-found by reference — #3737), then land beside or inside it.
   if (!r) return
-  const target = getNode(r, at)
-  if (!target) return
-  const { root: lifted, detached } = detachNode(r, payload.path)
+  if (!getNode(r, at)) return
+  const { root: lifted, detached, trackedPath } = detachNode(r, payload.path, at)
   if (!detached) return
   if (!lifted) return writeRoot(detached)
-  const targetPath = findNodePath(lifted, target)
-  if (!targetPath) return
-  writeRoot(edge === 'center' ? nestInside(lifted, targetPath, detached) : applyPaneDrop(lifted, { path: targetPath, edge }, detached))
+  if (!trackedPath) return
+  writeRoot(edge === 'center' ? nestInside(lifted, trackedPath, detached) : applyPaneDrop(lifted, { path: trackedPath, edge }, detached))
 }
 registerDrop(onDrop)
 

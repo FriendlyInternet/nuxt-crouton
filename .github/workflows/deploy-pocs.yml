@@ -8,8 +8,10 @@ name: Deploy POCs (preview)
 # Triggers:
 #   • pull_request touching pocs/** or packages/** → deploy each opted-in POC whose own
 #                                      folder or dependent package changed (auto preview).
-#   • push to main touching pocs/**  → redeploy each CHANGED, opted-in POC's staging Worker
-#                                      (trunk = staging, like deploy-apps.yml; #2896).
+#   • push to main touching pocs/**, packages/** or the lockfile → redeploy the staging
+#                                      Worker of each opted-in POC whose own folder or a
+#                                      package it depends on changed (trunk = staging, like
+#                                      deploy-apps.yml; #2896, #3734).
 #   • workflow_dispatch(app)         → deploy one named POC (the bot can call this via the
 #                                      API with only `actions` perms — no `workflows` scope).
 #
@@ -20,8 +22,13 @@ on:
   push:
     branches:
       - main
+    # Same paths as pull_request: a shared-package merge redeploys only the POCs that use it (#3475, #3734).
     paths:
       - 'pocs/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-pocs.yml'
+      - '.github/workflows/deploy-app.yml'
   pull_request:
     paths:
       - 'pocs/**'
