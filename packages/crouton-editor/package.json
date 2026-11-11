@@ -4,6 +4,9 @@
   "description": "Rich text editor layer extending nuxt-crouton (wraps Nuxt UI Editor)",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit"
+  },
   "files": [
     "app",
     "nuxt.config.ts",

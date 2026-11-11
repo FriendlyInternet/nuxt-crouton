@@ -16,6 +16,7 @@
     "README.md"
   ],
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "crouton:i18n:seed": "npx tsx ./cli/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
