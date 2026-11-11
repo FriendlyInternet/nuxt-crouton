@@ -5,9 +5,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import worker from '../workers/ticket-editor/src/index.ts'
-import { addedSceneText, saveCommentBody } from '../workers/ticket-editor/src/note.ts'
+import { addedSceneText, saveCommentBody, SAVE_FIRST_LINE } from '../workers/ticket-editor/src/note.ts'
 import { signEditorToken, deriveEditorSecret } from '../pocs/status/server/utils/editor-token-core.ts'
-import { isOwnerScreenSource, parseDiagramSave } from './lib/owner-screens.mjs'
+import { isOwnerScreenSource, parseDiagramSave, ownerScreenEmoji } from './lib/owner-screens.mjs'
 import { routeComment } from './comment-route.mjs'
 import { shouldRevise } from './revise-route.mjs'
 
@@ -18,6 +18,11 @@ test('addedSceneText: only text that is new, live and non-empty', () => {
   assert.deepEqual(addedSceneText({ elements: [T('A')] }, { elements: [T('A'), T('gone', { isDeleted: true }), T('  '), { type: 'rectangle' }] }), [])
   assert.deepEqual(addedSceneText(null, { elements: [T('A'), T(' B ')] }), ['A', 'B'])
   assert.deepEqual(addedSceneText({}, undefined), [])
+})
+
+test('SAVE_FIRST_LINE: the owner-screen helper reads it as a 📐 diagram save', () => {
+  assert.equal(ownerScreenEmoji(SAVE_FIRST_LINE), '📐')
+  assert.equal(ownerScreenEmoji('> ' + SAVE_FIRST_LINE), null)
 })
 
 const BASE = { slug: 'flow', branch: 'work-12', sha: 'abcdef1234', path: 'writeups/diagrams/flow.excalidraw', img: 'https://img', editUrl: 'https://e', at: '2026-11-11T00:00:00Z' }
