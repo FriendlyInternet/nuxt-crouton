@@ -573,7 +573,7 @@ jobs:
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ]; then
+              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ] || node scripts/lib/owner-screens.mjs --is-source "$RUNNER_TEMP/feedback.txt" "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq '.performed_via_github_app.slug // ""')"; then
                 WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
               else
                 WHO='by the plan reviewer'
