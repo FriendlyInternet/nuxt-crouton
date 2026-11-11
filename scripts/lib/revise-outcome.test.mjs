@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { bodyKey, reviseOutcome } from './revise-outcome.mjs'
 
 test('head moved, body unchanged', () => {
-  assert.deepEqual(reviseOutcome({ headMoved: true }), { revised: true, noop: false, rereview: false, note: 'commit' })
+  assert.deepEqual(reviseOutcome({ headMoved: true }), { revised: true, noop: false, rereview: false, note: 'commit', message: '' })
 })
 test('head moved and body changed: commit wins, no double review', () => {
   const r = reviseOutcome({ headMoved: true, bodyChanged: true, verdict: 'no-go', round: 1 })
@@ -11,7 +11,7 @@ test('head moved and body changed: commit wins, no double review', () => {
 })
 test('body only, no-go round 1 -> re-review', () => {
   const r = reviseOutcome({ bodyChanged: true, verdict: 'no-go', round: 1 })
-  assert.deepEqual(r, { revised: true, noop: false, rereview: true, note: 'body' })
+  assert.deepEqual(r, { revised: true, noop: false, rereview: true, note: 'body', message: '' })
 })
 test('body only, no-go round 2 -> no re-review', () => {
   const r = reviseOutcome({ bodyChanged: true, verdict: 'no-go', round: 2 })
@@ -29,8 +29,33 @@ test('nothing -> noop', () => {
   assert.equal(r.noop, true); assert.equal(r.revised, false)
 })
 test('base pushed only', () => {
-  const r = reviseOutcome({ basePushed: true })
-  assert.equal(r.revised, true); assert.equal(r.note, 'commit')
+  // #3775: a base merge alone is not the requested change (was: revised, note commit).
+  const r = reviseOutcome({ baseOnly: true })
+  assert.equal(r.revised, false); assert.equal(r.note, 'noop')
+})
+test('baseOnly, no reply, no body change -> noop: brought up to date, change not made (#3775)', () => {
+  const r = reviseOutcome({ baseOnly: true, base: 'main', from: 'https://x/c1' })
+  assert.equal(r.noop, true); assert.equal(r.revised, false); assert.equal(r.note, 'noop')
+  assert.match(r.message, /Brought up to date with `main`/)
+  assert.match(r.message, /\[your change\]\(https:\/\/x\/c1\) was not made/)
+  assert.match(r.message, /^<!-- pipeline-note -->/)
+})
+test('baseOnly + reply -> reply with "no code change"', () => {
+  const r = reviseOutcome({ baseOnly: true, replied: true, base: 'main' })
+  assert.equal(r.note, 'reply'); assert.equal(r.revised, true)
+  assert.match(r.message, /no code change/)
+})
+test('real commit after the merge -> revised', () => {
+  assert.equal(reviseOutcome({ headMoved: true, baseOnly: true }).note, 'commit')
+})
+test('PR-description change only (with a base merge) -> body', () => {
+  assert.equal(reviseOutcome({ baseOnly: true, bodyChanged: true }).note, 'body')
+})
+test('reply without baseOnly -> empty message (today: no extra comment)', () => {
+  assert.equal(reviseOutcome({ replied: true }).message, '')
+})
+test('nothing, no base merge -> the old "produced no change" text', () => {
+  assert.match(reviseOutcome({ from: 'u' }).message, /\[Your comment\]\(u\) produced no change and no answer\.\*\* Nothing was pushed/)
 })
 test('bodyKey normalises and handles empty', () => {
   assert.equal(bodyKey('a\r\nb\n'), bodyKey('a\nb'))

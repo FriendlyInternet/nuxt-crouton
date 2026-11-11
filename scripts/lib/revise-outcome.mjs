@@ -9,13 +9,27 @@ export function bodyKey(body) {
   return createHash('sha256').update(t).digest('hex').slice(0, 12)
 }
 
-export function reviseOutcome({ headMoved, basePushed, bodyChanged, replied, verdict, round } = {}) {
-  if (headMoved || basePushed) return { revised: true, noop: false, rereview: false, note: 'commit' }
+const HDR = '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3775)_\n\n'
+const link = (text, from) => (from ? `[${text}](${from})` : text)
+
+/**
+ * `headMoved` = a commit AFTER the base merge reached the PR. `baseOnly` = the only thing pushed
+ * was the base merge (#3775) — that is not the requested change, so on its own it is a no-op.
+ * Facts only: pi's wording is never read. `message` is the PR comment to post ('' = none).
+ */
+export function reviseOutcome({ headMoved, baseOnly, bodyChanged, replied, verdict, round, base = 'the base', from = '' } = {}) {
+  if (headMoved) return { revised: true, noop: false, rereview: false, note: 'commit', message: '' }
   if (bodyChanged) {
-    return { revised: true, noop: false, rereview: verdict === 'no-go' && Number(round) === 1, note: 'body' }
+    return { revised: true, noop: false, rereview: verdict === 'no-go' && Number(round) === 1, note: 'body', message: '' }
   }
-  if (replied) return { revised: true, noop: false, rereview: false, note: 'reply' }
-  return { revised: false, noop: true, rereview: false, note: 'noop' }
+  if (replied) {
+    const message = baseOnly ? `${HDR}Brought up to date with \`${base}\`; **no code change** — the worker answered above.` : ''
+    return { revised: true, noop: false, rereview: false, note: 'reply', message }
+  }
+  const message = baseOnly
+    ? `${HDR}Brought up to date with \`${base}\`; ⚠️ **${link('your change', from)} was not made** — that merge is the only commit pushed, and the worker posted no answer. Rephrase it as a concrete change (which file, what to do) and comment again.`
+    : `${HDR}⚠️ **${link('Your comment', from)} produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.`
+  return { revised: false, noop: true, rereview: false, note: 'noop', message }
 }
 
 // CLI: `key` (body on stdin) | `decide '<json>'`
