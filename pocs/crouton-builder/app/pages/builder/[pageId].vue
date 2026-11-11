@@ -23,6 +23,7 @@ import {
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import { usePaletteMenu } from '~/utils/palette-menu'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 definePageMeta({ middleware: ['auth'] })
@@ -181,26 +182,8 @@ function onChipClick(blockId: string) {
 // Grouped row (#3748): one chip per collection + Layout, each opening a menu of
 // its blocks. Unlinked generic blocks stay registered but aren't offered here.
 const paletteGroups = computed(() => groupPaletteBlocks(blocksList.value))
-const openGroup = ref<string | null>(null)
-// Once a held item arms a drag, the menu goes see-through so the board under the
-// finger receives it; it closes when the drag ends. (Unmounting it mid-gesture
-// would drop the touch's target and let the browser scroll instead.)
-const menuDragging = ref(false)
-watch(dragPayload, (p) => {
-  if (p && openGroup.value) menuDragging.value = true
-  else if (!p && menuDragging.value) {
-    menuDragging.value = false
-    openGroup.value = null
-  }
-})
-function setGroupOpen(key: string, open: boolean) {
-  if (open) openGroup.value = key
-  else if (openGroup.value === key && !menuDragging.value) openGroup.value = null
-}
-function onItemClick(blockId: string) {
-  openGroup.value = null
-  onChipClick(blockId)
-}
+// Menu state (tap closes + adds; a held item's drag makes it see-through, then closes).
+const { openGroup, dragging: menuDragging, setGroupOpen, onItemClick } = usePaletteMenu(dragPayload, onChipClick)
 
 // ── Save ───────────────────────────────────────────────────────────────────────
 const { update } = useCollectionMutation('builderPages')

@@ -9,6 +9,9 @@
  *  · a `chrome` block (Top bar, Bottom nav, Spacer) joins **Layout**;
  *  · anything else — the unlinked generic blocks, internal `__…__` blocks — is
  *    left out of the row. They stay registered, so pages that use them render.
+ * The rule is checked per BLOCK, not per group: a block that declares a
+ * `collection` field but leaves it empty would show "Configure a collection",
+ * so it is never offered, even when it's named into a group (`offerable`).
  * Collections sort alphabetically, Layout last; a group's icon is its first block's.
  */
 import type { CroutonLayoutBlockDefinition } from '@fyit/crouton-core/app/types/layout-block'
@@ -34,6 +37,19 @@ function collectionOf(def: CroutonLayoutBlockDefinition): string | null {
   return fromField || fromConfig || null
 }
 
+/**
+ * True when Builder's row may offer this block: a layout piece, a block linked to
+ * a collection, or a self-contained block that has no `collection` field at all
+ * (e.g. Artists · Stats). A block that needs a collection but has none is not.
+ */
+export function offerable(def: CroutonLayoutBlockDefinition): boolean {
+  if (def.id.startsWith('__')) return false
+  if (def.category === 'chrome') return true
+  const needsCollection = !!def.configSchema?.some(f => f.name === 'collection')
+    || (def.defaultConfig != null && 'collection' in def.defaultConfig)
+  return !needsCollection || !!collectionOf(def)
+}
+
 export function groupPaletteBlocks(list: CroutonLayoutBlockDefinition[]): PaletteGroup[] {
   const groups = new Map<string, PaletteGroup>()
   const add = (key: string, label: string, collection: string | null, def: CroutonLayoutBlockDefinition, itemLabel: string) => {
@@ -48,7 +64,7 @@ export function groupPaletteBlocks(list: CroutonLayoutBlockDefinition[]): Palett
   }
 
   for (const def of list) {
-    if (def.id.startsWith('__')) continue
+    if (!offerable(def)) continue
     const at = def.name.indexOf(SEP)
     if (at > 0) {
       const label = def.name.slice(0, at).trim()

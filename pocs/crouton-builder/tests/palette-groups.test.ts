@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import type { CroutonLayoutBlockDefinition, CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
-import { groupPaletteBlocks } from '../app/utils/palette-groups'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { groupPaletteBlocks, offerable } from '../app/utils/palette-groups'
+import { parseLayoutTree } from '../../../packages/crouton-layout/app/utils/layout-serialize'
+import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 
 // Builder's REAL block list: crouton-layout's defaults merged with Builder's own
 // registry, as the running app sees them (useCroutonLayoutBlocks → blocksList).
@@ -44,6 +48,54 @@ describe('groupPaletteBlocks — Builder block row (#3748)', () => {
   it('every block offered is linked to a collection or is a layout piece', () => {
     for (const g of groupPaletteBlocks(blocksList)) {
       if (g.label !== 'Layout') expect(g.collection).toBeTruthy()
+    }
+  })
+
+  it('checks the rule per BLOCK: no offered block needs a collection it doesn\'t have', () => {
+    const byId = new Map(blocksList.map(b => [b.id, b]))
+    for (const item of groupPaletteBlocks(blocksList).flatMap(g => g.items)) {
+      const def = byId.get(item.blockId)!
+      const needs = !!def.configSchema?.some(f => f.name === 'collection')
+      const has = def.configSchema?.find(f => f.name === 'collection')?.default || def.defaultConfig?.collection
+      expect(def.category === 'chrome' || !needs || !!has, `${def.id} would show "Configure a collection"`).toBe(true)
+    }
+  })
+
+  it('drops a block named into a linked group when it needs a collection and has none', () => {
+    const def = (id: string, name: string, collection?: string): CroutonLayoutBlockDefinition => ({
+      id, name, category: 'data', component: 'CroutonLayoutForm', kind: 'atomic',
+      configSchema: [{ name: 'collection', type: 'text', label: 'Collection', default: collection ?? '' }],
+    }) as CroutonLayoutBlockDefinition
+    const unlinked = def('artists-x', 'Artists · X')
+    expect(offerable(unlinked)).toBe(false)
+    // Its linked sibling keeps the group's collection — the old per-group check would pass this.
+    expect(shape([def('artists-list', 'Artists · List', 'builderArtists'), unlinked]))
+      .toEqual([['Artists', ['List']]])
+  })
+
+  it('an existing page that uses a plain Form block still resolves to a real component', () => {
+    // A page saved before #3748, with the generic entity-form beside an Artists list.
+    const stored = JSON.stringify({
+      renderer: 'panes',
+      root: { type: 'split', direction: 'horizontal', children: [
+        { type: 'leaf', id: 'a', blockId: 'artists-list' },
+        { type: 'leaf', id: 'b', blockId: 'entity-form', config: { collection: 'builderArtists' } },
+      ] },
+    })
+    const tree = parseLayoutTree(stored)
+    expect(tree).not.toBeNull()
+    const leaves: string[] = []
+    const walk = (n: LayoutNode) => (n.type === 'leaf' ? leaves.push(n.blockId) : n.children.forEach(walk))
+    walk(tree!.root)
+    expect(leaves).toContain('entity-form')
+    // Each leaf resolves in the merged registry to a component file that exists
+    // (`CroutonLayoutForm` → crouton-layout's components/LayoutForm.vue).
+    const registry = new Map(blocksList.map(b => [b.id, b]))
+    for (const id of leaves) {
+      const component = registry.get(id)?.component
+      expect(component, id).toMatch(/^CroutonLayout/)
+      const file = fileURLToPath(new URL(`../../../packages/crouton-layout/app/components/${component!.replace(/^Crouton/, '')}.vue`, import.meta.url))
+      expect(existsSync(file), file).toBe(true)
     }
   })
 
