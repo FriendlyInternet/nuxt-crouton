@@ -123,6 +123,13 @@ const groupRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
 // (#1178 view path). Deliberately NOT `groupRef` — it must never reach `useElementSize` (no RO).
 const viewGridRef = ref<HTMLElement | null>(null)
 const { width: groupWidth, height: groupHeight } = useElementSize(groupRef)
+// `useElementSize` resets to 0 whenever its target element changes (VueUse:
+// `width = ele ? initialSize.width : 0`). `groupRef` moves between the stacked / hug /
+// USplitter branches, so without this a stack swap reads 0 → "don't stack" → swap back →
+// measure → stack … ~10×/s on a phone, rebuilding the panes so taps never land (#3753).
+// Keep the last real width as the basis while the observer re-attaches.
+const lastGroupWidth = ref(0)
+watch(groupWidth, (w) => { if (w > 0) lastGroupWidth.value = w })
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 
 // The width to reason about min-sizes / stacking with: our own measured group width, or — when
@@ -130,7 +137,7 @@ const minWidthFor = computed(() => minWidthResolver(blocks.value))
 // width the responsive renderer resolved at. Without this the px→% min-size math divides by 0 and
 // every floor collapses to 0, so panes squish into equal clipped columns instead of stacking.
 const injectedWidth = inject(LAYOUT_CONTAINER_WIDTH_KEY, ref(0))
-const basisWidth = computed(() => groupWidth.value || injectedWidth.value)
+const basisWidth = computed(() => groupWidth.value || lastGroupWidth.value || injectedWidth.value)
 
 function panelMin(child: LayoutNode): number {
   if (props.node.type !== 'split') return 0
