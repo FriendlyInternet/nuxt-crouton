@@ -11,11 +11,13 @@ name: On comment
 #   kind            job                      was
 #   approve-draft   approve-draft            approve-draft-pr.yml
 #   approve-epic    approve-epic             approve-epic-pr.yml
+#   approve-plan    approve-plan             NEW (#3272): owner `ok: <reason>` on a plan rejected twice
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
+#   plan-needs-reason plan-needs-reason      NEW (#3272): a bare `ok` on a plan rejected twice (asks why)
 #   quiz-reply      quiz-reply               NEW (#3715): the owner's answer to an epic quiz (owner-quiz.yml)
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
@@ -96,6 +98,7 @@ jobs:
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const { planHeldFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
@@ -106,7 +109,8 @@ jobs:
             }
             const d = routeComment({
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
-              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
+                planHeld: await planHeldFor({ github, repo: context.repo, issue: i }) },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
@@ -450,6 +454,54 @@ jobs:
             await github.rest.issues.createComment({ owner, repo, issue_number,
               body: '<!-- pipeline-note -->\n' + `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
+
+  # Owner override of a plan held after two reviewer rejections (#3272). scripts/plan-held.mjs
+  # approvePlan posts the reason AS THE BOT (the only record the build trusts), logs a dated line on
+  # the parent epic, lifts the hold and adds `plan:approved`. The App token makes label-router.yml's
+  # actor check pass; the default-branch checkout keeps the imported script a trusted one.
+  approve-plan:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { approvePlan } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await approvePlan({ github, context, core })
+
+  # A bare approval on a twice-rejected plan (#3272): ask for the reason once; the hold stays.
+  plan-needs-reason:
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // NEEDS_REASON opens with the <!-- pipeline-note --> marker (#3251).
+            const { NEEDS_REASON } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number, body: NEEDS_REASON })
 
   resume:
     needs: route

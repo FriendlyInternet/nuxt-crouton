@@ -36,8 +36,19 @@ export function isPlanHold({ comments, labels = [], replyBody = '' } = {}) {
   if (!labels.includes('status:blocked') || labels.includes('plan:approved')) return false
   if (replyBody && (isApproval(replyBody) || OK_REASON.test(replyBody))) return false
   const v = verdicts(comments)
-  const last = v[v.length - 1]
-  return last === 'needs-owner' || (last === 'no-go' && v.filter((x) => x === 'no-go').length >= 2)
+  return v[v.length - 1] === 'needs-owner' || isRejectedTwice({ comments, labels })
+}
+
+/**
+ * True when the plan is held after two reviewer rejections (#3272): `status:blocked`, no
+ * `plan:approved`, the newest bot verdict is `no-go` and there are at least two. A `needs-owner`
+ * hold is NOT this — the owner override (`ok: <reason>`) applies only to the twice-rejected hold.
+ * @param {{comments?: object[], labels?: string[]}} input
+ */
+export function isRejectedTwice({ comments, labels = [] } = {}) {
+  if (!labels.includes('status:blocked') || labels.includes('plan:approved')) return false
+  const v = verdicts(comments)
+  return v[v.length - 1] === 'no-go' && v.filter((x) => x === 'no-go').length >= 2
 }
 
 /**
