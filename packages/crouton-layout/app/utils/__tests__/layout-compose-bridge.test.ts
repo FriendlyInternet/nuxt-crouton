@@ -92,6 +92,18 @@ describe('piecesToTree — recompose the authoritative tree', () => {
     const out = piecesToTree([{ id: 'p', node: { type: 'leaf', blockId: 'x' }, x: 0, y: 0, width: 1, height: 1 }], base)
     expect(out.breakpoints).toEqual(base.breakpoints)
   })
+
+  it('carries auto: true for both the 1-piece and the many-piece branch (#3816)', () => {
+    const base: LayoutTree = { ...hsplit, auto: true }
+    const one = piecesToTree([{ id: 'p', node: { type: 'leaf', blockId: 'x' }, x: 0, y: 0, width: 1, height: 1 }], base)
+    expect(one.auto).toBe(true)
+    const many = piecesToTree([
+      { id: 'a', node: { type: 'leaf', blockId: 'a' }, x: 0, y: 0, width: 100, height: 50 },
+      { id: 'b', node: { type: 'leaf', blockId: 'b' }, x: 200, y: 0, width: 100, height: 50 },
+    ], base)
+    expect(many.auto).toBe(true)
+    expect(piecesToTree(treeToPieces(hsplit), hsplit).auto).toBeUndefined()
+  })
 })
 
 describe('piecePath — map a clicked card to its zoom target path', () => {
