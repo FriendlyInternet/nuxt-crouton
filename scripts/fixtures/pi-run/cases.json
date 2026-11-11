@@ -1,0 +1,18 @@
+{
+  "worker": { "env": { "ISSUE": "1" } },
+  "worker-epic": { "env": { "ISSUE": "1", "EPIC_BRANCH": "epic/1--x" } },
+  "worker-approved": { "env": { "ISSUE": "1", "APPROVED_PLAN_ID": "200" } },
+  "revise": { "env": { "ISSUE": "1", "REVISE": "1" }, "feedback": true },
+  "conflict": { "env": { "ISSUE": "1", "REVISE": "1", "REV_CONFLICT": "1", "REV_BRANCH": "epic/1--x" }, "feedback": true, "conflictTask": true },
+  "plan": { "env": { "ISSUE": "1", "PLAN": "1" } },
+  "plan-bot": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "101" } },
+  "plan-owner": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "102" } },
+  "plan-fresh": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "103" } },
+  "plan-decisions": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" } },
+  "fail-user-type": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" }, "fail": "user\\.type" },
+  "fail-prev-plan": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" }, "fail": "issues/2/comments" },
+  "fail-decisions": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" }, "fail": "^issue view" },
+  "fail-pr-lookup": { "env": { "ISSUE": "1", "REVISE": "1" }, "feedback": true, "fail": "^pr list" },
+  "fail-feedback": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "101" }, "fail": "comments/101 --jq \\.body", "throws": true },
+  "fail-approved": { "env": { "ISSUE": "1", "APPROVED_PLAN_ID": "200" }, "fail": "comments/200", "throws": true }
+}
