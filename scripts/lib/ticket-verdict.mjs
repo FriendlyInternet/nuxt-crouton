@@ -18,7 +18,7 @@
  * through a behaviour ticket that names neither a rule nor a test.
  *
  *   node scripts/lib/ticket-verdict.mjs <tickets.json> <verdict-file>        → JSON decision
- *   node scripts/lib/ticket-verdict.mjs render <tickets.json> <verdict-file> [model]
+ *   node scripts/lib/ticket-verdict.mjs render <tickets.json> <verdict-file> [model] [--revising R]
  *   node scripts/lib/ticket-verdict.mjs releasable <tickets.json>            → numbers to start now
  * tickets.json = [{ number, title, body, labels: ["type:feat", …] }]. Exit 1 on a malformed verdict.
  */
@@ -124,11 +124,16 @@ export function decide(tickets, verdictBody) {
 }
 
 /** PURE. The typed-brief comment for the epic (plain language, depth collapsed). */
-export function renderComment(d, { model = '' } = {}) {
+// `revising: R` (#3787) = ticket-revise.yml is about to rewrite the sent-back tickets (round R of 3),
+// so the owner is not asked to do the work the pipeline is doing.
+export function renderComment(d, { model = '', revising = 0 } = {}) {
   const bad = d.tickets.filter((t) => t.verdict !== 'go')
+  const sentBack = `🔴 **Tickets sent back** — ${bad.length} of ${d.tickets.length} would build something wrong.`
   const head = {
     go: `✅ **Tickets approved** — all ${d.tickets.length} read fine. The first ticket starts now.\n**Next:** none.`,
-    'no-go': `🔴 **Tickets sent back** — ${bad.length} of ${d.tickets.length} would build something wrong. Nothing has started.\n**Needs:** action — fix the tickets listed below, then re-run the ticket review.`,
+    'no-go': revising
+      ? `${sentBack} Rewriting them from this review now (round ${revising} of 3).\n**Next:** none.`
+      : `${sentBack} Nothing has started.\n**Needs:** action — fix the tickets listed below, then re-run the ticket review.`,
     'needs-owner': `🔀 **Needs your call** — ${bad.find((t) => t.question)?.question}\n**Needs:** answer`,
   }[d.verdict]
   const detail = d.tickets.map((t) => {
@@ -147,6 +152,8 @@ export function releasable(tickets, triggerLabels = ['work-this', 'delegate-pi',
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
+  const ri = args.indexOf('--revising')
+  const revising = ri >= 0 ? Number(args.splice(ri, 2)[1]) || 0 : 0
   const mode = ['render', 'releasable'].includes(args[0]) ? args.shift() : 'decide'
   const [ticketsFile, verdictFile, model] = args
   if (!ticketsFile || (mode !== 'releasable' && !verdictFile)) { console.error('usage: ticket-verdict.mjs [render|releasable] <tickets.json> [verdict-file] [model]'); process.exit(2) }
@@ -154,6 +161,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (mode === 'releasable') { console.log(JSON.stringify(releasable(tickets))); process.exit(0) }
   const d = decide(tickets, readFileSync(verdictFile, 'utf8'))
   if (!d.ok) console.error(d.errors.join('\n'))
-  console.log(mode === 'render' && d.ok ? renderComment(d, { model: model || '' }) : JSON.stringify(d))
+  console.log(mode === 'render' && d.ok ? renderComment(d, { model: model || '', revising }) : JSON.stringify(d))
   process.exit(d.ok ? 0 : 1)
 }
