@@ -393,6 +393,7 @@ jobs:
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
+          cp scripts/revise-merge-guard.mjs "$RUNNER_TEMP/revise-merge-guard.mjs"
           # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
           cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
           # Revise outcome (#3432): counts a PR-description edit as a revision.
@@ -572,7 +573,7 @@ jobs:
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ]; then
+              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ] || node scripts/lib/owner-screens.mjs --is-source "$RUNNER_TEMP/feedback.txt" "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq '.performed_via_github_app.slug // ""')"; then
                 WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
               else
                 WHO='by the plan reviewer'
@@ -860,9 +861,7 @@ jobs:
           [ "$NIN"  -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt"    | sed 's/^/  input:     /'
           [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | sed 's/^/  generated: /'
 
-          # 3) Capture BOTH buckets' content before the re-base checkout (which discards the working
-          #    tree), then recreate work-<issue> off origin/$BASE — never depends on which branch pi
-          #    left the tree on (#1741).
+          # 3) Capture both buckets before the re-base checkout discards the tree, then recreate the branch (#1741).
           CONTENT="$RUNNER_TEMP/commit-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | while IFS= read -r p; do
             [ -z "$p" ] && continue
@@ -877,12 +876,14 @@ jobs:
           git status --porcelain -uall 2>/dev/null | grep -E '^( D|D )' | sed 's/^...//' > "$RUNNER_TEMP/deleted.txt" || true
 
           if [ -n "${REV_START:-}" ] && [ "${REV_CONFLICT:-}" = 1 ] && [ -z "${REV_BASE:-}" ]; then
-            # The resolution never became a merge commit (it failed its checks, or was asked to the
-            # owner; the conflict step already said which on the PR). Stacking pi's edits on the old
-            # head would push a flat copy of the base — the conflicts would never clear (#2914).
+            # The resolution never became a merge commit; stacking on the old head pushes a flat copy (#2914).
             echo "::warning::base merge conflicted and was not committed as a merge — pushing nothing (#2914)"
             exit 0
           fi
+          # #3704: refuse a worker-left merge (it'd commit flat); `|| true`: the PR lookup only picks where the comment goes, issue is the fallback.
+          GPR="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          GRC=0; node "$RUNNER_TEMP/revise-merge-guard.mjs" "$BASE" "${REV_START:-$(git rev-parse HEAD)}" "${GPR:-$ISSUE}" || GRC=$?
+          if [ "$GRC" -eq 3 ]; then echo "merge_refused=1" >> "$GITHUB_OUTPUT"; exit 0; elif [ "$GRC" -ne 0 ]; then echo "::warning::merge guard crashed (exit $GRC) — pushing as usual (#3704)"; fi
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           BR="work-${ISSUE}"; [ -n "${REV_START:-}" ] && BR="${REV_BRANCH:-$BR}"
           if [ -n "${REV_START:-}" ]; then
@@ -1493,6 +1494,7 @@ jobs:
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          MERGE_REFUSED: ${{ steps.finish.outputs.merge_refused }}  # #3704: the finish step refused a worker-left merge and explained it on the PR
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
