@@ -108,7 +108,7 @@ jobs:
             echo; echo "## Epic comments"
             gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
           } > "$D/epic.md"
-          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '[.[].body]' | jq -s 'add // []' > "$D/comments.json"
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > "$D/comments.json"
           gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
             --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
             | jq -s 'add // []' > "$D/tickets.json"
@@ -201,6 +201,7 @@ jobs:
             .claude/pipeline-models.json
           persist-credentials: false
       - name: Write the run record (never fails the run)
+        # allowed to fail: the run record is observability only — losing it must never fail a ticket rewrite that already ran
         continue-on-error: true
         env:
           REPO: ${{ github.repository }}

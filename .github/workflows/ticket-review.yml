@@ -108,6 +108,9 @@ jobs:
             echo; echo "## Epic comments"
             gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
           } > "$D/epic.md"
+          # with authors: only the harness bot's own verdicts count toward the round (#3787)
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" \
+            --jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > "$D/comments.json"
           gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
             --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
             | jq -s 'add // []' > "$D/tickets.json"
@@ -147,7 +150,7 @@ jobs:
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
           DECISION="$(node scripts/lib/ticket-verdict.mjs "$D/tickets.json" "$D/verdict.md")" || { echo "$DECISION"; fail "verdict was malformed"; }
           VERDICT="$(echo "$DECISION" | jq -r .verdict)"
-          read -r ROUTE ROUND < <(node scripts/ticket-revise.mjs route <(echo "$DECISION") "$D/epic.md")
+          read -r ROUTE ROUND < <(node scripts/ticket-revise.mjs route <(echo "$DECISION") "$D/comments.json")
           REV=(); [ "$ROUTE" = revise ] && REV=(--revising "$ROUND")
           node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" "${REV[@]}" > "$D/comment.md"
           # remove-then-add: re-adding a label the issue already carries fires no event.

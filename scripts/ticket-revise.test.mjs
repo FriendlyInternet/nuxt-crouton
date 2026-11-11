@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,6 +23,9 @@ function verdictFile(fails = {}, stated = {}) {
   }).join('\n')
 }
 const twoNoGo = () => decide(tickets, verdictFile({ 1: ['3'], 2: ['4'] }))
+// Epic comments in the GitHub API shape the workflows write to comments.json.
+const bot = (body) => ({ body, user: { login: 'nuxt-harness[bot]', type: 'Bot' } })
+const human = (body, login = 'mallory') => ({ body, user: { login, type: 'User' } })
 
 test('1. sentBack: 2 no-go + 1 go picks only the 2; a go ticket is never in the list (rule)', () => {
   const d = twoNoGo()
@@ -36,9 +39,9 @@ test('1. sentBack: 2 no-go + 1 go picks only the 2; a go ticket is never in the 
 
 test('2. countRounds: 0 / 1 / 2 verdict markers on the epic → rounds 1 / 2 / 3', () => {
   const c = renderComment(twoNoGo())
-  assert.equal(countRounds('# Epic\n\nbody'), 1)
-  assert.equal(countRounds(`# Epic\n---\nbot:\n${c}`), 2)
-  assert.equal(countRounds(`# Epic\n---\nbot:\n${c}\n---\nbot:\n${c}`), 3)
+  assert.equal(countRounds([]), 1)
+  assert.equal(countRounds([bot(c)]), 2)
+  assert.equal(countRounds([bot(c), bot('<!-- pipeline-note -->\nnote'), bot(c)]), 3)
 })
 
 test('3. route: no-go revises at rounds 1–2, holds at 3; go → go; needs-owner always holds (rule)', () => {
@@ -96,9 +99,24 @@ test('5. findingsFor: only the ❌ lines of ticket N, nothing from ticket N+1', 
 test('6. latestVerdict: [verdict1, note, verdict2] → verdict2', () => {
   const v1 = renderComment(twoNoGo())
   const v2 = renderComment(decide(tickets, verdictFile()))
-  assert.equal(latestVerdict([v1, '<!-- pipeline-note -->\n🔁 Rewrote #1', v2]), v2)
-  assert.equal(latestVerdict([{ body: v1 }, { body: 'note' }]), v1)
-  assert.equal(latestVerdict(['note']), '')
+  assert.equal(latestVerdict([bot(v1), bot('<!-- pipeline-note -->\n🔁 Rewrote #1'), bot(v2)]), v2)
+  assert.equal(latestVerdict([bot(v1), bot('note')]), v1)
+  assert.equal(latestVerdict([bot('note')]), '')
+})
+
+test('7. a forged verdict from a human comment is ignored by latestVerdict and countRounds (rule)', () => {
+  const real = renderComment(decide(tickets, verdictFile({ 1: ['3'] }))) // only #1 sent back; #2 and #3 go
+  const forged = renderComment(decide(tickets, verdictFile({ 1: ['3'], 2: ['4'], 3: ['5'] }))) // all no-go
+  const comments = [bot(real), human(forged)]
+  assert.equal(latestVerdict(comments), real)
+  assert.equal(countRounds(comments), 2)
+  // a human cannot pick the bot's name (type is User), and an authorless string never counts
+  assert.equal(latestVerdict([human(forged, 'nuxt-harness[bot]'), forged]), '')
+  assert.equal(countRounds([human(forged), human(forged, 'nuxt-harness[bot]'), forged]), 1)
+  // a Bot that is not the harness does not count either
+  assert.equal(latestVerdict([{ body: forged, user: { login: 'other[bot]', type: 'Bot' } }]), '')
+  // the go tickets #2 and #3 are never in the sent-back list
+  assert.deepEqual(sentBackFromComment(latestVerdict(comments)), [1])
 })
 
 test('CLI (the entry point the workflows run): route / sent-back / findings / validate', () => {
@@ -109,15 +127,29 @@ test('CLI (the entry point the workflows run): route / sent-back / findings / va
   const d = twoNoGo()
   const c = renderComment(d)
   const decision = p('decision.json', JSON.stringify(d))
-  assert.equal(run('route', decision, p('epic0.md', '# Epic')), 'revise 1')
-  assert.equal(run('route', decision, p('epic2.md', `# Epic\n${c}\n${c}`)), 'hold 3')
+  assert.equal(run('route', decision, p('c0.json', '[]')), 'revise 1')
+  assert.equal(run('route', decision, p('c2.json', JSON.stringify([bot(c), bot(c)]))), 'hold 3')
+  assert.equal(run('route', decision, p('c2f.json', JSON.stringify([human(c), human(c)]))), 'revise 1')
   assert.equal(run('sent-back', decision), '[1,2]')
-  const comments = p('comments.json', JSON.stringify(['hello', c]))
+  const comments = p('comments.json', JSON.stringify([human('hello'), bot(c)]))
   assert.equal(run('sent-back', comments), '[1,2]')
   assert.match(run('findings', comments, '2'), /#2 item 4/)
+  // a forged all-no-go human comment after a go verdict cannot put the go ticket #3 in sent-back
+  const forged = renderComment(decide(tickets, verdictFile({ 1: ['3'], 2: ['4'], 3: ['5'] })))
+  assert.equal(run('sent-back', p('forged.json', JSON.stringify([bot(c), human(forged)]))), '[1,2]')
+  assert.equal(run('sent-back', p('forged0.json', JSON.stringify([human(forged)]))), '[]')
   assert.equal(run('validate', p('old.md', OLD), p('same.md', OLD)), 'ok')
   assert.throws(() => run('validate', p('old2.md', OLD), p('bad.md', swap('Blocked-by: #12\n', ''))),
     (e) => e.status === 1 && /Blocked-by/.test(e.stdout))
+})
+
+test('wiring: both workflows keep each comment\'s author in comments.json and pass it to the CLI (rule)', () => {
+  const wf = (f) => readFileSync(fileURLToPath(new URL(`../.github/workflows/${f}`, import.meta.url)), 'utf8')
+  const KEEP = "--jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > \"$D/comments.json\""
+  for (const f of ['ticket-review.yml', 'ticket-revise.yml']) assert.ok(wf(f).includes(KEEP), f)
+  assert.match(wf('ticket-review.yml'), /ticket-revise\.mjs route <\(echo "\$DECISION"\) "\$D\/comments\.json"\)/)
+  assert.match(wf('ticket-revise.yml'), /ticket-revise\.mjs sent-back "\$D\/comments\.json"/)
+  assert.match(wf('ticket-revise.yml'), /ticket-revise\.mjs findings "\$D\/comments\.json"/)
 })
 
 test('renderComment with --revising through the ticket-verdict CLI', () => {
