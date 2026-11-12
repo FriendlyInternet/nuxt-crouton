@@ -193,6 +193,21 @@ const TOLERANCE = 2
  * denominator is always a full band so a short tail band or a tiny frame isn't over-weighted.
  */
 export function isFlatFrame({ data, width, height, channels }) {
+  const bg = dominantColor({ data, width, height, channels })
+  const threshold = width * Math.min(BAND, height) * MIN_CONTENT
+  for (let y0 = 0; y0 < height; y0 += BAND) {
+    const y1 = Math.min(height, y0 + BAND)
+    let diff = 0
+    for (let idx = y0 * width * channels, end = y1 * width * channels; idx < end; idx += channels) {
+      if (Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE) diff++
+    }
+    if (diff >= threshold) return false
+  }
+  return true
+}
+
+/** The most common RGB colour on a 16×16 sample grid — the frame's background (#3854). */
+function dominantColor({ data, width, height, channels }) {
   const counts = new Map()
   let bg = null
   let best = 0
@@ -207,16 +222,7 @@ export function isFlatFrame({ data, width, height, channels }) {
       if (n > best) { best = n; bg = [data[idx], data[idx + 1], data[idx + 2]] }
     }
   }
-  const threshold = width * Math.min(BAND, height) * MIN_CONTENT
-  for (let y0 = 0; y0 < height; y0 += BAND) {
-    const y1 = Math.min(height, y0 + BAND)
-    let diff = 0
-    for (let idx = y0 * width * channels, end = y1 * width * channels; idx < end; idx += channels) {
-      if (Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE) diff++
-    }
-    if (diff >= threshold) return false
-  }
-  return true
+  return bg
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
