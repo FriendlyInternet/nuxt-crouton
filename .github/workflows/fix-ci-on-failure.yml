@@ -383,7 +383,8 @@ jobs:
             core.info(`base ${branch}: ${JSON.stringify(v)}`)
             if (!v.skip) { if (v.mainRed.length) core.setOutput('main_red', v.mainRed.join(', ')); return }
             try { await github.rest.issues.removeLabel({ owner, repo, issue_number: Number(PR), name: 'main-red' }) } catch (e) { /* not there yet */ }
-            await github.rest.issues.addLabels({ owner, repo, issue_number: Number(PR), labels: ['main-red'] })
+            const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+            await handoffGuard({ kind: 'label', issue: Number(PR), label: 'main-red' }, () => github.rest.issues.addLabels({ owner, repo, issue_number: Number(PR), labels: ['main-red'] }))
             let known = 'not reported yet'
             try {
               const q = `repo:${owner}/${repo} is:issue is:open in:title "${RUN_NAME} failed on main (post-merge)"`
@@ -586,6 +587,7 @@ jobs:
           exit "$bad"
       - name: Review
         id: review
+        # A crashed or timed-out reviewer must not fail the job: no verdict file is read as reject by the route step.
         continue-on-error: true
         env:
           PI_MODEL: ${{ steps.model.outputs.model }}
@@ -646,11 +648,13 @@ jobs:
           name: fixbot-inputs
           path: ${{ runner.temp }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        # no round-1 diagnosis (diagnoser crashed) → the route reads the missing file as reject.
         continue-on-error: true
         with:
           name: diagnosis-r1
           path: ${{ runner.temp }}/diagnosis-review/r1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        # no round-1 verdict (reviewer crashed) → the route reads the missing file as reject.
         continue-on-error: true
         with:
           name: review-r1
@@ -825,6 +829,7 @@ jobs:
           exit "$bad"
       - name: Review
         id: review
+        # A crashed or timed-out reviewer must not fail the job: no verdict file is read as reject by the route step.
         continue-on-error: true
         env:
           PI_MODEL: ${{ steps.model.outputs.model }}
@@ -898,18 +903,21 @@ jobs:
           for s in failed-job-logs log-tail diagnosis-marker diagnosis-review ci-fix-commit; do git show "origin/$DEFAULT_BRANCH:scripts/lib/$s.mjs" > "$RUNNER_TEMP/lib/$s.mjs"; done
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        # missing logs only drop the log section; the fix still needs the approved diagnosis.
         continue-on-error: true
         with:
           name: fixbot-inputs
           path: ${{ runner.temp }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.review-2.result != 'skipped'
+        # no round-2 diagnosis → route 2 reads the missing file as reject (owner ask).
         continue-on-error: true
         with:
           name: diagnosis-r2
           path: ${{ runner.temp }}/diagnosis-review/r2
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.review-2.result != 'skipped'
+        # no round-2 verdict → route 2 reads the missing file as reject (owner ask).
         continue-on-error: true
         with:
           name: review-r2
@@ -1016,6 +1024,7 @@ jobs:
         run: |
           set -euo pipefail
           N=$(( ${ATTEMPTS:-0} + 1 ))
+          # The old counter label may already be gone (removed by hand or a racing run); a missing one is fine.
           if [ -n "$OLD" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$OLD" >/dev/null || true; fi
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" -f "labels[]=ci-fix-attempts:$N" >/dev/null
           echo "attempt=$N" >> "$GITHUB_OUTPUT"
