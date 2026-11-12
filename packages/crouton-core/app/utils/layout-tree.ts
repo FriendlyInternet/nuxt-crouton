@@ -17,8 +17,11 @@
  * Lives in crouton-core (auto-imported) alongside the `LayoutTree` types it pairs
  * with, so crouton-pages' `PaneBlock` can validate an embedded layout WITHOUT the
  * app extending crouton-layout (#1618). crouton-layout re-consumes it from here.
+ *
+ * Store wiring survives the gate (#3650): a leaf's `source` string and a tree's
+ * `sources` map (nested trees too) are kept, so saving + loading never strips them.
  */
-import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '../types/layout'
+import type { LayoutBreakpoint, LayoutNode, LayoutSourceSettings, LayoutTree } from '../types/layout'
 import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance, isLayoutCollapsePlacement, isLayoutCollapseReveal } from '../types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
@@ -58,7 +61,9 @@ function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
         }
       : undefined
     const id = typeof input.id === 'string' && input.id ? input.id : undefined
-    return { type: 'leaf', blockId: input.blockId, ...(id ? { id } : {}), ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...base }
+    // The store copy this pane is fed from (#3650) — a non-empty string, or dropped.
+    const source = typeof input.source === 'string' && input.source ? input.source : undefined
+    return { type: 'leaf', blockId: input.blockId, ...(id ? { id } : {}), ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...(source ? { source } : {}), ...base }
   }
 
   if (input.type === 'split') {
@@ -98,6 +103,21 @@ function stringRecord(input: unknown): Record<string, string> | undefined {
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(input)) {
     if (typeof v === 'string') out[k] = v
+  }
+  return out
+}
+
+/**
+ * Sanitize a tree's `sources` map (#3650): keep each key whose value is a plain
+ * object, and its `options` only when that is a plain object too. Returns
+ * undefined when the input isn't a plain object, so the clean tree omits it.
+ */
+function sanitizeSources(input: unknown): Record<string, LayoutSourceSettings> | undefined {
+  if (!isRecord(input)) return undefined
+  const out: Record<string, LayoutSourceSettings> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (!key || !isRecord(value)) continue
+    out[key] = isRecord(value.options) ? { options: { ...value.options } } : {}
   }
   return out
 }
@@ -149,7 +169,8 @@ function sanitizeTreeAtDepth(input: unknown, depth: number): LayoutTree | null {
     const root = sanitizeNode(input.root, depth)
     if (!root) return null
     const breakpoints = sanitizeBreakpoints(input.breakpoints, depth + 1)
-    return { renderer: 'panes', root, ...(breakpoints ? { breakpoints } : {}) }
+    const sources = sanitizeSources(input.sources)
+    return { renderer: 'panes', root, ...(breakpoints ? { breakpoints } : {}), ...(sources ? { sources } : {}) }
   }
 
   // Bare root-node form.
