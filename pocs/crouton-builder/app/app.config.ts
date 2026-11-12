@@ -35,6 +35,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 260,
+    // Heading + ~3 rows before a list stops being usable (same as `collection-list`, #3815).
     minHeight: 240,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
@@ -66,6 +67,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 320,
+    // Heading + ~3 fields + submit (same as `entity-form`, #3815).
     minHeight: 320,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
@@ -118,6 +120,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 300,
+    // Heading + ~3 rows, same as the package's `bookings-list` it copies (#3815).
     minHeight: 240,
     defaultSize: 40,
     sizing: { width: 'fill', height: 'fill' },
