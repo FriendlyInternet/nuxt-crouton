@@ -17,6 +17,12 @@ test('carries the comment head and the marker', () => {
   assert.ok(prompt.includes('🩺 **Diagnosis**'))
   assert.ok(prompt.includes('diagnosis:v1'))
 })
+test('#3668: a round-2 redo section, the round in the marker, the review footer', () => {
+  assert.ok(prompt.includes('## Redo (round 2)'))
+  assert.match(prompt, /<!-- diagnosis:v1 sha=<head sha> check=<url-encoded check> round=<n> -->/)
+  assert.match(prompt, /a second agent reviews this before any fix/)
+  assert.ok(!prompt.includes('send it on with a **Worker:** comment'))
+})
 test('forbids commits and pushes', () => {
   assert.match(prompt, /Do NOT run `git commit` or `git push`/)
 })
