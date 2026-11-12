@@ -29,6 +29,20 @@
       "when": 1794260079493,
       "tag": "0003_overrated_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794486063785,
+      "tag": "0004_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486213761,
+      "tag": "0005_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

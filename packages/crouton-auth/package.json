@@ -96,6 +96,7 @@
     "@nuxt/schema": "^3.14.0",
     "@types/better-sqlite3": "^7.6.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "better-sqlite3": "^12.4.1",
     "drizzle-kit": "catalog:",
     "jsdom": "^25.0.1",
     "nuxt": "catalog:",
