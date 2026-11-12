@@ -83,6 +83,17 @@ export function pickDeployRun(runs) {
   return list[0] ?? null
 }
 
+/**
+ * The preview test only proves something against a preview that really deployed
+ * this commit (plan Test 3, #3813): a finished deploy run that did not succeed fails.
+ */
+export function assertDeploySucceeded(run) {
+  if (!run || run.conclusion !== 'success') {
+    throw new Error(`Deploy POCs (preview) run ${run?.databaseId ?? '?'} concluded ${run?.conclusion ?? 'unknown'} — the previews may not hold this commit, so the scroll test would prove nothing`)
+  }
+  return run
+}
+
 function arg(argv, name, fallback = '') {
   const i = argv.indexOf(`--${name}`)
   return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback
@@ -121,7 +132,7 @@ async function previewUrls(argv) {
   const limitMs = Number(arg(argv, 'timeout-min', '40')) * 60_000
   if (!sha) throw new Error('--sha is required')
   const run = await waitForDeployRun(sha, limitMs)
-  if (run.conclusion !== 'success') console.error(`Deploy POCs (preview) run ${run.databaseId} concluded ${run.conclusion} — using whatever records it uploaded`)
+  assertDeploySucceeded(run)
   const out = []
   for (const [app, envName] of [['crouton-builder', 'BUILDER_URL'], ['booking-demo', 'BOOKING_DEMO_URL']]) {
     out.push(`${envName}=${previewUrlFor(run, app)}`)

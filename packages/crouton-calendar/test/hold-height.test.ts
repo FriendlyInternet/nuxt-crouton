@@ -173,6 +173,24 @@ describe('changeWhileHeld (#3813)', () => {
     expect(e.style.minHeight).toBe('')
   })
 
+  // WebKit only keeps the page scroll when the pin is laid out BEFORE the redraw
+  // (PR preview, WebKit iPhone: pin without a layout 0/4, pin + layout 15/15).
+  // Reading offsetHeight is what makes the browser lay it out.
+  it('lays the pin out (reads offsetHeight after pinning) before the change runs', () => {
+    const log: string[] = []
+    const e = {
+      style: { minHeight: '' },
+      get offsetHeight() {
+        log.push(`read@${this.style.minHeight || 'auto'}`)
+        return 304
+      },
+    }
+    changeWhileHeld(e, {}, () => { log.push('change') }, fakeEnv().env)
+    const change = log.indexOf('change')
+    expect(change).toBeGreaterThan(0)
+    expect(log.slice(0, change)).toContain('read@304px')
+  })
+
   it('a throwing change releases the hold and rethrows', () => {
     const e = el(304)
     expect(() => changeWhileHeld(e, {}, () => { throw new Error('boom') }, fakeEnv().env)).toThrow('boom')

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseLines, summarize, renderSection, spliceBody } from './calendar-scroll-report.mjs'
+import { parseLines, summarize, renderSection, spliceBody, assertDeploySucceeded } from './calendar-scroll-report.mjs'
 
 // Real lines as the deployed spec prints them (staging, WebKit, before the fix, #3813).
 const LOG = `
@@ -54,6 +54,15 @@ test('spliceBody appends once, then replaces in place, keeping the Closes line',
 })
 
 // Real entry point: the workflow file wires these rules, read it and check them.
+test('a preview deploy that did not succeed fails the preview job (plan Test 3)', () => {
+  const ok = { databaseId: 1, status: 'completed', conclusion: 'success' }
+  assert.equal(assertDeploySucceeded(ok), ok)
+  for (const conclusion of ['failure', 'cancelled', 'timed_out', null]) {
+    assert.throws(() => assertDeploySucceeded({ databaseId: 2, status: 'completed', conclusion }), /concluded/)
+  }
+  assert.throws(() => assertDeploySucceeded(null), /concluded/)
+})
+
 const WF = readFileSync(new URL('../.github/workflows/calendar-scroll.yml', import.meta.url), 'utf8')
 
 test('workflow: runs on PRs that touch the calendar package or the spec', () => {

@@ -3,7 +3,12 @@
  *
  * WebKit (iOS Safari) drops the page's scroll position while Vue redraws the
  * month panels after a month change. Pinning the swipe container's
- * `min-height` across that redraw keeps it. The redraw can land well after the
+ * `min-height` across that redraw keeps it — but only once the pin has been laid
+ * out BEFORE the redraw starts: a pin set in the same task as the month change,
+ * with no layout in between, does not help (measured in WebKit against the PR
+ * preview: pin alone 0/4 kept the scroll, layout read alone 0/2, pin + layout
+ * read 15/15). So the hold reads `offsetHeight` right after pinning, which makes
+ * the browser commit it. The redraw can land well after the
  * change (~220–276 ms measured in WebKit), so the hold is released only once
  * the watched body has changed AND then stayed quiet for `quietFrames` frames,
  * with a safety timeout in case no redraw ever comes.
@@ -67,6 +72,9 @@ export function holdHeightUntilRedrawn(
 
   const previous = el.style.minHeight
   el.style.minHeight = `${el.offsetHeight}px`
+  // Commit the pin now (forces a layout): without it WebKit lays out the pin and
+  // the redraw together and still drops the page scroll (#3813).
+  void el.offsetHeight
 
   let released = false
   let resolveDone!: () => void

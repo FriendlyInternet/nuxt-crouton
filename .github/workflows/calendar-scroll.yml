@@ -51,6 +51,9 @@ jobs:
     name: Calendar scroll · staging (main) baseline
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Staging runs main WITHOUT this PR's fix, so this job is EXPECTED to fail until the
+    # fix merges: it is the "red before" half of the proof, reported in the PR body, never
+    # a gate. The real gate is the `preview` job below, which has no continue-on-error.
     continue-on-error: true
     env:
       CAL_SCROLL_TARGET: staging
