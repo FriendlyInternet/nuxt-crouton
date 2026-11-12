@@ -7,6 +7,7 @@
 //   run-record.mjs last-message <session-dir> [max]  → pi's last assistant text (≤max chars)
 //   run-record.mjs annotate <log> <title>            → one ::error:: with the last 40 lines
 //   run-record.mjs record <log> <issue> <step> <exit> → run-record JSON on stdout
+//   run-record.mjs finish-check-line <outcome.json>     → "finish check: …" line (never throws)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +61,17 @@ export function lastAssistantMessage(jsonlPath, max = 500) {
   return '';
 }
 
+// #3762: the run-record line for the finish-check outcome the pi extension writes.
+export function finishCheckLine(outcome) {
+  if (!outcome || typeof outcome !== 'object' || outcome.ran !== true) return 'finish check: not run';
+  const n = Number(outcome.rounds) || 0;
+  return `finish check: ran, ${n} ${n === 1 ? 'round' : 'rounds'}, ${outcome.last ?? 'not-run'}`;
+}
+
+export function readFinishCheckLine(p) {
+  try { return finishCheckLine(JSON.parse(fs.readFileSync(p, 'utf8'))); } catch { return 'finish check: not run'; }
+}
+
 export function newestSessionFile(dir) {
   try {
     return fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
@@ -78,8 +90,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(errorAnnotation(b || 'failing step', readLog(a)));
   } else if (cmd === 'record') {
     console.log(JSON.stringify(buildRecord({ issue: b, step: c, exit: d, text: readLog(a) }), null, 2));
+  } else if (cmd === 'finish-check-line') {
+    console.log(readFinishCheckLine(a));
   } else {
-    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit>');
+    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit> | finish-check-line <outcome.json>');
     process.exit(2);
   }
 }

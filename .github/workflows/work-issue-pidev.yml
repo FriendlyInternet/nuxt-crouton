@@ -537,6 +537,8 @@ jobs:
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           BASE: ${{ steps.ctx.outputs.base }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
+          # #3762: .pi/extensions/finish-check.ts runs the finish check before pi stops (not in plan mode).
+          FINISH_CHECK: ${{ inputs.mode != 'plan' && '1' || '' }}
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
           PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
@@ -1425,6 +1427,22 @@ jobs:
         run: |
           D="$(gh pr list --head "$BR" --state open --json isDraft -q '.[0].isDraft' 2>/dev/null || true)"
           [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
+
+      # #3762: append the finish-check line to the run record. Own step, same reason.
+      - id: finish-check-line
+        if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
+        run: |
+          PR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          [ -n "$PR" ] || exit 0
+          CID="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate -q '[.[] | select(.body | contains("pi worker — run record"))] | last | .id // empty' 2>/dev/null | tail -1 || true)"
+          [ -n "$CID" ] || exit 0
+          LINE="$(node "$RUNNER_TEMP/run-record.mjs" finish-check-line "$RUNNER_TEMP/finish-check-outcome.json" 2>/dev/null || echo 'finish check: not run')"
+          BODY="$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${CID}" -q .body 2>/dev/null || true)"
+          [ -n "$BODY" ] || exit 0
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${CID}" -f body="${BODY}"$'\n\n'"🔁 ${LINE}" >/dev/null 2>&1 || true
 
       - name: Upload worker screenshots (download backup, #3351)
         if: ${{ always() && inputs.mode != 'plan' }}

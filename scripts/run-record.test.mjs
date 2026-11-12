@@ -8,7 +8,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile } from './run-record.mjs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile, finishCheckLine, readFinishCheckLine } from './run-record.mjs'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-record-'))
 const rec = (role, content) => JSON.stringify({ type: 'message', message: { role, content } })
@@ -63,4 +65,19 @@ test('empty output still annotates, and the record carries issue/step/exit/tail'
   assert.match(errorAnnotation('t', ''), /no output captured/)
   const r = buildRecord({ issue: '7', step: 'finish', exit: '128', text: 'a\nb\n' })
   assert.deepEqual(r, { issue: 7, step: 'finish', exit: 128, tail: ['a', 'b'] })
+})
+
+test('#3762: the finish-check line says ran/rounds/last, or not run, and never throws', () => {
+  assert.equal(finishCheckLine({ ran: true, rounds: 2, last: 'red' }), 'finish check: ran, 2 rounds, red')
+  assert.equal(finishCheckLine({ ran: true, rounds: 1, last: 'green' }), 'finish check: ran, 1 round, green')
+  assert.equal(finishCheckLine({ ran: true, rounds: 0, last: 'green' }), 'finish check: ran, 0 rounds, green')
+  assert.equal(finishCheckLine({ ran: false, rounds: 0, last: 'not-run' }), 'finish check: not run')
+  assert.equal(readFinishCheckLine(path.join(dir, 'missing.json')), 'finish check: not run')
+  const bad = path.join(dir, 'bad.json')
+  fs.writeFileSync(bad, '{not json')
+  assert.equal(readFinishCheckLine(bad), 'finish check: not run')
+  const script = fileURLToPath(new URL('./run-record.mjs', import.meta.url))
+  const r = spawnSync(process.execPath, [script, 'finish-check-line', path.join(dir, 'missing.json')], { encoding: 'utf8' })
+  assert.equal(r.status, 0)
+  assert.equal(r.stdout.trim(), 'finish check: not run')
 })
