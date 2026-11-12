@@ -12,8 +12,9 @@ import {builderBookingsConfig} from '../layers/builder/collections/bookings/app/
 // defaults (collection-list / entity-form / stats). Real-collection blocks bind a
 // package component to a generated collection by name (the `real-collections` spec
 // Add — the builder composes REAL data). Sizing (#986, typed) drives intrinsic
-// sizing: a Top bar / Bottom nav declare `height: 'hug'` → a short pill wherever
-// they land; `deriveSizing` folds these bottom-up for the floor readout.
+// sizing: every offered block (except Spacer) declares `sizing.height` + `minHeight`
+// (#3815): Top bar, Bottom nav and Stats `hug`; lists/forms `fill`. `deriveSizing`
+// folds these bottom-up for the floor readout.
 // The demo `Gigs · List` options — see the `bookings-list` entry below for why
 // they're held in a function.
 const BUILDER_BOOKINGS_LIST_FIELDS: NonNullable<CroutonLayoutBlockRegistry[string]['configSchema']> = [
@@ -34,6 +35,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 260,
+    minHeight: 240,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
     variants: ['list', 'grid', 'table'],
@@ -64,6 +66,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 320,
+    minHeight: 320,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
     defaultConfig: { collection: 'builderArtists', heading: 'Artist' },
@@ -84,6 +87,8 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 260,
+    // Set explicitly: otherwise defu silently inherits the package entry's value.
+    minHeight: 240,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
     defaultConfig: { collection: 'builderBookings', heading: 'Bookings' },
@@ -113,7 +118,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 300,
+    minHeight: 240,
     defaultSize: 40,
+    sizing: { width: 'fill', height: 'fill' },
     configSchema: [
       {
         name: 'scope',
@@ -127,7 +134,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
       },
     ],
   },
-  // Artists · Stats — KPI cards (fluid, modest floor).
+  // Artists · Stats — KPI cards, Fit height (as tall as one row of cards).
   'artists-stats': {
     id: 'artists-stats',
     name: 'Artists · Stats',
@@ -137,12 +144,13 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'data',
     minWidth: 200,
+    minHeight: 96,
     defaultSize: 40,
-    sizing: { width: 'fill', height: 'fill' },
+    sizing: { width: 'fill', height: 'hug' },
   },
   // ── Chrome / layout primitives ──
   // Top bar — declares `height: 'hug'` so it renders as a SHORT pill (intrinsic
-  // sizing), no per-instance size UI. The point of the sizing descriptor.
+  // sizing), no per-instance size UI; `minHeight` 56 matches its `h-14` (#3815).
   'app-toolbar': {
     id: 'app-toolbar',
     name: 'Top bar',
@@ -152,10 +160,11 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'chrome',
     minWidth: 200,
+    minHeight: 56,
     defaultSize: 100,
     sizing: { width: 'fill', height: 'hug' },
   },
-  // Bottom nav — also hug-height.
+  // Bottom nav — also hug-height; `minHeight` 64 matches its `h-16` (#3815).
   'app-nav': {
     id: 'app-nav',
     name: 'Bottom nav',
@@ -165,6 +174,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'chrome',
     minWidth: 200,
+    minHeight: 64,
     defaultSize: 100,
     sizing: { width: 'fill', height: 'hug' },
   },
