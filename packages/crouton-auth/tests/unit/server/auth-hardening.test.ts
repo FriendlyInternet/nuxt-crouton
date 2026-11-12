@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { memoryAdapter } from 'better-auth/adapters/memory'
+import { createAuth, isEmailVerificationRequired } from '../../../server/lib/auth'
 
 type Sent = { type: string, to: string, url: string }
 
@@ -30,9 +31,6 @@ vi.mock('nitropack/runtime', () => ({
     }
   })
 }))
-
-// eslint-disable-next-line import/first
-import { createAuth, isEmailVerificationRequired } from '../../../server/lib/auth'
 
 const EMAIL = 'new.user@example.com'
 const PASSWORD = 'correct-horse-battery'
