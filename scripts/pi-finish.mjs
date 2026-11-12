@@ -80,16 +80,19 @@ export function verdict({ acceptance, testsMissing }) {
 const TS_ERR_RE = /(?:^|\s)(?:##\[[a-z]+\])?(\S+?)(?:\((\d+),(\d+)\):|:(\d+):(\d+)\s+-)\s*error\s+(TS\d+):\s*(.*)$/;
 const ANY_TS_RE = /error TS[0-9]/;
 
-// → { errors: [{ file, line, col, code, text }], anyCount }. `errors` drops `../` paths (outside
-// the app — the shell's OWN rule); `anyCount` counts every `error TS` line (the shell's ANY).
+// → { errors: [{ file, line, col, code, text }], anyCount, unreadable }. `errors` drops `../` paths
+// (outside the app — the shell's OWN rule); `anyCount` counts every `error TS` line (the shell's
+// ANY); `unreadable` holds the `error TS` lines the path pattern can't read (TS18003 "No inputs
+// were found", TS5083 "Cannot read file" — no file:line at all). A trailing `\r` is stripped first.
 export function parseTsErrors(logText) {
   const errors = [];
+  const unreadable = [];
   let anyCount = 0;
-  for (const raw of String(logText || '').split('\n')) {
+  for (const raw of String(logText || '').split('\n').map((l) => l.replace(/\r+$/, ''))) {
     if (!ANY_TS_RE.test(raw)) continue;
     anyCount += 1;
     const m = TS_ERR_RE.exec(raw);
-    if (!m) continue;
+    if (!m) { unreadable.push(raw); continue; }
     const file = m[1];
     if (file.startsWith('../')) continue;
     errors.push({
@@ -100,7 +103,7 @@ export function parseTsErrors(logText) {
       text: m[7].trim(),
     });
   }
-  return { errors, anyCount };
+  return { errors, anyCount, unreadable };
 }
 
 function toRepoPath(file, appDir) {
@@ -116,7 +119,7 @@ function toRepoPath(file, appDir) {
 export function classifyTypeErrors({ logText, tcExit, committedFiles, prFiles, appDir } = {}) {
   const diff = new Set([...(committedFiles || []), ...(prFiles || [])]
     .map((f) => String(f).trim().replace(/^(\.\/)+/, '')).filter(Boolean));
-  const { errors, anyCount } = parseTsErrors(logText);
+  const { errors, anyCount, unreadable } = parseTsErrors(logText);
   const own = errors.map((e) => ({ ...e, file: toRepoPath(e.file, appDir) }));
   const inDiff = own.filter((e) => diff.has(e.file));
   const notInDiff = own.filter((e) => !diff.has(e.file));
@@ -127,6 +130,11 @@ export function classifyTypeErrors({ logText, tcExit, committedFiles, prFiles, a
   }
   if (inDiff.length) {
     return { acceptance: 'fail', inDiff, notInDiff, message: `${inDiff.length} type error(s) in files this PR changed in ${where}` };
+  }
+  // A line we can't place in a file (TS18003/TS5083: the typecheck never really ran) is never a
+  // pass — it's 'neutral', not verified (#1849).
+  if (unreadable.length) {
+    return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck output for ${where} has ${unreadable.length} unreadable error line(s) — not verified` };
   }
   if (notInDiff.length) {
     return { acceptance: 'pass', inDiff, notInDiff, message: `${notInDiff.length} error(s) in files this PR didn't touch` };

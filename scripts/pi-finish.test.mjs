@@ -199,6 +199,39 @@ test('classifyTypeErrors: never false-pass a typecheck that did not run (#1849)'
   assert.equal(outside.notInDiff.length, 0);
 });
 
+test('classifyTypeErrors: a typecheck that never ran is never a pass — TS18003 No inputs were found → neutral', () => {
+  const r = classifyTypeErrors({
+    logText: "error TS18003: No inputs were found in config file '/repo/pocs/status/tsconfig.json'. Specified 'include' paths were '[\"**/*\"]'.",
+    tcExit: 2, committedFiles: ['pocs/status/server/a.ts'], appDir: 'pocs/status',
+  });
+  assert.equal(r.acceptance, 'neutral');
+  assert.match(r.message, /not verified/);
+});
+
+test('classifyTypeErrors: a typecheck that never ran is never a pass — TS5083 Cannot read file → neutral', () => {
+  const r = classifyTypeErrors({
+    logText: "##[error]error TS5083: Cannot read file '/repo/pocs/status/.nuxt/tsconfig.json'.",
+    tcExit: 2, committedFiles: ['pocs/status/server/a.ts'], appDir: 'pocs/status',
+  });
+  assert.equal(r.acceptance, 'neutral');
+  // …and still not a pass when a readable error elsewhere sits next to it.
+  const mixed = classifyTypeErrors({
+    logText: "error TS5083: Cannot read file '/x/tsconfig.json'.\nserver/b.ts(2,2): error TS2551: y",
+    tcExit: 2, committedFiles: ['pocs/status/server/a.ts'], appDir: 'pocs/status',
+  });
+  assert.equal(mixed.acceptance, 'neutral');
+});
+
+test('classifyTypeErrors: a CRLF line (trailing \\r) is still read — an in-diff error fails, never passes', () => {
+  const r = classifyTypeErrors({
+    logText: 'server/a.ts(1,1): error TS2322: Type string is not assignable to number.\r\n',
+    tcExit: 2, committedFiles: ['pocs/status/server/a.ts'], appDir: 'pocs/status',
+  });
+  assert.equal(r.acceptance, 'fail');
+  assert.equal(r.inDiff.length, 1);
+  assert.equal(r.inDiff[0].text, 'Type string is not assignable to number.');
+});
+
 test('classifyTypeErrors: TS2304 Cannot find name (auto-imports unresolved) stays neutral even with an in-diff error', () => {
   const r = classifyTypeErrors({
     logText: "server/a.ts(1,1): error TS2322: x\nserver/c.ts(3,3): error TS2304: Cannot find name 'useFoo'.",
