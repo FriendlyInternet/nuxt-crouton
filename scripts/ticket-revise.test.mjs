@@ -17,7 +17,7 @@ function verdictFile(fails = {}, stated = {}) {
   const ids = ['3', '4', '5', '6', '7', '8', '9', '10']
   return '<!-- ticket-review:v1 -->\n' + tickets.map((t) => {
     const f = fails[t.number] || []
-    const v = stated[t.number] || (f.some((id) => id !== '7' && id !== '10') ? 'no-go' : f.length ? 'needs-owner' : 'go')
+    const v = stated[t.number] || (f.some((id) => id !== '7' && id !== '10') ? 'no-go' : f.includes('7') ? 'needs-owner' : f.length ? 'no-go' : 'go')
     const rows = ids.map((id) => `- ${id}: ${f.includes(id) ? 'FAIL' : 'PASS'} — evidence for #${t.number} item ${id}`).join('\n')
     return `## Ticket #${t.number}\n### Verdict\n${v}\n### Rubric\n${rows}\n### Question\n${v === 'needs-owner' ? 'Ship it?' : ''}\n`
   }).join('\n')
@@ -54,6 +54,15 @@ test('3. route: no-go revises at rounds 1–2, holds at 3; go → go; needs-owne
   assert.equal(mixed.ok, true)
   assert.equal(mixed.verdict, 'no-go') // decide checks no-go first…
   assert.equal(route(mixed, 1), 'hold') // …but the needs-owner ticket still holds the epic
+})
+
+test('3b. route: an epic whose only failure is check 10 revises at round 1, never holds (rule, #3833)', () => {
+  const d = decide(tickets, verdictFile({ 2: ['10'] }))
+  assert.equal(d.ok, true, String(d.errors))
+  assert.equal(d.verdict, 'no-go')
+  assert.equal(route(d, 1), 'revise')
+  assert.deepEqual(sentBack(d), [2])
+  assert.equal(route(decide(tickets, verdictFile({ 2: ['7', '10'] })), 1), 'hold')
 })
 
 const OLD = [
