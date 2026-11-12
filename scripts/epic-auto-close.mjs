@@ -33,23 +33,57 @@ const epicPrs = (pulls, n) => (pulls || []).filter(p => String(p?.head?.ref || '
 export function decideAutoClose({ state = 'open', labels = [], subIssues = [], prs = [], comments = [], prFiles = [] } = {}) {
   if (state === 'closed') return { action: 'none', reason: 'epic already closed', waiting: [] }
   if (!labels.includes('epic')) return { action: 'none', reason: 'not an epic', waiting: [] }
+  const merged = (prs || []).some(p => p.merged_at)
+  const waiting = [
+    ...waitOnSubIssues(subIssues),
+    ...waitOnMain(prs, merged),
+    ...waitOnTestCard({ labels, comments, prFiles, merged }),
+    ...waitOnPostmortem(comments)
+  ]
+  if (waiting.length) return { action: 'wait', reason: waiting.join(', '), waiting }
+  return { action: 'close', reason: 'on main, test card ok (or none needed), postmortem posted', waiting: [] }
+}
+
+/** Guard: every sub-issue is closed. */
+function waitOnSubIssues(subIssues) {
   const waiting = []
   for (const k of subIssues || []) if (k.state !== 'closed') waiting.push(`#${k.number} (sub-issue still open)`)
+  return waiting
+}
+
+/** Rule 1: the epic/<N>- → main PR has merged (an open one is named). */
+function waitOnMain(prs, merged) {
+  const waiting = []
   const openPrs = (prs || []).filter(p => p.state === 'open')
   for (const p of openPrs) waiting.push(`#${p.number} (epic→main PR still open)`)
-  const merged = (prs || []).some(p => p.merged_at)
   if (!merged && !openPrs.length) waiting.push('not on main yet')
-  const hasCard = (comments || []).some(c => isPipelineAuthor(c) && String(c.body || '').includes(CARD_MARKER))
+  return waiting
+}
+
+/** Rule 2: the staging test card got `ok` — or none is coming (the merge deployed nothing). */
+function waitOnTestCard({ labels, comments, prFiles, merged }) {
+  const waiting = []
   if (labels.includes('status:failed')) waiting.push('test card answered not ok — fix sub-issue')
   else if (labels.includes('status:to-test')) waiting.push('test card waiting on your ok')
-  else if (!labels.includes('status:verified') && !hasCard && merged && (prFiles || []).some(f => fileMatchesAny(f, DEPLOY_PATHS))) {
+  else if (cardStillComing({ labels, comments, prFiles, merged })) {
     waiting.push('test card not posted yet — waits for the staging deploy')
   }
+  return waiting
+}
+
+function cardStillComing({ labels, comments, prFiles, merged }) {
+  if (labels.includes('status:verified') || !merged) return false
+  const hasCard = (comments || []).some(c => isPipelineAuthor(c) && String(c.body || '').includes(CARD_MARKER))
+  return !hasCard && (prFiles || []).some(f => fileMatchesAny(f, DEPLOY_PATHS))
+}
+
+/** Rule 3: the postmortem is posted (a `skipped` one waits). */
+function waitOnPostmortem(comments) {
+  const waiting = []
   const pm = postmortemState(comments)
   if (pm === null) waiting.push('postmortem not posted')
   else if (pm === 'skipped') waiting.push("postmortem didn't run — re-run postmortem.yml or /close-epic")
-  if (waiting.length) return { action: 'wait', reason: waiting.join(', '), waiting }
-  return { action: 'close', reason: 'on main, test card ok (or none needed), postmortem posted', waiting: [] }
+  return waiting
 }
 
 /** Every input decideAutoClose needs, read with the github-script octokit. */
