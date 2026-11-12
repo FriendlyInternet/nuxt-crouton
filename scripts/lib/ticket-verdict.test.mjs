@@ -90,19 +90,29 @@ test('hold: with reviewTickets no child gets a trigger label, a review is reques
   assert.equal(open.some((a) => a.type === 'request-ticket-review'), false)
 })
 
-test('item 10 (own test steps) FAIL → needs-owner, never no-go', () => {
-  const ten = fx('clean.verdict.md').replace('## Ticket #1\n### Verdict\ngo', '## Ticket #1\n### Verdict\nneeds-owner').replace('- 10: PASS — every step exercises only this ticket', '- 10: FAIL — step 2 needs #2828 seed data')
-  // (a) with a question → needs-owner
-  const a = ten.replace('### Question\n\n## Ticket #2', '### Question\nDrop the sibling-dependent step?\n\n## Ticket #2')
-  const da = decide(set('clean.json'), a)
-  assert.equal(da.ok, true)
-  assert.equal(da.tickets[0].verdict, 'needs-owner')
-  assert.equal(da.verdict, 'needs-owner')
-  // (b) no question → error
-  assert.match(decide(set('clean.json'), ten).errors.join(), /needs-owner needs a Question/)
-  // (c) hard fail wins
-  const c = a.replace('- 4: PASS — one-line change', '- 4: FAIL — bigger fix exists')
-  assert.equal(decide(set('clean.json'), c).tickets[0].verdict, 'no-go')
+test('item 10 (own test steps) alone → no-go; only item 7 makes needs-owner (#3833)', () => {
+  const stated = (v) => fx('clean.verdict.md').replace('## Ticket #1\n### Verdict\ngo', `## Ticket #1\n### Verdict\n${v}`)
+  const fail10 = (s) => s.replace('- 10: PASS — every step exercises only this ticket', '- 10: FAIL — step 2 needs #2828 seed data')
+  const fail7 = (s) => s.replace('- 7: PASS — mechanical', '- 7: FAIL — needs a cost decision')
+  const ask = (s) => s.replace('### Question\n\n## Ticket #2', '### Question\nShip it?\n\n## Ticket #2')
+  // (a) only 10 FAIL, stated no-go, NO question → accepted as no-go (no malformed-file error)
+  const da = decide(set('clean.json'), fail10(stated('no-go')))
+  assert.equal(da.ok, true, String(da.errors))
+  assert.equal(da.tickets[0].verdict, 'no-go')
+  assert.equal(da.verdict, 'no-go')
+  // (b) only 7 FAIL with a question → needs-owner; without a question → error
+  const db = decide(set('clean.json'), ask(fail7(stated('needs-owner'))))
+  assert.equal(db.ok, true, String(db.errors))
+  assert.equal(db.tickets[0].verdict, 'needs-owner')
+  assert.equal(db.verdict, 'needs-owner')
+  assert.match(decide(set('clean.json'), fail7(stated('needs-owner'))).errors.join(), /needs-owner needs a Question/)
+  // (c) 7 and 10 FAIL with a question → needs-owner (an owner question beats a wording fix)
+  const dc = decide(set('clean.json'), ask(fail10(fail7(stated('needs-owner')))))
+  assert.equal(dc.ok, true, String(dc.errors))
+  assert.equal(dc.tickets[0].verdict, 'needs-owner')
+  // (d) 10 + a hard fail (4) → no-go
+  const dd = fail10(stated('no-go')).replace('- 4: PASS — one-line change', '- 4: FAIL — bigger fix exists')
+  assert.equal(decide(set('clean.json'), dd).tickets[0].verdict, 'no-go')
   // (d) "10" parses as id 10, not 1
   assert.equal(parseVerdicts(fx('clean.verdict.md')).tickets[1].items['10'].pass, true)
   // (e) missing line → error
