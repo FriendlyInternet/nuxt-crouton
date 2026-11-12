@@ -198,27 +198,43 @@ const TOLERANCE = 2
  * denominator is always a full band so a short tail band or a tiny frame isn't over-weighted.
  */
 export function isFlatFrame({ data, width, height, channels }) {
-  const bg = dominantColor({ data, width, height, channels })
+  const frame = { data, width, height, channels }
+  const bg = dominantColor(frame)
   const threshold = width * Math.min(BAND, height) * MIN_CONTENT
   for (let y0 = 0; y0 < height; y0 += BAND) {
-    const y1 = Math.min(height, y0 + BAND)
-    let diff = 0
-    let solid = 0
-    let prev = null
-    for (let y = y0; y < y1; y++) {
-      const cur = new Uint8Array(width)
-      for (let x = 0, idx = y * width * channels; x < width; x++, idx += channels) {
-        if (Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE) {
-          cur[x] = 1
-          diff++
-          if (prev && x > 0 && cur[x - 1] && prev[x - 1] && prev[x]) solid++
-        }
-      }
-      if (diff >= threshold || solid >= MIN_SOLID) return false
-      prev = cur
-    }
+    if (bandHasContent(frame, bg, y0, threshold)) return false
   }
   return true
+}
+
+/** True once the band starting at `y0` has ≥threshold differing pixels or ≥MIN_SOLID solid ones. */
+function bandHasContent({ data, width, height, channels }, bg, y0, threshold) {
+  const y1 = Math.min(height, y0 + BAND)
+  let diff = 0
+  let solid = 0
+  let prev = null
+  for (let y = y0; y < y1; y++) {
+    const cur = new Uint8Array(width)
+    for (let x = 0, idx = y * width * channels; x < width; x++, idx += channels) {
+      if (!pixelDiffers(data, idx, bg)) continue
+      cur[x] = 1
+      diff++
+      if (inSolidBlock(cur, prev, x)) solid++
+    }
+    if (diff >= threshold || solid >= MIN_SOLID) return true
+    prev = cur
+  }
+  return false
+}
+
+/** True if the pixel at `idx` differs from the background by more than TOLERANCE on any channel. */
+function pixelDiffers(data, idx, bg) {
+  return Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE
+}
+
+/** True if pixel x closes a 2×2 block of differing pixels with its left/up/up-left neighbours. */
+function inSolidBlock(cur, prev, x) {
+  return Boolean(prev && x > 0 && cur[x - 1] && prev[x - 1] && prev[x])
 }
 
 /** The most common RGB colour on a 16×16 sample grid — the frame's background (#3854). */
