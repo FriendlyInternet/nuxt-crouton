@@ -45,18 +45,8 @@ writeFileSync(cfgPath, JSON.stringify(config, null, 2))
 const wrangler = (args, opts = {}) =>
   execFileSync('npx', ['wrangler', ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], ...opts })
 
-// 1. Worker (provisions the D1 on first run). A brand-new Worker can 404 ("does not exist",
-// code 10007) for a moment right after its upload; the deploy is idempotent, so retry it.
-const deployWithRetry = (attempts = 3) => {
-  for (let i = 1; ; i++) {
-    try { return wrangler(['deploy', '--config', cfgPath]) } catch (e) {
-      if (i >= attempts) throw e
-      console.error(`::warning::wrangler deploy failed (attempt ${i}/${attempts}); retrying in 10s`)
-      execFileSync('sleep', ['10'])
-    }
-  }
-}
-const out = deployWithRetry()
+// 1. Worker (provisions the D1 on first run)
+const out = wrangler(['deploy', '--config', cfgPath])
 process.stdout.write(out)
 let url
 try { url = extractWorkerUrl(out, name) } catch (e) {

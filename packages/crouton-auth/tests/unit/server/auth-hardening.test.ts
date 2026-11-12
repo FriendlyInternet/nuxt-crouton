@@ -35,9 +35,9 @@ vi.mock('nitropack/runtime', () => ({
 const EMAIL = 'new.user@example.com'
 const PASSWORD = 'correct-horse-battery'
 
-function build(requireEmailVerification: boolean) {
+function build(requireEmailVerification: boolean, signup?: 'open' | 'invite') {
   return createAuth({
-    config: {} as any,
+    config: (signup ? { signup } : {}) as any,
     db: { all: async () => [], run: async () => ({}), get: async () => undefined } as any,
     secret: 'y'.repeat(40),
     baseURL: 'http://localhost:3000',
@@ -131,6 +131,36 @@ describe('createAuth sign-in hardening (#3141)', () => {
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/auth/accept-invitation/inv1')
     expect(res.headers.get('set-cookie') ?? '').toMatch(/session_token=/)
+  })
+
+  // velo's setup: invite-only + e-mail verification. A browser sign-up from an
+  // uninvited address must create NO account and send NO e-mail, whatever
+  // status better-auth answers with (#3855 review).
+  it('invite-only + verification: an uninvited browser sign-up creates no account and sends no e-mail', async () => {
+    const auth = build(true, 'invite')
+    const res: Response = await auth.handler(new Request('http://localhost:3000/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD, name: 'New User' })
+    }))
+    let json: any = null
+    try { json = await res.clone().json() } catch { /* not JSON */ }
+    // better-auth hides the refusal (no account enumeration when verification
+    // is on): 200 + token null, not 403. Pinned so scripts/seed-review-login's
+    // fake server can't drift from the real answer.
+    expect(res.status).toBe(200)
+    // Never a session.
+    expect(res.headers.get('set-cookie') ?? '').not.toMatch(/session_token=/)
+    expect(json?.token ?? null).toBeNull()
+    expect(db.user).toHaveLength(0)
+    expect(db.account).toHaveLength(0)
+    expect(sent.filter(s => s.type === 'verification')).toHaveLength(0)
+  })
+
+  it('invite-only + verification: a server-side sign-up (admin create-user) still creates the account', async () => {
+    const auth = build(true, 'invite')
+    await signUp(auth)
+    expect(db.user.map(u => u.email)).toEqual([EMAIL])
   })
 
   it('isEmailVerificationRequired reads only crouton-email\'s key', () => {

@@ -523,10 +523,15 @@ test('R4 reviewerExistsSql: matches regardless of letter case; quotes cannot bre
   assert.equal(d.prepare(reviewerExistsSql("x' OR '1'='1")).get().n, 0)
 })
 
-// ── #3340 + #3141: velo is invite-only AND has crouton-email (verification on) ──
-// The account the seed creates via SQL is unverified, and such an app refuses an
-// unverified sign-in — so the seed must mark it verified BEFORE signing in.
-test('#3340+#3141 invite-only app with verification on: sign-up 403 SIGNUP_INVITE_ONLY → account created via SQL, marked verified BEFORE sign-in, sign-in 200 → exit 0', async () => {
+// ── #3340 + #3141: the 403 branch still verifies before signing in (defensive) ──
+// Today's better-auth does NOT send this pairing: with verification on it hides the
+// invite-only 403 behind a generic 200 / token:null (pinned against the real
+// createAuth in packages/crouton-auth/tests/unit/server/auth-hardening.test.ts,
+// "invite-only + verification: an uninvited browser sign-up creates no account";
+// velo's real path is the next test). This case guards the 403 branch: if a future
+// better-auth surfaced the 403 while sign-in still required a verified row, the seed
+// must mark the SQL-created account verified BEFORE signing in.
+test('#3340 sign-up 403 SIGNUP_INVITE_ONLY while sign-in requires a verified row (not sent by today\'s better-auth) → account created via SQL, marked verified BEFORE sign-in → exit 0', async () => {
   const file = authDb()
   const signInSawVerified = []
   const server = createServer((req, res) => {
