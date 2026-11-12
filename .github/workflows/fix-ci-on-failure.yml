@@ -12,7 +12,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}',
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at FIX_BOT_MAX_ATTEMPTS (3, scripts/lib/fix-bot-dispatch.mjs). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Repeat red (label ≥ 1, fix-bot head) → diagnose → review (max 2 rounds) → fix from the approved diagnosis, or an owner ask (#3667, #3668). Same failure on base → `main-red`, no try (#3270). The reviewer runs in its own job (review-1/review-2) that never mints the App token; only job `fix` commits or pushes.
-#   - The counter only counts while the head is the fix-bot's own commit; a stuck head pages the owner once (#3277).
+#   - The counter only counts while the head is the fix-bot's own commit, or while the same line is red again after a refused fix hand-back or an approved diagnosis (then the count carries, so the loop ends at the cap, #3668); a stuck head pages the owner once (#3277).
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
 #     it, the agent stops and blocks instead (same as the auto-merge guard, #339).
 #   - The label also feeds the #337 sticky status note ("🔧 Auto-fix attempts: N").
