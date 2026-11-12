@@ -119,3 +119,22 @@ test('gate: conflict failed -> run fails, but no ticket comment', async () => {
   const c = await gate({ CONFLICT_FAILED: '1' })
   assert.equal(c.failed.length, 1)
 })
+
+test("pi-request runs the owner's request only after the conflict merge is committed (#3775)", () => {
+  const at = (id) => YML.findIndex((l) => l.trim() === `- id: ${id}`)
+  const [conflict, request, finish] = [at('conflict'), at('pi-request'), at('finish')]
+  assert.ok(conflict >= 0 && request > conflict && finish > request, `order conflict(${conflict}) < pi-request(${request}) < finish(${finish})`)
+  const cond = YML.slice(request, request + 3).find((l) => l.trim().startsWith('if:'))
+  assert.ok(cond, 'pi-request has an if:')
+  assert.ok(cond.includes("steps.revise.outputs.conflict == '1'"), cond)
+  assert.ok(cond.includes("steps.conflict.outputs.rev_base != ''"), 'skipped unless the conflict step committed a merge')
+  const run = block('- id: pi-request', 'run')
+  assert.match(run, /pipeline-prompt\.mjs pi-reviser [^\n]*--var-file "feedback=/)
+  assert.match(run, /--session-dir "\$RUNNER_TEMP\/pi-session"/)
+  assert.match(run, /tee -a "decompose-pidev-exec-/)
+  // and the resolver itself is no longer handed the comment
+  const pi = block('- id: pi', 'run')
+  const resolver = pi.split('\n').findIndex((l) => l.includes('pipeline-prompt.mjs pi-conflict-resolver'))
+  assert.ok(resolver >= 0)
+  assert.doesNotMatch(pi.split('\n').slice(resolver, resolver + 2).join('\n'), /feedback=/)
+})

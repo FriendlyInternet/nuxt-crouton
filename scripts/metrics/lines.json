@@ -7,6 +7,7 @@
       "on-issue-close.yml",
       "routing-registry.yml",
       "ticket-review.yml",
+      "ticket-revise.yml",
       "warn-closes-blocked.yml"
     ],
     "planning": [
@@ -40,6 +41,7 @@
       "handoff-sweep.yml",
       "on-pr-close.yml",
       "owner-quiz.yml",
+      "postmortem.yml",
       "status.yml"
     ],
     "deploys": [

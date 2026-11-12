@@ -292,6 +292,7 @@ jobs:
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-labels.json`, JSON.stringify((data.labels || []).map(l => typeof l === 'string' ? l : l.name))) // #3701: packages-notice + --pr-note
       - id: ctx
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -596,7 +597,7 @@ jobs:
               # #3002: the base merge conflicted — the task is the merge, with its own persona (the
               # reviser's "work-<issue>" / "owner comment" framing made pi stop on epic PRs).
               node scripts/pipeline-prompt.mjs pi-conflict-resolver --var "pr=$PRN" --var "issue=$ISSUE" --var "branch=${REV_BRANCH:-work-${ISSUE}}" \
-                --var-file "task=$RUNNER_TEMP/conflict-task.txt" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+                --var-file "task=$RUNNER_TEMP/conflict-task.txt" > "$PROMPT_FILE"
             else
               node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
                 --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
@@ -691,7 +692,7 @@ jobs:
           }
           HDR=$'<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-          # Read the per-file state NOW, while the index is still unmerged: verify's `git add -u`
+          # Read the per-file state NOW, while the index is still unmerged: verify's staging
           # and `git merge --abort` both empty this list (#3322).
           LEFTOVER=""
           ALL_UNTOUCHED=1
@@ -741,6 +742,31 @@ jobs:
           fi
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
+
+      # ── OWNER REQUEST after a conflict merge (#3775) — two commits, always ──
+      # The resolver session never sees the owner's comment, so the request can't land inside the
+      # merge. This pass runs on the committed merge; the finish step commits its edits on top.
+      - id: pi-request
+        if: ${{ !cancelled() && steps.revise.outputs.conflict == '1' && steps.conflict.outputs.rev_base != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.build }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
+        run: |
+          set -uo pipefail
+          PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"  # a failed lookup leaves pr= empty; the persona still gets issue=
+          REQ_PROMPT="$RUNNER_TEMP/request-prompt.txt"
+          node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$REQ_PROMPT"
+          set +e
+          pi --print --approve --session-dir "$RUNNER_TEMP/pi-session" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+            < "$REQ_PROMPT" 2>&1 | tee -a "decompose-pidev-exec-${{ github.run_id }}.log"
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          set -e
 
       # ── FINISH — commit pi's EDITED-FILE LEDGER (Pattern B), never `git add -A` ──────────
       # pi narrates the commit and stops without emitting it (#1764), so the HARNESS owns the
@@ -815,6 +841,8 @@ jobs:
           # #2941: the revise step already pushed a clean base merge (counts as delivered when pi adds nothing).
           BASE_PUSHED: ${{ steps.revise.outputs.base_pushed }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
+          # #3775: the owner-request pass's exit code (empty when it did not run) — non-zero = worker failure.
+          REQUEST_RC: ${{ steps.pi-request.outputs.rc }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
           PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
@@ -893,7 +921,7 @@ jobs:
             # lost we are on the old PR head — merge the base now, or fail loudly, never commit stale.
             CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
             git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
-            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
+            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG --pr "${GPR:-}" --staged "$RUNNER_TEMP/inputs.txt,$RUNNER_TEMP/generated.txt" --from "${FEEDBACK_FROM:-}" || exit 1
             # The exact base commit HEAD now contains (#3347) — what GitHub must hold after the push.
             BASE_TARGET="$(git rev-parse "origin/${BASE}")"
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
@@ -997,26 +1025,22 @@ jobs:
           #     have to diff the PR to learn that.
           if [ -n "${REV_START:-}" ]; then
             RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            if [ "$HAVE_COMMITS" = "1" ]; then
+            # #3775: only a commit AFTER the base merge (RUN_START) is the requested change.
+            if [ "$HAVE_COMMITS" = "1" ] && [ "$(git rev-parse HEAD)" != "$RUN_START" ] && node "$RUNNER_TEMP/revise-outcome.mjs" ok "${REQUEST_RC:-}"; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
-              if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
-              else
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
-              fi
-            elif [ "${BASE_PUSHED:-}" = "1" ]; then
-              echo "revise: base merge pushed by the revise step (#2941)"
-              echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
-              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
+              BASE_ONLY=false; { [ "${BASE_PUSHED:-}" = "1" ] || [ "$HAVE_COMMITS" = "1" ]; } && BASE_ONLY=true
+              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]" and ((.body | contains("<!-- pipeline-note -->")) | not))] | length' 2>/dev/null || echo 0)"
               # A PR-description edit is a revision too (#3432): fingerprint the body now vs before pi ran.
               BODY_NOW="$(gh pr view "${RPR:-0}" --json body -q .body 2>/dev/null | node "$RUNNER_TEMP/revise-outcome.mjs" key 2>/dev/null || true)"
               BODY_CHANGED=false
               [ -n "${REV_BODY_KEY:-}" ] && [ -n "$BODY_NOW" ] && [ "$BODY_NOW" != "$REV_BODY_KEY" ] && BODY_CHANGED=true
               LAST_V="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -o 'build-review-verdict:[a-z-]*' | tail -1 | sed 's/.*://' || true)"
               ROUND_N="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -c '<!-- build-review-verdict:no-go -->' || true)"
-              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "{\"bodyChanged\":${BODY_CHANGED},\"replied\":$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false),\"verdict\":\"${LAST_V}\",\"round\":${ROUND_N:-0}}")"
+              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "$(jq -nc --argjson b "$BODY_CHANGED" --argjson o "$BASE_ONLY" --argjson r "$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false)" --arg v "$LAST_V" --argjson n "${ROUND_N:-0}" --arg base "$BASE" --arg from "${FEEDBACK_FROM:-}" --arg rc "${REQUEST_RC:-}" '{bodyChanged:$b,baseOnly:$o,replied:$r,verdict:$v,round:$n,base:$base,from:$from,requestRc:$rc}')")"
+              MSG="$(echo "$OUT" | jq -r .message)"
               NOTE="$(echo "$OUT" | jq -r .note)"; REREVIEW="$(echo "$OUT" | jq -r .rereview)"
               if [ "$NOTE" = "body" ]; then
                 echo "revise: PR description updated (#3432)"
@@ -1028,11 +1052,11 @@ jobs:
                 fi
               elif [ "$NOTE" = "reply" ]; then
                 echo "revise: answered on the PR without a code change"
-                echo "revised=1" >> "$GITHUB_OUTPUT"
+                echo "revised=1" >> "$GITHUB_OUTPUT"  # no base merge pushed: the reply is the answer (#3775)
               else
-                echo "::error::revise produced no commit and no reply (#2446)"
-                echo "revise_noop=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                echo "::error::$(echo "$OUT" | jq -r .error)"
+                echo "$OUT" | jq -r .output >> "$GITHUB_OUTPUT"  # revise_noop=1, or request_failed=<rc> (#3775)
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$MSG" 2>&1 | tail -1 || true  # MSG opens with <!-- pipeline-note --> (revise-outcome.mjs)
               fi
             fi
           fi
@@ -1306,7 +1330,7 @@ jobs:
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s\n\n%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s\n\n%s%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$(git diff --name-only "$BASE_SHA"..HEAD | node scripts/packages-guard.mjs --pr-note --body "$RUNNER_TEMP/issue-body.txt" --labels "$RUNNER_TEMP/issue-labels.json" 2>/dev/null || true)" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3 # packages note is advisory (#3701): on failure the PR opens without it and the CI check still asks for the line
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
@@ -1494,6 +1518,7 @@ jobs:
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          REQUEST_FAILED: ${{ steps.finish.outputs.request_failed }}  # #3775: the owner-request worker exited non-zero (code), explained on the PR
           MERGE_REFUSED: ${{ steps.finish.outputs.merge_refused }}  # #3704: the finish step refused a worker-left merge and explained it on the PR
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.

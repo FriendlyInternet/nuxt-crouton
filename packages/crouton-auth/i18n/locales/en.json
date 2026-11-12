@@ -10,6 +10,11 @@
   },
   "auth": {
     "resetLinkSentDescription": "We sent a password reset link to your email. Click the link to reset your password.",
+    "inviteOnly": {
+      "title": "{app} is invite-only",
+      "description": "Ask a team for an invite. Already have an account? Sign in.",
+      "thisApp": "This app"
+    },
     "magicLinkSentDescription": "We sent a magic link to your email. Click the link to sign in.",
     "tryAnotherEmail": "Try another email",
     "enterEmailAndPassword": "Enter your email and password.",

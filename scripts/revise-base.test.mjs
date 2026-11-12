@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ensureBaseMerged } from './revise-base.mjs'
+import { ensureBaseMerged, notPushedBody, parseArgs } from './revise-base.mjs'
 
 // main and work diverge from a common commit; HEAD is left on `work`, behind main.
 function repo(mainEdit = 'main.txt') {
@@ -44,6 +44,8 @@ test('unmergeable base: fails loudly, leaves the tree clean and HEAD unchanged',
   const before = git('rev-parse', 'HEAD')
   const r = ensureBaseMerged({ cwd: dir, baseRef: 'main' })
   assert.equal(r.ok, false)
+  assert.deepEqual(r.conflicts, ['work.txt'])
+  assert.match(r.message, /work\.txt/, 'the log names the conflicting file (git says so on stdout)')
   assert.equal(git('rev-parse', 'HEAD'), before)
   assert.equal(git('status', '--porcelain'), '')
 })
@@ -71,4 +73,21 @@ test('merging the epic keeps the leaf diff to its own file; merging main drags i
   const b = setup()
   ensureBaseMerged({ cwd: b.dir, baseRef: 'main' })
   assert.match(b.git('diff', '--name-only', 'epic...work'), /later\.txt/)
+})
+
+test('notPushedBody: names the staged edit, the conflict, and says it was not pushed (#3775)', () => {
+  const b = notPushedBody({ base: 'main', baseTip: '0d4d529ed3a1', head: '042849a8dabc', staged: ['pocs/x/nuxt.config.ts'], conflicts: ['pocs/x/page.vue'], from: 'https://x/pr#c1' })
+  for (const s of ['<!-- pipeline-note -->', 'was not pushed', '`pocs/x/nuxt.config.ts`', '`pocs/x/page.vue`', '042849a8d', '0d4d529ed', '[Your change](https://x/pr#c1)']) assert.ok(b.includes(s), s)
+})
+
+test('notPushedBody: no staged files -> "Nothing was changed"; no conflict list -> "could not be merged"', () => {
+  const b = notPushedBody({ base: 'main', baseTip: 'a', head: 'b', staged: [], conflicts: [] })
+  assert.match(b, /Nothing was changed/)
+  assert.match(b, /could not be merged/)
+})
+
+test('parseArgs keeps the positional form and reads the new flags', () => {
+  assert.deepEqual(parseArgs(['origin/main', '--conflict']), { baseRef: 'origin/main', conflict: true, pr: '', staged: [], from: '' })
+  assert.deepEqual(parseArgs(['origin/main', '--pr', '42', '--staged', 'a.txt,b.txt', '--from', 'u']), { baseRef: 'origin/main', conflict: false, pr: '42', staged: ['a.txt', 'b.txt'], from: 'u' })
+  assert.equal(parseArgs(['origin/main', '--pr', '', '--from', '']).pr, '')
 })

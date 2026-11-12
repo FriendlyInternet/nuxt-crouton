@@ -36,6 +36,13 @@
       "when": 1794260078933,
       "tag": "0004_tidy_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794394238234,
+      "tag": "0005_bookings_package",
+      "breakpoints": true
     }
   ]
 }

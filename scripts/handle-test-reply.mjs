@@ -12,6 +12,7 @@
  */
 import { pathToFileURL } from 'node:url'
 import { parseTestReply } from './approval.mjs'
+import { decideAutoClose } from './epic-auto-close.mjs'
 
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 
@@ -24,24 +25,6 @@ export function decideTestReply({ labels = [], body = '', association = '' } = {
   const { result, note } = parseTestReply(body)
   if (!result) return { act: false, reason: 'comment is not an ok / not ok reply' }
   return { act: true, result, note }
-}
-
-/**
- * A verified epic is done when every sub-issue is closed and its epic→main PR is merged (#2955).
- * `prs` are the PRs whose head is the epic's branch; with none, there is nothing unmerged to wait on.
- * @returns {{ close: true } | { close: false, comment: string }}
- */
-export function decideEpicClose({ subIssues = [], prs = [] } = {}) {
-  const openKids = subIssues.filter(i => i.state !== 'closed')
-  const openPrs = prs.filter(p => p.state === 'open')
-  const unmerged = !openPrs.length && prs.length && !prs.some(p => p.merged_at)
-  const waiting = [
-    ...openKids.map(i => `#${i.number} (sub-issue still open)`),
-    ...openPrs.map(p => `#${p.number} (epic→main PR still open)`),
-    ...(unmerged ? [`#${prs[0].number} (epic→main PR closed without merging)`] : [])
-  ]
-  if (!waiting.length) return { close: true }
-  return { close: false, comment: `Verified, but left open — still waiting on: ${waiting.join(', ')}.` }
 }
 
 /** Body of the follow-up sub-issue created from a `not ok` note. */
@@ -95,20 +78,31 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const issue = await gh(base)
   const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
   const PROV = '> 🤖 **pi.dev harness** · agent pipeline (CI) · _test-card reply handler (#2542)_'
-  // Close a verified epic once its children and epic→main PR are all merged (#2955).
-  const closeIfDone = async () => {
+  // A verified epic closes once it is on main and its postmortem is posted (#3012). The close itself
+  // happens in postmortem.yml's `auto-close` job (Harness App token, so the follow-up workflows run —
+  // a close made with this job's GITHUB_TOKEN would start none, #572). Here: say what is left, then
+  // dispatch postmortem.yml (the one event GITHUB_TOKEN may trigger); it writes a missing postmortem
+  // and its auto-close job decides.
+  const handOff = async (currentLabels) => {
     const subIssues = await gh(`${base}/sub_issues?per_page=100`)
     const pulls = await gh(`/repos/${REPO}/pulls?state=all&base=main&per_page=100`)
     const prs = pulls.filter(p => p.head.ref.startsWith(`epic/${number}-`))
-    const c = decideEpicClose({ subIssues, prs })
-    const body = c.close ? 'Closed — verified, every sub-issue is closed and the epic is merged to main.' : c.comment
-    await gh(`${base}/comments`, { method: 'POST', body: JSON.stringify({ body: `${body}\n\n${PROV}` }) })
-    if (c.close) await gh(base, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) })
-    console.log(`handle-test-reply: #${number} ${c.close ? 'closed' : 'left open'}`)
+    const comments = await gh(`${base}/comments?per_page=100`)
+    const prFiles = []
+    for (const p of prs.filter(x => x.merged_at)) {
+      prFiles.push(...(await gh(`/repos/${REPO}/pulls/${p.number}/files?per_page=100`)).map(f => f.filename))
+    }
+    const d = decideAutoClose({ state: issue.state, labels: currentLabels, subIssues, prs, comments, prFiles })
+    const left = d.waiting.filter(w => !/^postmortem /.test(w))
+    const body = left.length ? `Verified — closing once: ${left.join(', ')}.` : 'Verified — closing now.'
+    await gh(`${base}/comments`, { method: 'POST', body: JSON.stringify({ body: `<!-- pipeline-note -->\n${body}\n\n${PROV}` }) })
+    const { handoffExec } = await import('./handoff-exec.mjs')
+    await handoffExec({ kind: 'dispatch', issue: number, workflow: 'postmortem.yml', inputs: { epic: String(number) } })
+    console.log(`handle-test-reply: #${number} verified — ${d.reason}; postmortem.yml dispatched`)
   }
   // Backfill: re-check an already-verified epic (CLOSE_VERIFIED=true, APPLY=true).
   if (process.env.CLOSE_VERIFIED === 'true' && labels.includes('status:verified') && issue.state === 'open') {
-    if (APPLY) await closeIfDone()
+    if (APPLY) await handOff(labels)
     process.exit(0)
   }
   const d = decideTestReply({
@@ -139,5 +133,5 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     method: 'POST',
     body: JSON.stringify({ body: `${msg}\n\n${PROV}` })
   })
-  if (d.result === 'ok') await closeIfDone()
+  if (d.result === 'ok') await handOff([...labels.filter(l => l !== 'status:to-test'), 'status:verified'])
 }

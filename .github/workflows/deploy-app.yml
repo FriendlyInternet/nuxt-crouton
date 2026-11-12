@@ -966,21 +966,20 @@ jobs:
           SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
-          # Attach the review login to the SEEDED demo team (#832) so the advertised
-          # login lands in the team the content seed populated (test1 → seed:org:test1),
-          # not an empty fresh org. Staging-only step → production is untouched.
-          # #1369: never advertise creds for a seed that failed (no `|| true`); warn loudly and
-          # emit NO login — a broken preview must look broken.
+          # Attach the login to the SEEDED demo team test1 (#832), not an empty fresh org. #1369: never
+          # advertise creds for a failed seed (no `|| true`) — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
+          # #3751: an app can name the tables its seeded team must have rows in
+          # (`reviewLogin.requireData` in deploy.config.json). The script logs the counts and
+          # fails if any is empty, so a login into an empty team is never advertised.
+          REQUIRE_DATA="$(jq -r '(.reviewLogin.requireData // []) | join(",")' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo '')"
+          REQUIRE_ARGS=(); [ -z "$REQUIRE_DATA" ] || REQUIRE_ARGS=(--require-data "$REQUIRE_DATA")
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-               --seed-team test1 --db "$SEED_DB"; then
+               --seed-team test1 --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
-            # One-click link: crouton-auth prefills the login form from ?email=&password=
-            # and never auto-submits (#1153 made the prefill actually apply). Optional
-            # per-app landing path so the link drops the reviewer on the surface worth
-            # reviewing instead of '/': `reviewLogin.landing` in deploy.config.json
-            # (same config block #1185 proposes for a fixed email/password).
+            # One-click link: crouton-auth prefills the form from ?email=&password= (never auto-submits,
+            # #1153); optional `reviewLogin.landing` in deploy.config.json lands on the surface to review.
             LANDING="$(node -p "(require('./$WORKSPACE/$APP/deploy.config.json').reviewLogin||{}).landing||''" 2>/dev/null || echo '')"
             LOGIN_URL="$(node -e 'const [u,e,p,l]=process.argv.slice(1); const q=new URLSearchParams({email:e,password:p}); if(l) q.set("redirect",l); process.stdout.write(`${u}/auth/login?${q}`)' "$DEPLOY_URL" "$EMAIL" "$PW" "$LANDING")"
             echo "login_url=$LOGIN_URL" >> "$GITHUB_OUTPUT"
