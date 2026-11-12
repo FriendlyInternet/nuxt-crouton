@@ -79,7 +79,7 @@ empty layer; subsequent PRs move the code in:
 | `app/components/LayoutForm.vue` | `CroutonLayoutForm` — real data-bound **form** block. Edits whatever record the page's shared selection holds for its collection (core `useCollectionSelection`, #2598) via `CroutonWorkspaceEditor`; a create form when nothing is selected. While mounted it registers as "a form is on screen", so a List block's row edit opens HERE instead of the overlay. |
 | *List ↔ Form link (#2598)* | `CroutonLayoutCollection` routes its rows' open / new / delete to the same selection (`provideSelectionItemActions`). The PAGE that hosts a layout calls `provideCollectionSelections()` once (done in `/admin/[team]/layout`; the builder POC's board + served page do the same). A layout without a Form block for that collection (e.g. a phone breakpoint that leaves it out) opens rows in the collection's overlay, as before — decided by what is on screen, never by viewport width. |
 | `app/components/LayoutSpikeStats.vue` | `CroutonLayoutSpikeStats` — generic KPI demo block, registered as `stats`. |
-| `app/app.config.ts` | The default `croutonLayoutBlocks` registry (collection-list / entity-form / stats), defu-merged across layers (packages add their own, e.g. bookings' `bookings-calendar`). |
+| `app/app.config.ts` | The default `croutonLayoutBlocks` registry (collection-list / entity-form / stats), defu-merged across layers (packages add their own, e.g. bookings' `bookings-calendar`); each declares `sizing.height` (List/Form `fill`, Stats `hug`) + a `minHeight` floor (#3815). |
 | `crouton.manifest.ts` | Declares `bundled: false` (opt-in, #2282): `crouton init --features layout` adds it to `extends` + deps and `doctor` checks the dep. |
 
 ## Key Files
