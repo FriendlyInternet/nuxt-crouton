@@ -142,7 +142,15 @@ export async function decideV1Answer({ github, owner, repo, env, pr, pull_number
 }
 
 async function enableAutoOrMerge({ github, core, pr, pull_number, answer, checkState, red, mergeWithRetry }) {
-  if (!shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) return
+  if (!shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) {
+    // #3845: say what happens next on the already-armed path, so a quiet log isn't read as "stuck" and dispatched by hand.
+    if (pr.auto_merge && answer?.code !== 'not-pipeline') {
+      core.info(answer?.merge === true
+        ? `#${pull_number} auto-merge already armed (by ${pr.auto_merge.enabled_by?.login ?? '?'}) — GitHub merges it once CI Gate + Merge decision are green; no dispatch needed.`
+        : `#${pull_number} auto-merge armed; waits on Merge decision (${answer?.code}).`)
+    }
+    return
+  }
   try {
     await setAutoMerge(github, pr, 'enable')
     core.info(`#${pull_number} v1 auto-merge enabled.`)
