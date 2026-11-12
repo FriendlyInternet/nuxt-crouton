@@ -29,11 +29,11 @@ import { fileURLToPath } from 'node:url'
 import { releasable, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { countRounds as legacyRounds, route } from './ticket-revise.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
+import { PIPELINE_LABELS } from './traffic-control.mjs'
 import {
   ROLLING_LABEL, STEPS_APPROVED_LABEL, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
 } from './lib/epic-steps.mjs'
 
-const TRIGGERS = ['work-this', 'delegate-pi', 'delegate']
 const names = (ls) => (ls || []).map((l) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)
 // Instruction TEXT for the orchestrator (a note in the verdict comment) — this file never dispatches.
 const reviewCmd = (epic, subject) => `\`gh workflow ${'run'} ticket-review.yml -f epic=${epic} -f subject=${subject}\``
@@ -75,7 +75,7 @@ function rollingPlanState({ subject, labels, decision, comments, steps }) {
 
 /** One sub-issue's row. `t` = this review's verdict for it (undefined if it was not graded). */
 function rollingTicketState(s, t, { comments, runnable }) {
-  const started = names(s.labels).some((l) => TRIGGERS.includes(l))
+  const started = names(s.labels).some((l) => PIPELINE_LABELS.includes(l))
   // Only tickets this review graded carry a verdict; others are reported, never touched.
   return {
     state: s.state === 'closed' ? 'closed' : 'open',
@@ -89,39 +89,55 @@ function rollingTicketState(s, t, { comments, runnable }) {
 }
 
 /** PURE. Verdict → handoff lines (see the header). */
-// fallow-ignore-next-line complexity -- maps each nextAction() row to its handoff line; covered by ticket-review-actions.test.mjs (#3846)
 export function reviewActions({ epic, subject = '', labels = [], decision, comments = [], tickets = [], subIssues = [], steps = null }) {
   if (!names(labels).includes(ROLLING_LABEL)) return legacyActions({ epic, decision, comments, tickets })
   const subs = subIssues.length ? subIssues : tickets
   const state = rollingState({ subject, labels, decision, comments, subIssues: subs, steps })
   const out = []
   if (subject === 'plan' && decision?.plan?.verdict === 'go') out.push({ kind: 'label', issue: epic, label: STEPS_APPROVED_LABEL })
-  const { hold } = splitVerdict(decision, steps, subs)
-  const graded = new Set((decision?.tickets || []).map((t) => t.number))
+  const ctx = {
+    epic, steps, hold: splitVerdict(decision, steps, subs).hold,
+    graded: new Set((decision?.tickets || []).map((t) => t.number)),
+  }
+  // A `hold` line becomes ONE status:blocked on the epic (the first time) plus a note.
   let blocked = false
-  const block = (text) => { if (!blocked) out.push({ kind: 'block', issue: epic }); blocked = true; out.push({ kind: 'note', text }) }
-  const titleOf = (k) => steps?.[k]?.title || `step ${k}`
-  for (const a of nextAction(state)) {
-    if (a.type === 'hold' && a.target === 'plan' && a.reason === 'plan-wrong') {
-      out.push({ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL })
-      block(`The step list is wrong. Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}. Tickets already started keep running.`)
-    } else if (a.type === 'hold' && a.target === 'plan') {
-      block(`The step list was not approved (${a.reason}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.`)
-    } else if (a.type === 'plan-review') {
-      out.push({ kind: 'note', text: `The step list has no approved review yet — run ${reviewCmd(epic, 'plan')} first.` })
-    } else if (a.type === 'start' && graded.has(a.n) && !hold.includes(a.n)) {
-      out.push({ kind: 'label', issue: a.n, label: a.label })
-    } else if (a.type === 'revise' && graded.has(a.n)) {
-      out.push({ kind: 'dispatch', issue: epic, workflow: 'ticket-revise.yml', inputs: { epic: String(epic), subject: String(a.n) } })
-    } else if (a.type === 'hold' && graded.has(a.target)) {
-      block(`#${a.target} is held (${a.reason === 'round-cap' ? 'third review round' : 'needs your answer'}); tickets that are go are not affected.`)
-    } else if (a.type === 'write-ticket') {
-      out.push({ kind: 'note', text: `Step ${a.step} (${titleOf(a.step)}) is ready — write its ticket by hand with \`<!-- pipeline: epic=${epic} step=${a.step} -->\` in the body, then run ${reviewCmd(epic, '<ticket>')}.` })
-    } else if (a.type === 'done') {
-      out.push({ kind: 'note', text: 'Every step has a closed ticket — the epic is finished.' })
-    }
+  for (const line of nextAction(state).flatMap((a) => linesFor(a, ctx))) {
+    if (line.kind !== 'hold') { out.push(line); continue }
+    if (!blocked) out.push({ kind: 'block', issue: epic })
+    blocked = true
+    out.push({ kind: 'note', text: line.text })
   }
   return out
+}
+
+/** One nextAction() row → its handoff lines (`hold` = block the epic with this note). */
+function linesFor(a, ctx) {
+  if (a.type === 'plan-review' || a.target === 'plan') return planLines(a, ctx.epic)
+  if (a.type === 'write-ticket' || a.type === 'done') return stepLines(a, ctx)
+  return ticketLines(a, ctx)
+}
+
+function planLines(a, epic) {
+  if (a.type === 'plan-review') return [{ kind: 'note', text: `The step list has no approved review yet — run ${reviewCmd(epic, 'plan')} first.` }]
+  if (a.reason !== 'plan-wrong') return [{ kind: 'hold', text: `The step list was not approved (${a.reason}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.` }]
+  return [{ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL },
+    { kind: 'hold', text: `The step list is wrong. Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}. Tickets already started keep running.` }]
+}
+
+/** Only tickets this review graded are touched; others are reported by a later review. */
+function ticketLines(a, { epic, graded, hold }) {
+  const n = a.n ?? a.target
+  if (!graded.has(n)) return []
+  if (a.type === 'start') return hold.includes(n) ? [] : [{ kind: 'label', issue: n, label: a.label }]
+  if (a.type === 'revise') return [{ kind: 'dispatch', issue: epic, workflow: 'ticket-revise.yml', inputs: { epic: String(epic), subject: String(n) } }]
+  if (a.type === 'hold') return [{ kind: 'hold', text: `#${n} is held (${a.reason === 'round-cap' ? 'third review round' : 'needs your answer'}); tickets that are go are not affected.` }]
+  return []
+}
+
+function stepLines(a, { epic, steps }) {
+  if (a.type === 'done') return [{ kind: 'note', text: 'Every step has a closed ticket — the epic is finished.' }]
+  const title = steps?.[a.step]?.title || `step ${a.step}`
+  return [{ kind: 'note', text: `Step ${a.step} (${title}) is ready — write its ticket by hand with \`<!-- pipeline: epic=${epic} step=${a.step} -->\` in the body, then run ${reviewCmd(epic, '<ticket>')}.` }]
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

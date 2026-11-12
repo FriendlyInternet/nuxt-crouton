@@ -25,12 +25,12 @@
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { HARNESS_BOT, isHarnessBot, countRounds as countSubjectRounds, verdictCommentsFor } from './lib/epic-steps.mjs'
+import {
+  HARNESS_BOT, isHarnessBot, VERDICT_MARKER, MAX_ROUNDS, countRounds as countSubjectRounds, verdictCommentsFor,
+} from './lib/epic-steps.mjs'
 
-// Moved to lib/epic-steps.mjs (#3846) so lib modules can use it without an import cycle.
-export { HARNESS_BOT, isHarnessBot }
-export const VERDICT_MARKER = '<!-- ticket-review-verdict:'
-export const MAX_ROUNDS = 3
+// Moved to lib/epic-steps.mjs (#3846) so lib modules can use them without an import cycle.
+export { HARNESS_BOT, isHarnessBot, VERDICT_MARKER, MAX_ROUNDS }
 export const NEEDS_OWNER = /^\s*needs-owner:/i
 const verdictBodies = (comments) =>
   (Array.isArray(comments) ? comments : []).filter(isHarnessBot).map((c) => String(c.body || '')).filter((b) => b.includes(VERDICT_MARKER))

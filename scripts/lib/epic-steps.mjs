@@ -180,12 +180,19 @@ export function narrowToSubject({ subject = '', tickets = [], steps = null } = {
   return open.filter((t) => String(t.number) === s)
 }
 
-/** PURE. Bot verdict comments carrying the subject marker (plan | <n>). */
+/**
+ * PURE. Bot verdict comments for a subject (plan | <n>): those carrying its subject marker, and — for a
+ * ticket — any verdict that graded it (its `#### ✅|❌ #<n>` row). A review run with no subject writes
+ * no marker, so without the second rule those rounds would never count and the 3-round cap could be
+ * bypassed (#3846 review).
+ */
 const subjectRe = (s) => new RegExp(`<!--\\s*ticket-review-subject:${String(s).replace(/[^\w]/g, '')}\\s*-->`)
+const gradedRe = (s) => (/^\d+$/.test(String(s)) ? new RegExp(`^####\\s+(?:✅|❌)\\s+#${s}\\b`, 'mu') : null)
 export function verdictCommentsFor(comments = [], subject) {
   const re = subjectRe(subject)
+  const graded = gradedRe(subject)
   return (Array.isArray(comments) ? comments : []).filter(isHarnessBot)
-    .map((c) => String(c.body || '')).filter((b) => b.includes(VERDICT_MARKER) && re.test(b))
+    .map((c) => String(c.body || '')).filter((b) => b.includes(VERDICT_MARKER) && (re.test(b) || graded?.test(b)))
 }
 
 /** PURE. The round of the verdict being posted now for `subject` (plan | <n>): its bot verdicts + 1. */
@@ -245,34 +252,42 @@ export function splitVerdict(decision, steps = null, subIssues = []) {
  *   { type:'hold', target: n|'plan', reason } · { type:'done' }
  * state = { rolling, plan: { verdict, round, wrong }, steps, tickets: { [n]: { state, verdict, round, started, label, step } } }
  */
-// fallow-ignore-next-line complexity -- one flat pass over the epic's state; each branch is one row of the #3846 decision table, covered by epic-steps.test.mjs
 export function nextAction({ rolling = false, plan = {}, steps = null, tickets = {} } = {}) {
   if (!rolling) return []
   const entries = Object.entries(tickets || {}).map(([n, t]) => ({ n: Number(n), ...t }))
+  const gate = planGate(plan, steps, entries)
+  if (gate) return [gate]
+  const out = entries.map(ticketAction).filter(Boolean)
+  if (!steps) return out
+  const { done, write } = stepProgress(steps, tickets, entries)
+  return done ? [{ type: 'done' }] : [...out, ...write]
+}
+
+/** The plan row: a plan-wrong / unreviewed / unapproved plan stops everything else (null = go on). */
+function planGate(plan, steps, entries) {
   const planWrong = entries.some((t) => t.state !== 'closed' && t.verdict === 'plan-wrong')
-  if (planWrong || (plan.verdict === 'go' && plan.wrong)) return [{ type: 'hold', target: 'plan', reason: 'plan-wrong' }]
-  if (steps && !plan.verdict) return [{ type: 'plan-review' }]
-  if (steps && plan.verdict !== 'go') {
-    return [{ type: 'hold', target: 'plan', reason: (plan.round || 0) >= MAX_ROUNDS ? 'round-cap' : plan.verdict }]
-  }
-  const out = []
-  for (const t of entries) {
-    if (t.state === 'closed') continue
-    if (!t.verdict) out.push({ type: 'review-ticket', n: t.n })
-    else if (t.verdict === 'go') { if (!t.started) out.push({ type: 'start', n: t.n, label: t.label || 'work-this' }) }
-    else if (t.verdict === 'needs-owner') out.push({ type: 'hold', target: t.n, reason: 'needs-owner' })
-    else if ((t.round || 0) >= MAX_ROUNDS) out.push({ type: 'hold', target: t.n, reason: 'round-cap' })
-    else out.push({ type: 'revise', n: t.n })
-  }
-  if (steps) {
-    const byStep = ticketsByStep(steps, entries.map((t) => ({ number: t.n, step: t.step ?? null })))
-    const closed = (k) => byStep[k] && tickets[byStep[k]]?.state === 'closed'
-    for (const s of steps) {
-      if (!byStep[s.step] && s.blockedBy.every(closed)) out.push({ type: 'write-ticket', step: s.step })
-    }
-    if (steps.every((s) => closed(s.step))) return [{ type: 'done' }]
-  }
-  return out
+  if (planWrong || (plan.verdict === 'go' && plan.wrong)) return { type: 'hold', target: 'plan', reason: 'plan-wrong' }
+  if (!steps || plan.verdict === 'go') return null
+  if (!plan.verdict) return { type: 'plan-review' }
+  return { type: 'hold', target: 'plan', reason: (plan.round || 0) >= MAX_ROUNDS ? 'round-cap' : plan.verdict }
+}
+
+/** One open ticket's row, from its own verdict and round only (never a sibling's). */
+function ticketAction(t) {
+  if (t.state === 'closed') return null
+  if (!t.verdict) return { type: 'review-ticket', n: t.n }
+  if (t.verdict === 'go') return t.started ? null : { type: 'start', n: t.n, label: t.label || 'work-this' }
+  if (t.verdict === 'needs-owner') return { type: 'hold', target: t.n, reason: 'needs-owner' }
+  if ((t.round || 0) >= MAX_ROUNDS) return { type: 'hold', target: t.n, reason: 'round-cap' }
+  return { type: 'revise', n: t.n }
+}
+
+/** Steps whose blockers are closed and that have no ticket yet, and whether every step is closed. */
+function stepProgress(steps, tickets, entries) {
+  const byStep = ticketsByStep(steps, entries.map((t) => ({ number: t.n, step: t.step ?? null })))
+  const closed = (k) => byStep[k] && tickets[byStep[k]]?.state === 'closed'
+  const write = steps.filter((s) => !byStep[s.step] && s.blockedBy.every(closed)).map((s) => ({ type: 'write-ticket', step: s.step }))
+  return { done: steps.every((s) => closed(s.step)), write }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

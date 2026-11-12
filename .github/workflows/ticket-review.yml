@@ -189,6 +189,7 @@ jobs:
             K="$(jq -r .kind <<<"$A")"; N="$(jq -r .issue <<<"$A")"
             case "$K" in
               label|dispatch) node scripts/handoff-exec.mjs "$K" "$A"; echo "$K #$N: $A" ;;
+              # || true: removing a label the epic does not carry (steps:approved never set) errors, and that is fine.
               unlabel) gh issue edit "$N" --remove-label "$(jq -r .label <<<"$A")" 2>/dev/null || true ;;
               block) gh issue edit "$N" --add-label "status:blocked" ;;
             esac

@@ -26,12 +26,12 @@ import { appendFileSync, readFileSync } from 'node:fs'
 import { WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 import { parseBlockedBy } from './apply-decompose-plan.mjs'
 import { stepOf } from './lib/epic-steps.mjs'
+import { PIPELINE_LABELS } from './traffic-control.mjs'
 
-// The labels that start a child. A rolling-epic ticket (#3846) without one is waiting for its own
-// ticket review, which starts it on go — resuming must not start it unreviewed.
-const TRIGGERS = ['work-this', 'delegate-pi', 'delegate']
+// A rolling-epic ticket (#3846) without a start label is waiting for its own ticket review, which
+// starts it on go — resuming must not start it unreviewed.
 const awaitingReview = (c) =>
-  stepOf(c.body || '') !== null && !(c.labels || []).some((l) => TRIGGERS.includes(typeof l === 'string' ? l : l?.name))
+  stepOf(c.body || '') !== null && !(c.labels || []).some((l) => PIPELINE_LABELS.includes(typeof l === 'string' ? l : l?.name))
 
 /**
  * Which of an already-decomposed issue's children should be dispatched now?

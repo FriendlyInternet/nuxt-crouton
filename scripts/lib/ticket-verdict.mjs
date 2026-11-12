@@ -26,7 +26,6 @@
  *
  *   node scripts/lib/ticket-verdict.mjs <tickets.json> <verdict-file> [--subject S]  → JSON decision
  *   node scripts/lib/ticket-verdict.mjs render <tickets.json> <verdict-file> [model] [--revising R] [--subject S]
- *   node scripts/lib/ticket-verdict.mjs releasable <tickets.json>            → numbers to start now
  * tickets.json = [{ number, title, body, labels: ["type:feat", …] }]. Exit 1 on a malformed verdict.
  */
 import { readFileSync } from 'node:fs'
@@ -255,11 +254,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const revising = ri >= 0 ? Number(args.splice(ri, 2)[1]) || 0 : 0
   const si = args.indexOf('--subject')
   const subject = si >= 0 ? String(args.splice(si, 2)[1] || '').trim() : ''
-  const mode = ['render', 'releasable'].includes(args[0]) ? args.shift() : 'decide'
+  const mode = args[0] === 'render' ? args.shift() : 'decide'
   const [ticketsFile, verdictFile, model] = args
-  if (!ticketsFile || (mode !== 'releasable' && !verdictFile)) { console.error('usage: ticket-verdict.mjs [render|releasable] <tickets.json> [verdict-file] [model]'); process.exit(2) }
+  if (!ticketsFile || !verdictFile) { console.error('usage: ticket-verdict.mjs [render] <tickets.json> <verdict-file> [model]'); process.exit(2) }
   const tickets = JSON.parse(readFileSync(ticketsFile, 'utf8'))
-  if (mode === 'releasable') { console.log(JSON.stringify(releasable(tickets))); process.exit(0) }
   const d = decide(tickets, readFileSync(verdictFile, 'utf8'), { subject })
   if (!d.ok) console.error(d.errors.join('\n'))
   console.log(mode === 'render' && d.ok ? renderComment(d, { model: model || '', revising, subject }) : JSON.stringify(d))

@@ -60,6 +60,23 @@ test('6. round cap per ticket: the third bot verdict for #2 holds, a sibling at 
   assert.deepEqual(kinds(lines), [{ kind: 'label', issue: 1, label: 'work-this' }, { kind: 'block', issue: 9 }])
 })
 
+test('6. round cap per ticket also counts reviews run with NO subject (they write no subject marker)', () => {
+  const subs = [sub(1, 0), sub(2, 1)]
+  const d = decide(subs, verdictFile(ticketSection(1), ticketSection(2, 'no-go', '4')))
+  // earlier blank-subject reviews on this rolling epic: real rendered comments, no subject marker
+  const earlier = Array.from({ length: 5 }, () => bot(renderComment(d)))
+  assert.ok(!earlier[0].body.includes('ticket-review-subject:'))
+  const lines = reviewActions({ epic: 9, labels: ROLLING, decision: d, comments: earlier, tickets: subs, subIssues: subs, steps: null })
+  assert.ok(!lines.some((l) => l.kind === 'dispatch'), 'a capped ticket is never sent back for another rewrite (go ticket #1 still starts)')
+  assert.deepEqual(kinds(lines), [{ kind: 'label', issue: 1, label: 'work-this' }, { kind: 'block', issue: 9 }])
+  // the CLI the workflow runs agrees
+  const dir = mkdtempSync(join(tmpdir(), 'tra-cap-'))
+  const f = (n, v) => { const p = join(dir, n); writeFileSync(p, JSON.stringify(v)); return p }
+  const out = execFileSync('node', ['scripts/ticket-review-actions.mjs', f('d.json', d), f('c.json', earlier), f('e.json', { number: 9, labels: ROLLING }), f('s.json', subs), '--subject', ''], { encoding: 'utf8' })
+  assert.ok(!/ticket-revise\.yml/.test(out))
+  assert.match(out, /"kind":"block"/)
+})
+
 test('5. plan-wrong → exactly unlabel steps:approved + block the epic; no decomposer run; started ticket untouched', () => {
   const steps = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1, { ticket: 12 })])
   const subs = [sub(11, 0, { labels: ['type:feat', 'work-this'] }), sub(12, 1)]
