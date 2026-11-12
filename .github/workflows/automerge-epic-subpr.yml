@@ -162,7 +162,7 @@ jobs:
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
             const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-            const { decideLeafMerge, withoutMergeDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideLeafMerge, withoutMergeDecision, changedPaths /* #3757: renames keep their old path */ } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
             const { isV1Base, v1Enabled } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
             const { runV1, v1OffSwitch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/v1-merge-io.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
@@ -263,7 +263,7 @@ jobs:
               if (v1Base && !v1 && pr.auto_merge) await v1OffSwitch({ github, core, pr, pull_number })
               // An epic → main PR (#2832) is evaluated too, but ONLY merges on an owner `ok` (below).
               const epicToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('epic/')
-              // A pipeline leaf PR straight into main (head `work-<N>`, no epic) — same rule: ONLY an owner `ok` merges it.
+              // A pipeline leaf PR straight into main (head `work-<N>`): an owner `ok` merges it, or incubator-only + head review go (#3757).
               const leafToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('work-')
               if (!pr.base.ref.startsWith('epic/') && !epicToMain && !leafToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
               // A v1 base needs a `Merge decision` on owner PRs too, or the ruleset blocks even a hand merge (decideV1 answers not-pipeline).
@@ -330,8 +330,8 @@ jobs:
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
               // The merge decision (#2777, #3103): one pure call owns the whole rule — who said yes
-              // (owner `ok` for anything → main, `build:approved` for epic-based PRs), any red check,
-              // CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
+              // (owner `ok` for anything → main, except an incubator-only work-* PR with a build-review go on its head
+              // (#3757); `build:approved` for epic-based PRs), any red check, CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
               // Loaded from the default-branch checkout above — never the PR head, so a PR cannot edit the
               // rule that judges it.
               if (v1) {
@@ -339,7 +339,7 @@ jobs:
                 continue
               }
 
-              let gate
+              let gate, fileNames // fileNames: the PR's changed files, fetched lazily at most once (#3306 API budget)
               if (epicToMain) {
                 // epic → main (#3105): the SAME decision the owner's `ok` runs (decideEpicMerge) — both
                 // aggregate gates green AND a standing ok. A green that lands after the ok merges here,
@@ -353,7 +353,8 @@ jobs:
                 if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
+                if (leafToMain && !go.go && reviewSt.kind === 'other') fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number }))
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, files: fileNames, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
                   const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
@@ -367,15 +368,14 @@ jobs:
                   }
                 }
               }
-              if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
+              core.info(`#${pull_number} ${gate.merge ? 'merging' : 'not merging'} — ${gate.reason}.`); if (!gate.merge) continue
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
               // workflows, but a workflow change never self-merges.
-              const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
-              // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
+              if (!fileNames) fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })) // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
               const { decideSharedCodeHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/shared-code-hold.mjs`)
-              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: files.map(f => f.filename) })
+              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: fileNames })
               const sharedCode = hold.held
               if (hold.action === 'hold' && !go.go) {
                 // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR

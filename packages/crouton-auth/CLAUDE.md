@@ -13,6 +13,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | Team Creation | `teams: { allowCreate: true, showSwitcher: true }` | SaaS platforms |
 | Default Team | `teams: { defaultTeamSlug: 'acme', allowCreate: false, showSwitcher: false }` | Company apps |
 | Personal Workspace | `teams: { autoCreateOnSignup: true, allowCreate: false, showSwitcher: false }` | Personal apps |
+| Invite-only | `signup: 'invite'` | Closed apps (Velo) — sign-up refused on every path (password, magic link, OAuth) unless the email has a pending invitation (403 `SIGNUP_INVITE_ONLY`, `signupGate` in `server/lib/auth.ts`); server-side `auth.api` calls (admin create-user) still allowed; `RouteModal` hides the "Create account" links |
 
 ### TeamsConfig Flags
 

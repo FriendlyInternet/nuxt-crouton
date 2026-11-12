@@ -11,6 +11,7 @@
     "./editor": "./app/editor/index.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build"

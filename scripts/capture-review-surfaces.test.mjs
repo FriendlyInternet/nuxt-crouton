@@ -171,6 +171,23 @@ test('deriveSurfaces: page file → route, team segment → seeded team (#2698)'
   assert.deepEqual(s.map(x => x.path), ['/admin/test1/sales', '/'])
 })
 
+test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
+  const changedFiles = ['pocs/booking-demo/app/pages/admin/[team]/blocks.vue']
+  assert.deepEqual(deriveSurfaces({ app: 'booking-demo', changedFiles }), [{ name: 'admin-team-blocks', path: '/admin/test1/blocks', do: [] }])
+  assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles }), [])
+  assert.deepEqual(deriveSurfaces({ app: 'gallery', changedFiles }), [])
+  assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
+})
+
+test('deriveSurfaces: a packages/ page maps for any app (#3794)', () => {
+  const changedFiles = ['packages/crouton-x/app/pages/foo.vue']
+  for (const app of ['velo', 'gallery']) {
+    const s = deriveSurfaces({ app, changedFiles })
+    assert.equal(s.length, 1)
+    assert.equal(s[0].path, '/foo')
+  }
+})
+
 test('deriveSurfaces: package component only maps for the gallery', () => {
   const f = ['packages/crouton-core/app/components/Pill.vue']
   assert.deepEqual(deriveSurfaces({ app: 'velo', changedFiles: f }), [])

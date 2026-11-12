@@ -38,6 +38,14 @@ signed-off behaviour); this file is the architecture and the decisions behind it
 - **Board drag is one pointer gesture** (`board-drag.ts`): hold-then-drag with `elementFromPoint`
   hit-testing and `touchmove` cancelled only while a drag is live. No HTML5 drag — it never starts
   on iOS. Width authoring is a scaled frame (`useBoardWidth`), presets plus a free drag.
+- **The block row is grouped by collection** (#3748, `utils/palette-groups.ts`): one chip per
+  collection (`Artists · Form` → group `Artists`, item `Form`) plus **Layout** for `chrome`
+  blocks, each opening a `UPopover` menu. Blocks with neither shape — crouton-layout's generic
+  `collection-list` / `entity-form` / `stats`, `__dropghost__` — stay registered (old pages
+  render) but aren't offered. A held menu item goes see-through while it drags, then closes.
+- Board panes are floored at the same floor the served page uses (`boardPaneMinPct` →
+  `deriveSizing(...).hardMinWidth`: a block's `minWidth`, a nested split's widest block), so
+  editor and page give each pane the same width (#3746, `tests/board-vs-preview.test.ts`).
 
 ## Gotchas
 
@@ -47,7 +55,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   hidden list, the visible tree and every pane's rendered box, which is how the Safari zero-height
   bug was pinned (#2490).
 - reka's splitter re-reports stale proportions on a variant/width switch; the board ignores no-op
-  layout reports and remounts on `currentId:activeBreakpoint`.
+  layout reports and remounts on `currentId:activeBreakpoint`; BoardTree only forwards a layout
+  report during a handle drag or key press, so reka's min-width clamp on open/width change never
+  edits the page (#3746).
 - A `pocs/*` typecheck sweeps the whole monorepo and reports thousands of unrelated errors; the
   gate is `pnpm typecheck` (apps) after a package change.
 
@@ -57,4 +67,5 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   extraction into `crouton-layout` once it holds up on a phone across the spec entries.
 - The served page needs a public data path for team-scoped blocks before it can be truly public.
 - Board and served page must stack the same way at narrow widths (open: the board squeezes panes
-  side by side where the page stacks them).
+  side by side where the page stacks them). Hidden panes no longer count toward the board's
+  stack check (#3828); both now use partitionCollapsed's visible tree.

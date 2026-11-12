@@ -16,7 +16,10 @@ exact word they reply.
      design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
      splitter, `decompose-on-issue-pidev.yml`. For an epic it writes sub-issues to
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
-     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). For a design
+     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the
+     failed tickets to `ticket-revise.yml`, which rewrites them from the review's findings
+     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds; a needs-owner verdict
+     or round 3 holds for the owner. For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
    - c. `scripts/lib/plan-route.mjs` says `plan` → `work-issue-pidev.yml` in plan mode (step 2).
@@ -49,7 +52,9 @@ exact word they reply.
    never merges by itself), a PR the build review held after two rejected rounds, and a PR where the
    build review asked a `needs-owner` question (step 5). On a v1 epic branch the workflow only
    writes the `Merge decision` check, and GitHub merges once `CI Gate` + `Merge decision` are green —
-   see [the pipeline v1 guide](./README.md).
+   see [the pipeline v1 guide](./README.md). A `work-*` PR straight into `main` merges on the
+   owner's `ok`, or by itself when every changed file is in the incubator stage and the build review
+   said go on its current commit (#3757); the merge check logs the reason.
 7. **Epic → `main`.** The epic PR merges only on **the owner's `ok`**, and only when both `CI Gate`
    and `E2E Gate` have passed (the `approve-epic` job in `on-comment.yml`, decided by
    `scripts/epic-merge-decision.mjs`).
@@ -77,6 +82,7 @@ The table below is generated from the workflow files and the grouping in
 | [on-issue-close.yml](../../.github/workflows/on-issue-close.yml) | On issue close | `issues`, `workflow_dispatch` |
 | [routing-registry.yml](../../.github/workflows/routing-registry.yml) | routing-registry | `pull_request`, `push` |
 | [ticket-review.yml](../../.github/workflows/ticket-review.yml) | Ticket review (independent reviewer — pi.dev) | `workflow_dispatch` |
+| [ticket-revise.yml](../../.github/workflows/ticket-revise.yml) | Ticket revise (rewrite sent-back tickets — pi.dev) | `workflow_dispatch` |
 | [warn-closes-blocked.yml](../../.github/workflows/warn-closes-blocked.yml) | Warn on a risky Closes | `pull_request` |
 
 #### planning
@@ -122,6 +128,7 @@ The table below is generated from the workflow files and the grouping in
 | [handoff-sweep.yml](../../.github/workflows/handoff-sweep.yml) | Hand-off sweep (replay saved pipeline hand-offs) | `schedule`, `workflow_run`, `workflow_dispatch` |
 | [on-pr-close.yml](../../.github/workflows/on-pr-close.yml) | On PR close | `pull_request` |
 | [owner-quiz.yml](../../.github/workflows/owner-quiz.yml) | Owner quiz | `workflow_call`, `workflow_dispatch` |
+| [postmortem.yml](../../.github/workflows/postmortem.yml) | Epic postmortem | `workflow_call`, `workflow_dispatch` |
 | [status.yml](../../.github/workflows/status.yml) | Status | `workflow_run`, `check_suite`, `status`, `pull_request`, `issues` |
 
 #### deploys
