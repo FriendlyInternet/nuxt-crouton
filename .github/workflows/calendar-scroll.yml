@@ -1,0 +1,111 @@
+name: Calendar scroll (WebKit iPhone)
+
+# #3813 — the proof that changing the calendar month no longer throws the page to the
+# top on an iPhone. Runs e2e/deployed/calendar-month-scroll.deployed.spec.ts (WebKit,
+# iPhone 13, touch) against DEPLOYED apps:
+#   • staging-baseline — staging = main, i.e. WITHOUT this PR's fix: expected RED before
+#     the fix lands (report-only, never blocks; it goes green once the fix is on main).
+#   • preview          — this PR's crouton-builder + booking-demo previews, WITH the fix:
+#     the real red/green check on the PR.
+# Each job writes its per-run numbers into the PR body (scripts/calendar-scroll-report.mjs).
+# Every browser run has a hard time limit (owner, 2026-11-12 15:26): a hung WebKit must
+# never eat the job. Logic lives in scripts/calendar-scroll-report.mjs (#3452).
+
+on:
+  pull_request:
+    paths:
+      - 'packages/crouton-calendar/**'
+      - 'e2e/deployed/**'
+      - 'scripts/calendar-scroll-report.mjs'
+      - '.github/workflows/calendar-scroll.yml'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number whose previews to test (empty = staging baseline only)'
+        required: false
+      repeat:
+        description: 'Runs per case'
+        required: false
+        default: '10'
+      engine:
+        description: 'webkit (default) or chromium (iPhone emulation fallback — cannot show the WebKit bug)'
+        required: false
+        default: 'webkit'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: calendar-scroll-${{ github.event.pull_request.number || inputs.pr || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  REPEAT: ${{ inputs.repeat || '10' }}
+  CAL_SCROLL_ENGINE: ${{ inputs.engine || 'webkit' }}
+  PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+
+jobs:
+  staging-baseline:
+    name: Calendar scroll · staging (main) baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      CAL_SCROLL_TARGET: staging
+      REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install (root only, for @playwright/test)
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
+      - name: Install the browser (hard limit)
+        run: timeout -k 10 600 pnpm exec playwright install --with-deps "$CAL_SCROLL_ENGINE"
+      - name: Run against staging
+        run: |
+          set -o pipefail
+          timeout -k 10 1500 pnpm exec playwright test --config e2e/deployed/playwright.config.ts --repeat-each="$REPEAT" 2>&1 | tee calscroll.log
+      - name: Per-run numbers → summary + PR body
+        if: always()
+        run: |
+          node scripts/calendar-scroll-report.mjs report --log calscroll.log --job staging \
+            --title "Staging (main, no fix) — expected to FAIL until this merges" ${PR_NUMBER:+--pr "$PR_NUMBER"} >> "$GITHUB_STEP_SUMMARY"
+
+  preview:
+    name: Calendar scroll · PR preview (WebKit iPhone)
+    if: github.event_name == 'pull_request' || inputs.pr != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      CAL_SCROLL_TARGET: pr
+      REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install (root only, for @playwright/test)
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
+      - name: Install the browser (hard limit)
+        run: timeout -k 10 600 pnpm exec playwright install --with-deps "$CAL_SCROLL_ENGINE"
+      - name: Wait for this PR's previews
+        run: node scripts/calendar-scroll-report.mjs preview-urls --sha "$HEAD_SHA" --timeout-min 40 >> "$GITHUB_ENV"
+      - name: Run against the PR previews
+        run: |
+          set -o pipefail
+          timeout -k 10 1500 pnpm exec playwright test --config e2e/deployed/playwright.config.ts --repeat-each="$REPEAT" 2>&1 | tee calscroll.log
+      - name: Per-run numbers → summary + PR body
+        if: always()
+        run: |
+          node scripts/calendar-scroll-report.mjs report --log calscroll.log --job preview \
+            --title "PR preview (with the fix) — must PASS" ${PR_NUMBER:+--pr "$PR_NUMBER"} >> "$GITHUB_STEP_SUMMARY"

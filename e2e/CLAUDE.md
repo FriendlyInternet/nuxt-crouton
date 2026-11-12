@@ -22,6 +22,8 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   bookings-fullscreen.smoke.spec.ts # with-bookings only: phone: no inline calendar; full screen keeps week/filter/day/view across close+reopen (#3079), one toolbar row + one labelled close, month leaves ≥200px for the list (#3046); desktop keeps the inline calendar
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
+  deployed/                  # tests against DEPLOYED staging/PR previews (no webServer, no fixture): own playwright.config.ts, WebKit iPhone 13 (CAL_SCROLL_ENGINE=chromium fallback); run by .github/workflows/calendar-scroll.yml
+    calendar-month-scroll.deployed.spec.ts # month change (swipe, « ») keeps the page scroll + no wrong-month frame, Builder page + booking-demo blocks (#3813)
 
 fixtures/                    # the apps under test — real crouton apps, one per config
   minimal/                   # core + auth + i18n, one 'items' collection

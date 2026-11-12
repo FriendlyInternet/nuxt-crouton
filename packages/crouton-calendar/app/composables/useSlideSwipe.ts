@@ -1,4 +1,5 @@
 import { swipeDirection, lockAxis } from '../utils/swipe'
+import { changeWhileHeld } from '../utils/hold-height'
 
 /**
  * Finger-following horizontal swipe (#2515). While dragging, `dragX` tracks the
@@ -43,10 +44,15 @@ export function useSlideSwipe(
     await wait(SLIDE_MS)
     animating = false
     render()
-    fire()
-    // neighbour panel is already in view: data swapped, snap back to centre
-    dragX = 0
-    render()
+    // Hold the height → change the month → snap back, all in one synchronous
+    // call: WebKit loses the page scroll during the redraw otherwise (#3813),
+    // and no frame may show the neighbour next to the new month.
+    void changeWhileHeld(el.value, opts.track.value, () => {
+      fire()
+      // neighbour panel is already in view: data swapped, snap back to centre
+      dragX = 0
+      render()
+    })
   }
 
   async function slide(dir: 'next' | 'prev') {
@@ -55,7 +61,7 @@ export function useSlideSwipe(
     if (reducedMotion()) {
       dragX = 0
       render()
-      fire()
+      void changeWhileHeld(el.value, opts.track.value, fire)
       return
     }
     busy = true
@@ -112,5 +118,8 @@ export function useSlideSwipe(
     },
   })
 
-  return { slide }
+  /** Run a period change that doesn't slide (e.g. "today") with the height held (#3813). */
+  const keepHeight = (change: () => void) => changeWhileHeld(el.value, opts.track.value, change)
+
+  return { slide, keepHeight }
 }

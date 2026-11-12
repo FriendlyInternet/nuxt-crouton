@@ -1,0 +1,38 @@
+{
+  "renderer": "panes",
+  "root": {
+    "type": "split",
+    "direction": "vertical",
+    "children": [
+      { "type": "leaf", "blockId": "app-toolbar", "id": "8ho0io", "defaultSize": 10 },
+      { "type": "leaf", "blockId": "bookings-locations", "id": "hvcal9", "defaultSize": 20.3 },
+      { "type": "leaf", "blockId": "bookings-calendar-only", "id": "uv36ho", "defaultSize": 44.7 },
+      { "type": "leaf", "blockId": "bookings-package-list", "id": "q9ssy6", "defaultSize": 25 }
+    ]
+  },
+  "breakpoints": [
+    {
+      "minWidth": 536,
+      "root": {
+        "type": "split",
+        "direction": "vertical",
+        "children": [
+          { "type": "leaf", "blockId": "app-toolbar", "id": "8ho0io", "defaultSize": 33.3 },
+          { "type": "leaf", "blockId": "bookings-list", "id": "ex9qb1", "config": { "collection": "builderBookings", "heading": "Bookings" }, "defaultSize": 15 },
+          { "type": "leaf", "blockId": "bookings-locations", "id": "hvcal9", "collapse": { "edge": "right", "affordance": "tab", "placement": "nav", "reveal": "sheet" }, "defaultSize": 51.7 },
+          {
+            "type": "split",
+            "direction": "horizontal",
+            "children": [
+              { "type": "leaf", "blockId": "bookings-package-list", "id": "q9ssy6", "defaultSize": 33.3 },
+              { "type": "leaf", "blockId": "artists-list", "id": "pbf6t6", "config": { "collection": "builderArtists", "heading": "Artists", "layout": "table" }, "defaultSize": 33.3 },
+              { "type": "leaf", "blockId": "bookings-calendar-only", "id": "uv36ho", "defaultSize": 33.3 }
+            ],
+            "defaultSize": 25
+          }
+        ]
+      },
+      "collapsed": ["hvcal9"]
+    }
+  ]
+}

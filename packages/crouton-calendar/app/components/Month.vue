@@ -34,7 +34,7 @@ const isSameMonth = (a: { year: number, month: number }, b: { year: number, mont
   a.year === b.year && a.month === b.month
 
 const trackEl = ref<HTMLElement | null>(null)
-const { slide } = useSlideSwipe(swipeEl, {
+const { slide, keepHeight } = useSlideSwipe(swipeEl, {
   track: trackEl,
   onNext: () => showMonth(placeholder.value.add({ months: 1 })),
   onPrev: () => showMonth(placeholder.value.subtract({ months: 1 })),
@@ -67,7 +67,7 @@ function showMonth(d: DateValue) {
 }
 
 function goToToday() {
-  date.value = new Date()
+  void keepHeight(() => { date.value = new Date() })
 }
 
 // Day activation comes through UCalendar's own cellTrigger (a real <button>,
@@ -79,7 +79,7 @@ function onActivate(value: any) {
   selected.value = single
   // Tapping a greyed neighbour-month day selects it and slides to that month.
   if (single && !isSameMonth(single, placeholder.value)) {
-    showMonth(single)
+    void keepHeight(() => showMonth(single))
   }
   if (single) emit('select', single.toDate(getLocalTimeZone()))
 }
