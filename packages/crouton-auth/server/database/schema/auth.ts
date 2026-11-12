@@ -3,6 +3,7 @@
  *
  * This schema defines all tables required by Better Auth and its plugins:
  * - Core: user, session, account, verification
+ * - Rate limit: rateLimit
  * - Organization Plugin: organization, member, invitation
  * - Passkey Plugin: passkey
  * - Two-Factor Plugin: twoFactor
@@ -95,6 +96,19 @@ export const verification = sqliteTable('verification', {
 }, table => [
   index('verification_identifier_idx').on(table.identifier)
 ])
+
+/**
+ * Rate limit table - better-auth rate-limit counters (#3142)
+ *
+ * Used by `rateLimit.storage: 'database'` so every Worker instance shares one
+ * counter per client. `key` is `<ip>|<path>`.
+ */
+export const rateLimit = sqliteTable('rateLimit', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(),
+  count: integer('count').notNull(),
+  lastRequest: integer('lastRequest').notNull() // epoch ms
+})
 
 // ============================================================================
 // Organization Plugin Tables

@@ -312,7 +312,7 @@ const {
   loginWithPasskey,        // () => Promise<void>
   loginWithPasskeyAutofill,// () => Promise<void>
   loginWithMagicLink,      // (email: string) => Promise<void>
-  register,                // (data: RegisterData) => Promise<void>
+  register,                // (data: RegisterData) => Promise<{ requiresVerification: boolean }> — with crouton-email installed, no session until the e-mail is verified
   logout,                  // () => Promise<void>
   forgotPassword,          // (email: string) => Promise<void>
   resetPassword,           // (token: string, password: string) => Promise<void>
@@ -766,7 +766,7 @@ definePageMeta({
 
 ### `guest` Middleware
 
-Requires NO authentication. Redirects to home if authenticated.
+Requires NO authentication. Signed-in users are sent to the `?redirect=` target if it is on the same site (anything else falls back to `/`), otherwise to `ui.redirects.authenticated`.
 
 ```vue
 <script setup lang="ts">
@@ -805,6 +805,7 @@ export * from '@crouton/auth/server/database/schema/auth'
 | `invitation` | Pending invitations |
 | `passkey` | WebAuthn credentials |
 | `twoFactor` | 2FA settings |
+| `rateLimit` | Rate-limit counters for auth endpoints |
 | `subscription` | Stripe subscriptions |
 
 ### Generate Migrations
