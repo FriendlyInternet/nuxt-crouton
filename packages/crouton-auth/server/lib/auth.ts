@@ -369,8 +369,8 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * These hooks automatically:
  *
  * **defaultTeamSlug (company app pattern):**
- * 1. Create the default organization on first user signup (lazy creation)
- * 2. Add new users to the default organization
+ * 1. Create the default organization on the first sign-up or sign-in (lazy creation)
+ * 2. Add every user to it on sign-up and on every sign-in (`session.create.before`, #3786)
  * 3. Set the default organization as active for new sessions
  *
  * **autoCreateOnSignup (personal workspace pattern):**
@@ -499,6 +499,21 @@ function buildDatabaseHooks(
         // that null for up to five minutes. `before` merges its returned `data`
         // into the record actually created, so it lands in the cookie too.
         before: async (session) => {
+          // One-team apps: join the default team on every sign-in, not just at
+          // sign-up, so accounts made before `defaultTeamSlug` was set (or removed
+          // from the team later) aren't activated into a team they can't use (#3786).
+          // Both helpers are idempotent.
+          if (hasDefaultTeam) {
+            const defaultTeamSlug = teams.defaultTeamSlug!
+            try {
+              await ensureDefaultOrgExists(db, defaultTeamSlug, appName)
+              await addUserToDefaultOrg(db, session.userId, defaultTeamSlug)
+            } catch (error) {
+              // Never block sign-in over the default-team join (#3786)
+              console.error(`[crouton/auth] Could not add ${session.userId} to default org "${defaultTeamSlug}":`, error)
+            }
+          }
+
           const orgId = await resolveInitialOrgId(db, session.userId, teams)
 
           if (!orgId) {
@@ -525,7 +540,7 @@ function buildDatabaseHooks(
  * Ensure the default organization exists (lazy creation)
  *
  * Creates the default organization if it doesn't exist.
- * This is called on first user signup when defaultTeamSlug is set.
+ * Called on every sign-up and every sign-in when defaultTeamSlug is set (a cheap slug lookup once the org exists).
  *
  * @param db - Drizzle database instance
  * @param slug - Default team slug from config
@@ -1150,7 +1165,7 @@ function buildGenericProviderConfig(config: OAuthProviderConfig): SocialProvider
  * - `allowCreate`: Whether users can create new organizations
  * - `limit`: Maximum organizations per user (0 = unlimited)
  * - `autoCreateOnSignup`: Auto-create personal workspace
- * - `defaultTeamSlug`: Everyone joins this team on signup
+ * - `defaultTeamSlug`: Everyone joins this team on sign-up and on sign-in
  */
 export function buildOrganizationConfig(
   config: CroutonAuthConfig,
