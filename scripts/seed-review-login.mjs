@@ -10,11 +10,23 @@
  *     [--seed-team test1 --db app-staging-db]
  *
  * Flow (all via the public auth routes the browser uses):
- *   1. POST /api/auth/sign-up/email   (autoSignIn → session cookie). An existing
- *      user (redeploy) returns USER_ALREADY_EXISTS → sign in with the given password.
- *      If that fails the account holds an OLD password (e.g. the review secret was
- *      rotated, #2358): with --db/--sqlite the password is reset to the given one
- *      (hashed with better-auth's own helper) and sign-in is retried.
+ *   0. With --db/--sqlite (both callers always pass one), LOOK THE ACCOUNT UP FIRST
+ *      (#3141). An app with crouton-email requires a verified e-mail, so sign-up of
+ *      an existing address no longer says "already exists" (it returns 200 with no
+ *      session) and a new account gets no session until it is verified.
+ *      - Existing account (redeploy): POST /sign-in/email with the given password.
+ *        A 200 proves the account is ours — reused as-is (step 4 verifies it). If it
+ *        is refused (old password, or not verified yet): reset its password to the
+ *        given one (hashed with better-auth's own helper, #2358), mark it verified
+ *        (dropping any stranger's unverified sessions first, #3162), then sign in
+ *        again — it must return 200. Sign-up is skipped.
+ *      - New account: step 1. If sign-up returns no session token (verification
+ *        required), the seed just created the account with its own password, so it
+ *        marks it verified and signs in (must return 200).
+ *   1. POST /api/auth/sign-up/email   (autoSignIn → session cookie). Without a db
+ *      flag (today's flow): an existing user (redeploy) returns USER_ALREADY_EXISTS
+ *      → sign in with the given password; if that fails the account holds an OLD
+ *      password and, with --db/--sqlite, it is reset and sign-in is retried.
  *   2. GET  /api/auth/get-session     → capture the review user's id + whether
  *      the session already has an active organization.
  *   3a. --seed-team given (#832): attach the review user to the SEEDED demo org
@@ -206,6 +218,14 @@ export async function resetPasswordSql(email, password, hashPassword) {
 }
 
 /**
+ * #3141: SQL that counts the accounts holding `email` (case-insensitive, like
+ * better-auth, which stores addresses lower-cased). Read through `querySeedCount`.
+ */
+export function reviewerExistsSql(email) {
+  return `SELECT COUNT(*) AS "n" FROM "user" WHERE lower("email") = ${sqlStr(String(email).toLowerCase())};`
+}
+
+/**
  * SQL that closes the "stranger pre-registered the predictable review address" hole
  * (#3162). The feedback guard only trusts a VERIFIED email, and sign-up leaves it
  * unverified. Run it ONLY after the seed proved the account holds the seed password
@@ -219,6 +239,19 @@ export function markReviewerVerifiedSql(email) {
   return `DELETE FROM "session" WHERE "userId" IN ` +
     `(SELECT "id" FROM "user" WHERE lower("email") = ${e} AND "emailVerified" = 0); ` +
     `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
+}
+
+/**
+ * #3141: SQL that deletes EVERY session of the account holding `email`, verified or
+ * not. Run only in the reset branch (an existing account refused the seed password),
+ * before `resetPasswordSql`: the `0006_verify_existing_users` backfill marks every
+ * account verified, so `markReviewerVerifiedSql` drops nothing there, and a stranger who
+ * pre-registered the review address would stay signed in to an account the feedback
+ * guard trusts. The review address belongs to the deploy; the stranger loses access.
+ */
+export function deleteReviewerSessionsSql(email) {
+  return `DELETE FROM "session" WHERE "userId" IN ` +
+    `(SELECT "id" FROM "user" WHERE lower("email") = ${sqlStr(String(email).toLowerCase())});`
 }
 
 /**
@@ -308,12 +341,76 @@ async function main() {
     return { res, json }
   }
 
-  // 1. Sign up (autoSignIn returns a session cookie on success). A brand-new Worker
-  //    may not see its just-uploaded auth secret for a few seconds → retry (#3474).
   const delays = retryDelays()
   const maxAttempts = delays.length + 1
+  const hasDb = !!(args.db || args.sqlite)
+
+  // Sign in with the seed password, retrying while a fresh Worker has no auth
+  // secret yet (#3474). Returns null on a 200, else the refusal code.
+  async function trySignIn() {
+    for (let attempt = 1; ; attempt++) {
+      let res = null
+      let json = null
+      let threw = null
+      try {
+        ;({ res, json } = await post('/api/auth/sign-in/email', { email, password }))
+      } catch (e) {
+        threw = e
+      }
+      if (res?.ok) return null
+      const code = threw ? (threw?.message || String(threw)) : (json?.code || json?.message || `HTTP ${res.status}`)
+      if ((threw || isMissingSecretError(code)) && attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, delays[attempt - 1]))
+        continue
+      }
+      return code
+    }
+  }
+
+  // Exits 1 unless sign-in ends in a 200 (#3141).
+  async function signInOrExit(why) {
+    const code = await trySignIn()
+    if (code === null) return
+    warn(`${why}: sign-in refused (${code}) — NOT advertising this login.`)
+    process.exit(1)
+  }
+
+  // 0. Look the account up first (#3141) — see the header.
+  let existing = false
+  if (hasDb) {
+    try {
+      existing = querySeedCount(args, reviewerExistsSql(email)) > 0
+    } catch (e) {
+      warn(`could not look up ${email}: ${e?.message || e} — NOT advertising this login.`)
+      process.exit(1)
+    }
+  }
+  // An existing account that already takes the seed password (the usual redeploy) is
+  // proven and needs nothing changed — step 4 verifies it. Only a refusal (old password
+  // after a secret rotation #2358, or EMAIL_NOT_VERIFIED in a crouton-email app #3141)
+  // resets the password and marks the address verified, then must sign in.
+  const refused = existing ? await trySignIn() : null
+  if (existing && refused === null) {
+    info(`user ${email} already exists and takes the current password — reusing.`)
+  } else if (existing) {
+    info(`user ${email} already exists but refuses sign-in (${refused}) — resetting its password and marking it verified.`)
+    try {
+      // Take the address back first: revoke every session of it (#3141) — the reuse
+      // path above revokes nothing.
+      execSeedSql(args, deleteReviewerSessionsSql(email))
+      execSeedSql(args, await resetPasswordSql(email, password))
+      execSeedSql(args, markReviewerVerifiedSql(email))
+    } catch (e) {
+      warn(`could not reset/verify ${email}: ${e?.message || e} — NOT advertising this login.`)
+      process.exit(1)
+    }
+    await signInOrExit(`existing user ${email}`)
+  }
+
+  // 1. Sign up (autoSignIn returns a session cookie on success). A brand-new Worker
+  //    may not see its just-uploaded auth secret for a few seconds → retry (#3474).
   let signedUp = false
-  for (let attempt = 1; ; attempt++) {
+  for (let attempt = 1; !existing; attempt++) {
     let res = null
     let json = null
     let threw = null
@@ -327,6 +424,19 @@ async function main() {
     if (decision === 'ok') {
       signedUp = true
       info(`signed up ${email}`)
+      if (hasDb && !json?.token) {
+        // Verification required (crouton-email app, #3141): no session yet. The seed
+        // created this account one call ago with its own password, so verifying it
+        // keeps the #3162 rule; then sign in for the steps below.
+        info('sign-up gave no session (e-mail verification required) — marking it verified and signing in.')
+        try {
+          execSeedSql(args, markReviewerVerifiedSql(email))
+        } catch (e) {
+          warn(`could not mark ${email} verified: ${e?.message || e} — NOT advertising this login.`)
+          process.exit(1)
+        }
+        await signInOrExit(`new user ${email}`)
+      }
       break
     }
     if (decision === 'retry') {

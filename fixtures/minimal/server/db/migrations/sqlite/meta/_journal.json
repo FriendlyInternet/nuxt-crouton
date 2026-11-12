@@ -29,6 +29,13 @@
       "when": 1794437290255,
       "tag": "0003_auth_rate_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794437291255,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

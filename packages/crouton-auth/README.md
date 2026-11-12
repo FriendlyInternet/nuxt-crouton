@@ -311,7 +311,7 @@ const {
   loginWithPasskey,        // () => Promise<void>
   loginWithPasskeyAutofill,// () => Promise<void>
   loginWithMagicLink,      // (email: string) => Promise<void>
-  register,                // (data: RegisterData) => Promise<void>
+  register,                // (data: RegisterData) => Promise<{ requiresVerification: boolean }> — with crouton-email installed, no session until the e-mail is verified
   logout,                  // () => Promise<void>
   forgotPassword,          // (email: string) => Promise<void>
   resetPassword,           // (token: string, password: string) => Promise<void>
