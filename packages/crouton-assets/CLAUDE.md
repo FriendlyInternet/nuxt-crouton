@@ -146,5 +146,5 @@ Query with `contentType` filter (e.g., `image/*`).
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck  # MANDATORY after changes (checks this package only)
 ```
