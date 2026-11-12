@@ -10,7 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile, finishCheckLine, readFinishCheckLine } from './run-record.mjs'
+import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile, finishCheckLine, readFinishCheckLine, appendFinishCheck } from './run-record.mjs'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-record-'))
 const rec = (role, content) => JSON.stringify({ type: 'message', message: { role, content } })
@@ -80,4 +80,67 @@ test('#3762: the finish-check line says ran/rounds/last, or not run, and never t
   const r = spawnSync(process.execPath, [script, 'finish-check-line', path.join(dir, 'missing.json')], { encoding: 'utf8' })
   assert.equal(r.status, 0)
   assert.equal(r.stdout.trim(), 'finish check: not run')
+})
+
+// A fake `gh`: answers pr list / comment list / comment body, records every call.
+function fakeGh({ pr = '42', ids = '7\n9', body = 'pi worker — run record\nok', failPatch = false } = {}) {
+  const calls = []
+  const gh = (args) => {
+    calls.push(args)
+    if (args[0] === 'pr') return pr
+    if (args.includes('PATCH')) { if (failPatch) throw new Error('500'); return '' }
+    if (args[1].endsWith('/comments')) return ids
+    return body
+  }
+  return { gh, calls }
+}
+
+test('#3762: append-finish-check patches the NEWEST run-record comment of the open PR', () => {
+  const out = path.join(dir, 'outcome.json')
+  fs.writeFileSync(out, JSON.stringify({ ran: true, rounds: 2, last: 'green' }))
+  const { gh, calls } = fakeGh()
+  const r = appendFinishCheck({ outcomePath: out, branch: 'work-1', repo: 'o/r', gh })
+  assert.equal(r.done, true)
+  assert.deepEqual(calls[0].slice(0, 4), ['pr', 'list', '--head', 'work-1'])
+  const patch = calls.at(-1)
+  assert.ok(patch.includes('repos/o/r/issues/comments/9'))
+  assert.equal(patch.at(-1), 'body=pi worker — run record\nok\n\n🔁 finish check: ran, 2 rounds, green')
+})
+
+test('#3762: append-finish-check is best effort — no PR, no comment, a failing API never throw or patch', () => {
+  for (const [opts, why] of [[{ pr: '' }, 'no PR'], [{ ids: '' }, 'no run-record comment'], [{ body: '' }, 'empty comment body']]) {
+    const { gh, calls } = fakeGh(opts)
+    const r = appendFinishCheck({ outcomePath: '/nope', branch: 'b', repo: 'o/r', gh })
+    assert.equal(r.done, false); assert.equal(r.why, why)
+    assert.ok(!calls.some((c) => c.includes('PATCH')))
+  }
+  const { gh } = fakeGh({ failPatch: true })
+  assert.equal(appendFinishCheck({ outcomePath: '/nope', branch: 'b', repo: 'o/r', gh }).why, 'patch failed')
+  const throws = () => { throw new Error('boom') }
+  assert.equal(appendFinishCheck({ outcomePath: '/nope', branch: 'b', repo: 'o/r', gh: throws }).why, 'no PR')
+})
+
+test('#3762: the CLI subcommand runs real `gh` from PATH and exits 0 either way', () => {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-gh-'))
+  const log = path.join(bin, 'calls.log')
+  fs.writeFileSync(path.join(bin, 'gh'), `#!/usr/bin/env node
+const a = process.argv.slice(2); require('fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(a) + '\\n')
+if (a[0] === 'pr') console.log('5')
+else if (a.includes('PATCH')) {}
+else if (a[1].endsWith('/comments')) console.log('11')
+else console.log('pi worker — run record')
+`, { mode: 0o755 })
+  const out = path.join(dir, 'cli-outcome.json')
+  fs.writeFileSync(out, JSON.stringify({ ran: true, rounds: 1, last: 'red' }))
+  const script = fileURLToPath(new URL('./run-record.mjs', import.meta.url))
+  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, GITHUB_REPOSITORY: 'o/r' }
+  const r = spawnSync(process.execPath, [script, 'append-finish-check', out, 'work-5'], { encoding: 'utf8', env })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /finish check: ran, 1 round, red/)
+  const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  assert.equal(calls.at(-1).at(-1), 'body=pi worker — run record\n\n🔁 finish check: ran, 1 round, red')
+  // No gh on PATH at all → still exit 0.
+  const r2 = spawnSync(process.execPath, [script, 'append-finish-check', out, 'work-5'], { encoding: 'utf8', env: { ...env, PATH: '/nonexistent' } })
+  assert.equal(r2.status, 0)
+  assert.match(r2.stdout, /skipped \(no PR\)/)
 })

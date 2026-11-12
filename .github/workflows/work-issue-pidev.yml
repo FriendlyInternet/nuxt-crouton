@@ -1429,21 +1429,13 @@ jobs:
           [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
 
       # #3762: append the finish-check line to the run record. Own step, same reason.
-      # Best effort (each `|| true`): no PR, no run-record comment or an API error must not fail the job.
+      # Best effort (in the script): no PR, no run-record comment or an API error must not fail the job.
       - id: finish-check-line
         if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
-        run: |
-          PR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-          [ -n "$PR" ] || exit 0
-          CID="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate -q '[.[] | select(.body | contains("pi worker — run record"))] | last | .id // empty' 2>/dev/null | tail -1 || true)"
-          [ -n "$CID" ] || exit 0
-          LINE="$(node "$RUNNER_TEMP/run-record.mjs" finish-check-line "$RUNNER_TEMP/finish-check-outcome.json" 2>/dev/null || echo 'finish check: not run')"
-          BODY="$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${CID}" -q .body 2>/dev/null || true)"
-          [ -n "$BODY" ] || exit 0
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${CID}" -f body="${BODY}"$'\n\n'"🔁 ${LINE}" >/dev/null 2>&1 || true
+        run: node "$RUNNER_TEMP/run-record.mjs" append-finish-check "$RUNNER_TEMP/finish-check-outcome.json" "$BR" || true
 
       - name: Upload worker screenshots (download backup, #3351)
         if: ${{ always() && inputs.mode != 'plan' }}
