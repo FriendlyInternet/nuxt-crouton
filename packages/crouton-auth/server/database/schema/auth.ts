@@ -105,7 +105,7 @@ export const verification = sqliteTable('verification', {
  *
  * Stores organization (team) data. Configuration flags control behavior:
  * - teams.allowCreate=true: Users can create multiple organizations
- * - teams.defaultTeamSlug: All users join this org on signup (isDefault = true)
+ * - teams.defaultTeamSlug: All users join this org on sign-up and sign-in (isDefault = true)
  * - teams.autoCreateOnSignup: Auto-create personal workspace (personal = true)
  */
 export const organization = sqliteTable('organization', {
