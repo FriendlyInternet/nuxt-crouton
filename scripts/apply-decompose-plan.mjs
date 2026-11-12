@@ -705,25 +705,29 @@ function main(argv) {
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
   console.log(JSON.stringify(summary, null, 2))
+  // A design sign-off hold IS the deliverable (status:blocked + the posted forks/artifacts);
+  // the artifact-gate recognises signoffHeld. Emit the rendered files so the workflow commits
+  // them to the epic branch (their raw URLs are referenced in the posted comment).
+  if (plan.signoff && summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
+  const failure = applyFailure(plan, summary)
+  if (failure) {
+    console.error(failure)
+    process.exit(1)
+  }
+}
+
+/** Why this apply must go red (so the artifact-gate stays honest), or null when it produced its deliverable. */
+function applyFailure(plan, summary) {
   if (plan.signoff) {
-    // A design sign-off hold IS the deliverable (status:blocked + the posted forks/artifacts);
-    // the artifact-gate recognises signoffHeld. Emit the rendered files so the workflow commits
-    // them to the epic branch (their raw URLs are referenced in the posted comment).
-    if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
-    if (!summary.held.length) { console.error('signoff plan produced no hold — failing'); process.exit(1) }
+    if (!summary.held.length) return 'signoff plan produced no hold — failing'
     // The hold posted (with a visible warning), but a UI hold without its image is a defect: go red.
-    if (summary.mockupMissing) { console.error('design hold described a mockup but none was linked — failing (#2809)'); process.exit(1) }
-    return
+    if (summary.mockupMissing) return 'design hold described a mockup but none was linked — failing (#2809)'
+    return null
   }
-  if (!plan.leaf && summary.created.length === 0) {
-    console.error('apply produced no children — failing so the artifact-gate stays honest')
-    process.exit(1)
-  }
+  if (!plan.leaf && summary.created.length === 0) return 'apply produced no children — failing so the artifact-gate stays honest'
   // #3846: check the step list was written rather than assume it.
-  if (plan.rolling && summary.stepsPosted.length === 0) {
-    console.error('rolling plan posted no step list — failing')
-    process.exit(1)
-  }
+  if (plan.rolling && summary.stepsPosted.length === 0) return 'rolling plan posted no step list — failing'
+  return null
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {

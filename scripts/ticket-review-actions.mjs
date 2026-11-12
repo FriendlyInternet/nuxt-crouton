@@ -53,32 +53,39 @@ export function legacyActions({ epic, decision, comments, tickets }) {
 
 /** PURE. The epic's state after this review, in the shape nextAction() reads. */
 export function rollingState({ subject = '', labels = [], decision, comments = [], subIssues = [], steps = null }) {
+  const plan = rollingPlanState({ subject, labels, decision, comments, steps })
+  const per = new Map((decision?.tickets || []).map((t) => [t.number, t]))
+  const runnable = new Set(releasable(subIssues.filter((s) => s.state !== 'closed')).map((r) => r.number))
+  const tickets = {}
+  for (const s of subIssues) tickets[s.number] = rollingTicketState(s, per.get(s.number), { comments, runnable })
+  return { rolling: true, plan, steps, tickets }
+}
+
+/** The plan's row: this review's plan verdict, else approved (or no step list) → go. */
+function rollingPlanState({ subject, labels, decision, comments, steps }) {
   const planNow = subject === 'plan' ? decision?.plan?.verdict || null : null
   const approved = names(labels).includes(STEPS_APPROVED_LABEL)
-  const plan = {
+  return {
     verdict: planNow || (approved || !steps ? 'go' : null),
     round: countRounds(comments, 'plan'),
     // A plan go in THIS review is newer than any plan-wrong comment already on the epic.
     wrong: planNow === 'go' ? false : planWrongOnRecord(comments),
   }
-  const per = new Map((decision?.tickets || []).map((t) => [t.number, t]))
-  const runnable = new Set(releasable(subIssues.filter((s) => s.state !== 'closed')).map((r) => r.number))
-  const tickets = {}
-  for (const s of subIssues) {
-    const t = per.get(s.number)
-    const started = names(s.labels).some((l) => TRIGGERS.includes(l))
-    // Only tickets this review graded carry a verdict; others are reported, never touched.
-    tickets[s.number] = {
-      state: s.state === 'closed' ? 'closed' : 'open',
-      verdict: t ? t.verdict : (started ? 'go' : null),
-      round: countRounds(comments, String(s.number)),
-      // A ticket still Blocked-by an earlier one is released by the wave scheduler, not here.
-      started: started || (t?.verdict === 'go' && !runnable.has(s.number)),
-      label: parsePipelineBlock(s.body || '').dispatch || 'work-this',
-      step: stepOf(s.body),
-    }
+}
+
+/** One sub-issue's row. `t` = this review's verdict for it (undefined if it was not graded). */
+function rollingTicketState(s, t, { comments, runnable }) {
+  const started = names(s.labels).some((l) => TRIGGERS.includes(l))
+  // Only tickets this review graded carry a verdict; others are reported, never touched.
+  return {
+    state: s.state === 'closed' ? 'closed' : 'open',
+    verdict: t ? t.verdict : (started ? 'go' : null),
+    round: countRounds(comments, String(s.number)),
+    // A ticket still Blocked-by an earlier one is released by the wave scheduler, not here.
+    started: started || (t?.verdict === 'go' && !runnable.has(s.number)),
+    label: parsePipelineBlock(s.body || '').dispatch || 'work-this',
+    step: stepOf(s.body),
   }
-  return { rolling: true, plan, steps, tickets }
 }
 
 /** PURE. Verdict → handoff lines (see the header). */

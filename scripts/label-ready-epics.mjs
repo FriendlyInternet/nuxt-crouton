@@ -30,6 +30,7 @@
 
 import { postmortemState } from './postmortem.mjs'
 import { stepsPending } from './lib/epic-steps.mjs'
+import { githubRest } from './lib/github-rest.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -45,20 +46,7 @@ const NEEDS = 'status:needs-postmortem'
 const INPROGRESS = 'status:in-progress'
 const MANAGED = [READY, NEEDS, INPROGRESS]
 
-async function gh(path, init) {
-  const res = await fetch('https://api.github.com' + path, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'label-ready-epics',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {})
-    }
-  })
-  if (!res.ok) throw new Error(`GitHub ${res.status} on ${path}: ${await res.text()}`)
-  return res.status === 204 ? null : res.json()
-}
+const gh = githubRest(token, 'label-ready-epics')
 const search = async (q) =>
   (await gh(`/search/issues?per_page=100&q=${encodeURIComponent(q)}`)).items || []
 const labelNames = (it) => (it.labels || []).map((l) => (typeof l === 'string' ? l : l.name))

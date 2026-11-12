@@ -211,23 +211,28 @@ export function planWrongOnRecord(comments = []) {
  *   decision = ticket-verdict.mjs decide() output · steps = the step list (or null)
  *   subIssues (optional) = to find tickets written by hand (`step=<k>`)
  */
+/** Grow `hold` along the step list: a step waiting on a held step is held too (and so is its ticket). */
+function holdDependentSteps(steps, byStep, held, hold) {
+  const stepOfTicket = new Map(Object.entries(byStep).map(([k, n]) => [n, Number(k)]))
+  const heldSteps = new Set(held.map((n) => stepOfTicket.get(n)).filter((k) => k !== undefined))
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const s of steps) {
+      if (heldSteps.has(s.step) || !s.blockedBy.some((b) => heldSteps.has(b))) continue
+      heldSteps.add(s.step); grew = true
+      if (byStep[s.step]) hold.add(byStep[s.step])
+    }
+  }
+}
+
 export function splitVerdict(decision, steps = null, subIssues = []) {
   const per = decision?.tickets || []
   const held = per.filter((t) => t.verdict !== 'go').map((t) => t.number)
   const hold = new Set(held)
   if (steps && held.length) {
     const byStep = ticketsByStep(steps, [...subIssues, ...per.map((t) => ({ number: t.number, body: t.body }))])
-    const stepOfTicket = new Map(Object.entries(byStep).map(([k, n]) => [n, Number(k)]))
-    const heldSteps = new Set(held.map((n) => stepOfTicket.get(n)).filter((k) => k !== undefined))
-    let grew = true
-    while (grew) {
-      grew = false
-      for (const s of steps) {
-        if (heldSteps.has(s.step) || !s.blockedBy.some((b) => heldSteps.has(b))) continue
-        heldSteps.add(s.step); grew = true
-        if (byStep[s.step]) hold.add(byStep[s.step])
-      }
-    }
+    holdDependentSteps(steps, byStep, held, hold)
   }
   const start = per.filter((t) => t.verdict === 'go' && !hold.has(t.number)).map((t) => t.number)
   return { start, hold: [...hold].sort((a, b) => a - b) }

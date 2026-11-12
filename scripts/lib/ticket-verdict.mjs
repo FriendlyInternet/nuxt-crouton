@@ -189,33 +189,57 @@ export function decide(tickets, verdictBody, { subject = '' } = {}) {
 // review writes one `<!-- ticket-review-subject:… -->` marker per subject it graded (the plan and
 // each ticket), so rounds are counted per plan and per ticket.
 export function renderComment(d, { model = '', revising = 0, subject = '' } = {}) {
+  const head = renderHead(d, { revising, subject })
+  const markers = renderMarkers(d, subject)
+  return `${TICKET_MARKER}\n<!-- ticket-review-verdict:${d.verdict} -->\n${markers}> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist per ticket</summary>\n\n${renderPlanDetail(d.plan)}${renderTicketDetail(d.tickets)}\n\n</details>\n`
+}
+
+const FIX_STEPS = '**Needs:** action — fix the step-list comment by hand, then re-run the plan review (`subject=plan`).'
+
+/** The visible typed-brief line(s) for the verdict. */
+function renderHead(d, { revising, subject }) {
   const bad = d.tickets.filter((t) => t.verdict !== 'go')
-  const sentBack = `🔴 **Tickets sent back** — ${bad.length} of ${d.tickets.length} would build something wrong.`
   const planBad = d.plan && d.plan.verdict !== 'go'
   const wrong = d.tickets.find((t) => t.verdict === 'plan-wrong')
-  const head = {
-    go: subject
-      ? `✅ **${d.plan ? 'Step list' + (d.tickets.length ? ' and ticket' : '') : 'Ticket'} approved** — ${d.tickets.length ? d.tickets.map((t) => `#${t.number}`).join(', ') + ' can start.' : 'no open ticket to start yet.'}\n**Next:** none.`
-      : `✅ **Tickets approved** — all ${d.tickets.length} read fine. The first ticket starts now.\n**Next:** none.`,
-    'plan-wrong': `🔀 **The step list looks wrong** — ${(wrong?.why || '').split('\n')[0]}\n**Needs:** action — fix the step-list comment by hand, then re-run the plan review (\`subject=plan\`).`,
-    'no-go': planBad
-      ? `🔴 **Step list sent back** — ${d.plan.failed.join(', ')} failed. Nothing has started.\n**Needs:** action — fix the step-list comment by hand, then re-run the plan review (\`subject=plan\`).`
-      : revising
-      ? `${sentBack} Rewriting them from this review now (round ${revising} of 3).\n**Next:** none.`
-      : `${sentBack} Nothing has started.\n**Needs:** action — fix the tickets listed below, then re-run the ticket review.`,
-    'needs-owner': `🔀 **Needs your call** — ${(planBad && d.plan.question) || bad.find((t) => t.question)?.question}\n**Needs:** answer`,
-  }[d.verdict]
-  const detail = d.tickets.map((t) => {
+  if (d.verdict === 'go') return renderGoHead(d, subject)
+  if (d.verdict === 'plan-wrong') return `🔀 **The step list looks wrong** — ${(wrong?.why || '').split('\n')[0]}\n${FIX_STEPS}`
+  if (d.verdict === 'no-go') return planBad ? `🔴 **Step list sent back** — ${d.plan.failed.join(', ')} failed. Nothing has started.\n${FIX_STEPS}` : renderSentBackHead(d, bad, revising)
+  if (d.verdict === 'needs-owner') return `🔀 **Needs your call** — ${(planBad && d.plan.question) || bad.find((t) => t.question)?.question}\n**Needs:** answer`
+  return undefined
+}
+
+function renderGoHead(d, subject) {
+  if (!subject) return `✅ **Tickets approved** — all ${d.tickets.length} read fine. The first ticket starts now.\n**Next:** none.`
+  const what = d.plan ? 'Step list' + (d.tickets.length ? ' and ticket' : '') : 'Ticket'
+  const then = d.tickets.length ? d.tickets.map((t) => `#${t.number}`).join(', ') + ' can start.' : 'no open ticket to start yet.'
+  return `✅ **${what} approved** — ${then}\n**Next:** none.`
+}
+
+function renderSentBackHead(d, bad, revising) {
+  const sentBack = `🔴 **Tickets sent back** — ${bad.length} of ${d.tickets.length} would build something wrong.`
+  return revising
+    ? `${sentBack} Rewriting them from this review now (round ${revising} of 3).\n**Next:** none.`
+    : `${sentBack} Nothing has started.\n**Needs:** action — fix the tickets listed below, then re-run the ticket review.`
+}
+
+function renderTicketDetail(tickets) {
+  return tickets.map((t) => {
     const lines = RUBRIC.map((r) => `- ${t.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${t.items[r.id].evidence}`).join('\n')
     const why = t.why ? `\n\n**Why the step list is wrong:** ${t.why}` : ''
     return `#### ${t.verdict === 'go' ? '✅' : '❌'} #${t.number} ${t.title} — ${t.verdict}\n\n${lines}${why}`
   }).join('\n\n')
-  const planDetail = d.plan
-    ? `#### ${d.plan.verdict === 'go' ? '✅' : '❌'} Step list — ${d.plan.verdict}\n\n${PLAN_RUBRIC.map((r) => `- ${d.plan.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.plan.items[r.id].evidence}`).join('\n')}\n\n`
-    : ''
+}
+
+function renderPlanDetail(plan) {
+  if (!plan) return ''
+  const lines = PLAN_RUBRIC.map((r) => `- ${plan.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${plan.items[r.id].evidence}`).join('\n')
+  return `#### ${plan.verdict === 'go' ? '✅' : '❌'} Step list — ${plan.verdict}\n\n${lines}\n\n`
+}
+
+/** One subject marker per subject graded (so rounds count per plan / per ticket) + the plan-go marker. */
+function renderMarkers(d, subject) {
   const subjects = subject ? [...new Set([...(d.plan ? ['plan'] : []), ...(subject === 'plan' ? [] : [subject]), ...d.tickets.map((t) => String(t.number))])] : []
-  const markers = subjects.map((s) => `${subjectMarker(s)}\n`).join('') + (d.plan?.verdict === 'go' ? `${PLAN_GO_MARKER}\n` : '')
-  return `${TICKET_MARKER}\n<!-- ticket-review-verdict:${d.verdict} -->\n${markers}> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist per ticket</summary>\n\n${planDetail}${detail}\n\n</details>\n`
+  return subjects.map((s) => `${subjectMarker(s)}\n`).join('') + (d.plan?.verdict === 'go' ? `${PLAN_GO_MARKER}\n` : '')
 }
 
 /** PURE. Tickets to start the moment the epic is approved: no blockers, not already dispatched. */
