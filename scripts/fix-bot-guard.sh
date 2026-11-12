@@ -67,9 +67,14 @@ ERR="$(cat "$RUNNER_TEMP/failed-job-logs.md" 2>/dev/null || echo '(could not rea
 # #3668 review: a hidden marker with the failing line, so the worker's next head keeps the try count
 # while that line repeats (carriedTry) — refused fix → worker → same red ends at the cap, not in a loop.
 # The lib is the default-branch copy the fix job puts in $RUNNER_TEMP/lib; no lib or no line → no marker.
+# A crash of the marker CLI fails CLOSED: warn, and post a marker with an empty line (= "handed back,
+# line unknown"), which carriesCount treats as a carry — so the try count does not reset (#3830 review).
 HB_MARK=""
 if [ -f "$RUNNER_TEMP/lib/diagnosis-review.mjs" ]; then
-  HB_MARK="$(node "$RUNNER_TEMP/lib/diagnosis-review.mjs" handback-marker "$PRE" "$RUN_NAME" "$RUNNER_TEMP/raw-logs" 2>/dev/null || true)"
+  if ! HB_MARK="$(node "$RUNNER_TEMP/lib/diagnosis-review.mjs" handback-marker "$PRE" "$RUN_NAME" "$RUNNER_TEMP/raw-logs")"; then
+    echo "::warning::fix-bot guard: the handback-marker CLI (diagnosis-review.mjs) failed — marking this hand-back with an unknown line so the try count carries over"
+    HB_MARK="<!-- fix-bot-handback:v1 sha=$PRE check=$(jq -rn --arg c "${RUN_NAME:-unknown}" '$c|@uri') line= -->"
+  fi
 fi
 {
   echo "<!-- pipeline-note -->"

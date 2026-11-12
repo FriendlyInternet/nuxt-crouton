@@ -271,8 +271,10 @@ export const firstFailingLines = (raws = []) =>
  */
 export function carriesCount({ comments = [], check, sha, failingLines: lines = [] }) {
   const want = (lines || []).map(normaliseLine).filter(Boolean)
-  if (!want.length) return false
   const hb = (comments || []).filter(isPipelineBot).map(c => parseHandbackMarker(c.body)).filter(h => h && h.check === check).pop()
+  // An empty line = the guard's marker CLI crashed (fix-bot-guard.sh): fail closed, the count carries.
+  if (hb && hb.line === '') return true
+  if (!want.length) return false
   if (hb && want.includes(hb.line)) return true
   return (lines || []).some(failingLine => missOf({ comments, check, sha, failingLine }) !== null)
 }

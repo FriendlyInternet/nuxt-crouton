@@ -220,6 +220,10 @@ test('carriesCount: a pipeline-bot hand-back on the same line carries; another l
   assert.equal(carriesCount({ comments: [human(handbackMarker({ sha: 'aaaaaaa', check: 'CI', line: FAIL }))], check: 'CI', sha: SHA, failingLines: lines }), false, 'non-bot')
   assert.equal(carriesCount({ comments: [hb(FAIL), hb(OTHER)], check: 'CI', sha: SHA, failingLines: lines }), false, 'the newest hand-back decides')
   assert.equal(carriesCount({ comments: [hb(FAIL)], check: 'CI', sha: SHA, failingLines: [] }), false, 'no failing line')
+  // #3830 review: the guard's marker CLI crashed → empty line → fail closed, the count carries.
+  const unknown = bot(`<!-- pipeline-note -->\n<!-- fix-bot-handback:v1 sha=aaaaaaa check=CI line= -->`, 'github-actions[bot]')
+  assert.equal(carriesCount({ comments: [unknown], check: 'CI', sha: SHA, failingLines: lines }), true, 'unknown line carries')
+  assert.equal(carriesCount({ comments: [unknown], check: 'E2E', sha: SHA, failingLines: lines }), false, 'unknown line, other check')
 })
 
 test('bot fix refused → worker commit → same red: the counter keeps rising and stops at the cap', async () => {

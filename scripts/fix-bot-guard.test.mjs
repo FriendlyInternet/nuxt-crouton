@@ -109,3 +109,22 @@ test('a refused fix → the hand-back carries a hidden marker with the failing l
   const { parseHandbackMarker, normaliseLine, firstFailingLines } = await import('./lib/diagnosis-review.mjs')
   assert.deepEqual(parseHandbackMarker(hb[1]), { sha: s.pre, check: 'CI', line: normaliseLine(firstFailingLines([line])[0]) })
 })
+
+// #3830 review: a crash of the marker CLI must not silently turn the loop protection off — it fails closed.
+test('a refused fix whose marker CLI crashes → ::warning::, and an unknown-line marker that still carries the try count', async () => {
+  const s = setup()
+  mkdirSync(join(s.temp, 'lib'))
+  writeFileSync(join(s.temp, 'lib', 'diagnosis-review.mjs'), "throw new Error('marker CLI boom')\n")
+  writeFileSync(join(s.work, 'app.js'), 'const a = 1\n')
+  git(s.work, 'commit', '-qam', 'fix: drop stray line')
+  const r = guard(s)
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(r.output, /refused=true/)
+  assert.match(r.stdout, /::warning::.*handback-marker CLI.*failed/)
+  assert.match(r.stderr, /marker CLI boom/, 'the crash is visible in the log, not swallowed')
+  const hb = readFileSync(join(s.temp, 'handback.md'), 'utf8').split('\n')
+  const { parseHandbackMarker, carriesCount } = await import('./lib/diagnosis-review.mjs')
+  assert.deepEqual(parseHandbackMarker(hb[1]), { sha: s.pre, check: 'CI', line: '' })
+  const comment = { body: hb.join('\n'), user: { login: 'github-actions[bot]', type: 'Bot' } }
+  assert.equal(carriesCount({ comments: [comment], check: 'CI', sha: 'b'.repeat(40), failingLines: ['any line'] }), true, 'fails closed: treated as handed back')
+})
