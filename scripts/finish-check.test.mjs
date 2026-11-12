@@ -274,6 +274,24 @@ test('.fallowrc.json raising a threshold is a finding; lowering is not', () => {
   assert.deepEqual(lowered, []);
 });
 
+test('.fallowrc.json raising duplicates.minOccurrences is a finding → red through finishCheck', () => {
+  const diffText = [
+    'diff --git a/.fallowrc.json b/.fallowrc.json',
+    '--- a/.fallowrc.json',
+    '+++ b/.fallowrc.json',
+    '@@ -196 +196 @@',
+    '-    "minOccurrences": 3,',
+    '+    "minOccurrences": 50,',
+  ].join('\n');
+  const raised = scanSuppressions({ diffText, untracked: {}, paths: ['.fallowrc.json'] });
+  assert.deepEqual(raised.map((f) => `${f.file}:${f.line}`), ['.fallowrc.json:196']);
+  assert.match(raised[0].message, /minOccurrences 3 → 50/);
+  const r = finishCheck(world({ status: ' M .fallowrc.json\n', diff: diffText }).deps);
+  assert.equal(r.status, 'red');
+  assert.equal(r.exitCode, 1);
+  assert.ok(r.findings.some((f) => f.file === '.fallowrc.json' && f.line === 196));
+});
+
 test('a changed or deleted Fallow baseline file is a finding', () => {
   const f = scanSuppressions({ diffText: '', untracked: {}, paths: ['.fallow-health-baseline.json', '.fallow-dupes-baseline.json'] });
   assert.deepEqual(f.map((x) => `${x.file}:${x.line}`), ['.fallow-health-baseline.json:1', '.fallow-dupes-baseline.json:1']);

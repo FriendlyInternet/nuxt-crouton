@@ -33,7 +33,8 @@ const VITEST_RE = /^packages\/[^/]+\/.+\.(test|spec)\.[cm]?[jt]sx?$/;
 const TEST_LIKE_RE = /[.-](test|spec)\.[cm]?[jt]sx?$/;
 const IGNORE_RE = new RegExp('fallow' + '-ignore');
 const PARKED_RE = /\b(it|test|describe)\.(skip|todo)\b/;
-const THRESHOLD_RE = /"(max\w+)"\s*:\s*(\d+)/;
+// Both `max*` (e.g. maxCrap) and `min*` (e.g. duplicates.minOccurrences) limits hide findings when raised.
+const THRESHOLD_RE = /"((?:max|min)\w+)"\s*:\s*(\d+)/;
 const NOT_COVERED = 'not covered by the finish check';
 const NOT_INCLUDED = "not matched by its package's vitest include";
 
