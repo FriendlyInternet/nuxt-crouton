@@ -101,6 +101,12 @@ test('isFlatFrame: a short normal page is not flat (#3854)', () => {
   assert.equal(isFlatFrame(frame), false)
 })
 
+test('isFlatFrame: a nearly empty page with one small button is not flat (#3854)', () => {
+  const frame = whiteFrame(780, 1688)
+  fillRect(frame, 340, 800, 100, 30)
+  assert.equal(isFlatFrame(frame), false)
+})
+
 test('isFlatFrame: a single 1-px line is still blank (#3854)', () => {
   const row = whiteFrame(780, 25280)
   fillRect(row, 0, 12000, 780, 1)

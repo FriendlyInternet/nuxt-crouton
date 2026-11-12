@@ -181,6 +181,11 @@ const BAND = 844
 // real pages are far above it (#3841: 14.8% overall), and even a sparse login form at 390 px has
 // borders, text and a button well over 0.5% of one screen.
 const MIN_CONTENT = 0.005
+// …OR when it holds a solid patch: ≥256 pixels that sit in a 2×2 block of differing pixels
+// (#3854 review). 256 = a 16×16 patch — smaller than any real control (a 100×30 button has
+// ~2,900), so a nearly empty page with one small button isn't called blank, while a 1-px line
+// has no 2×2 block at all and contributes 0.
+const MIN_SOLID = 256
 // Same per-channel tolerance colorsAreFlat uses.
 const TOLERANCE = 2
 
@@ -198,10 +203,20 @@ export function isFlatFrame({ data, width, height, channels }) {
   for (let y0 = 0; y0 < height; y0 += BAND) {
     const y1 = Math.min(height, y0 + BAND)
     let diff = 0
-    for (let idx = y0 * width * channels, end = y1 * width * channels; idx < end; idx += channels) {
-      if (Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE) diff++
+    let solid = 0
+    let prev = null
+    for (let y = y0; y < y1; y++) {
+      const cur = new Uint8Array(width)
+      for (let x = 0, idx = y * width * channels; x < width; x++, idx += channels) {
+        if (Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE) {
+          cur[x] = 1
+          diff++
+          if (prev && x > 0 && cur[x - 1] && prev[x - 1] && prev[x]) solid++
+        }
+      }
+      if (diff >= threshold || solid >= MIN_SOLID) return false
+      prev = cur
     }
-    if (diff >= threshold) return false
   }
   return true
 }
