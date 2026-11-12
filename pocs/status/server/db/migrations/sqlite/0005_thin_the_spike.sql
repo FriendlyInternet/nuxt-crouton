@@ -1,4 +1,4 @@
-CREATE TABLE `inbox_cards` (
+CREATE TABLE IF NOT EXISTS `inbox_cards` (
 	`id` text PRIMARY KEY NOT NULL,
 	`teamId` text NOT NULL,
 	`owner` text NOT NULL,
