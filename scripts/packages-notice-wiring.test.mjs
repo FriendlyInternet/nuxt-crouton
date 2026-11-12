@@ -19,6 +19,28 @@ function step(startMarker) {
   return rest.slice(0, next < 0 ? undefined : next)
 }
 
+// Count the top-level "…" arguments that follow a printf format, stopping at the `)` that
+// closes the outer $(printf …). Quotes inside nested $(…) are not counted.
+function countPrintfArgs(after) {
+  const quotes = { args: 0, inArg: false }
+  let depth = 0
+  for (let i = 0; i < after.length; i++) {
+    const c = after[i]
+    if (c === '$' && after[i + 1] === '(') { depth++; i++; continue }
+    if (c === ')' && depth > 0) { depth--; continue }
+    if (c === ')' && depth === 0) break // closes the outer $(printf …)
+    trackQuote(quotes, c, depth)
+  }
+  return quotes.args
+}
+
+// A top-level `"` toggles in/out of an argument; each opening quote counts as one argument.
+function trackQuote(quotes, c, depth) {
+  if (c !== '"' || depth !== 0) return
+  if (!quotes.inArg) quotes.args++
+  quotes.inArg = !quotes.inArg
+}
+
 test('Fetch issue body writes issue-labels.json next to issue-body.txt', () => {
   const s = step('- name: Fetch issue body')
   assert.match(s, /issue-body\.txt/)
@@ -44,13 +66,6 @@ test('the finish step\'s gh pr create body carries the --pr-note line from the w
   const fmt = /printf '([^']*)'/.exec(line)[1]
   const placeholders = (fmt.match(/%[sb]/g) || []).length
   const after = line.slice(line.indexOf(`'${fmt}'`) + fmt.length + 2)
-  let depth = 0, args = 0, inArg = false
-  for (let i = 0; i < after.length; i++) {
-    const c = after[i]
-    if (c === '$' && after[i + 1] === '(') { depth++; i++; continue }
-    if (c === ')' && depth > 0) { depth--; continue }
-    if (c === ')' && depth === 0) break // closes the outer $(printf …)
-    if (c === '"' && depth === 0) { if (!inArg) args++; inArg = !inArg }
-  }
+  const args = countPrintfArgs(after)
   assert.equal(args, placeholders, `printf has ${placeholders} placeholders and ${args} arguments`)
 })
