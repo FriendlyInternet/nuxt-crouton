@@ -10,6 +10,7 @@ import {
   scanSuppressions,
   finishCheck,
   formatText,
+  unquotePath,
 } from './finish-check.mjs';
 
 const ROOT = '/repo';
@@ -25,6 +26,7 @@ const PASS = { code: 0, stdout: JSON.stringify({ verdict: 'pass', complexity: { 
 function world({
   status = '',
   diff = '',
+  diffResult,
   fallow = PASS,
   vitestList = '',
   files = {},
@@ -46,7 +48,7 @@ function world({
         : { code: 0, stdout: `${ROOT}\n`, stderr: '' };
     }
     if (key.startsWith('git status')) return { code: 0, stdout: status, stderr: '' };
-    if (key.startsWith('git diff')) return { code: 0, stdout: diff, stderr: '' };
+    if (key.startsWith('git diff')) return diffResult || { code: 0, stdout: diff, stderr: '' };
     if (key.startsWith('npx --no-install fallow')) return fallow;
     if (key.startsWith('npx --no-install vitest') && args[2] === 'list') return { code: 0, stdout: vitestList, stderr: '' };
     if (key.startsWith('npx --no-install vitest') && args[2] === 'run') return vitestRun;
@@ -364,6 +366,77 @@ test('formatText prints a summary line, file:line findings, not-run tests and th
   assert.ok(lines.some((l) => l.includes('no coverage file')));
   assert.match(formatText({ status: 'not-run', files: [], findings: [], reason: 'timed out after 1ms' }), /^finish-check: not run — timed out after 1ms/);
   assert.match(formatText({ status: 'green', files: [], findings: [] }), /^finish-check: green/);
+});
+
+// ── build-review fixes: anything it could not check is not run, never green ──────────────────────
+
+test('the Rule: git diff exits non-zero → suppression scan not run, never green', () => {
+  const r = finishCheck(world({
+    status: ' M scripts/a.mjs\n',
+    diffResult: { code: 128, stdout: '', stderr: "fatal: ambiguous argument 'HEAD': unknown revision" },
+  }).deps);
+  assert.equal(r.status, 'not-run');
+  assert.equal(r.exitCode, 2);
+  assert.match(r.reason, /suppression scan not run: git diff failed \(fatal: ambiguous argument 'HEAD'/);
+
+  const spawnFail = finishCheck(world({
+    status: ' M scripts/a.mjs\n',
+    diffResult: { code: null, stdout: '', stderr: '', error: new Error('spawn git EACCES') },
+  }).deps);
+  assert.equal(spawnFail.status, 'not-run');
+  assert.match(spawnFail.reason, /git diff failed \(spawn git EACCES\)/);
+});
+
+test('the Rule: an untracked file that cannot be read → its scan is not run, never green', () => {
+  // scripts/new.mjs is untracked but missing from `files`, so readFile throws.
+  const { deps, reads } = world({ status: '?? scripts/new.mjs\n' });
+  const r = finishCheck(deps);
+  assert.ok(reads.includes(`${ROOT}/scripts/new.mjs`));
+  assert.equal(r.status, 'not-run');
+  assert.equal(r.exitCode, 2);
+  assert.match(r.reason, /suppression scan not run on scripts\/new\.mjs: could not read it/);
+});
+
+test('the Rule: quoted file names (space, non-ASCII) are unquoted, read and scanned', () => {
+  assert.equal(unquotePath('"my file.mjs"'), 'my file.mjs');
+  assert.equal(unquotePath('"scripts/caf\\303\\251.mjs"'), 'scripts/café.mjs');
+  assert.equal(unquotePath('"a\\tb\\"c\\\\d"'), 'a\tb"c\\d');
+  assert.equal(unquotePath('scripts/plain.mjs'), 'scripts/plain.mjs');
+
+  const s = parseStatus('?? "scripts/my file.mjs"\nR  "scripts/old name.mjs" -> "scripts/caf\\303\\251.mjs"\n M scripts/a.mjs\n');
+  assert.deepEqual(s.changed, ['scripts/my file.mjs', 'scripts/café.mjs', 'scripts/a.mjs']);
+  assert.deepEqual(s.untracked, ['scripts/my file.mjs']);
+
+  // Through finishCheck: the untracked quoted name is read under its real name and its
+  // ignore comment is found; the quoted diff header maps the tracked finding to the real name.
+  const { deps, reads } = world({
+    status: '?? "scripts/my file.mjs"\n M "scripts/caf\\303\\251.mjs"\n',
+    files: { 'scripts/my file.mjs': `// ${IGNORE}\n` },
+    diff: [
+      'diff --git "a/scripts/caf\\303\\251.mjs" "b/scripts/caf\\303\\251.mjs"',
+      '--- "a/scripts/caf\\303\\251.mjs"',
+      '+++ "b/scripts/caf\\303\\251.mjs"',
+      '@@ -3,0 +4 @@',
+      `+// ${IGNORE}`,
+    ].join('\n'),
+  });
+  const r = finishCheck(deps);
+  assert.ok(reads.includes(`${ROOT}/scripts/my file.mjs`));
+  assert.deepEqual(r.files, ['scripts/my file.mjs', 'scripts/café.mjs']);
+  assert.deepEqual(r.findings.map((f) => `${f.file}:${f.line}`).sort(), ['scripts/café.mjs:4', 'scripts/my file.mjs:1']);
+  assert.equal(r.status, 'red');
+  assert.ok(!/could not read/.test(r.reason || ''));
+});
+
+test('the Rule: Fallow exit 0 without a verdict → not run, never green', () => {
+  const noVerdict = { code: 0, stdout: JSON.stringify({ complexity: { findings: [] } }), stderr: '' };
+  const r = finishCheck(world({ status: ' M scripts/a.mjs\n', fallow: noVerdict }).deps);
+  assert.equal(r.status, 'not-run');
+  assert.equal(r.exitCode, 2);
+  assert.match(r.reason, /fallow did not run cleanly/);
+
+  const emptyJson = finishCheck(world({ status: ' M scripts/a.mjs\n', fallow: { code: 0, stdout: '{}', stderr: '' } }).deps);
+  assert.equal(emptyJson.status, 'not-run');
 });
 
 /** A minimal `git diff HEAD --unified=0` for added lines starting at `start` in `file`. */

@@ -42,6 +42,34 @@ class NotRun extends Error {}
 
 // ── git status ───────────────────────────────────────────────────────────────────────────────
 
+const C_ESCAPES = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 };
+
+/**
+ * Git's C-style quoted path (`"my file.mjs"`, `"caf\303\251.mjs"`) → the real name. Unquoted
+ * input is returned as is. Octal escapes are raw bytes, so the result is decoded as UTF-8.
+ */
+export function unquotePath(p) {
+  const s = String(p);
+  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"')) return s;
+  const bytes = [];
+  const body = s.slice(1, -1);
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== '\\') { bytes.push(...Buffer.from(body[i], 'utf8')); continue; }
+    const oct = /^[0-7]{3}/.exec(body.slice(i + 1));
+    if (oct) { bytes.push(parseInt(oct[0], 8)); i += 3; continue; }
+    const next = body[++i];
+    bytes.push(C_ESCAPES[next] ?? next.charCodeAt(0));
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/** The path part of a porcelain line: a rename `a -> b` keeps `b`; either side may be quoted. */
+function statusPath(rest) {
+  const quotedTail = /(?:^|\s->\s)("(?:[^"\\]|\\.)*")$/.exec(rest);
+  if (quotedTail) return unquotePath(quotedTail[1]);
+  return unquotePath(rest.replace(/^(?:"(?:[^"\\]|\\.)*"|.*?) -> /, ''));
+}
+
 /** `git status --porcelain -uall` → changed (tracked + untracked), deleted, untracked. DENY dropped. */
 export function parseStatus(porcelain) {
   const changed = new Set();
@@ -50,7 +78,7 @@ export function parseStatus(porcelain) {
   for (const line of String(porcelain).split('\n')) {
     if (line.length < 4) continue;
     const xy = line.slice(0, 2);
-    const file = line.slice(3).replace(/^.* -> /, '');
+    const file = statusPath(line.slice(3));
     if (DENY.test(file)) continue;
     if (xy.includes('D')) deleted.add(file);
     else changed.add(file);
@@ -119,7 +147,8 @@ function relative(file, repoRoot) {
 export function parseFallow(result, changedSet, repoRoot) {
   if (result.error) return { ran: false, findings: [], reason: `fallow could not run: ${result.error.message}` };
   const report = tryJson(result.stdout);
-  if (result.code === 0 && report) return { ran: true, findings: [] };
+  // Exit 0 is clean only when Fallow said so: JSON without a `verdict` is not a result.
+  if (result.code === 0 && typeof report?.verdict === 'string' && report.verdict !== 'fail') return { ran: true, findings: [] };
   if (result.code !== 1 || !report || report.verdict !== 'fail') {
     const why = report?.message || firstLine(result.stderr) || firstLine(result.stdout) || `exit ${result.code}`;
     return { ran: false, findings: [], reason: `fallow did not run cleanly: ${why}` };
@@ -163,8 +192,8 @@ function parseDiff(diffText) {
 /** File headers and `@@` hunk headers; true when the line was one. */
 function diffHeaderLine(s, raw) {
   if (raw.startsWith('diff --git ')) return Object.assign(s, { header: true, hunk: null });
-  if (s.header && raw.startsWith('--- ')) return Object.assign(s, { oldFile: raw.slice(4).replace(/^a\//, '') });
-  if (s.header && raw.startsWith('+++ ')) return Object.assign(s, { file: raw === '+++ /dev/null' ? s.oldFile : raw.slice(4).replace(/^b\//, '') });
+  if (s.header && raw.startsWith('--- ')) return Object.assign(s, { oldFile: unquotePath(raw.slice(4)).replace(/^a\//, '') });
+  if (s.header && raw.startsWith('+++ ')) return Object.assign(s, { file: raw === '+++ /dev/null' ? s.oldFile : unquotePath(raw.slice(4)).replace(/^b\//, '') });
   const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
   if (!m) return false;
   Object.assign(s, { header: false, next: Number(m[1]), hunk: { file: s.file, added: [], removed: [] } });
@@ -229,12 +258,25 @@ function makeRunner(deps, root, timeoutMs, start) {
   };
 }
 
-function readUntracked(deps, root, files) {
+/** Untracked contents for the scan; a file that cannot be read is reported as not scanned. */
+function readUntracked(deps, root, files, state) {
   const out = {};
   for (const f of files) {
-    try { out[f] = deps.readFile(path.join(root, f)); } catch { /* vanished or unreadable: nothing added to scan */ }
+    try {
+      out[f] = deps.readFile(path.join(root, f));
+    } catch (err) {
+      state.reasons.push(`suppression scan not run on ${f}: could not read it (${firstLine(err.message)})`);
+    }
   }
   return out;
+}
+
+/** `git diff HEAD` text, or null (with a not-run reason) when git could not produce it. */
+function readDiff(run, state) {
+  const diff = run('git', ['diff', 'HEAD', '--unified=0', '--no-color', '--no-ext-diff']);
+  if (!diff.error && diff.code === 0) return diff.stdout || '';
+  state.reasons.push(`suppression scan not run: git diff failed (${firstLine(diff.stderr) || diff.error?.message || `exit ${diff.code}`})`);
+  return null;
 }
 
 function vitestIncludesVia(run) {
@@ -257,9 +299,9 @@ function runTestBatch(run, files, [cmd, args], state) {
 }
 
 function checkChanged(deps, run, root, status, state) {
-  const diff = run('git', ['diff', 'HEAD', '--unified=0', '--no-color', '--no-ext-diff']);
-  const untracked = readUntracked(deps, root, status.untracked);
-  state.findings.push(...scanSuppressions({ diffText: diff.stdout || '', untracked, paths: [...status.changed, ...status.deleted] }));
+  const diffText = readDiff(run, state);
+  const untracked = readUntracked(deps, root, status.untracked, state);
+  state.findings.push(...scanSuppressions({ diffText: diffText ?? '', untracked, paths: [...status.changed, ...status.deleted] }));
   if (!status.changed.length) return;
   const hasCoverage = deps.exists(path.join(root, COVERAGE_FILE));
   if (!hasCoverage) state.note = COVERAGE_NOTE;
