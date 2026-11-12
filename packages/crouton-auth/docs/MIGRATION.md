@@ -11,6 +11,7 @@ This guide explains how to set up and migrate the database schema for @crouton/a
 - `session` - User sessions with organization context
 - `account` - OAuth and credential accounts
 - `verification` - Email verification and password reset tokens
+- `rateLimit` - Rate-limit counters (better-auth database store)
 
 **Organization Plugin Tables:**
 - `organization` - Teams/workspaces

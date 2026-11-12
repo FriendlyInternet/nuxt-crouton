@@ -68,8 +68,15 @@
     {
       "idx": 9,
       "version": "6",
-      "when": 1794436394764,
-      "tag": "0009_verify_existing_users",
+      "when": 1794437175606,
+      "tag": "0009_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794437176606,
+      "tag": "0010_verify_existing_users",
       "breakpoints": true
     }
   ]

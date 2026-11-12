@@ -158,10 +158,11 @@ Better Auth includes built-in rate limiting:
 
 | Endpoint | Limit | Window |
 |----------|-------|--------|
-| Login | 5 attempts | 15 minutes |
-| Register | 3 attempts | 1 hour |
-| Password Reset | 3 attempts | 1 hour |
-| OAuth | 10 attempts | 15 minutes |
+| Sign-in, sign-up, change password/email | 3 | 10 seconds |
+| Password reset, verification email, email OTP | 3 | 60 seconds |
+| Every other auth endpoint | 100 | 10 seconds |
+
+Counted per client IP (`cf-connecting-ip`) in the `rateLimit` D1 table, shared by every Worker instance; requests without that header and the page-load reads `/get-session`, `/organization/get-full-organization`, `/organization/list` are not counted.
 
 **Recommended Additional Protection:**
 ```typescript

@@ -164,11 +164,39 @@ export function createAuth(options: CreateAuthOptions) {
     // Session configuration
     session: buildSessionConfig(config.session),
 
+    // Rate limiting (#3142): one counter per client IP in the shared D1 table, so
+    // every Worker isolate sees the same count. better-auth's built-in limits are
+    // returned unchanged.
+    // - The three session/org READS the app makes on every page (SSR + client) are
+    //   not counted: each counted request costs a D1 read + write, and a 429 there
+    //   turns into a null session (the user looks signed out). They carry no
+    //   credentials, so they aren't a password-guessing target.
+    // - A request without cf-connecting-ip (local dev, e2e, self-hosted without
+    //   Cloudflare) is never limited, so those requests don't all share one counter.
+    // Order matters: better-auth uses the FIRST key that matches, so the exact
+    // read paths must come before '/**'.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      customRules: {
+        '/get-session': false,
+        '/organization/get-full-organization': false,
+        '/organization/list': false,
+        '/**': (request: Request, current: { window: number, max: number }) =>
+          request.headers.get('cf-connecting-ip') ? current : false
+      }
+    },
+
     // Advanced options
     advanced: {
       // Generate secure IDs - moved to database config in Better Auth 1.4.x
       database: {
         generateId: () => crypto.randomUUID()
+      },
+      // Real client IP (#3142): Cloudflare sets cf-connecting-ip and a client
+      // can't forge it. x-forwarded-for is deliberately not trusted.
+      ipAddress: {
+        ipAddressHeaders: ['cf-connecting-ip']
       }
     },
 
@@ -1199,10 +1227,11 @@ export function buildOrganizationConfig(
       role: string
       expiresAt: Date
     }) => {
+      // Never log the invitee's email or the invite id (#3143) — the id is the
+      // secret in the accept link.
       if (config.debug) {
-        console.log(`[crouton/auth] Invitation for ${data.email} to ${data.organization.name} (id: ${data.id})`)
+        console.log(`[crouton/auth] Invitation email requested for org "${data.organization.name}"`)
       }
-      console.log(`[crouton/auth] 📧 sendInvitationEmail called for ${data.email} to org "${data.organization.name}" (invitationId: ${data.id})`)
       let _event: any; try { _event = useEvent() } catch {}
       try {
         await useNitroApp().hooks.callHook('crouton:auth:email', {
@@ -1216,10 +1245,9 @@ export function buildOrganizationConfig(
           role: data.role,
           expiresAt: data.expiresAt
         })
-        console.log(`[crouton/auth] ✅ crouton:auth:email hook completed for ${data.email}`)
       }
       catch (err) {
-        console.error(`[crouton/auth] ❌ crouton:auth:email hook FAILED for ${data.email}:`, err)
+        console.error('[crouton/auth] crouton:auth:email hook FAILED for invitation:', err)
       }
     },
 
