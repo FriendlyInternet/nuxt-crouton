@@ -17,6 +17,7 @@
     ],
     "building": [
       "build-review.yml",
+      "calendar-scroll.yml",
       "ci.yml",
       "e2e.yml",
       "guard-package-approval.yml",

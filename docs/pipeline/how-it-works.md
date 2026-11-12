@@ -98,6 +98,7 @@ The table below is generated from the workflow files and the grouping in
 | File | Name | Starts on |
 | --- | --- | --- |
 | [build-review.yml](../../.github/workflows/build-review.yml) | Build review (independent reviewer — pi.dev) | `workflow_run`, `workflow_dispatch` |
+| [calendar-scroll.yml](../../.github/workflows/calendar-scroll.yml) | Calendar scroll (WebKit iPhone) | `pull_request`, `workflow_dispatch` |
 | [ci.yml](../../.github/workflows/ci.yml) | CI | `push`, `pull_request` |
 | [e2e.yml](../../.github/workflows/e2e.yml) | E2E | `push`, `pull_request`, `schedule`, `workflow_dispatch` |
 | [guard-package-approval.yml](../../.github/workflows/guard-package-approval.yml) | Guard package-edit approval | `pull_request` |

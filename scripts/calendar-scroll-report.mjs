@@ -90,10 +90,8 @@ function arg(argv, name, fallback = '') {
 
 const gh = (args, opts = {}) => execFileSync('gh', args, { encoding: 'utf8', ...opts })
 
-async function previewUrls(argv) {
-  const sha = arg(argv, 'sha')
-  const limitMs = Number(arg(argv, 'timeout-min', '40')) * 60_000
-  if (!sha) throw new Error('--sha is required')
+/** Poll until the commit's Deploy POCs (preview) run has completed, or time out. */
+async function waitForDeployRun(sha, limitMs) {
   const start = Date.now()
   let run = null
   for (;;) {
@@ -104,16 +102,29 @@ async function previewUrls(argv) {
     console.error(`waiting for Deploy POCs (preview) on ${sha}: ${run ? run.status : 'not started'}`)
     await new Promise(r => setTimeout(r, 30_000))
   }
+  return run
+}
+
+/** Read one app's preview URL from the run's preview-meta-<app> record. */
+function previewUrlFor(run, app) {
+  const dir = mkdtempSync(join(tmpdir(), `meta-${app}-`))
+  try { gh(['run', 'download', String(run.databaseId), '--name', `preview-meta-${app}`, '--dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] }) }
+  catch { throw new Error(`run ${run.databaseId} has no preview-meta-${app} record — its preview did not deploy`) }
+  const metaFile = join(dir, 'meta.json')
+  const url = existsSync(metaFile) ? JSON.parse(readFileSync(metaFile, 'utf8')).url : ''
+  if (!url) throw new Error(`preview-meta-${app} has no url`)
+  return String(url).replace(/\/+$/, '')
+}
+
+async function previewUrls(argv) {
+  const sha = arg(argv, 'sha')
+  const limitMs = Number(arg(argv, 'timeout-min', '40')) * 60_000
+  if (!sha) throw new Error('--sha is required')
+  const run = await waitForDeployRun(sha, limitMs)
   if (run.conclusion !== 'success') console.error(`Deploy POCs (preview) run ${run.databaseId} concluded ${run.conclusion} — using whatever records it uploaded`)
   const out = []
   for (const [app, envName] of [['crouton-builder', 'BUILDER_URL'], ['booking-demo', 'BOOKING_DEMO_URL']]) {
-    const dir = mkdtempSync(join(tmpdir(), `meta-${app}-`))
-    try { gh(['run', 'download', String(run.databaseId), '--name', `preview-meta-${app}`, '--dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] }) }
-    catch { throw new Error(`run ${run.databaseId} has no preview-meta-${app} record — its preview did not deploy`) }
-    const metaFile = join(dir, 'meta.json')
-    const url = existsSync(metaFile) ? JSON.parse(readFileSync(metaFile, 'utf8')).url : ''
-    if (!url) throw new Error(`preview-meta-${app} has no url`)
-    out.push(`${envName}=${String(url).replace(/\/+$/, '')}`)
+    out.push(`${envName}=${previewUrlFor(run, app)}`)
   }
   console.log(out.join('\n'))
 }
