@@ -46,7 +46,8 @@
       "cancelled": "Cancelled"
     },
     "admin": {
-      "openFullScreen": "Open full screen",
+      "openBookingsHint": "Tap to see and manage bookings",
+      "openBookingsTool": "Open bookings tool",
       "closeFullScreen": "Close full screen",
       "title": "Bookings",
       "sectionTitle": "Bookings",

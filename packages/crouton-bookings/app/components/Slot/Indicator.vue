@@ -82,9 +82,11 @@ function isCancelled(slotId: string): boolean {
   return props.cancelledSlotIds?.includes(slotId) || false
 }
 
-// Two-state opacity: fully booked (1.0) or available/partial (0.15)
+// Three shades: full (1.0), partly booked (0.5), empty (faint) — so a
+// half-full slot no longer looks the same as an empty one (#3046)
 function getSlotOpacity(slotId: string): number {
   if (isBooked(slotId)) return 1
+  if (isPartial(slotId)) return 0.5
   return 0.1
 }
 

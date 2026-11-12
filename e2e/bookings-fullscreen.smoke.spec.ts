@@ -6,7 +6,7 @@
  * to own its own store, so closing full screen lost everything the user had picked.
  *
  * #3046 — on a phone (below lg) the page shows no inline calendar, only the
- * "Open full screen" button. Full screen has no title bar: one toolbar row that
+ * "Open bookings tool" launcher. Full screen has no title bar: one toolbar row that
  * ends in a single labelled close. Month view leaves room for the booking list.
  * Desktop keeps the inline calendar.
  *
@@ -48,7 +48,7 @@ async function openFullScreen(page: Page): Promise<Locator> {
   const dialog = page.getByRole('dialog')
   // A click before hydration does nothing, so retry until the modal is open.
   await expect(async () => {
-    await page.getByRole('button', { name: 'Open full screen' }).click()
+    await page.getByRole('button', { name: 'Open bookings tool' }).click()
     await expect(dialog).toBeVisible({ timeout: 5000 })
   }).toPass({ timeout: FIRST_HIT })
   return dialog
@@ -100,7 +100,8 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
   test('phone: no inline calendar, only the full-screen button', async ({ page, baseURL }) => {
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
-    await expect(page.getByRole('button', { name: 'Open full screen' })).toBeVisible({ timeout: FIRST_HIT })
+    await expect(page.getByRole('button', { name: 'Open bookings tool' })).toBeVisible({ timeout: FIRST_HIT })
+    await expect(page.getByText('Tap to see and manage bookings')).toBeVisible()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.locator('.booking-panel').first()).toBeHidden()
   })
