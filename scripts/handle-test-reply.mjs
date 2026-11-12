@@ -12,6 +12,7 @@
  */
 import { pathToFileURL } from 'node:url'
 import { parseTestReply } from './approval.mjs'
+import { postmortemState, renderPending } from './postmortem.mjs'
 
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 
@@ -29,9 +30,11 @@ export function decideTestReply({ labels = [], body = '', association = '' } = {
 /**
  * A verified epic is done when every sub-issue is closed and its epic→main PR is merged (#2955).
  * `prs` are the PRs whose head is the epic's branch; with none, there is nothing unmerged to wait on.
- * @returns {{ close: true } | { close: false, comment: string }}
+ * `postmortem` is postmortemState() of the epic's comments (#3425): with nothing else to wait on and
+ * no postmortem yet, the close is left pending — postmortem.yml closes the epic once it posts.
+ * @returns {{ close: true } | { close: false, comment: string, pending?: true }}
  */
-export function decideEpicClose({ subIssues = [], prs = [] } = {}) {
+export function decideEpicClose({ subIssues = [], prs = [], postmortem = null } = {}) {
   const openKids = subIssues.filter(i => i.state !== 'closed')
   const openPrs = prs.filter(p => p.state === 'open')
   const unmerged = !openPrs.length && prs.length && !prs.some(p => p.merged_at)
@@ -40,8 +43,9 @@ export function decideEpicClose({ subIssues = [], prs = [] } = {}) {
     ...openPrs.map(p => `#${p.number} (epic→main PR still open)`),
     ...(unmerged ? [`#${prs[0].number} (epic→main PR closed without merging)`] : [])
   ]
-  if (!waiting.length) return { close: true }
-  return { close: false, comment: `Verified, but left open — still waiting on: ${waiting.join(', ')}.` }
+  if (waiting.length) return { close: false, comment: `Verified, but left open — still waiting on: ${waiting.join(', ')}.` }
+  if (!postmortem) return { close: false, pending: true, comment: 'Verified — the postmortem is running; the epic closes as soon as it posts.' }
+  return { close: true }
 }
 
 /** Body of the follow-up sub-issue created from a `not ok` note. */
@@ -100,7 +104,18 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     const subIssues = await gh(`${base}/sub_issues?per_page=100`)
     const pulls = await gh(`/repos/${REPO}/pulls?state=all&base=main&per_page=100`)
     const prs = pulls.filter(p => p.head.ref.startsWith(`epic/${number}-`))
-    const c = decideEpicClose({ subIssues, prs })
+    const comments = await gh(`${base}/comments?per_page=100`)
+    const c = decideEpicClose({ subIssues, prs, postmortem: postmortemState(comments) })
+    if (c.pending) {
+      // Wait for the postmortem (#3425): leave a pipeline-authored pending marker, then start the run.
+      // postmortem.yml's post step closes the epic when it lands (or when it fails — never blocks).
+      const runUrl = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${REPO}/actions/workflows/postmortem.yml`
+      await gh(`${base}/comments`, { method: 'POST', body: JSON.stringify({ body: renderPending({ epic: number, via: 'verified', runUrl }) }) })
+      const { handoffExec } = await import('./handoff-exec.mjs')
+      await handoffExec({ kind: 'dispatch', issue: number, workflow: 'postmortem.yml', inputs: { epic: String(number) } })
+      console.log(`handle-test-reply: #${number} verified — postmortem started, close pending`)
+      return
+    }
     const body = c.close ? 'Closed — verified, every sub-issue is closed and the epic is merged to main.' : c.comment
     await gh(`${base}/comments`, { method: 'POST', body: JSON.stringify({ body: `${body}\n\n${PROV}` }) })
     if (c.close) await gh(base, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) })

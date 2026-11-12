@@ -192,3 +192,150 @@ test('#3474 retry delays', () => {
   assert.equal(retryDelays({}), SIGNUP_RETRY_DELAYS_MS)
   assert.equal(retryDelays({ SEED_SIGNUP_RETRY_DELAYS_MS: 'x' }), SIGNUP_RETRY_DELAYS_MS)
 })
+
+// ── #3751: no login advertised when the seeded team has no demo data ─────────────────
+// The real CLI, run against a real SQLite file holding the seeded team, with a stand-in
+// for the Worker's auth routes (the only part that needs a deployed app). This is the
+// same `--require-data` path the deploy step runs; only the transport differs (--sqlite
+// instead of --db, the same SQL).
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { teamDataCountSql, missingTeamData } from './seed-review-login.mjs'
+
+const ORG = 'seed:org:test1'
+
+function teamDb({ locations, bookings }) {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-3751-'))
+  const file = join(dir, 'sqlite.db')
+  const d = new DatabaseSync(file)
+  d.exec(`
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    CREATE TABLE "bookings_locations" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
+    CREATE TABLE "bookings_bookings" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
+    INSERT INTO "user" VALUES ('u1', 'review+t@example.com', 0);
+    -- another team's rows must not count for test1
+    INSERT INTO "bookings_locations" VALUES ('other-l', 'seed:org:other');
+    INSERT INTO "bookings_bookings" VALUES ('other-b', 'seed:org:other');
+  `)
+  for (let i = 0; i < locations; i++) d.exec(`INSERT INTO "bookings_locations" VALUES ('l${i}', '${ORG}')`)
+  for (let i = 0; i < bookings; i++) d.exec(`INSERT INTO "bookings_bookings" VALUES ('b${i}', '${ORG}')`)
+  d.close()
+  // The membership prune shells out to wrangler; a failing `npx` keeps the test offline.
+  writeFileSync(join(dir, 'npx'), '#!/bin/sh\nexit 1\n')
+  chmodSync(join(dir, 'npx'), 0o755)
+  return { file, bin: dir }
+}
+
+async function runWithData(db, requireData) {
+  const server = createServer((req, res) => {
+    let body = {}
+    if (req.url === '/api/auth/get-session') body = { user: { id: 'u1' }, session: {} }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const args = [SCRIPT, '--url', url, '--email', 'review+t@example.com', '--password', 'pw',
+    '--seed-team', 'test1', '--sqlite', db.file]
+  if (requireData) args.push('--require-data', requireData)
+  const result = await new Promise((resolve) => {
+    execFile(process.execPath, args,
+      { env: { ...process.env, PATH: `${db.bin}:${process.env.PATH}`, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  return result
+}
+
+const BOOKING_TABLES = 'bookings_locations,bookings_bookings'
+
+test('#3751 seeded team has locations and bookings → exit 0, counts logged', async () => {
+  const r = await runWithData(teamDb({ locations: 2, bookings: 3 }), BOOKING_TABLES)
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /team seed:org:test1 data: bookings_locations=2, bookings_bookings=3/)
+})
+
+test('#3751 seed never reached the team (no rows) → non-zero, no login', async () => {
+  const r = await runWithData(teamDb({ locations: 0, bookings: 0 }), BOOKING_TABLES)
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /bookings_locations=0, bookings_bookings=0/)
+  assert.match(r.out, /no rows in bookings_locations, bookings_bookings/)
+})
+
+test('#3751 locations but no bookings → non-zero', async () => {
+  const r = await runWithData(teamDb({ locations: 1, bookings: 0 }), BOOKING_TABLES)
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /no rows in bookings_bookings/)
+})
+
+test('#3751 a table the seed never created counts as missing → non-zero', async () => {
+  const r = await runWithData(teamDb({ locations: 1, bookings: 1 }), 'bookings_locations,bookings_missing')
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /bookings_missing=error/)
+})
+
+test('#3751 no --require-data → an empty team still logs in (other apps unchanged)', async () => {
+  const r = await runWithData(teamDb({ locations: 0, bookings: 0 }), '')
+  assert.equal(r.code, 0, r.out)
+  assert.doesNotMatch(r.out, /data:/)
+})
+
+test('#3751 teamDataCountSql refuses a non-identifier table name', () => {
+  assert.throws(() => teamDataCountSql('x"; DROP TABLE user; --', ORG), /invalid table name/)
+  assert.match(teamDataCountSql('bookings_locations', "a'b"), /"teamId"='a''b'/)
+})
+
+test('#3751 missingTeamData: zero and failed counts are missing', () => {
+  assert.deepEqual(missingTeamData({ a: 1, b: 0, c: null }), ['b', 'c'])
+  assert.deepEqual(missingTeamData({ a: 4 }), [])
+})
+
+// The deploy step must pass the app's `reviewLogin.requireData` through, and booking-demo
+// must name both bookings tables — else the check above never runs where it matters.
+test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-demo sets it', () => {
+  const wf = readFileSync(new URL('../.github/workflows/deploy-app.yml', import.meta.url), 'utf8')
+  assert.match(wf, /\.reviewLogin\.requireData \/\/ \[\]\) \| join\(","\)/)
+  const seedCall = wf.match(/if node scripts\/seed-review-login\.mjs[^\n]*\\\n[^\n]*/)?.[0] || ''
+  assert.match(seedCall, /"\$\{REQUIRE_ARGS\[@\]\}"; then/)
+  const cfg = JSON.parse(readFileSync(new URL('../pocs/booking-demo/deploy.config.json', import.meta.url), 'utf8'))
+  assert.deepEqual(cfg.reviewLogin.requireData, ['bookings_locations', 'bookings_bookings'])
+})
+
+// ── #3533: member upsert quote escaping ──
+// The --seed-team member upsert used to be built inline in main(), so no test could
+// reach it. Runs the real SQL against an in-memory SQLite db.
+import { memberUpsertSql } from './seed-review-login.mjs'
+
+function memberDb() {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
+    INSERT INTO "member" VALUES ('keep', 'u2', 'seed:org:test1', 'owner', 1);
+  `)
+  return d
+}
+
+test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break out', () => {
+  const d = memberDb()
+  const userId = 'u\'); DELETE FROM "member"; --'
+  d.exec(memberUpsertSql({ memberId: "m'1", userId, orgId: "o'x", createdAt: 1 }))
+  const row = d.prepare('SELECT * FROM "member" WHERE "id" = ?').get("m'1")
+  assert.equal(row.userId, userId)
+  assert.equal(row.organizationId, "o'x")
+  assert.equal(row.role, 'owner')
+  assert.ok(d.prepare('SELECT 1 FROM "member" WHERE "id" = ?').get('keep'), 'bystander row survives')
+  assert.equal(d.prepare('SELECT count(*) AS n FROM "member"').get().n, 2)
+})
+
+test('#3533 memberUpsertSql: re-running updates the same row (idempotent)', () => {
+  const d = memberDb()
+  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'first', orgId: 'seed:org:test1', createdAt: 100 }))
+  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'second', orgId: 'seed:org:test1', createdAt: 200 }))
+  const rows = d.prepare('SELECT * FROM "member" WHERE "id" = ?').all('m1')
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].userId, 'second')
+  assert.equal(rows[0].createdAt, 100)
+})

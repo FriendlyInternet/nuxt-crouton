@@ -1,0 +1,176 @@
+name: Epic postmortem
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('postmortem #{0}', inputs.epic) || 'Epic postmortem' }}"
+
+# (#3425) When an epic is done, the pipeline writes its postmortem itself, following
+# .claude/skills/postmortem/SKILL.md, and posts it with `<!-- postmortem:done epic=#N -->`.
+# Decisions live in scripts/postmortem.mjs (pure, tested) + scripts/postmortem-run.mjs (I/O).
+#
+# Started by:
+#   on-pr-close.yml   an epic/<N>-… → main PR merged           (workflow_call, head_ref)
+#   on-issue-close.yml  a sub-issue closed (its parent is the epic) (workflow_call, closed_issue)
+#   /close-epic and the verified test card, when the postmortem is missing (workflow_dispatch,
+#     through handoffGuard / handoffExec). They leave a pipeline-authored close-pending marker;
+#     `post` closes the epic once the postmortem lands.
+#   by hand: dispatch with `epic` (catch-up / retry; runs even after a skipped run).
+#
+# NEVER BLOCKS: if the model run fails or writes nothing usable, `post` still runs and posts
+# `<!-- postmortem:skipped epic=#N -->` with the run link, and a waiting close still happens.
+#
+# ONE RUN PER EPIC: starts for one epic queue on `write`'s concurrency group. GitHub keeps only one
+# waiting job per group, so a replaced run's `write` ends `cancelled` — its `post` then does nothing
+# (the newer run owns the epic). `write` re-checks for a posted postmortem after the queue, so a run
+# that waited behind one that posted skips the model.
+#
+# SPLIT BY TRUST (same as owner-quiz.yml): `write` runs the model, which has a shell, so it holds
+# only a read-only token and keeps no git credentials; `post` holds the Harness App token on a
+# fresh runner (so its close cascades into on-issue-close.yml) and receives only the model's text.
+
+on:
+  workflow_call:
+    inputs:
+      epic:
+        type: string
+        default: ''
+      head_ref:
+        type: string
+        default: ''
+      closed_issue:
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      epic:
+        description: Epic issue number
+        required: true
+      simulate_failure:
+        description: Fail the model step on purpose (to test the skipped path)
+        type: boolean
+        default: false
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      go: ${{ steps.t.outputs.go }}
+      epic: ${{ steps.t.outputs.epic }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: t
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EPIC: ${{ inputs.epic }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          CLOSED_ISSUE: ${{ inputs.closed_issue }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          script: |
+            const { target } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
+            const { EPIC: epic, HEAD_REF: headRef, CLOSED_ISSUE: closedIssue, MANUAL } = process.env
+            await target({ github, context, core }, { epic, headRef, closedIssue, manual: MANUAL === 'true' })
+
+  write:
+    needs: target
+    if: needs.target.outputs.go == 'true'
+    concurrency:
+      group: postmortem-write-${{ needs.target.outputs.epic }}
+      cancel-in-progress: false
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    env:
+      EPIC: ${{ needs.target.outputs.epic }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false # no token in .git/config
+      # Re-check after the queue: a run that waited behind one which already posted skips the model.
+      - id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { alreadyPosted } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
+            await alreadyPosted({ github, context, core }, { epic: process.env.EPIC })
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.check.outputs.done != 'true'
+        with:
+          node-version: 22
+      - name: Set up pi + Claude CLI (subscription)
+        if: steps.check.outputs.done != 'true'
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      # Tier from .claude/pipeline-models.json only — no model literal here (#2161). Prompt on stdin (#3331).
+      # GH_TOKEN is the job's read-only token: the model can read the epic, never write to it.
+      # Step timeout < job timeout: a hung model FAILS (→ skipped note, never blocks) instead of the
+      # job being cancelled, which `post` reads as "a newer run owns this epic".
+      - name: Write the postmortem (review model)
+        if: steps.check.outputs.done != 'true'
+        timeout-minutes: 25
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/postmortem"; mkdir -p "$D"
+          [ "$SIMULATE_FAILURE" = "true" ] && { echo "::error::simulate_failure set — failing on purpose"; exit 1; }
+          node scripts/postmortem-run.mjs prompt "$EPIC" "$D/postmortem.md" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$(node scripts/resolve-pipeline-model.mjs review)" \
+            --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: postmortem-body
+          path: ${{ runner.temp }}/postmortem/postmortem.md
+          if-no-files-found: ignore
+
+  post:
+    needs: [target, write]
+    if: always() && needs.target.outputs.go == 'true'
+    concurrency:
+      group: postmortem-post-${{ needs.target.outputs.epic }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # no artifact = the model wrote nothing; post records it as skipped
+        with:
+          name: postmortem-body
+          path: ${{ runner.temp }}/postmortem
+      - name: Post the postmortem (or the skipped note) and close a waiting epic
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EPIC: ${{ needs.target.outputs.epic }}
+          WRITE_RESULT: ${{ needs.write.result }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { post } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/postmortem-run.mjs`)
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await post({ github, context, core }, { epic: process.env.EPIC, modelFile: `${process.env.RUNNER_TEMP}/postmortem/postmortem.md`, runUrl, writeResult: process.env.WRITE_RESULT })

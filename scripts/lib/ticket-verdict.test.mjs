@@ -23,6 +23,16 @@ test('replay #229 as first written: no-go on item 9, citing the 2026-06 priority
   assert.match(renderComment(d), /Tickets sent back/)
 })
 
+test('revising (#3787): the no-go headline says the pipeline is rewriting, and asks the owner for nothing', () => {
+  const d = decide(set('229.json'), fx('229.verdict.md'))
+  const c = renderComment(d, { revising: 2 })
+  assert.match(c, /Tickets sent back/)
+  assert.match(c, /round 2 of 3/)
+  assert.match(c, /\*\*Next:\*\* none/)
+  assert.doesNotMatch(c, /fix the tickets/)
+  assert.match(renderComment(d), /fix the tickets/) // the hold case (round 3) keeps the ask
+})
+
 test('replay #2725 as first written: "force teamId" is flagged as mechanism-without-rule even when the model says go', () => {
   assert.ok(precheck(set('2725.json')[0])['8'])
   const d = decide(set('2725.json'), fx('2725.lenient.verdict.md'))

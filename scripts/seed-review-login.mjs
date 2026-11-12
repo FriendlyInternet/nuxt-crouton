@@ -54,8 +54,43 @@ function parseArgs(argv) {
     else if (a === '--seed-team') out.seedTeam = argv[++i]
     else if (a === '--db') out.db = argv[++i]
     else if (a === '--sqlite') out.sqlite = argv[++i]
+    else if (a === '--require-data') out.requireData = String(argv[++i] || '').split(',').map(s => s.trim()).filter(Boolean)
   }
   return out
+}
+
+/**
+ * #3751: the SQL that counts a seeded team's rows in one table. Crouton collection
+ * tables scope rows by a `teamId` column. The table name is interpolated, so it must
+ * be a plain identifier — anything else throws rather than reaching the database.
+ */
+export function teamDataCountSql(table, orgId) {
+  if (!/^[A-Za-z0-9_]+$/.test(String(table))) throw new Error(`invalid table name: ${table}`)
+  return `SELECT COUNT(*) AS "n" FROM "${table}" WHERE "teamId"=${sqlStr(orgId)};`
+}
+
+/**
+ * #3751: given `{ table: count | null }` (null = the query failed), the tables that
+ * leave the review login without data. Empty array ⇔ the team has everything.
+ */
+export function missingTeamData(counts) {
+  return Object.entries(counts).filter(([, n]) => !(Number(n) > 0)).map(([t]) => t)
+}
+
+/** Run one read query and return its first row's `n` (same two transports as execSeedSql). */
+function querySeedCount(args, sql) {
+  if (args.sqlite) {
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+    const db = new DatabaseSync(args.sqlite)
+    try { return Number(db.prepare(sql).get()?.n ?? 0) } finally { db.close() }
+  }
+  const out = execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--json', '--yes'], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+    env: process.env
+  }).toString()
+  // wrangler --json prints `[{ results: [{ n }], success, meta }]`.
+  const parsed = JSON.parse(out.slice(out.indexOf('[')))
+  return Number(parsed?.[0]?.results?.[0]?.n ?? 0)
 }
 
 /**
@@ -186,6 +221,18 @@ export function markReviewerVerifiedSql(email) {
     `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
 }
 
+/**
+ * Idempotent member upsert for the seeded team (conflict on the deterministic id →
+ * no dupes on redeploy; createdAt preserved). Every value goes through `sqlStr`, and
+ * `createdAt` is forced to a number, so no id can break out of its literal (#3533).
+ */
+export function memberUpsertSql({ memberId, userId, orgId, createdAt }) {
+  return `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
+    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${Number(createdAt)}) ` +
+    `ON CONFLICT("id") DO UPDATE SET ` +
+    `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -217,7 +264,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const { url, email, password } = args
   if (!url || !email || !password) {
-    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>)]')
+    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>) [--require-data <table,table>]]')
     process.exit(2)
   }
 
@@ -338,11 +385,7 @@ async function main() {
     const createdAt = Math.floor(Date.now() / 1000)
     // Idempotent member upsert (conflict on the deterministic id → no dupes on
     // redeploy; createdAt preserved). Mirrors crouton-auth/seed's `member` shape.
-    const sql =
-      `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-      `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${createdAt}) ` +
-      `ON CONFLICT("id") DO UPDATE SET ` +
-      `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+    const sql = memberUpsertSql({ memberId, userId, orgId, createdAt })
     try {
       execSeedSql(args, sql)
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
@@ -370,6 +413,33 @@ async function main() {
     }
   } else if (args.seedTeam && (args.db || args.sqlite) && !userId) {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
+  }
+
+  // 3c. --require-data (#3751): the login is only worth advertising if the seeded team
+  //     actually holds the demo data. Count each named table for that team, log the
+  //     counts, and exit non-zero (→ no login advertised, #1369) if any is empty or the
+  //     count fails. A silent seed failure left booking-demo's login in an empty team.
+  if (args.requireData?.length) {
+    if (!args.seedTeam || !(args.db || args.sqlite)) {
+      warn('--require-data needs --seed-team and --db/--sqlite — cannot check the team\'s data.')
+      process.exit(1)
+    }
+    const orgId = seedOrgId(args.seedTeam)
+    const counts = {}
+    for (const table of args.requireData) {
+      try {
+        counts[table] = querySeedCount(args, teamDataCountSql(table, orgId))
+      } catch (e) {
+        warn(`count of ${table} for ${orgId} failed: ${e?.message || e}`)
+        counts[table] = null
+      }
+    }
+    info(`team ${orgId} data: ${Object.entries(counts).map(([t, n]) => `${t}=${n ?? 'error'}`).join(', ')}`)
+    const missing = missingTeamData(counts)
+    if (missing.length) {
+      warn(`seeded team ${orgId} has no rows in ${missing.join(', ')} — the demo seed did not reach it; not a working review login.`)
+      process.exit(1)
+    }
   }
 
   // 3b. No active org yet → create a fresh one so the reviewer lands inside the
