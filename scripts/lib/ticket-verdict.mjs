@@ -113,7 +113,8 @@ export function decide(tickets, verdictBody) {
     for (const id of IDS) items[id] = floor[id] || r.items[id]
     const failed = IDS.filter((id) => !items[id].pass)
     const hard = failed.filter((id) => id !== '7' && id !== '10')
-    const verdict = hard.length ? 'no-go' : !(items['7'].pass && items['10'].pass) ? 'needs-owner' : 'go'
+    // Only an owner decision (7) holds; a check-10 wording failure goes to the automatic rewrite (#3833).
+    const verdict = hard.length ? 'no-go' : !items['7'].pass ? 'needs-owner' : !items['10'].pass ? 'no-go' : 'go'
     if (r.stated === 'go' && verdict !== 'go' && !Object.keys(floor).length) errors.push(`#${t.number}: reviewer said go but its own rubric fails: ${failed.join(', ')}`)
     if (verdict === 'needs-owner' && !r.question) errors.push(`#${t.number}: needs-owner needs a Question section`)
     per.push({ number: t.number, title: t.title, verdict, items, failed, question: r.question })
