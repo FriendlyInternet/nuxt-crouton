@@ -40,27 +40,35 @@ export function listPackages(root) {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** A typecheck-able package must sit in exactly one of the two lists. */
+function membershipError(p, gate, excluded) {
+  const inGate = gate.has(p.name)
+  const inExcluded = Object.hasOwn(excluded, p.name)
+  if (!inGate && !inExcluded) return `${p.name} has a typecheck script but is in neither "gate" nor "excluded" — add it to one`
+  if (inGate && inExcluded) return `${p.name} is in both "gate" and "excluded" — pick one`
+  return null
+}
+
+/** A listed name must be a real package that has a typecheck script. */
+function listedError(name, known) {
+  if (!known.has(name)) return `${name} is listed but no packages/* package has that name`
+  if (!known.get(name).hasTypecheck) return `${name} is listed but has no typecheck script`
+  return null
+}
+
 /** Problems with the list file itself: anything here fails the run. */
 export function configErrors(pkgs, config) {
   const gate = new Set(config.gate || [])
   const excluded = config.excluded || {}
   const known = new Map(pkgs.map(p => [p.name, p]))
-  const errors = []
-  for (const p of pkgs) {
-    if (!p.hasTypecheck) continue
-    const inGate = gate.has(p.name)
-    const inExcluded = Object.hasOwn(excluded, p.name)
-    if (!inGate && !inExcluded) errors.push(`${p.name} has a typecheck script but is in neither "gate" nor "excluded" — add it to one`)
-    if (inGate && inExcluded) errors.push(`${p.name} is in both "gate" and "excluded" — pick one`)
-  }
-  for (const name of [...gate, ...Object.keys(excluded)]) {
-    if (!known.has(name)) errors.push(`${name} is listed but no packages/* package has that name`)
-    else if (!known.get(name).hasTypecheck) errors.push(`${name} is listed but has no typecheck script`)
-  }
+  const errors = [
+    ...pkgs.filter(p => p.hasTypecheck).map(p => membershipError(p, gate, excluded)),
+    ...[...gate, ...Object.keys(excluded)].map(name => listedError(name, known)),
+  ]
   for (const [name, ticket] of Object.entries(excluded)) {
     if (!TICKET.test(String(ticket))) errors.push(`${name} is excluded without a ticket ("${ticket}") — use "#<issue>"`)
   }
-  return errors
+  return errors.filter(Boolean)
 }
 
 /** Gate packages to run. `only` null → all; else changed ones plus their transitive dependents. */
