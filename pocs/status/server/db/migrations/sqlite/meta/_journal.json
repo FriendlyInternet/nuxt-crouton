@@ -26,8 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1794484921272,
-      "tag": "0003_thin_the_spike",
+      "when": 1794486066293,
+      "tag": "0003_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794486217102,
+      "tag": "0004_verify_existing_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486218102,
+      "tag": "0005_thin_the_spike",
       "breakpoints": true
     }
   ]

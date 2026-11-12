@@ -23,7 +23,7 @@ This document details the security measures implemented in @crouton/auth and pro
 - Session tokens are hashed before storage (SHA-256)
 - Default expiry: 7 days (configurable)
 - Automatic session refresh on activity
-- Session invalidation on password change
+- A password reset signs out every session (`revokeSessionsOnPasswordReset`)
 
 ### CSRF Protection
 
@@ -49,6 +49,7 @@ croutonAuth: {
 
 - Passwords are hashed using Argon2id (memory-hard, resistant to GPU attacks)
 - Minimum password length: 8 characters (configurable)
+- When `@fyit/crouton-email` is installed, sign-up sends a verification e-mail and password sign-in is refused until it is clicked; apps without it sign up as before
 - Password reset tokens expire after 1 hour
 - Account lockout after failed attempts (configurable)
 
@@ -157,10 +158,11 @@ Better Auth includes built-in rate limiting:
 
 | Endpoint | Limit | Window |
 |----------|-------|--------|
-| Login | 5 attempts | 15 minutes |
-| Register | 3 attempts | 1 hour |
-| Password Reset | 3 attempts | 1 hour |
-| OAuth | 10 attempts | 15 minutes |
+| Sign-in, sign-up, change password/email | 3 | 10 seconds |
+| Password reset, verification email, email OTP | 3 | 60 seconds |
+| Every other auth endpoint | 100 | 10 seconds |
+
+Counted per client IP (`cf-connecting-ip`) in the `rateLimit` D1 table, shared by every Worker instance; requests without that header and the page-load reads `/get-session`, `/organization/get-full-organization`, `/organization/list` are not counted.
 
 **Recommended Additional Protection:**
 ```typescript

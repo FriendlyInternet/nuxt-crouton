@@ -1,7 +1,8 @@
 /**
  * Collection Sync Plugin (Client-only)
  *
- * Auto-initializes real-time collection sync when crouton-collab is installed.
+ * Initializes real-time collection sync only when the app is opted in (`"collab": true`
+ * deploy flag → `collabWorkerUrl`); same-host only in local dev (#3810).
  * This plugin:
  * 1. Watches for team context availability
  * 2. Establishes a Yjs sync room for the team
@@ -16,8 +17,12 @@
  * The .client.ts suffix ensures this only runs on the client side.
  */
 import { useCollectionSyncSignal } from '../composables/useCollectionSyncSignal'
+import { isCollabEnabled } from '../composables/useCollabConnection'
 
 export default defineNuxtPlugin((nuxtApp) => {
+  // Not opted into live sync → no router watcher, no mutation hook, no socket (#3810)
+  if (!isCollabEnabled(useRuntimeConfig().public.collabWorkerUrl, import.meta.env.DEV)) return
+
   // Track if sync is initialized to avoid duplicate setup
   let syncInitialized = false
   let signalChangeFn: ((collection: string) => void) | null = null

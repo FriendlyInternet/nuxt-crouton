@@ -14,8 +14,8 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  // crouton-flow (Site level) rides Vue Flow; extended here (not default-on). No
-  // flowId/sync used → no collab Durable Object binding needed (mirrors the demo POC).
+  // crouton-flow (Site level) rides Vue Flow; extended here (not default-on).
+  // crouton-flow pulls in crouton-collab; live sync stays off because this app doesn't opt in (no "collab": true, #3810).
   // crouton-bookings (#2559): its atomic layout blocks (calendar / filters / locations /
   // list) join the block row, the same package booking-demo extends.
   extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', '@fyit/crouton-bookings', './layers/builder'],

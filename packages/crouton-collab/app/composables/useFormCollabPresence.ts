@@ -5,7 +5,8 @@
  * automatically establishes WebSocket presence when users are editing items.
  *
  * It is auto-initialized via the form-collab.client.ts plugin when
- * crouton-collab is installed.
+ * crouton-collab is installed and the app opted in; it connects only in local dev
+ * (same-host route, #3810).
  *
  * @example
  * // Usually auto-initialized by plugin, but can be used manually:
@@ -16,6 +17,7 @@ import { tryOnScopeDispose } from '@vueuse/core'
 import type { CollabAwarenessState } from '../types/collab'
 import { generateUserColor } from '../utils/avatar'
 import { useCollabTeamId } from './useCollabTeamId'
+import { isCollabEnabled } from './useCollabConnection'
 
 export interface FormCollabConnection {
   stateId: string
@@ -93,6 +95,15 @@ export function useFormCollabPresence(): UseFormCollabPresenceReturn {
    * Set up a presence WebSocket connection for a form state
    */
   function setupPresence(stateId: string, collection: string, itemId: string): void {
+    const workerUrl = useRuntimeConfig().public.collabWorkerUrl
+    const dev = import.meta.env.DEV
+    // Not opted into live sync → no presence socket (#3810)
+    if (!isCollabEnabled(workerUrl, dev)) return
+    // This composable only knows the same-host URL, and that route is dev-only
+    // (ws-route-resolve.ts). Opted-in production apps get form presence via the
+    // worker in the follow-up.
+    if (!dev) return
+
     // Skip if already connected for this state
     if (activeConnections.value.has(stateId)) {
       return
