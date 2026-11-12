@@ -558,3 +558,39 @@ test('#3340+#3141 invite-only app with verification on: sign-up 403 SIGNUP_INVIT
   assert.equal(users[0].emailVerified, 1)
   assert.equal(rows(file, 'SELECT * FROM "account"').length, 1)
 })
+
+// PR #3861 owner review: the real velo preview. With verification on, better-auth
+// answers the invite-only 403 with its generic 200 / token:null (it hides whether the
+// address exists), so the seed took the "new user" branch, created nothing, and
+// sign-in said INVALID_EMAIL_OR_PASSWORD. The fake Worker below does exactly that.
+test('new review user in an app that requires verification (invite-only hides its 403) → account created + verified server-side, login works', async () => {
+  const file = authDb()
+  const E = 'review+velo-pr9@example.com'
+  const server = createServer((req, res) => {
+    let status = 200
+    let body = {}
+    let headers = {}
+    if (req.url === '/api/auth/sign-up/email') body = { token: null, user: { email: E } } // nothing created
+    else if (req.url === '/api/auth/sign-in/email') {
+      const u = rows(file, `SELECT u."emailVerified" AS v FROM "user" u JOIN "account" a ON a."userId" = u."id" AND a."providerId" = 'credential' WHERE u."email" = '${E}'`)[0]
+      if (!u) { status = 401; body = { code: 'INVALID_EMAIL_OR_PASSWORD' } }
+      else if (u.v !== 1) { status = 403; body = { code: 'EMAIL_NOT_VERIFIED' } }
+      else { body = { token: 'tok' }; headers = SESSION_COOKIE }
+    } else if (req.url === '/api/auth/get-session') body = { user: { id: 'whatever' }, session: { activeOrganizationId: 'o1' } }
+    res.writeHead(status, { 'content-type': 'application/json', ...headers })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const r = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'Review+velo-pr9@example.com', '--password', 'pw', '--sqlite', file],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  assert.equal(r.code, 0, r.out)
+  const users = rows(file, 'SELECT * FROM "user"')
+  assert.equal(users.length, 1)
+  assert.equal(users[0].emailVerified, 1)
+  assert.equal(rows(file, 'SELECT * FROM "account" WHERE "providerId" = \'credential\'').length, 1)
+})

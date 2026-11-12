@@ -23,7 +23,9 @@
  *        again — it must return 200. Sign-up is skipped.
  *      - New account: step 1. If sign-up returns no session token (verification
  *        required), the seed just created the account with its own password, so it
- *        marks it verified and signs in (must return 200).
+ *        marks it verified and signs in (must return 200). An invite-only app hides
+ *        its 403 behind that same 200, so if no account row exists yet the seed
+ *        creates it first, as in 1b.
  *   1. POST /api/auth/sign-up/email   (autoSignIn → session cookie). Without a db
  *      flag (today's flow): an existing user (redeploy) returns USER_ALREADY_EXISTS
  *      → sign in with the given password; if that fails the account holds an OLD
@@ -468,6 +470,14 @@ async function main() {
         // keeps the #3162 rule; then sign in for the steps below.
         info('sign-up gave no session (e-mail verification required) — marking it verified and signing in.')
         try {
+          // With verification on, better-auth answers an invite-only refusal (403
+          // SIGNUP_INVITE_ONLY) with the same generic 200/no-session it gives a
+          // duplicate (sign-up.mjs: `statusCode === 403 && shouldReturnGenericDuplicateResponse`),
+          // so no row exists yet. Create it like the invite-only path (#3340) does.
+          if (!(querySeedCount(args, reviewerExistsSql(email)) > 0)) {
+            info(`sign-up created no account (invite-only app hides SIGNUP_INVITE_ONLY) — creating ${email} directly in the database.`)
+            execSeedSql(args, await createReviewAccountSql(email, name, password))
+          }
           execSeedSql(args, markReviewerVerifiedSql(email))
         } catch (e) {
           warn(`could not mark ${email} verified: ${e?.message || e} — NOT advertising this login.`)
