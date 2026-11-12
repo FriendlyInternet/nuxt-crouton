@@ -67,4 +67,5 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   extraction into `crouton-layout` once it holds up on a phone across the spec entries.
 - The served page needs a public data path for team-scoped blocks before it can be truly public.
 - Board and served page must stack the same way at narrow widths (open: the board squeezes panes
-  side by side where the page stacks them).
+  side by side where the page stacks them). Hidden panes no longer count toward the board's
+  stack check (#3828); both now use partitionCollapsed's visible tree.
