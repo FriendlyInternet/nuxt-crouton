@@ -86,16 +86,13 @@ test('post: no model output → skipped note with the run link, and a /close-epi
   assert.match(notes[0], /https:\/\/run\/1/)
   assert.deepEqual(w.calls.find(x => x[0] === 'update'), ['update', 'closed', 'completed'])
 })
-test('post: a verified pending epic closes once its PR is merged and the postmortem posts', async () => {
+// #3012: a `verified` pending marker (written before the auto-close job) no longer closes in `post` —
+// postmortem.yml's auto-close job decides (main + test card + postmortem), with the same App token.
+test('post: a verified pending marker closes nothing — the auto-close job decides', async () => {
   const w = world({ comments: [actions(renderPending({ epic: 7, via: 'verified' }))], pulls: [{ number: 9, state: 'closed', merged_at: 'x', head: { ref: 'epic/7-x' } }] })
   await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD), runUrl: 'u' })
-  assert.deepEqual(w.calls.find(x => x[0] === 'update'), ['update', 'closed', 'completed'])
-})
-test('post: a verified pending epic whose sub-issue was reopened stays open and says why', async () => {
-  const w = world({ kids: [{ number: 4, state: 'open' }], comments: [actions(renderPending({ epic: 7, via: 'verified' }))] })
-  await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD), runUrl: 'u' })
   assert.ok(!w.calls.some(x => x[0] === 'update'))
-  assert.ok(w.calls.some(x => x[0] === 'comment' && /#4/.test(x[1])))
+  assert.equal(w.calls.filter(x => x[0] === 'comment').length, 1) // only the postmortem itself
 })
 test('post: a pending marker planted by an outsider never closes the epic', async () => {
   const w = world({ comments: [outsider(renderPending({ epic: 7, via: 'close-epic' }))] })
