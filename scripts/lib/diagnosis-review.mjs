@@ -373,37 +373,49 @@ const readLogs = (paths) => paths.flatMap(p => {
   if (statSync(p).isDirectory()) return readdirSync(p).filter(f => f.endsWith('.log')).map(f => read(join(p, f)))
   return [read(p)]
 }).join('\n')
+const readJson = (p) => JSON.parse(read(p) || '{}')
+const REJECTED = { verdict: 'reject', checks: [], points: [], errors: [] }
+
+// route <round> <diagnosis.md> <verdict.md> <raw log paths...>
+function cliRoute(a) {
+  const round = Number(a[0])
+  const pre = precheck({ diagnosisBody: read(a[1]), rawLog: readLogs(a.slice(3)) })
+  const v = pre.ok ? parseReviewVerdict(read(a[2])) : REJECTED
+  const verdict = pre.ok ? v.verdict : 'reject'
+  return { round, verdict, next: routeReview({ verdict, round }), precheck: pre, checks: v.checks, points: [...pre.points, ...v.points], errors: v.errors }
+}
+
+function cliBase(a) {
+  const p = readJson(a[0])
+  const withRaw = (js) => (js || []).map(j => ({ ...j, raw: j.raw ?? read(j.log) }))
+  return baseVerdict({ prJobs: withRaw(p.prJobs), baseRun: p.baseRun || null, baseJobs: withRaw(p.baseJobs) })
+}
+
+/** Paths as given, except a directory expands to its `.log` files (one level). */
+const expandLogDirs = (paths) => paths.flatMap(p => (p && existsSync(p) && statSync(p).isDirectory() ? readdirSync(p).filter(f => f.endsWith('.log')).map(f => join(p, f)) : [p]))
+
+// handback-marker <sha> <check> <raw log paths...> — '' when no job log has a failing line
+function cliHandbackMarker(a) {
+  const line = firstFailingLines(expandLogDirs(a.slice(2)).map(read))[0]
+  return line ? handbackMarker({ sha: a[0], check: a[1], line }) : ''
+}
+
+const COMMANDS = {
+  'precheck': (a) => precheck({ diagnosisBody: read(a[0]), rawLog: readLogs(a.slice(1)) }),
+  'route': cliRoute,
+  // render-review <route.json> <sha> <check> — the 🔎 comment for a `route` result
+  'render-review': (a) => renderReview({ ...readJson(a[0]), sha: a[1], check: a[2] }),
+  'fix-go': (a) => fixGo(JSON.parse(a[0] || '{}')),
+  'base': cliBase,
+  'owner-ask': (a) => ownerAsk(readJson(a[0])),
+  'handback-marker': cliHandbackMarker,
+}
 
 function cli(argv) {
   const [cmd, ...a] = argv
-  if (cmd === 'precheck') return precheck({ diagnosisBody: read(a[0]), rawLog: readLogs(a.slice(1)) })
-  if (cmd === 'route') {
-    // route <round> <diagnosis.md> <verdict.md> <raw log paths...>
-    const round = Number(a[0])
-    const pre = precheck({ diagnosisBody: read(a[1]), rawLog: readLogs(a.slice(3)) })
-    const v = pre.ok ? parseReviewVerdict(read(a[2])) : { verdict: 'reject', checks: [], points: [], errors: [] }
-    const verdict = pre.ok ? v.verdict : 'reject'
-    return { round, verdict, next: routeReview({ verdict, round }), precheck: pre, checks: v.checks, points: [...pre.points, ...v.points], errors: v.errors }
-  }
-  if (cmd === 'render-review') {
-    // render-review <route.json> <sha> <check> — the 🔎 comment for a `route` result
-    const r = JSON.parse(read(a[0]) || '{}')
-    return renderReview({ ...r, sha: a[1], check: a[2] })
-  }
-  if (cmd === 'fix-go') return fixGo(JSON.parse(a[0] || '{}'))
-  if (cmd === 'base') {
-    const p = JSON.parse(read(a[0]) || '{}')
-    const withRaw = (js) => (js || []).map(j => ({ ...j, raw: j.raw ?? read(j.log) }))
-    return baseVerdict({ prJobs: withRaw(p.prJobs), baseRun: p.baseRun || null, baseJobs: withRaw(p.baseJobs) })
-  }
-  if (cmd === 'owner-ask') return ownerAsk(JSON.parse(read(a[0]) || '{}'))
-  if (cmd === 'handback-marker') {
-    // handback-marker <sha> <check> <raw log paths...> — '' when no job log has a failing line
-    const paths = a.slice(2).flatMap(p => (p && existsSync(p) && statSync(p).isDirectory() ? readdirSync(p).filter(f => f.endsWith('.log')).map(f => join(p, f)) : [p]))
-    const line = firstFailingLines(paths.map(read))[0]
-    return line ? handbackMarker({ sha: a[0], check: a[1], line }) : ''
-  }
-  throw new Error(`usage: diagnosis-review.mjs precheck|route|render-review|fix-go|base|owner-ask|handback-marker … (got ${cmd})`)
+  const run = Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : null
+  if (!run) throw new Error(`usage: diagnosis-review.mjs precheck|route|render-review|fix-go|base|owner-ask|handback-marker … (got ${cmd})`)
+  return run(a)
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
