@@ -6,7 +6,8 @@
  * SplitterGroup / Panel / ResizeHandle) and gives every pane its `NodePath`,
  * so a pane (BoardPane) can be a drop target. A split lays out only the
  * children that still show something at this width — a hidden pane gives its
- * space back; its trigger lives on an edge or in the nav (#2418).
+ * space back; its trigger lives on an edge or in the nav (#2418) — its stack check,
+ * floors and sizes read the visible children only (#3828).
  *
  * Deliberately in the POC (consume-vs-grow): once it holds up on a phone, the
  * splitter + drop layer is the candidate for extraction into crouton-layout.
@@ -15,8 +16,8 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
-import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
 import { boardPaneMinPct } from '../../utils/board-pane-min'
+import { boardStackThreshold, toChildSizes, visibleDefaultSizes, visibleSubtree } from '../../utils/board-visible'
 import { useElementSize } from '@vueuse/core'
 
 defineOptions({ name: 'BoardTree' })
@@ -30,7 +31,7 @@ const props = withDefaults(defineProps<{
 }>(), { path: () => [], selected: null, hidden: () => new Set<string>() })
 
 const emit = defineEmits<{
-  resize: [at: NodePath, sizes: number[]]
+  resize: [at: NodePath, sizes: (number | undefined)[]]
   select: [at: NodePath]
 }>()
 
@@ -47,9 +48,10 @@ const { width: splitWidth } = useElementSize(splitEl)
 
 // Floor each pane at the same floor the served page gives it (#3746).
 const panelMin = (child: LayoutNode) => props.node.type === 'split'
-  ? boardPaneMinPct(props.node.direction, child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
+  ? boardPaneMinPct(props.node.direction, visibleSubtree(child, props.hidden) ?? child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
   : 10
-const panelDefault = (child: LayoutNode, n: number) => child.defaultSize ?? 100 / n
+// Visible panes' sizes re-normalised to 100 for reka (#3828); stored sizes are untouched.
+const panelDefaults = computed(() => visibleDefaultSizes(visibleChildren.value.map(v => v.child)))
 
 // Only a user resize edits the page (#3746): reka re-reports the min-width clamp on
 // mount / width change, and that must not mark the board unsaved or overwrite the base.
@@ -59,18 +61,17 @@ function onHandleKey() {
   setTimeout(() => (userResizing.value = false), 0)
 }
 function onLayout(sizes: number[]) {
-  if (userResizing.value) emit('resize', props.path, sizes)
+  if (!userResizing.value || props.node.type !== 'split') return
+  // Back onto the original child indices; hidden children stay undefined (#3828).
+  emit('resize', props.path, toChildSizes(props.node.children, visibleChildren.value.map(v => v.i), sizes))
 }
 
 // Stack like the page does (#2523): the served page stacks a horizontal split once its
 // container is narrower than the split's derived soft floor (a container query in the
 // renderer). The board measures the same width against the same threshold, so what you
 // see on a phone is what the page shows — one under the other, no resize handles.
-const stackThreshold = computed(() => (
-  props.node.type === 'split' && props.node.direction === 'horizontal'
-    ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth)
-    : 0
-))
+// Hidden panes don't count (#3828) — the page renders from the visible tree too.
+const stackThreshold = computed(() => boardStackThreshold(props.node, props.hidden, blocks.value))
 const stacked = computed(() => stackThreshold.value > 0 && splitWidth.value > 0 && splitWidth.value <= stackThreshold.value)
 </script>
 
@@ -109,7 +110,7 @@ const stacked = computed(() => stackThreshold.value > 0 && splitWidth.value > 0 
           data-handoff="pane-resize-handle"
           @dragging="(d: boolean) => (userResizing = d)"
         />
-        <SplitterPanel :default-size="panelDefault(child, visibleChildren.length)" :min-size="panelMin(child)" class="overflow-hidden">
+        <SplitterPanel :default-size="panelDefaults[vi]" :min-size="panelMin(child)" class="overflow-hidden">
           <BoardTree
             :node="child"
             :path="[...path, i]"
