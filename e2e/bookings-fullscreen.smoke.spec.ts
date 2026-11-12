@@ -178,7 +178,9 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
   test('desktop: no full-screen button, inline week navigation still works', async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await openPage(page, baseURL)
-    await expect(page.getByRole('button', { name: 'Open full screen' })).toBeHidden()
+    // The phone launcher card (hint + big button) must stay off the desktop page.
+    await expect(page.getByRole('button', { name: 'Open bookings tool' })).toBeHidden()
+    await expect(page.getByText('Tap to see and manage bookings')).toBeHidden()
     const inline = page.locator('.booking-panel').first()
     await expect(inline).toBeVisible()
     const before = await cells(inline).allTextContents()
