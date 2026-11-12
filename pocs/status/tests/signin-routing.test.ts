@@ -58,6 +58,21 @@ describe('signed-out routing', () => {
     expect(u.searchParams.get('to')).toBe('/admin/test1/bookings')
   })
 
+  it('a card link with a long walk keeps key, to and walk past the sign-in page check', async () => {
+    const h = await loginHandler()
+    const { safeRedirect } = await import('../shared/safe-path')
+    const walk = 'A'.repeat(2048)
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805', to: '/admin/test1/bookings', walk } })
+    const back = new URL(loc, 'http://h').searchParams.get('redirect')!
+    expect(back.length).toBeGreaterThan(500)
+    // What signin.vue does with route.query.redirect before mailing the link.
+    const kept = new URL(safeRedirect(back), 'http://h')
+    expect(kept.pathname).toBe('/api/status/login/velo')
+    expect(kept.searchParams.get('key')).toBe('pr3805')
+    expect(kept.searchParams.get('to')).toBe('/admin/test1/bookings')
+    expect(kept.searchParams.get('walk')).toBe(walk)
+  })
+
   it('drops a bad key, unsafe to and junk params from the return path', async () => {
     const h = await loginHandler()
     const { loc } = await h({ app: 'velo', query: { key: 'pr3805x', to: '//evil.com', walk: 'a b', x: '1' } })

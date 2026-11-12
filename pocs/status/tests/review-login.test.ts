@@ -77,6 +77,17 @@ describe('signedOutBackPath (#3840)', async () => {
     const back = signedOutBackPath('velo', { key: 'pr3805', to: '/admin/test1/bookings', walk: 'abc' })
     expect(safeRedirect(back)).toBe(back)
   })
+  it('a real card link with a long walk and an encoded to also survives it', async () => {
+    const { safeRedirect } = await import('../shared/safe-path')
+    const { loginHrefFor } = await import('../app/utils/walk')
+    const steps = Array.from({ length: 30 }, (_, i) => `Step ${i + 1}: ${'open the bookings page and check the row '.repeat(8)}`)
+    const href = new URL(loginHrefFor({ app: 'velo', number: 3840, title: 'T'.repeat(80), steps, to: `/admin/test1/bookings?q=${'%'.repeat(150)}` }), 'http://h')
+    const query = Object.fromEntries(href.searchParams)
+    expect(query.walk!.length).toBeGreaterThan(1500)
+    const back = signedOutBackPath('velo', { ...query, key: 'pr3805' })
+    expect(back.length).toBeGreaterThan(500)
+    expect(safeRedirect(back)).toBe(back)
+  })
 })
 
 describe('walk in the login redirect (#2681)', async () => {
