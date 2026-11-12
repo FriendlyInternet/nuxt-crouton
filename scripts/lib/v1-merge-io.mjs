@@ -141,14 +141,18 @@ export async function decideV1Answer({ github, owner, repo, env, pr, pull_number
   return { answer, reviewSt }
 }
 
+// #3845: say what happens next on the already-armed path, so a quiet log isn't read as "stuck" and dispatched by hand.
+function logArmedNextStep({ core, pr, pull_number, answer }) {
+  if (!pr.auto_merge || answer?.code === 'not-pipeline') return
+  const by = pr.auto_merge.enabled_by?.login ?? '?'
+  core.info(answer?.merge === true
+    ? `#${pull_number} auto-merge already armed (by ${by}) — GitHub merges it once CI Gate + Merge decision are green; no dispatch needed.`
+    : `#${pull_number} auto-merge armed; waits on Merge decision (${answer?.code}).`)
+}
+
 async function enableAutoOrMerge({ github, core, pr, pull_number, answer, checkState, red, mergeWithRetry }) {
   if (!shouldEnableAuto({ answer, autoMergeOn: !!pr.auto_merge })) {
-    // #3845: say what happens next on the already-armed path, so a quiet log isn't read as "stuck" and dispatched by hand.
-    if (pr.auto_merge && answer?.code !== 'not-pipeline') {
-      core.info(answer?.merge === true
-        ? `#${pull_number} auto-merge already armed (by ${pr.auto_merge.enabled_by?.login ?? '?'}) — GitHub merges it once CI Gate + Merge decision are green; no dispatch needed.`
-        : `#${pull_number} auto-merge armed; waits on Merge decision (${answer?.code}).`)
-    }
+    logArmedNextStep({ core, pr, pull_number, answer })
     return
   }
   try {
