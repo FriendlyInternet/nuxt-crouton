@@ -1429,6 +1429,7 @@ jobs:
           [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
 
       # #3762: append the finish-check line to the run record. Own step, same reason.
+      # Best effort (each `|| true`): no PR, no run-record comment or an API error must not fail the job.
       - id: finish-check-line
         if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
         env:
