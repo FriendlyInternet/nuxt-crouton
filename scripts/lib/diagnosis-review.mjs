@@ -8,14 +8,16 @@
 //     pages the owner once (gaveUpMarker / gaveUpPosted), not once per red workflow.
 //   - #3270: a failure the base branch also has (same failureSignature) is not this PR's to fix.
 //
-// Pure functions + a small CLI (`precheck|route|render-review|fix-go|base|owner-ask`). Imports only files the
-// fix-ci workflow copies next to it into $RUNNER_TEMP/lib (log-tail, diagnosis-marker, ci-fix-commit).
+// Pure functions + a small CLI (`precheck|route|render-review|fix-go|base|owner-ask|handback-marker`). Imports only
+// files the fix-ci workflow copies next to it into $RUNNER_TEMP/lib (log-tail, diagnosis-marker, ci-fix-commit,
+// failed-job-logs).
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cleanLine, failingLines, NOISE_LINES, EXIT_LINE } from './log-tail.mjs'
 import { parseDiagnosisMarker } from './diagnosis-marker.mjs'
 import { isCiFixCommit } from './ci-fix-commit.mjs'
+import { pickFailedJobs } from './failed-job-logs.mjs'
 
 export const MAX_REVIEW_ROUNDS = 2
 export const REVIEW_CHECKS = ['stopped-at', 'cause', 'since-when', 'proof', 'known-before']
@@ -236,11 +238,60 @@ export function baseVerdict({ prJobs = [], baseRun = null, baseJobs = [] }) {
 }
 
 // ── #3277: the try counter and the one-page rule ────────────────────────────────────────────
-/** The label count while the head is the fix-bot's own commit; any other head is new code → 0. */
-export function effectiveAttempts({ labels = [], headCommit }) {
+/**
+ * The label count while the head is the fix-bot's own commit, or while `carry` says a worker head
+ * still fails on the same line (see carriesCount); any other head is new code → 0.
+ */
+export function effectiveAttempts({ labels = [], headCommit, carry = false }) {
   const l = (labels || []).find(n => /^ci-fix-attempts:\d+$/.test(n))
   const n = l ? Number(l.split(':')[1]) : 0
-  return isCiFixCommit(headCommit) ? n : 0
+  return isCiFixCommit(headCommit) || truthy(carry) ? n : 0
+}
+
+// ── The count across a worker revision (#3668 review): guard refused a fix → worker → same red ──
+const HANDBACK_RE = /<!--\s*fix-bot-handback:v1\s+sha=(\S+)\s+check=(\S+)\s+line=(\S*)\s*-->/
+/** The hidden marker on the guard's hand-back comment: the check and the (normalised) failing line. */
+export const handbackMarker = ({ sha, check, line }) =>
+  `<!-- fix-bot-handback:v1 sha=${sha} check=${encodeURIComponent(String(check))} line=${encodeURIComponent(normaliseLine(line))} -->`
+/** @returns {{ sha:string, check:string, line:string } | null} */
+export function parseHandbackMarker(body) {
+  const m = HANDBACK_RE.exec(String(body || ''))
+  if (!m) return null
+  try { return { sha: m[1], check: decodeURIComponent(m[2]), line: decodeURIComponent(m[3]) } } catch { return null }
+}
+
+/** The first failing line of each job log (empty ones dropped), in order. */
+export const firstFailingLines = (raws = []) =>
+  (raws || []).map(r => failingLines(String(r || ''), { max: 1 })[0]?.text || '').filter(Boolean)
+
+/**
+ * Does the try count carry over to a head that is not the fix-bot's commit? Yes while the same line
+ * keeps failing: the newest pipeline-bot hand-back for this check (the guard refused a fix and re-ran
+ * the worker) quoted it, or an approved diagnosis on an older head did (a miss). Else → false.
+ */
+export function carriesCount({ comments = [], check, sha, failingLines: lines = [] }) {
+  const want = (lines || []).map(normaliseLine).filter(Boolean)
+  if (!want.length) return false
+  const hb = (comments || []).filter(isPipelineBot).map(c => parseHandbackMarker(c.body)).filter(h => h && h.check === check).pop()
+  if (hb && want.includes(hb.line)) return true
+  return (lines || []).some(failingLine => missOf({ comments, check, sha, failingLine }) !== null)
+}
+
+/**
+ * The gate's call (fix-ci-on-failure.yml): reads the failed run's job logs and the PR thread, only
+ * when it matters — a non-fix-bot head on a PR that already has a counted try. Any read error → false
+ * (the old behaviour: a worker head starts at 0).
+ */
+export async function carriedTry({ github, owner, repo, pr, sha, runId, check, labels = [], headCommit }) {
+  if (isCiFixCommit(headCommit) || !runId) return false
+  if (!(labels || []).some(n => /^ci-fix-attempts:[1-9]\d*$/.test(n))) return false
+  try {
+    const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner, repo, run_id: Number(runId), filter: 'latest', per_page: 100 })
+    const raws = []
+    for (const j of pickFailedJobs(jobs)) raws.push(String((await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: j.id })).data || ''))
+    const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: Number(pr), per_page: 100 })
+    return carriesCount({ comments, check, sha, failingLines: firstFailingLines(raws) })
+  } catch { return false }
 }
 
 export const gaveUpMarker = (sha) => `<!-- fix-bot-gave-up:v1 sha=${sha} -->`
@@ -288,7 +339,7 @@ export function ownerAsk({ check, sha, pr, rounds = [] }) {
     '',
     `@pmcp — PR #${pr} is red on \`${String(sha).slice(0, 7)}\` and the fix-bot could not produce a diagnosis the reviewer accepts, so no fix was made.`,
     '',
-    `**Recommendation:** reply \`ok\` to redo the diagnosis with the reviewer's latest points (${(last.points || []).length} below), or reply \`**Worker:** <the cause>\` to send the worker straight at a cause you name.`,
+    `**Recommendation:** reply \`**Worker:** <the cause>\` to send the worker straight at a cause you name (the reviewer's latest points, ${(last.points || []).length}, are below).`,
     '',
     'A fresh session must not lose: nothing was committed; both diagnoses and both reviews are linked below.',
     '',
@@ -346,7 +397,13 @@ function cli(argv) {
     return baseVerdict({ prJobs: withRaw(p.prJobs), baseRun: p.baseRun || null, baseJobs: withRaw(p.baseJobs) })
   }
   if (cmd === 'owner-ask') return ownerAsk(JSON.parse(read(a[0]) || '{}'))
-  throw new Error(`usage: diagnosis-review.mjs precheck|route|render-review|fix-go|base|owner-ask … (got ${cmd})`)
+  if (cmd === 'handback-marker') {
+    // handback-marker <sha> <check> <raw log paths...> — '' when no job log has a failing line
+    const paths = a.slice(2).flatMap(p => (p && existsSync(p) && statSync(p).isDirectory() ? readdirSync(p).filter(f => f.endsWith('.log')).map(f => join(p, f)) : [p]))
+    const line = firstFailingLines(paths.map(read))[0]
+    return line ? handbackMarker({ sha: a[0], check: a[1], line }) : ''
+  }
+  throw new Error(`usage: diagnosis-review.mjs precheck|route|render-review|fix-go|base|owner-ask|handback-marker … (got ${cmd})`)
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

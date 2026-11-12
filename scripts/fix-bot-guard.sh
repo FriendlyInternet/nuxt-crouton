@@ -64,8 +64,16 @@ fi
 # shellcheck disable=SC2016 # the JS is single-quoted on purpose
 LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
 ERR="$(cat "$RUNNER_TEMP/failed-job-logs.md" 2>/dev/null || echo '(could not read the failed job logs — see the failing run)')"
+# #3668 review: a hidden marker with the failing line, so the worker's next head keeps the try count
+# while that line repeats (carriedTry) — refused fix → worker → same red ends at the cap, not in a loop.
+# The lib is the default-branch copy the fix job puts in $RUNNER_TEMP/lib; no lib or no line → no marker.
+HB_MARK=""
+if [ -f "$RUNNER_TEMP/lib/diagnosis-review.mjs" ]; then
+  HB_MARK="$(node "$RUNNER_TEMP/lib/diagnosis-review.mjs" handback-marker "$PRE" "$RUN_NAME" "$RUNNER_TEMP/raw-logs" 2>/dev/null || true)"
+fi
 {
   echo "<!-- pipeline-note -->"
+  if [ -n "$HB_MARK" ]; then echo "$HB_MARK"; fi
   echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
   echo
   echo "🔧 **Auto-fix not pushed: it would delete code this PR was asked to add.** Handing back to the worker to implement the missing piece instead."

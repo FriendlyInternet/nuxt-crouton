@@ -40,11 +40,13 @@ export const FIX_BOT_MAX_ATTEMPTS = 3
 // #3277: with a `headCommit` the count only stands while the head is the fix-bot's own commit; any
 // other head (a worker commit, a base merge) is new code and starts again at 0. Without one (an
 // older caller) the label alone counts, as before. `attemptLabel` stays so the bump can replace it.
-const attemptsFrom = (labels = [], headCommit) => {
+// #3668 review: `carry` (carriedTry in diagnosis-review.mjs) keeps the count on a worker head that
+// still fails on the same line after a refused fix hand-back, so that loop ends at the cap.
+const attemptsFrom = (labels = [], headCommit, carry = false) => {
   const attemptLabel = labels.find(n => /^ci-fix-attempts:\d+$/.test(n))
   const attempts = headCommit === undefined
     ? (attemptLabel ? Number(attemptLabel.split(':')[1]) : 0)
-    : effectiveAttempts({ labels, headCommit })
+    : effectiveAttempts({ labels, headCommit, carry })
   return { attemptLabel, attempts }
 }
 
@@ -54,8 +56,8 @@ const attemptsFrom = (labels = [], headCommit) => {
  * #3277: with `headCommit`, N only counts while the head is a fix-bot commit.
  * @returns {'fix'|'diagnose'}
  */
-export function fixOrDiagnose({ labels = [], failures = [], headCommit } = {}) {
-  if (attemptsFrom(labels, headCommit).attempts < 1) return 'fix'
+export function fixOrDiagnose({ labels = [], failures = [], headCommit, carry = false } = {}) {
+  if (attemptsFrom(labels, headCommit, carry).attempts < 1) return 'fix'
   const red = failures.some(f => f && FIX_BOT_WORKFLOWS.includes(f.workflow) && f.conclusion === 'failure')
   return red ? 'diagnose' : 'fix'
 }
@@ -65,7 +67,7 @@ export function fixOrDiagnose({ labels = [], failures = [], headCommit } = {}) {
  *   failures?:{ workflow:string|null, conclusion:string|null }[] }} p
  * @returns {{ who:'bot'|'gave-up'|'owner'|'none', code:string, reason:string, attempts:number, attemptLabel:string|undefined, mode:'fix'|'diagnose' }}
  */
-export function fixBotWillTry({ head, base, state, go, manual = false, labels = [], failures = [], headCommit }) {
+export function fixBotWillTry({ head, base, state, go, manual = false, labels = [], failures = [], headCommit, carry = false }) {
   const out = (who, code, reason, attempts = 0, attemptLabel, mode = 'fix') => ({ who, code, reason, attempts, attemptLabel, mode })
   const h = String(head || '')
   if (!manual && !h.startsWith('work-')) {
@@ -85,9 +87,9 @@ export function fixBotWillTry({ head, base, state, go, manual = false, labels = 
   if (odd) {
     return out('owner', 'not-failure', `the auto-fix only starts on a plain failure; \`${odd.workflow}\` ended \`${odd.conclusion}\``)
   }
-  const { attemptLabel, attempts } = attemptsFrom(labels, headCommit)
+  const { attemptLabel, attempts } = attemptsFrom(labels, headCommit, carry)
   if (attempts >= FIX_BOT_MAX_ATTEMPTS) return out('gave-up', 'gave-up', `auto-fix gave up after ${attempts} tries`, attempts, attemptLabel)
-  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel, fixOrDiagnose({ labels, failures, headCommit }))
+  return out('bot', 'bot', 'the auto-fix will try', attempts, attemptLabel, fixOrDiagnose({ labels, failures, headCommit, carry }))
 }
 
 /** The conclusion the bot's workflow_run event will carry. A still-running run (null) is predicted from its red check. */

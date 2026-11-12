@@ -91,3 +91,21 @@ test('a fix that deletes a worker-added line → refused, reset to PRE, hand-bac
   assert.match(hb, /Error: compute is not defined/)
   assert.match(r.gh, /pr comment 1 --body-file .*handback\.md/)
 })
+
+// #3668 review: the hand-back carries the failing line, so the worker's next head keeps the try count.
+test('a refused fix → the hand-back carries a hidden marker with the failing line (from the default-branch lib)', async () => {
+  const s = setup()
+  mkdirSync(join(s.temp, 'lib')); mkdirSync(join(s.temp, 'raw-logs'))
+  for (const f of ['diagnosis-review', 'log-tail', 'diagnosis-marker', 'ci-fix-commit', 'failed-job-logs']) copyFileSync(join(ROOT, 'scripts/lib', `${f}.mjs`), join(s.temp, 'lib', `${f}.mjs`))
+  const line = '2026-11-11T10:00:00.0000000Z ##[error]app.js(2,20): error TS2304: Cannot find name \'compute\'.'
+  writeFileSync(join(s.temp, 'raw-logs', '7.log'), `2026-11-11T09:59:59.0000000Z Run pnpm typecheck\n${line}\n`)
+  writeFileSync(join(s.work, 'app.js'), 'const a = 1\n')
+  git(s.work, 'commit', '-qam', 'fix: drop stray line')
+  const r = guard(s)
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(r.output, /refused=true/)
+  const hb = readFileSync(join(s.temp, 'handback.md'), 'utf8').split('\n')
+  assert.equal(hb[0], '<!-- pipeline-note -->')
+  const { parseHandbackMarker, normaliseLine, firstFailingLines } = await import('./lib/diagnosis-review.mjs')
+  assert.deepEqual(parseHandbackMarker(hb[1]), { sha: s.pre, check: 'CI', line: normaliseLine(firstFailingLines([line])[0]) })
+})

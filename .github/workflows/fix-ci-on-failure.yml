@@ -159,11 +159,11 @@ jobs:
               failed = pickFailedRun(runs)
               if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
             }
-            // #3373: the single "will the bot try?" decision (shared with status.yml's red ping).
-            // #3277: the head commit decides whether the try counter still stands.
+            // #3373 one "will the bot try?" decision (shared with status.yml); #3277 the head commit (or #3668 the same failing line after a hand-back, `carry`) keeps the try count.
             const failures = run ? [{ workflow: run.name, conclusion: run.conclusion }] : []
             const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: full.head.sha })).data
-            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels, failures, headCommit })
+            const carry = run ? await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/diagnosis-review.mjs`)).carriedTry({ github, owner, repo, pr: pr.number, sha: full.head.sha, runId: run.id, check: run.name, labels, headCommit }) : false
+            const d = fixBotWillTry({ head: full.head.ref, base: full.base.ref, state: full.state, go, manual, labels, failures, headCommit, carry })
             if (d.who === 'none') {
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
                 '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
@@ -396,7 +396,8 @@ jobs:
             core.setOutput('skip', 'true')
 
       # #3668: the same line red again after an approved fix is a MISS — noted (#3669 tallies it), then
-      # diagnosed again; a miss never jumps straight to another fix.
+      # diagnosed again; a miss never jumps straight to another fix. A worker head gets here too: the gate's
+      # `carry` keeps its try count when the line repeats (a hand-back or a miss), which makes it diagnose mode.
       - name: Miss check
         if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

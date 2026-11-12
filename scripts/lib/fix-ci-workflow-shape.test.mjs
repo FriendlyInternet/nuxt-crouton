@@ -269,6 +269,17 @@ test('every commit step runs on the one fixgo decision, never on mode alone', ()
   assert.equal(step('fix', 'Decide the fix').id, 'fixgo')
 })
 
+// #3668 review: refused fix → worker → same red must keep the try count, so the gate asks carriedTry
+// (default-branch copy) and hands its answer to the one fixBotWillTry decision.
+test('the gate passes the carried try count (same line after a hand-back) into fixBotWillTry', () => {
+  const gate = stepsOf(jobs.fixbot).find(s => s.id === 'gate').text
+  assert.match(gate, /const carry = run \? await \(await import\(`\$\{process\.env\.GITHUB_WORKSPACE\}\/scripts\/lib\/diagnosis-review\.mjs`\)\)\.carriedTry\(\{[^\n]*runId: run\.id, check: run\.name, labels, headCommit \}\)/)
+  assert.match(gate, /fixBotWillTry\(\{[^\n]*headCommit, carry \}\)/)
+  assert.ok(gate.indexOf('const carry') < gate.indexOf('fixBotWillTry({'), 'carry is computed before the decision')
+  // diagnosis-review.mjs imports failed-job-logs.mjs: every job that copies it to $RUNNER_TEMP/lib copies both.
+  for (const j of ['fixbot', 'fix']) assert.match(step(j, 'Copy log helpers from the default branch').text, /for s in [^;\n]*\bfailed-job-logs\b[^;\n]*\bdiagnosis-review\b/, j)
+})
+
 test('the gate no longer bumps the counter or posts the gave-up page; the one-page step does', () => {
   const gate = stepsOf(jobs.fixbot).find(s => s.id === 'gate').text
   assert.ok(!/addLabels[^\n]*ci-fix-attempts/.test(gate), 'no counter bump in the gate')

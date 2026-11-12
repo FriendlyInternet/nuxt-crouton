@@ -9,8 +9,10 @@ import {
   MAX_REVIEW_ROUNDS, isPipelineBot, reviewMarker, parseReviewMarker, stoppedAtLine, precheck, parseReviewVerdict,
   routeReview, fixGo, approvedDiagnosis, handoffLog, isMiss, missOf, normaliseLine, failureSignature, pickBaseRun,
   baseVerdict, effectiveAttempts, gaveUpMarker, gaveUpPosted, ownerAsk, renderReview, linkedRefs,
+  handbackMarker, parseHandbackMarker, carriesCount, carriedTry, firstFailingLines,
 } from './diagnosis-review.mjs'
 import { diagnosisMarker } from './diagnosis-marker.mjs'
+import { fixBotWillTry, FIX_BOT_MAX_ATTEMPTS } from './fix-bot-dispatch.mjs'
 
 const fixture = (name) => readFileSync(new URL(`./__fixtures__/ci-logs/${name}`, import.meta.url), 'utf8')
 const deploy3632 = fixture('pr3632-deploy-staging.txt')
@@ -82,6 +84,17 @@ test('two rejections → owner (How to test 2)', () => {
   for (const u of ['https://x/d1', 'https://x/r1', 'https://x/d2', 'https://x/r2']) {
     assert.ok(details.includes(u), u); assert.ok(!ask.slice(0, ask.indexOf('<details>')).includes(u), `${u} only inside details`)
   }
+})
+
+// #3668 review: nothing acts on a bare `ok` to an owner ask (the gate allows one diagnosis per head and
+// check), so the ask must not offer it — only the `**Worker:**` reply, which resumes the worker.
+test('the owner ask offers only an answer something acts on: no `ok` to redo the diagnosis', () => {
+  const ask = ownerAsk({ check: CHECK, sha: SHA, pr: 3192, rounds: [{ points: ['p1'] }, { points: ['p2', 'p3'] }] })
+  const visible = ask.slice(0, ask.indexOf('<details>'))
+  assert.doesNotMatch(visible, /reply `ok`/)
+  assert.doesNotMatch(visible, /redo the diagnosis/)
+  assert.match(visible, /\*\*Recommendation:\*\* reply `\*\*Worker:\*\* <the cause>`/)
+  assert.match(visible, /latest points, 2, are below/)
 })
 
 // ── How to test 3: no fix before approval
@@ -171,6 +184,82 @@ test('effectiveAttempts: the label counts only while the head is a fix-bot commi
   assert.equal(effectiveAttempts({ labels: ['ci-fix-attempts:3'], headCommit: commit('fix: x\n\nCI-Fix: true') }), 3)
   assert.equal(effectiveAttempts({ labels: ['ci-fix-attempts:3'], headCommit: commit('fix: x\n\nCI-Fix: true', 'nuxt-harness[bot]') }), 0)
   assert.equal(effectiveAttempts({ labels: [], headCommit: commit('fix: x\n\nCI-Fix: true') }), 0)
+})
+
+// #3668 review: guard refused a bot fix → worker commit → same red must not reset the counter.
+const FAIL = '2026-11-11T10:00:00.0000000Z ##[error]src/x.ts(3,1): error TS2304: Cannot find name \'compute\'.'
+const OTHER = '2026-11-11T10:00:00.0000000Z ##[error]src/y.ts(9,1): error TS2322: Type \'string\' is not assignable to type \'number\'.'
+const logWith = (line) => `2026-11-11T09:59:59.0000000Z Run pnpm typecheck\n${line}\n2026-11-11T10:00:01.0000000Z ##[error]Process completed with exit code 2.\n`
+/** A fake Octokit over a PR's thread and one failed run's job logs — the REST API itself can't run here. */
+const fakeGithub = ({ comments, log }) => ({
+  paginate: async (fn, p) => fn(p),
+  rest: {
+    actions: {
+      listJobsForWorkflowRun: async () => [{ id: 7, name: 'typecheck', conclusion: 'failure' }, { id: 8, name: 'CI Gate', conclusion: 'failure' }],
+      downloadJobLogsForWorkflowRun: async ({ job_id }) => ({ data: job_id === 7 ? log : '{}' }),
+    },
+    issues: { listComments: async () => comments },
+  },
+})
+
+test('handback marker round-trips with the normalised failing line; firstFailingLines skips logs with none', () => {
+  const m = handbackMarker({ sha: 'abc1234', check: 'CI', line: FAIL })
+  const p = parseHandbackMarker(`<!-- pipeline-note -->\n${m}\n🔧 refused`)
+  assert.equal(p.check, 'CI'); assert.equal(p.sha, 'abc1234')
+  assert.equal(p.line, normaliseLine(firstFailingLines([logWith(FAIL)])[0]))
+  assert.equal(parseHandbackMarker('nope'), null)
+  assert.deepEqual(firstFailingLines(['', '2026-11-11T10:00:00Z all good']), [])
+})
+
+test('carriesCount: a pipeline-bot hand-back on the same line carries; another line, check or a human copy does not', () => {
+  const hb = (line, check = 'CI') => bot(`<!-- pipeline-note -->\n${handbackMarker({ sha: 'aaaaaaa', check, line })}`, 'github-actions[bot]')
+  const lines = firstFailingLines([logWith(FAIL)])
+  assert.equal(carriesCount({ comments: [hb(FAIL)], check: 'CI', sha: SHA, failingLines: lines }), true)
+  assert.equal(carriesCount({ comments: [hb(OTHER)], check: 'CI', sha: SHA, failingLines: lines }), false, 'different line')
+  assert.equal(carriesCount({ comments: [hb(FAIL, 'E2E')], check: 'CI', sha: SHA, failingLines: lines }), false, 'different check')
+  assert.equal(carriesCount({ comments: [human(handbackMarker({ sha: 'aaaaaaa', check: 'CI', line: FAIL }))], check: 'CI', sha: SHA, failingLines: lines }), false, 'non-bot')
+  assert.equal(carriesCount({ comments: [hb(FAIL), hb(OTHER)], check: 'CI', sha: SHA, failingLines: lines }), false, 'the newest hand-back decides')
+  assert.equal(carriesCount({ comments: [hb(FAIL)], check: 'CI', sha: SHA, failingLines: [] }), false, 'no failing line')
+})
+
+test('bot fix refused → worker commit → same red: the counter keeps rising and stops at the cap', async () => {
+  const worker = commit('feat: worker revision', 'nuxt-harness[bot]')
+  const comments = []
+  let labels = []
+  const gate = async (log) => {
+    const github = fakeGithub({ comments, log })
+    const carry = await carriedTry({ github, owner: 'o', repo: 'r', pr: 1, sha: SHA, runId: 99, check: 'CI', labels, headCommit: worker })
+    return fixBotWillTry({ head: 'work-1', base: 'main', state: 'open', labels, failures: [{ workflow: 'CI', conclusion: 'failure' }], headCommit: worker, carry })
+  }
+  const seen = []
+  for (let round = 0; round < 10; round++) {
+    const d = await gate(logWith(FAIL))
+    seen.push(`${d.who}:${d.attempts}:${d.mode}`)
+    if (d.who !== 'bot') break
+    // job `fix`: the bump, then the guard refuses and hands back to the worker (its hidden marker).
+    labels = [`ci-fix-attempts:${d.attempts + 1}`]
+    comments.push(bot(`<!-- pipeline-note -->\n${handbackMarker({ sha: SHA, check: 'CI', line: FAIL })}\n🔧 refused`, 'github-actions[bot]'))
+  }
+  assert.deepEqual(seen, ['bot:0:fix', 'bot:1:diagnose', 'bot:2:diagnose', `gave-up:${FIX_BOT_MAX_ATTEMPTS}:fix`])
+  // The worker really fixed it and a NEW line fails: new code, the count starts again.
+  assert.equal((await gate(logWith(OTHER))).attempts, 0)
+})
+
+test('carriedTry reads nothing for a fix-bot head or a PR with no counted try, and a read error is false', async () => {
+  const boom = { paginate: async () => { throw new Error('no network') }, rest: { actions: {}, issues: {} } }
+  const base = { github: boom, owner: 'o', repo: 'r', pr: 1, sha: SHA, runId: 99, check: 'CI' }
+  assert.equal(await carriedTry({ ...base, labels: ['ci-fix-attempts:2'], headCommit: commit('fix: x\n\nCI-Fix: true') }), false)
+  assert.equal(await carriedTry({ ...base, labels: [], headCommit: commit('feat: w') }), false)
+  assert.equal(await carriedTry({ ...base, labels: ['ci-fix-attempts:2'], headCommit: commit('feat: w') }), false)
+})
+
+test('CLI handback-marker reads the raw-log dir the fix job downloads', () => {
+  const d = mkdtempSync(join(tmpdir(), 'handback-'))
+  writeFileSync(join(d, '7.log'), logWith(FAIL))
+  const out = execFileSync('node', [new URL('./diagnosis-review.mjs', import.meta.url).pathname, 'handback-marker', 'abc1234', 'CI', d], { encoding: 'utf8' }).trim()
+  assert.deepEqual(parseHandbackMarker(out), { sha: 'abc1234', check: 'CI', line: normaliseLine(firstFailingLines([logWith(FAIL)])[0]) })
+  const empty = mkdtempSync(join(tmpdir(), 'handback-'))
+  assert.equal(execFileSync('node', [new URL('./diagnosis-review.mjs', import.meta.url).pathname, 'handback-marker', 'abc1234', 'CI', empty], { encoding: 'utf8' }).trim(), '')
 })
 test('#3277 one page: gaveUpPosted', () => {
   assert.equal(gaveUpPosted([], { sha: SHA }), false)
