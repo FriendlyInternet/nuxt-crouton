@@ -170,6 +170,7 @@ interface CroutonAuthConfig {
   // Default team for single-tenant mode
   defaultTeamId?: string
   appName?: string
+  signup?: 'open' | 'invite'  // Default 'open'; 'invite' = only invited emails can create an account (site admin still can)
 
   // Authentication methods
   methods?: {

@@ -20,7 +20,8 @@ import {
   nestInside, applySizes, setConfig, removeNode,
   type NodePath, type DropEdge,
 } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { resolveLayoutAtWidth, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { editRoot } from '~/utils/board-empty'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
 import { paletteBlocksOf } from '~/utils/palette-blocks'
@@ -79,11 +80,12 @@ function setTree(next: LayoutTree) {
   current.value.tree = next
   dirty.value = true
 }
+// No root left ⇒ the board is empty (#3808); the first block on an empty board
+// becomes its base layout — see `editRoot`.
 function writeRoot(next: LayoutNode | null) {
-  const t = tree.value
-  if (!t) return
-  const r = next ?? starterRoot()
-  setTree(writeTarget.value === null ? { ...t, root: r } : patchBreakpoint(t, writeTarget.value, { root: r }))
+  if (!current.value) return
+  current.value.tree = editRoot(tree.value, next, writeTarget.value)
+  dirty.value = true
 }
 function resetBreakpoint() {
   if (tree.value && activeBp.value !== null) setTree(removeBreakpoint(tree.value, activeBp.value))
@@ -159,12 +161,16 @@ registerDrop(onDrop)
 // only on a drag — a report that changes nothing is ignored (it would otherwise
 // dirty the board and, on a width/variant switch, feed stale proportions into the
 // breakpoint just switched to).
-function onResize(at: NodePath, sizes: number[]) {
+// Hidden children arrive as undefined and keep their stored size (#3828).
+function onResize(at: NodePath, sizes: (number | undefined)[]) {
   const r = root.value
   const split = r ? getNode(r, at) : null
   if (!r || !split || split.type !== 'split') return
-  const same = split.children.every((c, i) => Math.abs((c.defaultSize ?? 100 / split.children.length) - (sizes[i] ?? -1)) < 0.05)
-  if (!same) writeRoot(applySizes(r, at, sizes))
+  const same = split.children.every((c, i) => {
+    const s = sizes[i]
+    return s === undefined || Math.abs((c.defaultSize ?? 100 / split.children.length) - s) < 0.05
+  })
+  if (!same) writeRoot(applySizes(r, at, sizes as number[]))
 }
 
 // ── Palette strip: hold a chip, then drag it onto a pane edge; a tap adds beside the selection ──
@@ -191,10 +197,9 @@ const { openGroup, dragging: menuDragging, setGroupOpen, onItemClick } = usePale
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
 async function saveBoard() {
-  if (!root.value) return
   saveState.value = 'saving'
   try {
-    await update(pageId.value, { board: serializeBoard(root.value) })
+    await update(pageId.value, { board: serializeBoard() })
     dirty.value = false
     saveState.value = 'saved'
   }

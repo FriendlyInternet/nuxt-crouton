@@ -293,6 +293,6 @@ The translation endpoint recognizes field types for better translations:
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck  # MANDATORY after changes (checks this package only)
 pnpm build          # Build with unbuild
 ```

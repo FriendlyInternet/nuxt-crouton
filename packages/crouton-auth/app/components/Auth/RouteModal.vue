@@ -25,6 +25,13 @@ const { state } = authModal
 const authConfig = useAuthConfig()
 const showGoHome = computed(() => !state.value.dismissible && authConfig?.ui?.showGoHome !== false)
 
+// Invite-only apps (#3340): hide the "Create account" links, and show a notice
+// instead of the register form — unless the visitor came from an invitation
+// (accept-invitation sends /auth/register?email=<invited>, so prefillEmail is set).
+// The server refuses uninvited sign-ups regardless; this is just the UI half.
+const inviteOnly = authConfig?.signup === 'invite'
+const inviteOnlyAppName = computed(() => authConfig?.appName || t('auth.inviteOnly.thisApp'))
+
 // Bind UModal open state — setter restores URL when user dismisses
 const isOpen = computed({
   get: () => state.value.open,
@@ -431,7 +438,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 <template v-if="showMagicLink">
                   {{ t('auth.magicLinkDescription') }}
                 </template>
-                <template v-else>
+                <template v-else-if="!inviteOnly">
                   {{ t('auth.dontHaveAccount') }}
                   <UButton
                     variant="link"
@@ -500,7 +507,10 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 <h2 class="mt-4 text-xl font-semibold text-highlighted">
                   {{ t('auth.welcomeBack') }}
                 </h2>
-                <p class="mt-2 text-muted">
+                <p
+                  v-if="!inviteOnly"
+                  class="mt-2 text-muted"
+                >
                   {{ t('auth.dontHaveAccount') }}
                   <UButton
                     variant="link"
@@ -537,8 +547,29 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
           v-else-if="state.mode === 'register'"
           key="register"
         >
+          <!-- Invite-only app, no invitation in hand (#3340) -->
+          <div
+            v-if="inviteOnly && !state.prefillEmail"
+            class="space-y-6"
+          >
+            <UAlert
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-mail-plus"
+              :title="t('auth.inviteOnly.title', { app: inviteOnlyAppName })"
+              :description="t('auth.inviteOnly.description')"
+            />
+            <UButton
+              block
+              color="primary"
+              @click="authModal.setMode('login')"
+            >
+              {{ t('auth.signIn') }}
+            </UButton>
+          </div>
+
           <UAuthForm
-            v-if="hasPassword"
+            v-else-if="hasPassword"
             ref="registerForm"
             :fields="registerFields"
             :providers="oauthButtons"

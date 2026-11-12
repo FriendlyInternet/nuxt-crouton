@@ -79,17 +79,20 @@ The "ready to close vs needs postmortem" labeller (#763, `label-ready-epics.mjs`
 greps the epic's comments for `postmortem:done`: present ⇒ `status:ready-to-close`,
 absent ⇒ `status:needs-postmortem`. Use the real epic number for `#NN`.
 
+In CI (`postmortem.yml`, #3425) the model only writes the body; the trusted post step adds the marker, posts, flips the labels; the `auto-close` job then closes the epic if it is on main and its test card is ok'd (or it has none) (#3012). A failed run posts `<!-- postmortem:skipped epic=#NN -->` instead. Markers only count from the pipeline bots or an owner/member/collaborator.
+
 Post it with `add_issue_comment` on the epic.
 
 **Flip the labels immediately (don't wait for the daily cron).** Right after posting,
 add `status:ready-to-close` and remove `status:needs-postmortem` on the epic
 (`issue_write` / label tools) so the review queue updates *now* — `label-ready-epics`
-stays as the daily safety net. The epic is then closeable by the owner simply commenting
-**`/close-epic`** on it (`close-epic-on-comment.yml` closes it, gated on the
-`status:ready-to-close` label, #856) — surface that in the `🔭 Next` handoff so they know
-the one-gesture close is available.
+stays as the daily safety net. The epic then closes by itself once it is on main and its test card is ok'd (or it has
+none) (#3012); `/close-epic` (the `close-epic` job in `on-comment.yml`, #856) is the
+fallback — mention it in `🔭 Next` only when the epic is stuck.
 
 ## Step 4 — Dedup against existing follow-ups, then offer to turn proposals into work
+
+(pipeline run: list where each proposal is tracked or mark it `new — not minted`; never create issues)
 
 **First, dedup — don't mint duplicates.** Before proposing anything new, search for an
 existing home for each proposal: an open follow-up / "harden X" **epic** or issues that
