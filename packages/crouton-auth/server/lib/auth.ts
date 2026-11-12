@@ -14,6 +14,7 @@
  * ```
  */
 import { betterAuth } from 'better-auth'
+import { APIError } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization, twoFactor, magicLink, admin, haveIBeenPwned, type TwoFactorOptions } from 'better-auth/plugins'
 import { i18n } from '@better-auth/i18n'
@@ -393,6 +394,52 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * @param db - Drizzle database instance
  * @returns Database hooks configuration
  */
+/**
+ * Invite-only sign-up gate (#3340) — the `user.create.before` hook.
+ *
+ * better-auth runs `user.create.before` for EVERY user creation (email +
+ * password, magic link, OAuth first sign-in — they all go through its shared
+ * `createWithHooks`), so this one hook closes every sign-up path.
+ *
+ * - `signup !== 'invite'` → allowed (the default; other apps unchanged).
+ * - No `ctx.request` → allowed: a trusted server-side `auth.api.*` call that
+ *   didn't come through the HTTP handler (e.g. crouton-admin's super-admin
+ *   "create user" route calls `auth.api.signUpEmail` with no headers).
+ * - Otherwise the email must have a pending, unexpired invitation, else
+ *   403 `SIGNUP_INVITE_ONLY`.
+ *
+ * The lookup goes through better-auth's adapter (not raw SQL) because
+ * `invitation.expiresAt` is stored in unix SECONDS; the adapter hands back a
+ * Date, so the comparison is unit-safe (same lookup as better-auth's own
+ * `findPendingInvitation`).
+ *
+ * Known gap: a pending invitation doesn't prove the person owns the mailbox —
+ * whoever knows an invited address can register it first (#3138).
+ */
+export function signupGate(config: Pick<CroutonAuthConfig, 'signup'>) {
+  return async (user: { email: string }, ctx?: any): Promise<void> => {
+    if (config.signup !== 'invite') return
+    if (!ctx?.request) return
+
+    const email = String(user.email ?? '').toLowerCase()
+    const rows: Array<{ expiresAt: Date | string | number }> = await ctx.context.adapter.findMany({
+      model: 'invitation',
+      where: [
+        { field: 'email', value: email },
+        { field: 'status', value: 'pending' }
+      ]
+    })
+    const now = new Date()
+    const hasValidInvite = rows.some(r => new Date(r.expiresAt) > now)
+    if (!hasValidInvite) {
+      throw new APIError('FORBIDDEN', {
+        message: 'Sign-up is by invitation only',
+        code: 'SIGNUP_INVITE_ONLY'
+      })
+    }
+  }
+}
+
 function buildDatabaseHooks(
   config: CroutonAuthConfig,
   db: DrizzleD1Database<Record<string, unknown>>
@@ -406,6 +453,8 @@ function buildDatabaseHooks(
   return {
     user: {
       create: {
+        // Invite-only sign-up (#3340) — no-op unless `signup: 'invite'`.
+        before: signupGate(config),
         after: async (user) => {
           // Emit operation event for new user registration
           useNitroApp().hooks.callHook('crouton:operation', {

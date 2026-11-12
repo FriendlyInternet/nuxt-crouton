@@ -2,8 +2,9 @@
 /**
  * seed-review-login.mjs — seed a throwaway, loginable test account on a fresh
  * preview deploy so a reviewer can open the URL and be inside the app in one step
- * (#608). Drives the app's OWN HTTP auth on the deployed Worker — no raw SQL, so
- * the password is hashed by better-auth exactly like a real signup.
+ * (#608). Drives the app's own HTTP auth; SQL only where there is no HTTP path (team
+ * membership, a rotated password, and the account itself on an invite-only app,
+ * #3340). Passwords are always hashed with better-auth's own helper.
  *
  *   node scripts/seed-review-login.mjs --url https://app-staging.workers.dev \
  *     --email review+app-pr12@example.com --password <pw> [--team "Review Team"] \
@@ -15,6 +16,10 @@
  *      If that fails the account holds an OLD password (e.g. the review secret was
  *      rotated, #2358): with --db/--sqlite the password is reset to the given one
  *      (hashed with better-auth's own helper) and sign-in is retried.
+ *   1b. sign-up refused SIGNUP_INVITE_ONLY (the app sets `croutonAuth.signup:
+ *      'invite'`, #3340) → with --db/--sqlite create the user + credential rows
+ *      directly (idempotent), then sign in and continue like an existing user.
+ *      Without --db/--sqlite it exits 1 — there is no HTTP path to an account.
  *   2. GET  /api/auth/get-session     → capture the review user's id + whether
  *      the session already has an active organization.
  *   3a. --seed-team given (#832): attach the review user to the SEEDED demo org
@@ -40,6 +45,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { randomBytes, scrypt } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 function parseArgs(argv) {
@@ -139,9 +145,11 @@ export function isMissingSecretError(code) {
   return /BETTER_AUTH_SECRET is required/i.test(String(code ?? ''))
 }
 
-/** 'ok' | 'exists' | 'retry' | 'give-up' for one sign-up attempt. */
+/** 'ok' | 'exists' | 'invite-only' | 'retry' | 'give-up' for one sign-up attempt. */
 export function signUpDecision({ ok, status, code, threw, attempt, maxAttempts }) {
   if (ok) return 'ok'
+  // #3340: an invite-only app refuses public sign-up for an uninvited email.
+  if (!threw && status === 403 && /SIGNUP_INVITE_ONLY/.test(String(code ?? ''))) return 'invite-only'
   if (!threw && (status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code ?? '')))) return 'exists'
   if ((threw || isMissingSecretError(code)) && attempt < maxAttempts) return 'retry'
   return 'give-up'
@@ -189,9 +197,25 @@ function sqlStr(v) {
  * so resolve it from crouton-auth — the package every crouton app's auth comes from.
  */
 async function loadHashPassword() {
-  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
-  const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
-  return hashPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
+    return hashPassword
+  } catch {
+    // No `pnpm install` in this checkout (e.g. CI's Node-only job, #3340): use the
+    // same scrypt hash better-auth's Node build makes, so sign-in still verifies it.
+    return scryptHashPassword
+  }
+}
+
+/** better-auth's Node password hash (`@better-auth/utils/password`): `<salt hex>:<key hex>`. */
+export function scryptHashPassword(password) {
+  const N = 16384, r = 16, p = 1
+  const salt = randomBytes(16).toString('hex')
+  return new Promise((resolve, reject) => {
+    scrypt(String(password).normalize('NFKC'), salt, 64, { N, r, p, maxmem: 128 * N * r * 2 },
+      (err, key) => err ? reject(err) : resolve(`${salt}:${key.toString('hex')}`))
+  })
 }
 
 /**
@@ -203,6 +227,29 @@ export async function resetPasswordSql(email, password, hashPassword) {
   const hash = await (hashPassword || await loadHashPassword())(password)
   return `UPDATE "account" SET "password" = ${sqlStr(hash)} ` +
     `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
+}
+
+/**
+ * SQL that creates the review account directly (#3340) — for an invite-only app,
+ * where public sign-up is refused for an uninvited email. Inserts a `user` row and
+ * its `credential` `account` row (password hashed with better-auth's own helper, so
+ * sign-in verifies it). Idempotent: both inserts are `WHERE NOT EXISTS`, so a second
+ * run adds nothing. Timestamps are unix SECONDS (drizzle `mode: 'timestamp'`).
+ * The address is left unverified — markReviewerVerifiedSql runs after sign-in.
+ */
+export async function createReviewAccountSql(email, name, password, hashPassword) {
+  const hash = await (hashPassword || await loadHashPassword())(password)
+  const e = sqlStr(String(email).toLowerCase())
+  const now = Math.floor(Date.now() / 1000)
+  const userId = sqlStr(crypto.randomUUID())
+  const accountId = sqlStr(crypto.randomUUID())
+  return `INSERT INTO "user" ("id","name","email","emailVerified","createdAt","updatedAt") ` +
+    `SELECT ${userId},${sqlStr(name)},${e},0,${now},${now} ` +
+    `WHERE NOT EXISTS (SELECT 1 FROM "user" WHERE lower("email") = ${e}); ` +
+    `INSERT INTO "account" ("id","userId","accountId","providerId","password","createdAt","updatedAt") ` +
+    `SELECT ${accountId},u."id",u."id",'credential',${sqlStr(hash)},${now},${now} FROM "user" u ` +
+    `WHERE lower(u."email") = ${e} AND NOT EXISTS ` +
+    `(SELECT 1 FROM "account" a WHERE a."userId" = u."id" AND a."providerId" = 'credential');`
 }
 
 /**
@@ -219,18 +266,6 @@ export function markReviewerVerifiedSql(email) {
   return `DELETE FROM "session" WHERE "userId" IN ` +
     `(SELECT "id" FROM "user" WHERE lower("email") = ${e} AND "emailVerified" = 0); ` +
     `UPDATE "user" SET "emailVerified" = 1 WHERE lower("email") = ${e};`
-}
-
-/**
- * Idempotent member upsert for the seeded team (conflict on the deterministic id →
- * no dupes on redeploy; createdAt preserved). Every value goes through `sqlStr`, and
- * `createdAt` is forced to a number, so no id can break out of its literal (#3533).
- */
-export function memberUpsertSql({ memberId, userId, orgId, createdAt }) {
-  return `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-    `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${Number(createdAt)}) ` +
-    `ON CONFLICT("id") DO UPDATE SET ` +
-    `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
 }
 
 function warn(msg) {
@@ -335,6 +370,26 @@ async function main() {
       await new Promise(r => setTimeout(r, wait))
       continue
     }
+    if (decision === 'invite-only') {
+      // #3340: public sign-up is closed — create the account in the database.
+      if (!(args.db || args.sqlite)) {
+        warn('invite-only app: pass --db so the seed can create the review login — NOT advertising it.')
+        process.exit(1)
+      }
+      info(`app is invite-only — creating ${email} directly in the database.`)
+      try {
+        execSeedSql(args, await createReviewAccountSql(email, name, password))
+      } catch (e) {
+        warn(`could not create the review account: ${e?.message || e} — NOT advertising it.`)
+        process.exit(1)
+      }
+      const { res: si } = await post('/api/auth/sign-in/email', { email, password })
+      if (!si.ok) {
+        warn(`created ${email} but sign-in returned HTTP ${si.status} — NOT advertising this login.`)
+        process.exit(1)
+      }
+      break
+    }
     if (decision === 'exists') {
       info(`user ${email} already exists — already seeded, reusing.`)
       // Re-establish a session for the org check below.
@@ -385,7 +440,11 @@ async function main() {
     const createdAt = Math.floor(Date.now() / 1000)
     // Idempotent member upsert (conflict on the deterministic id → no dupes on
     // redeploy; createdAt preserved). Mirrors crouton-auth/seed's `member` shape.
-    const sql = memberUpsertSql({ memberId, userId, orgId, createdAt })
+    const sql =
+      `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
+      `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${createdAt}) ` +
+      `ON CONFLICT("id") DO UPDATE SET ` +
+      `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
     try {
       execSeedSql(args, sql)
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
