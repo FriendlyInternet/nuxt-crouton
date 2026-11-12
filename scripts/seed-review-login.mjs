@@ -242,6 +242,19 @@ export function markReviewerVerifiedSql(email) {
 }
 
 /**
+ * #3141: SQL that deletes EVERY session of the account holding `email`, verified or
+ * not. Run only in the reset branch (an existing account refused the seed password),
+ * before `resetPasswordSql`: the `0006_verify_existing_users` backfill marks every
+ * account verified, so `markReviewerVerifiedSql` drops nothing there, and a stranger who
+ * pre-registered the review address would stay signed in to an account the feedback
+ * guard trusts. The review address belongs to the deploy; the stranger loses access.
+ */
+export function deleteReviewerSessionsSql(email) {
+  return `DELETE FROM "session" WHERE "userId" IN ` +
+    `(SELECT "id" FROM "user" WHERE lower("email") = ${sqlStr(String(email).toLowerCase())});`
+}
+
+/**
  * Idempotent member upsert for the seeded team (conflict on the deterministic id →
  * no dupes on redeploy; createdAt preserved). Every value goes through `sqlStr`, and
  * `createdAt` is forced to a number, so no id can break out of its literal (#3533).
@@ -382,6 +395,9 @@ async function main() {
   } else if (existing) {
     info(`user ${email} already exists but refuses sign-in (${refused}) — resetting its password and marking it verified.`)
     try {
+      // Take the address back first: revoke every session of it (#3141) — the reuse
+      // path above revokes nothing.
+      execSeedSql(args, deleteReviewerSessionsSql(email))
       execSeedSql(args, await resetPasswordSql(email, password))
       execSeedSql(args, markReviewerVerifiedSql(email))
     } catch (e) {

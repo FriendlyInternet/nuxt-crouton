@@ -380,6 +380,34 @@ test('R4 new account in an app that requires verification', async () => {
   assert.match(session.cookie, /better-auth\.session_token=tok/)
 })
 
+// Owner review on #3807 (Qodo 1 + 2): only the reset branch takes the address back.
+import { deleteReviewerSessionsSql } from './seed-review-login.mjs'
+
+test('R4 deleteReviewerSessionsSql: drops every session of that email, verified or not; others untouched', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    INSERT INTO "user" VALUES ('u1', 'review+t@example.com', 1), ('u2', 'other@example.com', 1);
+    INSERT INTO "session" VALUES ('s1', 'u1'), ('s2', 'u1'), ('s3', 'u2');`)
+  d.exec(deleteReviewerSessionsSql('Review+T@example.com'))
+  const ids = d.prepare('SELECT "id" FROM "session" ORDER BY "id"').all().map(r => r.id)
+  assert.deepEqual(ids, ['s3'])
+  d.exec(deleteReviewerSessionsSql("x' OR '1'='1"))
+  assert.equal(d.prepare('SELECT count(*) AS n FROM "session"').get().n, 1, 'quotes cannot break out')
+})
+
+test('R4 reuse path (account takes the current password) revokes no session', async () => {
+  // After the 0006 backfill the account is verified; its existing session must survive.
+  const file = r4Db({ withUser: true, verified: true, sessions: [['s-old', 'u1']] })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-in/email') return { body: { token: 'tok' }, headers: SESSION_COOKIE }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u1' }, session: {} } }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /takes the current password — reusing/)
+  assert.equal(row(file, `SELECT count(*) AS n FROM "session" WHERE "id" = 's-old'`).n, 1)
+})
+
 test('R4 reviewerExistsSql: matches regardless of letter case; quotes cannot break out', () => {
   const d = new DatabaseSync(':memory:')
   d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT);

@@ -14,7 +14,7 @@ const SCRIPT = fileURLToPath(new URL('./seed-review-login.mjs', import.meta.url)
 
 export const R4_EMAIL = 'review+t@example.com'
 
-export function r4Db({ withUser }) {
+export function r4Db({ withUser, verified = false, sessions = [] }) {
   const dir = mkdtempSync(join(tmpdir(), 'seed-3141-'))
   const file = join(dir, 'sqlite.db')
   const d = new DatabaseSync(file)
@@ -24,9 +24,11 @@ export function r4Db({ withUser }) {
     CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
   `)
   if (withUser) {
-    d.exec(`INSERT INTO "user" VALUES ('u1', '${R4_EMAIL}', 0);
+    d.exec(`INSERT INTO "user" VALUES ('u1', '${R4_EMAIL}', ${verified ? 1 : 0});
       INSERT INTO "account" VALUES ('a1', 'u1', 'credential', 'hash-of-an-old-password');`)
   }
+  // Sessions already in the db: [sessionId, userId] pairs (e.g. a stranger's).
+  for (const [id, userId] of sessions) d.exec(`INSERT INTO "session" VALUES ('${id}', '${userId}')`)
   d.close()
   return file
 }
