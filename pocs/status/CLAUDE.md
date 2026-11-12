@@ -2,6 +2,11 @@
 
 Owner-only status app (magic-link sign-in, no passwords/passkeys).
 
+Data: one collection, `cards` (layer `inbox`, table `inbox_cards`), on the seeded team `test1`
+(one-team mode); its `seed.json` is kept at `rows: []` on purpose so no sample cards reach status.pmcp.dev.
+The `state: 'waiting'` form default in `useInboxCards.ts` is a hand-edit (the generator ignores
+`meta.default` for string fields) — keep it when regenerating.
+
 ## Owner email
 
 The single email allowed to sign in is read from the Worker var `NUXT_STATUS_OWNER_EMAIL` only.
