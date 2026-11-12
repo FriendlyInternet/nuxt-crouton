@@ -83,11 +83,24 @@ const SEEDED_TEAM = 'test1'
 
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
- *  - a page file (`…/app/pages/**.vue`) → its route, with a `[team]`-style segment → the seeded team;
+ *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`-style segment → the seeded team;
  *    pages with any other dynamic segment are skipped (no data to open them with);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
+// The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
+function pageSurface(file, pagePath, app) {
+  const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
+  if (owner && owner[1] !== app) return null
+  if (pagePath.startsWith('__review')) return null
+  const segs = pagePath.split('/').filter(s => s !== 'index')
+  const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
+  if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  return { route, label: segs.join('-') || 'index' }
+}
+
 export function deriveSurfaces({ changedFiles, app }) {
   const out = []
   const add = (path, label) => {
@@ -101,12 +114,8 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      if (page[1].startsWith('__review')) continue
-      const segs = page[1].split('/').filter(s => s !== 'index')
-      const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
-      if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) continue
-      const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
-      add(route, segs.join('-') || 'index')
+      const surface = pageSurface(file, page[1], app)
+      if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
     }
@@ -165,18 +174,86 @@ export function parseAction(a) {
   return { verb: 'unknown', raw }
 }
 
-/** Sample an 8×8 grid of a raw RGBA buffer → true if the frame is a single flat colour (blank). */
+// Band height = the phone viewport the capture runs at (one screen).
+const BAND = 844
+// A band "has content" when ≥0.5% of its pixels differ from the background. A 1-px full-width
+// line is 1/844 ≈ 0.12% of a band and a 1-px full-height line 1/780 ≈ 0.13% — both stay blank;
+// real pages are far above it (#3841: 14.8% overall), and even a sparse login form at 390 px has
+// borders, text and a button well over 0.5% of one screen.
+const MIN_CONTENT = 0.005
+// …OR when it holds a solid patch: ≥256 pixels that sit in a 2×2 block of differing pixels
+// (#3854 review). 256 = a 16×16 patch — smaller than any real control (a 100×30 button has
+// ~2,900), so a nearly empty page with one small button isn't called blank, while a 1-px line
+// has no 2×2 block at all and contributes 0.
+const MIN_SOLID = 256
+// Same per-channel tolerance colorsAreFlat uses.
+const TOLERANCE = 2
+
+/**
+ * True if a raw RGBA/RGB frame is blank — one flat colour (#2526). Scans EVERY pixel in
+ * viewport-tall bands (#3854): the old 8×8 grid sat `height/8` apart on a full-page capture
+ * (3,160 px on a 25,280 px page), so content between grid rows was never seen.
+ * Background = the most common colour on a 16×16 sample grid (not pixel 0, so a 1-px line in the
+ * top row can't become the background). The frame is flat only if NO band has content; the
+ * denominator is always a full band so a short tail band or a tiny frame isn't over-weighted.
+ */
 export function isFlatFrame({ data, width, height, channels }) {
-  const samples = []
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 8; j++) {
-      const x = Math.floor((i + 0.5) * width / 8)
-      const y = Math.floor((j + 0.5) * height / 8)
+  const frame = { data, width, height, channels }
+  const bg = dominantColor(frame)
+  const threshold = width * Math.min(BAND, height) * MIN_CONTENT
+  for (let y0 = 0; y0 < height; y0 += BAND) {
+    if (bandHasContent(frame, bg, y0, threshold)) return false
+  }
+  return true
+}
+
+/** True once the band starting at `y0` has ≥threshold differing pixels or ≥MIN_SOLID solid ones. */
+function bandHasContent({ data, width, height, channels }, bg, y0, threshold) {
+  const y1 = Math.min(height, y0 + BAND)
+  let diff = 0
+  let solid = 0
+  let prev = null
+  for (let y = y0; y < y1; y++) {
+    const cur = new Uint8Array(width)
+    for (let x = 0, idx = y * width * channels; x < width; x++, idx += channels) {
+      if (!pixelDiffers(data, idx, bg)) continue
+      cur[x] = 1
+      diff++
+      if (inSolidBlock(cur, prev, x)) solid++
+    }
+    if (diff >= threshold || solid >= MIN_SOLID) return true
+    prev = cur
+  }
+  return false
+}
+
+/** True if the pixel at `idx` differs from the background by more than TOLERANCE on any channel. */
+function pixelDiffers(data, idx, bg) {
+  return Math.abs(data[idx] - bg[0]) > TOLERANCE || Math.abs(data[idx + 1] - bg[1]) > TOLERANCE || Math.abs(data[idx + 2] - bg[2]) > TOLERANCE
+}
+
+/** True if pixel x closes a 2×2 block of differing pixels with its left/up/up-left neighbours. */
+function inSolidBlock(cur, prev, x) {
+  return Boolean(prev && x > 0 && cur[x - 1] && prev[x - 1] && prev[x])
+}
+
+/** The most common RGB colour on a 16×16 sample grid — the frame's background (#3854). */
+function dominantColor({ data, width, height, channels }) {
+  const counts = new Map()
+  let bg = null
+  let best = 0
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < 16; j++) {
+      const x = Math.floor((i + 0.5) * width / 16)
+      const y = Math.floor((j + 0.5) * height / 16)
       const idx = (y * width + x) * channels
-      samples.push([data[idx], data[idx + 1], data[idx + 2], channels > 3 ? data[idx + 3] : 255])
+      const key = `${data[idx]},${data[idx + 1]},${data[idx + 2]}`
+      const n = (counts.get(key) || 0) + 1
+      counts.set(key, n)
+      if (n > best) { best = n; bg = [data[idx], data[idx + 1], data[idx + 2]] }
     }
   }
-  return colorsAreFlat(samples)
+  return bg
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────

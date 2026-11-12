@@ -341,7 +341,7 @@ crouton {layer} {collection} --fields-file=./schemas/{collection}.json --dialect
 
 ### Step 6: Default Layout (generate → POC, #709)
 
-The generator's final step runs the **deterministic layout pass** and writes
+For an app that extends `@fyit/crouton-layout` only (opt-in, parked, #2282; others get a one-line skip and no file), the generator's final step runs the **deterministic layout pass** and writes
 **`crouton.layout.json`** at the app root — a `layout_configs`-format tree that
 arranges the just-generated collections into a good default (no LLM):
 

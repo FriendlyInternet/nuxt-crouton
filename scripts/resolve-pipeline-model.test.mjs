@@ -44,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the five the workflows use', () => {
-  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan'])
+test('VALID_TIERS is exactly the seven the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review', 'plan', 'decompose', 'build'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file
@@ -71,8 +71,54 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
     assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
   }
   // plan-review re-plans through the saved-hand-off wrapper (#3306); the dispatch itself lives in handoff-exec.
-  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
+  // (the plan review is the plan-review job of on-comment.yml since #3313)
+  assert.match(readFileSync('.github/workflows/on-comment.yml', 'utf8'), /\n  plan-review:\n[\s\S]*handoff-exec\.mjs replan[\s\S]*\n  plan-review-outcome:\n/)
   assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('.github/workflows/label-router.yml', 'utf8'), /dispatch work-issue-pidev\.yml[^\n]*mode:"plan"/)
+})
+
+test('decompose tier resolves to its configured model (#3670)', () => {
+  assert.equal(resolveModel({ decompose: 'claude-opus-5-5' }, 'decompose'), 'claude-opus-5-5')
+  assert.throws(() => resolveModel({ decompose: 'x' }, 'decomposer'), /tier must be one of/)
+})
+
+test('the committed config resolves decompose to claude-opus-5-5 (#3670)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const cfg = JSON.parse(readFileSync('.claude/pipeline-models.json', 'utf8'))
+  assert.equal(resolveModel(cfg, 'decompose'), 'claude-opus-5-5')
+})
+
+test('decomposer PI_MODEL and run record both read the decompose tier (#3670)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { tierModel } = await import('./eval-ledger/record-run.mjs')
+  const wf = readFileSync('.github/workflows/decompose-on-issue-pidev.yml', 'utf8')
+  assert.match(wf, /PI_MODEL: \$\{\{ inputs\.model \|\| steps\.model\.outputs\.decompose \}\}/)
+  assert.match(wf, /resolve-pipeline-model\.mjs decompose/)
+  assert.match(wf, /MODEL_TIER: decompose\b/)
+  assert.doesNotMatch(wf, /MODEL_TIER: default\b/)
+  assert.equal(tierModel('decompose'), 'claude-opus-5-5')
+})
+
+test('build tier resolves to its configured model (#3693)', () => {
+  assert.equal(resolveModel({ build: 'claude-opus-5-5' }, 'build'), 'claude-opus-5-5')
+  assert.throws(() => resolveModel({ build: 'x' }, 'builder'), /tier must be one of/)
+})
+
+test('the committed config resolves build to claude-opus-5-5 (#3693)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const cfg = JSON.parse(readFileSync('.claude/pipeline-models.json', 'utf8'))
+  assert.equal(resolveModel(cfg, 'build'), 'claude-opus-5-5')
+})
+
+test('worker PI_MODEL and run record read the build tier (#3693)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { tierModel } = await import('./eval-ledger/record-run.mjs')
+  const wf = readFileSync('.github/workflows/work-issue-pidev.yml', 'utf8')
+  assert.match(wf, /resolve-pipeline-model\.mjs build/)
+  // pi step + finish step + the pi-request pass after a conflict merge (#3775)
+  assert.equal((wf.match(/steps\.model\.outputs\.build \}\}/g) || []).length, 3)
+  assert.doesNotMatch(wf, /steps\.model\.outputs\.default/)
+  assert.match(wf, /MODEL_TIER: "\$\{\{ inputs\.mode == 'plan' && 'plan' \|\| 'build' \}\}"/)
+  assert.equal(tierModel('build'), 'claude-opus-5-5')
 })

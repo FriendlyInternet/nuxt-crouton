@@ -11,19 +11,25 @@ name: On comment
 #   kind            job                      was
 #   approve-draft   approve-draft            approve-draft-pr.yml
 #   approve-epic    approve-epic             approve-epic-pr.yml
+#   approve-plan    approve-plan             NEW (#3272): owner `ok: <reason>` on a plan rejected twice
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
+#   plan-needs-reason plan-needs-reason      NEW (#3272): a bare `ok` on a plan rejected twice (asks why)
+#   quiz-reply      quiz-reply               NEW (#3715): the owner's answer to an epic quiz (owner-quiz.yml)
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
+#   (unrouted)      plan-review              plan-review.yml (#3313; a BOT's plan comment — own `if:`)
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
-# The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no runner.
+# The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no
+# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment,
+# and owner-screen comments (scripts/lib/owner-screens.mjs, #3691): a 🎯/📐 from the Nuxt Harness app on a status:blocked item.
 
 on:
   issue_comment:
@@ -35,9 +41,13 @@ jobs:
     name: Read API allowance at start
     # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
@@ -68,12 +78,19 @@ jobs:
     # `performed_via_github_app` also catches an App acting under a user-typed identity, except the
     # Claude app: the interactive agent posts `**Worker:**` change requests through it as the owner
     # (user.type == User), and dropping those silently ignored them (#3029). No flow
-    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
-    # and consumed by reading the thread (revise), not by this trigger.
+    # needs a bot comment to trigger a workflow — with ONE exception (#3691): an owner-screen comment
+    # (first line 🎯/📐/🚶/🗳, from the Nuxt Harness app, on a status:blocked item) is the owner
+    # answering from our screens. On a PR the hold label sits on its SOURCE issue (`Closes #N`), not
+    # the PR, so a PR passes here and comment-route.mjs checks that issue (owner-screens sourceIssueFor). The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
+    # by scripts/on-comment-bot-filter.test.mjs; scripts/comment-route.mjs decides what it means.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -93,17 +110,22 @@ jobs:
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
+            const { planHeldFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             let pr
             if (isPr) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
-              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, sourceIssue: await sourceIssueFor({ comment, prBody: p.body, getIssue }) }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
-              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              comment,
+              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
+                planHeld: await planHeldFor({ github, repo: context.repo, issue: i }) },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
@@ -258,7 +280,7 @@ jobs:
               body: '<!-- pipeline-note -->\n' + `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
 
             if (d.action === 'ignore') return
-            if (!go.go) return // red/wait only matter while the ok stands
+            if (!go.go || await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)).replyIfConflicting({ github, owner, repo, pull_number, say })) return // only while the ok stands; a conflicting PR gets the resolver, not a wait (#3227)
             if (d.action === 'red') {
               const names = d.failing.map(f => `\`${f}\``).join(', ')
               try {
@@ -287,7 +309,10 @@ jobs:
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
+      contents: read
       issues: write
+      # (#3425) a done epic with no postmortem starts postmortem.yml instead of being refused.
+      actions: write
     steps:
       # Close with the Harness App token (NOT GITHUB_TOKEN): GitHub suppresses workflow
       # triggers for GITHUB_TOKEN-initiated events, so a GITHUB_TOKEN close's
@@ -300,66 +325,21 @@ jobs:
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      # Logic in scripts/close-epic.mjs (#3425): push-access check, the two gating labels, and the
+      # postmortem start (through handoffGuard) when only `status:ready-to-close` is missing.
       - name: Close the epic
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const issue_number = context.payload.issue.number
-            const actor = context.payload.comment.user.login
-            const body = context.payload.comment.body || ''
-
-            // Whole-word /close-epic (the `if:` substring test would also match e.g.
-            // "/close-epically"; tighten here).
-            if (!/(^|\s)\/close-epic(\s|$)/i.test(body)) {
-              core.info('Comment does not invoke /close-epic as a command — ignoring.'); return
-            }
-
-            // Re-check server-side: state + the two gating labels.
-            const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
-            if (issue.state === 'closed') { core.info('Epic already closed — nothing to do.'); return }
-            // Only a maintainer (push access) may close. getCollaboratorPermissionLevel
-            // collapses to admin/write/read/none.
-            let perm = 'none'
-            try {
-              perm = (await github.rest.repos.getCollaboratorPermissionLevel({
-                ...context.repo, username: actor })).data.permission
-            } catch (e) { core.info(`Permission check failed for @${actor}: ${e.message}`); return }
-            if (!['admin', 'write'].includes(perm)) {
-              core.info(`@${actor} lacks push access (perm=${perm}) — ignoring.`); return
-            }
-
-            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
-            const missing = ['epic', 'status:ready-to-close'].filter(l => !labels.includes(l))
-            if (missing.length) {
-              // Say why, on the issue (#2501). Plain-language owner brief: what to do, then the depth.
-              const fixes = []
-              if (missing.includes('epic')) fixes.push('add the `epic` label (the pipeline now adds it when it splits an issue, #2501)')
-              if (missing.includes('status:ready-to-close')) fixes.push('run the postmortem first — it stamps `status:ready-to-close` (#856)')
-              await github.rest.issues.createComment({
-                ...context.repo, issue_number,
-                body: '<!-- pipeline-note -->\n' + `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
-                  + `🔴 **Not closed — this issue is missing ${missing.map(l => `\`${l}\``).join(' and ')}.**\n\n`
-                  + `**You:** ${fixes.join('; then ')}, and comment \`/close-epic\` again.\n`
-                  + `**Depth:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              })
-              core.info(`Not closing #${issue_number}: missing ${missing.join(', ')} — replied.`); return
-            }
-
-            // Close as completed + strip the managed status labels directly (idempotent;
-            // strip-status-on-close also handles this, but don't rely on the cascade).
-            await github.rest.issues.update({
-              ...context.repo, issue_number, state: 'closed', state_reason: 'completed',
-            })
-            for (const name of ['status:ready-to-close', 'status:needs-postmortem']) {
-              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch (e) {}
-            }
-            await github.rest.issues.createComment({
-              ...context.repo, issue_number,
-              body: '<!-- pipeline-note -->\n' + `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
-                + '<sub>🤖 agent pipeline (CI) · close-epic on comment (#856) · was status:ready-to-close</sub>',
-            })
-            core.info(`Closed epic #${issue_number} (requested by @${actor}).`)
+            const { runCloseEpic } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/close-epic.mjs`)
+            await runCloseEpic({ github, context, core })
 
   dispatch:
     needs: route
@@ -447,6 +427,54 @@ jobs:
             await github.rest.issues.createComment({ owner, repo, issue_number,
               body: '<!-- pipeline-note -->\n' + `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
+
+  # Owner override of a plan held after two reviewer rejections (#3272). scripts/plan-held.mjs
+  # approvePlan posts the reason AS THE BOT (the only record the build trusts), logs a dated line on
+  # the parent epic, lifts the hold and adds `plan:approved`. The App token makes label-router.yml's
+  # actor check pass; the default-branch checkout keeps the imported script a trusted one.
+  approve-plan:
+    needs: route
+    if: needs.route.outputs.kind == 'approve-plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { approvePlan } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await approvePlan({ github, context, core })
+
+  # A bare approval on a twice-rejected plan (#3272): ask for the reason once; the hold stays.
+  plan-needs-reason:
+    needs: route
+    if: needs.route.outputs.kind == 'plan-needs-reason'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // NEEDS_REASON opens with the <!-- pipeline-note --> marker (#3251).
+            const { NEEDS_REASON } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number, body: NEEDS_REASON })
 
   resume:
     needs: route
@@ -538,7 +566,7 @@ jobs:
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
@@ -616,9 +644,9 @@ jobs:
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
-      # An issue held after the plan reviewer rejected twice (plan-review.yml) is not a gate PR or a
+      # An issue held after the plan reviewer rejected twice (the plan-review job) is not a gate PR or a
       # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
-      # Detect the hold the way plan-review.yml makes it (two no-go verdicts, newest a no-go; the job
+      # Detect the hold the way the plan-review job makes it (two no-go verdicts, newest a no-go; the job
       # guard already requires status:blocked) and re-run the planner with the reply as feedback.
       # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
       - name: Re-plan a held plan from the reply
@@ -701,14 +729,17 @@ jobs:
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
+          allowed_bots: "nuxt-harness[bot]"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
             question came in — this run collected it across every surface into `.resume-answer.md`
             (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
-            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
-            treat it as their answer; if it flags an edited diagram, run
-            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            and a 📐 line if a diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it names an edited diagram, its scene at the saved sha
+            (fetched from the editor's branch) is in `.resume-diagram.excalidraw` — read that file
+            and treat the quoted note as the owner's words.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
@@ -1111,12 +1142,15 @@ jobs:
         with:
           script: |
             const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const pull_number = context.payload.issue.number
             const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
             const c = context.payload.comment
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             const route = routePrComment({
-              pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              pr: { headRef: pr.head.ref, state: pr.state, sourceIssue: await sourceIssueFor({ comment, prBody: pr.body, getIssue }) },
+              comment,
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {
@@ -1154,6 +1188,9 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # (#3425) a verified epic with no postmortem starts postmortem.yml (workflow_dispatch is the
+      # one event a GITHUB_TOKEN may still trigger).
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1164,12 +1201,40 @@ jobs:
       - name: Handle test reply
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs
+
+  # (#3715) The owner's reply to an epic quiz: `1B 2A 3C` → a result comment; `2 code` → a dated
+  # line in the epic's `## Decisions`. Never resumes, approves or re-plans; changes no label.
+  quiz-reply:
+    needs: route
+    if: needs.route.outputs.kind == 'quiz-reply'
+    concurrency:
+      group: owner-quiz-reply-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true # quiz replies are advisory (#3715): a failed answer must not turn the comment run red
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+        with:
+          script: |
+            const { reply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/owner-quiz-run.mjs`)
+            await reply({ github, context, core }, { owner: process.env.OWNER_LOGIN })
 
   # Not routed by `kind`: a decision comment ("Decision: …", or "ok: <reason>" on a held plan) is
   # recognised by format in scripts/lib/decision-line.mjs and copied into the ticket's
@@ -1494,6 +1559,255 @@ jobs:
               await relabel(label)
               await say(`🛠 ${opener}. Starting it now (\`${label}\`).`)
             }
+
+  # ── Plan review (#2756, folded in from plan-review.yml by #3313) ─────────────────────────
+  # A separate reviewer on the strongest model (the `review` tier of .claude/pipeline-models.json)
+  # reads a worker's PLAN comment and the code it names, grades it against a fixed rubric
+  # (.claude/agents/plan-reviewer.md) and posts a verdict:
+  #   go           → label `plan:approved`
+  #   no-go        → re-run the plan with the review as feedback; after 2 sent-back rounds, hold
+  #   needs-owner  → one yes/no question, held `status:blocked`
+  # UNROUTED, like record-decision: the plan is a BOT comment, and `route` skips every bot comment.
+  # This job's own `if:` is the filter — only the harness bot's plan marker on a plain issue.
+  #
+  # SAFETY: the pi step is READ-ONLY and holds only a read-only App token (#3035; a probe proves it
+  # cannot write; checkout persist-credentials:false, the write token is only used by the trusted
+  # steps). The model comes from the ONE setting — no hard-coded model, and NO silent fallback: if
+  # the review model does not run on the pipeline's provider, the preflight fails loudly on the issue.
+  plan-review:
+    # Only a bot-posted plan on a plain issue (not a PR) — a human cannot start an expensive run
+    # by pasting the marker.
+    if: >-
+      ${{ !github.event.issue.pull_request
+      && github.event.comment.user.login == 'nuxt-harness[bot]'
+      && startsWith(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
+    # One review per issue at a time (was the workflow-level group of plan-review.yml).
+    concurrency:
+      group: plan-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Allowance at run start (#3251): the shared rl-start job skips bot comments, so this job
+      # reads its own. plan-review-outcome reads it again; the difference is the approximate spend.
+      - name: Read API allowance at start
+        id: rl-start
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
+      # Read-only token for the reviewer (#3035): same App, narrowed to this repo and to reads. The
+      # write token above stays on the trusted steps only.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: ro-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+          permission-actions: read
+          permission-checks: read
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # Does the review model run on the pipeline's provider at all? One tiny call. If not, fail
+      # LOUDLY and tell the issue — never fall back to another model (#2756).
+      - name: Preflight — the review model runs on claude-bridge
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -uo pipefail
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — plan review NOT run, no fallback to another model (#2756)"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            exit 1
+          fi
+          echo "preflight: $MODEL answers on claude-bridge"
+
+      - name: Gather the issue and the plan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PLAN_ID: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/plan-review"; mkdir -p "$D"
+          gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
+          gh api "repos/${{ github.repository }}/issues/comments/${PLAN_ID}" --jq .body > "$D/plan.md"
+          # Prior review rounds: each sent-back verdict carries a hidden verdict line.
+          PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
+            --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- plan-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+          echo "$PRIOR" > "$D/prior"
+          echo "prior sent-back rounds: $PRIOR"
+
+      # Prove once that the reviewer token cannot write: a no-op PATCH must fail (non-zero exit). On
+      # success the reviewer never runs.
+      - name: Probe — the reviewer token is read-only
+        env:
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
+          PROBE_ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -uo pipefail
+          # Decide on gh's exit code only (the step runs under `bash -e`; `|| rc=$?` keeps it alive).
+          rc=0
+          ERR="$(echo '{}' | gh api -X PATCH "repos/${{ github.repository }}/issues/${PROBE_ISSUE}" --input - 2>&1 >/dev/null)" || rc=$?
+          echo "$ERR" | tail -n 3
+          if [ "$rc" -ne 0 ]; then
+            echo "probe: reviewer token cannot write (expected)"
+          else
+            echo "::error::reviewer token can write — review NOT run"
+            exit 1
+          fi
+
+      # ── The reviewer: READ-ONLY GitHub token (ro-token) ──────────────────────
+      - id: pi
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          GH_TOKEN: ${{ steps.ro-token.outputs.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/plan-reviewer.md \
+            | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
+                  -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Post the verdict
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ steps.model.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_ID: ${{ github.event.comment.id }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
+          if [ ! -s "$D/verdict.md" ]; then
+            echo "::error::the reviewer wrote no verdict file"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          if ! DECISION="$(node scripts/lib/plan-verdict.mjs "$D/plan.md" "$D/verdict.md")"; then
+            echo "::error::malformed verdict: $DECISION"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review verdict was malformed** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
+          node scripts/lib/plan-verdict.mjs render "$D/plan.md" "$D/verdict.md" "$ROUND" "$MODEL" > "$D/comment.md"
+          # remove-then-add: re-adding a label the issue already carries fires no event.
+          gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
+          REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
+          echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
+          ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold; }
+          node scripts/flow-checklist.mjs "$ISSUE" --verdict plan "$VERDICT" --round "$ROUND" --link "$REVIEW_URL" ${ROUTE:+--route "$ROUTE"} || true
+          case "$VERDICT" in
+            go)
+              node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$ISSUE" '{issue:$i,label:"plan:approved"}')"
+              ;;
+            needs-owner)
+              gh issue edit "$ISSUE" --add-label "status:blocked"
+              ;;
+            no-go)
+              if [ "$ROUTE" = hold ]; then
+                gh issue edit "$ISSUE" --add-label "status:blocked"
+              else
+                # The read + the dispatch are ONE hand-off: a limit / 5xx on either is saved and replayed (#3306).
+                node scripts/handoff-exec.mjs replan "$(jq -nc --argjson i "$ISSUE" '{issue:$i}')"
+              fi
+              ;;
+          esac
+
+  # Run record for the plan-review job (#3251). Its own job: the shared record-outcome below is
+  # tied to the interpret chain, and a run holds either a review (bot plan) or an interpret (human).
+  plan-review-outcome:
+    name: Record plan-review run outcome
+    needs: [plan-review]
+    if: ${{ always() && needs.plan-review.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: on-comment.yml
+          ISSUE: "${{ github.event.issue.number }}"
+          STAGE: plan-review
+          MODEL_TIER: review
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.plan-review.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).

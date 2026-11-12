@@ -17,6 +17,7 @@
     "./app/composables/useCroutonComposeGestures": "./app/composables/useCroutonComposeGestures.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -50,7 +51,7 @@
   "peerDependencies": {
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
-    "@nuxt/ui": "^4.3.0",
+    "@nuxt/ui": "^4.11.0",
     "nuxt": "^4.0.0"
   },
   "devDependencies": {

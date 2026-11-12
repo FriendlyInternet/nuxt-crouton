@@ -3,9 +3,10 @@
  *
  * `/builder` is a root route (no `[team]` param), so team context comes entirely from the
  * session's active organization. The auth package self-heals the "has orgs, none active"
- * case (useSession's `trySetDefaultOrg` sets the first active), and `autoCreateOnSignup`
- * gives every NEW signup an org. The gap this closes: an **already-accountless** session
- * (a user who signed up before auto-create, or a seeded member whose org row is missing) —
+ * case (useSession's `trySetDefaultOrg` sets the first active). Builder does NOT use
+ * `autoCreateOnSignup` (#2559 — it would pull every session into a personal workspace,
+ * away from the seeded team), so the gap this closes is any **accountless** session
+ * (a fresh signup, or a seeded member whose org row is missing) —
  * zero orgs means `trySetDefaultOrg` has nothing to activate, so `teamId` stays null and
  * the "New page" button sits in "Preparing…" forever (verified on the deployed build: a
  * fresh account had zero orgs).

@@ -101,6 +101,13 @@ jobs:
 
       - uses: ./.github/actions/warm-packages
 
+      # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
+      - name: Run scripts/*.deps-test.mjs
+        run: node --test scripts/*.deps-test.mjs
+
+      - name: Check package dist ships no test files
+        run: node scripts/check-dist-no-tests.mjs
+
       # tar, not a glob upload: a multi-path glob artifact's root depends on the least common
       # ancestor, a tarball extracts to exactly packages/*/dist every time.
       - name: Pack dist
@@ -498,7 +505,7 @@ jobs:
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
         if: env.IS_CODE == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 
       # (#3452) No `if: IS_CODE` on purpose: a workflow-only PR is the one that grows inline blocks.
       - name: Inline workflow block size (#3452)
@@ -506,13 +513,21 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           if [ "$EVENT" = "pull_request" ]; then
             git fetch --no-tags origin "$BASE_REF"
+            # Live body (not the event payload): a re-run must see an approval line added after the push (#3615). A failed gh call may be ignored: an empty body means no approval, so the check fails closed.
+            PR_BODY="$(gh pr view "$PR_NUMBER" --json body --jq .body || true)"; export PR_BODY
             node scripts/workflow-inline-size.mjs --base "$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             node scripts/workflow-inline-size.mjs
           fi
+
+      # (#3730) No `if: IS_CODE`: a workflow-only PR is the one that adds or renames a workflow.
+      - name: Pipeline map up to date (#3730)
+        run: node scripts/gen-pipeline-map.mjs --check
 
       - name: Extract each `run:` block and lint it
         run: |

@@ -150,13 +150,16 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       const runs = st.wfRuns ?? await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
         { owner, repo, head_sha: pr.head.sha, per_page: 100 })
       const failures = fixBotFailures(causes, runs)
-      dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels: labelNames(pr), failures })
+      // #3277: the head commit decides whether the try counter still stands (same input as the gate).
+      let headCommit
+      try { headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data } catch { headCommit = undefined }
+      dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels: labelNames(pr), failures, headCommit })
     } catch (e) {
       core.warning(`fix-bot decision unavailable: ${e.message}`)
       dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }
     }
     const hd = redPingHeading({ who: dec.who === 'none' ? 'owner' : dec.who, reason: dec.reason,
-      attempts: dec.attempts, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
+      attempts: dec.attempts, mode: dec.mode, count: causes.length, list, head: pr.head.ref, base: pr.base.ref })
     const body = renderRedPing({ marker, hd, why, tails, pr })
     if (existing) {
       if ((existing.body || '').trim() === body.trim()) return // nothing new to say

@@ -24,6 +24,7 @@
  *
  *   node scripts/lib/build-verdict.mjs <diff-file> <ticket-file> <verdict-file> → JSON decision
  *   node scripts/lib/build-verdict.mjs render <diff-file> <ticket-file> <verdict-file> <round> <model>
+ *   node scripts/lib/build-verdict.mjs stop-line <log-file>   → " — it stopped at: `<line>`" (#3696)
  *   exit 1 when the verdict is malformed (the workflow then fails loudly instead of approving).
  */
 import { readFileSync } from 'node:fs'
@@ -159,6 +160,37 @@ export function renderComment(d, { round = 1, model = '', okAgain = '' } = {}) {
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer — reply \`ok\` to merge as is, or reply with how this should change.`,
   }[d.verdict]
   return `${REVIEW_MARKER}\n${final ? `${FINAL_MARKER}\n` : ''}<!-- build-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
+}
+
+/**
+ * #3696 — the one line of pi's log that says why it stopped, so "produced no verdict" names the cause.
+ * Prefers the last line that STARTS with `Error`/`fatal` (pi's own message) over a later runner
+ * `##[error]` line, then any line with an error word, then the last non-empty line, else ''.
+ * ANSI codes stripped, backticks swapped for `'`, capped at 300 chars.
+ */
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g')
+
+export function stopLine(log) {
+  const lines = String(log ?? '')
+    .replace(ANSI, '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const last = (re) => [...lines].reverse().find((l) => re.test(l))
+  const line = last(/^(Error|fatal)\b[:!]?/) ?? last(/\b(Error|error|fatal)\b[:!]?/) ?? lines.at(-1) ?? ''
+  return line.replace(/`/g, "'").slice(0, 300)
+}
+
+export function stopLineSuffix(logFile) {
+  let log = ''
+  try { log = readFileSync(logFile, 'utf8') } catch { log = '' }
+  const line = stopLine(log)
+  return line ? ` — it stopped at: \`${line}\`` : ' — pi printed nothing'
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'stop-line') {
+  process.stdout.write(stopLineSuffix(process.argv[3]))
+  process.exit(0)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

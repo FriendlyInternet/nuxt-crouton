@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import coreManifest from '../../../../crouton-core/crouton.manifest.ts'
 import {
   AUTO_GENERATED_FIELDS,
+  AUTO_FIELDS,
   SYSTEM_FIELD_GROUPS,
   metadataFields,
   autoRefFields,
@@ -23,6 +24,10 @@ describe('system-fields: one enumeration, pinned to the core manifest', () => {
     for (const name of Object.values(SYSTEM_FIELD_GROUPS).flat()) {
       expect(reserved.has(name), `${name} missing from reservedFieldNames`).toBe(true)
     }
+  })
+
+  it('AUTO_FIELDS is every auto column plus the default hierarchy names', () => {
+    expect([...AUTO_FIELDS]).toEqual([...AUTO_GENERATED_FIELDS, 'parentId', 'path', 'depth', 'order'])
   })
 
   it('metadataFields: timestamps + audit', () => {

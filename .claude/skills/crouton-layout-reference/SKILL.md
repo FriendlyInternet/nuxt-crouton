@@ -23,7 +23,7 @@ One-line purpose: the verified system model of `@fyit/crouton-layout` — data s
 
 **Layout is data, not `.vue`.** A team's admin surface is a `LayoutTree` — a JSON tree of panes — persisted in the `layout_configs` DB table and rendered at runtime by recursive splitter components. Leaves of the tree are **blocks**: components a package registers as placeable via the `croutonLayoutBlocks` app.config registry. Every arrangement is gated by one objective metric — **viability** (every block gets ≥ its declared `minWidth`) — used identically by the deterministic **placer** at generate time and the renderer at runtime. Dependency direction is a HARD RULE: `crouton-layout → crouton-core`, never reverse; feature packages contribute blocks via the registry, never by depending on the layout package (see `crouton-architecture-contract` for why).
 
-The package is **default-on** (`crouton.manifest.ts` has `bundled: true`) — every crouton app gets the engine unless `features.layout: false`.
+The package is **opt-in** (`bundled: false`, parked while the engine is unfinished, #2282) — an app gets the engine, the generated `crouton.layout.json` and the seeded default layout only when it extends `@fyit/crouton-layout`.
 
 ## 1. The data model (`LayoutTree` / `layout_configs`)
 

@@ -37,6 +37,59 @@ describe('previewSessionToken', () => {
   })
 })
 
+describe('signedOutBackPath (#3840)', async () => {
+  const { signedOutBackPath } = await import('../server/utils/review-login')
+  const parse = (p: string) => new URL(p, 'http://h')
+
+  it('keeps a PR key and a safe page path', () => {
+    const u = parse(signedOutBackPath('velo', { key: 'pr3805', to: '/admin/x' }))
+    expect(u.pathname).toBe('/api/status/login/velo')
+    expect(u.searchParams.get('key')).toBe('pr3805')
+    expect(u.searchParams.get('to')).toBe('/admin/x')
+  })
+  it('omits key=main (the route defaults to main)', () => {
+    expect(signedOutBackPath('velo', { key: 'main' })).toBe('/api/status/login/velo')
+  })
+  it('keeps a valid walk', () => {
+    expect(parse(signedOutBackPath('velo', { walk: 'abc_-1' })).searchParams.get('walk')).toBe('abc_-1')
+  })
+  it('drops a bad key', () => {
+    expect(signedOutBackPath('velo', { key: 'pr3805x' })).toBe('/api/status/login/velo')
+    expect(signedOutBackPath('velo', { key: ['pr1'] })).toBe('/api/status/login/velo')
+  })
+  it('drops an unsafe to', () => {
+    expect(signedOutBackPath('velo', { to: '//evil.com' })).toBe('/api/status/login/velo')
+    expect(signedOutBackPath('velo', { to: 'https://evil.com/x' })).toBe('/api/status/login/velo')
+  })
+  it('drops a bad walk', () => {
+    expect(signedOutBackPath('velo', { walk: 'a b' })).toBe('/api/status/login/velo')
+  })
+  it('passes no other params through', () => {
+    const u = parse(signedOutBackPath('velo', { key: 'pr1', to: '/a', walk: 'w', redirect: '/evil', email: 'x' }))
+    expect([...u.searchParams.keys()].sort()).toEqual(['key', 'to', 'walk'])
+  })
+  it('a bad slug falls back to /', () => {
+    expect(signedOutBackPath('../x', { key: 'pr1' })).toBe('/')
+    expect(signedOutBackPath(undefined, {})).toBe('/')
+  })
+  it('the result survives the sign-in redirect check', async () => {
+    const { safeRedirect } = await import('../shared/safe-path')
+    const back = signedOutBackPath('velo', { key: 'pr3805', to: '/admin/test1/bookings', walk: 'abc' })
+    expect(safeRedirect(back)).toBe(back)
+  })
+  it('a real card link with a long walk and an encoded to also survives it', async () => {
+    const { safeRedirect } = await import('../shared/safe-path')
+    const { loginHrefFor } = await import('../app/utils/walk')
+    const steps = Array.from({ length: 30 }, (_, i) => `Step ${i + 1}: ${'open the bookings page and check the row '.repeat(8)}`)
+    const href = new URL(loginHrefFor({ app: 'velo', number: 3840, title: 'T'.repeat(80), steps, to: `/admin/test1/bookings?q=${'%'.repeat(150)}` }), 'http://h')
+    const query = Object.fromEntries(href.searchParams)
+    expect(query.walk!.length).toBeGreaterThan(1500)
+    const back = signedOutBackPath('velo', { ...query, key: 'pr3805' })
+    expect(back.length).toBeGreaterThan(500)
+    expect(safeRedirect(back)).toBe(back)
+  })
+})
+
 describe('walk in the login redirect (#2681)', async () => {
   const { reviewLoginUrl, sanitizeWalk, withWalk } = await import('../server/utils/review-login')
   const { loginHrefFor } = await import('../app/utils/walk')

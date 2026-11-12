@@ -65,6 +65,57 @@ test('isFlatFrame: a single-colour frame is flat (blank), a varied one is not', 
   assert.equal(isFlatFrame({ width: 8, height: 8, channels: 4, data: varied }), false)
 })
 
+// #3854 — a full-page capture of a tall page (#3841: 780 × 25,280) put the old 8×8 grid rows
+// ~3,160 px apart, so cards between them were never sampled and the page read as blank.
+function whiteFrame(width, height, rgb = [255, 255, 255]) {
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = rgb[0]; data[i + 1] = rgb[1]; data[i + 2] = rgb[2]; data[i + 3] = 255
+  }
+  return { width, height, channels: 4, data }
+}
+function fillRect(frame, x0, y0, w, h, rgb = [30, 30, 30]) {
+  for (let y = y0; y < y0 + h; y++) {
+    for (let x = x0; x < x0 + w; x++) {
+      const idx = (y * frame.width + x) * 4
+      frame.data[idx] = rgb[0]; frame.data[idx + 1] = rgb[1]; frame.data[idx + 2] = rgb[2]
+    }
+  }
+}
+
+test('isFlatFrame: a one-colour frame is flat at any size (#3854)', () => {
+  assert.equal(isFlatFrame(whiteFrame(780, 25280)), true)
+  assert.equal(isFlatFrame(whiteFrame(390, 844, [0xf4, 0xf4, 0xf5])), true)
+})
+
+test('isFlatFrame: a tall page with cards between the old 8×8 grid points is not flat (#3854)', () => {
+  const frame = whiteFrame(780, 25280)
+  for (let band = 0; band < 8; band++) fillRect(frame, 150, band * 3160 + 400, 300, 120)
+  assert.equal(isFlatFrame(frame), false)
+})
+
+test('isFlatFrame: a short normal page is not flat (#3854)', () => {
+  const frame = whiteFrame(390, 844)
+  fillRect(frame, 0, 0, 390, 56)
+  for (const y of [120, 160, 200, 240]) fillRect(frame, 24, y, 200, 14)
+  assert.equal(isFlatFrame(frame), false)
+})
+
+test('isFlatFrame: a nearly empty page with one small button is not flat (#3854)', () => {
+  const frame = whiteFrame(780, 1688)
+  fillRect(frame, 340, 800, 100, 30)
+  assert.equal(isFlatFrame(frame), false)
+})
+
+test('isFlatFrame: a single 1-px line is still blank (#3854)', () => {
+  const row = whiteFrame(780, 25280)
+  fillRect(row, 0, 12000, 780, 1)
+  assert.equal(isFlatFrame(row), true)
+  const col = whiteFrame(780, 25280)
+  fillRect(col, 400, 0, 1, 25280)
+  assert.equal(isFlatFrame(col), true)
+})
+
 // #2433 — the PR (copied from its issue) names the page that shows the change. Without it the
 // capture shot each app's fixed landing page, and that unrelated screenshot satisfied the
 // sign-off gate (#2420: the kassa POS launcher, for a page-editor change).
@@ -169,6 +220,23 @@ test('deriveSurfaces: page file → route, team segment → seeded team (#2698)'
     'README.md'
   ] })
   assert.deepEqual(s.map(x => x.path), ['/admin/test1/sales', '/'])
+})
+
+test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
+  const changedFiles = ['pocs/booking-demo/app/pages/admin/[team]/blocks.vue']
+  assert.deepEqual(deriveSurfaces({ app: 'booking-demo', changedFiles }), [{ name: 'admin-team-blocks', path: '/admin/test1/blocks', do: [] }])
+  assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles }), [])
+  assert.deepEqual(deriveSurfaces({ app: 'gallery', changedFiles }), [])
+  assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
+})
+
+test('deriveSurfaces: a packages/ page maps for any app (#3794)', () => {
+  const changedFiles = ['packages/crouton-x/app/pages/foo.vue']
+  for (const app of ['velo', 'gallery']) {
+    const s = deriveSurfaces({ app, changedFiles })
+    assert.equal(s.length, 1)
+    assert.equal(s[0].path, '/foo')
+  }
 })
 
 test('deriveSurfaces: package component only maps for the gallery', () => {

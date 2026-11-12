@@ -36,19 +36,19 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 CroutonBooking
 ├── Slot/
 │   └── Indicator.vue   - Visual slot indicator
-├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList)
+├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot to PanelFilters
 ├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
-├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key ⇒ no dup calls) + coordinates cross-pane via useBookingsLayoutFilters.
+├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key per team + `dedupe: 'defer'` ⇒ one call per key; see *useFetch keys carry the team* below) + coordinates cross-pane via useBookingsLayoutFilters.
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
 │   ├── CalendarOnly.vue - CroutonBookingsLayoutCalendarOnly (`bookings-calendar-only`) — just the grid
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
-│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-view toggles kept local/inert)
+│   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map, location cards); a `#toolbar-end` slot renders after the fold button (the admin full-screen close, #3046)
 └── PanelMap.vue        - Map display
 ```
 
@@ -248,6 +248,26 @@ Pure module (references `bookings_*` table/columns by name, loads under jiti).
 Idempotent — stable `seedId(...)` ids upsert in place. Every NOT-NULL column is
 set explicitly because Drizzle `$default(...)` is ORM-time, not a SQL DEFAULT.
 Run via an app's `crouton-seed` / `db:seed:*` scripts.
+
+**Deploy check (#3751):** an app whose review login must land on this demo data lists the
+tables in `reviewLogin.requireData` (`deploy.config.json`, e.g. booking-demo:
+`["bookings_locations", "bookings_bookings"]`). The deploy's review-login step then logs the
+seeded team's row counts and advertises no login if any is 0 (`scripts/seed-review-login.mjs
+--require-data`).
+
+## useFetch keys carry the team (#3751)
+
+Every `useFetch` in `useBookingsList`, `useBookingCart` and `useBookingOptions` has the team
+id in its `key` (e.g. `crouton-booking-list-locations-<scope>-<teamId>`). With a fixed key
+and no `watch`, Nuxt does **not** re-fetch when only the URL changes, so a fetch that ran
+before the team was known (URL still empty) never ran again once the team arrived — after a
+sign-in, the blocks page showed "No locations yet" for a team full of data. Rules for a new
+fetch here: put the team id (or anything else the URL depends on) in the key; keep the key
+identical across components that should share one call, and set `dedupe: 'defer'` on it:
+every owner of a reactive key re-runs it when the key changes, and Nuxt's default `'cancel'`
+aborts the others' requests (#3789). Manual refreshes pass `{ dedupe: 'cancel' }` so a save
+still gets fresh data. Don't add a `watch:` to paper over a fixed key. Covered by
+`test/team-keyed-fetch.test.ts`.
 
 ## Testing
 

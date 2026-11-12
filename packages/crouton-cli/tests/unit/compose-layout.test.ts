@@ -27,7 +27,7 @@ describe('writeDefaultLayout', () => {
     const dir = makeDir()
     const r = await writeDefaultLayout({
       cwd: dir,
-      packages: ['crouton-bookings'],
+      packages: ['crouton-layout', 'crouton-bookings'],
       allCollections: [{ name: 'booking', layer: 'bookings' }],
     })
     expect(r.written).toBe(true)
@@ -49,7 +49,7 @@ describe('writeDefaultLayout', () => {
     const dir = makeDir()
     const r = await writeDefaultLayout({
       cwd: dir,
-      packages: [],
+      packages: ['crouton-layout'],
       allCollections: [{ name: 'item', layer: 'main' }],
     })
     expect(r.pattern).toBe('master-detail')
@@ -63,13 +63,28 @@ describe('writeDefaultLayout', () => {
 
   it('does not write on dry-run and skips when there are no collections', async () => {
     const dir = makeDir()
-    const dry = await writeDefaultLayout({ cwd: dir, allCollections: [{ name: 'item', layer: 'main' }], dryRun: true })
+    const dry = await writeDefaultLayout({ cwd: dir, packages: ['crouton-layout'], allCollections: [{ name: 'item', layer: 'main' }], dryRun: true })
     expect(dry.written).toBe(false)
     expect(dry.pattern).toBe('master-detail')
     expect(existsSync(join(dir, 'crouton.layout.json'))).toBe(false)
 
-    const none = await writeDefaultLayout({ cwd: dir, allCollections: [] })
+    const none = await writeDefaultLayout({ cwd: dir, packages: ['crouton-layout'], allCollections: [] })
     expect(none.written).toBe(false)
     expect(none.reason).toBe('no-collections')
+  })
+
+  it('skips when the app does not extend crouton-layout', async () => {
+    const dir = makeDir()
+    const r = await writeDefaultLayout({ cwd: dir, packages: ['crouton-bookings'], allCollections: [{ name: 'item', layer: 'main' }] })
+    expect(r.written).toBe(false)
+    expect(r.reason).toBe('layout not enabled')
+    expect(existsSync(join(dir, 'crouton.layout.json'))).toBe(false)
+  })
+
+  it('skips when packages is omitted', async () => {
+    const dir = makeDir()
+    const r = await writeDefaultLayout({ cwd: dir, allCollections: [{ name: 'item', layer: 'main' }] })
+    expect(r.reason).toBe('layout not enabled')
+    expect(existsSync(join(dir, 'crouton.layout.json'))).toBe(false)
   })
 })

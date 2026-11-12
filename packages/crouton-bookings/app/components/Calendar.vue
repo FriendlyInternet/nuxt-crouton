@@ -394,15 +394,12 @@ function getLocationAddress(locationId: string): string | null {
   return parts.length > 0 ? parts.join(', ') : null
 }
 
-// Calculate cell height based on max indicators
-// Base height: 20px (day number) + padding
-// Each indicator row: ~10px
+// Month cell height matches the real stack (#3046), for n indicator rows:
+//   4 (pt-1) + 16 (day number) + 2 (mt-0.5)
+//   + 4n (2xs bars/dots) + 2(n-1) (gap-0.5) + 4 (pb-1)
+//   = 24 + 6n, with a 40px floor.
 const monthCellHeight = computed(() => {
-  const baseHeight = 24 // day number + top padding
-  const indicatorHeight = 10 // per indicator row
-  const bottomPadding = 4
-  const minHeight = 40
-  return Math.max(minHeight, baseHeight + (maxIndicatorCount.value * indicatorHeight) + bottomPadding)
+  return Math.max(40, 24 + 6 * maxIndicatorCount.value)
 })
 </script>
 
@@ -519,7 +516,7 @@ const monthCellHeight = computed(() => {
             <span class="text-xs font-medium" :class="hasBookings(jsDate) ? 'text-default' : 'text-muted'">
               {{ day.day }}
             </span>
-            <div class="flex flex-col gap-1 mt-0.5 w-fit mx-auto">
+            <div class="flex flex-col gap-0.5 mt-0.5 w-fit mx-auto">
               <CroutonBookingsSlotIndicator
                 v-for="indicator in getIndicatorsForDate(jsDate)"
                 :key="indicator.locationId"
@@ -529,7 +526,7 @@ const monthCellHeight = computed(() => {
                 :cancelled-slot-ids="indicator.cancelledSlotIds"
                 :bookings="indicator.bookings"
                 :color="indicator.color"
-                size="xs"
+                size="2xs"
                 :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
               />
             </div>
@@ -571,7 +568,7 @@ const monthCellHeight = computed(() => {
             </span>
 
             <!-- Slot indicators (all locations) -->
-            <div class="flex flex-col gap-1 mt-0.5 w-fit mx-auto">
+            <div class="flex flex-col gap-0.5 mt-0.5 w-fit mx-auto">
               <UPopover
                 v-for="indicator in getIndicatorsForDate(jsDate)"
                 :key="indicator.locationId"
@@ -587,7 +584,7 @@ const monthCellHeight = computed(() => {
                   :cancelled-slot-ids="indicator.cancelledSlotIds"
                   :bookings="indicator.bookings"
                   :color="indicator.color"
-                  size="xs"
+                  size="2xs"
                   :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
                   @hover-booking="(id) => emit('hoverBooking', id)"
                 />

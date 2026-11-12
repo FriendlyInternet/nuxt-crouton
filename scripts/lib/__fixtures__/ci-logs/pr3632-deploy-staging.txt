@@ -1,0 +1,67 @@
+# #3666 fixture: trimmed raw log of job 129411200782 (PR #3632, deploy staging); ESC rendered as ^[
+2026-11-09T20:17:09.6842104Z packages/crouton-core build: [info] Cleaning dist directory: `./dist/app/composables`
+2026-11-09T20:17:09.6959442Z packages/crouton-core build: [info] Cleaning dist directory: `./dist/server/database/schema`
+2026-11-09T20:17:14.3794106Z ##[error]packages/crouton-core build: app/composables/__tests__/test-utils.ts(8,17): error TS2742: The inferred type of 'createNuxtMocks' cannot be named without a reference to '.pnpm/@vitest+spy@4.1.12/node_modules/@vitest/spy'. This is likely not portable. A type annotation is necessary.
+2026-11-09T20:17:16.2182085Z packages/crouton-core build: [success] ^[[32mBuild succeeded for crouton-core^[[39m
+2026-11-09T20:17:16.2276871Z packages/crouton-core build: [log]   ^[[1mdist/app/composables^[[22m (total size: ^[[36m335 kB^[[39m)
+…trimmed…
+2026-11-09T20:17:16.2495011Z packages/crouton-core build: [warn] Build is done with some warnings:
+2026-11-09T20:17:16.2495888Z packages/crouton-core build: - mkdist build failed for `dist/app/composables/__tests__/test-utils.d.ts`:
+2026-11-09T20:17:16.2499952Z ##[error]packages/crouton-core build:   - TypeError: app/composables/__tests__/test-utils.ts(8,17): error TS2742: The inferred type of 'createNuxtMocks' cannot be named without a reference to '.pnpm/@vitest+spy@4.1.12/node_modules/@vitest/spy'. This is likely not portable. A type annotation is necessary.
+2026-11-09T20:17:16.3322857Z packages/crouton-core build: Done
+2026-11-09T20:17:16.3329140Z packages/crouton-devtools build$ unbuild
+…trimmed…
+2026-11-09T20:18:31.7942388Z in "../../node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/util.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+2026-11-09T20:18:31.8493089Z ../../node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/regexes.js (74:0): A comment
+2026-11-09T20:18:31.8493878Z 
+2026-11-09T20:18:31.8494741Z "/** Anchors a pattern source. The interpolation lives here rather than at the call site because
+2026-11-09T20:18:31.8496150Z  * esbuild will not drop a `@__PURE__` call whose own argument interpolates a variable, but it
+2026-11-09T20:18:31.8497051Z  * will drop `anchor(dateSource)`. Keeping it inline pinned `date` into every bundle. */"
+2026-11-09T20:18:31.8497667Z 
+2026-11-09T20:18:31.8499230Z in "../../node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/regexes.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+2026-11-09T20:18:32.8927102Z [error] [nitro] RollupError: ../../scripts/approval.mjs (1:1): Expected ident (Note that you need plugins to import files that are not JavaScript)
+2026-11-09T20:18:32.8928185Z 
+2026-11-09T20:18:32.8928193Z 
+2026-11-09T20:18:32.8928423Z 1: #!/usr/bin/env node
+2026-11-09T20:18:32.8928862Z     ^
+2026-11-09T20:18:32.8929926Z 2: // approval.mjs — is this comment an APPROVAL? One definition, used everywhere (#2051).
+2026-11-09T20:18:32.8930650Z 3: //
+2026-11-09T20:18:32.8935595Z [error] ../../scripts/approval.mjs (1:1): Expected ident (Note that you need plugins to import files that are not JavaScript)
+2026-11-09T20:18:32.8937339Z   at getRollupError (/home/runner/work/nuxt-crouton/nuxt-crouton/node_modules/.pnpm/rollup@4.65.1/node_modules/rollup/dist/es/shared/parseAst.js:337:41)
+…trimmed…
+2026-11-09T20:18:32.8965354Z     at async ModuleLoader.addModuleSource (/home/runner/work/nuxt-crouton/nuxt-crouton/node_modules/.pnpm/rollup@4.65.1/node_modules/rollup/dist/es/shared/node-entry.js:22747:9) 
+2026-11-09T20:18:32.8966437Z 
+2026-11-09T20:18:33.1153418Z ##[error]Process completed with exit code 1.
+2026-11-09T20:18:33.1370804Z Post job cleanup.
+2026-11-09T20:18:33.1374802Z ##[start-action display=Restore package dist cache;id=__5e7861cc-4da3-4035-8ffe-634ed9953ec0.cache]
+…trimmed…
+2026-11-09T20:18:33.4102541Z Temporarily overriding HOME='/home/runner/work/_temp/df8e2d0f-e0bd-4e24-a0fc-b711c0e50bc0' before making global git config changes
+2026-11-09T20:18:33.4111720Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-09T20:18:33.4113309Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-09T20:18:33.4136742Z Removing SSH command configuration
+2026-11-09T20:18:33.4143491Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-09T20:18:33.4184259Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-09T20:18:33.4662471Z Removing HTTP extra header
+2026-11-09T20:18:33.4675315Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-09T20:18:33.4751809Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-09T20:18:33.5137117Z Removing includeIf entries pointing to credentials config files
+2026-11-09T20:18:33.5146960Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-09T20:18:33.5181328Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-09T20:18:33.5182568Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-09T20:18:33.5183587Z includeif.gitdir:/github/workspace/.git.path
+2026-11-09T20:18:33.5184379Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-09T20:18:33.5194039Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-09T20:18:33.5219281Z /home/runner/work/_temp/git-credentials-3f5b290b-7415-46f4-b0ae-4edc2c9eafb0.config
+2026-11-09T20:18:33.5231288Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-3f5b290b\-7415\-46f4\-b0ae\-4edc2c9eafb0\.config
+2026-11-09T20:18:33.5277250Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-09T20:18:33.5304130Z /home/runner/work/_temp/git-credentials-3f5b290b-7415-46f4-b0ae-4edc2c9eafb0.config
+2026-11-09T20:18:33.5313546Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-3f5b290b\-7415\-46f4\-b0ae\-4edc2c9eafb0\.config
+2026-11-09T20:18:33.5348865Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-09T20:18:33.5372858Z /github/runner_temp/git-credentials-3f5b290b-7415-46f4-b0ae-4edc2c9eafb0.config
+2026-11-09T20:18:33.5380681Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-3f5b290b\-7415\-46f4\-b0ae\-4edc2c9eafb0\.config
+2026-11-09T20:18:33.5413060Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-09T20:18:33.5436748Z /github/runner_temp/git-credentials-3f5b290b-7415-46f4-b0ae-4edc2c9eafb0.config
+2026-11-09T20:18:33.5443827Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-3f5b290b\-7415\-46f4\-b0ae\-4edc2c9eafb0\.config
+2026-11-09T20:18:33.5478389Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-09T20:18:33.5764559Z Removing credentials config '/home/runner/work/_temp/git-credentials-3f5b290b-7415-46f4-b0ae-4edc2c9eafb0.config'
+2026-11-09T20:18:33.5927446Z Cleaning up orphan processes

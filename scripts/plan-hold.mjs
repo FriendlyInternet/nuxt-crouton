@@ -2,7 +2,7 @@
 //
 // A reply on such an issue must re-run the planner with the reply as feedback. It used to reach the
 // generic resume responder, which posted "still iterating" and nothing else. Detection mirrors how
-// plan-review.yml decides to hold: two or more `plan-review-verdict:no-go` comments plus
+// on-comment.yml's plan-review job decides to hold: two or more `plan-review-verdict:no-go` comments plus
 // `status:blocked`, or a newest `needs-owner` verdict (#3564 — plan review holds on it and the
 // owner's answer is the only restart). A later `go` verdict, a verdict posted by a person, a
 // `plan:approved` label, or an approval reply (`ok`) does not count — approval is not a re-plan.
@@ -36,8 +36,19 @@ export function isPlanHold({ comments, labels = [], replyBody = '' } = {}) {
   if (!labels.includes('status:blocked') || labels.includes('plan:approved')) return false
   if (replyBody && (isApproval(replyBody) || OK_REASON.test(replyBody))) return false
   const v = verdicts(comments)
-  const last = v[v.length - 1]
-  return last === 'needs-owner' || (last === 'no-go' && v.filter((x) => x === 'no-go').length >= 2)
+  return v[v.length - 1] === 'needs-owner' || isRejectedTwice({ comments, labels })
+}
+
+/**
+ * True when the plan is held after two reviewer rejections (#3272): `status:blocked`, no
+ * `plan:approved`, the newest bot verdict is `no-go` and there are at least two. A `needs-owner`
+ * hold is NOT this — the owner override (`ok: <reason>`) applies only to the twice-rejected hold.
+ * @param {{comments?: object[], labels?: string[]}} input
+ */
+export function isRejectedTwice({ comments, labels = [] } = {}) {
+  if (!labels.includes('status:blocked') || labels.includes('plan:approved')) return false
+  const v = verdicts(comments)
+  return v[v.length - 1] === 'no-go' && v.filter((x) => x === 'no-go').length >= 2
 }
 
 /**

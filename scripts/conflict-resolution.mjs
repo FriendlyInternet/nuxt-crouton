@@ -58,6 +58,17 @@ export function generatorsFor(files) {
   return GENERATORS.filter((g) => files.some((f) => g.touches.some((p) => matches(p, f))))
 }
 
+/**
+ * The paths the merge commit may hold (#3775): the conflicted files, plus what a generator keyed
+ * off them rewrote (#2848). Any other edit is not part of resolving the merge — it stays unstaged
+ * and the finish step commits it on top, as its own commit.
+ */
+export function resolutionPaths({ modified, conflicted }) {
+  const gens = generatorsFor(conflicted)
+  const keep = modified.filter((f) => conflicted.includes(f) || gens.some((g) => g.touches.some((p) => matches(p, f))))
+  return [...new Set(keep)].sort()
+}
+
 const MARKER = /^(<<<<<<<|=======|>>>>>>>)(\s|$)/m
 
 /** Files (path → text) that still carry a conflict marker. */
@@ -111,7 +122,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const v = verdict({ choiceText, markerFiles: withMarkers(contents) })
     if (v.status === 'choice') process.exit(3)
     if (v.status === 'failed') { console.error(`::error::${v.reason}`); process.exit(1) }
-    sh('git', ['add', '-u']) // tracked only: never stage runner scratch files
+    // Only the resolution (#3775): `git add -u` also staged any other tracked edit into the merge.
+    // Mid-merge the auto-merged base files are already staged, so nothing of the base is dropped.
+    const stage = resolutionPaths({ modified: sh('git', ['diff', '--name-only']).split('\n').filter(Boolean), conflicted: files })
+    if (stage.length) sh('git', ['add', '--', ...stage])
     // Only the conflicted files: mid-merge the index holds the whole base diff, whose own whitespace is not ours to judge.
     try { if (files.length) sh('git', ['diff', '--cached', '--check', '--', ...files]) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
     for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
