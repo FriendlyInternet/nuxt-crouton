@@ -14,10 +14,12 @@
  *      (#3141). An app with crouton-email requires a verified e-mail, so sign-up of
  *      an existing address no longer says "already exists" (it returns 200 with no
  *      session) and a new account gets no session until it is verified.
- *      - Existing account (redeploy): reset its password to the given one (hashed
- *        with better-auth's own helper, #2358), mark it verified (dropping any
- *        stranger's unverified sessions first, #3162), then POST /sign-in/email —
- *        it must return 200. Sign-up is skipped.
+ *      - Existing account (redeploy): POST /sign-in/email with the given password.
+ *        A 200 proves the account is ours — reused as-is (step 4 verifies it). If it
+ *        is refused (old password, or not verified yet): reset its password to the
+ *        given one (hashed with better-auth's own helper, #2358), mark it verified
+ *        (dropping any stranger's unverified sessions first, #3162), then sign in
+ *        again — it must return 200. Sign-up is skipped.
  *      - New account: step 1. If sign-up returns no session token (verification
  *        required), the seed just created the account with its own password, so it
  *        marks it verified and signs in (must return 200).
@@ -331,8 +333,8 @@ async function main() {
   const hasDb = !!(args.db || args.sqlite)
 
   // Sign in with the seed password, retrying while a fresh Worker has no auth
-  // secret yet (#3474). Exits 1 unless it ends in a 200 (#3141).
-  async function signInOrExit(why) {
+  // secret yet (#3474). Returns null on a 200, else the refusal code.
+  async function trySignIn() {
     for (let attempt = 1; ; attempt++) {
       let res = null
       let json = null
@@ -342,15 +344,22 @@ async function main() {
       } catch (e) {
         threw = e
       }
-      if (res?.ok) return
+      if (res?.ok) return null
       const code = threw ? (threw?.message || String(threw)) : (json?.code || json?.message || `HTTP ${res.status}`)
       if ((threw || isMissingSecretError(code)) && attempt < maxAttempts) {
         await new Promise(r => setTimeout(r, delays[attempt - 1]))
         continue
       }
-      warn(`${why}: sign-in refused (${code}) — NOT advertising this login.`)
-      process.exit(1)
+      return code
     }
+  }
+
+  // Exits 1 unless sign-in ends in a 200 (#3141).
+  async function signInOrExit(why) {
+    const code = await trySignIn()
+    if (code === null) return
+    warn(`${why}: sign-in refused (${code}) — NOT advertising this login.`)
+    process.exit(1)
   }
 
   // 0. Look the account up first (#3141) — see the header.
@@ -363,8 +372,15 @@ async function main() {
       process.exit(1)
     }
   }
-  if (existing) {
-    info(`user ${email} already exists — resetting its password and marking it verified.`)
+  // An existing account that already takes the seed password (the usual redeploy) is
+  // proven and needs nothing changed — step 4 verifies it. Only a refusal (old password
+  // after a secret rotation #2358, or EMAIL_NOT_VERIFIED in a crouton-email app #3141)
+  // resets the password and marks the address verified, then must sign in.
+  const refused = existing ? await trySignIn() : null
+  if (existing && refused === null) {
+    info(`user ${email} already exists and takes the current password — reusing.`)
+  } else if (existing) {
+    info(`user ${email} already exists but refuses sign-in (${refused}) — resetting its password and marking it verified.`)
     try {
       execSeedSql(args, await resetPasswordSql(email, password))
       execSeedSql(args, markReviewerVerifiedSql(email))

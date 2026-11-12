@@ -337,70 +337,24 @@ test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break
 // In an app with crouton-email, sign-up of an existing address returns 200 with no
 // session (not 422), and a new account gets no session until it is verified. These run
 // the real script against a real sqlite file and a fake Worker that enforces both rules.
+// "Existing review account whose password changed" needs better-auth's real hasher, so it
+// lives in seed-review-login.deps-test.mjs (the job that installs packages).
 import { reviewerExistsSql } from './seed-review-login.mjs'
+import { R4_EMAIL, r4Db, row, runR4, SESSION_COOKIE } from './seed-review-login.fixtures.mjs'
 
-const R4_EMAIL = 'review+t@example.com'
-
-function r4Db({ withUser }) {
-  const dir = mkdtempSync(join(tmpdir(), 'seed-3141-'))
-  const file = join(dir, 'sqlite.db')
-  const d = new DatabaseSync(file)
-  d.exec(`
-    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
-    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
-    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
-  `)
-  if (withUser) {
-    d.exec(`INSERT INTO "user" VALUES ('u1', '${R4_EMAIL}', 0);
-      INSERT INTO "account" VALUES ('a1', 'u1', 'credential', 'hash-of-an-old-password');`)
-  }
-  d.close()
-  return file
-}
-
-const row = (file, sql) => {
-  const d = new DatabaseSync(file)
-  try { return d.prepare(sql).get() } finally { d.close() }
-}
-
-async function runR4(file, handle) {
-  const calls = []
-  const server = createServer(async (req, res) => {
-    calls.push({ url: req.url, cookie: req.headers.cookie || '' })
-    const { status = 200, body = {}, headers = {} } = (await handle(req.url)) || {}
-    res.writeHead(status, { 'content-type': 'application/json', ...headers })
-    res.end(JSON.stringify(body))
-  })
-  await new Promise(r => server.listen(0, '127.0.0.1', r))
-  const url = `http://127.0.0.1:${server.address().port}`
-  const result = await new Promise((resolve) => {
-    execFile(process.execPath, [SCRIPT, '--url', url, '--email', R4_EMAIL, '--password', 'pw', '--sqlite', file],
-      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
-      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
-  })
-  await new Promise(r => server.close(r))
-  return { ...result, calls }
-}
-
-const SESSION_COOKIE = { 'set-cookie': 'better-auth.session_token=tok; Path=/; HttpOnly' }
-
-test('R4 existing review account whose password changed still gets a working login', async () => {
-  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
-  const { verifyPassword } = await import(req.resolve('better-auth/crypto'))
+test('R4 existing review account that still takes the current password: reused, verified, not reset', async () => {
   const file = r4Db({ withUser: true })
   const r = await runR4(file, async (path) => {
     if (path === '/api/auth/sign-up/email') return { body: { token: null } } // verification on: hides "exists"
-    if (path === '/api/auth/sign-in/email') {
-      const { password } = row(file, `SELECT "password" FROM "account" WHERE "userId" = 'u1'`)
-      const ok = await verifyPassword({ hash: password, password: 'pw' }).catch(() => false)
-      return ok ? { body: { token: 'tok' }, headers: SESSION_COOKIE } : { status: 401, body: { code: 'INVALID_EMAIL_OR_PASSWORD' } }
-    }
+    if (path === '/api/auth/sign-in/email') return { body: { token: 'tok' }, headers: SESSION_COOKIE }
     if (path === '/api/auth/get-session') return { body: { user: { id: 'u1' }, session: {} } }
   })
   assert.equal(r.code, 0, r.out)
-  assert.notEqual(row(file, `SELECT "password" FROM "account" WHERE "id" = 'a1'`).password, 'hash-of-an-old-password')
+  assert.equal(row(file, `SELECT "password" FROM "account" WHERE "id" = 'a1'`).password, 'hash-of-an-old-password', 'no password reset')
   assert.equal(row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u1'`).v, 1)
   assert.equal(r.calls.filter(c => c.url === '/api/auth/sign-up/email').length, 0, 'sign-up is never called')
+  const session = r.calls.find(c => c.url === '/api/auth/get-session')
+  assert.match(session.cookie, /better-auth\.session_token=tok/)
 })
 
 test('R4 new account in an app that requires verification', async () => {
