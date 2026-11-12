@@ -20,7 +20,7 @@ const ALLOW = [
   { file: 'ticket-review', has: 'comment.md', reason: 'the review verdict itself' },
   { file: 'on-comment', has: 'const say = (brief, more)', reason: "the interpreter's own comment (posted by interpret-act) is agent output" },
   { file: 'work-issue-pidev', has: '--body-file "$REC"', reason: 'run-record file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
-  { file: 'fix-ci-on-failure', has: 'handback.md', reason: 'hand-back file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
+  { file: 'fix-bot-guard', has: 'handback.md', reason: 'hand-back file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
 ]
 
 export function findUnmarked(file, text) {
@@ -58,7 +58,8 @@ test('lint over the real workflows: every non-output post carries the marker', (
 // Scripts the workflows call (via github-script import) that post pipeline notes themselves.
 // wave-release.mjs posts gate-formatted hold/release comments from the epic-wave workflows, which
 // are not agent runs and are not recorded; traffic-control.mjs posts into the agent run's thread.
-const SCRIPTS = ['traffic-control']
+// fix-bot-guard.sh is the fix-bot guard fix-ci-on-failure.yml runs (#3452); its posts moved there from the workflow.
+const SCRIPTS = ['traffic-control.mjs', 'fix-bot-guard.sh']
 const SCRIPT_DIR = join(DIR, '..', '..', 'scripts')
 
 test('lint over automerge-epic-subpr.yml: every note it posts carries the marker', () => {
@@ -69,8 +70,9 @@ test('lint over automerge-epic-subpr.yml: every note it posts carries the marker
 test('lint over the scripts the workflows call: every post carries the marker', () => {
   const all = []
   let sites = 0
-  for (const f of SCRIPTS) {
-    const text = readFileSync(join(SCRIPT_DIR, `${f}.mjs`), 'utf8')
+  for (const file of SCRIPTS) {
+    const f = file.replace(/\.(mjs|sh)$/, '')
+    const text = readFileSync(join(SCRIPT_DIR, file), 'utf8')
     sites += text.split('\n').filter((l) => SITE.test(l) && !/^\s*#/.test(l)).length
     all.push(...findUnmarked(f, text))
   }

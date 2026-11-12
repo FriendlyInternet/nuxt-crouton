@@ -15,7 +15,6 @@
     ".github/workflows/deploy-app.yml › deploy › Wire preview-review bridge config (staging, PR-tied) › run": 54,
     ".github/workflows/e2e.yml › detect › set › run": 56,
     ".github/workflows/fix-ci-on-failure.yml › fixbot › gate › script": 105,
-    ".github/workflows/fix-ci-on-failure.yml › fix › guard › run": 72,
     ".github/workflows/on-comment.yml › approve-draft › #2 › script": 49,
     ".github/workflows/on-comment.yml › approve-epic › #2 › script": 49,
     ".github/workflows/on-comment.yml › dispatch › #2 › script": 54,

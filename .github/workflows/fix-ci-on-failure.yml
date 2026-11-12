@@ -1127,6 +1127,7 @@ jobs:
         id: guard
         env:
           GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PRE: ${{ steps.prefix.outputs.sha }}
           BASE: ${{ needs.fixbot.outputs.base_ref }}
           BRANCH: ${{ needs.fixbot.outputs.head_branch }}
@@ -1137,77 +1138,11 @@ jobs:
           RUN_NAME: ${{ needs.fixbot.outputs.run_name }}
         run: |
           set -euo pipefail
-          HEAD_NOW="$(git rev-parse HEAD)"
-          # Belt and braces: `git push` is disallowed for the agent, but if it pushed anyway the
-          # remote head has moved past $PRE. Judge those commits too; if refused, revert them.
-          git fetch -q origin "$BRANCH"
-          REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
-          PUSHED=0
-          if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
-          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then
-            echo "No fix commit — nothing to push."
-            # #3373: the first-failure ping no longer mentions the owner while the bot is on it, so a
-            # silent no-fix exit would reach nobody. Ping once unless the agent already blocked the issue.
-            if [ -n "${ISSUE:-}" ] && ! gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx 'status:blocked'; then
-              gh pr comment "$PR" --body "<!-- pipeline-note -->
-          🔴 **@pmcp — auto-fix stopped without a fix; \`$RUN_NAME\` is still failing.**
-
-          **Fix:** take a look, then push a fix or reply to resume." || true
-              gh issue edit "$ISSUE" --add-label "status:blocked" || true
-            fi
-            exit 0
-          fi
-          git fetch -q origin "$BASE"
-          git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
-          git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
-          if [ "$PUSHED" = 1 ]; then git diff "$PRE" "$REMOTE_NOW" >> "$RUNNER_TEMP/fix.diff"; fi
-          node -e '
-            const fs = require("fs")
-            import("./scripts/lib/fix-removes-worker-code.mjs").then(({ findRemovedWorkerLines }) => {
-              const r = findRemovedWorkerLines(fs.readFileSync(process.argv[1], "utf8"), fs.readFileSync(process.argv[2], "utf8"))
-              fs.writeFileSync(process.argv[3], JSON.stringify(r))
-              process.exit(r.refuse ? 3 : 0)
-            })
-          ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
-          if [ "$ok" = 1 ]; then
-            if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
-            exit 0
-          fi
-
-          echo "refused=true" >> "$GITHUB_OUTPUT"
-          git reset -q --hard "$PRE"
-          # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
-          # Undo only the fix-bot's own commits; a worker revision pushed meanwhile must survive (#2978).
-          if [ "$PUSHED" = 1 ] && ! bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH" "$HEAD_NOW"; then
-            UNDONE_NOTE="<!-- pipeline-note -->"$'\n'"> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
-            UNDONE_NOTE="$UNDONE_NOTE"$'\n\n'"⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
-            gh pr comment "$PR" --body "$UNDONE_NOTE"
-          fi
-          LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
-          ERR="$(cat "$RUNNER_TEMP/failed-job-logs.md" 2>/dev/null || echo '(could not read the failed job logs — see the failing run)')"
-          {
-            echo "<!-- pipeline-note -->"
-            echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
-            echo
-            echo "🔧 **Auto-fix not pushed: it would delete code this PR was asked to add.** Handing back to the worker to implement the missing piece instead."
-            echo
-            echo "**Lines the fix would remove:**"
-            echo "$LINES"
-            echo
-            echo "<details><summary>CI failure (\`$RUN_NAME\`) the worker should fix</summary>"
-            echo
-            echo "$ERR"
-            echo "[failing run]($RUN_URL)"
-            echo "</details>"
-            echo
-            echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
-          } > "$RUNNER_TEMP/handback.md"
-          PRC_URL="$(gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md")"
-          if [ -n "$ISSUE" ]; then
-            # Comment POST + dispatch are ONE protected hand-off step (#3306): a limit / 5xx saves it for the sweep,
-            # which falls back to the PR comment just posted (an issue-comment id, readable the same way).
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" --arg b "$BRANCH" --arg f "$RUNNER_TEMP/handback.md" --arg p "${PRC_URL##*issuecomment-}" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),branch:$b},postBodyFile:$f,fallbackFeedback:$p}')"
-          fi
+          # The guard logic lives in scripts/fix-bot-guard.sh (#3452), read from the default branch
+          # (trusted, and present even on a PR branch cut before it existed) like commit-ci-fix.sh.
+          git fetch -q origin "$DEFAULT_BRANCH"
+          git show "origin/$DEFAULT_BRANCH:scripts/fix-bot-guard.sh" > "$RUNNER_TEMP/fix-bot-guard.sh"
+          bash "$RUNNER_TEMP/fix-bot-guard.sh"
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace

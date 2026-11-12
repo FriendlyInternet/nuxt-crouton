@@ -80,31 +80,45 @@ export function precheck({ diagnosisBody, rawLog }) {
 }
 
 // ── The model reviewer's verdict file ───────────────────────────────────────────────────────
+/** The body of the `### <name>` section, up to the next `###` heading ('' when absent). */
+function reviewSection(s, name) {
+  const m = new RegExp(`^###\\s+${name}\\s*$`, 'm').exec(s)
+  if (!m) return ''
+  const rest = s.slice(m.index + m[0].length)
+  const end = rest.search(/^###\s/m)
+  return (end < 0 ? rest : rest.slice(0, end)).trim()
+}
+
+/** `- <name>: PASS|FAIL — evidence` lines of the Checks section. */
+function reviewChecks(body) {
+  const checks = []
+  for (const l of body.split('\n')) {
+    const m = /^\s*-\s*([\w-]+):\s*(PASS|FAIL)\b\s*(?:[—–-]\s*)?(.*)$/i.exec(l)
+    if (m) checks.push({ name: m[1].toLowerCase(), pass: m[2].toUpperCase() === 'PASS', evidence: m[3].trim() })
+  }
+  return checks
+}
+
+/** What is wrong with the file's shape: header, verdict word, a missing check. */
+function reviewShapeErrors(s, v, checks) {
+  const errors = []
+  if (!s.includes('<!-- diagnosis-review:v1 -->')) errors.push('the verdict file lacks the `<!-- diagnosis-review:v1 -->` header')
+  if (v !== 'approve' && v !== 'reject') errors.push(`the verdict is \`${v || '(missing)'}\`, not approve or reject`)
+  for (const name of REVIEW_CHECKS) if (!checks.some(c => c.name === name)) errors.push(`check \`${name}\` is missing`)
+  return errors
+}
+
 /**
  * Reads the reviewer's file. Closed by default: a missing/malformed file is `reject` with `errors`.
  * @returns {{ verdict:'approve'|'reject', checks:{ name:string, pass:boolean, evidence:string }[], points:string[], errors:string[] }}
  */
 export function parseReviewVerdict(text) {
   const s = String(text || '')
-  const errors = []
   if (!s.trim()) return { verdict: 'reject', checks: [], points: [], errors: ['no review verdict file (the reviewer did not run or wrote nothing)'] }
-  if (!s.includes('<!-- diagnosis-review:v1 -->')) errors.push('the verdict file lacks the `<!-- diagnosis-review:v1 -->` header')
-  const section = (name) => {
-    const m = new RegExp(`^###\\s+${name}\\s*$`, 'm').exec(s)
-    if (!m) return null
-    const rest = s.slice(m.index + m[0].length)
-    const end = rest.search(/^###\s/m)
-    return (end < 0 ? rest : rest.slice(0, end)).trim()
-  }
-  const v = (section('Verdict') || '').split('\n')[0].trim().toLowerCase()
-  if (v !== 'approve' && v !== 'reject') errors.push(`the verdict is \`${v || '(missing)'}\`, not approve or reject`)
-  const checks = []
-  for (const l of (section('Checks') || '').split('\n')) {
-    const m = /^\s*-\s*([\w-]+):\s*(PASS|FAIL)\b\s*(?:[—–-]\s*)?(.*)$/i.exec(l)
-    if (m) checks.push({ name: m[1].toLowerCase(), pass: m[2].toUpperCase() === 'PASS', evidence: m[3].trim() })
-  }
-  for (const name of REVIEW_CHECKS) if (!checks.some(c => c.name === name)) errors.push(`check \`${name}\` is missing`)
-  const points = (section('Points') || '').split('\n').map(l => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean)
+  const v = reviewSection(s, 'Verdict').split('\n')[0].trim().toLowerCase()
+  const checks = reviewChecks(reviewSection(s, 'Checks'))
+  const errors = reviewShapeErrors(s, v, checks)
+  const points = reviewSection(s, 'Points').split('\n').map(l => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean)
   for (const c of checks) if (!c.pass) points.push(`${c.name}: ${c.evidence || 'failed'}`)
   const verdict = v === 'approve' && !errors.length && checks.every(c => c.pass) ? 'approve' : 'reject'
   return { verdict, checks, points: [...new Set(points)], errors }

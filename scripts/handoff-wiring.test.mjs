@@ -101,14 +101,17 @@ test('push retry is wired: worker pushes call git-push-retry.mjs and the baselin
   assert.match(w, /git-push-retry\.mjs" -u --force-with-lease=/)
   assert.match(w, /git-push-retry\.mjs" -u --force origin/)
   assert.match(w, /cp scripts\/git-push-retry\.mjs "\$RUNNER_TEMP\/git-push-retry\.mjs"/)
-  assert.match(readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8'), /node scripts\/git-push-retry\.mjs origin/)
+  // the fix-bot's push sits in the guard script fix-ci-on-failure.yml runs (#3452)
+  assert.match(readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8'), /scripts\/fix-bot-guard\.sh/)
+  assert.match(readFileSync(join(ROOT, 'scripts/fix-bot-guard.sh'), 'utf8'), /node scripts\/git-push-retry\.mjs origin/)
 })
 
 // Review round (#3306): the READS inside a hand-off and the hand-back comment POST are part of the step.
 // A read/POST outside the guard dies on a rate limit before the guard is ever reached.
 test('reads and the hand-back POST sit inside the protected hand-off step', () => {
   const oc = readFileSync(join(ROOT, '.github/workflows/on-comment.yml'), 'utf8')
-  const fix = readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8')
+  // the fix-bot hand-back moved from the workflow into scripts/fix-bot-guard.sh (#3452): judge both
+  const fix = readFileSync(join(ROOT, '.github/workflows/fix-ci-on-failure.yml'), 'utf8') + readFileSync(join(ROOT, 'scripts/fix-bot-guard.sh'), 'utf8')
   // every pulls.list / pulls.get in on-comment.yml that precedes a dispatch must be within a handoffGuard callback
   const L = oc.split('\n')
   L.forEach((line, i) => {

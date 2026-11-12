@@ -84,25 +84,35 @@ export function stepSets(step) {
 }
 
 /** Every read output that is not declared, as `job: expression — why`. */
+/** Distinct `<kind>.<a>.outputs.<b>` reads in a job, as [whole, a, b]. */
+const outputReads = (text, kind) => [...new Map([...text.matchAll(new RegExp(`${kind}\\.([\\w-]+)\\.outputs\\.([\\w-]+)`, 'g'))].map(x => [x[0], x])).values()]
+
+/** Why one `steps.<id>.outputs.<x>` read is undeclared, or null. */
+function stepReadMiss(steps, [m, id, x]) {
+  const s = steps.find(st => st.id === id)
+  if (!s) return `${m} — no step with id ${id} in this job`
+  const { set, known } = stepSets(s)
+  if (!known) return `${m} — step ${id} uses ${s.uses.split('@')[0]}, outputs unknown (add it to ACTION_OUTPUTS)`
+  return set.has(x) ? null : `${m} — step ${id} never sets ${x}`
+}
+
+/** Why one `needs.<job>.outputs.<x>` read is undeclared, or null. */
+function needsReadMiss(jobs, needs, [m, other, x]) {
+  if (!needs.includes(other)) return `${m} — ${other} is not in this job's needs`
+  return jobs[other] && jobOutputs(jobs[other]).includes(x) ? null : `${m} — not declared on ${other}`
+}
+
 export function undeclaredOutputs(yml) {
   const jobs = splitJobs(yml)
   const missing = []
   for (const [job, text] of Object.entries(jobs)) {
     const steps = stepsOf(text)
-    for (const m of new Set([...text.matchAll(/steps\.([\w-]+)\.outputs\.([\w-]+)/g)].map(x => x[0]))) {
-      const [, id, x] = /steps\.([\w-]+)\.outputs\.([\w-]+)/.exec(m)
-      const s = steps.find(st => st.id === id)
-      if (!s) { missing.push(`${job}: ${m} — no step with id ${id} in this job`); continue }
-      const { set, known } = stepSets(s)
-      if (!known) missing.push(`${job}: ${m} — step ${id} uses ${s.uses.split('@')[0]}, outputs unknown (add it to ACTION_OUTPUTS)`)
-      else if (!set.has(x)) missing.push(`${job}: ${m} — step ${id} never sets ${x}`)
-    }
     const needs = needsOf(text)
-    for (const m of new Set([...text.matchAll(/needs\.([\w-]+)\.outputs\.([\w-]+)/g)].map(x => x[0]))) {
-      const [, other, x] = /needs\.([\w-]+)\.outputs\.([\w-]+)/.exec(m)
-      if (!needs.includes(other)) missing.push(`${job}: ${m} — ${other} is not in this job's needs`)
-      else if (!jobs[other] || !jobOutputs(jobs[other]).includes(x)) missing.push(`${job}: ${m} — not declared on ${other}`)
-    }
+    const why = [
+      ...outputReads(text, 'steps').map(r => stepReadMiss(steps, r)),
+      ...outputReads(text, 'needs').map(r => needsReadMiss(jobs, needs, r)),
+    ]
+    for (const w of why) if (w) missing.push(`${job}: ${w}`)
   }
   return missing
 }
