@@ -244,6 +244,50 @@ jobs:
             done
           fi
 
+  typecheck-packages:
+    needs: [changes, prepare]
+    if: needs.changes.outputs.packages != '[]' || needs.changes.outputs.stage == 'infra'
+    # A type error in any packages/* file fails the PR that introduces it, or the package is
+    # printed as skipped with its ticket (#3126/#3128). The gate/skip lists live in
+    # scripts/typecheck-packages.json; a package on neither list fails this job. On a PR it runs
+    # the changed gate packages plus the gate packages that depend on them; push and infra run all.
+    # Built dist first: devtools takes its types from crouton-feedback's dist.
+    name: Type Check Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download package dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package-dist
+      - run: tar xzf package-dist.tgz
+
+      - name: Type check the packages
+        env:
+          PACKAGES: ${{ needs.changes.outputs.packages }}
+          STAGE: ${{ needs.changes.outputs.stage }}
+          EVENT: ${{ github.event_name }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "push" ] || [ "$STAGE" = "infra" ]; then
+            node scripts/typecheck-packages.mjs
+          else
+            node scripts/typecheck-packages.mjs --only "$(echo "$PACKAGES" | jq -r 'join(",")')"
+          fi
+
   build-kassa:
     needs: [changes, prepare]
     # Only when kassa itself, or a package kassa depends on, changed (the `apps` list is the
@@ -669,7 +713,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, build-kassa, compile-check,
+    needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, typecheck-packages, build-kassa, compile-check,
             test, package-check, node-checks, actionlint, fallow-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 15
