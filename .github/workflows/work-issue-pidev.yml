@@ -292,6 +292,7 @@ jobs:
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-labels.json`, JSON.stringify((data.labels || []).map(l => typeof l === 'string' ? l : l.name))) // #3701: packages-notice + --pr-note
       - id: ctx
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -1329,7 +1330,7 @@ jobs:
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s\n\n%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s\n\n%s%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$(git diff --name-only "$BASE_SHA"..HEAD | node scripts/packages-guard.mjs --pr-note --body "$RUNNER_TEMP/issue-body.txt" --labels "$RUNNER_TEMP/issue-labels.json" 2>/dev/null || true)" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3 # packages note is advisory (#3701): on failure the PR opens without it and the CI check still asks for the line
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
