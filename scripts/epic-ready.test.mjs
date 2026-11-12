@@ -172,6 +172,15 @@ test('buildEpicMainPr: title strips Epic: and is cut to 250', () => {
   assert.equal(title.length, 250)
   assert.ok(title.startsWith('Epic #7: zzz'))
 })
+// #3846 rule: a rolling epic is finished only when every step in its step list has a closed ticket.
+test('10. decideOpen: pending steps of a rolling epic keep the epic→main PR closed', () => {
+  const r = decideOpen({ subIssues: [CLOSED], aheadCount: 2, pendingSteps: 3 })
+  assert.equal(r.open, false)
+  assert.match(r.reason, /step/)
+  assert.equal(decideOpen({ subIssues: [CLOSED], aheadCount: 2, pendingSteps: 0 }).open, true)
+  assert.equal(decideOpen({ subIssues: [CLOSED], aheadCount: 2 }).open, true)
+})
+
 test('buildEpicMainPr: solo-leaf child renders "undefined" title', () => {
   // quirk preserved — see #3619
   assert.ok(mk({ subIssues: [{ number: 9, state: 'closed' }] }).body.includes('- #9 undefined'))

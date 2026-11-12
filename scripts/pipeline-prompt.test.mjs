@@ -54,7 +54,27 @@ test('pi-conflict-resolver without a task is a hard error', () => {
 })
 
 test('pi-decomposer (+ shared dedup rule)', () => {
-  assertGolden(renderPrompt('pi-decomposer', { issue: '1932' }), 'pi-decomposer')
+  assertGolden(renderPrompt('pi-decomposer', { issue: '1932', epic_src: '' }), 'pi-decomposer')
+})
+
+// #3846: the decomposer grades ticket claims against a read-only epic-branch checkout; the path
+// comes from scripts/epic-checkout.mjs (blank for a brand-new epic → the main checkout).
+test('pi-decomposer names the epic-branch checkout it grades against (#3846)', () => {
+  const blank = renderPrompt('pi-decomposer', { issue: '1932', epic_src: '' })
+  const set = renderPrompt('pi-decomposer', { issue: '1932', epic_src: '/tmp/x' })
+  assert.ok(set.includes('EPIC BRANCH CHECKOUT (read-only): `/tmp/x`'))
+  assert.match(blank, /path is empty, the epic has no branch yet and the current checkout \(main\) is its code/)
+  assert.ok(set.includes('ROLLING SPLIT'))
+  assert.throws(() => renderPrompt('pi-decomposer', { issue: '1' }), /missing --var epic_src/)
+})
+
+test('the decomposer workflow passes epic_src and has no step input (#3846: later tickets are written by hand)', () => {
+  const wf = readFileSync(new URL('../.github/workflows/decompose-on-issue-pidev.yml', import.meta.url), 'utf8')
+  assert.match(wf, /pipeline-prompt\.mjs pi-decomposer --var "issue=\$ISSUE" --var "epic_src=\$\(node scripts\/epic-checkout\.mjs --epic "\$ISSUE" --dest "\$RUNNER_TEMP\/epic-src"\)"/)
+  const inputs = wf.slice(wf.indexOf('workflow_dispatch:'), wf.indexOf('\njobs:'))
+  assert.doesNotMatch(inputs, /^\s+step:/m)
+  assert.ok(!wf.includes('step=next'))
+  assert.ok(!/replan/i.test(wf))
 })
 
 test('pi-planner (plan mode, #2755)', () => {

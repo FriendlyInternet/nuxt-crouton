@@ -44,7 +44,9 @@ const BLOCK_RE = /<!--\s*pipeline:\s*([^>]*?)\s*-->/i
 const LEGACY_RE = /^[ \t]*pipeline:\s*(.+?)\s*$/im
 
 // Keys we understand. Anything else in the block is ignored (forward-compatible).
-const INT_KEYS = new Set(['epic', 'depth'])
+// `step` (#3846): which step of a rolling epic's step list this ticket builds. Only present on
+// rolling tickets, so it is set on the parsed object only when the block carries it.
+const INT_KEYS = new Set(['epic', 'depth', 'step'])
 const STR_KEYS = new Set(['epic_branch', 'dispatch', 'base'])
 
 // A value that can actually be a git branch / label name. Anything else (`…`, `<slug>`, `N`) is
@@ -110,10 +112,11 @@ export function parsePipelineBlock(body) {
  * non-null/defined value are emitted, in a stable order (epic, depth, epic_branch, dispatch).
  * Returns null if nothing is worth writing (so callers can skip an empty block).
  */
-export function formatPipelineBlock({ epic, depth, epic_branch, dispatch, base } = {}) {
+export function formatPipelineBlock({ epic, depth, epic_branch, dispatch, base, step } = {}) {
   const toks = []
   if (epic !== null && epic !== undefined && `${epic}` !== '') toks.push(`epic=${epic}`)
   if (depth !== null && depth !== undefined && `${depth}` !== '') toks.push(`depth=${depth}`)
+  if (step !== null && step !== undefined && `${step}` !== '') toks.push(`step=${step}`)
   if (epic_branch) toks.push(`epic_branch=${epic_branch}`)
   if (dispatch) toks.push(`dispatch=${dispatch}`)
   if (base) toks.push(`base=${base}`)

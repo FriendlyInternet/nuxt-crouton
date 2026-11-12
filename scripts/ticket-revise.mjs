@@ -18,24 +18,29 @@
  * comments.json = a JSON array of epic comments `{ body, user: { login, type } }` (the GitHub API shape).
  *   Only the harness bot's own comments count (#3787 review): the repo is public, so anyone can post
  *   a comment that looks like a verdict. Same rule as scripts/lib/build-review-state.mjs.
+ *
+ * `--subject S` (#3846, rolling epics): `plan` or a ticket number. The round, the sent-back list and
+ * the findings are then read only from the verdict comments for that subject (per plan / per ticket
+ * rounds, lib/epic-steps.mjs). Blank or absent = the whole-epic behaviour above.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { HARNESS_BOT, isHarnessBot, countRounds as countSubjectRounds, verdictCommentsFor } from './lib/epic-steps.mjs'
 
+// Moved to lib/epic-steps.mjs (#3846) so lib modules can use it without an import cycle.
+export { HARNESS_BOT, isHarnessBot }
 export const VERDICT_MARKER = '<!-- ticket-review-verdict:'
 export const MAX_ROUNDS = 3
 export const NEEDS_OWNER = /^\s*needs-owner:/i
-export const HARNESS_BOT = 'nuxt-harness[bot]'
-
-/** PURE. Is this comment the harness bot's own? A bare string has no author, so it never is. */
-export const isHarnessBot = (c) =>
-  c?.user?.type === 'Bot' && String(c?.user?.login || '').toLowerCase() === HARNESS_BOT
 const verdictBodies = (comments) =>
   (Array.isArray(comments) ? comments : []).filter(isHarnessBot).map((c) => String(c.body || '')).filter((b) => b.includes(VERDICT_MARKER))
 
-/** PURE. The round of the verdict being posted now: the bot's verdict comments on the epic + 1. */
-export function countRounds(comments) {
-  return verdictBodies(comments).length + 1
+/**
+ * PURE. The round of the verdict being posted now: the bot's verdict comments on the epic + 1.
+ * With a subject (#3846): only that subject's verdict comments count (per plan / per ticket).
+ */
+export function countRounds(comments, subject = '') {
+  return subject ? countSubjectRounds(comments, subject) : verdictBodies(comments).length + 1
 }
 
 /** PURE. What to do after a ticket review: 'go' | 'revise' | 'hold'. */
@@ -56,9 +61,9 @@ export function sentBackFromComment(body) {
   return [...String(body || '').matchAll(/^####\s+❌\s+#(\d+)\b.*—\s*no-go\s*$/gm)].map((m) => Number(m[1]))
 }
 
-/** PURE. The body of the newest harness-bot comment carrying a ticket-review verdict, or ''. */
-export function latestVerdict(comments) {
-  return verdictBodies(comments).at(-1) || ''
+/** PURE. The body of the newest harness-bot comment carrying a ticket-review verdict (for `subject`, when given), or ''. */
+export function latestVerdict(comments, subject = '') {
+  return (subject ? verdictCommentsFor(comments, subject) : verdictBodies(comments)).at(-1) || ''
 }
 
 /** PURE. The ❌ finding lines for ticket n from a rendered verdict comment ('' when none). */
@@ -102,17 +107,22 @@ export function validate(oldBody, newBody) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [mode, a, b] = process.argv.slice(2)
+  const argv = process.argv.slice(2)
+  const si = argv.indexOf('--subject')
+  const subject = si >= 0 ? String(argv.splice(si, 2)[1] || '').trim() : ''
+  const [mode, a, b] = argv
   const read = (f) => readFileSync(f, 'utf8')
   const usage = () => { console.error('usage: ticket-revise.mjs route <decision.json> <comments.json> | sent-back <decision.json> | findings <comments.json> <n> | validate <old> <new>'); process.exit(2) }
   if (mode === 'route' && a && b) {
-    const round = countRounds(JSON.parse(read(b)))
+    const round = countRounds(JSON.parse(read(b)), subject)
     console.log(`${route(JSON.parse(read(a)), round)} ${round}`)
   } else if (mode === 'sent-back' && a) {
     const j = JSON.parse(read(a))
-    console.log(JSON.stringify(Array.isArray(j) ? sentBackFromComment(latestVerdict(j)) : sentBack(j)))
+    const list = Array.isArray(j) ? sentBackFromComment(latestVerdict(j, subject)) : sentBack(j)
+    // A ticket subject rewrites only that ticket, even if the comment also graded others.
+    console.log(JSON.stringify(/^\d+$/.test(subject) ? list.filter((n) => String(n) === subject) : list))
   } else if (mode === 'findings' && a && b) {
-    console.log(findingsFor(latestVerdict(JSON.parse(read(a))), Number(b)))
+    console.log(findingsFor(latestVerdict(JSON.parse(read(a)), subject), Number(b)))
   } else if (mode === 'validate' && a && b) {
     const v = validate(read(a), read(b))
     if (!v.ok) { console.log(v.errors.join('\n')); process.exit(1) }

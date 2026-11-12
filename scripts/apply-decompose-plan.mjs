@@ -20,6 +20,9 @@
 //         "needsSplit": false,                          // false → a leaf child (work-this);
 //         "blockedBy": [0] }                            //   true → needs more decomposition (delegate-pi)
 //   ] }                                                // blockedBy = sibling INDICES this child waits on
+//   { "leaf": false, "steps": [ { "title", "goal", "proves", "blockedBy": [stepIdx], "needsSplit" }, … ],
+//     "children": [ { …one child…, "step": 0 } ] }    // ROLLING split (#3846): the step list + ONLY
+//                                                      //   step 0's ticket; later tickets are written by hand
 //
 // ORDERING (#1750). `blockedBy` is how the decomposer expresses that one leaf cannot start until
 // another lands. A blocked child is created and linked like any other but gets NO trigger label —
@@ -42,8 +45,11 @@ import { SIGNOFF_MARKER, HOLD_HEADING, signoffRoute } from './lib/signoff-route.
 import { diagramEditUrl, DIAGRAM_BRANCH } from './lib/diagram-edit-link.mjs'
 import { saveDiagramScene } from './lib/diagram-branch.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
+import { PlanError, normalizeBlockedBy, assertNoDependencyCycle, normalizeSteps, renderSteps, stepsComment, ROLLING_LABEL } from './lib/epic-steps.mjs'
 
-export class PlanError extends Error {}
+// PlanError + the blockedBy checks live in lib/epic-steps.mjs (#3846) so the step list is validated
+// by the same code; re-exported so existing imports keep working.
+export { PlanError }
 
 /** Parse + validate the plan pi wrote. Throws PlanError on anything malformed (→ honest failure). */
 // fallow-ignore-next-line complexity -- unchanged by #2776; the import added above shifted its line, so fallow's position-based attribution now charges this inherited finding to the PR
@@ -76,6 +82,9 @@ export function parsePlan(raw) {
     }
   }
   if (typeof p.leaf !== 'boolean') throw new PlanError('plan.leaf must be a boolean, or provide a `signoff` object')
+  // #3846 (owner decision 2026-11-12 12:54): no step-list-only rewrite run. A wrong step list holds
+  // the epic and the orchestrator fixes the step-list comment by hand.
+  if (p.step === 'replan') throw new PlanError('step=replan is not supported (#3846): fix the step list by hand')
   if (p.leaf) return { leaf: true, children: [] }
   if (!Array.isArray(p.children) || p.children.length === 0) {
     throw new PlanError('a non-leaf plan must have a non-empty children array')
@@ -99,7 +108,19 @@ export function parsePlan(raw) {
     }
   })
   assertNoDependencyCycle(children)
+  if (p.steps !== undefined) return rollingPlan(p, children)
   return { leaf: false, children }
+}
+
+/**
+ * ROLLING split (#3846): the step list plus ONLY step 0's ticket. Later tickets are written by hand
+ * just before they are built, so they can be graded against the epic branch as it is then.
+ */
+function rollingPlan(p, children) {
+  const steps = normalizeSteps(p.steps)
+  if (children.length !== 1 || p.children[0].step !== 0) throw new PlanError('a rolling plan (with `steps`) has exactly one child: step 0\'s ticket, with "step": 0')
+  if (steps[0].blockedBy.length) throw new PlanError('step 0 cannot wait on another step')
+  return { leaf: false, rolling: true, steps, children: [{ ...children[0], blockedBy: [], step: 0 }] }
 }
 
 /**
@@ -134,36 +155,9 @@ export function withPackageLabels(labels, approved) {
   return approved ? [...new Set([...labels, ...approved.labels])] : labels
 }
 
-/** Validate one child's `blockedBy` → a sorted, de-duped array of in-range sibling indices. */
-function normalizeBlockedBy(raw, self, count) {
-  if (raw === undefined || raw === null) return []
-  const list = Array.isArray(raw) ? raw : [raw]
-  const out = new Set()
-  for (const v of list) {
-    if (!Number.isInteger(v)) throw new PlanError(`child[${self}].blockedBy must contain sibling indices (integers), got ${JSON.stringify(v)}`)
-    if (v === self) throw new PlanError(`child[${self}].blockedBy cannot reference itself`)
-    if (v < 0 || v >= count) throw new PlanError(`child[${self}].blockedBy references sibling ${v}, which does not exist (0..${count - 1})`)
-    out.add(v)
-  }
-  return [...out].sort((a, b) => a - b)
-}
-
-/**
- * A cycle would deadlock the whole tree: every child waits on another, none is ever dispatched,
- * and the epic silently stalls with no worker and no error. Fail LOUD at plan time instead —
- * an honest parse failure is recoverable, a silent stall is the failure mode this issue is about.
- */
-function assertNoDependencyCycle(children) {
-  const state = new Array(children.length).fill(0)   // 0 = unvisited, 1 = on stack, 2 = done
-  const walk = (i, path) => {
-    if (state[i] === 1) throw new PlanError(`child dependency cycle: ${[...path, i].map(n => `child[${n}]`).join(' → ')}`)
-    if (state[i] === 2) return
-    state[i] = 1
-    for (const dep of children[i].blockedBy) walk(dep, [...path, i])
-    state[i] = 2
-  }
-  for (let i = 0; i < children.length; i++) walk(i, [])
-}
+// normalizeBlockedBy / assertNoDependencyCycle (#1750): moved to lib/epic-steps.mjs (#3846). A cycle
+// would deadlock the whole tree, so it fails LOUD at plan time — an honest parse failure is
+// recoverable, a silent stall is not.
 
 /** Keep only labels that actually exist in the repo taxonomy — an unknown label fails `gh issue
  *  create`, which is how pi's fabrication started. Drops (with a returned note) instead of failing. */
@@ -197,8 +191,8 @@ export function parseBlockedBy(body = '') {
 }
 
 /** The child's final body = its markdown + the WS2 pipeline block at childDepth. Pure. */
-export function buildChildBody(body, { epic, childDepth, epic_branch, dispatch = null }) {
-  return writePipelineBlock(body, { epic, depth: childDepth, epic_branch, dispatch })
+export function buildChildBody(body, { epic, childDepth, epic_branch, dispatch = null, step = null }) {
+  return writePipelineBlock(body, { epic, depth: childDepth, epic_branch, dispatch, step })
 }
 
 /**
@@ -228,6 +222,7 @@ export function planToActions(plan, ctx) {
   // comments did nothing until the label was added by hand. `ensure-label`, not `add-label`:
   // this must not force a fresh `labeled` event (that remove-then-add is for trigger labels).
   actions.push({ type: 'ensure-label', issue: target, label: 'epic' })
+  if (plan.rolling) return rollingActions(plan, { target, epic, childDepth, epic_branch, knownLabels }, actions)
   // ORDERING (#1750). Two passes, and the split matters: a `Blocked-by: #N` line can only be
   // written once N exists, so EVERY child must be created before ANY dependency is recorded or
   // any worker dispatched. The old interleaved create→link→label loop dispatched child 0's worker
@@ -264,6 +259,8 @@ export function planToActions(plan, ctx) {
   })
   // TICKET REVIEW (#2776): an unreviewed epic starts nothing. The unblocked children keep their
   // recorded `dispatch=` and wait; ticket-review.yml releases them once the tickets are approved.
+  // A ROLLING split (#3846, rollingActions below) creates only step 0's ticket, posts the step list
+  // and asks for ONE plan review (`subject=plan`); later tickets are written by hand and reviewed alone.
   if (reviewTickets) {
     actions.push({ type: 'request-ticket-review', epic: target })
     return actions
@@ -274,6 +271,29 @@ export function planToActions(plan, ctx) {
   })
   // NB the label in `dispatch=` (recorded above) and the one applied here are the SAME expression —
   // a blocked child must be released with exactly what it would have been dispatched with.
+  return actions
+}
+
+/**
+ * PURE. The rolling split's actions (#3846): label the epic `tickets:rolling`, create + link ONLY step
+ * 0's ticket (its `dispatch=` recorded, `step=0` in its block, NO trigger label), post the step list
+ * with that ticket's number, then ask for one plan review. Nothing starts until the review says go.
+ */
+function rollingActions(plan, { target, epic, childDepth, epic_branch, knownLabels }, actions) {
+  actions.push({ type: 'ensure-label', issue: target, label: ROLLING_LABEL })
+  const c = plan.children[0]
+  const { kept, dropped } = sanitizeLabels(c.labels, knownLabels)
+  const lostPkg = dropped.filter(l => (c.approvedPkgLabels || []).includes(l))
+  if (lostPkg.length) throw new PlanError(`child "${c.title}": unknown package label(s) ${lostPkg.join(', ')} — add to .github/labels.yml`)
+  const dispatch = labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH })
+  actions.push({
+    type: 'create', ref: 'child0', title: c.title,
+    body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch, step: 0 }),
+    labels: kept, droppedLabels: dropped,
+  })
+  actions.push({ type: 'link', parent: target, ref: 'child0' })
+  actions.push({ type: 'post-steps', epic: target, steps: plan.steps, ticketRefs: { 0: 'child0' } })
+  actions.push({ type: 'request-plan-review', epic: target })
   return actions
 }
 
@@ -339,13 +359,13 @@ export function ghCreateIssue(exec, repo, { title, file, labels = [] }) {
  * One small handler per action type (a dispatch table) — each closes over the shared run state.
  */
 export function runActions(actions, { repo, exec = realExec, log = console.error, writeBody = defaultWriteBody } = {}) {
-  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [], blocked: [], pending: [] }
+  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [], blocked: [], pending: [], stepsPosted: [] }
   for (const a of actions) {
     const handler = ACTION_HANDLERS[a.type]
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, pending: state.pending, mockupMissing: !!state.mockupMissing }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, pending: state.pending, stepsPosted: state.stepsPosted, mockupMissing: !!state.mockupMissing }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -548,6 +568,25 @@ const ACTION_HANDLERS = {
       () => exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`]), { ...st, log })
     log(`ticket review requested for epic #${a.epic} — no ticket starts until it is approved`)
   },
+  // Rolling plan review (#3846): same shape as request-ticket-review, for the step list.
+  'request-plan-review'(a, { repo, exec, log, ...st }) {
+    deferHandoff(exec, { kind: 'dispatch', issue: a.epic, workflow: 'ticket-review.yml', inputs: { epic: String(a.epic), subject: 'plan' } },
+      () => exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`, '-f', 'subject=plan']), { ...st, log })
+    log(`plan review requested for rolling epic #${a.epic} — no ticket starts until it is approved`)
+  },
+  // The step list (#3846): one harness-bot comment, edited in place on a re-run of the same split
+  // (newest `<!-- epic-steps:v1 -->` bot comment), else posted new. Records the comment it wrote.
+  'post-steps'(a, { repo, exec, writeBody, refToNumber, stepsPosted }) {
+    const steps = a.steps.map((s) => ({ ...s, ticket: refToNumber[a.ticketRefs?.[s.step]] ?? s.ticket ?? null }))
+    const f = writeBody(`steps-${a.epic}`, renderSteps(steps))
+    const raw = exec('gh', ['api', '--paginate', issueApi(repo, a.epic, '/comments?per_page=100'), '--jq', '.[] | {id, body, user: {login: .user.login, type: .user.type}}'])
+    const comments = String(raw || '').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l))
+    const old = stepsComment(comments)
+    const id = old
+      ? (exec('gh', ['api', '--method', 'PATCH', `repos/${repo}/issues/comments/${old.id}`, '-F', `body=@${f}`, '-q', '.id']), old.id)
+      : Number(exec('gh', ['api', '--method', 'POST', issueApi(repo, a.epic, '/comments'), '-F', `body=@${f}`, '-q', '.id']))
+    if (id) stepsPosted.push({ epic: a.epic, comment: id })
+  },
   // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
   // record of the dependency, and the format is load-bearing, not decoration: the wave scheduler
   // (`wave-gate.mjs` → `parseBlockers`, #283) reads these lines back off the body to decide what a
@@ -597,10 +636,24 @@ function hasLabel(repo, n, label) {
   } catch { return false }
 }
 
-/** #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`). */
-function needsTicketReview(plan, ctx, repo) {
+/** Does the issue have sub-issues? A failed lookup answers true (the rolling guard then asks for the label). */
+function hasChildren(repo, n) {
+  try { return Number(realExec('gh', ['api', issueApi(repo, n, '/sub_issues?per_page=1'), '-q', 'length'])) > 0 } catch { return true }
+}
+
+/**
+ * #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`).
+ * #3846: a rolling plan answers 'rolling' (its plan review is requested by the `request-plan-review`
+ * action) when the epic has no children yet or already carries `tickets:rolling`. An epic that has
+ * children but no label keeps today's whole-set review, so a rolling plan there is refused.
+ */
+export function needsTicketReview(plan, ctx, { hasLabel: has = () => false, hasChildren: kids = () => true } = {}) {
+  if (plan.rolling) {
+    if (has(ctx.target, ROLLING_LABEL) || !kids(ctx.target)) return 'rolling'
+    throw new PlanError(`a rolling plan on #${ctx.target}, which already has sub-issues: add the \`${ROLLING_LABEL}\` label by hand to opt it in (#3846)`)
+  }
   if (plan.leaf || plan.signoff || ctx.depth !== 0 || !shouldReview(plan.children)) return false
-  return !hasLabel(repo, ctx.target, APPROVED_LABEL)
+  return !has(ctx.target, APPROVED_LABEL)
 }
 
 /**
@@ -648,7 +701,7 @@ function main(argv) {
     epic_branch: args['epic-branch'] || '',
     knownLabels: knownLabelsFromFile(),
   }
-  ctx.reviewTickets = needsTicketReview(plan, ctx, args.repo)
+  ctx.reviewTickets = needsTicketReview(plan, ctx, { hasLabel: (n, l) => hasLabel(args.repo, n, l), hasChildren: (n) => hasChildren(args.repo, n) }) === true
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
   console.log(JSON.stringify(summary, null, 2))
@@ -664,6 +717,11 @@ function main(argv) {
   }
   if (!plan.leaf && summary.created.length === 0) {
     console.error('apply produced no children — failing so the artifact-gate stays honest')
+    process.exit(1)
+  }
+  // #3846: check the step list was written rather than assume it.
+  if (plan.rolling && summary.stepsPosted.length === 0) {
+    console.error('rolling plan posted no step list — failing')
     process.exit(1)
   }
 }
