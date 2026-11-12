@@ -65,17 +65,18 @@ function waitOnTestCard({ labels, comments, prFiles, merged }) {
   const waiting = []
   if (labels.includes('status:failed')) waiting.push('test card answered not ok — fix sub-issue')
   else if (labels.includes('status:to-test')) waiting.push('test card waiting on your ok')
-  else if (cardStillComing({ labels, comments, prFiles, merged })) {
+  else if (labels.includes('status:verified')) return waiting
+  // A posted card without the `ok` label still waits: the label lands in a second call after the
+  // card, and a closed-then-reopened epic keeps its card but loses every status:* label.
+  else if (hasPipelineCard(comments)) waiting.push('test card waiting on your ok')
+  else if (merged && (prFiles || []).some(f => fileMatchesAny(f, DEPLOY_PATHS))) {
     waiting.push('test card not posted yet — waits for the staging deploy')
   }
   return waiting
 }
 
-function cardStillComing({ labels, comments, prFiles, merged }) {
-  if (labels.includes('status:verified') || !merged) return false
-  const hasCard = (comments || []).some(c => isPipelineAuthor(c) && String(c.body || '').includes(CARD_MARKER))
-  return !hasCard && (prFiles || []).some(f => fileMatchesAny(f, DEPLOY_PATHS))
-}
+const hasPipelineCard = comments =>
+  (comments || []).some(c => isPipelineAuthor(c) && String(c.body || '').includes(CARD_MARKER))
 
 /** Rule 3: the postmortem is posted (a `skipped` one waits). */
 function waitOnPostmortem(comments) {

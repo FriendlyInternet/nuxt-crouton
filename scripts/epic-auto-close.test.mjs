@@ -67,8 +67,20 @@ test('a card marker planted by a non-bot user is not a card', () => {
   const app = { ...base, prFiles: ['packages/crouton/x.ts'] }
   const d = decideAutoClose({ ...app, comments: [PM, human(`${CARD_MARKER}\nfake`)] })
   assert.ok(has(d, /test card not posted yet/))
-  // …whereas a real (bot) card with no to-test label left (e.g. stripped) no longer waits for one
-  assert.equal(decideAutoClose({ ...app, comments: [PM, CARD] }).action, 'close')
+  // …whereas a real (bot) card is one: it no longer waits for a card to be posted
+  assert.ok(!has(decideAutoClose({ ...app, comments: [PM, CARD] }), /test card not posted yet/))
+})
+test('a bot card with neither status:to-test nor status:verified (label not added yet, or stripped on a reopen) → wait on the ok', () => {
+  for (const prFiles of [['apps/velo/x.vue'], ['scripts/x.mjs']]) {
+    const d = decideAutoClose({ ...base, labels: ['epic'], prFiles, comments: [PM, CARD] })
+    assert.equal(d.action, 'wait')
+    assert.ok(has(d, /test card waiting on your ok/))
+  }
+})
+test('runAutoClose: a reopened epic with its card but no status:* labels → no close', async () => {
+  const w = world({ labels: ['epic'] })
+  await runAutoClose(w.ctx, { epic: '7', via: 'sub-issue' })
+  assert.deepEqual(w.calls, [])
 })
 test('DEPLOY_PATHS matches on.push.paths in deploy-apps.yml (drift guard)', () => {
   const y = readFileSync(new URL('../.github/workflows/deploy-apps.yml', import.meta.url), 'utf8')
