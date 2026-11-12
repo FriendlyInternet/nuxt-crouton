@@ -32,6 +32,7 @@ describe('signed-out routing', () => {
     vi.stubGlobal('useRuntimeConfig', () => ({}))
     vi.stubGlobal('useServerAuth', () => ({ api: { getSession: async () => null } }))
     vi.stubGlobal('getRouterParam', (e: any) => e.app)
+    vi.stubGlobal('getQuery', (e: any) => e.query ?? {})
     vi.stubGlobal('sendRedirect', (_e: unknown, loc: string, code: number) => ({ loc, code }))
     return (await import('../server/api/status/login/[app].get')).default as unknown as (e: unknown) => Promise<any>
   }
@@ -44,5 +45,22 @@ describe('signed-out routing', () => {
   it('a bad slug falls back to /', async () => {
     const h = await loginHandler()
     expect((await h({ app: '../x' })).loc).toBe('/signin?redirect=%2F')
+  })
+
+  // #3840: a PR-preview link must still point at the preview + page after the sign-in mail.
+  it('keeps a valid key and to in the return path', async () => {
+    const h = await loginHandler()
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805', to: '/admin/test1/bookings' } })
+    const back = new URL(loc, 'http://h').searchParams.get('redirect')!
+    expect(back).toBe('/api/status/login/velo?key=pr3805&to=%2Fadmin%2Ftest1%2Fbookings')
+    const u = new URL(back, 'http://h')
+    expect(u.searchParams.get('key')).toBe('pr3805')
+    expect(u.searchParams.get('to')).toBe('/admin/test1/bookings')
+  })
+
+  it('drops a bad key, unsafe to and junk params from the return path', async () => {
+    const h = await loginHandler()
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805x', to: '//evil.com', walk: 'a b', x: '1' } })
+    expect(new URL(loc, 'http://h').searchParams.get('redirect')).toBe('/api/status/login/velo')
   })
 })
