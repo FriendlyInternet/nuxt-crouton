@@ -1,5 +1,5 @@
 import { appTargetFor } from '../../../utils/app-urls'
-import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
+import { reviewLoginUrl, sanitizeWalk, signedOutBackPath, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
 import { loginPlan } from '../../../utils/live-apps-core'
@@ -14,9 +14,8 @@ export default defineEventHandler(async (event) => {
   const session = await useServerAuth(event).api.getSession({ headers: event.headers }).catch(() => null)
   const email = String(session?.user?.email ?? '').trim().toLowerCase()
   if (!email) {
-    // Signed out: send to sign-in and come back here afterwards (path is built from a validated slug).
-    const slug = String(getRouterParam(event, 'app') ?? '')
-    const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}` : '/'
+    // Signed out: send to sign-in and come back here afterwards, keeping the validated key/to/walk (#3840).
+    const back = signedOutBackPath(getRouterParam(event, 'app'), getQuery(event))
     return sendRedirect(event, `/signin?redirect=${encodeURIComponent(back)}`, 302)
   }
   if (!owner || email !== owner) {
