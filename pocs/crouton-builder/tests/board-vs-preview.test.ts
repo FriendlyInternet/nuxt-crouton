@@ -23,6 +23,7 @@ import BoardTree from '../app/components/board/BoardTree.vue'
 import { pageRowTracks } from '../../../packages/crouton-layout/app/utils/layout-viability'
 import { partitionCollapsed } from '../../../packages/crouton-layout/app/utils/layout-responsive'
 import { LAYOUT_RENDER_CONTEXT_KEY } from '../../../packages/crouton-layout/app/composables/useCroutonLayoutRenderContext'
+import { expandGroups } from '../app/utils/board-groups'
 
 const frameWidth = ref(536)
 vi.mock('@vueuse/core', async (orig) => ({
@@ -59,12 +60,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 const BoardPaneStub = defineComponent({ props: ['node'], render() { return h('div', { 'data-pane': (this as any).node.blockId }) } })
+const BoardGroupHandleStub = defineComponent({ render: () => null })
 
 function mountBoard(node: LayoutNode, hidden?: string[]) {
   return mount(BoardTree, {
     props: { node, ...(hidden ? { hidden: new Set(hidden) } : {}) },
     attachTo: document.body,
-    global: { components: { BoardTree, BoardPane: BoardPaneStub } },
+    global: { components: { BoardTree, BoardPane: BoardPaneStub, BoardGroupHandle: BoardGroupHandleStub } },
   })
 }
 
@@ -91,17 +93,19 @@ function mountPreview(node: LayoutNode) {
 // The REAL BoardPane (tests 5/5b): it imports `~/utils/board-drag`, which calls the
 // auto-imported `ref` at module load — so set the globals first, then import it.
 let RealBoardPane: Component
+let RealBoardGroupHandle: Component
 beforeAll(async () => {
   ;(globalThis as Record<string, unknown>).ref = ref
   ;(globalThis as Record<string, unknown>).computed = computed
   RealBoardPane = (await import('../app/components/board/BoardPane.vue')).default
+  RealBoardGroupHandle = (await import('../app/components/board/BoardGroupHandle.vue')).default
 })
 function mountBoardReal(node: LayoutNode, hidden?: string[]) {
   return mount(BoardTree, {
     props: { node, ...(hidden ? { hidden: new Set(hidden) } : {}) },
     attachTo: document.body,
     global: {
-      components: { BoardTree, BoardPane: RealBoardPane, ...rendererComponents, UIcon: defineComponent({ render: () => h('i') }) },
+      components: { BoardTree, BoardPane: RealBoardPane, BoardGroupHandle: RealBoardGroupHandle, ...rendererComponents, UIcon: defineComponent({ render: () => h('i') }) },
     },
   })
 }
@@ -370,5 +374,40 @@ describe('editor rows flow like the page (#3865)', () => {
     expect(el?.dataset.handoff).toBe('board-cell')
     expect(chain.length).toBeGreaterThanOrEqual(2)
     chain.forEach(w => expect(w.classList.contains('h-full')).toBe(true))
+  })
+})
+
+describe('groups on the board (#3906)', () => {
+  const savedGroup = (children: LayoutNode[], extra: Record<string, unknown> = {}): LayoutNode =>
+    ({ type: 'nested', layout: { renderer: 'panes', root: row(children) }, ...extra } as any)
+  const savedRow = () => row([leaf('artists-list', 85), savedGroup([leaf('narrow'), leaf('narrow')], { defaultSize: 15 })])
+
+  it('19 · the list and the group get the same widths on both sides', async () => {
+    const board = mountBoard(expandGroups(savedRow()))
+    await nextTick()
+    within2pct(boardWidths(board), resolveFlexRow(mountPreview(savedRow())).widths)
+  })
+
+  it('20 · every block inside a group keeps its own grip; the group gets one handle and a frame', async () => {
+    const board = mountBoardReal(expandGroups(savedRow()))
+    await nextTick()
+    expect(board.findAll('[data-handoff="pane-grip"]')).toHaveLength(3)
+    expect(board.findAll('[data-handoff="group-grip"]')).toHaveLength(1)
+    const frames = board.findAll('[data-board-group]')
+    expect(frames).toHaveLength(1)
+    expect(frames[0]!.attributes('data-path')).toBe('1')
+  })
+
+  it('21 · a group with one block showing at this width has no frame and no handle', async () => {
+    const tree = () => row([leaf('artists-list'), savedGroup([leaf('artists-stats'), leaf('artists-form')])])
+    const all = mountBoardReal(expandGroups(tree()))
+    await nextTick()
+    expect(all.findAll('[data-handoff="group-grip"]')).toHaveLength(1)
+    const one = mountBoardReal(expandGroups(tree()), ['artists-form'])
+    await nextTick()
+    expect(one.find('[data-handoff="board-only"]').exists()).toBe(true)
+    expect(one.findAll('[data-handoff="pane-grip"]')).toHaveLength(2)
+    expect(one.find('[data-handoff="group-grip"]').exists()).toBe(false)
+    expect(one.find('[data-board-group]').exists()).toBe(false)
   })
 })
