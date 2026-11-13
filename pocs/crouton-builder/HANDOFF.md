@@ -36,7 +36,7 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   frame, and WebKit sizes a `flex:1 1 0` column item to zero without one. Blocks follow the same
   rule (`LayoutCollection`, `LayoutForm`: `admin` fills + scrolls, `page` sizes to content).
 - **The board draws the page's rows (#3865).** Vertical splits are the page's grid
-  (`pageRowTracks`, no row handle); side-by-side rows stay reka (`BoardRow.vue`: widths + handles) but take
+  (`pageRowTracks`, no row handle); side-by-side rows stay reka (in `BoardTree.vue`: widths + handles) but take
   content height, top-aligned (`!h-auto !items-start`); a split with one visible child draws
   that child alone; leaves render `page` context; the frame scrolls as one page. `h-full` /
   `min-height: 100%` only inside a grid cell (`inGridCell`), like the renderer there.

@@ -10,20 +10,21 @@
  *
  * Rows flow like the served page (#3865): a vertical split is the page's content-flow
  * grid (`pageRowTracks`, no row handle); a side-by-side split stays a reka group
- * (BoardRow: widths, minimums, handles) but takes content height and top-aligns its
+ * (widths, minimums, handles) but takes content height and top-aligns its
  * panes; a split with one visible child draws that child in its place (the page does,
  * `partitionCollapsed`).
  *
  * Deliberately in the POC (consume-vs-grow): once it holds up on a phone, the
  * splitter + drop layer is the candidate for extraction into crouton-layout.
  */
+import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { pageRowTracks } from '@fyit/crouton-layout/app/utils/layout-viability'
-import { boardFloorStyle, boardStackThreshold, visibleSubtree } from '../../utils/board-visible'
+import { boardPaneMinPct } from '../../utils/board-pane-min'
+import { boardFloorStyle, boardStackThreshold, toChildSizes, visibleDefaultSizes, visibleSubtree } from '../../utils/board-visible'
 import { useElementSize } from '@vueuse/core'
-import BoardRow from './BoardRow.vue'
 
 defineOptions({ name: 'BoardTree' })
 
@@ -93,9 +94,36 @@ const column = computed(() => {
 })
 // A grid cell sizes like the page's cell; a stacked pane is floored at its block's minimum
 // height — the same number the page's `viewChildStyle` uses.
+const floorStyle = (child: LayoutNode) => boardFloorStyle(child, props.hidden, blocks.value)
 const cellAttrs = (child: LayoutNode) => isVertical.value
   ? { 'class': 'min-h-0 min-w-0 overflow-hidden', 'data-handoff': 'board-cell' }
-  : { class: 'w-full shrink-0', style: boardFloorStyle(child, props.hidden, blocks.value) }
+  : { class: 'w-full shrink-0', style: floorStyle(child) }
+
+// SIDE BY SIDE (not stacked): one reka group with the tested widths, minimums and handles
+// (#3746). Content height, panes top-aligned like the page (#3865): `!h-auto !items-start`
+// beat reka's inline `height: 100%`; the handle stretches to the row so it can still be
+// grabbed; each pane is floored at its block's minimum height. The group remounts when
+// the visible set changes.
+const panelMin = (child: LayoutNode) => props.node.type === 'split'
+  ? boardPaneMinPct(props.node.direction, visibleSubtree(child, props.hidden) ?? child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
+  : 0
+// Visible panes' sizes re-normalised to 100 for reka (#3828); stored sizes are untouched.
+const panelDefaults = computed(() => visibleDefaultSizes(visibleChildren.value.map(v => v.child)))
+const groupKey = computed(() => visibleChildren.value.map(v => v.i).join('-'))
+
+// Only a user resize edits the page (#3746): reka re-reports the min-width clamp on
+// mount / width change, and that must not mark the board unsaved or overwrite the base.
+const userResizing = ref(false)
+function onHandleKey() {
+  userResizing.value = true
+  setTimeout(() => (userResizing.value = false), 0)
+}
+const onDragging = (d: boolean) => (userResizing.value = d)
+function onLayout(sizes: number[]) {
+  if (!userResizing.value || props.node.type !== 'split') return
+  // Back onto the original child indices; hidden children stay undefined (#3828).
+  emit('resize', props.path, toChildSizes(props.node.children, visibleChildren.value.map(v => v.i), sizes))
+}
 </script>
 
 <template>
@@ -135,17 +163,34 @@ const cellAttrs = (child: LayoutNode) => isVertical.value
     </div>
 
     <!-- Side by side: the reka row (widths, minimums, handles), content height, top-aligned. -->
-    <BoardRow
+    <SplitterGroup
       v-else
-      :node="node"
-      :path="path"
-      :selected="selected"
-      :hidden="hidden"
-      :items="visibleChildren"
-      :width="splitWidth"
-      @resize="onChildResize"
-      @select="onChildSelect"
-    />
+      :key="groupKey"
+      :direction="node.direction"
+      class="!h-auto !items-start w-full"
+      @layout="onLayout"
+      @keydown.capture="onHandleKey"
+    >
+      <template v-for="({ child, i }, vi) in visibleChildren" :key="i">
+        <SplitterResizeHandle
+          v-if="vi > 0"
+          class="relative shrink-0 self-stretch bg-border hover:bg-primary data-[state=drag]:bg-primary transition-colors data-[orientation=horizontal]:w-1.5 data-[orientation=vertical]:h-1.5"
+          data-handoff="pane-resize-handle"
+          @dragging="onDragging"
+        />
+        <SplitterPanel :default-size="panelDefaults[vi]" :min-size="panelMin(child)" class="overflow-hidden">
+          <BoardTree
+            :style="floorStyle(child)"
+            :node="child"
+            :path="childPath(i)"
+            :selected="selected"
+            :hidden="hidden"
+            @resize="onChildResize"
+            @select="onChildSelect"
+          />
+        </SplitterPanel>
+      </template>
+    </SplitterGroup>
   </div>
 
   <!-- Leaf or nested app: a pane. Hidden at this width → nothing (its trigger lives elsewhere). -->
