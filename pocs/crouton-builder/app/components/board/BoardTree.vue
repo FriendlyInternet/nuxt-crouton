@@ -85,9 +85,11 @@ const { width: splitWidth } = useElementSize(splitEl)
 const stackThreshold = computed(() => boardStackThreshold(props.node, props.hidden, blocks.value))
 const stacked = computed(() => stackThreshold.value > 0 && splitWidth.value > 0 && splitWidth.value <= stackThreshold.value)
 
-// A COLUMN — the vertical grid or the stacked side-by-side row — is one branch in the
-// template; these hold the two shapes' differences (#3865).
+// A COLUMN — the lone visible child, the vertical grid or the stacked side-by-side row —
+// is one branch in the template; these hold the shapes' differences (#3865). The lone
+// child keeps the split's grid-cell context, so `h-full` carries down to it.
 const column = computed(() => {
+  if (onlyChild.value) return { handoff: 'board-only', class: props.inGridCell ? 'h-full w-full' : 'w-full', style: undefined }
   if (isVertical.value) return { handoff: 'board-grid', class: undefined, style: gridStyle.value }
   if (stacked.value) return { handoff: 'board-stack', class: 'flex w-full flex-col gap-px', style: undefined }
   return null
@@ -95,9 +97,13 @@ const column = computed(() => {
 // A grid cell sizes like the page's cell; a stacked pane is floored at its block's minimum
 // height — the same number the page's `viewChildStyle` uses.
 const floorStyle = (child: LayoutNode) => boardFloorStyle(child, props.hidden, blocks.value)
-const cellAttrs = (child: LayoutNode) => isVertical.value
-  ? { 'class': 'min-h-0 min-w-0 overflow-hidden', 'data-handoff': 'board-cell' }
-  : { class: 'w-full shrink-0', style: floorStyle(child) }
+const cellAttrs = (child: LayoutNode) => {
+  if (onlyChild.value) return { class: props.inGridCell ? 'h-full w-full' : 'w-full' }
+  return isVertical.value
+    ? { 'class': 'min-h-0 min-w-0 overflow-hidden', 'data-handoff': 'board-cell' }
+    : { class: 'w-full shrink-0', style: floorStyle(child) }
+}
+const childInGridCell = computed(() => isVertical.value || (!!onlyChild.value && props.inGridCell))
 
 // SIDE BY SIDE (not stacked): one reka group with the tested widths, minimums and handles
 // (#3746). Content height, panes top-aligned like the page (#3865): `!h-auto !items-start`
@@ -132,30 +138,18 @@ function onLayout(sizes: number[]) {
        like the page (#3865); `h-full` only inside a grid cell, where the cell is stretched by
        its row and a percentage min-height below needs a sized parent. -->
   <div v-if="node.type === 'split'" ref="splitEl" class="w-full" :class="{ 'h-full': inGridCell }" data-handoff="board-split">
-    <!-- ONE visible child (#3865): drawn in the split's place, like the page. -->
-    <BoardTree
-      v-if="onlyChild"
-      :node="onlyChild.child"
-      :path="childPath(onlyChild.i)"
-      :selected="selected"
-      :hidden="hidden"
-      :in-grid-cell="inGridCell"
-      @resize="onChildResize"
-      @select="onChildSelect"
-    />
-
-    <!-- COLUMN: a VERTICAL split is the page's content-flow grid — same row tracks, no row
-         handle (#3865); a STACKED side-by-side row (#2523, narrower than its soft floor) goes
+    <!-- COLUMN: ONE visible child is drawn in the split's place, like the page (#3865); a
+         VERTICAL split is the page's content-flow grid — same row tracks, no row handle; a STACKED side-by-side row (#2523, narrower than its soft floor) goes
          one under the other like the page, each pane floored at its block's minimum. Grips +
          drops stay; no resize handles; the frame scrolls. -->
-    <div v-else-if="column" :class="column.class" :style="column.style" :data-handoff="column.handoff">
+    <div v-if="column" :class="column.class" :style="column.style" :data-handoff="column.handoff">
       <div v-for="({ child, i }) in visibleChildren" :key="i" v-bind="cellAttrs(child)">
         <BoardTree
           :node="child"
           :path="childPath(i)"
           :selected="selected"
           :hidden="hidden"
-          :in-grid-cell="isVertical"
+          :in-grid-cell="childInGridCell"
           @resize="onChildResize"
           @select="onChildSelect"
         />
