@@ -36,6 +36,13 @@
       "when": 1794486217102,
       "tag": "0004_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486218102,
+      "tag": "0005_thin_the_spike",
+      "breakpoints": true
     }
   ]
 }
