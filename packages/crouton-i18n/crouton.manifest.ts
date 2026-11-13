@@ -14,5 +14,12 @@ export default defineCroutonManifest({
   ],
   provides: {
     composables: ['useT'],
+    components: [
+      { name: 'CroutonI18nBlockTranslateTrigger', description: 'Trigger button for translating block-editor fields' },
+      { name: 'CroutonI18nInput', description: 'Per-locale input for translatable fields' },
+      { name: 'CroutonI18nLanguageSwitcher', description: 'Select menu to switch the current language' },
+      { name: 'CroutonI18nListCards', description: 'Translation status badges for an entity' },
+      { name: 'TranslationsUiList', description: 'Searchable list of UI translations' },
+    ],
   },
 })

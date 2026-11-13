@@ -14,6 +14,10 @@ export default defineCroutonManifest({
       {
         name: 'CroutonCalendarWeek',
         description: 'Swipeable week strip (prev · current · next) with a #day slot and a #day-action slot'
+      },
+      {
+        name: 'CroutonCalendarMonth',
+        description: 'Swipeable month grid with a fixed header and weekday row'
       }
     ],
   },
