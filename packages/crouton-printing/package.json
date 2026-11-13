@@ -40,7 +40,7 @@
     }
   },
   "scripts": {
-    "typecheck": "nuxt typecheck",
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "test": "vitest run",

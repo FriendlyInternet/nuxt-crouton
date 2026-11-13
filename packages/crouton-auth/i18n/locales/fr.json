@@ -1,5 +1,8 @@
 {
   "onboarding": {
+    "signOut": "Se déconnecter",
+    "noTeamTitle": "Vous n'êtes pas encore dans une équipe",
+    "noTeamDescription": "Demandez une invitation pour rejoindre une équipe.",
     "createTeamTitle": "Créez Votre Première Équipe",
     "createTeamDescription": "Commencez par créer un espace de travail pour vos projets.",
     "settingUpWorkspace": "Préparation de votre espace de travail",
@@ -7,6 +10,11 @@
   },
   "auth": {
     "resetLinkSentDescription": "Nous avons envoyé un lien de réinitialisation à votre e-mail. Cliquez sur le lien pour réinitialiser votre mot de passe.",
+    "inviteOnly": {
+      "title": "{app} fonctionne uniquement sur invitation",
+      "description": "Demandez une invitation à une équipe. Vous avez déjà un compte ? Connectez-vous.",
+      "thisApp": "Cette application"
+    },
     "magicLinkSentDescription": "Nous avons envoyé un lien magique à votre e-mail. Cliquez sur le lien pour vous connecter.",
     "tryAnotherEmail": "Essayer un autre e-mail",
     "enterEmailAndPassword": "Saisissez votre e-mail et votre mot de passe.",

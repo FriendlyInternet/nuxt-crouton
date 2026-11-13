@@ -13,6 +13,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | Team Creation | `teams: { allowCreate: true, showSwitcher: true }` | SaaS platforms |
 | Default Team | `teams: { defaultTeamSlug: 'acme', allowCreate: false, showSwitcher: false }` | Company apps |
 | Personal Workspace | `teams: { autoCreateOnSignup: true, allowCreate: false, showSwitcher: false }` | Personal apps |
+| Invite-only | `signup: 'invite'` | Closed apps (Velo) — sign-up refused on every path (password, magic link, OAuth) unless the email has a pending invitation (403 `SIGNUP_INVITE_ONLY`, `signupGate` in `server/lib/auth.ts`); server-side `auth.api` calls (admin create-user) still allowed; `RouteModal` hides the "Create account" links |
 
 ### TeamsConfig Flags
 
@@ -20,7 +21,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
 | `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
-| `allowCreate` | Can users create additional teams | true |
+| `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
 | `limit` | Max teams per user (0 = unlimited) | 0 |
@@ -230,6 +231,15 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `twoFactor` - 2FA settings
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
+- `rateLimit` - better-auth rate-limit counters (key = ip|path), shared across instances
+
+### Sign-up & password reset (#3141)
+
+E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.public.crouton.email` exists (only crouton-email defines it). It is read once, in `useServerAuth` via `isEmailVerificationRequired(config)`, and passed to `createAuth({ requireEmailVerification })`, which then sets `requireEmailVerification` + `sendOnSignUp` + `sendOnSignIn` (never a hard-coded `sendOnSignUp: false` — that would require verification but never send the mail). The verify link signs the user in (`autoSignInAfterVerification`) and lands on the sign-up `callbackURL` (`register({ callbackURL })`, sanitized), so an invitee returns to the invite page. `register()` returns `{ requiresVerification }`; the register modal then shows "check your email" instead of signing in. Apps without crouton-email keep instant sign-up. A password reset always revokes every session (`revokeSessionsOnPasswordReset`). Existing users were backfilled as verified (migration `*_verify_existing_users` in every app/POC/fixture). The staging review login (`scripts/seed-review-login.mjs`) looks the account up first and resets + verifies it server-side before signing in.
+
+### Custom Domain Claims
+
+`domain` rows are unique per `(organizationId, domain)`, so a team's unverified (pending) claim never blocks another team. Only one team can hold a *verified* domain (partial unique index `domain_verified_uniq`). `POST /api/teams/[id]/domains` refuses a domain only if another team already has it verified; `.../domains/[domainId]/verify` refuses to verify if another team verified it first (409). Apps need migration `domain_per_team_pending` (kassa 0008, velo 0004).
 
 ### Auth Email Log API
 
@@ -306,9 +316,11 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
 
 **Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
-## Rate Limiting (Recommended)
+## Rate Limiting
 
-Authentication endpoints are prime targets for abuse. We recommend using `nuxthub-ratelimit` for rate limiting.
+Built in: better-auth's limiter runs with `storage: 'database'` (the `rateLimit` table, shared across Worker instances), keyed on `cf-connecting-ip`; sign-in/sign-up allow 3 tries per 10 s and password-reset/verification-email 3 per 60 s per IP; other auth endpoints 100 per 10 s. Not counted: requests without `cf-connecting-ip` (local dev, e2e — and so any deployment not behind Cloudflare has no auth limit) and the page-load reads `/get-session`, `/organization/get-full-organization`, `/organization/list`. Config: `rateLimit` + `advanced.ipAddress` in `server/lib/auth.ts`; behaviour test: `tests/unit/server/rate-limit.test.ts`. Apps need migration `auth_rate_limit` (#3142).
+
+### Optional: broader per-route limits (`nuxthub-ratelimit`)
 
 ### Installation
 
@@ -537,7 +549,7 @@ emailed to the owner). Never write a password into a seed: this repo is public.
 - **Extends**: None (standalone module/layer)
 - **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
 - **Core deps**: better-auth, @better-auth/passkey
-- **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
+- **Optional**: nuxthub-ratelimit (extra per-route limits; auth endpoints are already limited by better-auth's database store)
 
 ## Testing
 

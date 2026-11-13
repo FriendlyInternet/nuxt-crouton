@@ -22,6 +22,34 @@
       "when": 1793051588148,
       "tag": "0002_violet_red_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955340404,
+      "tag": "0003_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793955340405,
+      "tag": "0004_domain_per_team_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486051878,
+      "tag": "0005_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794486195814,
+      "tag": "0006_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

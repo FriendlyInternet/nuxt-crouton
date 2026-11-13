@@ -20,7 +20,10 @@ import { validateRefTargets } from './utils/validate-ref-targets.ts'
 import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type OwnedRefTarget } from './utils/owned-collections.ts'
 import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
+import type { DeferralCause } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
+import { pruneDanglingCollectionRefs } from './utils/prune-dangling-collections.ts'
+import { getAllLayers, getAllCollectionsInLayer } from './utils/layer-discovery.ts'
 import { loadFields } from './utils/load-fields.ts'
 import { validateConfig } from './utils/validate-config.ts'
 import { updateLayerRootConfig, setupLayerI18n } from './utils/layer-config.ts'
@@ -50,6 +53,7 @@ import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
 import { generateCollectionTypesRegistry } from './generators/collection-types-registry.ts'
 import { generateQueryRegistryFile } from './generators/query-registry.ts'
+import { isDependentField } from './utils/list-fields.ts'
 
 // ---------------------------------------------------------------------------
 // Generation History
@@ -106,6 +110,7 @@ interface Field {
   zod: string
   default: string
   tsType: string
+  translatableType?: boolean
 }
 
 interface WriteScaffoldOptions {
@@ -377,9 +382,9 @@ export function buildFieldsSchema(params: {
   const regularFieldsSchema = fields
     .filter(f => f.name !== 'id' && !translatableFieldNames.includes(f.name) && !hierarchyFieldNames.includes(f.name))
     .map((f) => {
-      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+      const dependent = isDependentField(f)
       const hasRepeaterProperties = f.type === 'repeater' && (f.meta?.translatableProperties || f.meta?.properties)
-      let baseZod = isDependentField ? 'z.array(z.string())' : f.zod
+      let baseZod = dependent ? 'z.array(z.string())' : f.zod
       // Dates arrive as ISO strings (forms/JSON) — coerce so validation accepts them.
       if (f.type === 'date') baseZod = 'z.coerce.date()'
       if (hasRepeaterProperties) {
@@ -389,7 +394,7 @@ export function buildFieldsSchema(params: {
       }
       if (f.meta?.required) {
         // Manifest zod as-is; only dependent arrays and text get a non-empty check.
-        if (isDependentField || f.type === 'string' || f.type === 'text') {
+        if (dependent || f.type === 'string' || f.type === 'text') {
           return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
         }
         return `${f.name}: ${baseZod}`
@@ -462,8 +467,8 @@ function buildFieldsDefault(params: {
   const { fields, config, hierarchy, cases } = params
   const hierarchyDefaultNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
   let fieldDefaults = fields.filter(f => f.name !== 'id' && !hierarchyDefaultNames.includes(f.name)).map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    if (isDependentField) {
+    const dependent = isDependentField(f)
+    if (dependent) {
       return `${f.name}: null`
     }
     return `${f.name}: ${f.default}`
@@ -498,8 +503,8 @@ export function buildFieldsTypes(params: {
   const { fields, config, hierarchy, cases } = params
   const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
   const typeLines = fields.filter(f => f.name !== 'id').map((f) => {
-    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-    let tsType = isDependentField ? 'string[] | null' : f.tsType
+    const dependent = isDependentField(f)
+    let tsType = dependent ? 'string[] | null' : f.tsType
     if (f.meta?.required) {
       // Required ⇒ the zod schema enforces a present, non-null value, so the
       // interface must not widen to null (some tsTypes, e.g. date, default to
@@ -667,7 +672,7 @@ function resolveStructureConfig(collectionConfig: Record<string, any> | null, hi
 // Returns the (possibly created or replaced) config object; when translatable
 // fields are found, the existing config's translations map is updated in place
 // so the caller's config object observes the merged field list.
-function resolveTranslationConfig(params: {
+export function resolveTranslationConfig(params: {
   fields: Field[]
   config: Record<string, any> | null
   collectionConfig: Record<string, any> | null
@@ -691,7 +696,7 @@ function resolveTranslationConfig(params: {
         'remarkPrompt', 'terms', 'conditions', 'notes']
       collectionLevelTranslatable = fields
         .filter(f => autoDetectFieldNames.includes(f.name)
-          && (f.type === 'string' || f.type === 'text'))
+          && f.translatableType === true)
         .map(f => f.name)
     }
 
@@ -1228,7 +1233,7 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<MigrationOutcome | null> {
   // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
   // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
   // branch and emit an import to a collection that does not exist, turning a local, obvious
@@ -1263,7 +1268,7 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
 
   if (dryRun) {
     printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
-    return
+    return null
   }
 
   // Check for required modules/dependencies (writes nuxt.config.ts — never in a dry run)
@@ -1308,8 +1313,9 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
   await updateLayerAndRootConfigs({ layer, collection, config, cases })
 
   // Create database table if requested
+  let migration: MigrationOutcome | null = null
   if (!noDb) {
-    await runDatabaseSetup([{ name: collection, layer }], force)
+    migration = await runDatabaseSetup([{ name: collection, layer }], force)
   }
 
   // Update collection registry
@@ -1329,6 +1335,7 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
   }
 
   console.log(`\n✓ Successfully generated collection '${cases.plural}' in layer '${layer}'`)
+  return migration
 }
 
 interface PostGenerationOptions {
@@ -1346,7 +1353,7 @@ interface PostGenerationOptions {
 // WS2). Throws on a HARD failure (duplicate table / drizzle error) so the bin
 // exits non-zero + prints a recipe; a SOFT deferral (unresolvable extends) prints
 // its recipe and returns (exit 0).
-async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
+async function runMigrationStep(appDir: string = process.cwd()): Promise<MigrationOutcome> {
   let result
   try {
     result = await generateMigrations(appDir)
@@ -1359,12 +1366,14 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
   }
   if (result.generated) {
     console.log(`\n✓ Database migration generated`)
-    return
+    return { deferred: false, recipe: [], unresolved: [] }
   }
   if (result.reason === 'deferred') {
-    console.log(`\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
+    console.log(result.cause === 'no-db-generate-script'
+      ? `\n↻ Migration deferred — the app has no db:generate script:`
+      : `\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
     for (const step of result.recipe) console.log(`     ${step}`)
-    return
+    return { deferred: true, cause: result.cause, recipe: result.recipe, unresolved: result.unresolved }
   }
   console.error(`\n✗ Database migration was NOT generated`)
   if (result.detail) console.error(`  ${result.detail}`)
@@ -1374,7 +1383,7 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
 
 // The one database step for both paths: schema index → translations_ui → migration.
 // Throws on any failure so the CLI exits non-zero.
-async function runDatabaseSetup(allCollections: Array<{ name: string; layer: string }>, force: boolean): Promise<void> {
+async function runDatabaseSetup(allCollections: Array<{ name: string; layer: string }>, force: boolean): Promise<MigrationOutcome> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DATABASE SETUP`)
   console.log(`${'═'.repeat(60)}\n`)
@@ -1396,7 +1405,7 @@ async function runDatabaseSetup(allCollections: Array<{ name: string; layer: str
 
   // Generate the migration once for all collections — no Nuxt process (#1445 WS2).
   console.log(`\nRunning database migration...`)
-  await runMigrationStep()
+  return await runMigrationStep()
 }
 
 // Setup the CSS @source directive for Tailwind.
@@ -1468,6 +1477,8 @@ async function composeDefaultLayoutStep(allCollections: Array<{ name: string; la
     if (layoutResult.written) {
       console.log(`✓ Composed default layout (${layoutResult.pattern}${layoutResult.viable ? ', viable' : ', NOT viable — review minWidths'})`)
       console.log(`  → ${layoutResult.path}`)
+    } else if (layoutResult.reason === 'layout not enabled') {
+      console.log('– Skipped default layout (layout not enabled — app does not extend @fyit/crouton-layout)')
     } else {
       console.log(`⚠ Skipped default layout (${layoutResult.reason})`)
     }
@@ -1480,8 +1491,9 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   const { allCollections, config, dryRun, noDb, force } = opts
 
   // Update schema index for all collections and run migration once (unless disabled)
+  let migration: MigrationOutcome | null = null
   if (!noDb && !dryRun && allCollections.length > 0) {
-    await runDatabaseSetup(allCollections, force)
+    migration = await runDatabaseSetup(allCollections, force)
   }
 
   // Setup CSS @source directive for Tailwind
@@ -1496,7 +1508,7 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  ALL DONE!`)
   console.log(`${'═'.repeat(60)}\n`)
-  console.log(`Next step: Restart your Nuxt dev server\n`)
+  console.log(`${formatClosingSummary(migration).join('\n')}\n`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1613,6 +1625,43 @@ export function resolveDialect(config: Record<string, any> | null | undefined): 
   return config?.dialect || 'sqlite'
 }
 
+/** What the migration step did — carried up to the closing summary (#1742). */
+export interface MigrationOutcome {
+  deferred: boolean
+  /** Set when deferred; absent reads as 'unresolved-layers'. */
+  cause?: DeferralCause
+  recipe: string[]
+  unresolved: string[]
+}
+
+// The closing "next steps" lines of `crouton config` / `crouton generate`. A
+// soft-deferred migration is easy to miss mid-log, and missing it means deploying
+// an app with no migrations — so it is restated here as numbered step 1 (#1742).
+// `null` = no migration step ran (noDb / dry run).
+export function formatClosingSummary(outcome: MigrationOutcome | null): string[] {
+  const restart = 'Restart your Nuxt dev server'
+  if (!outcome || !outcome.deferred) return [`Next step: ${restart}`]
+  if (outcome.cause === 'no-db-generate-script') {
+    return [
+      'Next steps:',
+      '  1. Add "db:generate": "drizzle-kit generate" to package.json scripts, then run pnpm db:generate   (migration was deferred — the app has no db:generate script)',
+      `  2. ${restart}`
+    ]
+  }
+  const commands = outcome.recipe
+    .map(step => step.replace(/^cd .+? && /, '').replace(/\s+#.*$/, '').trim())
+    .filter(Boolean)
+  const command = commands.length > 0 ? commands.join(' && ') : 'pnpm db:generate'
+  const why = outcome.unresolved.length > 0
+    ? `layers not yet resolved: ${outcome.unresolved.join(', ')}`
+    : 'layers not yet resolved'
+  return [
+    'Next steps:',
+    `  1. ${command}   (migration was deferred — ${why})`,
+    `  2. ${restart}`
+  ]
+}
+
 // Generate one collection entry from the enhanced config format. Returns the
 // entry to track for the batch db:generate, or null when the collection has no
 // fields file.
@@ -1687,6 +1736,24 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
 
   // Track all collections for batch db:generate
   const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
+
+  // Drop references to collection folders that were deleted (#226) — the stale
+  // barrel would otherwise crash the migration step below.
+  await pruneDanglingCollectionRefs({ dryRun: config.flags?.dryRun || false })
+
+  // Collections on disk but absent from the config stay wired up — warn, never delete.
+  if (!config._onlyCollection) {
+    const configured = new Set<string>(
+      config.targets.flatMap((t: any) => t.collections.map((c: string) => `${t.layer}/${c}`))
+    )
+    for (const layer of await getAllLayers()) {
+      for (const name of await getAllCollectionsInLayer(layer)) {
+        if (!configured.has(`${layer}/${name}`)) {
+          console.log(`! ${layer}/${name} is on disk but not in crouton.config — it stays wired up. To remove it: crouton rollback ${layer} ${name}`)
+        }
+      }
+    }
+  }
 
   // Process each target
   for (const target of config.targets) {
@@ -1828,8 +1895,11 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     throw new Error(`Error loading schema: ${error.message}`, { cause: error })
   }
 
+  // Drop references to deleted collection folders before the migration step loads the barrel (#226)
+  await pruneDanglingCollectionRefs({ dryRun: args.dryRun })
+
   // Proceed with generation
-  await writeScaffold({ ...args, fields })
+  const migration = await writeScaffold({ ...args, fields })
 
   // Generate the type + query registries for type-safe CRUD composables
   if (!args.dryRun) {
@@ -1838,6 +1908,6 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     console.log(`\n${'═'.repeat(60)}`)
     console.log(`  ALL DONE!`)
     console.log(`${'═'.repeat(60)}\n`)
-    console.log(`Next step: Restart your Nuxt dev server\n`)
+    console.log(`${formatClosingSummary(migration).join('\n')}\n`)
   }
 }

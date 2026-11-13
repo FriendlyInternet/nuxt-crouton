@@ -202,6 +202,8 @@ Unlike Nuxt Modules that require complex build steps and configurations, Nuxt La
 
 ## 🔧 Development
 
+**How this repo is built:** [How a ticket becomes a merged change](./docs/pipeline/how-it-works.md) — the agent pipeline, step by step, with where the owner decides.
+
 ### Setup
 
 ```bash

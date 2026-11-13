@@ -32,7 +32,7 @@
     }
   },
   "scripts": {
-    "typecheck": "nuxt typecheck",
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "test": "vitest run",
@@ -67,8 +67,7 @@
     "@fyit/crouton-printing": "workspace:*",
     "@nuxt/ui": "catalog:",
     "@vueuse/integrations": "^13.3.0",
-    "nanoid": "^5.0.0",
-    "reka-ui": "^2.9.0"
+    "nanoid": "^5.0.0"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",

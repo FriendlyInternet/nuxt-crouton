@@ -8,6 +8,27 @@
       "when": 1781523028709,
       "tag": "0000_loving_krista_starr",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793955340408,
+      "tag": "0001_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794486159929,
+      "tag": "0002_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794486201168,
+      "tag": "0003_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

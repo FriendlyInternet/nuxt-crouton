@@ -1,15 +1,18 @@
 <script setup lang="ts">
 /**
  * CroutonLayoutRenderer — renders a layout *data tree* into resizable, nestable
- * panes using reka-ui's Splitter primitives (Sprint 0 #713 → Sprint 1 #704 →
- * runtime min-width enforcement Sprint 3 #706).
+ * panes using Nuxt UI's `USplitter` (Sprint 0 #713 → Sprint 1 #704 →
+ * runtime min-width enforcement Sprint 3 #706 → USplitter #3708).
  *
- * - `split` node → a SplitterGroup with one SplitterPanel per child (recursing),
- *   interleaved with resize handles. Nesting = a group inside a panel. In VIEW mode
- *   (`interactive=false`: a served page / Preview) there's nothing to drag, so it
- *   renders plain flex at the stored proportions instead of reka's SplitterGroup —
- *   avoiding reka's internal ResizeObserver churn (the benign "loop completed" flood,
- *   #983) that a read-only view has no reason to pay for. Same proportions, no handles.
+ * - `split` node → a `USplitter` whose items come from `rendererSplitterItems`
+ *   (one pane per child, recursing), with a resize handle between panes. Nesting =
+ *   a splitter inside a pane. Handles are hidden + disabled when `!interactive`;
+ *   in-place collapse runs through each pane slot's `collapse` / `expand` props
+ *   (decided by `collapseAction`). In VIEW mode (`interactive=false`: a served page /
+ *   Preview) without in-place collapse there's nothing to drag, so it renders plain
+ *   flex at the stored proportions instead of the splitter — avoiding the splitter's
+ *   internal ResizeObserver churn (the benign "loop completed" flood, #983) that a
+ *   read-only view has no reason to pay for. Same proportions, no handles.
  * - `leaf` node  → one block, resolved id → component NAME through the
  *   ALLOWLISTED `croutonLayoutBlocks` registry (#704). An unknown id renders a
  *   safe fallback — NEVER an arbitrary component. Per-block config is sanitized
@@ -17,16 +20,29 @@
  *
  * Min-width enforcement (#710): a horizontal pane refuses to shrink a block
  * below its declared `minWidth` — we measure the live group width and convert
- * each block's px floor to the SplitterPanel's `min-size` (%) via
+ * each block's px floor to the splitter item's `minSize` (%) via
  * `panelMinSizePct`. Splitter primitives are SSR-safe (no <ClientOnly> needed);
  * the floor falls back to the authored `minSize` until the group has measured.
  */
-import { computed, inject, nextTick, provide, ref, watch, type CSSProperties, type Ref } from 'vue'
+import {
+  computed,
+  defineComponent,
+  inject,
+  nextTick,
+  onMounted,
+  provide,
+  ref,
+  watch,
+  type ComponentPublicInstance,
+  type CSSProperties,
+  type PropType,
+  type Ref,
+} from 'vue'
 import { useElementSize, unrefElement } from '@vueuse/core'
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+import { rendererSplitterItems, rendererHandleClass, collapseAction } from '../utils/layout-splitter-items'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import { isInPlaceCollapse } from '@fyit/crouton-core/app/types/layout'
-import { minWidthResolver, panelMinSizePct, deriveSizing } from '../utils/layout-viability'
+import { minWidthResolver, panelMinSizePct, deriveSizing, pageRowTracks } from '../utils/layout-viability'
 import { siblingKeys } from '../utils/layout-flip'
 import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
@@ -100,11 +116,17 @@ const safeConfig = computed<Record<string, unknown>>(() => {
 
 // Live width of THIS split's group → converts each child's px min-width floor
 // to a percentage min-size for its panel (horizontal splits only).
-const groupRef = ref<HTMLElement | null>(null)
+// Measured on ONE wrapper `<div>` (`measureRef`) around the stacked / hug / USplitter branches,
+// so switching between them never changes the measured element. (VueUse resets the width to 0
+// when its target changes, which made a phone stack ↔ splitter loop forever, #3753/#3771.)
+// `groupRef` is a plain ref on the ACTIVE branch (stacked / hug `<div>` or the USplitter
+// instance — `unrefElement` resolves a component to its root), used only by FLIP.
+const measureRef = ref<HTMLElement | null>(null)
+const groupRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
 // A plain ref on the VIEW-mode grid wrapper so FLIP can find its `[data-crouton-pane]` children
 // (#1178 view path). Deliberately NOT `groupRef` — it must never reach `useElementSize` (no RO).
 const viewGridRef = ref<HTMLElement | null>(null)
-const { width: groupWidth, height: groupHeight } = useElementSize(groupRef)
+const { width: groupWidth, height: groupHeight } = useElementSize(measureRef)
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 
 // The width to reason about min-sizes / stacking with: our own measured group width, or — when
@@ -150,10 +172,10 @@ function onLayout(sizes: number[]) {
 // deeper — a pane whose resolved sizing ALONG the split axis is `hug` sizes to its content
 // (`flex: 0 0 auto`) while the `fill` siblings share the rest. Engages ONLY when a split
 // actually contains a hug pane along its axis, so an all-`fill` layout renders through the
-// reka SplitterGroup below byte-for-byte unchanged. Off for the in-place-collapse path
+// USplitter below byte-for-byte unchanged. Off for the in-place-collapse path
 // (which owns its own splitter reflow). NB: direct `fill` siblings of a hug pane share
 // space without a draggable seam here — compose them as a sub-split to keep an inner
-// splitter (that sub-split recurses through the SplitterGroup path).
+// splitter (that sub-split recurses through the USplitter path).
 const hugAlongAxis = computed<boolean[]>(() => {
   if (props.node.type !== 'split') return []
   const horizontal = props.node.direction === 'horizontal'
@@ -195,17 +217,20 @@ const viewGridStyle = computed<CSSProperties>(() => {
   const base: CSSProperties = { gap: '1px', minHeight: '100%', width: '100%' }
   if (props.node.type !== 'split') return { ...base, display: 'grid' }
   if (viewHorizontal.value) {
-    return { ...base, display: 'flex', flexWrap: 'wrap', '--stack-at': `${viewStackThreshold.value}px` }
+    // Top-aligned (#3865, owner rule): the row is as tall as its tallest pane; a shorter pane
+    // keeps its own height at the top instead of stretching. `alignContent` keeps wrapped
+    // (stacked) lines packed at the top inside a fixed-height box (crouton-pages PaneBlock).
+    return { ...base, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', alignContent: 'flex-start', '--stack-at': `${viewStackThreshold.value}px` }
   }
-  const rows = props.node.children
-    .map((_, i) => (hugAlongAxis.value[i] ? 'auto' : `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`))
-    .join(' ')
-  return { ...base, display: 'grid', gridTemplateRows: rows }
+  return { ...base, display: 'grid', gridTemplateRows: pageRowTracks(props.node.children, blocks.value) }
 })
 function viewChildStyle(i: number): CSSProperties {
   if (props.node.type !== 'split' || !viewHorizontal.value) return {}
+  // No longer stretched (#3865), so floor each pane at its block's minimum height — the
+  // same floor the vertical grid uses.
+  const minHeight = `${Math.round(childSizings.value[i]!.minHeight)}px`
   // A hug pane keeps its content width (no block declares width-hug today).
-  if (hugAlongAxis.value[i]) return { flex: '0 0 auto' }
+  if (hugAlongAxis.value[i]) return { flex: '0 0 auto', minHeight }
   const child = props.node.children[i]!
   const size = child.defaultSize ?? (100 / props.node.children.length)
   const floor = Math.round(childSizings.value[i]!.hardMinWidth)
@@ -214,11 +239,12 @@ function viewChildStyle(i: number): CSSProperties {
     flexShrink: '1',
     flexBasis: 'calc((var(--stack-at) - 100%) * 999)',
     minWidth: `min(${floor}px, 100%)`,
+    minHeight,
   }
 }
 
 // --- FLIP reflow on structural change (#943) ------------------------------------
-// When this split's children change (a pane detached, a block inserted), reka-ui rebuilds
+// When this split's children change (a pane detached, a block inserted), the splitter rebuilds
 // the panes at their final sizes — so the survivors would JUMP into place. useLayoutFlip
 // measures each direct pane before the change and tweens it back from its old box, with
 // zero change to keys/sizing (purely a one-shot transform). Off for the collapse path,
@@ -227,23 +253,23 @@ function viewChildStyle(i: number): CSSProperties {
 const childKeys = computed(() => (props.node.type === 'split' ? siblingKeys(props.node.children) : []))
 const flipEnabled = computed(() => props.node.type === 'split' && !inPlace.value)
 const flipPanels = (): HTMLElement[] => {
-  // The reka path attaches `groupRef`; the observer-free VIEW-mode grid path (#1178) does NOT
+  // The USplitter path attaches `groupRef`; the observer-free VIEW-mode grid path (#1178) does NOT
   // (binding `groupRef` there would re-arm the ResizeObserver #1178 removed) — so fall back to
   // `viewGridRef`, a plain element ref NOT fed to `useElementSize`, so FLIP also eases the view
   // panes apart on a structural change. useLayoutFlip measures via getBoundingClientRect (no RO),
   // so covering the view path adds no observer.
   const g = (unrefElement(groupRef) ?? unrefElement(viewGridRef)) as HTMLElement | null
   if (!g) return []
-  // reka-ui panes carry `data-panel`; stacked panes (own render path) carry `data-crouton-pane`.
+  // USplitter panes (reka SplitterPanels underneath) carry `data-panel`; stacked panes (own render path) carry `data-crouton-pane`.
   return Array.from(g.querySelectorAll<HTMLElement>(':scope > [data-panel], :scope > [data-crouton-pane]'))
 }
 useLayoutFlip({ enabled: flipEnabled, keys: childKeys, panels: flipPanels })
 
 // --- In-place collapse: hand a collapsed child's space back to its siblings ---
 // A child panel collapses when ITS WHOLE SUBTREE is collapsed (a half-collapsed
-// split keeps its slot). We drive reka-ui's collapsible panels imperatively so the
-// non-collapsed siblings reflow into the freed space without remounting the tree.
-const panelEls = ref<Array<{ collapse?: () => void, expand?: () => void, isCollapsed?: boolean } | null>>([])
+// split keeps its slot). We drive the splitter's collapsible panels through each pane
+// slot's `collapse` / `expand` (see `PaneCollapseSync`) so the non-collapsed siblings
+// reflow into the freed space without remounting the tree.
 const childCollapsed = computed<boolean[]>(() => {
   const c = collapseCtx.value
   if (props.node.type !== 'split' || !inPlace.value || !c) return []
@@ -259,27 +285,33 @@ const collapsedPct = computed(() => {
 })
 
 // WS6 #875 follow-up: the PANE's own collapse/expand animates, not just the handle.
-// reka-ui sizes a panel via inline `flex-grow`; the per-style transition class on the
-// panel (present whenever an in-place style is active — see the template) tweens the
+// USplitter's panels are sized by inline `flex-grow`; the per-style transition class on
+// the panel (set via the item's `class` whenever an in-place style is active) tweens the
 // shrink in BOTH directions, and siblings reflow into the freed space as their grow
-// rebalances. We still drive reka-ui's collapsible panels imperatively so a fully
-// -collapsed subtree hands its slot back to its siblings.
-watch(
-  () => childCollapsed.value.join(','),
-  () => {
-    if (props.node.type !== 'split' || !inPlace.value) return
-    nextTick(() => {
-      childCollapsed.value.forEach((want, i) => {
-        const p = panelEls.value[i]
-        if (!p) return
-        const is = Boolean(p.isCollapsed)
-        if (want && !is) p.collapse?.()
-        else if (!want && is) p.expand?.()
-      })
-    })
+// rebalances. A renderless `PaneCollapseSync` inside each pane slot drives that panel's
+// `collapse()` / `expand()` so a fully-collapsed subtree hands its slot back to its siblings.
+const PaneCollapseSync = defineComponent({
+  name: 'PaneCollapseSync',
+  props: {
+    want: { type: Boolean, default: undefined },
+    collapsed: { type: Boolean, required: true },
+    collapse: { type: Function as PropType<() => void>, required: true },
+    expand: { type: Function as PropType<() => void>, required: true },
   },
-  { flush: 'post', immediate: true },
-)
+  setup(p) {
+    const sync = () => {
+      const a = collapseAction(p.want, p.collapsed)
+      if (a === 'collapse') p.collapse()
+      else if (a === 'expand') p.expand()
+    }
+    // The panel registers with its group in ITS onMounted, which runs after this child's → defer.
+    onMounted(() => nextTick(sync))
+    // Only a change in the WANTED state syncs. `collapsed` is read inside `sync`, never watched —
+    // so a pane the user drags shut in interactive mode is left alone.
+    watch(() => p.want, sync, { flush: 'post' })
+    return () => null
+  },
+})
 </script>
 
 <template>
@@ -339,8 +371,8 @@ watch(
        page / Preview) has nothing to drag, so it is laid out from the declared sizing contract
        with ZERO ResizeObserver and NO generated CSS (see `viewGridStyle` / `viewChildStyle`):
        a horizontal split is a wrapping flex row that stacks at its soft floor via the inline
-       `--stack-at` variable; a vertical split is a content-flow grid. No reka SplitterGroup
-       (its observer flooded the console). Excludes in-place-collapse (still reka). -->
+       `--stack-at` variable; a vertical split is a content-flow grid. No USplitter
+       (its observer flooded the console). Excludes in-place-collapse (still USplitter). -->
   <div
     v-else-if="node.type === 'split' && !interactive && !inPlace"
     ref="viewGridRef"
@@ -362,87 +394,91 @@ watch(
     </div>
   </div>
 
-  <!-- Split, STACKED — too narrow to fit side-by-side, so the columns reflow to a
-       full-width vertical stack (responsive reflow, #852 follow-up). `groupRef` stays on
-       it so the live width keeps measuring: widen past the fit threshold and it flips
-       back to the SplitterGroup below. No resize handles (you don't drag stacked panes). -->
+  <!-- Split, MEASURED wrapper (#3771) — the stacked / hug / USplitter branches all sit inside
+       this one `<div>`, which is what `useElementSize` measures (`measureRef`). Switching
+       between the branches never changes the measured element, so the width never resets to
+       0 mid-switch (that reset made a phone stack ↔ splitter loop forever, #3753). -->
   <div
-    v-else-if="node.type === 'split' && shouldStack"
-    ref="groupRef"
-    class="flex h-full w-full flex-col gap-px overflow-y-auto"
-  >
-    <div
-      v-for="(child, i) in node.children"
-      :key="i"
-      data-crouton-pane
-      class="croutonpane min-h-72 w-full shrink-0"
-    >
-      <CroutonLayoutRenderer
-        :node="child"
-        :interactive="interactive"
-        @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
-      />
-    </div>
-  </div>
-
-  <!-- Split with a HUG pane (#986 UI half) — a pane whose declared sizing along the
-       split axis is `hug` sizes to its content (`flex:0 0 auto`); `fill` siblings share
-       the rest. A plain flex layout (no reka splitter — you don't drag against a content
-       -sized bar). `groupRef` stays on it so width keeps measuring. -->
-  <div
-    v-else-if="node.type === 'split' && hasHug"
-    ref="groupRef"
-    class="flex h-full w-full gap-px"
-    :class="node.direction === 'horizontal' ? 'flex-row overflow-x-auto' : 'flex-col overflow-y-auto'"
-  >
-    <div
-      v-for="(child, i) in node.children"
-      :key="i"
-      data-crouton-pane
-      class="croutonpane min-h-0 min-w-0"
-      :style="hugAlongAxis[i] ? 'flex:0 0 auto' : 'flex:1 1 0'"
-    >
-      <CroutonLayoutRenderer
-        :node="child"
-        :interactive="interactive"
-        @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
-      />
-    </div>
-  </div>
-
-  <!-- Split -->
-  <SplitterGroup
     v-else-if="node.type === 'split'"
-    ref="groupRef"
-    :direction="node.direction"
+    ref="measureRef"
     class="h-full w-full"
-    @layout="onLayout"
   >
-    <template
-      v-for="(child, i) in node.children"
-      :key="i"
+    <!-- Split, STACKED — too narrow to fit side-by-side, so the columns reflow to a
+         full-width vertical stack (responsive reflow, #852 follow-up). The wrapper keeps
+         measuring: widen past the fit threshold and it flips back to the USplitter below.
+         No resize handles (you don't drag stacked panes). -->
+    <div
+      v-if="shouldStack"
+      ref="groupRef"
+      class="flex h-full w-full flex-col gap-px overflow-y-auto"
     >
-      <SplitterResizeHandle
-        v-if="i > 0 && interactive"
-        class="bg-border hover:bg-primary transition-colors data-[orientation=horizontal]:w-px data-[orientation=vertical]:h-px"
-      />
-      <SplitterPanel
-        :ref="(el: any) => { panelEls[i] = el }"
-        :default-size="inPlace && childCollapsed[i] ? collapsedPct : (child.defaultSize ?? (100 / node.children.length))"
-        :min-size="inPlace && childCollapsed[i] ? collapsedPct : panelMin(child)"
-        :collapsible="inPlace || undefined"
-        :collapsed-size="inPlace ? collapsedPct : undefined"
-        class="overflow-hidden"
-        :class="inPlace && collapseCtx ? `mq-co-${collapseCtx.style}` : ''"
+      <div
+        v-for="(child, i) in node.children"
+        :key="i"
+        data-crouton-pane
+        class="croutonpane min-h-72 w-full shrink-0"
       >
         <CroutonLayoutRenderer
           :node="child"
           :interactive="interactive"
           @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
         />
-      </SplitterPanel>
-    </template>
-  </SplitterGroup>
+      </div>
+    </div>
+
+    <!-- Split with a HUG pane (#986 UI half) — a pane whose declared sizing along the
+         split axis is `hug` sizes to its content (`flex:0 0 auto`); `fill` siblings share
+         the rest. A plain flex layout (no splitter — you don't drag against a content
+         -sized bar). The wrapper keeps measuring the width. -->
+    <div
+      v-else-if="hasHug"
+      ref="groupRef"
+      class="flex h-full w-full gap-px"
+      :class="node.direction === 'horizontal' ? 'flex-row overflow-x-auto' : 'flex-col overflow-y-auto'"
+    >
+      <div
+        v-for="(child, i) in node.children"
+        :key="i"
+        data-crouton-pane
+        class="croutonpane min-h-0 min-w-0"
+        :style="hugAlongAxis[i] ? 'flex:0 0 auto' : 'flex:1 1 0'"
+      >
+        <CroutonLayoutRenderer
+          :node="child"
+          :interactive="interactive"
+          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+        />
+      </div>
+    </div>
+
+    <!-- Split — USplitter (interactive, and view-only in-place collapse). Handles are
+         hidden + disabled when `!interactive`. -->
+    <USplitter
+      v-else
+      ref="groupRef"
+      :orientation="node.direction"
+      :items="rendererSplitterItems(node, panelMin, inPlace && collapseCtx ? { collapsed: childCollapsed, pct: collapsedPct, style: collapseCtx.style } : null)"
+      :disabled="!interactive"
+      class="h-full w-full"
+      :ui="{ handle: rendererHandleClass(node.direction, interactive) }"
+      @layout="onLayout"
+    >
+      <template #pane="{ index, collapsed, collapse, expand }">
+        <PaneCollapseSync
+          v-if="inPlace"
+          :want="childCollapsed[index]"
+          :collapsed="collapsed"
+          :collapse="collapse"
+          :expand="expand"
+        />
+        <CroutonLayoutRenderer
+          :node="node.children[index]!"
+          :interactive="interactive"
+          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+        />
+      </template>
+    </USplitter>
+  </div>
 </template>
 
 <style scoped>
@@ -457,14 +493,16 @@ watch(
 }
 
 /* WS6 #875 follow-up — the pane's own collapse/expand motion, one curve per style
-   (armed only while `animating`, so interactive divider drags stay snappy). reka-ui
-   drives the panel via inline `flex-grow`; transitioning it tweens the shrink and the
+   (armed only while `animating`, so interactive divider drags stay snappy). USplitter
+   sizes the panel via inline `flex-grow`; transitioning it tweens the shrink and the
    siblings reflowing into the freed space. The collapse *handle* adds its signature
-   in-pane motion on top — together the four styles read distinctly. */
-.mq-co-spring-drawer  { transition: flex-grow .52s cubic-bezier(.34, 1.56, .64, 1); }   /* overshoot — springs shut */
-.mq-co-crt-power-down { transition: flex-grow .30s cubic-bezier(.85, 0, .97, .27); }     /* snappy — powers off */
-.mq-co-iris-portal    { transition: flex-grow .46s cubic-bezier(.65, 0, .35, 1); }       /* smooth iris */
+   in-pane motion on top — together the four styles read distinctly.
+   `:deep()` because the panels render inside USplitter's template, so they don't carry
+   this component's scope attribute (USplitter's root does). */
+:deep(.mq-co-spring-drawer)  { transition: flex-grow .52s cubic-bezier(.34, 1.56, .64, 1); }   /* overshoot — springs shut */
+:deep(.mq-co-crt-power-down) { transition: flex-grow .30s cubic-bezier(.85, 0, .97, .27); }     /* snappy — powers off */
+:deep(.mq-co-iris-portal)    { transition: flex-grow .46s cubic-bezier(.65, 0, .35, 1); }       /* smooth iris */
 @media (prefers-reduced-motion: reduce) {
-  .mq-co-spring-drawer, .mq-co-crt-power-down, .mq-co-iris-portal { transition: none; }
+  :deep(.mq-co-spring-drawer), :deep(.mq-co-crt-power-down), :deep(.mq-co-iris-portal) { transition: none; }
 }
 </style>

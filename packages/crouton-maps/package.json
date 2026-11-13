@@ -44,7 +44,7 @@
     "@nuxt/ui": "^4.3.0"
   },
   "scripts": {
-    "test": "vitest run",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt prepare --extends ../crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
+    "test": "vitest run"
   }
 }

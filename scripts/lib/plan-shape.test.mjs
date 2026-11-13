@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parsePlan, parseAssumptions, PLAN_MARKER } from './plan-shape.mjs'
+import { parsePlan, parseAssumptions, parseDocs, PLAN_MARKER } from './plan-shape.mjs'
 
 const A_OK = '- The bug is in foo — Why: the stack trace ends there — Evidence: https://github.com/o/r/blob/abc/foo.ts#L10 — Status: verified'
 
@@ -21,6 +21,7 @@ const plan = (over = {}) => {
     Files: '- foo.ts',
     Test: 'foo.test.ts',
     Assumptions: A_OK,
+    Docs: 'none — test fixture',
     'Needs owner': 'no — mechanical',
     ...over,
   }
@@ -64,12 +65,35 @@ test('an assumption with no evidence is malformed', () => {
 })
 
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
-  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
+  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /checkable proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
 })
 
 test('status must be verified or unverified', () => {
   assert.ok(parseAssumptions('- c — Why: w — Evidence: https://x.dev — Status: probably').errors.some((e) => /Status/.test(e)))
+})
+
+// #3271 — Status is its first word; verified evidence may be a link, a commit SHA or path:line / path#Lnn.
+const pa = (ev, st) => parseAssumptions(`- c — Why: w — Evidence: ${ev} — Status: ${st}`)
+
+test('Status reads first word; trailing reason allowed', () => {
+  const r = pa('no staging access', 'unverified (could not reach staging)')
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.items[0].status, 'unverified')
+  assert.ok(pa('x', 'maybe').errors.some((e) => /Status/.test(e)))
+})
+
+test('verified evidence forms', () => {
+  assert.ok(pa('I looked at it', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.ok(pa('defaced', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs:74', 'verified').errors, [])
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs#L74', 'verified').errors, [])
+  assert.deepEqual(pa('commit dd1b002a4', 'verified').errors, [])
+  assert.deepEqual(pa('https://x.dev/a', 'verified').errors, [])
+})
+
+test('unverified needs no evidence form', () => {
+  assert.deepEqual(pa('could not check', 'unverified').errors, [])
 })
 
 // #3149 — a re-plan (--revised) must carry a "Ticket re-read" section.
@@ -127,4 +151,56 @@ test('CLI: --revised before or after the file fails a plan missing the section',
 test('#3359 marker not on the first line is rejected', () => {
   const r = parsePlan(`intro text\n${PLAN_MARKER}\n`)
   assert.ok(r.errors.some((e) => e.includes('must be the first line')))
+})
+
+const D_OK = '- a.md:3 "x" — Status: checked — Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 — Regression: no — Edit: none needed'
+
+test('docs: missing section → malformed', () => {
+  const r = parsePlan(plan({ Docs: null }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /Docs/.test(e)))
+})
+
+test('docs: bare "none" → malformed', () => {
+  const r = parsePlan(plan({ Docs: 'none' }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /reason/.test(e)))
+})
+
+test('docs: "none — pure refactor" → ok', () => {
+  const r = parsePlan(plan({ Docs: 'none — pure refactor' }))
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.docs, [])
+})
+
+test('docs: a row missing Status → malformed', () => {
+  const r = parsePlan(plan({ Docs: '- a.md:3 "x" — Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 — Regression: no — Edit: none' }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /docs row 1: .*Status/.test(e)))
+})
+
+test('docs: a valid two-row table → ok', () => {
+  const table = [
+    '| Claim | Status | Evidence | Regression | Edit |',
+    '|---|---|---|---|---|',
+    '| a.md:3 "x" | Status: checked | Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 | Regression: no | Edit: none needed |',
+    '| b.md:9 "y" | Status: wrong | Regression: yes | Debt: fixed in follow-up |',
+  ].join('\n')
+  const r = parsePlan(plan({ Docs: table }))
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.docs.length, 2)
+})
+
+test('docs: checked needs a permalink; can\'t tell does not', () => {
+  const bare = parseDocs('- a.md:3 "x" — Status: checked — Evidence: scripts/a.ts — Regression: no — Edit: none')
+  assert.ok(bare.errors.some((e) => /permalink/.test(e)))
+  const branch = parseDocs('- a.md:3 "x" — Status: checked — Evidence: https://github.com/o/r/blob/main/a.ts — Regression: no — Edit: none')
+  assert.ok(branch.errors.some((e) => /permalink/.test(e)))
+  assert.deepEqual(parseDocs('- a.md:3 "x" — Status: can\'t tell — Regression: no — Debt: unknown').errors, [])
+  assert.deepEqual(parseDocs(D_OK).errors, [])
+})
+
+test('docs: neither Edit nor Debt, or a bad Regression → malformed', () => {
+  assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: no').errors.some((e) => /Edit/.test(e)))
+  assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: maybe — Edit: x').errors.some((e) => /Regression/.test(e)))
 })

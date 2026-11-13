@@ -9,6 +9,8 @@ name: On PR close
 #   cleanup-epic-branch  cleanup-epic-branches.yml      (PR path, #2788)
 #   close-linked-issues  schedule-waves.yml             (PR path, #283)
 #   release-traffic      traffic-release.yml            (#2786)
+#   owner-quiz           NEW (#3715) → owner-quiz.yml (reusable; also dispatchable by hand)
+#   postmortem           NEW (#3425) → postmortem.yml (reusable; also dispatchable by hand)
 #
 # `clear-blocked` and on-issue-close.yml's `release` are the only two places that remove
 # `status:blocked`. Token rule unchanged: jobs whose writes must cascade use the Harness App
@@ -180,6 +182,57 @@ jobs:
           script: |
             const { closeLinkedIssues } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/wave-release.mjs`)
             await closeLinkedIssues({ github, context, core })
+      - name: Tick Merged for v1 PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            // #3501: GitHub (not automerge-epic-subpr) merges a v1 PR, so the "Merged" tick happens here, whoever merged it.
+            const { isV1Base } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
+            const pr = context.payload.pull_request
+            if (!isV1Base(pr.base.ref)) return
+            const { issueFromPrBody } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/flow-checklist.mjs`)
+            const closes = issueFromPrBody(pr.body || '')
+            if (!closes) { core.info('v1 PR without a Closes line — no tick.'); return }
+            require('node:child_process').execFileSync('node', ['scripts/flow-checklist.mjs', String(closes), 'merged', '--link', pr.html_url],
+              { env: { ...process.env, GH_TOKEN: process.env.FLOW_TOKEN, GITHUB_REPOSITORY: `${context.repo.owner}/${context.repo.repo}` }, stdio: 'inherit' })
+
+  owner-quiz:
+    # (#3715) A product epic (or a work-<N> ticket) merged to main → a 3–5 question owner quiz on
+    # the epic. owner-quiz.yml decides whether it is product work (app:* / pkg:*) and posts once per
+    # PR. Never blocks anything, never touches a label.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      (startsWith(github.event.pull_request.head.ref, 'epic/') ||
+       startsWith(github.event.pull_request.head.ref, 'work-'))
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    uses: ./.github/workflows/owner-quiz.yml
+    with:
+      pr: ${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  postmortem:
+    # (#3425) An epic → main PR merged → the pipeline writes the epic's postmortem, once.
+    # postmortem.yml decides (every sub-issue closed, no trusted marker yet) and never blocks.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'epic/')
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/postmortem.yml
+    with:
+      head_ref: ${{ github.event.pull_request.head.ref }}
+    secrets: inherit
 
   release-traffic:
     # (#2786) A pipeline PR (`work-<n>`) closing frees a slot: re-check every ticket parked by the

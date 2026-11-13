@@ -1,0 +1,1 @@
+{"id":4,"attempt":1,"workflow":"loop-station-refresh.yml","event":"push","branch":"main","sha":"abc","prs":[],"created":"2026-11-10T10:51:07Z","started":"2026-11-10T10:51:07Z","ended":"2026-11-10T10:51:07Z","status":"completed","conclusion":"failure"}

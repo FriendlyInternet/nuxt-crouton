@@ -3,6 +3,7 @@ import type { CroutonAuthConfig } from '../../../types/config'
 
 // Import after mocks
 import {
+  buildOrganizationConfig,
   createAuth,
   isTwoFactorEnabled,
   getTwoFactorInfo,
@@ -45,6 +46,12 @@ vi.mock('drizzle-orm/d1', () => ({
     run: mockDbRun,
     all: mockDbAll
   })
+}))
+
+// The invitation hook dispatch (#3143): resolves by default, a test can make it reject.
+const mockCallHook = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('nitropack/runtime', () => ({
+  useNitroApp: () => ({ hooks: { hook: () => {}, callHook: mockCallHook } })
 }))
 
 vi.mock('drizzle-orm', () => ({
@@ -386,5 +393,87 @@ describe('Configuration patterns (flag-based)', () => {
       expect(config.teams?.autoCreateOnSignup).toBe(true)
       expect(config.teams?.allowCreate).toBe(false)
     })
+  })
+})
+
+describe('allowCreate: superAdmin mapping', () => {
+  const resolve = (allowCreate: boolean | 'superAdmin') =>
+    (buildOrganizationConfig({ teams: { allowCreate } } as CroutonAuthConfig) as {
+      allowUserToCreateOrganization: boolean | ((u: unknown) => boolean)
+    }).allowUserToCreateOrganization
+
+  it('refuses a stranger', () => {
+    const fn = resolve('superAdmin') as (u: unknown) => boolean
+    expect(fn({ role: 'user' })).toBe(false)
+    expect(fn(null)).toBe(false)
+  })
+  it('allows role admin', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'admin' })).toBe(true)
+  })
+  it('allows superAdmin: true with role user', () => {
+    expect((resolve('superAdmin') as (u: unknown) => boolean)({ role: 'user', superAdmin: true })).toBe(true)
+  })
+  it('leaves true/false unchanged', () => {
+    expect(resolve(true)).toBe(true)
+    expect(resolve(false)).toBe(false)
+  })
+  it('unset allowCreate defaults to true', () => {
+    const cfg = buildOrganizationConfig({ teams: {} } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(true)
+  })
+  it('unset allowCreate with defaultTeamSlug defaults to false', () => {
+    const cfg = buildOrganizationConfig({ teams: { defaultTeamSlug: 'acme' } } as CroutonAuthConfig) as { allowUserToCreateOrganization: unknown }
+    expect(cfg.allowUserToCreateOrganization).toBe(false)
+  })
+})
+
+// #3143 — invite logs never carry the invitee's email or the invite id (the
+// secret in the accept link), and say nothing at all unless `debug` is on.
+describe('sendInvitationEmail logging', () => {
+  const invite = {
+    id: 'inv_123',
+    email: 'alice@example.com',
+    organization: { name: 'Acme', id: 'org_1' },
+    inviter: { user: { name: 'Bob', email: 'bob@example.com' } },
+    role: 'member',
+    expiresAt: new Date()
+  }
+  const send = (debug: boolean) =>
+    (buildOrganizationConfig({ debug, teams: {} } as CroutonAuthConfig) as {
+      sendInvitationEmail: (d: typeof invite) => Promise<void>
+    }).sendInvitationEmail(invite)
+  const leaks = (calls: unknown[][]) =>
+    calls.flat().some(a => String(a instanceof Error ? a.message : a).match(/alice@example\.com|inv_123/))
+
+  let log: ReturnType<typeof vi.spyOn>
+  let error: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    mockCallHook.mockReset()
+    mockCallHook.mockResolvedValue(undefined)
+    log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    error = vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    log.mockRestore()
+    error.mockRestore()
+  })
+
+  it('debug off → no console.log at all', async () => {
+    await send(false)
+    expect(mockCallHook).toHaveBeenCalledWith('crouton:auth:email', expect.objectContaining({ type: 'invitation', to: 'alice@example.com' }))
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('debug on → logged, without the email or invite id', async () => {
+    await send(true)
+    expect(log).toHaveBeenCalled()
+    expect(leaks(log.mock.calls)).toBe(false)
+  })
+
+  it('hook failure → console.error without the email or invite id', async () => {
+    mockCallHook.mockRejectedValue(new Error('boom'))
+    await send(false)
+    expect(error).toHaveBeenCalled()
+    expect(leaks(error.mock.calls)).toBe(false)
   })
 })

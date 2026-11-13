@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `teams.allowCreate: 'superAdmin'` — restrict team creation to super-admin users (`canCreateTeam` is false for everyone else)
+- `signup: 'open' | 'invite'` — invite-only sign-up, enforced in a `user.create.before` hook (password, magic link, OAuth); the auth modal hides "Create account" and shows an invite-only notice. Known gap: an invited address can be registered by whoever knows it until verify-on-sign-up (#3138)
+
 ## [0.1.0] - 2024-12-17
 
 ### Added

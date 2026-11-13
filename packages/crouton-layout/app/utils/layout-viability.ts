@@ -192,6 +192,21 @@ export function deriveSizing(node: LayoutNode, registry: CroutonLayoutBlockRegis
   return { hardMinWidth, softMinWidth, minHeight, width: 'fill', height: 'fill' }
 }
 
+/**
+ * A vertical split's page row tracks (#983, #3865) — the `grid-template-rows` a read-only
+ * render gives its children: a Fit (`height: 'hug'`) child is `auto`; a Fill child flows to
+ * content but never below its derived floor, `minmax(<minHeight>px, auto)`. One expression
+ * for the package renderer's view grid and the Builder board, so the two can't drift.
+ */
+export function pageRowTracks(children: LayoutNode[], registry: CroutonLayoutBlockRegistry): string {
+  return children
+    .map((child) => {
+      const d = deriveSizing(child, registry)
+      return d.height === 'hug' ? 'auto' : `minmax(${Math.round(d.minHeight)}px, auto)`
+    })
+    .join(' ')
+}
+
 /** A block's bounded display-variant option list (#986), or `[]` when none declared. */
 export function blockVariants(registry: CroutonLayoutBlockRegistry, blockId: string): string[] {
   const v = registry[blockId]?.variants
@@ -210,7 +225,7 @@ export function resolveVariant(registry: CroutonLayoutBlockRegistry, blockId: st
 }
 
 /**
- * The `min-size` (percent) a reka-ui `SplitterPanel` should get so the block(s)
+ * The `minSize` (percent) a USplitter pane should get so the block(s)
  * inside it can't be dragged below their `minWidth` contract (#706 / #710).
  *
  * Only a HORIZONTAL parent constrains width, so we convert the child subtree's
@@ -218,7 +233,7 @@ export function resolveVariant(registry: CroutonLayoutBlockRegistry, blockId: st
  * isn't divided) we keep the child's authored `minSize` (a height %). Falls back
  * to the authored `minSize` when the container hasn't measured yet (px ≤ 0) so
  * SSR / first paint stays stable. Capped at 90% so a single panel can't claim
- * the whole group (reka-ui also clamps, but we keep the sum sane).
+ * the whole group (the splitter also clamps, but we keep the sum sane).
  */
 export function panelMinSizePct(
   parentDirection: 'horizontal' | 'vertical',

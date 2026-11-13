@@ -222,9 +222,13 @@ export interface TeamsConfig {
   /**
    * Allow users to create new teams
    *
+   * - `true`: any signed-in user can create teams
+   * - `false`: nobody can
+   * - `'superAdmin'`: only the site admin (user `role: 'admin'`)
+   *
    * @default true
    */
-  allowCreate?: boolean
+  allowCreate?: boolean | 'superAdmin'
 
   /**
    * Maximum number of teams per user (0 = unlimited)
@@ -412,6 +416,20 @@ export interface CroutonAuthConfig {
    * @example 'My Company App'
    */
   appName?: string
+
+  /**
+   * Who may create an account (#3340)
+   *
+   * - `'open'` (default) — anyone can sign up.
+   * - `'invite'` — only people with a pending invitation for their email can
+   *   create an account, on every path (email + password, magic link, OAuth
+   *   first sign-in). Enforced on the server in a `user.create.before` hook;
+   *   the UI also hides the "Create account" links. The site admin can still
+   *   create users (server-side `auth.api` calls are trusted).
+   *
+   * @default 'open'
+   */
+  signup?: 'open' | 'invite'
 
   /**
    * Authentication methods configuration

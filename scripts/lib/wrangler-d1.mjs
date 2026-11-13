@@ -67,11 +67,16 @@ export function runWrangler(args, { cwd, capture = false } = {}) {
     stdio: ['inherit', capture ? 'pipe' : 'inherit', 'pipe']
   })
   if (res.stderr) process.stderr.write(res.stderr)
-  if (res.status !== 0) {
-    const detail = (res.stderr ?? '').trim()
-    throw new Error(`wrangler exited with code ${res.status}: npx ${full.join(' ')}${detail ? `\n${detail}` : ''}`)
-  }
+  const err = wranglerError(res, full)
+  if (err) throw new Error(err)
   return res.stdout ?? ''
+}
+
+/** Error message for a finished wrangler spawn, or null on success. Includes stdout: with `--json` wrangler prints its error JSON there, not on stderr. */
+export function wranglerError(res, full) {
+  if (res.status === 0) return null
+  const detail = [res.stderr, res.stdout].map(x => String(x ?? '').trim()).filter(Boolean).join('\n')
+  return `wrangler exited with code ${res.status}: npx ${full.join(' ')}${detail ? `\n${detail}` : ''}`
 }
 
 /**
@@ -82,6 +87,12 @@ export function runWrangler(args, { cwd, capture = false } = {}) {
  */
 export function isAlreadyGone(msg) {
   return /not found|does not exist|couldn'?t find|could not find|no such|\b10007\b/i.test(String(msg ?? ''))
+}
+
+/** True for the app's own tables — not SQLite's (`sqlite_*`) or Cloudflare's (`_cf_*`) internals. Prefix check in JS: in SQL LIKE, `_` is a wildcard. */
+export function isUserTable(name) {
+  const n = String(name ?? '')
+  return !n.startsWith('sqlite_') && !n.startsWith('_cf_')
 }
 
 /** Run a remote SELECT and return the first result set's rows (wrangler --json shape). */

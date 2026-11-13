@@ -1,0 +1,100 @@
+name: Migration guard
+
+# #3013 — report-only. When a PR changes a package's database schema, run every deployed
+# app's own `db:generate` on the PR head; any statement it produces means the PR is missing
+# that app's migration. Decision logic lives in scripts/migration-guard.mjs (unit-tested).
+
+on:
+  pull_request:
+    branches: [main, 'epic/**']
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - '.github/workflows/migration-guard.yml'
+      - 'scripts/migration-guard.mjs'
+      - 'scripts/migration-guard.test.mjs'
+      - 'packages/*/server/database/schema.ts'
+      - 'packages/*/server/database/schema/**'
+      - 'packages/*/collections/*/server/database/schema.ts'
+      - 'packages/*/server/database/migrations/*.sql'
+      - 'packages/*/server/db/schema*.ts'
+      - 'packages/*/server/db/schema/**'
+      - 'apps/*/server/db/schema.ts'
+      - 'pocs/*/server/db/schema.ts'
+      - 'pocs/*/layers/*/collections/*/server/database/schema.ts'
+      - 'apps/*/server/db/migrations/**'
+      - 'pocs/*/server/db/migrations/**'
+      - 'apps/*/drizzle.config.ts'
+      - 'pocs/*/drizzle.config.ts'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check (run from the PR branch)'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: migration-guard-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  migrations:
+    name: App migrations present
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Gather PR inputs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs')
+            const pr = context.payload.pull_request
+              || (await github.rest.pulls.get({ ...context.repo, pull_number: Number(context.payload.inputs.pr_number) })).data
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { ...context.repo, pull_number: pr.number })
+            fs.writeFileSync('/tmp/files.txt', files.map(f => f.filename).join('\n'))
+            fs.writeFileSync('/tmp/body.txt', pr.body || '')
+
+      - name: Build packages (drizzle configs import their dist/ schemas)
+        run: pnpm build:packages
+
+      # #3076: the #2850 replay runs kassa's real db:generate, so it needs the install above
+      # (ci.yml's node-checks job has none and skips it). Not a PR verdict — a guard self-test.
+      - name: Self-test — replay #2850 through real db:generate
+        run: node --test --test-name-pattern 'real db:generate|guard checks kassa' scripts/migration-guard.test.mjs
+
+      - name: Run each app's db:generate
+        run: node scripts/migration-guard.mjs generate --root . --out /tmp/results.json
+
+      - name: Evaluate
+        id: evaluate
+        run: node scripts/migration-guard.mjs evaluate --results /tmp/results.json --files /tmp/files.txt --body-file /tmp/body.txt --out /tmp/verdict.json
+
+      - name: Sticky comment
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = '<!-- migration-guard -->'
+            let v
+            try { v = JSON.parse(fs.readFileSync('/tmp/verdict.json', 'utf8')) } catch { return }
+            const pr = context.payload.pull_request || { number: Number(context.payload.inputs.pr_number) }
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { ...context.repo, issue_number: pr.number })
+            const prev = comments.find(c => c.body && c.body.includes(marker))
+            if (v.status === 'not-involved') return
+            if (prev) await github.rest.issues.updateComment({ ...context.repo, comment_id: prev.id, body: v.commentBody })
+            else if (v.status !== 'pass') await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body: v.commentBody })

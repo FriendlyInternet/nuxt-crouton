@@ -191,6 +191,8 @@ export async function deleteMainAdmindoc(
   return { success: true }
 }
 
+export const MainAdmindocsAccess = {"create":"admin","reorder":"admin"} as const
+
 // Tree hierarchy queries (auto-generated when hierarchy: true)
 // Type: MainAdmindoc with hierarchy fields
 

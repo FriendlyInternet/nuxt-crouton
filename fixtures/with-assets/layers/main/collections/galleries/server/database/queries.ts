@@ -196,3 +196,9 @@ export async function deleteMainGallery(
 
   return { success: true }
 }
+
+export async function assertMainGalleryReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'imageId', table: assetsSchema.croutonAssets, value: data.imageId },
+  ])
+}

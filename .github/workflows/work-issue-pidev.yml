@@ -29,9 +29,9 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #
 # WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
-#   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
-#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
-#     `workflow_dispatch`, where the actor is the human dispatcher.
+#   • Piece 2 — retired here (#3312): the guard now lives in label-router.yml — its `if` admits
+#     only `nuxt-harness[bot]` for delegate/plan:approved, and `work-this` runs
+#     `pipeline-loop-guard.mjs bot-guard`; this workflow is dispatch-only.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
@@ -45,19 +45,24 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #     planning on Opus). Choose the one model deliberately via the `model` input.
 #
 # PROMOTED past dispatch-only (#1017): now also fires when the pipeline app applies the `delegate-pi`
-# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
-# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard now lives in label-router.yml;
+# on that path on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
 # Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
 
 on:
   workflow_dispatch:
     inputs:
+      from_label:
+        description: "Set by label-router.yml (#3312): the run was started by a label, so post the done-note back on the issue."
+        required: false
+        default: ""
+        type: string
       issue:
         description: "Leaf issue number to implement (e.g. 660)."
         required: true
         type: string
       model:
-        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge)."
+        description: "Model for pi. Blank = the `build` tier (plan mode: the `plan` tier) in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge)."
         required: false
         default: ""
         type: string
@@ -90,91 +95,16 @@ on:
         type: string
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
-  # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
-  # event but the job `if` gates to the EXACT `work-this` label, so a worker later adding
-  # `status:in-progress` does NOT re-fire this workflow (the #535 lesson).
-  issues:
-    types: [labeled]
+  # to a LEAF issue → label-router.yml dispatches this one-shot worker, which implements it and opens
+  # a PR. Only the router listens to `issues: labeled` (#3312), so a worker later adding
+  # `status:in-progress` does NOT re-fire anything (the #535 lesson).
 
 jobs:
-  # ── ROUTE (#2757, epic #2754) — plan first, or build directly? ─────────────────────────
-  # A `work-this` LABEL event on a bug / packages/ change / auth-sync-team code starts in PLAN
-  # mode: this job dispatches this workflow with mode=plan and tells `work-pi` to stand down.
-  # The plan reviewer (plan-review.yml, #2756) then labels `plan:approved` and plan-approved.yml
-  # dispatches the build. Chores and app-only tweaks, a manual dispatch, a revise round and an
-  # issue already carrying `plan:approved` all go straight to `work-pi`. The rules are
-  # .claude/plan-routing.json (labels `plan-first` / `no-plan` override).
-  route:
-    name: Route (plan first or build)
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: read
-    outputs:
-      build: ${{ steps.route.outputs.build }}
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ github.event_name == 'issues' }}
-        with:
-          node-version: 22
-      - id: route
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          EVENT: ${{ github.event_name }}
-          ISSUE: ${{ github.event.issue.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # A dispatch (manual, revise, plan, build-from-plan) always runs as asked.
-          if [ "$EVENT" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          gh issue view "$ISSUE" --repo "$REPO" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/route-issue.txt"
-          LABELS="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
-          if echo ",$LABELS," | grep -q ',plan:approved,'; then
-            echo "issue #$ISSUE already carries plan:approved → build"
-            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          # #3208: a big (epic) issue is split, not built — hand it to the splitter and stop here.
-          if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
-            echo "issue #$ISSUE is an epic → splitter"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"decompose-on-issue-pidev.yml",inputs:{issue:($i|tostring),harness:"pi"}}')"
-            exit 0
-          fi
-          R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
-          echo "route: $R"
-          MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
-          if [ "$MODE" = "plan" ]; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$ISSUE" '{issue:$i,workflow:"work-issue-pidev.yml",inputs:{issue:($i|tostring),mode:"plan"}}')"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
+  # Routing (epic → splitter, plan-first, or build) now lives in label-router.yml (#3312); this
+  # workflow is dispatch-only and every run builds (or plans, per `mode`).
   work-pi:
-    needs: route
-    # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
-    # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
-    # labels (status:in-progress) mid-run (#535). Anything else → no run.
-    if: |
-      needs.route.outputs.build == 'true' && (
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this'))
+    # Dispatch-only (#3312): label-router.yml turns a `work-this` label into a dispatch.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
     # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
@@ -191,6 +121,7 @@ jobs:
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       conflict: ${{ steps.revise.outputs.conflict }}
+      held: ${{ steps.held.outputs.held }}
     steps:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
@@ -218,22 +149,6 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
-
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
-      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      # The decision is the pure, unit-tested `botActorAllowed` (WS4 of #1685); this step is I/O
-      # only — so the SHIPPED guard IS the tested function. Contract: scripts/pipeline-loop-guard.test.mjs.
-      # (Placed after checkout so the script is available; the token minted above is unused if we exit.)
-      - name: Bot-actor guard
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        env:
-          ACTOR: ${{ github.actor }}
-        run: node scripts/pipeline-loop-guard.mjs bot-guard "$ACTOR"
 
       # ── CLAIM GUARD (#1890) — is someone already on this issue? ──────────────────────
       # Five workflows stamped `status:in-progress` and NOTHING read it, so two runners could
@@ -377,19 +292,30 @@ jobs:
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
             const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-labels.json`, JSON.stringify((data.labels || []).map(l => typeof l === 'string' ? l : l.name))) // #3701: packages-notice + --pr-note
       - id: ctx
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           FEEDBACK: ${{ inputs.feedback }}
         run: |
-          EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
-          ISSUE_EPIC="$EPIC_BRANCH"
-          # Revising an epic → main PR (#2875): its base is main, whatever the issue block says.
-          REV_BRANCH="${{ inputs.branch }}"; [ -n "$REV_BRANCH" ] && EPIC_BRANCH=""
+          # #3504: the ticket block wins; with none, the nearest OPEN parent epic that has a branch.
+          REV_BRANCH="${{ inputs.branch }}"
+          if [ -n "$REV_BRANCH" ]; then
+            EPIC_BRANCH=""
+            ISSUE_EPIC="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_NUM="$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")"
+            EB_SRC="revise"
+          else
+            EB="$(node scripts/epic-base.mjs "${{ inputs.issue || github.event.issue.number }}" < "$RUNNER_TEMP/issue-body.txt")"
+            EPIC_BRANCH="$(echo "$EB" | sed -n 's/^epic_branch=//p')"
+            EPIC_NUM="$(echo "$EB" | sed -n 's/^epic=//p')"
+            EB_SRC="$(echo "$EB" | sed -n 's/^source=//p')"
+            ISSUE_EPIC="$EPIC_BRANCH"
+          fi
           echo "rev_branch=${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}" >> "$GITHUB_OUTPUT"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
-          echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}' (source=${EB_SRC})"
+          echo "epic=${EPIC_NUM}" >> "$GITHUB_OUTPUT"
           # #3072: one base for the revise / conflict / finish steps — the PR's own base, never
           # inferred from inputs.branch (a leaf PR into an epic used to fall back to main).
           HEAD_REF="${REV_BRANCH:-work-${{ inputs.issue || github.event.issue.number }}}"
@@ -468,8 +394,13 @@ jobs:
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
+          cp scripts/revise-merge-guard.mjs "$RUNNER_TEMP/revise-merge-guard.mjs"
           # Push-failure classifier + "does GitHub hold the base merge" check (#3347).
           cp scripts/revise-push.mjs "$RUNNER_TEMP/revise-push.mjs"
+          # Revise outcome (#3432): counts a PR-description edit as a revision.
+          cp scripts/lib/revise-outcome.mjs "$RUNNER_TEMP/revise-outcome.mjs"
+          # Adds the Workflow-change PR-body line when a workflow file is touched (#3469).
+          cp scripts/lib/workflow-change-line.mjs "$RUNNER_TEMP/workflow-change-line.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -488,11 +419,11 @@ jobs:
       # silently run a stale model; a broken config now fails this step loudly instead.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
-          echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
+          BUILD="$(node scripts/resolve-pipeline-model.mjs build)"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           PLAN="$(node scripts/resolve-pipeline-model.mjs plan)"
           echo "plan=$PLAN" >> "$GITHUB_OUTPUT"
-          echo "pipeline models — default=$DEFAULT plan=$PLAN (from .claude/pipeline-models.json)"
+          echo "pipeline models — build=$BUILD plan=$PLAN (from .claude/pipeline-models.json)"
 
       # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
       # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
@@ -520,6 +451,9 @@ jobs:
           git checkout -f -B "${REV_BRANCH}" "origin/${REV_BRANCH}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
+          # PR description fingerprint BEFORE pi runs (#3432); the finish step compares.
+          REV_BODY_KEY="$(gh pr list --head "${REV_BRANCH}" --state open --json body -q '.[0].body // ""' | node "$RUNNER_TEMP/revise-outcome.mjs" key || true)"
+          echo "rev_body_key=${REV_BODY_KEY}" >> "$GITHUB_OUTPUT"
           # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
           # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
           # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
@@ -593,7 +527,7 @@ jobs:
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here.
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
@@ -603,6 +537,8 @@ jobs:
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           BASE: ${{ steps.ctx.outputs.base }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
+          # #3762: .pi/extensions/finish-check.ts runs the finish check before pi stops (not in plan mode).
+          FINISH_CHECK: ${{ inputs.mode != 'plan' && '1' || '' }}
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
           PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
@@ -640,7 +576,7 @@ jobs:
             # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
             if [ -n "${FEEDBACK_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ]; then
+              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ] || node scripts/lib/owner-screens.mjs --is-source "$RUNNER_TEMP/feedback.txt" "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq '.performed_via_github_app.slug // ""')"; then
                 WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
               else
                 WHO='by the plan reviewer'
@@ -663,22 +599,19 @@ jobs:
               # #3002: the base merge conflicted — the task is the merge, with its own persona (the
               # reviser's "work-<issue>" / "owner comment" framing made pi stop on epic PRs).
               node scripts/pipeline-prompt.mjs pi-conflict-resolver --var "pr=$PRN" --var "issue=$ISSUE" --var "branch=${REV_BRANCH:-work-${ISSUE}}" \
-                --var-file "task=$RUNNER_TEMP/conflict-task.txt" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+                --var-file "task=$RUNNER_TEMP/conflict-task.txt" > "$PROMPT_FILE"
             else
               node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
                 --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
             fi
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
-            # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
-            # The worker implements exactly that plan, and records the plan-review ledger row.
+            # #2757: BUILD FROM AN APPROVED PLAN — label-router.yml passes the plan comment id.
+            # The worker implements exactly that plan, (the ledger row is written by record-outcome, #3457).
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
-              LEDGER_ROW="$(node scripts/plan-ledger.mjs "$ISSUE" 2>/dev/null || echo '{}')"
-              {
-                printf '\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\nAlso append this ONE line to writeups/reports/plan-review-ledger.jsonl (create the file if missing; otherwise read it and keep every existing line; use the edit/write tool): %s\n\n--- APPROVED PLAN ---\n' "$APPROVED_PLAN_ID" "$LEDGER_ROW"
-                cat "$RUNNER_TEMP/approved-plan.txt"
-              } >> "$PROMPT_FILE"
+              node scripts/plan-held.mjs --approved-prompt --plan-id "$APPROVED_PLAN_ID" --plan-file "$RUNNER_TEMP/approved-plan.txt" --issue "$ISSUE" > "$RUNNER_TEMP/approved-section.txt"
+              cat "$RUNNER_TEMP/approved-section.txt" >> "$PROMPT_FILE"
             fi
           fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
@@ -761,7 +694,7 @@ jobs:
           }
           HDR=$'<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-          # Read the per-file state NOW, while the index is still unmerged: verify's `git add -u`
+          # Read the per-file state NOW, while the index is still unmerged: verify's staging
           # and `git merge --abort` both empty this list (#3322).
           LEFTOVER=""
           ALL_UNTOUCHED=1
@@ -812,6 +745,31 @@ jobs:
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
 
+      # ── OWNER REQUEST after a conflict merge (#3775) — two commits, always ──
+      # The resolver session never sees the owner's comment, so the request can't land inside the
+      # merge. This pass runs on the committed merge; the finish step commits its edits on top.
+      - id: pi-request
+        if: ${{ !cancelled() && steps.revise.outputs.conflict == '1' && steps.conflict.outputs.rev_base != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.build }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
+        run: |
+          set -uo pipefail
+          PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"  # a failed lookup leaves pr= empty; the persona still gets issue=
+          REQ_PROMPT="$RUNNER_TEMP/request-prompt.txt"
+          node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$REQ_PROMPT"
+          set +e
+          pi --print --approve --session-dir "$RUNNER_TEMP/pi-session" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+            < "$REQ_PROMPT" 2>&1 | tee -a "decompose-pidev-exec-${{ github.run_id }}.log"
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          set -e
+
       # ── FINISH — commit pi's EDITED-FILE LEDGER (Pattern B), never `git add -A` ──────────
       # pi narrates the commit and stops without emitting it (#1764), so the HARNESS owns the
       # commit. But NOT via `git add -A`: that blanket-adds tool/runtime junk (the #1786 `.pi/npm/`
@@ -842,12 +800,12 @@ jobs:
             echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
             echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
           fi
-          VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")"; RC=$?
+          RC=0; VERDICT="$(node scripts/lib/plan-shape.mjs ${REVISED:+--revised} "$RUNNER_TEMP/plan.md")" || RC=$?
           echo "$VERDICT"
           if [ "$RC" -ne 0 ]; then
             ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
             gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
-            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+            echo "ok=0" >> "$GITHUB_OUTPUT"; echo "explained=1" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
           # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
@@ -874,6 +832,7 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          REV_BODY_KEY: ${{ steps.revise.outputs.rev_body_key }}
           # #2757: the approved plan this build implements (linked from the PR body).
           APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
@@ -884,9 +843,11 @@ jobs:
           # #2941: the revise step already pushed a clean base merge (counts as delivered when pi adds nothing).
           BASE_PUSHED: ${{ steps.revise.outputs.base_pushed }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
+          # #3775: the owner-request pass's exit code (empty when it did not run) — non-zero = worker failure.
+          REQUEST_RC: ${{ steps.pi-request.outputs.rc }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.default }}
+          PI_MODEL: ${{ inputs.model || (inputs.mode == 'plan' && steps.model.outputs.plan) || steps.model.outputs.build }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail
@@ -930,9 +891,7 @@ jobs:
           [ "$NIN"  -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt"    | sed 's/^/  input:     /'
           [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | sed 's/^/  generated: /'
 
-          # 3) Capture BOTH buckets' content before the re-base checkout (which discards the working
-          #    tree), then recreate work-<issue> off origin/$BASE — never depends on which branch pi
-          #    left the tree on (#1741).
+          # 3) Capture both buckets before the re-base checkout discards the tree, then recreate the branch (#1741).
           CONTENT="$RUNNER_TEMP/commit-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | while IFS= read -r p; do
             [ -z "$p" ] && continue
@@ -947,12 +906,14 @@ jobs:
           git status --porcelain -uall 2>/dev/null | grep -E '^( D|D )' | sed 's/^...//' > "$RUNNER_TEMP/deleted.txt" || true
 
           if [ -n "${REV_START:-}" ] && [ "${REV_CONFLICT:-}" = 1 ] && [ -z "${REV_BASE:-}" ]; then
-            # The resolution never became a merge commit (it failed its checks, or was asked to the
-            # owner; the conflict step already said which on the PR). Stacking pi's edits on the old
-            # head would push a flat copy of the base — the conflicts would never clear (#2914).
+            # The resolution never became a merge commit; stacking on the old head pushes a flat copy (#2914).
             echo "::warning::base merge conflicted and was not committed as a merge — pushing nothing (#2914)"
             exit 0
           fi
+          # #3704: refuse a worker-left merge (it'd commit flat); `|| true`: the PR lookup only picks where the comment goes, issue is the fallback.
+          GPR="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          GRC=0; node "$RUNNER_TEMP/revise-merge-guard.mjs" "$BASE" "${REV_START:-$(git rev-parse HEAD)}" "${GPR:-$ISSUE}" || GRC=$?
+          if [ "$GRC" -eq 3 ]; then echo "merge_refused=1" >> "$GITHUB_OUTPUT"; exit 0; elif [ "$GRC" -ne 0 ]; then echo "::warning::merge guard crashed (exit $GRC) — pushing as usual (#3704)"; fi
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           BR="work-${ISSUE}"; [ -n "${REV_START:-}" ] && BR="${REV_BRANCH:-$BR}"
           if [ -n "${REV_START:-}" ]; then
@@ -962,7 +923,7 @@ jobs:
             # lost we are on the old PR head — merge the base now, or fail loudly, never commit stale.
             CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
             git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
-            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
+            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG --pr "${GPR:-}" --staged "$RUNNER_TEMP/inputs.txt,$RUNNER_TEMP/generated.txt" --from "${FEEDBACK_FROM:-}" || exit 1
             # The exact base commit HEAD now contains (#3347) — what GitHub must hold after the push.
             BASE_TARGET="$(git rev-parse "origin/${BASE}")"
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
@@ -1066,26 +1027,38 @@ jobs:
           #     have to diff the PR to learn that.
           if [ -n "${REV_START:-}" ]; then
             RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            if [ "$HAVE_COMMITS" = "1" ]; then
+            # #3775: only a commit AFTER the base merge (RUN_START) is the requested change.
+            if [ "$HAVE_COMMITS" = "1" ] && [ "$(git rev-parse HEAD)" != "$RUN_START" ] && node "$RUNNER_TEMP/revise-outcome.mjs" ok "${REQUEST_RC:-}"; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
-              if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
-              else
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
-              fi
-            elif [ "${BASE_PUSHED:-}" = "1" ]; then
-              echo "revise: base merge pushed by the revise step (#2941)"
-              echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
-              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
-              if [ "${REPLIED:-0}" -gt 0 ]; then
-                echo "revise: answered on the PR without a code change"
+              BASE_ONLY=false; { [ "${BASE_PUSHED:-}" = "1" ] || [ "$HAVE_COMMITS" = "1" ]; } && BASE_ONLY=true
+              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]" and ((.body | contains("<!-- pipeline-note -->")) | not))] | length' 2>/dev/null || echo 0)"
+              # A PR-description edit is a revision too (#3432): fingerprint the body now vs before pi ran.
+              BODY_NOW="$(gh pr view "${RPR:-0}" --json body -q .body 2>/dev/null | node "$RUNNER_TEMP/revise-outcome.mjs" key 2>/dev/null || true)"
+              BODY_CHANGED=false
+              [ -n "${REV_BODY_KEY:-}" ] && [ -n "$BODY_NOW" ] && [ "$BODY_NOW" != "$REV_BODY_KEY" ] && BODY_CHANGED=true
+              LAST_V="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -o 'build-review-verdict:[a-z-]*' | tail -1 | sed 's/.*://' || true)"
+              ROUND_N="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?per_page=100" --jq '.[].body' 2>/dev/null | grep -c '<!-- build-review-verdict:no-go -->' || true)"
+              OUT="$(node "$RUNNER_TEMP/revise-outcome.mjs" decide "$(jq -nc --argjson b "$BODY_CHANGED" --argjson o "$BASE_ONLY" --argjson r "$([ "${REPLIED:-0}" -gt 0 ] && echo true || echo false)" --arg v "$LAST_V" --argjson n "${ROUND_N:-0}" --arg base "$BASE" --arg from "${FEEDBACK_FROM:-}" --arg rc "${REQUEST_RC:-}" '{bodyChanged:$b,baseOnly:$o,replied:$r,verdict:$v,round:$n,base:$base,from:$from,requestRc:$rc}')")"
+              MSG="$(echo "$OUT" | jq -r .message)"
+              NOTE="$(echo "$OUT" | jq -r .note)"; REREVIEW="$(echo "$OUT" | jq -r .rereview)"
+              if [ "$NOTE" = "body" ]; then
+                echo "revise: PR description updated (#3432)"
                 echo "revised=1" >> "$GITHUB_OUTPUT"
+                if [ "$REREVIEW" = "true" ]; then TAIL="a second build review runs on the same commit."; else TAIL="nothing else to review."; fi
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#3432)_\n\n📝 **PR description updated from [your comment](%s)** — no code change; %s' "$FEEDBACK_FROM" "$TAIL")" 2>&1 | tail -1 || true
+                if [ "$REREVIEW" = "true" ]; then
+                  node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$RPR" '{issue:$i,workflow:"build-review.yml",inputs:{pr:($i|tostring),reason:"body"}}')" || echo "::warning::could not dispatch the body re-review (#3432)"
+                fi
+              elif [ "$NOTE" = "reply" ]; then
+                echo "revise: answered on the PR without a code change"
+                echo "revised=1" >> "$GITHUB_OUTPUT"  # no base merge pushed: the reply is the answer (#3775)
               else
-                echo "::error::revise produced no commit and no reply (#2446)"
-                echo "revise_noop=1" >> "$GITHUB_OUTPUT"
-                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+                echo "::error::$(echo "$OUT" | jq -r .error)"
+                echo "$OUT" | jq -r .output >> "$GITHUB_OUTPUT"  # revise_noop=1, or request_failed=<rc> (#3775)
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$MSG" 2>&1 | tail -1 || true  # MSG opens with <!-- pipeline-note --> (revise-outcome.mjs)
               fi
             fi
           fi
@@ -1125,7 +1098,10 @@ jobs:
           # sign-off hold commits nothing) versus "the planner never ran" (a harness bug). Only the
           # second is a failure, and it is the one that must be loud.
           PLAN_ERR="$RUNNER_TEMP/plan-stderr.txt"
-          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
+          # #3411: the tests gate judges the whole PR, not just this run's commit.
+          PR_FILES="$RUNNER_TEMP/pr-files.txt"
+          git diff --name-only --diff-filter=d "$BASE_SHA"..HEAD > "$PR_FILES" 2>/dev/null || : > "$PR_FILES"
+          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" "$PR_FILES" 2>"$PLAN_ERR")"
           PLAN_RC=$?
           if [ "$PLAN_RC" -ne 0 ]; then
             echo "::error::pi-finish plan exited $PLAN_RC — the harness could not read this run's result. This is a WORKFLOW bug, not an underspecified issue."
@@ -1145,6 +1121,7 @@ jobs:
           PKG_LOGIC="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC=//p')"; PKG_LOGIC=${PKG_LOGIC:-0}
           TEST_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TEST_FILES=//p')"; TEST_FILES=${TEST_FILES:-0}
           TESTS_MISSING="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TESTS_MISSING=//p')"; TESTS_MISSING=${TESTS_MISSING:-0}
+          PKG_LOGIC_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC_FILES=//p')"
           echo "plan (#1904) — app=${APP_DIR:-<none>} packages-logic=$PKG_LOGIC test-files=$TEST_FILES tests-missing=$TESTS_MISSING"
 
           # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
@@ -1163,6 +1140,13 @@ jobs:
             fi
           fi
           echo "visual surface touched: $UI_TOUCHED"
+          # #3531: hold only when a page + expected sight is named on a previewed app (scripts/signoff-surface.mjs).
+          SIGNOFF_OUT="$(node scripts/signoff-surface.mjs --ui "$UI_TOUCHED" --plan "$RUNNER_TEMP/approved-plan.txt" --issue "$RUNNER_TEMP/issue-body.txt" --base "$BASE_SHA" 2>/dev/null || true)"
+          SIGNOFF_HOLD="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^HOLD=//p')"; SIGNOFF_HOLD=${SIGNOFF_HOLD:-$UI_TOUCHED}
+          SIGNOFF_REASON="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^REASON=//p')"
+          HOLD_NOTE="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^NOTE_B64=//p' | base64 -d 2>/dev/null || true)"
+          SIGNOFF_SURFACE="$(printf '%s\n' "$SIGNOFF_OUT" | sed -n 's/^SURFACE=//p')"
+          echo "sign-off hold: $SIGNOFF_HOLD ($SIGNOFF_REASON)"
 
           # PACKAGE-ONLY CHANGE (#2709) — no app was touched, so there is nothing to typecheck by
           # default. If a packages/<pkg> was committed, borrow ONE consuming app (the first apps/ or
@@ -1293,7 +1277,7 @@ jobs:
           # this step share one rule: evidence = that comment. Screenshots otherwise come from the
           # deployed preview (#2546): deploy-side capture posts the same tagged comment.
           EVIDENCE_ATTACHED=0; CAP_SHA=""; CAP_FILES=""
-          if [ "$UI_TOUCHED" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
+          if [ "$SIGNOFF_HOLD" = "1" ] && ls screenshots/*.png >/dev/null 2>&1; then
             if PUB="$(node scripts/publish-review-captures.mjs --dir screenshots --key "issue${ISSUE}" 2>&1)"; then
               CAP_SHA="$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)"
               CAP_FILES="$(cd screenshots && ls *.png | paste -sd, -)"
@@ -1302,7 +1286,7 @@ jobs:
               echo "::warning::could not publish worker screenshots: $PUB"
             fi
           fi
-          [ "$UI_TOUCHED" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
+          [ "$SIGNOFF_HOLD" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
 
           # 7) Open the PR. On a FAILED acceptance or a missing test, open it as a DRAFT (automerge skips drafts, #339) —
           #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
@@ -1313,51 +1297,49 @@ jobs:
             # owner reviews from a phone and cannot judge a layout change from a diff, so the PR
             # waits for an `lgtm` reply exactly like the claude lane's UI gate (#307/#572).
             DRAFT_FLAG=""
-            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
-            HOLD_NOTE=""
-            # Trailing HTML comment on BOTH branches is a MACHINE marker, not owner-facing prose:
-            # deploy-detect.mjs (#2140) greps the PR body for it to opt this PR into a real
-            # staging preview (the #2020 isolated per-PR Worker) instead of the PR-restricted
-            # apps/<app>/** matching #1297 uses for everything else. It belongs on both branches
-            # below — the live preview is independent of whether the local screenshot capture
-            # (#2057) happened to succeed this run. Keep in sync with UI_SIGNOFF_MARKER there.
-            if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `ok` to release it, or `not ok: what is wrong`. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
-            elif [ "$UI_TOUCHED" = "1" ]; then
-              # Honest version (#2057): the old text here always said "evidence should be
-              # attached above", even when nothing was — which is exactly what happened on
-              # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
-              # never mistakes an empty PR for a reviewed one. A live preview (#2140) should
-              # still follow separately, so this is a lesser gap than it used to be.
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
+            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$SIGNOFF_HOLD" = "1" ]; } && DRAFT_FLAG="--draft"
+            # #3411: say WHICH files lack a test on the ticket too, not just in the run record.
+            if [ "$TESTS_MISSING" = "1" ]; then
+              gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _tests gate (#3411)_\n\n🧪 **Drafted: no test for** `%s`. Build review skips drafts, so it will not run until a test is added (comment on the PR asking for one) or the PR is marked ready by hand.' "${PKG_LOGIC_FILES//,/\`, \`}")" || true
             fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
             # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
             # nothing triggers off this label (#572); the PR-side ✅/`lgtm` route (#2052)
             # remains primary since that's where the reviewer is looking.
-            if [ "$UI_TOUCHED" = "1" ]; then
+            if [ "$SIGNOFF_HOLD" = "1" ]; then
               gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             fi
             # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
             # so the deploy screenshots the page that shows the change, not the app's start page.
             SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
+            [ -n "$SIGNOFF_SURFACE" ] && SURFACES="$(printf '%s\n%s' "$SURFACES" "$SIGNOFF_SURFACE")"
             # #2757: a build from an approved plan links that plan in the PR body.
             PLAN_NOTE=""
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then
               PLAN_NOTE="$(printf '\n\n📋 Built from the approved plan: https://github.com/%s/issues/%s#issuecomment-%s' "$GITHUB_REPOSITORY" "$ISSUE" "$APPROVED_PLAN_ID")"
             fi
+            # #3036: one line pointing at the issue's 🧪 How to test, so the PR page is not a dead end.
+            HOWTO_NOTE="$(ISSUE="$ISSUE" BODY_FILE="$RUNNER_TEMP/issue-body.txt" node --input-type=module -e '
+              import { readFileSync } from "node:fs"
+              import { howToTestPointer } from "./scripts/test-card.mjs"
+              let b = ""; try { b = readFileSync(process.env.BODY_FILE, "utf8") } catch {}
+              process.stdout.write(howToTestPointer(process.env.ISSUE, b))')" || HOWTO_NOTE=""
+            if [ -z "$HOWTO_NOTE" ]; then
+              echo "::warning::howToTestPointer failed — PR body gets the plain pointer instead (#3036)"
+              HOWTO_NOTE="How to test: see #$ISSUE → 🧪"
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s\n\n%s%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOWTO_NOTE" "$(git diff --name-only "$BASE_SHA"..HEAD | node scripts/packages-guard.mjs --pr-note --body "$RUNNER_TEMP/issue-body.txt" --labels "$RUNNER_TEMP/issue-labels.json" 2>/dev/null || true)" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3 # packages note is advisory (#3701): on failure the PR opens without it and the CI check still asks for the line
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
               # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
               elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
-              echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
+              echo "PR #${EXISTING} already open for ${BR} (draft=$([ -n "$DRAFT_FLAG" ] && echo yes || echo no))"
             fi
           fi
 
@@ -1368,6 +1350,16 @@ jobs:
           # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
           #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          # #3531: the sign-off link carries a pr{{PR}} placeholder until the PR number exists.
+          if [ -n "$PRNUM" ]; then
+            PR_BODY="$(gh pr view "$PRNUM" --json body -q .body 2>/dev/null || true)"
+            if printf '%s' "$PR_BODY" | grep -qF 'pr{{PR}}'; then
+              printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+              node scripts/signoff-surface.mjs --fill-pr "$PRNUM" --body "$RUNNER_TEMP/pr-body.txt" > "$RUNNER_TEMP/pr-body-filled.txt" \
+                && gh pr edit "$PRNUM" --body-file "$RUNNER_TEMP/pr-body-filled.txt" || true
+            fi
+          fi
+          [ -n "$PRNUM" ] && node "$RUNNER_TEMP/workflow-change-line.mjs" --pr "$PRNUM" --issue "$ISSUE" --title "$TITLE" || true
           # Post the tagged screenshot comment (same marker the deploy-side capture uses, #3351);
           # if the write fails the run record must not claim an image the PR doesn't show.
           if [ "$EVIDENCE_ATTACHED" = "1" ]; then
@@ -1403,12 +1395,11 @@ jobs:
               # Name the missing test in the run record, or the draft state is unexplained (#1885).
               [ "$TESTS_MISSING" = "1" ] && {
                 echo
-                echo "🧪 **tests: MISSING** — ${PKG_LOGIC} \`packages/\` logic file(s) landed with no test file."
-                echo "Opened as a DRAFT so it can't auto-merge. Add the test (or say on the issue why it can't run here), then re-dispatch."
+                echo "🧪 **Drafted: no test for** \`${PKG_LOGIC_FILES//,/\`, \`}\`. Build review skips drafts, so it won't run until a test is added (comment on this PR asking for one) or you mark the PR ready by hand."
               }
               # #2057 — make a missing capture LOUD in the one comment a reviewer actually
               # reads, not just a line in the PR body nobody re-checks after the first read.
-              [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
+              [ "$SIGNOFF_HOLD" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
                 echo
                 echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no screenshot yet — the Preview screenshot check posts one on this PR when the preview deploys."
                 echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`ok\`."
@@ -1425,6 +1416,26 @@ jobs:
           else
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
+
+      # #3583: held=1 when the PR is a draft AFTER the whole create/re-dispatch logic in `finish`
+      # (new draft AND re-dispatch). Own step so the frozen `finish` block does not grow.
+      - id: held
+        if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
+        run: |
+          D="$(gh pr list --head "$BR" --state open --json isDraft -q '.[0].isDraft' 2>/dev/null || true)"
+          [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
+
+      # #3762: append the finish-check line to the run record. Own step, same reason.
+      # Best effort (in the script): no PR, no run-record comment or an API error must not fail the job.
+      - id: finish-check-line
+        if: ${{ !cancelled() && steps.finish.outcome == 'success' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
+        run: node "$RUNNER_TEMP/run-record.mjs" append-finish-check "$RUNNER_TEMP/finish-check-outcome.json" "$BR" || true
 
       - name: Upload worker screenshots (download backup, #3351)
         if: ${{ always() && inputs.mode != 'plan' }}
@@ -1511,16 +1522,19 @@ jobs:
           # do" from "the harness crashed mid-finish", and defaults to blaming the ISSUE.
           FINISH_OUTCOME: ${{ steps.finish.outcome }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
-          TRIGGER: ${{ github.event_name }}
+          TRIGGER: ${{ inputs.from_label == 'true' && 'issues' || github.event_name }}
           # #2446: a revision stacks on the EXISTING PR, so there is no fresh PR for the checks below
           # to find — they read it as "produced nothing" and paged the owner on a successful run.
           # The finish step already proved the outcome (a pushed commit or a reply) and said so on
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          REQUEST_FAILED: ${{ steps.finish.outputs.request_failed }}  # #3775: the owner-request worker exited non-zero (code), explained on the PR
+          MERGE_REFUSED: ${{ steps.finish.outputs.merge_refused }}  # #3704: the finish step refused a worker-left merge and explained it on the PR
           # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
           # fails the run itself when it is missing or malformed.
           PLAN_OK: ${{ steps.plan.outputs.ok }}
+          PLAN_EXPLAINED: ${{ steps.plan.outputs.explained }} # #3028
           RUN_START: ${{ steps.t0.outputs.ts }}
           # #3322: the conflict step explains itself on the PR (a failure, or a 🔀 put to the owner);
           # paging "produced nothing" on the ticket too would be a false alarm.
@@ -1528,307 +1542,8 @@ jobs:
           CONFLICT_ASKED: ${{ steps.conflict.outputs.asked }}
         with:
           script: |
-            const issue_number = Number(process.env.ISSUE_NUMBER)
-            if (process.env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
-            if (process.env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
-            if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
-            if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
-            if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
-            const rs = (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/run-start.mjs`)).parseRunStart(process.env.RUN_START)
-            if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
-            const since = rs.since
-            const sinceMs = rs.sinceMs
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              ...context.repo, issue_number, since,
-            })
-            const newComment = comments.length > 0
-
-            const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
-              ...context.repo, issue_number,
-            })
-            const prRefs = timeline.filter(e =>
-              e.event === 'cross-referenced' &&
-              e.source && e.source.issue && e.source.issue.pull_request
-            )
-            const linkedPR = prRefs.some(e => new Date(e.created_at).getTime() >= sinceMs)
-            // NOTE (#1019): we deliberately do NOT treat a pre-existing cross-referenced PR as
-            // a pass. On #839 an UNRELATED epic PR (#846) merely cross-referenced the issue and
-            // false-greened a no-op run. A fresh-work run must yield a FRESH deliverable (a PR
-            // opened this run / sub-issues created this run / a sign-off held this run) or a
-            // genuinely closed issue — not a stale link. `alreadyLinkedPR` is intentionally unused.
-
-            const issue = await github.rest.issues.get({ ...context.repo, issue_number })
-            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-            const alreadyClosed = issue.data.state === 'closed'
-
-            let createdSubIssues = false
-            try {
-              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-                ...context.repo, issue_number, per_page: 100,
-              })
-              createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
-            } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
-
-            const signoffHeld = blocked && newComment
-
-            // ── ASK vs APPROVE (#1745) ────────────────────────────────────────────────
-            // A held run means one of two very different things to the owner: "review and
-            // approve this" (a sign-off) or "answer this question" (an ask-human fork — the
-            // decide-vs-ask carve-out in .claude/agents/pi-operating-contract.md). Reporting
-            // both as "held for sign-off" tells the owner to APPROVE when what is actually
-            // needed is an ANSWER — the gate asserting a state it never distinguished (#1751).
-            // The ask-human template's mandatory first line is the discriminator.
-            // WHAT does the hold need? (#2067) The `🔀 Blocked` heading is a FAMILY marker —
-            // it cannot tell "pick A or B" from "apply this patch, I'm not allowed to". Reading
-            // only the heading is how #2054 announced "asked you a question" above 4,372
-            // characters that contained no question: a workflow-only fix the App token cannot
-            // push (#1076), which needs the owner to ACT, not to answer.
-            // The `**Needs:** answer | action | approval` line is the explicit discriminator.
-            // Absent ⇒ 'answer', which is exactly today's behaviour, so older holds are unaffected.
-            // Keep the COMMENT OBJECT, not just its body (#2096): the notification below
-            // links the ask directly, so the owner is one tap from it instead of scroll-
-            // hunting a long thread on a phone for "the 🔀 comment above".
-            const holdComment = comments.find(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || '')) || null
-            const holdBody = holdComment ? (holdComment.body || '') : ''
-            const needs = (holdBody.match(/^\s*\*\*Needs:\*\*\s*(answer|action|approval)\b/mi) || [])[1]
-            const holdKind = holdBody ? (needs ? needs.toLowerCase() : 'answer') : null
-            const askedQuestion = signoffHeld && holdKind === 'answer'
-            const needsAction = signoffHeld && holdKind === 'action'
-
-            // #3219: a commit pushed to work-<N> THIS run is a deliverable even when the PR already
-            // existed (its cross-reference predates t0, so linkedPR is false). A failed finish step
-            // is still a failure, handled in the classifier below.
-            let workBranch = null
-            try {
-              const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
-              const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
-              const committedAt = new Date(commit.data.committer?.date || 0).getTime()
-              // Only a commit from THIS run counts (as on main); an older branch is not a deliverable
-              // and must not feed the harness-failure verdict below.
-              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7), committedAt }
-            } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
-
-            // Load from the RUNNER_TEMP copy (baseline step): work-<N> may predate this helper.
-            const { decideDeliverable, pushedThisRun } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/run-deliverable.mjs')).href)
-            const workBranchPushed = pushedThisRun({ committedAt: workBranch ? workBranch.committedAt : null, sinceMs, finishOutcome: process.env.FINISH_OUTCOME })
-
-            const deliverable = decideDeliverable({ linkedPR, workBranchPushed, signoffHeld, alreadyClosed, createdSubIssues })
-            if (deliverable.ok) {
-              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} workBranchPushed=${workBranchPushed} via=${deliverable.via}`)
-              // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
-              // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
-              // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
-              if (process.env.TRIGGER === 'issues') {
-                const freshPR = prRefs
-                  .filter(e => new Date(e.created_at).getTime() >= sinceMs)
-                  .map(e => e.source.issue.number)[0]
-                // Link the ask itself (#2096) — holdComment is guaranteed non-null on both
-                // hold branches (holdKind requires a non-empty holdBody).
-                const what = freshPR
-                  ? `done → PR #${freshPR}`
-                  : workBranchPushed ? `pushed a commit to \`work-${issue_number}\` (existing PR updated)`
-                  : needsAction ? `**needs you to APPLY something** — not an answer, not an approval. **[→ the ask](${holdComment.html_url})** says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.`
-                  : askedQuestion ? `**asked you a question** — it needs an *answer*, not an approval. **[→ the ask](${holdComment.html_url})** leads with the recommendation; reply with your pick and the work resumes in a fresh run.`
-                  : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
-                    : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
-                    : 'produced a deliverable — see the run')
-                await github.rest.issues.createComment({
-                  ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
-                })
-              }
-              return
-            }
-
-            // ── CHILD deliverables (#1074) ─────────────────────────────────────────────
-            // When the labeled issue is ALREADY decomposed, the correct behaviour is
-            // "resume the tree, work the remaining open leaf" — the fresh deliverable
-            // lands on a CHILD issue, invisible to the checks above (the #1050 false-fail:
-            // pi merged a real PR on child #1053 and this gate still went red). Scan the
-            // sub-issue tree for the same fresh-since-t0 signals. Only runs when the
-            // primary checks found nothing. Kept in sync with decompose-on-issue.yml.
-            let childDeliverable = ''
-            try {
-              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-                ...context.repo, issue_number, per_page: 100,
-              })
-              for (const s of subs) {
-                if (s.state === 'closed' && s.closed_at && new Date(s.closed_at).getTime() >= sinceMs) {
-                  childDeliverable = `child #${s.number} closed this run`; break
-                }
-                const tl = await github.paginate(github.rest.issues.listEventsForTimeline, {
-                  ...context.repo, issue_number: s.number,
-                })
-                if (tl.some(e => e.event === 'cross-referenced' && e.source && e.source.issue &&
-                    e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
-                  childDeliverable = `PR linked to child #${s.number} this run`; break
-                }
-                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-                if (childBlocked) {
-                  const cc = await github.paginate(github.rest.issues.listComments, {
-                    ...context.repo, issue_number: s.number, since,
-                  })
-                  if (cc.length > 0) { childDeliverable = `child #${s.number} held for sign-off this run`; break }
-                }
-              }
-            } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
-            if (decideDeliverable({ childDeliverable }).ok) {
-              core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
-              if (process.env.TRIGGER === 'issues') {
-                await github.rest.issues.createComment({
-                  ...context.repo, issue_number,
-                  body: '<!-- pipeline-note -->\n' + `> 🤖 **pi.dev harness** · agent pipeline (CI · ${process.env.AGENT_RUNNER_LABEL}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
-                })
-              }
-              return
-            }
-
-            // ── Classify WHY there was no deliverable (#1004 piece 3) ──────────────────
-            // pi emits no structured execution_file like claude-code-action — it emits the
-            // plain-text run log we tee'd to PI_EXEC_LOG. Grep it for the known causes so the
-            // failure comment names the actual problem + fix (mirrors decompose-on-issue.yml's
-            // billing/error/underspecified buckets). The most likely first-run cause is an
-            // out-of-credit PI_PROVIDER_KEY, so detect that explicitly.
-            const fs = require('fs')
-            let why = '', action = '', detail = ''
-            const failed = process.env.CLAUDE_CONCLUSION === 'failure'
-
-            // ── HARNESS-FAILED-AFTER-COMMITTING (#1876) — checked FIRST ────────────────
-            // The gate's evidence used to be {pi's exit code, pi's stdout, the GitHub API}. The
-            // FINISH step was invisible to it, so when the finish step crashed after pushing a
-            // branch, every real cause missed and the run fell through to the `else` below and
-            // told the owner their ISSUE was underspecified — while a branch with their work sat
-            // on the remote (#1874/#1875). A pushed `work-<issue>` branch is proof the agent
-            // produced something; the only thing missing is the PR the harness died before opening.
-            if (workBranch && process.env.FINISH_OUTCOME === 'failure') {
-              why = `the HARNESS failed after committing — \`work-${issue_number}\` (\`${workBranch.sha}\`) was pushed this run, but the finish step died before opening the PR`
-              action = 'open the run log at the `finish` step — this is a workflow bug, NOT an underspecified issue. '
-                + 'Do not edit the issue; fix the workflow, delete the branch, and re-apply the label'
-            }
-
-            try {
-              const logFile = process.env.PI_EXEC_LOG
-              // `!why` — never let the log-grep chain overwrite the harness-failure verdict above,
-              // whose evidence (a pushed branch + a failed finish step) is stronger than a regex (#1876).
-              if (!why && logFile && fs.existsSync(logFile)) {
-                const log = fs.readFileSync(logFile, 'utf8')
-                const tail = log.length > 600 ? log.slice(-600) : log
-                // GLM Coding Plan quota (z.ai) — checked FIRST: its 429 is distinct from an
-                // Anthropic billing failure and must not fall through to the generic SDK-error
-                // bucket (the #1451/#1492 misdiagnosis). z.ai emits `429 {"code":"1308",
-                // "message":"Usage limit reached for 5 hour. Your limit will reset at <ts>"}`.
-                const glmReset = (log.match(/reset at ([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]+)/i) || [])[1]
-                if (/\b1308\b|usage limit reached/i.test(log)) {
-                  why = 'the GLM Coding Plan quota was reached mid-run'
-                    + (glmReset ? ` (the plan window resets at ${glmReset})` : ' (z.ai 5-hour / weekly window)')
-                  action = 'wait for that window to reset then re-dispatch on GLM (free), '
-                    + 'or escalate this one leaf to the metered `provider=anthropic` lane to unblock now — '
-                    + 'this is NOT a code/SDK bug, nothing is broken'
-                } else if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
-                  why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
-                  action = 'top up the account, then re-dispatch' // NB: not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
-                } else if (process.env.PI_LEFT_DIRTY === '1') {
-                  // #1764: pi edited files but the DETERMINISTIC finish step still could not
-                  // persist them — a git/tooling failure, not the narrate-then-stop fault (which
-                  // the finish step handles). Name it accurately, not "underspecified".
-                  why = 'the deterministic finish step could not persist pi\'s edits (a git/tooling failure, not the narrate-then-stop fault) — the working tree is still dirty (#1764)'
-                  action = 'open the run log — the finish step logged the git error; this is NOT an underspecified issue (see #1764)'
-                } else if (failed) {
-                  why = 'the pi agent step errored before it built anything'
-                  action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
-                  if (tail.trim()) detail = tail.trim()
-                } else if (process.env.FINISH_OUTCOME === 'failure') {
-                  // The finish step failed but pushed nothing — still a harness fault, not the ticket.
-                  why = 'the finish step failed before it could commit anything'
-                  action = 'open the run log at the `finish` step — a workflow bug, not an underspecified issue'
-                  if (tail.trim()) detail = tail.trim()
-                } else if (/PI_TASK_COMPLETE_NOTHING_LEFT/.test(log)) {
-                  // #2104 — pi DELIBERATELY concluded nothing was left to do (the completion-
-                  // enforcer's escape marker, .pi/extensions/complete-work.ts) and ended without
-                  // saying so on the issue. The usual cause is a STALE THREAD: an old 🔀 hold, or
-                  // a "blocked on #X" note whose blocker has since closed — on #2037, #2070 was
-                  // fixed 4h earlier and nothing updated the thread pi read. The contract now
-                  // requires pi to verify cited blockers live and to post its nothing-left
-                  // conclusion as a hold; this bucket names an occurrence that slipped through.
-                  why = 'pi deliberately concluded there was NOTHING left to do and ended without saying so on the issue (`PI_TASK_COMPLETE_NOTHING_LEFT` in the log)'
-                  action = 'the thread probably reads as stale — re-read the newest 🔀 hold and any "blocked on #X" claim; if the blocker is resolved or the hold answered, reply stating the current state (e.g. "#X is closed — proceed with option A"), then re-dispatch (#2104)'
-                  if (tail.trim()) detail = tail.trim()
-                } else {
-                  // LAST RESORT — no known cause matched. Say exactly that (#1876). The old text
-                  // asserted "the issue is likely underspecified", which is a GUESS printed in the
-                  // same confident voice as the real detections above; it sent the owner to rewrite
-                  // two well-specified tickets while the actual bug was in this workflow.
-                  why = 'pi ran to completion but no PR, sub-issues, or sign-off hold appeared — and none of the known causes matched'
-                  action = 'read the log tail below first — it is what pi actually said. Only if it shows pi genuinely had nothing to act on is the issue underspecified'
-                  // ATTACH THE TAIL HERE ABOVE ALL (#2065). This branch means "I cannot explain
-                  // this run", and it was the ONLY branch that withheld the log — while sitting
-                  // inside `if (exists(logFile))`, so the log was read and then dropped. Three
-                  // alarms (#2055/#2056/#2058) were undiagnosable from outside the runner for
-                  // exactly this reason, each telling the owner to "open the run log" while the
-                  // relevant slice of it sat in `tail`.
-                  if (tail.trim()) detail = tail.trim()
-                }
-              }
-            } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
-
-            // #2012 — the finish step FAILED, and that verdict must not depend on pi's log
-            // existing. This same check also lives inside the `if (logFile && exists(logFile))`
-            // chain above, which is exactly where it cannot help: when the harness dies early pi
-            // never runs, so PI_EXEC_LOG is empty, the whole chain is skipped, and the branch that
-            // would name this is unreachable. That is how run 31057590885 reported "none of the
-            // known causes matched" while its own env said FINISH_OUTCOME=failure. #1876's detector
-            // misses it too — that one requires a commit made THIS run, and a harness that dies
-            // before committing has none by definition.
-            if (!why && process.env.FINISH_OUTCOME === 'failure') {
-              why = 'the finish step FAILED — the harness could not process this run'
-              action = 'open the run log at the `finish` step and read its error (a non-zero plan exit prints the stderr tail there). '
-                + 'This is a WORKFLOW bug, not an underspecified issue — do not edit the ticket'
-            }
-
-            // #1764 fallback — an uncommitted tree is a definite cause even if the log is unreadable.
-            if (!why && process.env.PI_LEFT_DIRTY === '1') {
-              why = 'the deterministic finish step could not persist pi\'s edits — the working tree is still dirty (#1764)'
-              action = 'open the run log for the finish step git error; not an underspecified issue (see #1764)'
-            }
-
-            // No log at all (#2065). "Open the run log" is misleading advice when the run
-            // never wrote one — and an empty PI_EXEC_LOG is itself evidence: the harness
-            // stopped before pi produced any output. Distinguish the two situations.
-            let hadLog = false
-            try { hadLog = Boolean(process.env.PI_EXEC_LOG) && fs.existsSync(process.env.PI_EXEC_LOG) } catch (e) { hadLog = false }
-            if (!why && !hadLog) {
-              why = 'pi produced NO run log at all — the harness stopped before pi wrote any output'
-              action = 'do not edit the issue. Open the run log and read the steps BEFORE the agent step; '
-                + 'an absent `PI_EXEC_LOG` means the failure is upstream of pi, in the workflow'
-            }
-
-            // Fallback when the log is unreadable but the step itself failed.
-            if (!why && failed) {
-              why = 'the pi agent step failed before producing anything (likely out of credit, or an API/tooling error)'
-              action = 'open the run log — if it says "credit balance is too low", top up `PI_PROVIDER_KEY`; otherwise fix the logged error, then re-dispatch'
-            }
-
-            // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
-            // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${process.env.AGENT_RUNNER_LABEL}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
-            // #2464: quote pi's own last words — often the whole explanation ("nothing left to do").
-            let piSaid = ''
-            try {
-              piSaid = require('child_process').execFileSync('node',
-                [`${process.env.RUNNER_TEMP}/run-record.mjs`, 'last-message', `${process.env.RUNNER_TEMP}/pi-session`, '500'],
-                { encoding: 'utf8' }).trim()
-            } catch (e) { piSaid = '' }
-            if (piSaid) core.error(piSaid, { title: "pi's last message" })
-            const said = piSaid ? `\n\n**pi's last message:**\n> ${piSaid.replace(/\n/g, '\n> ')}` : ''
-            const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
-            const body = why
-              ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${said}${det}${foot}`
-              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${said}${foot}`
-
-            await github.rest.issues.createComment({ ...context.repo, issue_number, body: '<!-- pipeline-note -->\n' + body })
-            core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
+            const { artifactGate } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')).href)
+            await artifactGate({ github, context, core })
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
       # Proves the "one feed → both consumers" loop on a live run: locate this run's pi
@@ -1882,6 +1597,44 @@ jobs:
           path: pi-telemetry-out/
           if-no-files-found: ignore
 
+  # ── Re-check traffic when a PR becomes held (#3583) ────────────────────────────────────
+  # A draft PR waits on the owner, not on a build, so same-package tickets parked behind it
+  # can start. Trusted default-branch checkout: the worker's tree holds agent-edited code.
+  release-traffic:
+    name: Release parked tickets
+    needs: [work-pi]
+    if: ${{ always() && needs.work-pi.outputs.held == '1' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts
+            .claude
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+              const released = await releaseWaiting({ github, context })
+              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+            } catch (e) {
+              core.warning(`traffic release failed: ${e.message}`)
+            }
+
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).
   # Counts what the run left behind (agent comments, verdicts, commits) vs the workflow's own
@@ -1889,7 +1642,7 @@ jobs:
   # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
   record-outcome:
     name: Record run outcome
-    needs: [route, work-pi]
+    needs: [work-pi, release-traffic]
     if: ${{ always() && needs.work-pi.result != 'skipped' }}
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
@@ -1919,10 +1672,21 @@ jobs:
           ISSUE: "${{ inputs.issue || github.event.issue.number }}"
           BRANCH: "${{ inputs.branch }}"
           STAGE: "${{ inputs.mode == 'plan' && 'plan' || (inputs.feedback != '' && (needs.work-pi.outputs.conflict == '1' && 'conflict' || 'revise') || 'work') }}"
-          MODEL_TIER: default
+          MODEL_TIER: "${{ inputs.mode == 'plan' && 'plan' || 'build' }}"
           NEEDS_JSON: ${{ toJSON(needs) }}
           RL_START: ${{ needs.work-pi.outputs.rl_start }}
           TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           DATA_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node scripts/eval-ledger/record-run.mjs
+      - name: Write the plan-review ledger row (never fails the run)
+        if: ${{ inputs.plan != '' && inputs.mode != 'plan' && inputs.feedback == '' }}
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/plan-ledger.mjs --write "${{ inputs.issue }}"

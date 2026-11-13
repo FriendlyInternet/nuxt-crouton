@@ -91,7 +91,7 @@ its sub-issues is one coherent PR with the commits kept separate.
 
 ### Issue Status Updates
 - Move the issue through its states: open → in-progress → closed (via the PR's `Closes #NN` on merge)
-- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). See the `github-tasks` skill's epic-close flow. The postmortem stamps `status:ready-to-close`; the owner then closes the epic in one gesture by commenting **`/close-epic`** on it (`close-epic-on-comment.yml`, gated on that label so it can't fire before the postmortem — #856).
+- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856).
 - `writeups/PROGRESS_TRACKER.md` is an **optional** phase-level rollup, not the per-task tracker — update it only when keeping a phase summary current.
 
 ### Multi-Agent Continuity
@@ -124,7 +124,7 @@ The approval file is gitignored and session-scoped. Always clean it up after fin
 
 This applies to all agents and sub-agents.
 
-**PR-time backstop (#1611).** The PreToolUse hook only runs *in an agent session*, so it can't catch a `packages/**` change on its way to `main`. The `packages-guard` CI check (`.github/workflows/packages-guard.yml`, decision in the unit-tested `scripts/packages-guard.mjs`) is the authoritative PR-time gate: a PR touching `packages/**` **fails** unless the edit is *declared* — a **`packages:approved`** label, a **`Packages-approved: <why>`** body line, **or** a linked signed-off **`pkg:*`** issue — and it comments the blast-radius (which package files changed). It's declaration, not prohibition. (Distinct from `guard-package-approval.yml`, which only fails a *committed* `.package-edit-approved` override file.)
+**PR-time backstop (#1611).** The PreToolUse hook only runs *in an agent session*, so it can't catch a `packages/**` change on its way to `main`. The `packages-guard` CI check (`.github/workflows/packages-guard.yml`, decision in the unit-tested `scripts/packages-guard.mjs`) is the authoritative PR-time gate: a PR touching `packages/**` **fails** unless the edit is *declared* — a **`packages:approved`** label, a **`Packages-approved: <why>`** body line, **or** a linked signed-off **`pkg:*`** issue — and it comments the blast-radius (which package files changed). It's declaration, not prohibition. (Distinct from `guard-package-approval.yml`, which only fails a *committed* `.package-edit-approved` override file.) In the pi worker, `.pi/extensions/packages-notice.ts` tells the worker on its first write in each package whether the ticket approves it, and the finish step copies the ticket's `Packages-approved:` line into the PR body (decision: `packagesApprovalFor` in `scripts/packages-guard.mjs`, built on the CI check's own rule, #3701).
 
 ### Context Clearing Between Tasks
 After each task: announce completion, STOP. User runs `/clear`. Fresh agent reads the relevant GitHub issue/epic (and PROGRESS_TRACKER.md if a phase rollup exists) and continues.
@@ -373,7 +373,7 @@ Chromium is pre-installed at `/opt/pw-browsers`; `npx playwright install` fails 
 
 UI-touching → `ui-proposal` · collection schema → `schema-review` · `packages/*` logic → `test-review`. Which gate fires, each gate's scope, and what counts as approval (a reply that is only `ok`): `crouton-change-control`. Pipeline lane: `.claude/agents/task-worker.md`; plan→review→build for bugs/`packages/` work: `.claude/plan-routing.json`.
 
-**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing.
+**One dispatch label (#3208).** Humans apply only `work-this`; it routes itself — an `epic`-labelled issue goes to the splitter (`decompose-on-issue-pidev.yml`), anything else to a single-use worker. `delegate` / `delegate-pi` are internal hand-offs applied only by the pipeline: they start a run only when applied by the Harness App, so a human adding one starts nothing. The whole flow, step by step with each workflow file: `docs/pipeline/how-it-works.md` (its workflow table is generated — `node scripts/gen-pipeline-map.mjs`).
 
 ## Documentation Organization
 
@@ -398,7 +398,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Add/modify a page type (in a package or via `publishable`) | Always supply `name` + `description` + `icon` (required on `CroutonPageType`; surface in the pages page-type picker). See `packages/crouton-pages/CLAUDE.md` (Page Type Registration / Publishable Collections) |
 | Add new package | Create `packages/{name}/CLAUDE.md`, then run `node scripts/gen-package-catalog.mjs` (refreshes the task-decompose package catalog for the #292 package-fit check; `--check` verifies it's current) |
 | Add/modify/remove a skill (`.claude/skills/`) | Run `node scripts/gen-skills-doc.mjs` (regenerates `writeups/architecture/skills-and-triggers.html`; add new skills to its `META` map, and to a `FLOWS` lane if the skill fires on a specific trigger — the generator hard-fails if `FLOWS` references a skill that no longer exists). CI `skills-doc.yml` enforces it. |
-| Change which model a workflow runs on | Edit `.claude/pipeline-models.json` (`light` / `default` / `hard`) — every workflow reads its tier from it at run time (#2161). Never hard-code a model in a workflow: `node scripts/gen-routing.mjs --check` (CI) fails on one. |
+| Change which model a workflow runs on | Edit `.claude/pipeline-models.json` (`light` / `default` / `hard` / `review` / `plan` / `decompose` / `build` — each tier is described in its `_about`) — every workflow reads its tier from it at run time (#2161). Never hard-code a model in a workflow: `node scripts/gen-routing.mjs --check` (CI) fails on one. |
 | Change an agent's model / add a route or tier | Edit `.claude/routing.json` (the model-routing source of truth, #864), then run `node scripts/gen-routing.mjs` (regenerates `writeups/architecture/routing-registry.md`; `--check` also flags drift vs `.claude/agents/*` frontmatter). |
 
 ## Claude Code Configuration

@@ -2,7 +2,7 @@
  * Parser for the worker's PLAN comment (#2755, epic #2754). A plan run posts ONE issue comment
  * carrying PLAN_MARKER and these `### ` sections, in any order:
  *
- *   Reproduced · Cause · Fix · Files · Test · Assumptions · Needs owner
+ *   Reproduced · Cause · Fix · Files · Test · Docs · Assumptions · Needs owner
  *
  * Rules the parser enforces (a malformed plan is rejected, not waved through):
  *  - the marker and every section are present and non-empty
@@ -11,8 +11,14 @@
  *  - `Needs owner` opens with yes/no
  *  - `Assumptions` is either the single line "none", or a list of bullets, each carrying
  *      `Why: …`, `Evidence: …` and `Status: verified|unverified`
- *    Evidence of a *verified* assumption must contain a link (https://…) — the proof;
- *    an *unverified* one must say why it could not be checked.
+ *    Status is read from its first word, so `unverified (could not reach staging)` is fine.
+ *    Evidence of a *verified* assumption must be checkable: an https link, a commit SHA, or
+ *    `path:line` / `path#Lnn` (shape only); an *unverified* one must say why it could not be checked.
+ *
+ *  - `Docs` (#3568) is either ONE line `none — <reason>` (bare "none" is rejected), or rows (bullets or
+ *    table rows), one per doc claim: `<file:line> "<quote>" — Status: checked|wrong|can't tell —
+ *    Evidence: <permalink> — Regression: yes|no — Edit: <edit>` (or `Debt: <why not now>`).
+ *    `checked` needs a github.com /blob/<sha>/ permalink as Evidence.
  *
  * Assumption bullet shape (one line each):
  *   - <claim> — Why: <why it is taken as true> — Evidence: <permalink/commit/log/doc> — Status: verified
@@ -28,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import { hasMarker } from './marker.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
-export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Assumptions', 'Needs owner']
+export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Docs', 'Assumptions', 'Needs owner']
 // Required only on a re-plan (`--revised`, #3149): proof the planner re-read the ticket.
 export const REREAD = 'Ticket re-read'
 // #3341: a revision also says what it changed (waived by `--fresh`, a plan started from scratch).
@@ -57,6 +63,10 @@ const field = (text, key) => {
   return m ? m[1].replace(/^\**\s*/, '').trim() : ''
 }
 
+// Accepted forms of verified evidence (#3271): shape only, no git call (works in a shallow clone);
+// the reviewer checks a SHA exists.
+const EVIDENCE_FORMS = [/https?:\/\/\S+/, /\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/, /[\w./-]+\.\w+(?::\d+|#L\d+)\b/]
+
 export function parseAssumptions(text) {
   const errors = []
   const bullets = text.split('\n').map((l) => l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)).filter(Boolean).map((m) => m[1])
@@ -68,18 +78,74 @@ export function parseAssumptions(text) {
     const claim = b.split(/\s+[—–-]+\s+\**(?:Why|Evidence|Status):/i)[0].replace(/\*\*/g, '').trim()
     const why = field(b, 'Why')
     const evidence = field(b, 'Evidence')
-    const status = field(b, 'Status').toLowerCase().replace(/[^a-z]/g, '')
+    const status = field(b, 'Status').toLowerCase().match(/^[^a-z]*([a-z]+)/)?.[1] || ''
     const n = `assumption ${i + 1}`
     if (!claim) errors.push(`${n}: no claim`)
     if (!why) errors.push(`${n}: no "Why" (the reason it is taken as true)`)
     if (!evidence) errors.push(`${n}: no "Evidence"`)
     if (status !== 'verified' && status !== 'unverified') errors.push(`${n}: Status must be verified or unverified`)
-    if (status === 'verified' && evidence && !/https?:\/\/\S+/.test(evidence)) {
-      errors.push(`${n}: a verified assumption needs a linked proof (permalink, commit, run or doc URL)`)
+    if (status === 'verified' && evidence && !EVIDENCE_FORMS.some((re) => re.test(evidence))) {
+      errors.push(`${n}: a verified assumption needs a checkable proof: an https link, a commit SHA, or path:line / path#Lnn`)
     }
     return { claim, why, evidence, status }
   })
   return { items, errors }
+}
+
+const DOC_LABEL = /(?:^|\s+[—–-]+\s+|\s*\|\s*)\**(Status|Evidence|Regression|Edit|Debt):\**\s*/gi
+const PERMALINK = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/[0-9a-f]{7,40}\/\S+/
+
+// The text of one docs row, or null for a table separator / header line.
+function docRowBody(l, firstTableLine) {
+  if (!l.startsWith('|')) return l.replace(/^(?:[-*]|\d+\.)\s+/, '')
+  if (/^[\s|:-]+$/.test(l)) return null
+  const hasField = /\b(?:Status|Evidence|Regression|Edit|Debt):/i.test(l)
+  return firstTableLine && !hasField ? null : l
+}
+
+function docRowFields(b) {
+  const hits = [...b.matchAll(DOC_LABEL)]
+  const claim = (hits.length ? b.slice(0, hits[0].index) : b).replace(/^\|/, '').replace(/\*\*/g, '').replace(/\|\s*$/, '').trim()
+  const f = {}
+  hits.forEach((h, i) => {
+    const end = i + 1 < hits.length ? hits[i + 1].index : b.length
+    f[h[1].toLowerCase()] = b.slice(h.index + h[0].length, end).replace(/\s*\|\s*$/, '').replace(/\*\*/g, '').trim()
+  })
+  return { claim, f, status: norm(f.status || ''), regression: norm(f.regression || '') }
+}
+
+function docRowErrors({ claim, f, status, regression }, num) {
+  const n = `docs row ${num}`
+  const errors = []
+  if (!claim) errors.push(`${n}: no claim`)
+  else if (!/\S+:\d+/.test(claim)) errors.push(`${n}: the claim needs a file:line`)
+  if (!['checked', 'wrong', 'canttell'].includes(status)) errors.push(`${n}: Status must be checked, wrong or can't tell`)
+  if (status === 'checked' && !PERMALINK.test(f.evidence || '')) errors.push(`${n}: a checked claim needs a github.com /blob/<sha>/ permalink as Evidence`)
+  if (regression !== 'yes' && regression !== 'no') errors.push(`${n}: Regression must be yes or no`)
+  if (!f.edit && !f.debt) errors.push(`${n}: needs an Edit: (the exact edit) or a Debt: (why not now)`)
+  return errors
+}
+
+export function parseDocs(text) {
+  const t = text.trim()
+  const none = t.match(/^\W*none\s*[—–:-]+\s*(\S.{2,})$/i)
+  if (none && !t.includes('\n')) return { none: true, rows: [], errors: [] }
+  if (/^\W*none\W*$/i.test(t)) return { none: false, rows: [], errors: ['Docs: "none" needs a reason — write "none — <why no doc is touched>"'] }
+  const errors = []
+  const lines = t.split('\n').map((l) => l.trim()).filter((l) => /^(?:[-*]\s|\d+\.\s|\|)/.test(l))
+  const rows = []
+  let seenTable = false
+  for (const l of lines) {
+    const first = l.startsWith('|') && !seenTable
+    if (l.startsWith('|')) seenTable = true
+    const body = docRowBody(l, first)
+    if (body === null) continue
+    const row = docRowFields(body)
+    errors.push(...docRowErrors(row, rows.length + 1))
+    rows.push({ claim: row.claim, status: row.status, evidence: row.f.evidence || '', regression: row.regression, edit: row.f.edit || '', debt: row.f.debt || '' })
+  }
+  if (!rows.length) errors.push('Docs must be rows (one per doc claim) or one line "none — <reason>"')
+  return { none: false, rows, errors }
 }
 
 function parseReproduced(text, errors) {
@@ -134,7 +200,9 @@ export function parsePlan(body, { revised = false, fresh = false } = {}) {
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
   errors.push(...a.errors)
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, reread, unverified: reproduced === false }
+  const d = sections.Docs ? parseDocs(sections.Docs) : { rows: [], errors: [] }
+  errors.push(...d.errors)
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, reread, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

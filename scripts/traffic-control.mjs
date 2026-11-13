@@ -11,7 +11,9 @@
  * is `decideTraffic` — pure, no I/O — so the shipped guard IS the tested function. The
  * workflow steps only gather facts (`gatherTrafficFacts`) and apply the verdict.
  *
- * RELEASE. `work-issue-pidev.yml` marks a waiting ticket with `WAIT_MARKER` in its comment.
+ * RELEASE. `work-issue-pidev.yml` parks a ticket with `status:blocked` + `traffic:waiting` (the walk
+ * lists only those, so held tickets traffic did not park are never read) and `WAIT_MARKER` in its
+ * comment (the ownership/dedup check, #3311).
  * When any `work-*` PR closes (or an issue closes / loses a label), `releaseWaiting` re-checks each waiting ticket and, if clear,
  * removes `status:blocked` and does REMOVE-then-ADD of `work-this` — adding a label the issue
  * already carries fires no event (#1750).
@@ -19,8 +21,10 @@
 
 import { routeIssue } from './lib/plan-route.mjs'
 import { handoffGuard } from './handoff-exec.mjs'
+import { parseBlockers } from './wave-gate.mjs'
 
 export const WAIT_MARKER = '<!-- traffic-wait -->'
+export const WAITING_LABEL = 'traffic:waiting'
 export const SCOPE_PREFIXES = ['pkg:', 'app:', 'poc:']
 
 const names = (labels) => (labels || []).map((l) => (typeof l === 'string' ? l : l.name))
@@ -36,9 +40,12 @@ export const PIPELINE_LABELS = ['delegate', 'delegate-pi', 'work-this']
  * Does this ticket count as open pipeline work? Never an epic; otherwise an open `work-<n>` PR,
  * or `status:in-progress` AND pipeline-owned (a hand-held in-progress ticket has no PR coming).
  */
-function isBlocker(o) {
+function isBlocker(o, mineBlockedBy = []) {
   const n = names(o.labels)
   if (n.includes('epic')) return false
+  // #3583: a held PR (draft, or ticket status:blocked) waits on the owner, not on a build —
+  // it does not block, unless this ticket declares `Blocked-by: #n` on it.
+  if (o.openPr && o.held && !mineBlockedBy.includes(o.number)) return false
   if (o.openPr) return true
   // #3214: a ticket still in plan mode (no approved plan, no PR) changes no code — never a blocker.
   if (o.planning) return false
@@ -65,7 +72,7 @@ export function parseUnblocks(body) {
  * @param {number}   o.issue           the ticket about to start
  * @param {string[]|object[]} o.labels the ticket's labels
  * @param {string}   [o.body]          the ticket body (`Unblocks: #n` lines let it pass #n)
- * @param {Array<{number:number,labels:any[],openPr?:boolean,planning?:boolean}>} o.others
+ * @param {Array<{number:number,labels:any[],openPr?:boolean,held?:boolean,planning?:boolean}>} o.others
  *        open pipeline tickets (issues, not PRs). `openPr` = an open `work-<number>` PR exists.
  * @returns {{action:'proceed'|'wait', waitingFor:number[], reason:string}}
  */
@@ -73,9 +80,10 @@ export function decideTraffic({ issue, labels, body, others }) {
   const mine = scopeLabels(labels)
   if (!mine.length) return { action: 'proceed', waitingFor: [], reason: 'ticket has no pkg:/app:/poc: label' }
   const unblocks = parseUnblocks(body)
+  const mineBlockedBy = parseBlockers(body)
   const all = (others || [])
     .filter((o) => o.number !== issue)
-    .filter((o) => isBlocker(o))
+    .filter((o) => isBlocker(o, mineBlockedBy))
     .filter((o) => scopeLabels(o.labels).some((l) => mine.includes(l)))
     .map((o) => o.number)
     .sort((a, b) => a - b)
@@ -113,12 +121,13 @@ export async function gatherTrafficFacts({ github, context, issueNumber, labels 
       { owner, repo, state: 'open', head: `${owner}:work-${it.number}`, per_page: 5 })
     const lbls = names(it.labels)
     const openPr = prs.length > 0
+    const held = openPr && (prs.some((p) => p.draft) || lbls.includes('status:blocked'))
     let planning = false
     try {
       planning = !openPr && !lbls.includes('plan:approved')
         && routeIssue({ labels: lbls, text: `${it.title || ''}\n${it.body || ''}` }).mode === 'plan'
     } catch { /* unreadable routing config: treat as a builder (safe side) */ }
-    others.push({ number: it.number, labels: lbls, openPr, planning })
+    others.push({ number: it.number, labels: lbls, openPr, held, planning })
   }
   return others
 }
@@ -126,7 +135,7 @@ export async function gatherTrafficFacts({ github, context, issueNumber, labels 
 /** Park the ticket: `status:blocked`, `work-this` off (so it can be re-added), one comment. */
 export async function applyWait({ github, context, issueNumber, verdict }) {
   const { owner, repo } = context.repo
-  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] })
+  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked', WAITING_LABEL] })
   try {
     await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'work-this' })
   } catch { /* already gone (workflow_dispatch) */ }
@@ -186,6 +195,7 @@ async function releaseOne({ github, context, it }) {
   const ref = { owner, repo, issue_number: it.number }
   // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
   if (!(await removeLabelIfPresent(github, { ...ref, name: 'status:blocked' }))) return scopeLabels(labels)
+  await removeLabelIfPresent(github, { ...ref, name: WAITING_LABEL })
   await removeLabelIfPresent(github, { ...ref, name: 'work-this' })
   // A limit / 5xx on the start label is saved and replayed hourly (#3306), not lost.
   await handoffGuard({ kind: 'label', issue: it.number, label: 'work-this' },
@@ -198,7 +208,7 @@ async function releaseOne({ github, context, it }) {
 export async function releaseWaiting({ github, context }) {
   const { owner, repo } = context.repo
   const waiting = await github.paginate(github.rest.issues.listForRepo,
-    { owner, repo, state: 'open', labels: 'status:blocked', per_page: 100 })
+    { owner, repo, state: 'open', labels: `status:blocked,${WAITING_LABEL}`, per_page: 100 })
   const released = []
   const claimed = new Set() // scopes already released this pass: one ticket per scope
   waiting.sort((a, b) => a.number - b.number)

@@ -15,6 +15,34 @@
       "when": 1793723798751,
       "tag": "0001_pile_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793955340413,
+      "tag": "0002_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794260077089,
+      "tag": "0003_thick_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794486059672,
+      "tag": "0004_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486207917,
+      "tag": "0005_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

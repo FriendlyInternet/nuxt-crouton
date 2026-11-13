@@ -86,7 +86,7 @@ Both the app and collab worker must share `COLLAB_TOKEN_SECRET`.
 
 ### Runtime Config
 
-The package provides `collabWorkerUrl` in `runtimeConfig.public`. Apps do NOT need to redeclare it — just set the env var in production:
+The package provides `collabWorkerUrl` in `runtimeConfig.public`. Apps do NOT need to redeclare it — just set the env var at build time (the layer reads `process.env.NUXT_PUBLIC_COLLAB_WORKER_URL`). Empty in a production build = live sync off (#3810):
 
 ```bash
 NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-collab-worker.workers.dev
@@ -116,13 +116,13 @@ The `type` query parameter differentiates room types:
 
 - **Nitro cannot proxy WebSocket frames** — The 101 upgrade succeeds but no messages flow. Clients must connect directly to the collab worker in production.
 - **CollabRoom ships as a dedicated Worker** — the DO lives in its own standalone Worker (decoupled deploy lifecycle; the app's Nitro worker doesn't export DO classes), referenced via `script_name`.
-- **`NUXT_PUBLIC_COLLAB_WORKER_URL` is build-time** — It's baked into the client bundle. Changing it requires a rebuild.
+- **`NUXT_PUBLIC_COLLAB_WORKER_URL` is build-time** — It's baked into the client bundle. Changing it requires a rebuild. An empty value in a production build means live sync is off.
 - **Token expiry is 60 seconds** — Enough for initial connection. Reconnections auto-fetch a fresh token.
 - **`COLLAB_TOKEN_SECRET` must match** — Both the Nuxt app and collab worker use the same secret for HMAC signing/verification.
 
 ## Real-Time Collection Sync
 
-When `crouton-collab` is installed, collection lists automatically stay in sync across all clients. If User A creates/updates/deletes an item, User B's list refreshes automatically.
+When the app is opted into live sync (`"collab": true` in `deploy.config.json`, which sets `collabWorkerUrl`), collection lists stay in sync across all clients. Without it, nothing connects; local dev uses the same-host route (#3810). If User A creates/updates/deletes an item, User B's list refreshes automatically.
 
 ### How It Works
 
@@ -153,7 +153,7 @@ The plugin `collection-sync.client.ts` automatically:
 3. Hooks into `crouton:mutation` to signal changes
 4. Refreshes collection caches when remote changes are detected
 
-**Zero configuration required** - just install the package.
+**One setting required** — `"collab": true` in `deploy.config.json` (→ `collabWorkerUrl`). Without it the plugin does nothing in a production build; local dev connects to the same host (#3810).
 
 ### Manual Usage (Optional)
 
@@ -196,6 +196,7 @@ export default defineNuxtConfig({
 `worker-template` (`<app>-collab-staging` / `<app>-collab`, `<app>-pr<N>-collab` for previews) with
 auto-provisioned D1, sets the same derived `COLLAB_TOKEN_SECRET` on Worker and app, applies the migration, and builds the app
 with `NUXT_PUBLIC_COLLAB_WORKER_URL` — in that order. Steps 2–5 below are the manual fallback only.
+That setting is also the opt-in: a production build without a worker URL opens no socket and shows no presence; only local dev uses the same-host route (#3810).
 
 
 The collab Durable Object ships as a standalone Worker:

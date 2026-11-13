@@ -1,0 +1,61 @@
+# #3666 fixture: trimmed raw log of job 129372284702 (PR #3632, typecheck poc); ESC rendered as ^[
+2026-11-09T19:07:50.6534368Z [success] [nuxt:icon] Nuxt Icon discovered local-installed 3 collections: lucide, simple-icons, vscode-icons
+2026-11-09T19:07:51.2794524Z [info] Nuxt Icon client bundle consist of `43` icons with `10.40KB`(uncompressed) in size
+2026-11-09T19:07:53.4729115Z [Vue] Resolve plugin path failed: vue-router/volar/sfc-route-blocks Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './volar/sfc-route-blocks' is not defined by "exports" in /home/runner/work/nuxt-crouton/nuxt-crouton/pocs/status/node_modules/vue-router/package.json
+2026-11-09T19:07:53.4730255Z     at exportsNotFound (node:internal/modules/esm/resolve:318:10)
+2026-11-09T19:07:53.4730577Z     at packageExportsResolve (node:internal/modules/esm/resolve:665:9)
+…trimmed…
+2026-11-09T19:08:09.1847421Z 
+2026-11-09T19:08:09.1853991Z 
+2026-11-09T19:08:09.1874811Z ^[[2m Test Files ^[[22m ^[[1m^[[31m1 failed^[[39m^[[22m^[[2m | ^[[22m^[[1m^[[32m17 passed^[[39m^[[22m^[[90m (18)^[[39m
+2026-11-09T19:08:09.1875534Z ^[[2m      Tests ^[[22m ^[[1m^[[31m2 failed^[[39m^[[22m^[[2m | ^[[22m^[[1m^[[32m133 passed^[[39m^[[22m^[[90m (135)^[[39m
+2026-11-09T19:08:09.1875981Z ^[[2m   Start at ^[[22m 19:08:08
+2026-11-09T19:08:09.1876436Z ^[[2m   Duration ^[[22m 1.12s^[[2m (transform 366ms, setup 0ms, import 665ms, tests 302ms, environment 1ms)^[[22m
+2026-11-09T19:08:09.1876646Z 
+2026-11-09T19:08:09.1876654Z 
+2026-11-09T19:08:09.1890867Z ##[error]ReferenceError: getQuery is not defined
+ ❯ server/api/status/login/[app].get.ts:15:55
+ ❯ tests/signin-routing.test.ts:41:12
+
+
+2026-11-09T19:08:09.1897993Z 
+2026-11-09T19:08:09.1899303Z ##[error]ReferenceError: getQuery is not defined
+ ❯ server/api/status/login/[app].get.ts:15:55
+ ❯ tests/signin-routing.test.ts:46:13
+…trimmed…
+2026-11-09T19:08:09.2419452Z  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  status@0.1.0 test: `vitest run`
+2026-11-09T19:08:09.2419676Z Exit status 1
+2026-11-09T19:08:09.3272396Z ##[error]Process completed with exit code 1.
+2026-11-09T19:08:09.3336800Z Post job cleanup.
+2026-11-09T19:08:09.3339001Z ##[start-action display=Restore package dist cache;id=__2017a1d2-9153-47a7-a2fd-691fc8e9595b.cache]
+…trimmed…
+2026-11-09T19:08:09.5140080Z Temporarily overriding HOME='/home/runner/work/_temp/3080c0d9-8dae-4d53-a3ec-05c8f935f0fc' before making global git config changes
+2026-11-09T19:08:09.5140850Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-09T19:08:09.5143712Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-09T19:08:09.5189014Z Removing SSH command configuration
+2026-11-09T19:08:09.5189459Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-09T19:08:09.5229597Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-09T19:08:09.5495622Z Removing HTTP extra header
+2026-11-09T19:08:09.5500556Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-09T19:08:09.5550467Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-09T19:08:09.5797457Z Removing includeIf entries pointing to credentials config files
+2026-11-09T19:08:09.5803895Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-09T19:08:09.5830354Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-09T19:08:09.5830948Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-09T19:08:09.5831392Z includeif.gitdir:/github/workspace/.git.path
+2026-11-09T19:08:09.5831757Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-09T19:08:09.5838078Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-09T19:08:09.5860417Z /home/runner/work/_temp/git-credentials-dcaf998d-f9da-47f9-bea0-e38e46e59338.config
+2026-11-09T19:08:09.5867919Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-dcaf998d\-f9da\-47f9\-bea0\-e38e46e59338\.config
+2026-11-09T19:08:09.5923634Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-09T19:08:09.5946631Z /home/runner/work/_temp/git-credentials-dcaf998d-f9da-47f9-bea0-e38e46e59338.config
+2026-11-09T19:08:09.5954042Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-dcaf998d\-f9da\-47f9\-bea0\-e38e46e59338\.config
+2026-11-09T19:08:09.5983096Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-09T19:08:09.6003731Z /github/runner_temp/git-credentials-dcaf998d-f9da-47f9-bea0-e38e46e59338.config
+2026-11-09T19:08:09.6008543Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-dcaf998d\-f9da\-47f9\-bea0\-e38e46e59338\.config
+2026-11-09T19:08:09.6043074Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-09T19:08:09.6064008Z /github/runner_temp/git-credentials-dcaf998d-f9da-47f9-bea0-e38e46e59338.config
+2026-11-09T19:08:09.6069583Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-dcaf998d\-f9da\-47f9\-bea0\-e38e46e59338\.config
+2026-11-09T19:08:09.6099978Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-09T19:08:09.6343180Z Removing credentials config '/home/runner/work/_temp/git-credentials-dcaf998d-f9da-47f9-bea0-e38e46e59338.config'
+2026-11-09T19:08:09.6496658Z Cleaning up orphan processes

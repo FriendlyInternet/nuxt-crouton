@@ -13,21 +13,17 @@
 
 // A CI-fix commit (#3104): the fix-bot's commit carries this trailer and is committed by claude[bot].
 // Owner decision (#3058): such a commit keeps the owner's `ok`; a worker revision commit voids it.
-export const CI_FIX_MARKER = 'CI-Fix: true'
-
-function isCiFixCommit(k) {
-  const msg = k.commit?.message || ''
-  if (!msg.split('\n').some(l => l.trim() === CI_FIX_MARKER)) return false
-  return k.commit?.committer?.name === 'claude[bot]'
-}
-
+// The test lives in ci-fix-commit.mjs (#3668) so the fix-ci workflow can copy it on its own.
+import { CI_FIX_MARKER, isCiFixCommit } from './ci-fix-commit.mjs'
 import { isAgentComment, isApproval } from '../approval.mjs'
+
+export { CI_FIX_MARKER }
 
 /**
  * @param {{ comments: Array<{user?: {login?: string, type?: string}, body?: string, created_at: string}>,
  *           commits: Array<{parents?: unknown[], files?: Array<string | {filename: string}>, commit?: {committer?: {date?: string}, author?: {date?: string}}}>,
  *           owner: string }} input
- * @returns {{ go: boolean, reason: string, approvedAt?: string }}
+ * @returns {{ go: boolean, reason: string, approvedAt?: string, mergeSince?: boolean }} — `mergeSince`: a merge commit landed after the ok (#3467)
  */
 export function ownerMergeGo({ comments = [], commits = [], owner }) {
   const mine = comments
@@ -50,5 +46,13 @@ export function ownerMergeGo({ comments = [], commits = [], owner }) {
     return d && new Date(d) > approvedAt
   })
   if (revised) return { go: false, reason: 'a commit landed after the approval — needs a fresh ok', approvedAt: verdict.at }
-  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at }
+  // A merge commit keeps the ok, but it may have resolved conflicts (new code the owner never saw), so
+  // the caller makes the PR wait for a build review of the new head (#3467).
+  const mergeSince = commits.some(k => {
+    if ((k.parents || []).length <= 1) return false
+    const d = k.commit?.committer?.date || k.commit?.author?.date
+    return d && new Date(d) > approvedAt
+  })
+  if (mergeSince) return { go: true, reason: 'owner approved; a base merge landed since', approvedAt: verdict.at, mergeSince: true }
+  return { go: true, reason: 'owner approved and nothing changed since', approvedAt: verdict.at, mergeSince: false }
 }

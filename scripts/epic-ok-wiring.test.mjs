@@ -18,7 +18,10 @@ test('approve-epic says `ok`, never `lgtm`, and never enables GitHub auto-merge'
 test('fix-ci-on-failure can be started by hand and hands back with the branch', () => {
   const y = read('fix-ci-on-failure.yml')
   assert.match(y, /workflow_dispatch:/)
-  assert.match(y, /handoff-exec\.mjs dispatch[^\n]*branch:\$b/) // the hand-back goes through the saved-hand-off wrapper (#3306)
+  // the hand-back lives in the guard script the workflow runs (#3452), through the saved-hand-off wrapper (#3306)
+  assert.match(y, /git show "origin\/\$DEFAULT_BRANCH:scripts\/fix-bot-guard\.sh"/)
+  const guard = readFileSync(new URL('./fix-bot-guard.sh', import.meta.url), 'utf8')
+  assert.match(guard, /handoff-exec\.mjs dispatch[^\n]*branch:\$b/)
   assert.doesNotMatch(y, /github\.event\.workflow_run\.(id|name|html_url)/)
 })
 

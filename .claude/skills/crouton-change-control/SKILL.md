@@ -51,7 +51,7 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 ## 2. Approval semantics (#572) — one loop for every gate
 
 - **Hold state** = the `status:blocked` label on the issue. The gate PR (if any) is a **draft**.
-- **The ONLY resume signal is a reply comment** whose body matches `/\b(approve|approved|lgtm)\b/i`, posted by a human (non-Bot). Verified in `.github/workflows/resume-on-comment.yml`: it triggers **only** on `issue_comment: created`, on the blocked **ISSUE itself** — not a PR (`!github.event.issue.pull_request` in the job `if`) — + `status:blocked` + `comment.user.type != 'Bot'`. So an approval comment posted on the draft gate PR does **nothing** — reply on the issue. A 👍 reaction raises no event; the `ui-approved` label exists but nothing listens for it. **Reactions, labels, and PR comments do nothing.**
+- **The ONLY resume signal is a reply comment** whose body matches `/\b(approve|approved|lgtm)\b/i`, posted by a human (non-Bot). Exception (#3691): an owner-screen comment (first line 🎯/📐, from the Nuxt Harness app, on a `status:blocked` issue — or on a PR whose `Closes #N` issue is `status:blocked`) also resumes — as feedback only; it never counts as an approval. Verified in `.github/workflows/on-comment.yml` / `scripts/comment-route.mjs` (formerly `resume-on-comment.yml`): it triggers **only** on `issue_comment: created`, on the blocked **ISSUE itself** — not a PR (`!github.event.issue.pull_request` in the job `if`) — + `status:blocked` + `comment.user.type != 'Bot'`. So an approval comment posted on the draft gate PR does **nothing** — reply on the issue. A 👍 reaction raises no event; the `ui-approved` label exists but nothing listens for it. **Reactions, labels, and PR comments do nothing.**
 - On approval, a deterministic step in that same workflow finds the draft gate PR (linked to the issue, base is `epic/*`), marks it ready, **merges with a merge commit — never squash**, and removes `status:blocked`. The link is matched from GitHub's own linked-issue relation first, then from a line-start `Closes` / `Fixes` / `Resolves` / `Sub-issue` / `Refs #<issue>` in the body (#1663 — it used to demand the literal `Closes #NN`, and a PR saying `Sub-issue: #NN` made the approval a silent no-op). **Write `Closes #<issue>` anyway** — it stays the canonical form, even on an `epic/*` PR where GitHub won't auto-close.
 - Any other reply = a change request: iterate and re-hold. A no-op resume goes red (artifact-gate, #603).
 - Who approves: this is a solo-dev repo — the owner (@pmcp). "Done" is *derived from a recorded sign-off*, never self-asserted (`AGENTS.md` "Done is signed off, not asserted"; the #988 incident — see `crouton-failure-archaeology`).
@@ -64,9 +64,9 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 1. **Interactive:** after explicit user approval, `echo '<package-name>' >> .claude/.package-edit-approved` (one name per line, gitignored). Remove it when done.
 2. **Epic-scoped (#350):** `export CROUTON_PACKAGE_EDIT_APPROVED="<pkg> [<pkg>…]"` — survives spawned agents/worktrees, can't be committed.
 
-**The approved set is the ticket's `pkg:*` labels (#2778).** The worker and the fix-bot take their package scope from the ticket's `pkg:*` labels; the packages guard accepts any of its three declarations (the `Packages-approved:` line, a `packages:approved` label, or a linked `pkg:*` issue). Ticket writers set them once: give `epic-scaffold.mjs` / `apply-decompose-plan.mjs` a plan field `packagesApproved: { why, packages: ["crouton-assets", …] }` and every child gets the `Packages-approved: <why>` line plus one `pkg:<name>` label per package (an unknown label fails loudly). An interactive orchestrator creating tickets by hand must add the same labels.
+**The approved set is the ticket's `pkg:*` labels (#2778).** The worker and the fix-bot take their package scope from the ticket's `pkg:*` labels; the packages guard accepts any of its three declarations (the `Packages-approved:` line, a `packages:approved` label, or a linked `pkg:*` issue). Ticket writers set them once: give `epic-scaffold.mjs` / `apply-decompose-plan.mjs` a plan field `packagesApproved: { why, packages: ["crouton-assets", …] }` and every child gets the `Packages-approved: <why>` line plus one `pkg:<name>` label per package (an unknown label fails loudly). An interactive orchestrator creating tickets by hand must add the same labels. The pi worker is told that scope during the run by `.pi/extensions/packages-notice.ts`: `pkg:*` labels alone count as approval, as in the CI check; names in the line are the fallback scope (#3701).
 
-Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the approval file. The agent pipeline adds a second net: `automerge-epic-subpr.yml` **holds a bot sub-PR touching `packages/`** for a human unless it targets an `epic/*` branch, touches no `.github/workflows/**`, and carries `build:approved` (#2777; decision in `scripts/shared-code-hold.mjs`). Workflow changes (#2442) always stay held, and PRs into `main` are never auto-merged by this path.
+Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the approval file. The agent pipeline adds a second net: `automerge-epic-subpr.yml` **holds a bot sub-PR touching `packages/`** for a human unless it targets an `epic/*` branch, touches no `.github/workflows/**`, and carries `build:approved` (#2777; decision in `scripts/shared-code-hold.mjs`). Workflow changes (#2442) always stay held, and PRs into `main` merge here only on the owner's `ok`, except a pipeline `work-*` PR whose every file is in the incubator stage (`deploy: 'preview'` in `harness.config.mjs`) with a build-review go on its current head (#3757).
 
 ⚠️ **Contradiction, stated:** root `CLAUDE.md` and the hook's own comment call the file "session-scoped", but open issue [#701](https://github.com/FriendlyInternet/nuxt-crouton/issues/701) documents that `/commit` cleanup deletes the file, so multi-commit package work re-blocks (one epic needed 3 unlocks). Until #701 lands: expect to re-approve after each `/commit`, or use the env-var channel for a whole epic. Never route around the gate itself.
 
@@ -74,7 +74,9 @@ Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the
 
 The interactive flow (feature branch → `/commit` → PR `Closes #NN` → merge preserving commits) is owned by `AGENTS.md` (The loop, Commits) and the `github-tasks`/`commit` skills — read it there. What's specific here, verified in the workflows:
 
-Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs auto-merge there when green (`automerge-epic-subpr.yml`, merge commit); gate PRs wait for §2. **The pipeline stops at the epic branch — nothing reaches `main` on its own**: the epic→`main` PR is a human act (the #686 lesson, from that epic's postmortem — cited, not reproduced). It also never deploys production (§5).
+Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs auto-merge there when green (`automerge-epic-subpr.yml`, merge commit); gate PRs wait for §2. **Nothing outside the incubator reaches `main` on its own**: a POC-only `work-*` PR merges once green with a build-review go (#3757); everything else (and every epic→`main` PR) is a human act (the #686 lesson, from that epic's postmortem — cited, not reproduced). It also never deploys production (§5).
+
+When `main` turns green after being red, bring a waiting epic PR up to date with `gh api -X PUT repos/{o}/{r}/pulls/{n}/update-branch`. `rerun-failed-jobs` re-tests the stale merge ref and stays red (#3011, #3018).
 
 ## 5. The non-negotiables (rule → incident behind it)
 
@@ -204,11 +206,14 @@ follows this rule and says so in its done comment.
 
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
-data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
-(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
-`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
-instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
-differs, links the plan in its PR body and appends a row to
-`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+(#2755) → the `plan-review` job in `on-comment.yml` has an independent top-model reviewer grade it (#2756) → on
+`plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
+instruction (`plan` input). After two reviewer rejections the plan holds; the owner can push it
+forward with `ok: <reason>` (recorded as a bot decision comment and an epic Decisions line, then
+`plan:approved`); a bare `ok` is asked for the reason (#3272). The build implements exactly that plan, stops and says why if reality
+differs, links the plan in its PR body; the run's record step writes the ledger row to the
+`pipeline-data` branch under `plan-ledger/` (`scripts/plan-ledger.mjs --write`, #3457).
+`writeups/reports/plan-review-ledger.jsonl` stays on main as frozen history up to 6 Nov 2026. Chores and app-only
 tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
