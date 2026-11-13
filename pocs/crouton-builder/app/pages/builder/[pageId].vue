@@ -318,7 +318,8 @@ async function viewPage() {
 </template>
 
 <style scoped>
-.board-frame { position: absolute; left: 0; top: 0; background: var(--ui-bg); }
+/* The board is content-height like the served page (#3865): the frame scrolls as one page. */
+.board-frame { position: absolute; left: 0; top: 0; overflow-y: auto; background: var(--ui-bg); }
 .board-frame--scaled { outline: 1px solid var(--ui-border); box-shadow: 0 0 0 9999px color-mix(in oklch, var(--ui-bg-elevated) 70%, transparent); }
 /* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */
 .board-chip { touch-action: pan-x; -webkit-touch-callout: none; }
