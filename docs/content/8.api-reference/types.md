@@ -356,6 +356,7 @@ Extends: `LayoutNodeBase`
 | `id` | `string` | no | This pane's own id (#2490), so two panes of the same block can be addressed apart — a breakpoint's `collapsed` list may name a pane id or a block id. Absent on older trees, where the block id is the only handle. |
 | `config` | `Record<string, unknown>` | no | User-editable props passed to the block (validated against its config schema in Sprint 1). |
 | `collapse` | `LayoutCollapseRecipe` | no | How this pane tucks when collapsed (#852) — its **edge** + **affordance** (the "hide recipe"). A per-pane property (stable across breakpoints, unlike the per-breakpoint `collapsed` set + `collapseStyle` motion). Absent ⇒ `DEFAULT_COLLAPSE_RECIPE` (right-edge tab — the original gutter behaviour). |
+| `source` | `string` | no | The layout store copy this pane is fed from (#3650): `'<storeId>'` or `'<storeId>#<copy>'`. Each distinct string is its own copy, owned by the surrounding `CroutonLayoutStoreScope`; the block receives the store only as props + events, through the store's declared feed for this `blockId`. |
 
 _Source: `packages/crouton-core/app/types/layout.ts`_
 
@@ -471,6 +472,66 @@ _Source: `packages/crouton-core/app/types/layout.ts`_
 | `auto` | `boolean` | no | Auto layout (#3784): panes size from their block's rule / `size` override. Absent or false ⇒ today's percentage behaviour. A nested sub-layout is its own `LayoutTree`, so it carries its own flag. |
 | `root` | `LayoutNode` | yes |  |
 | `breakpoints` | `LayoutBreakpoint[]` | no | Authored responsive breakpoints (WS5, #874), the *explicit* layer over the *intrinsic* (container-query) reflow. Optional; absent = no authored breakpoints (the intrinsic layer still reflows every region to its own width). A nested sub-layout is its own `LayoutTree`, so it carries its own breakpoints — responsiveness recurses with the layout. |
+| `sources` | `Record<string, LayoutSourceSettings>` | no | Per-source options for the layout's store copies (#3650), keyed by the source string a leaf names (`'bookings'`, `'bookings#mine'`). A key with no leaf still creates a copy. On a clash with a nested sub-layout's map, the outer level wins. |
+
+_Source: `packages/crouton-core/app/types/layout.ts`_
+
+## LayoutSourceSettings
+
+Settings for one store copy in `LayoutTree.sources` (#3650).
+
+| Member | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options` | `Record<string, unknown>` | no |  |
+
+_Source: `packages/crouton-core/app/types/layout.ts`_
+
+## LayoutStoreEntry
+
+One store copy a layout needs — what `collectLayoutStores` returns (#3650).
+
+| Member | Type | Required | Description |
+| --- | --- | --- | --- |
+| `source` | `string` | yes |  |
+| `options` | `Record<string, unknown>` | no |  |
+
+_Source: `packages/crouton-core/app/types/layout.ts`_
+
+## LayoutStoreContext
+
+What a store's `setup` receives for one copy (#3650).
+
+| Member | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | yes | Unique per scope + source (`layout-store:<scopeId>:<source>`). Build every `useFetch` / `useAsyncData` key from it, so two copies never share data. |
+| `source` | `string` | yes | The full source string (`'test'`, `'test#2'`). |
+| `options` | `Record<string, unknown>` | yes | The options from the layout's `sources` map (`{}` when none). |
+
+_Source: `packages/crouton-core/app/types/layout.ts`_
+
+## CroutonLayoutStoreFeed
+
+How one store feeds one block (#3650): `props` maps the store to the block's
+props; `events` maps a block event name (`bump` → the block emits `bump`) to an
+intent on the store. Blocks never inject the store themselves.
+
+| Member | Type | Required | Description |
+| --- | --- | --- | --- |
+| `props` | `(store: S) => Record<string, unknown>` | no |  |
+| `events` | `Record<string, (store: S, ...args: any[]) => void>` | no |  |
+
+_Source: `packages/crouton-core/app/types/layout.ts`_
+
+## CroutonLayoutStoreDefinition
+
+A layout store definition (#3650), registered with `defineCroutonLayoutStore`
+from a Nuxt plugin. `setup` runs once per copy, inside the scope's own setup.
+
+| Member | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | yes |  |
+| `setup` | `(ctx: LayoutStoreContext) => S` | yes |  |
+| `feeds` | `Record<string, CroutonLayoutStoreFeed<S>>` | yes | Keyed by block id. |
 
 _Source: `packages/crouton-core/app/types/layout.ts`_
 

@@ -186,6 +186,26 @@ describe('#987 serializeLayoutDocument / parseLayoutDocument — the page-flow i
   })
 })
 
+describe('store wiring round-trips (#3650)', () => {
+  it('keeps a leaf `source` and a tree `sources` map through serialize → parse, nested too', () => {
+    const tree: LayoutTree = {
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'test' },
+          { type: 'nested', layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'b', source: 'test#2' }, sources: { 'test#2': { options: { start: 5 } } } } },
+        ],
+      },
+      sources: { test: { options: { start: 1 } }, spare: {} },
+    }
+    const text = serializeLayoutTree(tree)
+    expect(parseLayoutTree(text)).toEqual(tree)
+    expect(serializeLayoutTree(parseLayoutTree(text)!)).toBe(text)
+  })
+})
+
 describe('auto layout fields round-trip (#3816)', () => {
   const autoTree: LayoutTree = {
     renderer: 'panes',

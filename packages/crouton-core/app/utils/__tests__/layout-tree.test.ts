@@ -256,6 +256,46 @@ describe('sanitizeLayoutTree — authored breakpoints (WS5 #874)', () => {
   })
 })
 
+describe('sanitizeLayoutTree — keeps store wiring (#3650)', () => {
+  it('keeps a string leaf `source` and a tree `sources` map, nested too', () => {
+    const input = {
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'bookings' },
+          { type: 'nested', layout: { root: { type: 'leaf', blockId: 'b', source: 'bookings#mine' }, sources: { 'bookings#mine': { options: { mine: true } } } } },
+        ],
+      },
+      sources: { bookings: { options: { range: 'week' } }, spare: {} },
+    }
+    expect(sanitizeLayoutTree(input)).toEqual({
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'bookings' },
+          { type: 'nested', layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'b', source: 'bookings#mine' }, sources: { 'bookings#mine': { options: { mine: true } } } } },
+        ],
+      },
+      sources: { bookings: { options: { range: 'week' } }, spare: {} },
+    })
+  })
+
+  it('drops a non-string `source` and non-object `sources` entries', () => {
+    const clean = sanitizeLayoutTree({
+      renderer: 'panes',
+      root: { type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a', source: 42 }, { type: 'leaf', blockId: 'b', source: '' }] },
+      sources: { ok: { options: { x: 1 } }, bad: 'nope', list: [1], badOptions: { options: 'x' } },
+    })
+    expect(clean?.root).toEqual({ type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a' }, { type: 'leaf', blockId: 'b' }] })
+    expect(clean?.sources).toEqual({ ok: { options: { x: 1 } }, badOptions: {} })
+    expect(sanitizeLayoutTree({ root: { type: 'leaf', blockId: 'a' }, sources: ['x'] })).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'a' } })
+  })
+})
+
 describe('sanitizeLayoutTree — auto layout fields (#3816)', () => {
   it('keeps auto: true on a full tree, and on a nested node\'s sub-layout', () => {
     const clean = sanitizeLayoutTree({
