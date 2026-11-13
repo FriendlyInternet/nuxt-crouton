@@ -10,7 +10,7 @@ Call refreshNuxtData with the keys after every save.
 ### Files
 - packages/crouton-core/app/composables/useSave.ts
 ### Test
-none
+- [ ] T0 — no runnable test — Manual: none planned
 ### Assumptions
 - refreshing is enough — Why: seems right — Evidence: not checked — Status: unverified
 ### Docs
