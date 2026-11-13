@@ -164,3 +164,5 @@ pocs/crate/.data
 # Nuxt test env writes this inside the runtime-test project
 packages/crouton-core/tests/nuxt-runtime/.nuxtrc
 packages/crouton-core/tests/nuxt-runtime/.nuxt
+
+pocs/status/.data
