@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { cardView, submitAnswer, validateAnswer, waitingCards, type InboxCard } from '../app/utils/inbox-core'
+import { cardView, loadInbox, nothingWaits, submitAnswer, validateAnswer, waitingCards, type InboxCard, type InboxLoadState } from '../app/utils/inbox-core'
 
 const card = (over: Partial<InboxCard> & { id: string }): InboxCard => ({
   kind: 'review',
@@ -97,5 +97,90 @@ describe('submitAnswer', () => {
     expect(res.error).toBe('Add a short note first.')
     expect(send).toHaveBeenCalledTimes(0)
     expect(res.cards).toHaveLength(list().length)
+  })
+})
+
+describe('loadInbox', () => {
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void
+    let reject!: (e: unknown) => void
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej })
+    return { promise, resolve, reject }
+  }
+  const flush = () => new Promise(r => setTimeout(r, 0))
+  const harness = () => {
+    const state: InboxLoadState = { cards: [], loading: true, refreshing: false, loadError: null, syncError: null }
+    const update = (patch: Partial<InboxLoadState>) => Object.assign(state, patch)
+    return { state, update }
+  }
+  const stored = [card({ id: 'a', askedAt: '2026-11-01T00:00:00Z' })]
+  const fresh = [card({ id: 'a', askedAt: '2026-11-01T00:00:00Z' }), card({ id: 'b', askedAt: '2026-11-02T00:00:00Z' })]
+
+  it('shows the stored list before sync resolves', async () => {
+    const { state, update } = harness()
+    const sync = deferred()
+    const list = vi.fn().mockResolvedValueOnce(stored).mockResolvedValueOnce(fresh)
+    const done = loadInbox({ list, sync: () => sync.promise, update })
+    await flush()
+    expect(state.cards.map(c => c.id)).toEqual(['a'])
+    expect(state.loading).toBe(false)
+    expect(state.refreshing).toBe(true)
+    expect(list).toHaveBeenCalledTimes(1)
+    sync.resolve()
+    await done
+  })
+
+  it('fetches the list a second time after sync resolves and replaces the cards', async () => {
+    const { state, update } = harness()
+    const list = vi.fn().mockResolvedValueOnce(stored).mockResolvedValueOnce(fresh)
+    await loadInbox({ list, sync: async () => ({}), update })
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(state.cards.map(c => c.id)).toEqual(['b', 'a'])
+    expect(state.refreshing).toBe(false)
+    expect(state.syncError).toBeNull()
+  })
+
+  it('a sync that rejects leaves the first list in place and reports the error', async () => {
+    const { state, update } = harness()
+    const list = vi.fn().mockResolvedValue(stored)
+    await loadInbox({ list, sync: () => Promise.reject({ data: { statusMessage: 'rate limited' } }), update })
+    expect(list).toHaveBeenCalledTimes(1)
+    expect(state.cards.map(c => c.id)).toEqual(['a'])
+    expect(state.syncError).toBe('Could not refresh from GitHub: rate limited')
+    expect(state.refreshing).toBe(false)
+    expect(state.loadError).toBeNull()
+  })
+
+  it('a failed list load reports the load error', async () => {
+    const { state, update } = harness()
+    const list = vi.fn().mockRejectedValue(new Error('boom'))
+    const sync = deferred()
+    const done = loadInbox({ list, sync: () => sync.promise, update })
+    await flush()
+    expect(state.loadError).toBe('boom')
+    expect(state.loading).toBe(false)
+    sync.reject(new Error('down'))
+    await done
+    expect(state.syncError).toBe('Could not refresh from GitHub: down')
+  })
+
+  it('"nothing waits" is false while sync is pending and true once it finishes empty', async () => {
+    const { state, update } = harness()
+    const sync = deferred()
+    const list = vi.fn().mockResolvedValue([])
+    const done = loadInbox({ list, sync: () => sync.promise, update })
+    await flush()
+    expect(state.loading).toBe(false)
+    expect(state.cards).toEqual([])
+    expect(nothingWaits(state)).toBe(false)
+    sync.resolve()
+    await done
+    expect(nothingWaits(state)).toBe(true)
+  })
+
+  it('"nothing waits" is true after a failed sync with an empty list', async () => {
+    const { state, update } = harness()
+    await loadInbox({ list: async () => [], sync: () => Promise.reject(new Error('x')), update })
+    expect(nothingWaits(state)).toBe(true)
   })
 })

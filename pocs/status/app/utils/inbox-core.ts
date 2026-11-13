@@ -84,3 +84,56 @@ export async function submitAnswer<T extends InboxCard>(args: {
     return { cards, error: msg || 'Could not send.' }
   }
 }
+
+/** The inbox page's load state. `loading` = the stored list; `refreshing` = the GitHub sync behind it. */
+export interface InboxLoadState<T extends InboxCard = InboxCard> {
+  cards: T[]
+  loading: boolean
+  refreshing: boolean
+  loadError: string | null
+  syncError: string | null
+}
+
+/** The readable text of a $fetch error (server statusMessage first), or the fallback. */
+export function errorText(e: any, fallback: string): string {
+  return e?.data?.statusMessage ?? e?.statusMessage ?? e?.message ?? fallback
+}
+
+/** "Nothing waits on you." shows only once the list loaded AND the GitHub refresh is over, and it is empty. */
+export function nothingWaits(s: InboxLoadState): boolean {
+  return !s.loading && !s.refreshing && !s.loadError && s.cards.length === 0
+}
+
+/**
+ * Load the inbox: show the stored cards first, then refresh from GitHub in the background and
+ * list again. A failed refresh keeps the stored cards and reports `syncError`; a failed list
+ * reports `loadError`. Every change goes through `update`, so the page sees each step at once.
+ */
+export async function loadInbox<T extends InboxCard>(args: {
+  list: () => Promise<T[] | unknown>
+  sync: () => Promise<unknown>
+  update: (patch: Partial<InboxLoadState<T>>) => void
+}): Promise<void> {
+  const { list, sync, update } = args
+  const fetchList = async () => {
+    try {
+      const result = await list()
+      update({ cards: waitingCards(Array.isArray(result) ? result as T[] : []), loadError: null })
+    } catch (e) {
+      update({ loadError: errorText(e, 'Could not load cards.') })
+    }
+  }
+
+  update({ loading: true, refreshing: true, loadError: null, syncError: null })
+  await fetchList()
+  update({ loading: false })
+
+  try {
+    await sync()
+  } catch (e) {
+    update({ syncError: `Could not refresh from GitHub: ${errorText(e, 'sync failed')}`, refreshing: false })
+    return
+  }
+  await fetchList()
+  update({ refreshing: false })
+}

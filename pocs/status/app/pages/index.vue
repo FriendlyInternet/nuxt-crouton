@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// The inbox: every card that waits on the owner, newest first. On load it syncs cards from
-// GitHub (POST /api/cards/sync), then lists the stored ones. List/answer rules: utils/inbox-core.ts.
-import { cardView, submitAnswer, waitingCards, type InboxCard, type SendAnswer } from '~/utils/inbox-core'
+// The inbox: every card that waits on the owner, newest first. On load it shows the stored cards
+// at once, then syncs from GitHub (POST /api/cards/sync) in the background and lists again.
+// Load/list/answer rules: utils/inbox-core.ts.
+import { cardView, loadInbox, nothingWaits, submitAnswer, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -9,27 +10,33 @@ const { getTeamId } = useTeamContext()
 
 const cards = ref<InboxCard[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
 const syncError = ref<string | null>(null)
 const loadError = ref<string | null>(null)
 
-const errorText = (e: any, fallback: string) => e?.data?.statusMessage ?? e?.statusMessage ?? e?.message ?? fallback
+const showNothing = computed(() => nothingWaits({
+  cards: cards.value,
+  loading: loading.value,
+  refreshing: refreshing.value,
+  loadError: loadError.value,
+  syncError: syncError.value
+}))
 
-async function load() {
-  loading.value = true
-  loadError.value = null
-  await $fetch('/api/cards/sync', { method: 'POST' }).catch((e) => {
-    syncError.value = `Could not refresh from GitHub: ${errorText(e, 'sync failed')}`
-  })
-  try {
+function applyLoad(patch: Partial<InboxLoadState>) {
+  if (patch.cards !== undefined) cards.value = patch.cards
+  if (patch.loading !== undefined) loading.value = patch.loading
+  if (patch.refreshing !== undefined) refreshing.value = patch.refreshing
+  if (patch.loadError !== undefined) loadError.value = patch.loadError
+  if (patch.syncError !== undefined) syncError.value = patch.syncError
+}
+
+function load() {
+  return loadInbox({
     // One-team mode: the slug `test1` resolves too if the team is not known on the client yet.
-    const teamId = getTeamId() ?? 'test1'
-    const result = await $fetch<InboxCard[]>(`/api/teams/${teamId}/inbox-cards`)
-    cards.value = waitingCards(Array.isArray(result) ? result : [])
-  } catch (e) {
-    loadError.value = errorText(e, 'Could not load cards.')
-  } finally {
-    loading.value = false
-  }
+    list: () => $fetch<InboxCard[]>(`/api/teams/${getTeamId() ?? 'test1'}/inbox-cards`),
+    sync: async () => { await $fetch('/api/cards/sync', { method: 'POST' }) },
+    update: applyLoad
+  })
 }
 
 const sendToServer: SendAnswer = async (cardId, body) => {
@@ -63,7 +70,8 @@ onMounted(load)
       <UAlert v-if="loadError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="loadError" />
 
       <p v-if="loading" class="text-muted">Loading…</p>
-      <p v-else-if="!cards.length && !loadError" class="text-muted">Nothing waits on you.</p>
+      <p v-else-if="showNothing" class="text-muted">Nothing waits on you.</p>
+      <p v-else-if="refreshing && !cards.length && !loadError" class="text-muted">Checking GitHub…</p>
 
       <template v-for="c in cards" :key="c.id">
         <CardsEdit v-if="cardView(c) === 'edit'" :card="c" :send="answerFor(c.id)" />
