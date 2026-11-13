@@ -12,6 +12,7 @@
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
 import { resolveLayoutAtWidth, partitionCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { collectLayoutStores } from '@fyit/crouton-core/app/utils/layout-stores'
 import { useWindowSize } from '@vueuse/core'
 import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, type HiddenItem } from '~/utils/board-hidden'
 
@@ -39,6 +40,12 @@ const tree = computed<LayoutTree | null>(() => {
   const stored = live?.layout ?? (typeof board.layout === 'string' ? board.layout : null)
   return stored ? parseLayoutTree(stored) : null
 })
+
+// Every store copy the FULL tree needs (#3650) — one scope around the renderer AND the
+// hidden-blocks layer, so every pane reads the same copy across breakpoint re-keys.
+// Re-keyed (state reset) only when the list of sources changes.
+const stores = computed(() => (tree.value ? collectLayoutStores(tree.value) : []))
+const storesKey = computed(() => stores.value.map(s => s.source).join('|'))
 
 // Resolved at the real width of the device — this IS the served breakpoint.
 const { width } = useWindowSize()
@@ -97,12 +104,14 @@ provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: id => hiddenLaye
       <!-- Breakpoints are resolved on the client's real width; render after mount so SSR
            doesn't pick a desktop arrangement for a phone. -->
       <ClientOnly>
-        <CroutonLayoutRenderer v-if="visibleRoot" :node="visibleRoot" :interactive="false" :key="resolved?.activeBreakpoint ?? 'base'" />
-        <div v-else class="flex min-h-dvh items-center justify-center p-6 text-sm text-muted">
-          Nothing to show at this width.
-        </div>
-        <BoardHiddenBlocks ref="hiddenLayer" :items="hiddenItems" />
-        <pre v-if="debug" class="whitespace-pre-wrap break-all border-t border-default p-3 text-[11px] text-muted" data-handoff="served-debug">{{ debugText }}</pre>
+        <CroutonLayoutStoreScope :key="storesKey" :stores="stores">
+          <CroutonLayoutRenderer v-if="visibleRoot" :node="visibleRoot" :interactive="false" :key="resolved?.activeBreakpoint ?? 'base'" />
+          <div v-else class="flex min-h-dvh items-center justify-center p-6 text-sm text-muted">
+            Nothing to show at this width.
+          </div>
+          <BoardHiddenBlocks ref="hiddenLayer" :items="hiddenItems" />
+          <pre v-if="debug" class="whitespace-pre-wrap break-all border-t border-default p-3 text-[11px] text-muted" data-handoff="served-debug">{{ debugText }}</pre>
+        </CroutonLayoutStoreScope>
       </ClientOnly>
     </template>
   </div>

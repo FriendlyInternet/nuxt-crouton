@@ -22,18 +22,28 @@ export const POLL_LIMIT_MS = 60000
 const PUSH = ['admin', 'write']
 
 /**
- * @param {{ state?: string, perm?: string, branches?: string[], openPrs?: {number:number,title?:string,url?:string}[], archiveExists?: boolean }} input
+ * @param {{ state?: string, perm?: string, branches?: string[], openPrs?: {number:number,title?:string,url?:string}[], archiveExists?: boolean, epic?: number, parentEpic?: number }} input
+ *   `epic` is this epic's number — the branch must start with `epic/<epic>-` (missing ⇒ always refused).
+ *   `parentEpic` is the `epic=` on the epic's own pipeline line; when it differs, this is a child epic
+ *   carrying its parent's branch, and the refusal points at the parent (#3922).
  * @returns {{ action: 'ignore', reason: string }
- *   | { action: 'refuse', reason: string, prs: object[] }
+ *   | { action: 'refuse', reason: string, prs: object[], you?: string }
  *   | { action: 'rename', branch: string, archive: string }}
  */
-export function decideFreshBranch({ state = 'open', perm = 'none', branches = [], openPrs = [], archiveExists = false } = {}) {
+export function decideFreshBranch({ state = 'open', perm = 'none', branches = [], openPrs = [], archiveExists = false, epic, parentEpic } = {}) {
   const no = ignoreReason({ state, perm })
   if (no) return { action: 'ignore', reason: no }
   if (!branches.length) return { action: 'refuse', reason: 'no ticket in this epic names an `epic_branch=` in its pipeline line, so there is no branch to set aside', prs: [] }
   if (branches.length > 1) return { action: 'refuse', reason: `the tickets name more than one branch: ${branches.map(b => `\`${b}\``).join(', ')} — make them agree first`, prs: [] }
   const branch = branches[0]
   const archive = ARCHIVE_PREFIX + branch
+  // #3922: only this epic's own branch may be moved (a child epic carries its parent's).
+  if (!epic || !branch.startsWith(`epic/${epic}-`)) {
+    if (parentEpic && parentEpic !== epic) {
+      return { action: 'refuse', reason: `this branch belongs to epic #${parentEpic} — comment \`/fresh-branch\` there`, prs: [], you: `comment \`/fresh-branch\` on #${parentEpic} instead` }
+    }
+    return { action: 'refuse', reason: `\`${branch}\` is not this epic's branch (expected \`epic/${epic ?? '<N>'}-…\`), so nothing was moved`, prs: [] }
+  }
   if (openPrs.length) return { action: 'refuse', reason: `open pull requests still use \`${branch}\` — merge or close them first`, prs: openPrs }
   if (archiveExists) return { action: 'refuse', reason: `\`${archive}\` already exists — rename or delete it first`, prs: [] }
   return { action: 'rename', branch, archive }
@@ -91,14 +101,15 @@ function aheadBlock(ahead) {
 
 /**
  * The reply on the epic.
- * @param {{ outcome: 'renamed'|'failed'|'refused', branch?: string, archive?: string, ahead?: object, reason?: string, prs?: object[], actor?: string, runUrl?: string }} r
+ * @param {{ outcome: 'renamed'|'failed'|'refused', branch?: string, archive?: string, ahead?: object, reason?: string, prs?: object[], actor?: string, runUrl?: string, you?: string }} r
+ *   `you` (refused only) replaces the default "fix that, then comment `/fresh-branch` again" ask.
  */
-export function renderReport({ outcome, branch, archive, ahead, reason = '', prs = [], actor = '', runUrl = '' } = {}) {
+export function renderReport({ outcome, branch, archive, ahead, reason = '', prs = [], actor = '', runUrl = '', you = '' } = {}) {
   const by = actor ? ` · asked by \`${actor}\`` : ''
   const depth = runUrl ? `\n**Run:** ${runUrl}\n` : ''
   if (outcome === 'refused') {
     const list = prs.length ? '\n' + prs.map(p => `- #${p.number}${p.title ? ` ${p.title}` : ''}`).join('\n') + '\n' : ''
-    return HEADER + `🔴 **Branch not set aside** — ${reason}.${by}\n${list}\n**You:** fix that, then comment \`/fresh-branch\` again.\n${depth}`
+    return HEADER + `🔴 **Branch not set aside** — ${reason}.${by}\n${list}\n**You:** ${you || 'fix that, then comment `/fresh-branch` again'}.\n${depth}`
   }
   if (outcome === 'failed') {
     return HEADER + `🔴 **The branch move did not finish** — \`${branch}\` still exists and \`${archive}\` was not confirmed. ${reason}${by}\n\n`
@@ -169,12 +180,13 @@ async function branchFacts(github, repo, issue) {
   return { branches, openPrs, archiveExists }
 }
 
+/** The compare summary, or `{ error }` when the compare failed (the caller must then not rename). */
 async function aheadOf(github, repo, branch, core) {
   try {
     return summarizeAhead((await github.rest.repos.compareCommitsWithBasehead({ ...repo, basehead: `main...${branch}`, per_page: 100 })).data)
   } catch (e) {
     core.warning(`compare main...${branch} failed: ${e.message}`)
-    return null
+    return { error: e.message }
   }
 }
 
@@ -214,15 +226,21 @@ export async function runFreshBranch({ github, context, core, sleep = ms => new 
   const no = ignoreReason({ state: issue.state, perm })
   if (no) return core.info(`Not setting aside #${issue_number}'s branch: ${no}.`)
 
-  const d = decideFreshBranch({ state: issue.state, perm, ...(await branchFacts(github, repo, issue)) })
+  const parentEpic = parsePipelineBlock(issue.body || '').epic
+  const d = decideFreshBranch({ state: issue.state, perm, epic: issue_number, parentEpic, ...(await branchFacts(github, repo, issue)) })
   if (d.action === 'ignore') return core.info(`Not setting aside #${issue_number}'s branch: ${d.reason}.`)
   if (d.action === 'refuse') {
-    await say(renderReport({ outcome: 'refused', reason: d.reason, prs: d.prs, actor, runUrl }))
+    await say(renderReport({ outcome: 'refused', reason: d.reason, prs: d.prs, you: d.you, actor, runUrl }))
     return core.info(`Refused on #${issue_number}: ${d.reason}`)
   }
 
   const { branch, archive } = d
   const ahead = await aheadOf(github, repo, branch, core)
+  if (ahead?.error) {
+    const reason = `could not compare \`${branch}\` with main (${ahead.error}), so nothing was moved`
+    await say(renderReport({ outcome: 'refused', reason, actor, runUrl }))
+    return core.setFailed(`#${issue_number}: ${reason}`)
+  }
   const failure = await renameBranch(github, repo, d, sleep)
   if (failure) {
     await say(renderReport({ outcome: 'failed', branch, archive, ahead, reason: failure, actor, runUrl }))

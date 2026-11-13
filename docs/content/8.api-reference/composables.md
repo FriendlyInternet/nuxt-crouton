@@ -218,6 +218,18 @@ useCroutonError()
 
 _Source: `packages/crouton-core/app/composables/useCroutonError.ts`_
 
+## useCroutonLayoutStoreRegistry
+
+Read the layout stores registered on this Nuxt app (#3650) with
+`defineCroutonLayoutStore`. Not to be confused with crouton-layout's
+`useCroutonLayoutStore` (which loads/saves a layout tree).
+
+```ts
+useCroutonLayoutStoreRegistry(): { get: (id: string) => CroutonLayoutStoreDefinition | undefined list: () => CroutonLayoutStoreDefinition[] }
+```
+
+_Source: `packages/crouton-core/app/composables/useCroutonLayoutStoreRegistry.ts`_
+
 ## useCroutonMutate
 
 Convenience wrapper for quick mutations without setup

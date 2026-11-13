@@ -63,7 +63,7 @@ exact word they reply.
 
 A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
 
-**Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`).
+**Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`). It refuses a branch whose name does not start with `epic/<N>-` (a child epic is pointed to its parent) and refuses when it cannot list what the branch holds.
 
 ## Every workflow, by line
 

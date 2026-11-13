@@ -28,6 +28,7 @@ import {
   type NodePath,
   type DropEdge,
 } from '../utils/layout-edit'
+import { withTreeExtras } from '../utils/layout-tree-extras'
 import {
   LAYOUT_EDIT_KEY,
   pathKey,
@@ -53,14 +54,19 @@ const { blocksList, getBlock, checkViability } = useCroutonLayoutBlocks()
 
 // Local working copy of the root; synced from v-model, emitted on every edit.
 const root = ref<LayoutNode | null>(props.modelValue?.root ?? null)
+// The tree's store options (#3650) ride along untouched, so an edit never drops them.
+const sources = ref<LayoutTree['sources']>(props.modelValue?.sources)
 watch(
   () => props.modelValue,
-  v => { root.value = v?.root ?? null },
+  (v) => {
+    root.value = v?.root ?? null
+    sources.value = v?.sources
+  },
 )
 
 function apply(next: LayoutNode | null) {
   root.value = next
-  emit('update:modelValue', next ? { renderer: 'panes', root: next } : null)
+  emit('update:modelValue', next ? withTreeExtras(next, sources.value) : null)
 }
 
 // ---- Edit API (provided to every editor pane) -----------------------------
