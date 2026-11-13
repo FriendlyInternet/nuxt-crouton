@@ -350,6 +350,12 @@ jobs:
           fi
           node scripts/verify-touched-compiles.mjs --base "$BASE"
 
+      # #3910: fail a PR whose changed .vue gains a per-item overlay or a hover-only control.
+      - name: Runtime-cost check (overlays per item, hover-only)
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: node scripts/check-runtime-cost.mjs --base-ref "$BASE_REF"
+
   test:
     name: Test Suite
     needs: [changes, prepare]
