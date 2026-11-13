@@ -17,7 +17,11 @@ If the change alters something on screen, end Fix with `👁 What to look at: <a
 ### Files
 A bullet per file you would touch.
 ### Test
-The test to write (name, cases) or why none applies.
+A checklist, one line per check, and nothing else (prose belongs in Fix):
+`- [ ] T1 — <what it proves> — Run: \`<command>\``
+`- [ ] T2 — <what it proves> — Manual: <why a person must look>`
+If nothing is runnable, the section is ONE line: `- [ ] T0 — no runnable test — Manual: <reason>`.
+IDs are unique. Commands run from the repo root. Name every test in the plan, and run whole test files — never `--test-name-pattern`, so a run that matches no test cannot pass. Each `T` line is a CI command that fails on the base branch before the change and passes after, and says so ("Fails on main: … Passes after: …"). Suites that already pass are listed once on a `Still green:` line in Fix, not as `T` lines. Put `// covers: T<n>` on the line above each test, naming the `T` line it proves.
 ### Docs
 Which doc sentences this change touches. One row per claim, on ONE line, answering four questions:
 `- <file:line> "<short quote>" — Status: checked|wrong|can't tell — Evidence: <permalink> — Regression: yes|no — Edit: <the exact edit> (or Debt: <why not now>)`

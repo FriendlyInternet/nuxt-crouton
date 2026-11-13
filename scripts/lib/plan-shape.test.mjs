@@ -19,7 +19,7 @@ const plan = (over = {}) => {
     Cause: 'foo.ts:10 reads undefined',
     Fix: 'guard the read',
     Files: '- foo.ts',
-    Test: 'foo.test.ts',
+    Test: '- [ ] T1 — foo is guarded — Run: `node --test foo.test.mjs`',
     Assumptions: A_OK,
     Docs: 'none — test fixture',
     'Needs owner': 'no — mechanical',
@@ -203,4 +203,40 @@ test('docs: checked needs a permalink; can\'t tell does not', () => {
 test('docs: neither Edit nor Debt, or a bad Regression → malformed', () => {
   assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: no').errors.some((e) => /Edit/.test(e)))
   assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: maybe — Edit: x').errors.some((e) => /Regression/.test(e)))
+})
+
+// #3194 — the Test checklist rule, through the CLI the workflow's plan step runs.
+function cli(over) {
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'))
+  const f = join(dir, 'p.md')
+  writeFileSync(f, plan(over))
+  const r = spawnSync('node', [fileURLToPath(new URL('./plan-shape.mjs', import.meta.url)), f], { encoding: 'utf8' })
+  return { status: r.status, verdict: JSON.parse(r.stdout) }
+}
+
+// covers: T3
+test('Test checklist: prose Test section exits 1 with a Test: error', () => {
+  const r = cli({ Test: 'foo.test.ts: a row without teamId gets the current teamId.' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => e.startsWith('Test: ')), r.verdict.errors.join('; '))
+})
+
+// covers: T3
+test('Test checklist: valid checklist exits 0', () => {
+  const r = cli({ Test: '- [ ] T1 — guarded — Run: `node --test foo.test.mjs`\n- [ ] T2 — looks right — Manual: a person must look' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+  assert.deepEqual(r.verdict.checklist.map((i) => i.id), ['T1', 'T2'])
+})
+
+// covers: T3
+test('Test checklist: lone T0 line exits 0', () => {
+  const r = cli({ Test: '- [ ] T0 — no runnable test — Manual: config only' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+})
+
+// covers: T3
+test('Test checklist: duplicate ID exits 1', () => {
+  const r = cli({ Test: '- [ ] T1 — a — Run: `node --test a.test.mjs`\n- [ ] T1 — b — Run: `node --test b.test.mjs`' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => /Test: .*duplicate id T1/.test(e)))
 })
