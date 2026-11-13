@@ -13,6 +13,8 @@ const props = defineProps<{
   node: LayoutNode
   path: NodePath
   selected: NodePath | null
+  /** In a vertical grid's cell (#3865): fill the cell so the whole cell is the outline + drop target. */
+  inGridCell?: boolean
 }>()
 const emit = defineEmits<{ select: [at: NodePath] }>()
 
@@ -48,16 +50,17 @@ function onGripDown(e: PointerEvent) {
 
 <template>
   <div
-    class="board-pane relative h-full w-full croutonpane"
-    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
+    class="board-pane relative w-full croutonpane"
+    :class="{ 'min-h-full': inGridCell, 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
     @click="onPaneClick"
   >
     <!-- A leaf renders through the package renderer (registry resolution, config
-         sanitising, the admin fill-and-scroll); a nested app renders read-only. -->
-    <CroutonLayoutRenderer v-if="isLeaf" :node="node" :interactive="true" />
+         sanitising) in the PAGE render context, content-height like the served page
+         (#3865); a nested app renders read-only too. -->
+    <CroutonLayoutRenderer v-if="isLeaf" :node="node" :interactive="false" />
     <CroutonLayoutRenderer v-else :node="(node as any).layout.root" :interactive="false" />
 
     <!-- Grab handle: hold briefly, then drag this pane onto another pane. -->

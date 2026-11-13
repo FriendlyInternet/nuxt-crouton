@@ -203,11 +203,26 @@ test('the log names the restored extension deps', (t) => {
 test('the real repo\'s closure covers what the extensions import', () => {
   const cwd = fileURLToPath(new URL('..', import.meta.url))
   const run = (args) => execFileSync('git', args, { cwd, maxBuffer: 1024 * 1024 * 512 })
-  const closure = trustedImportClosure({ run, trusted: 'HEAD' })
+  // The staged tree, not HEAD: the conflict resolver runs this suite on an uncommitted merge (#3893).
+  const closure = trustedImportClosure({ run, trusted: run(['write-tree']).toString('utf8').trim() })
   for (const f of ['scripts/lib/finish-check-loop.mjs', 'scripts/packages-guard.mjs', 'scripts/pi-edited-files.mjs']) {
     assert.ok(closure.includes(f), `closure includes ${f} (got ${closure.join(', ')})`)
   }
   assert.ok(closure.every((f) => !f.startsWith('.pi/')))
+})
+
+test('the closure judges the staged tree, not the last commit (an uncommitted merge)', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'review-checkout-staged-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  git(root, 'init', '-q', '-b', 'main')
+  put(root, 'README.md', 'x\n')
+  commit(root, 'no extensions')
+  put(root, '.pi/extensions/x.ts', "import { y } from '../../scripts/lib/y.mjs'\nexport default () => y\n")
+  put(root, 'scripts/lib/y.mjs', 'export const y = 1\n')
+  git(root, 'add', '-A')
+  const run = (args) => execFileSync('git', args, { cwd: root })
+  assert.deepEqual(trustedImportClosure({ run, trusted: 'HEAD' }), [])
+  assert.deepEqual(trustedImportClosure({ run, trusted: run(['write-tree']).toString('utf8').trim() }), ['scripts/lib/y.mjs'])
 })
 
 test('a trusted extension importing a missing file fails loudly', (t) => {
