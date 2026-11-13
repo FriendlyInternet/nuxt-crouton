@@ -42,7 +42,7 @@ import { useElementSize, unrefElement } from '@vueuse/core'
 import { rendererSplitterItems, rendererHandleClass, collapseAction } from '../utils/layout-splitter-items'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import { isInPlaceCollapse } from '@fyit/crouton-core/app/types/layout'
-import { minWidthResolver, panelMinSizePct, deriveSizing } from '../utils/layout-viability'
+import { minWidthResolver, panelMinSizePct, deriveSizing, pageRowTracks } from '../utils/layout-viability'
 import { siblingKeys } from '../utils/layout-flip'
 import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
@@ -217,17 +217,20 @@ const viewGridStyle = computed<CSSProperties>(() => {
   const base: CSSProperties = { gap: '1px', minHeight: '100%', width: '100%' }
   if (props.node.type !== 'split') return { ...base, display: 'grid' }
   if (viewHorizontal.value) {
-    return { ...base, display: 'flex', flexWrap: 'wrap', '--stack-at': `${viewStackThreshold.value}px` }
+    // Top-aligned (#3865, owner rule): the row is as tall as its tallest pane; a shorter pane
+    // keeps its own height at the top instead of stretching. `alignContent` keeps wrapped
+    // (stacked) lines packed at the top inside a fixed-height box (crouton-pages PaneBlock).
+    return { ...base, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', alignContent: 'flex-start', '--stack-at': `${viewStackThreshold.value}px` }
   }
-  const rows = props.node.children
-    .map((_, i) => (hugAlongAxis.value[i] ? 'auto' : `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`))
-    .join(' ')
-  return { ...base, display: 'grid', gridTemplateRows: rows }
+  return { ...base, display: 'grid', gridTemplateRows: pageRowTracks(props.node.children, blocks.value) }
 })
 function viewChildStyle(i: number): CSSProperties {
   if (props.node.type !== 'split' || !viewHorizontal.value) return {}
+  // No longer stretched (#3865), so floor each pane at its block's minimum height — the
+  // same floor the vertical grid uses.
+  const minHeight = `${Math.round(childSizings.value[i]!.minHeight)}px`
   // A hug pane keeps its content width (no block declares width-hug today).
-  if (hugAlongAxis.value[i]) return { flex: '0 0 auto' }
+  if (hugAlongAxis.value[i]) return { flex: '0 0 auto', minHeight }
   const child = props.node.children[i]!
   const size = child.defaultSize ?? (100 / props.node.children.length)
   const floor = Math.round(childSizings.value[i]!.hardMinWidth)
@@ -236,6 +239,7 @@ function viewChildStyle(i: number): CSSProperties {
     flexShrink: '1',
     flexBasis: 'calc((var(--stack-at) - 100%) * 999)',
     minWidth: `min(${floor}px, 100%)`,
+    minHeight,
   }
 }
 
