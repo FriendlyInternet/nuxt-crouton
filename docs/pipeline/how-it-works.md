@@ -63,6 +63,8 @@ exact word they reply.
 
 A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
 
+**Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`).
+
 ## Every workflow, by line
 
 The table below is generated from the workflow files and the grouping in

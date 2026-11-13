@@ -15,6 +15,8 @@ defineProps<{
   def: CroutonLayoutBlockDefinition | null
   hidden: boolean
   hiddenItems: HiddenItem[]
+  /** The selection is a group (#3906): title Group, plus Ungroup. */
+  group?: boolean
 }>()
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   toggleHidden: [key: string]
   setRecipe: [leaf: LayoutLeaf, patch: Partial<LayoutCollapseRecipe>]
   remove: []
+  ungroup: []
   selectHidden: [item: HiddenItem]
 }>()
 </script>
@@ -32,8 +35,8 @@ const emit = defineEmits<{
       <!-- Bottom padding clears the floating review overlay. -->
       <div class="space-y-4 p-4 pb-24">
         <div class="flex items-center gap-2">
-          <UIcon :name="def?.icon ?? 'i-lucide-box'" class="size-4" />
-          <span class="font-medium">{{ def?.name ?? leaf?.blockId ?? 'Pane' }}</span>
+          <UIcon :name="group ? 'i-lucide-group' : (def?.icon ?? 'i-lucide-box')" class="size-4" />
+          <span class="font-medium">{{ group ? 'Group' : (def?.name ?? leaf?.blockId ?? 'Pane') }}</span>
           <span v-if="selected" class="ml-auto text-xs text-muted">pane {{ selected.join('.') || 'root' }}</span>
         </div>
 
@@ -46,6 +49,7 @@ const emit = defineEmits<{
           @toggle-hidden="id => emit('toggleHidden', id)"
           @set-recipe="(l, p) => emit('setRecipe', l, p)"
         />
+        <UButton v-if="selected && group" color="neutral" variant="soft" icon="i-lucide-ungroup" label="Ungroup" data-handoff="group-ungroup" @click="emit('ungroup')" />
         <UButton v-if="selected" color="error" variant="soft" icon="i-lucide-trash-2" label="Remove from page" @click="emit('remove')" />
 
         <template v-if="hiddenItems.length">

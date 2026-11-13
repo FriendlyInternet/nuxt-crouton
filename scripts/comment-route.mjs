@@ -15,7 +15,7 @@
 //          `pr.sourceIssue`) is status:blocked (scripts/lib/owner-screens.mjs) → resume on a pipeline-owned issue / revise on a
 //          pi PR, else none. Checked BEFORE the bot drop, and it never reaches the approval,
 //          quiz, test-card or interpret routes — it is feedback, never an `ok`.
-//   issue: /close-epic → close-epic · slash/rocket command → dispatch · quiz-shaped owner reply
+//   issue: owner `/fresh-branch` on an `epic` → fresh-branch (#3881) · /close-epic → close-epic · slash/rocket command → dispatch · quiz-shaped owner reply
 //          (`1B 2A 3C`, `2 code`) → quiz-reply (before test-card/resume, so a quiz answer never
 //          resumes, approves or re-plans anything; #3715) · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
@@ -40,7 +40,7 @@ import { parseOverride } from './lib/decision-line.mjs'
 
 export const KINDS = [
   'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
-  'dispatch', 'interpret', 'plan-needs-reason', 'quiz-reply', 'resume', 'revise', 'test-card', 'none',
+  'dispatch', 'fresh-branch', 'interpret', 'plan-needs-reason', 'quiz-reply', 'resume', 'revise', 'test-card', 'none',
 ]
 
 const COLLABORATORS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
@@ -48,6 +48,9 @@ const OWNERS = new Set(['OWNER', 'MEMBER'])
 
 /** Whole-word `/close-epic` as a command (not mentioned in code or a quote). */
 const CLOSE_EPIC = /(^|\s)\/close-epic(\s|$)/i
+
+/** `/fresh-branch` alone on its own line (#3881) — never mid-sentence, in code or in a quote. */
+const FRESH_BRANCH = /^\s*\/fresh-branch\s*$/im
 
 /**
  * A ticket the pipeline owns: its body carries the hidden `<!-- pipeline:` marker, or it holds a
@@ -68,11 +71,20 @@ function routeHeldPlan({ body, assoc, issue, out, userType }) {
   return null
 }
 
+/** An explicit command on an issue: /fresh-branch, /close-epic or a pipeline command; else null. */
+function routeIssueCommand({ body, assoc, collab, labels, out }) {
+  const text = stripNonCommandRegions(body)
+  if (OWNERS.has(assoc) && labels.includes('epic') && FRESH_BRANCH.test(text)) return out('fresh-branch', '/fresh-branch command')
+  if (CLOSE_EPIC.test(text)) return out('close-epic', '/close-epic command')
+  if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
+  return null
+}
+
 /** Routing for a comment on a plain issue. */
 function routeIssue({ body, assoc, collab, issue, out, userType }) {
   const labels = issue.labels || []
-  if (CLOSE_EPIC.test(stripNonCommandRegions(body))) return out('close-epic', '/close-epic command')
-  if (collab && parseCommand(body)) return out('dispatch', 'a pipeline command')
+  const command = routeIssueCommand({ body, assoc, collab, labels, out })
+  if (command) return command
   if (isQuizReply(body)) {
     // owner-quiz-run.mjs reply() also checks the login is the pipeline owner; no quiz on the issue → it logs and exits.
     return OWNERS.has(assoc) ? out('quiz-reply', 'a reply to an owner quiz') : out('none', 'quiz-shaped reply from a non-owner')
