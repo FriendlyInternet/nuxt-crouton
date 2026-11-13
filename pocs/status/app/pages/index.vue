@@ -1,286 +1,84 @@
 <script setup lang="ts">
+// The inbox: every card that waits on the owner, newest first. On load it shows the stored cards
+// at once, then syncs from GitHub (POST /api/cards/sync) in the background and lists again.
+// Load/list/answer rules: utils/inbox-core.ts.
+import { cardView, loadInbox, nothingWaits, submitAnswer, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
+
 definePageMeta({ middleware: 'auth' })
 
-interface ToTestItem {
-  kind: 'epic' | 'pr'
-  number: number
-  title: string
-  url: string
-  app: string | null
-  what: string
-  steps: string[]
-  to: string
-  stagingUrl: string | null
-  mergedAt?: string | null
+const { getTeamId } = useTeamContext()
+
+const cards = ref<InboxCard[]>([])
+const loading = ref(true)
+const refreshing = ref(false)
+const syncError = ref<string | null>(null)
+const loadError = ref<string | null>(null)
+
+const showNothing = computed(() => nothingWaits({
+  cards: cards.value,
+  loading: loading.value,
+  refreshing: refreshing.value,
+  loadError: loadError.value,
+  syncError: syncError.value
+}))
+
+function applyLoad(patch: Partial<InboxLoadState>) {
+  if (patch.cards !== undefined) cards.value = patch.cards
+  if (patch.loading !== undefined) loading.value = patch.loading
+  if (patch.refreshing !== undefined) refreshing.value = patch.refreshing
+  if (patch.loadError !== undefined) loadError.value = patch.loadError
+  if (patch.syncError !== undefined) syncError.value = patch.syncError
 }
-interface AppRow {
-  app: string
-  stagingUrl: string | null
-  hasSignIn: boolean
-  previews: Array<{ pr: number, title: string, updatedAt: string, url: string }>
+
+function load() {
+  return loadInbox({
+    // One-team mode: the slug `test1` resolves too if the team is not known on the client yet.
+    list: () => $fetch<InboxCard[]>(`/api/teams/${getTeamId() ?? 'test1'}/inbox-cards`),
+    sync: async () => { await $fetch('/api/cards/sync', { method: 'POST' }) },
+    update: applyLoad
+  })
 }
-interface Decision { date: string, epic: number, decision: string, why: string, rejected: string }
-interface OpenQuestion { number: number, title: string, url: string }
-interface ChangelogRow { date: string, number: number, title: string, area: string, url: string }
 
-const REPO_URL = 'https://github.com/FriendlyInternet/nuxt-crouton'
-
-const tabs = [
-  { label: 'Apps', slot: 'apps', icon: 'i-lucide-layout-grid' },
-  { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
-  { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
-  { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' }
-]
-
-const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
-const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
-const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
-
-const loginHref = (app: string, i: ToTestItem) => loginHrefFor({ ...i, app })
-
-// --- Apps ---
-const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
-const appCards = computed(() => {
-  const todo = (app: string) => items.value.filter(i => i.app === app)
-  return (appsRes.value?.data ?? [])
-    .map(a => ({ ...a, toTest: todo(a.app) }))
-    .sort((a, b) => b.toTest.length - a.toTest.length || a.app.localeCompare(b.app))
-})
-
-// --- To test ---
-const appFilter = ref<string | null>(null)
-const items = computed(() => totest.value?.data ?? [])
-const apps = computed(() => [...new Set(items.value.map(i => i.app ?? 'general'))].sort())
-const groups = computed(() => {
-  const by = new Map<string, ToTestItem[]>()
-  for (const i of items.value) {
-    const key = i.app ?? 'general'
-    if (appFilter.value && appFilter.value !== key) continue
-    by.set(key, [...(by.get(key) ?? []), i])
+const sendToServer: SendAnswer = async (cardId, body) => {
+  try {
+    await $fetch(`/api/cards/${cardId}/answer`, { method: 'POST', body })
+    return { status: 200, error: null }
+  } catch (e: any) {
+    return { status: e?.statusCode ?? 500, error: e?.data?.statusMessage ?? e?.statusMessage ?? null }
   }
-  return [...by.entries()].map(([app, list]) => ({ app, list, stagingUrl: list.find(i => i.stagingUrl)?.stagingUrl ?? null }))
-})
+}
 
-// --- Decisions ---
-const decisions = computed(() => decisionsRes.value?.data?.decisions ?? [])
-const openQuestions = computed(() => decisionsRes.value?.data?.openQuestions ?? [])
-const expanded = ref<string | null>(null)
-const rowKey = (d: Decision, idx: number) => `${d.epic}-${idx}`
+// ReplyButtons calls this; on success the card leaves the list (and unmounts).
+const answerFor = (cardId: string) => async (verdict: 'ok' | 'not-ok', note: string) => {
+  const res = await submitAnswer({ cards: cards.value, cardId, input: { verdict, note }, send: sendToServer })
+  cards.value = res.cards
+  return { error: res.error }
+}
 
-// --- Changelog ---
-const search = ref('')
-const areaFilter = ref<string | null>(null)
-const rows = computed(() => changelogRes.value?.data ?? [])
-const areas = computed(() => [...new Set(rows.value.map(r => r.area))].sort())
-const filteredRows = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  return rows.value.filter(r =>
-    (!areaFilter.value || r.area === areaFilter.value)
-    && (!q || r.title.toLowerCase().includes(q) || r.area.toLowerCase().includes(q))
-  )
-})
-
-const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
+onMounted(load)
 </script>
 
 <template>
-  <UContainer class="py-4 sm:py-6">
-    <UTabs :items="tabs" class="w-full">
-      <!-- Apps -->
-      <template #apps>
-        <div class="space-y-4 py-4">
-          <UAlert v-if="appsRes?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="appsRes.error" />
-          <p v-if="appsStatus === 'pending'" class="text-muted">Loading…</p>
-          <p v-else-if="!appCards.length" class="text-muted">No apps found.</p>
+  <UContainer class="@container py-4 sm:py-6">
+    <div class="mb-4 flex flex-wrap items-center gap-2">
+      <h1 class="flex-1 text-xl font-semibold">Waiting for you</h1>
+      <UButton to="/apps" variant="outline" icon="i-lucide-layout-grid" label="All apps" />
+    </div>
 
-          <UCard v-for="a in appCards" :key="a.app">
-            <template #header>
-              <div class="flex items-center gap-2">
-                <h2 class="text-lg font-semibold">{{ a.app }}</h2>
-                <UBadge v-if="a.toTest.length" color="warning" variant="subtle">{{ a.toTest.length }} to test</UBadge>
-              </div>
-            </template>
-            <div class="space-y-4">
-              <div v-if="a.toTest.length" class="space-y-3">
-                <p class="text-xs font-semibold uppercase text-muted">To test</p>
-                <div v-for="i in a.toTest" :key="`${i.kind}-${i.number}`" class="space-y-2 rounded-lg border border-default p-3">
-                  <div class="flex items-start gap-2">
-                    <h3 class="flex-1 text-sm font-medium">{{ i.title }}</h3>
-                    <a :href="i.url" target="_blank" rel="noopener" class="text-sm text-primary">#{{ i.number }}</a>
-                  </div>
-                  <p v-if="i.what" class="text-sm">{{ i.what }}</p>
-                  <ol v-if="i.steps.length" class="list-decimal space-y-1 pl-5 text-sm">
-                    <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
-                  </ol>
-                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="loginHref(a.app, i)" target="_blank" />
-                  <ReplyButtons v-if="i.kind === 'epic'" kind="issue" :number="i.number" />
-                </div>
-              </div>
+    <div class="space-y-4">
+      <UAlert v-if="syncError" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="syncError" />
+      <UAlert v-if="loadError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="loadError" />
 
-              <div class="space-y-2">
-                <p class="text-xs font-semibold uppercase text-muted">Staging</p>
-                <p v-if="!a.stagingUrl" class="text-sm text-muted">No staging URL configured.</p>
-                <template v-else>
-                  <a :href="a.stagingUrl" target="_blank" rel="noopener" class="block break-all text-sm text-primary">{{ a.stagingUrl }}</a>
-                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=main`" target="_blank" />
-                </template>
-              </div>
+      <p v-if="loading" class="text-muted">Loading…</p>
+      <p v-else-if="showNothing" class="text-muted">Nothing waits on you.</p>
+      <p v-else-if="refreshing && !cards.length && !loadError" class="text-muted">Checking GitHub…</p>
 
-              <div v-if="a.previews.length" class="space-y-2">
-                <p class="text-xs font-semibold uppercase text-muted">Open PR previews</p>
-                <div v-for="p in a.previews" :key="p.pr" class="space-y-2 rounded-lg border border-default p-3">
-                  <div class="flex items-start gap-2">
-                    <span class="flex-1 text-sm">{{ p.title }}</span>
-                    <a :href="`${REPO_URL}/pull/${p.pr}`" target="_blank" rel="noopener" class="text-sm text-primary">#{{ p.pr }}</a>
-                  </div>
-                  <p class="text-xs text-muted">Updated {{ day(p.updatedAt) }}</p>
-                  <UButton block variant="outline" icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=pr${p.pr}`" target="_blank" />
-                  <ReplyButtons kind="pr" :number="p.pr" />
-                </div>
-              </div>
-            </div>
-          </UCard>
-        </div>
+      <template v-for="c in cards" :key="c.id">
+        <CardsEdit v-if="cardView(c) === 'edit'" :card="c" :send="answerFor(c.id)" />
+        <CardsReview v-else-if="cardView(c) === 'review'" :card="c" :send="answerFor(c.id)" />
+        <CardsIssue v-else-if="cardView(c) === 'issue'" :card="c" />
+        <CardsPlaceholder v-else :card="c" />
       </template>
-
-      <!-- To test -->
-      <template #to-test>
-        <div class="space-y-5 py-4">
-          <div v-if="apps.length" class="flex flex-wrap gap-2">
-            <UButton
-              size="sm"
-              :variant="appFilter === null ? 'solid' : 'outline'"
-              label="All"
-              @click="appFilter = null"
-            />
-            <UButton
-              v-for="a in apps"
-              :key="a"
-              size="sm"
-              :variant="appFilter === a ? 'solid' : 'outline'"
-              :label="a"
-              @click="appFilter = a"
-            />
-          </div>
-
-          <UAlert v-if="totest?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="totest.error" />
-          <p v-if="totestStatus === 'pending'" class="text-muted">Loading…</p>
-          <p v-else-if="!groups.length" class="text-muted">Nothing to test yet.</p>
-
-          <section v-for="g in groups" :key="g.app" class="space-y-3">
-            <div class="flex flex-wrap items-baseline gap-x-3">
-              <h2 class="text-lg font-semibold">{{ g.app }}</h2>
-              <a v-if="g.stagingUrl" :href="g.stagingUrl" target="_blank" rel="noopener" class="text-sm text-primary break-all">{{ g.stagingUrl }}</a>
-            </div>
-            <UCard v-for="i in g.list" :key="`${i.kind}-${i.number}`">
-              <div class="space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <UBadge :color="i.kind === 'epic' ? 'warning' : 'success'" variant="subtle">
-                    {{ i.kind === 'epic' ? 'Waiting for you' : 'Merged' }}
-                  </UBadge>
-                  <span v-if="i.mergedAt" class="text-xs text-muted">{{ day(i.mergedAt) }}</span>
-                  <a :href="i.url" target="_blank" rel="noopener" class="ml-auto text-sm text-primary">#{{ i.number }}</a>
-                </div>
-                <h3 class="font-medium">{{ i.title }}</h3>
-                <div v-if="i.what">
-                  <p class="text-xs font-semibold uppercase text-muted">What changed</p>
-                  <p class="text-sm">{{ i.what }}</p>
-                </div>
-                <div v-if="i.steps.length">
-                  <p class="text-xs font-semibold uppercase text-muted">How to check</p>
-                  <ol class="list-decimal space-y-1 pl-5 text-sm">
-                    <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
-                  </ol>
-                </div>
-                <UButton
-                  v-if="i.app"
-                  block
-                  size="lg"
-                  icon="i-lucide-log-in"
-                  label="Open and sign in"
-                  :href="loginHref(i.app, i)"
-                  target="_blank"
-                />
-                <ReplyButtons v-if="i.kind === 'epic'" kind="issue" :number="i.number" />
-              </div>
-            </UCard>
-          </section>
-        </div>
-      </template>
-
-      <!-- Decisions -->
-      <template #decisions>
-        <div class="space-y-5 py-4">
-          <UAlert v-if="decisionsRes?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="decisionsRes.error" />
-          <p v-if="decisionsStatus === 'pending'" class="text-muted">Loading…</p>
-
-          <UCard v-if="openQuestions.length" class="ring-warning/50">
-            <template #header>
-              <h2 class="font-semibold">Waiting on you ({{ openQuestions.length }})</h2>
-            </template>
-            <ul class="space-y-2">
-              <li v-for="q in openQuestions" :key="q.number" class="text-sm">
-                <a :href="q.url" target="_blank" rel="noopener" class="text-primary">#{{ q.number }}</a>
-                {{ q.title }}
-              </li>
-            </ul>
-          </UCard>
-
-          <p v-if="decisionsStatus !== 'pending' && !decisions.length && !openQuestions.length" class="text-muted">No decisions yet.</p>
-
-          <ul v-if="decisions.length" class="divide-y divide-default rounded-lg border border-default">
-            <li v-for="(d, idx) in decisions" :key="rowKey(d, idx)">
-              <button
-                type="button"
-                class="flex w-full items-start gap-3 p-3 text-left"
-                :aria-expanded="expanded === rowKey(d, idx)"
-                @click="expanded = expanded === rowKey(d, idx) ? null : rowKey(d, idx)"
-              >
-                <span class="shrink-0 text-xs text-muted">{{ d.date }}</span>
-                <span class="flex-1 text-sm">{{ d.decision }}</span>
-                <UBadge variant="subtle" color="neutral" class="shrink-0">epic #{{ d.epic }}</UBadge>
-              </button>
-              <div v-if="expanded === rowKey(d, idx)" class="space-y-2 bg-elevated/50 px-3 pb-3 text-sm">
-                <p v-if="d.why"><span class="font-semibold">Why:</span> {{ d.why }}</p>
-                <p v-if="d.rejected"><span class="font-semibold">Not chosen:</span> {{ d.rejected }}</p>
-                <p v-if="!d.why && !d.rejected" class="text-muted">No further detail recorded.</p>
-                <a :href="`${REPO_URL}/issues/${d.epic}`" target="_blank" rel="noopener" class="text-primary">Open epic #{{ d.epic }}</a>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </template>
-
-      <!-- Changelog -->
-      <template #changelog>
-        <div class="space-y-4 py-4">
-          <UInput v-model="search" icon="i-lucide-search" placeholder="Search changes" class="w-full" aria-label="Search changes" />
-          <div v-if="areas.length" class="flex flex-wrap gap-2">
-            <UButton size="sm" :variant="areaFilter === null ? 'solid' : 'outline'" label="All" @click="areaFilter = null" />
-            <UButton
-              v-for="a in areas"
-              :key="a"
-              size="sm"
-              :variant="areaFilter === a ? 'solid' : 'outline'"
-              :label="a"
-              @click="areaFilter = a"
-            />
-          </div>
-
-          <UAlert v-if="changelogRes?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="changelogRes.error" />
-          <p v-if="changelogStatus === 'pending'" class="text-muted">Loading…</p>
-          <p v-else-if="!filteredRows.length" class="text-muted">No changes yet.</p>
-
-          <ul v-if="filteredRows.length" class="divide-y divide-default rounded-lg border border-default">
-            <li v-for="r in filteredRows" :key="r.number" class="flex flex-wrap items-start gap-x-3 gap-y-1 p-3">
-              <span class="text-xs text-muted">{{ r.date }}</span>
-              <UBadge variant="subtle" color="neutral">{{ r.area }}</UBadge>
-              <span class="basis-full text-sm sm:basis-0 sm:flex-1">{{ r.title }}</span>
-              <a :href="r.url" target="_blank" rel="noopener" class="text-sm text-primary">#{{ r.number }}</a>
-            </li>
-          </ul>
-        </div>
-      </template>
-    </UTabs>
+    </div>
   </UContainer>
 </template>

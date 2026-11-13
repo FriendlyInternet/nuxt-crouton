@@ -1,6 +1,12 @@
 <script setup lang="ts">
 // "Good to go" / "Not ok" for an epic (issue) or a PR preview — posts the reply via /api/reply.
-const props = defineProps<{ kind: 'issue' | 'pr', number: number }>()
+// Pass `send` to answer some other way (the inbox answers a card); its error shows in the alert.
+const props = withDefaults(defineProps<{
+  kind?: 'issue' | 'pr'
+  number?: number
+  okLabel?: string
+  send?: (verdict: 'ok' | 'not-ok', note: string) => Promise<{ error: string | null }>
+}>(), { kind: 'issue', number: 0, okLabel: 'Good to go', send: undefined })
 
 const noteOpen = ref(false)
 const note = ref('')
@@ -16,6 +22,17 @@ async function send(verdict: 'ok' | 'not-ok') {
   }
   sending.value = verdict
   error.value = null
+  if (props.send) {
+    try {
+      const res = await props.send(verdict, note.value)
+      error.value = res.error
+    } catch (e: any) {
+      error.value = e?.message || 'Could not send.'
+    } finally {
+      sending.value = null
+    }
+    return
+  }
   try {
     const res = await $fetch<{ data: { url: string } | null, error: string | null }>('/api/reply', {
       method: 'POST',
@@ -43,7 +60,7 @@ async function send(verdict: 'ok' | 'not-ok') {
         <UButton
           color="success"
           icon="i-lucide-thumbs-up"
-          label="Good to go"
+          :label="okLabel"
           :loading="sending === 'ok'"
           :disabled="!!sending"
           @click="send('ok')"
