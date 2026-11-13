@@ -10,7 +10,7 @@ const err404 = () => Object.assign(new Error('Not Found'), { status: 404 })
  * A fake GitHub that records every call. `refs` is the set of refs that exist; a rename moves the
  * ref after `renameAfterPolls` polls of the old name (Infinity = never finishes).
  */
-function world({ epic = {}, subs = {}, perm = 'admin', prsBase = [], prsHead = [], refs = ['heads/epic/9-x'], compare = { ahead_by: 0, commits: [] }, renameAfterPolls = 0, renameError = null } = {}) {
+function world({ epic = {}, subs = {}, perm = 'admin', prsBase = [], prsHead = [], refs = ['heads/epic/9-x'], compare = { ahead_by: 0, commits: [] }, renameAfterPolls = 0, renameError = null, compareError = null } = {}) {
   const calls = []
   const comments = []
   const live = new Set(refs)
@@ -27,7 +27,7 @@ function world({ epic = {}, subs = {}, perm = 'admin', prsBase = [], prsHead = [
       },
       repos: {
         getCollaboratorPermissionLevel: rec('repos.getCollaboratorPermissionLevel', () => ({ data: { permission: perm } })),
-        compareCommitsWithBasehead: rec('repos.compareCommitsWithBasehead', () => ({ data: compare })),
+        compareCommitsWithBasehead: rec('repos.compareCommitsWithBasehead', () => { if (compareError) throw new Error(compareError); return { data: compare } }),
       },
       pulls: { list: pullsList },
       git: {
@@ -210,5 +210,69 @@ test('decideFreshBranch: the pure order of checks', () => {
   assert.equal(decideFreshBranch({ state: 'closed', perm: 'admin', branches: ['b'] }).action, 'ignore')
   assert.equal(decideFreshBranch({ perm: 'read', branches: ['b'] }).action, 'ignore')
   assert.equal(decideFreshBranch({ perm: 'write', branches: [] }).action, 'refuse')
-  assert.deepEqual(decideFreshBranch({ perm: 'write', branches: ['epic/9-x'] }), { action: 'rename', branch: 'epic/9-x', archive: 'archive/epic/9-x' })
+  assert.deepEqual(decideFreshBranch({ perm: 'write', branches: ['epic/9-x'], epic: 9 }), { action: 'rename', branch: 'epic/9-x', archive: 'archive/epic/9-x' })
+})
+
+test('a full tree on epic/9-something renames to archive/epic/9-something', async () => {
+  const b = 'epic/9-something'
+  const w = world({ epic: { body: line(b) }, refs: [`heads/${b}`], subs: { 9: [{ number: 10, state: 'open', body: line(b) }], 10: [{ number: 12, state: 'open', body: line(b) }] } })
+  await w.run()
+  const r = renames(w)
+  assert.equal(r.length, 1)
+  assert.equal(r[0].args.new_name, 'archive/epic/9-something')
+})
+
+// covers: T1
+test('(T1) epic #9 whose own line names epic_branch=main → refused naming main, no rename request', async () => {
+  const w = world({ epic: { body: line('main') }, refs: ['heads/main'] })
+  await w.run()
+  assert.equal(renames(w).length, 0)
+  assert.equal(w.comments.length, 1)
+  assert.match(w.comments[0], /`main` is not this epic's branch/)
+  assert.match(w.comments[0], /nothing was moved/)
+})
+
+// covers: T2
+test('(T2) epic_branch=epic/99-other and epic/90-x on epic #9 → both refused (the dash is part of the prefix)', async () => {
+  for (const b of ['epic/99-other', 'epic/90-x']) {
+    const w = world({ epic: { body: line(b) }, refs: [`heads/${b}`] })
+    await w.run()
+    assert.equal(renames(w).length, 0, b)
+    assert.equal(w.comments.length, 1, b)
+    assert.match(w.comments[0], /not set aside/, b)
+    assert.ok(w.comments[0].includes(`\`${b}\` is not this epic's branch`), b)
+  }
+})
+
+// covers: T3
+test('(T3) the compare with main fails → refused, no rename, run marked failed', async () => {
+  const w = world({ subs: TREE_SUBS, compareError: 'boom 500' })
+  await w.run()
+  assert.equal(renames(w).length, 0)
+  assert.deepEqual(writes(w), [])
+  assert.equal(w.comments.length, 1)
+  assert.match(w.comments[0], /boom 500/)
+  assert.match(w.comments[0], /nothing was moved/)
+  assert.doesNotMatch(w.comments[0], /renamed/i)
+  assert.ok(w.log.some(m => m.startsWith('FAILED')))
+})
+
+// covers: T4
+test('(T4) a child epic carrying its parent\'s branch → refused, pointed at the parent', async () => {
+  const w = world({ epic: { body: 'Child epic.\n\n<!-- pipeline: epic=5 depth=1 epic_branch=epic/5-x -->' }, refs: ['heads/epic/5-x'] })
+  await w.run()
+  assert.equal(renames(w).length, 0)
+  assert.equal(w.comments.length, 1)
+  assert.match(w.comments[0], /#5/)
+  assert.match(w.comments[0], /\*\*You:\*\* comment `\/fresh-branch` on #5 instead/)
+  assert.doesNotMatch(w.comments[0], /fix that/)
+})
+
+// covers: T5
+test('(T5) decideFreshBranch: the epic check sits after the branch-count checks and before the open-PR check', () => {
+  assert.match(decideFreshBranch({ perm: 'write', epic: 9, branches: ['epic/9-x', 'epic/5-x'] }).reason, /more than one branch/)
+  const pr = decideFreshBranch({ perm: 'write', epic: 9, branches: ['epic/5-x'], openPrs: [{ number: 1 }] })
+  assert.equal(pr.action, 'refuse')
+  assert.match(pr.reason, /not this epic's branch/)
+  assert.equal(decideFreshBranch({ perm: 'write', branches: ['epic/9-x'] }).action, 'refuse')
 })
