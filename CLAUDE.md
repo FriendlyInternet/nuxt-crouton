@@ -205,9 +205,14 @@ A Cloudflare build (and any whole-monorepo `pnpm install`) runs *every* workspac
 Three cheap gates run **in-session before committing**, mirroring what CI gates — so a
 session catches what the PR would, not after:
 
-1. **Typecheck (always).** `pnpm typecheck` (runs per-app via `pnpm -r --filter './apps/*'
-   typecheck`). Never run `npx nuxt typecheck` from root — it has no Nuxt app context and
-   produces thousands of false positives. Fix errors immediately. Never skip.
+1. **Typecheck (always).** `pnpm typecheck` covers the **apps + the CLI** only (`pnpm -r
+   --filter './apps/*' --filter @fyit/crouton-cli typecheck`; CI runs it in full only on a push
+   or an infra change). Changed a package? Also run `pnpm typecheck:packages` — it lists every
+   `packages/*` package as `run` or `skip (#ticket)` and checks the `gate` list in
+   `scripts/typecheck-packages.json` (6 packages today; the other 23 are skipped under #3871).
+   CI's `Type Check Packages` job runs the same script on every PR that touches a package.
+   Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces
+   thousands of false positives. Fix errors immediately. Never skip.
 2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
    structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
    dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
@@ -300,7 +305,8 @@ pnpm preview <app>    # LOOK AT a change: boots the app, seeds it, mints a dispo
                       # review login and prints a PREFILLED one-click URL (#1777).
                       # For a changed shared component (packages/*/app/components)
                       # the PR gets a live gallery link automatically (#2462).
-pnpm typecheck        # Runs per-app typecheck (NEVER npx nuxt typecheck from root)
+pnpm typecheck        # Apps + CLI typecheck (NEVER npx nuxt typecheck from root)
+pnpm typecheck:packages  # packages/*: runs the gate list, prints the skipped ones (#3128)
 npx nuxt db generate  # Database migrations
 pnpm test / pnpm test:unit / pnpm test:e2e
 pnpm lint / pnpm lint:fix

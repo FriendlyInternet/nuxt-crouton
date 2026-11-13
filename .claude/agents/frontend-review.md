@@ -134,6 +134,13 @@ Common Vue smells in `<script setup>` where a cleaner primitive exists → 🟡/
   the reorder), 🔵 for a benign focus-after-render.
 - **Reaching past the framework to synchronise** — manual DOM reads/writes to reconcile
   what a `ref`/`computed` should own, or duplicated state kept in lockstep by hand.
+- **Hover-only information or control** (`hover-only`, #3910) — information or a control
+  carried only by a `title=` attribute or a `UTooltip` has no touch path (a phone never
+  hovers). Flag it 🟡 `suspected` when the diff adds it; the fix is a visible label, a
+  tap/focus path, or a `pointer-coarse:` reveal. Class-based hide/reveal pairs and
+  `UPopover mode="hover"` are already counted by `scripts/check-runtime-cost.mjs` in CI —
+  this bullet is the part that needs judgement (incl. controls that exist only while a
+  `@mouseenter` flag is set).
 
 Not in scope: legitimate `nextTick` for **DOM measurement after render** (focus, scroll,
 `getBoundingClientRect`) — that's the intended use, not a smell.
@@ -208,7 +215,7 @@ fix. For each finding:
 - `confidence` — `confirmed` (a deterministic signal backs it) | `suspected` (a
   reasoned smell). Never present a `suspected` raw-`<button>` call as `confirmed`.
 - `rule` — the short rule id: `v3-name` | `overlay-ucard` | `overlay-content-slot` |
-  `options-api` | `raw-html` | `hardcoded-color`.
+  `options-api` | `raw-html` | `hardcoded-color` | `hover-only`.
 - `what` — one sentence naming the convention broken ("uses the v3 `UDropdown`; v4 is
   `UDropdownMenu`").
 - `fix` — the specific change (the rename/component to use — not "use Nuxt UI").

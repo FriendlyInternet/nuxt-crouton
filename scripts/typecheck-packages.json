@@ -1,0 +1,35 @@
+{
+  "gate": [
+    "@fyit/canary-target",
+    "@fyit/crouton-cli",
+    "@fyit/crouton-devtools",
+    "@fyit/crouton-feedback",
+    "@fyit/crouton-mcp",
+    "@fyit/crouton-themes"
+  ],
+  "excluded": {
+    "@fyit/crouton-admin": "#3871",
+    "@fyit/crouton-ai": "#3871",
+    "@fyit/crouton-analytics": "#3871",
+    "@fyit/crouton-assets": "#3871",
+    "@fyit/crouton-audio": "#3871",
+    "@fyit/crouton-auth": "#3871",
+    "@fyit/crouton-bookings": "#3871",
+    "@fyit/crouton-calendar": "#3871",
+    "@fyit/crouton-charts": "#3871",
+    "@fyit/crouton-collab": "#3871",
+    "@fyit/crouton-core": "#3871",
+    "@fyit/crouton-editor": "#3871",
+    "@fyit/crouton-email": "#3871",
+    "@fyit/crouton-events": "#3871",
+    "@fyit/crouton-flow": "#3871",
+    "@fyit/crouton-i18n": "#3871",
+    "@fyit/crouton-layout": "#3871",
+    "@fyit/crouton-maps": "#3871",
+    "@fyit/crouton-mcp-toolkit": "#3871",
+    "@fyit/crouton-pages": "#3871",
+    "@fyit/crouton-printing": "#3871",
+    "@fyit/crouton-sales": "#3871",
+    "@fyit/crouton-three": "#3871"
+  }
+}

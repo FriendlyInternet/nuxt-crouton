@@ -1,6 +1,9 @@
 {
   "name": "@fyit/crouton-editor",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "nuxt typecheck"
+  },
   "description": "Rich text editor layer extending nuxt-crouton (wraps Nuxt UI Editor)",
   "type": "module",
   "main": "./nuxt.config.ts",

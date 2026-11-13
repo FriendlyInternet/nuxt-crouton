@@ -11,7 +11,25 @@
  * new `layout_configs` table.
  */
 
+/**
+ * How a pane sizes itself along its parent split's axis under Auto layout (#3784):
+ * `fit` = shrink to its content, `fill` = take the remaining space, `fixed` = use
+ * `defaultSize`.
+ */
+export const LAYOUT_PANE_SIZES = ['fit', 'fill', 'fixed'] as const
+export type LayoutPaneSize = (typeof LAYOUT_PANE_SIZES)[number]
+
+/** Type-guard for the closed `LayoutPaneSize` set (#3816). */
+export function isLayoutPaneSize(value: unknown): value is LayoutPaneSize {
+  return typeof value === 'string' && (LAYOUT_PANE_SIZES as readonly string[]).includes(value)
+}
+
 export interface LayoutNodeBase {
+  /**
+   * Per-pane size override (#3816). Absent ⇒ follow the block's `sizing` rule;
+   * only read when the tree's `auto` is on (#3784). `fixed` = use `defaultSize`.
+   */
+  size?: LayoutPaneSize
   /** Default size of this node within its parent split, as a percentage. */
   defaultSize?: number
   /** Minimum size of this node within its parent split, as a percentage. */
@@ -224,6 +242,12 @@ export interface LayoutBreakpoint {
 
 export interface LayoutTree {
   renderer: 'panes'
+  /**
+   * Auto layout (#3784): panes size from their block's rule / `size` override.
+   * Absent or false ⇒ today's percentage behaviour. A nested sub-layout is its own
+   * `LayoutTree`, so it carries its own flag.
+   */
+  auto?: boolean
   root: LayoutNode
   /**
    * Authored responsive breakpoints (WS5, #874), the *explicit* layer over the

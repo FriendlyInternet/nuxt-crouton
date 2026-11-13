@@ -2,12 +2,17 @@
 /**
  * BoardTree (#2375) — the page board as a plain DOM splitter tree.
  *
- * Recurses the LayoutTree the way the package renderer does (split → reka
- * SplitterGroup / Panel / ResizeHandle) and gives every pane its `NodePath`,
- * so a pane (BoardPane) can be a drop target. A split lays out only the
+ * Recurses the LayoutTree the way the package renderer does and gives every pane its
+ * `NodePath`, so a pane (BoardPane) can be a drop target. A split lays out only the
  * children that still show something at this width — a hidden pane gives its
  * space back; its trigger lives on an edge or in the nav (#2418) — its stack check,
  * floors and sizes read the visible children only (#3828).
+ *
+ * Rows flow like the served page (#3865): a vertical split is the page's content-flow
+ * grid (`pageRowTracks`, no row handle); a side-by-side split stays a reka group
+ * (widths, minimums, handles) but takes content height and top-aligns its
+ * panes; a split with one visible child draws that child in its place (the page does,
+ * `partitionCollapsed`).
  *
  * Deliberately in the POC (consume-vs-grow): once it holds up on a phone, the
  * splitter + drop layer is the candidate for extraction into crouton-layout.
@@ -16,8 +21,10 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { pageRowTracks } from '@fyit/crouton-layout/app/utils/layout-viability'
 import { boardPaneMinPct } from '../../utils/board-pane-min'
-import { boardStackThreshold, toChildSizes, visibleDefaultSizes, visibleSubtree } from '../../utils/board-visible'
+import { boardFloorStyle, boardStackThreshold, toChildSizes, visibleDefaultSizes, visibleSubtree } from '../../utils/board-visible'
+import { GROUP_KEY, isGroup } from '../../utils/board-groups'
 import { useElementSize } from '@vueuse/core'
 
 defineOptions({ name: 'BoardTree' })
@@ -28,7 +35,14 @@ const props = withDefaults(defineProps<{
   selected?: NodePath | null
   /** pane ids / block ids hidden at the current width: those panes aren't laid out. */
   hidden?: Set<string>
-}>(), { path: () => [], selected: null, hidden: () => new Set<string>() })
+  /**
+   * This tree sits in a vertical grid's cell (#3865). The cell is stretched by its row, so
+   * here (only here) wrappers keep `h-full`, a nested grid takes `min-height: 100%` and a
+   * pane fills the cell — like the page's renderer inside a grid cell. At the top level the
+   * board is content-height, like the served page.
+   */
+  inGridCell?: boolean
+}>(), { path: () => [], selected: null, hidden: () => new Set<string>(), inGridCell: false })
 
 const emit = defineEmits<{
   resize: [at: NodePath, sizes: (number | undefined)[]]
@@ -43,28 +57,26 @@ const visibleChildren = computed(() =>
     : [],
 )
 const { blocks } = useCroutonLayoutBlocks()
+
+// The page replaces a split with one visible child by that child (#3865).
+const onlyChild = computed(() => (visibleChildren.value.length === 1 ? visibleChildren.value[0]! : null))
+const isVertical = computed(() => props.node.type === 'split' && props.node.direction === 'vertical')
+// A vertical split's rows: the page's own tracks, computed from the visible tree (#3865).
+const gridStyle = computed(() => ({
+  display: 'grid',
+  gridTemplateRows: pageRowTracks(visibleChildren.value.map(v => visibleSubtree(v.child, props.hidden) ?? v.child), blocks.value),
+  gap: '1px',
+  width: '100%',
+  ...(props.inGridCell ? { minHeight: '100%' } : {}),
+}))
+
+// Re-emit a child tree's events (one named handler instead of an inline arrow per branch).
+const onChildResize = (at: NodePath, sizes: (number | undefined)[]) => emit('resize', at, sizes)
+const onChildSelect = (at: NodePath) => emit('select', at)
+const childPath = (i: number): NodePath => [...props.path, i]
+
 const splitEl = ref<HTMLElement | null>(null)
 const { width: splitWidth } = useElementSize(splitEl)
-
-// Floor each pane at the same floor the served page gives it (#3746).
-const panelMin = (child: LayoutNode) => props.node.type === 'split'
-  ? boardPaneMinPct(props.node.direction, visibleSubtree(child, props.hidden) ?? child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
-  : 10
-// Visible panes' sizes re-normalised to 100 for reka (#3828); stored sizes are untouched.
-const panelDefaults = computed(() => visibleDefaultSizes(visibleChildren.value.map(v => v.child)))
-
-// Only a user resize edits the page (#3746): reka re-reports the min-width clamp on
-// mount / width change, and that must not mark the board unsaved or overwrite the base.
-const userResizing = ref(false)
-function onHandleKey() {
-  userResizing.value = true
-  setTimeout(() => (userResizing.value = false), 0)
-}
-function onLayout(sizes: number[]) {
-  if (!userResizing.value || props.node.type !== 'split') return
-  // Back onto the original child indices; hidden children stay undefined (#3828).
-  emit('resize', props.path, toChildSizes(props.node.children, visibleChildren.value.map(v => v.i), sizes))
-}
 
 // Stack like the page does (#2523): the served page stacks a horizontal split once its
 // container is narrower than the split's derived soft floor (a container query in the
@@ -73,57 +85,128 @@ function onLayout(sizes: number[]) {
 // Hidden panes don't count (#3828) — the page renders from the visible tree too.
 const stackThreshold = computed(() => boardStackThreshold(props.node, props.hidden, blocks.value))
 const stacked = computed(() => stackThreshold.value > 0 && splitWidth.value > 0 && splitWidth.value <= stackThreshold.value)
+
+// A COLUMN — the lone visible child, the vertical grid or the stacked side-by-side row —
+// is one branch in the template; these hold the shapes' differences (#3865). The lone
+// child keeps the split's grid-cell context, so `h-full` carries down to it.
+const column = computed(() => {
+  if (onlyChild.value) return { handoff: 'board-only', class: props.inGridCell ? 'h-full w-full' : 'w-full', style: undefined }
+  if (isVertical.value) return { handoff: 'board-grid', class: undefined, style: gridStyle.value }
+  if (stacked.value) return { handoff: 'board-stack', class: 'flex w-full flex-col gap-px', style: undefined }
+  return null
+})
+// A grid cell sizes like the page's cell; a stacked pane is floored at its block's minimum
+// height — the same number the page's `viewChildStyle` uses.
+const floorStyle = (child: LayoutNode) => boardFloorStyle(child, props.hidden, blocks.value)
+const cellAttrs = (child: LayoutNode) => {
+  if (onlyChild.value) return { class: props.inGridCell ? 'h-full w-full' : 'w-full' }
+  return isVertical.value
+    ? { 'class': 'min-h-0 min-w-0 overflow-hidden', 'data-handoff': 'board-cell' }
+    : { class: 'w-full shrink-0', style: floorStyle(child) }
+}
+const childInGridCell = computed(() => isVertical.value || (!!onlyChild.value && props.inGridCell))
+
+// A GROUP (#3906) is laid out like any split; it only adds a dashed frame (an outline, so
+// no size changes) and its own handle. With one block showing at this width: no frame.
+const framedGroup = computed(() => isGroup(props.node) && !onlyChild.value)
+const groupLabel = computed(() => (isGroup(props.node) ? props.node[GROUP_KEY].label : undefined))
+const groupSelected = computed(() =>
+  !!props.selected && props.selected.length === props.path.length && props.selected.every((v, i) => v === props.path[i]),
+)
+const groupAttrs = computed(() => framedGroup.value
+  ? { 'class': ['relative board-group', { 'board-group--selected': groupSelected.value }], 'data-board-group': '', 'data-path': props.path.join('.') }
+  : {})
+
+// SIDE BY SIDE (not stacked): one reka group with the tested widths, minimums and handles
+// (#3746). Content height, panes top-aligned like the page (#3865): `!h-auto !items-start`
+// beat reka's inline `height: 100%`; the handle stretches to the row so it can still be
+// grabbed; each pane is floored at its block's minimum height. The group remounts when
+// the visible set changes.
+const panelMin = (child: LayoutNode) => props.node.type === 'split'
+  ? boardPaneMinPct(props.node.direction, visibleSubtree(child, props.hidden) ?? child, splitWidth.value, visibleChildren.value.length - 1, blocks.value)
+  : 0
+// Visible panes' sizes re-normalised to 100 for reka (#3828); stored sizes are untouched.
+const panelDefaults = computed(() => visibleDefaultSizes(visibleChildren.value.map(v => v.child)))
+const groupKey = computed(() => visibleChildren.value.map(v => v.i).join('-'))
+
+// Only a user resize edits the page (#3746): reka re-reports the min-width clamp on
+// mount / width change, and that must not mark the board unsaved or overwrite the base.
+const userResizing = ref(false)
+function onHandleKey() {
+  userResizing.value = true
+  setTimeout(() => (userResizing.value = false), 0)
+}
+const onDragging = (d: boolean) => (userResizing.value = d)
+function onLayout(sizes: number[]) {
+  if (!userResizing.value || props.node.type !== 'split') return
+  // Back onto the original child indices; hidden children stay undefined (#3828).
+  emit('resize', props.path, toChildSizes(props.node.children, visibleChildren.value.map(v => v.i), sizes))
+}
 </script>
 
 <template>
-  <!-- Split: one measured wrapper (the stack threshold reads its width) around either
-       the stacked column or the reka group. -->
-  <div v-if="node.type === 'split'" ref="splitEl" class="h-full w-full">
-    <!-- STACKED (#2523): narrower than its soft floor, so the panes go one under the
-         other — the page does the same at this width. Grips + drops stay; no resize handles. -->
-    <div v-if="stacked" class="flex h-full w-full flex-col gap-px overflow-y-auto" data-handoff="board-stack">
-      <div v-for="({ child, i }) in visibleChildren" :key="i" class="min-h-72 w-full shrink-0">
+  <!-- Split: one measured wrapper (the stack threshold reads its width) around the lone
+       visible child, the vertical grid, the stacked column or the reka row. Content-height
+       like the page (#3865); `h-full` only inside a grid cell, where the cell is stretched by
+       its row and a percentage min-height below needs a sized parent. -->
+  <div v-if="node.type === 'split'" ref="splitEl" class="w-full" :class="{ 'h-full': inGridCell }" data-handoff="board-split" v-bind="groupAttrs">
+    <!-- A group's own handle (#3906): drag the whole group, tap for its sheet (Ungroup). -->
+    <BoardGroupHandle :show="framedGroup" :path="path" :label="groupLabel" :selected="groupSelected" @select="onChildSelect" />
+    <!-- COLUMN: ONE visible child is drawn in the split's place, like the page (#3865); a
+         VERTICAL split is the page's content-flow grid — same row tracks, no row handle; a STACKED side-by-side row (#2523, narrower than its soft floor) goes
+         one under the other like the page, each pane floored at its block's minimum. Grips +
+         drops stay; no resize handles; the frame scrolls. -->
+    <div v-if="column" :class="column.class" :style="column.style" :data-handoff="column.handoff">
+      <div v-for="({ child, i }) in visibleChildren" :key="i" v-bind="cellAttrs(child)">
         <BoardTree
           :node="child"
-          :path="[...path, i]"
+          :path="childPath(i)"
           :selected="selected"
           :hidden="hidden"
-          @resize="(at, sizes) => emit('resize', at, sizes)"
-          @select="at => emit('select', at)"
+          :in-grid-cell="childInGridCell"
+          @resize="onChildResize"
+          @select="onChildSelect"
         />
       </div>
     </div>
 
-    <!-- Side by side: one reka group; the group remounts when the visible set changes. -->
+    <!-- Side by side: the reka row (widths, minimums, handles), content height, top-aligned. -->
     <SplitterGroup
       v-else
-      :key="visibleChildren.map(v => v.i).join('-')"
+      :key="groupKey"
       :direction="node.direction"
-      class="h-full w-full"
+      class="!h-auto !items-start w-full"
       @layout="onLayout"
       @keydown.capture="onHandleKey"
     >
       <template v-for="({ child, i }, vi) in visibleChildren" :key="i">
         <SplitterResizeHandle
           v-if="vi > 0"
-          class="relative shrink-0 bg-border hover:bg-primary data-[state=drag]:bg-primary transition-colors data-[orientation=horizontal]:w-1.5 data-[orientation=vertical]:h-1.5"
+          class="relative shrink-0 self-stretch bg-border hover:bg-primary data-[state=drag]:bg-primary transition-colors data-[orientation=horizontal]:w-1.5 data-[orientation=vertical]:h-1.5"
           data-handoff="pane-resize-handle"
-          @dragging="(d: boolean) => (userResizing = d)"
+          @dragging="onDragging"
         />
         <SplitterPanel :default-size="panelDefaults[vi]" :min-size="panelMin(child)" class="overflow-hidden">
           <BoardTree
+            :style="floorStyle(child)"
             :node="child"
-            :path="[...path, i]"
+            :path="childPath(i)"
             :selected="selected"
             :hidden="hidden"
-            @resize="(at, sizes) => emit('resize', at, sizes)"
-            @select="at => emit('select', at)"
+            @resize="onChildResize"
+            @select="onChildSelect"
           />
         </SplitterPanel>
       </template>
     </SplitterGroup>
   </div>
 
-  <!-- Leaf or nested app: a pane. Hidden at this width → nothing (its trigger lives elsewhere). -->
-  <BoardPane v-else-if="!isHidden" :node="node" :path="path" :selected="selected" @select="at => emit('select', at)" />
+  <!-- Leaf: a pane (groups arrive as marked splits, see board-groups.ts). Hidden at this width → nothing (its trigger lives elsewhere). -->
+  <BoardPane v-else-if="!isHidden" :node="node" :path="path" :selected="selected" :in-grid-cell="inGridCell" @select="onChildSelect" />
 </template>
+
+<style scoped>
+/* A group's frame: an outline, never a border or padding, so no pane changes size (#3906). */
+.board-group { outline: 1px dashed var(--ui-border-accented); outline-offset: -1px; }
+.board-group--selected { outline-color: var(--ui-primary); }
+</style>

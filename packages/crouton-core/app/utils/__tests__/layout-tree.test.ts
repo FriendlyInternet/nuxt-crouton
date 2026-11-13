@@ -295,3 +295,66 @@ describe('sanitizeLayoutTree — keeps store wiring (#3650)', () => {
     expect(sanitizeLayoutTree({ root: { type: 'leaf', blockId: 'a' }, sources: ['x'] })).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'a' } })
   })
 })
+
+describe('sanitizeLayoutTree — auto layout fields (#3816)', () => {
+  it('keeps auto: true on a full tree, and on a nested node\'s sub-layout', () => {
+    const clean = sanitizeLayoutTree({
+      renderer: 'panes',
+      auto: true,
+      root: { type: 'nested', label: 'Sub', layout: { renderer: 'panes', auto: true, root: { type: 'leaf', blockId: 'x' } } },
+    })
+    expect(clean?.auto).toBe(true)
+    expect(clean?.root.type === 'nested' && clean.root.layout.auto).toBe(true)
+  })
+
+  it('drops auto: false, \'true\' and 1 — the key is absent', () => {
+    for (const auto of [false, 'true', 1]) {
+      const clean = sanitizeLayoutTree({ renderer: 'panes', auto, root: { type: 'leaf', blockId: 'x' } })
+      expect(clean).not.toBeNull()
+      expect(Object.keys(clean!)).not.toContain('auto')
+    }
+  })
+
+  it('keeps size fit | fill | fixed on a leaf, a split and a nested node, alongside defaultSize', () => {
+    const input = {
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', size: 'fit' },
+          { type: 'split', direction: 'vertical', size: 'fill', children: [{ type: 'leaf', blockId: 'b' }] },
+          { type: 'nested', size: 'fixed', defaultSize: 40, layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'c' } } },
+        ],
+      },
+    }
+    expect(sanitizeLayoutTree(input)).toEqual(input)
+  })
+
+  it('drops an unknown size but keeps the rest of the node', () => {
+    for (const size of ['hug', 42, '']) {
+      const clean = sanitizeLayoutTree({ type: 'leaf', blockId: 'a', size, defaultSize: 30, config: { k: 1 } })
+      expect(clean?.root).toEqual({ type: 'leaf', blockId: 'a', defaultSize: 30, config: { k: 1 } })
+    }
+  })
+
+  it('keeps size on a node inside a breakpoint root override', () => {
+    const clean = sanitizeLayoutTree({
+      renderer: 'panes',
+      root: { type: 'leaf', blockId: 'a' },
+      breakpoints: [{ minWidth: 0, root: { type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a', size: 'fit' }] } }],
+    })
+    const bpRoot = clean?.breakpoints?.[0]?.root
+    expect(bpRoot?.type === 'split' && bpRoot.children[0]?.size).toBe('fit')
+  })
+
+  it('an existing tree without the new fields comes out unchanged, with no auto/size keys', () => {
+    const clean = sanitizeLayoutTree(validTree)
+    expect(clean).toEqual(validTree)
+    expect(Object.keys(clean!)).not.toContain('auto')
+    expect(Object.keys(clean!.root)).not.toContain('size')
+    const children = clean!.root.type === 'split' ? clean!.root.children : []
+    expect(children).toHaveLength(2)
+    for (const child of children) expect(Object.keys(child)).not.toContain('size')
+  })
+})

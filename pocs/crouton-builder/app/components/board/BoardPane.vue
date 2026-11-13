@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * BoardPane — one pane of the board: a leaf (or a read-only nested app) that
- * is also a drop target and carries the grip that moves it. Drop feedback comes
+ * BoardPane — one pane of the board: a leaf that is also a drop target and
+ * carries the grip that moves it. Drop feedback comes
  * from the shared drag state (the drag resolves the pane under the pointer with
  * elementFromPoint), so this pane only compares paths.
  */
@@ -13,14 +13,15 @@ const props = defineProps<{
   node: LayoutNode
   path: NodePath
   selected: NodePath | null
+  /** In a vertical grid's cell (#3865): fill the cell so the whole cell is the outline + drop target. */
+  inGridCell?: boolean
 }>()
 const emit = defineEmits<{ select: [at: NodePath] }>()
 
 const { blocks } = useCroutonLayoutBlocks()
 const { payload, hover, arm, consumeClick } = useBoardDrag()
 
-const isLeaf = computed(() => props.node.type === 'leaf')
-const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.name ?? props.node.blockId : 'App'))
+const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.name ?? props.node.blockId : ''))
 const isSelected = computed(() => !!props.selected && samePath(props.selected, props.path))
 
 // A pane can't be dropped onto itself or into its own subtree.
@@ -48,17 +49,17 @@ function onGripDown(e: PointerEvent) {
 
 <template>
   <div
-    class="board-pane relative h-full w-full croutonpane"
-    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
+    class="board-pane relative w-full croutonpane"
+    :class="{ 'min-h-full': inGridCell, 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
     @click="onPaneClick"
   >
     <!-- A leaf renders through the package renderer (registry resolution, config
-         sanitising, the admin fill-and-scroll); a nested app renders read-only. -->
-    <CroutonLayoutRenderer v-if="isLeaf" :node="node" :interactive="true" />
-    <CroutonLayoutRenderer v-else :node="(node as any).layout.root" :interactive="false" />
+         sanitising) in the PAGE render context, content-height like the served page
+         (#3865). -->
+    <CroutonLayoutRenderer :node="node" :interactive="false" />
 
     <!-- Grab handle: hold briefly, then drag this pane onto another pane. -->
     <button
