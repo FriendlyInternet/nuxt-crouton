@@ -58,10 +58,10 @@ export default defineCroutonManifest({
     ],
     components: [
       // Component prefix is 'CroutonMaps' — Map.vue → CroutonMapsMap, etc.
-      { name: 'CroutonMapsMap', description: 'Main map container with MapLibre GL (@geoql/v-maplibre, OpenFreeMap tiles)', props: ['center', 'zoom', 'style', 'height', 'flyToOnCenterChange'] },
-      { name: 'CroutonMapsMarker', description: 'Map marker with optional popup text and drag support', props: ['map', 'position', 'color', 'options', 'popupText', 'animateTransitions'] },
-      { name: 'CroutonMapsPopup', description: 'Map popup with custom slot content', props: ['map', 'position'] },
-      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells', props: ['location'] }
+      { name: 'CroutonMapsMap', description: 'Main map container with MapLibre GL (@geoql/v-maplibre, OpenFreeMap tiles)' },
+      { name: 'CroutonMapsMarker', description: 'Map marker with optional popup text and drag support' },
+      { name: 'CroutonMapsPopup', description: 'Map popup with custom slot content' },
+      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells' }
     ],
     apiRoutes: [
       '/api/maps/geocode',

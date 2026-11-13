@@ -43,10 +43,10 @@ export default defineCroutonManifest({
       'usePageBlocks',
     ],
     components: [
-      { name: 'CroutonPagesRenderer', description: 'Renders page based on type', props: ['page'] },
-      { name: 'CroutonPagesRegularContent', description: 'Rich text content display', props: ['content'] },
-      { name: 'CroutonPagesBlockContent', description: 'Block-based content display', props: ['content'] },
-      { name: 'CroutonPagesEditorBlockEditor', description: 'Block-based page editor', props: ['modelValue'] },
+      { name: 'CroutonPagesRenderer', description: 'Renders page based on type' },
+      { name: 'CroutonPagesRegularContent', description: 'Rich text content display' },
+      { name: 'CroutonPagesBlockContent', description: 'Block-based content display' },
+      { name: 'CroutonPagesEditorBlockEditor', description: 'Block-based page editor' },
     ],
     apiRoutes: [
       '/api/teams/[id]/pages',

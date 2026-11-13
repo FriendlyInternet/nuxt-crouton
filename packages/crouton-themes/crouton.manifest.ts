@@ -20,25 +20,25 @@ export default defineCroutonManifest({
     ],
     components: [
       // Themes layer — theme switching UI (no prefix, global)
-      { name: 'ThemeSwitcher', description: 'Theme selector with dropdown, inline, or cycle mode', props: ['mode', 'size'] },
-      { name: 'ThemeCompactPicker', description: 'Compact theme picker for settings panels', props: [] },
+      { name: 'ThemeSwitcher', description: 'Theme selector with dropdown, inline, or cycle mode' },
+      { name: 'ThemeCompactPicker', description: 'Compact theme picker for settings panels' },
 
       // KO theme — hardware-inspired (Teenage Engineering KO II) — prefix: Ko
-      { name: 'KoLed', description: 'LED indicator with glow animations (off, on, blink, fast, alive)', props: ['state', 'color'] },
-      { name: 'KoKnob', description: 'Rotary knob control with drag interaction', props: ['modelValue', 'min', 'max'] },
-      { name: 'KoPanel', description: 'Hardware-inspired display panel with glass overlay', props: [] },
-      { name: 'KoDisplay', description: '7-segment style LED readout', props: ['value'] },
-      { name: 'KoButton', description: 'Full tactile button with LED slot', props: ['modelValue', 'color'] },
-      { name: 'KoLabel', description: 'Hardware-style engraved label', props: ['text'] },
-      { name: 'KoPunchHole', description: 'Decorative punch hole element', props: [] },
-      { name: 'KoSpeakerGrill', description: 'Speaker grill pattern element', props: ['slots'] },
+      { name: 'KoLed', description: 'LED indicator with glow animations (off, on, blink, fast, alive)' },
+      { name: 'KoKnob', description: 'Rotary knob control with drag interaction' },
+      { name: 'KoPanel', description: 'Hardware-inspired display panel with glass overlay' },
+      { name: 'KoDisplay', description: '7-segment style LED readout' },
+      { name: 'KoButton', description: 'Full tactile button with LED slot' },
+      { name: 'KoLabel', description: 'Hardware-style engraved label' },
+      { name: 'KoPunchHole', description: 'Decorative punch hole element' },
+      { name: 'KoSpeakerGrill', description: 'Speaker grill pattern element' },
 
       // KR-11 theme — Korg KR-11 rhythm box inspired — prefix: Kr
-      { name: 'KrDisplay', description: '7-segment LED tempo display with blink animation', props: ['value', 'blink'] },
-      { name: 'KrPad', description: 'Tactile drum pad button (cream, coral, gold, mint)', props: ['color', 'label'] },
-      { name: 'KrLed', description: 'Status LED indicator (yellow, green, with blink)', props: ['state', 'color'] },
-      { name: 'KrKnob', description: 'Rotary control with drag interaction', props: ['modelValue', 'min', 'max'] },
-      { name: 'KrSpeakerGrill', description: 'Horizontal slot speaker grill pattern', props: ['slots'] },
+      { name: 'KrDisplay', description: '7-segment LED tempo display with blink animation' },
+      { name: 'KrPad', description: 'Tactile drum pad button (cream, coral, gold, mint)' },
+      { name: 'KrLed', description: 'Status LED indicator (yellow, green, with blink)' },
+      { name: 'KrKnob', description: 'Rotary control with drag interaction' },
+      { name: 'KrSpeakerGrill', description: 'Horizontal slot speaker grill pattern' },
 
       // Minimal theme — no custom components, CSS-only (black lines, white bg)
       // Blackandwhite theme — no custom components, CSS-only (monochrome dashboard)
