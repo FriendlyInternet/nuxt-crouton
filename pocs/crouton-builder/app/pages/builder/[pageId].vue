@@ -22,9 +22,10 @@ import {
 } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { resolveLayoutAtWidth, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { editRoot } from '~/utils/board-empty'
-import { expandGroups, collapseGroups, isGroup, movePane, ungroupAt } from '~/utils/board-groups'
+import { expandGroups, collapseGroups, isGroup, ungroupAt } from '~/utils/board-groups'
 import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-hidden'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import { placeBlock, movePaneToTarget, type BoardTarget } from '~/utils/board-target'
 import { paletteBlocksOf } from '~/utils/palette-blocks'
 import { usePaletteMenu } from '~/utils/palette-menu'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
@@ -146,20 +147,21 @@ function newLeaf(blockId: string): LayoutLeaf {
   return def?.defaultConfig ? { ...leaf, config: { ...def.defaultConfig } } : leaf
 }
 
-function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
+function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload, target: BoardTarget) {
   const r = root.value
   if (payload.kind === 'block') {
     if (!r) return writeRoot(newLeaf(payload.blockId))
     // Centre on a leaf swaps the block; an edge lands beside (flattening into a
-    // parallel split, wrapping otherwise).
-    if (edge === 'center') return writeRoot(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
-    return writeRoot(applyPaneDrop(r, { path: at, edge }, newLeaf(payload.blockId)))
+    // parallel split, wrapping otherwise); the page's / a group's edge lands beside
+    // the whole page / group (#3916).
+    if (target.scope === 'pane' && edge === 'center') return writeRoot(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
+    return writeRoot(placeBlock(r, target, newLeaf(payload.blockId)))
   }
   // Moving a pane: beside the target, or — a centre drop — grouped with it; a move
   // between two blocks of one group stays in it (#3906, `movePane`). A drop that
   // changes nothing writes nothing (no unsaved mark, no new breakpoint).
   if (!r) return
-  const next = movePane(r, payload.path, at, edge)
+  const next = movePaneToTarget(r, payload.path, target)
   if (next !== r) writeRoot(next)
 }
 registerDrop(onDrop)
@@ -288,8 +290,10 @@ async function viewPage() {
       <div v-if="root && allHidden" class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">
         Everything on this page is hidden at this width — use the triggers, or tap the eye-off count to show blocks again.
       </div>
-      <div v-else-if="root" class="board-frame" :class="{ 'board-frame--scaled': scale < 1 }" :style="frameStyle" :data-width="effWidth">
-        <BoardTree :key="boardKey" :node="root" :selected="selected" :hidden="hiddenSet" @resize="onResize" @select="onSelect" />
+      <div v-else-if="root" class="board-frame" :class="{ 'board-frame--scaled': scale < 1 }" :style="frameStyle" :data-width="effWidth" data-board-frame>
+        <div data-board-root class="w-full">
+          <BoardTree :key="boardKey" :node="root" :selected="selected" :hidden="hiddenSet" @resize="onResize" @select="onSelect" />
+        </div>
       </div>
       <div v-else class="flex h-full items-center justify-center p-6 text-center text-sm text-muted" data-handoff="board-pane" data-path="">
         Empty page — drag a block here, or tap one above.
@@ -323,6 +327,9 @@ async function viewPage() {
       @ungroup="ungroupSelected"
       @select-hidden="selectHidden"
     />
+
+    <!-- The bar for a page / group target (#3916), outside <main> so the frame's scaling doesn't apply. -->
+    <BoardDropBar />
   </div>
 </template>
 

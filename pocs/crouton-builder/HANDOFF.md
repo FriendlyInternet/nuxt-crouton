@@ -55,6 +55,13 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   group is a split marked `__boardGroup`; it is saved as today's `nested` node (`expandGroups` on
   read, `collapseGroups` in `writeRoot`). A middle drop never makes a group inside a group; a group
   left with one block stops being a group; the group's sheet has Ungroup.
+- **Drop targets** (#3916, `utils/board-target.ts`, pure): a point on the board resolves to ONE
+  target, first match wins — **page** (outside the tree, or within 20 px of its sides: a full-width
+  line / full-height column, or joining the page's own row/column) → **group** (within 20 px of a
+  group's frame, outermost first: beside the group) → **block** (its edges or middle, as before) →
+  **block above** (empty space under a short block: that block's bottom). Resize handles are never a
+  target. A page/group target's bar is `BoardDropBar` (fixed, over the clipped rect); a move that
+  changes nothing writes nothing (`movePaneToTarget` returns the same root).
 
 ## Gotchas
 
