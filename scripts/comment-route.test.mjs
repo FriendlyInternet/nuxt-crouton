@@ -11,7 +11,25 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 13)
+  assert.equal(KINDS.length, 14)
+})
+
+test('fresh-branch (#3881): a whole-line /fresh-branch from the owner on an epic', () => {
+  // 1a
+  assert.equal(kind({ comment: c('/fresh-branch'), issue: issue(['epic']) }), 'fresh-branch')
+  assert.equal(kind({ comment: c('  /fresh-branch  \n'), issue: issue(['epic', 'status:blocked']) }), 'fresh-branch')
+  // 1b — not from a non-owner
+  assert.notEqual(kind({ comment: c('/fresh-branch', 'COLLABORATOR'), issue: issue(['epic']) }), 'fresh-branch')
+  assert.notEqual(kind({ comment: c('/fresh-branch', 'NONE'), issue: issue(['epic']) }), 'fresh-branch')
+  // 1c — not on an issue without `epic`
+  assert.notEqual(kind({ comment: c('/fresh-branch'), issue: issue([]) }), 'fresh-branch')
+  // 1d — not mid-sentence
+  assert.notEqual(kind({ comment: c('please /fresh-branch now'), issue: issue(['epic']) }), 'fresh-branch')
+  // 1e — not in a code span or a quote
+  assert.notEqual(kind({ comment: c('`/fresh-branch`'), issue: issue(['epic']) }), 'fresh-branch')
+  assert.notEqual(kind({ comment: c('> /fresh-branch'), issue: issue(['epic']) }), 'fresh-branch')
+  // 1f — /close-epic is unchanged
+  assert.equal(kind({ comment: c('/close-epic'), issue: issue(['epic']) }), 'close-epic')
 })
 
 test('close-epic: /close-epic on an issue', () => {

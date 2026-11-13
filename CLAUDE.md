@@ -91,7 +91,7 @@ its sub-issues is one coherent PR with the commits kept separate.
 
 ### Issue Status Updates
 - Move the issue through its states: open → in-progress → closed (via the PR's `Closes #NN` on merge)
-- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856).
+- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856); an epic whose branch has drifted from main gets a fresh one with `/fresh-branch` (#3881).
 - `writeups/PROGRESS_TRACKER.md` is an **optional** phase-level rollup, not the per-task tracker — update it only when keeping a phase summary current.
 
 ### Multi-Agent Continuity
