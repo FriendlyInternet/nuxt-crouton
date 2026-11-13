@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// fallow-ignore-file circular-dependency
+// (BoardRow <-> BoardTree is the board's recursion: a row's panes are trees, a tree's
+// side-by-side split is a row, like BoardTree -> BoardTree. Components are only used at
+// render time, so the cycle has no module-init hazard.)
 /**
  * BoardRow (#3865) — a side-by-side split on the board, not stacked: one reka group with
  * the tested widths, minimums and handles (#3746). Split out of BoardTree so each template
