@@ -1,7 +1,7 @@
 name: Calendar scroll diagnostics (#3813)
 
 # #3813 — DIAGNOSTIC only. Runs e2e/deployed/calendar-month-scroll.diag.spec.ts
-# (WebKit iPhone 13, touch) against STAGING (= main, still has the bug) and prints
+# (WebKit iPhone 13, touch) against the PR #3904 preview (one shared popover) and prints
 # every per-frame number to this job log as DIAG3813 lines, plus a per-run JSON
 # artifact. Changes no app code; never a gate. Falls back to Chromium iPhone
 # emulation only when WebKit never produced a single run line.
@@ -22,11 +22,14 @@ concurrency:
 
 jobs:
   diag:
-    name: Calendar scroll diagnostics · staging (WebKit iPhone)
+    name: Calendar scroll diagnostics · PR #3904 preview (WebKit iPhone)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+      BOOKING_DEMO_URL: https://booking-demo-pr3904.cloudflare-e53.workers.dev
+      BUILDER_URL: https://crouton-builder-pr3904.cloudflare-e53.workers.dev
+      CAL_DIAG_KEY: pr3904
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -38,7 +41,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
       - name: Install WebKit (hard limit)
         run: timeout -k 10 600 pnpm exec playwright install --with-deps webkit
-      - name: Run diagnostics against staging (WebKit)
+      - name: Run diagnostics against PR #3904 preview (WebKit)
         id: webkit
         run: |
           set -o pipefail

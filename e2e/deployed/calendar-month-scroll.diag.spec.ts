@@ -28,7 +28,7 @@ import { join } from 'node:path'
 
 const ROOT = join(__dirname, '..', '..')
 const ENGINE = process.env.CAL_DIAG_ENGINE === 'chromium' ? 'chromium' : 'webkit'
-const KEY = 'main'
+const KEY = process.env.CAL_DIAG_KEY || 'main'
 const SECRET = process.env.REVIEW_SEED_SECRET || ''
 const BD_TEAM = process.env.BOOKING_DEMO_TEAM || 'test1'
 const OUT_DIR = join(ROOT, 'test-results', 'calendar-diag')
