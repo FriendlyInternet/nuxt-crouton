@@ -394,30 +394,27 @@ const arm = (page: Page, mark: string, recorder = false, resize = false) => page
 
   // Fourth run (#3813, clamp theory): every ResizeObserver callback on the swipe element and on
   // the scroller's content, with the swipe element's offsetHeight and the scroller's scrollHeight
-  // read inside the callback. Observing only — changes nothing.
-  if (recorder && resize) {
-    const content = [...(d.isWindow ? document.body.children : sc.children)] as HTMLElement[]
-    const label = (el: Element) => el === swipe ? 'swipe' : `content:${cls(el)}`
-    new ResizeObserver((entries) => {
-      R.resize.push({
-        ts: now(),
-        targets: entries.map(e => `${label(e.target)} h=${Math.round(e.contentRect.height * 10) / 10}`).join(' ; '),
-        swipeOH: swipe.offsetHeight,
-        scrollHeight: sc.scrollHeight,
-        scrollTop: Math.round(sc.scrollTop * 10) / 10,
-      })
-    }).observe(swipe)
-    const ro = new ResizeObserver((entries) => {
-      R.resize.push({
-        ts: now(),
-        targets: entries.map(e => `${label(e.target)} h=${Math.round(e.contentRect.height * 10) / 10}`).join(' ; '),
-        swipeOH: swipe.offsetHeight,
-        scrollHeight: sc.scrollHeight,
-        scrollTop: Math.round(sc.scrollTop * 10) / 10,
-      })
-    })
-    for (const el of content) ro.observe(el)
+  // read inside the callback. Observing only — changes nothing. (Its own arrow, so arm's
+  // complexity stays under fallow's gate.)
+  const observeResize = () => {
+    if (recorder && resize) {
+      const content = [...(d.isWindow ? document.body.children : sc.children)] as HTMLElement[]
+      const label = (el: Element) => el === swipe ? 'swipe' : `content:${cls(el)}`
+      const onResize = (entries: ResizeObserverEntry[]) => {
+        R.resize.push({
+          ts: now(),
+          targets: entries.map(e => `${label(e.target)} h=${Math.round(e.contentRect.height * 10) / 10}`).join(' ; '),
+          swipeOH: swipe.offsetHeight,
+          scrollHeight: sc.scrollHeight,
+          scrollTop: Math.round(sc.scrollTop * 10) / 10,
+        })
+      }
+      new ResizeObserver(onResize).observe(swipe)
+      const ro = new ResizeObserver(onResize)
+      for (const el of content) ro.observe(el)
+    }
   }
+  observeResize()
 
   // Logging-only wrappers: each calls the original unchanged. (Skipped when the recorder
   // above owns the wrapping, so each call is wrapped once and its stack stays clean.)
@@ -575,52 +572,70 @@ const appFrame = (stack: string[]) => {
   return 'no app frame'
 }
 
+// Recorder report helpers — split per section so reportRecorder stays under fallow's complexity gate.
+type RecWindow = { tag: string, span: string, rel: (ts: number) => number }
+
+function reportCalls(w: RecWindow, calls: any[]) {
+  for (const c of calls) {
+    console.log(`DIAG3813 CALL ${w.tag} t=${w.rel(c.ts)} ${c.kind} on ${c.target} args=(${c.args}) app=${appFrame(c.stack)} stack=${c.stack.join(' | ')}`)
+  }
+  if (!calls.length) console.log(`DIAG3813 CALL ${w.tag} no recorded call (${w.span})`)
+}
+
+function reportFocus(w: RecWindow, R: any, focus: any[]) {
+  for (const f of focus) console.log(`DIAG3813 FOCUS ${w.tag} t=${w.rel(f.ts)} ${f.kind} ${f.target}`)
+  if (!focus.length) console.log(`DIAG3813 FOCUS ${w.tag} no focusin/focusout (${w.span})`)
+  console.log(`DIAG3813 FOCUS ${w.tag} activeElement before=${R.before?.active ?? '?'} atJump=${R.jump?.active ?? 'no jump'}`)
+}
+
+function reportGeom(tag: string, R: any, jumpT: number | null) {
+  const g = (x: any) => x ? `scrollTop=${x.scrollTop} scrollHeight=${x.scrollHeight} clientHeight=${x.clientHeight} swipeTop=${x.swipeTop}` : 'n/a'
+  console.log(`DIAG3813 GEOM ${tag} before-finger-up ${g(R.before?.geom)}`)
+  console.log(`DIAG3813 GEOM ${tag} jump-frame ${jumpT !== null ? `t=${jumpT} from=${Math.round(R.jump.from * 10) / 10} ${g(R.jump.geom)}` : 'no jump frame'}`)
+}
+
+function shorterThan(r: any, refOH: unknown, refSH: unknown) {
+  return [
+    typeof refOH === 'number' && r.swipeOH < refOH ? `swipeOH ${refOH}→${r.swipeOH} (${r.swipeOH - refOH})` : '',
+    typeof refSH === 'number' && r.scrollHeight < refSH ? `scrollHeight ${refSH}→${r.scrollHeight} (${r.scrollHeight - refSH})` : '',
+  ].filter(Boolean).join(' ')
+}
+
+// Fourth run (#3813): ResizeObserver callbacks between finger-up and the jump frame (base case).
+function reportResize(w: RecWindow, R: any, resize: any[]) {
+  const refOH = R.before?.swipeOH
+  const refSH = R.before?.geom?.scrollHeight
+  console.log(`DIAG3813 RESIZE ${w.tag} before-finger-up swipeOH=${refOH ?? '?'} scrollHeight=${refSH ?? '?'}`)
+  for (const r of resize) {
+    const shorter = shorterThan(r, refOH, refSH)
+    console.log(`DIAG3813 RESIZE ${w.tag} t=${w.rel(r.ts)} swipeOH=${r.swipeOH} scrollHeight=${r.scrollHeight} scrollTop=${r.scrollTop} targets=${r.targets}${shorter ? ` SHORTER ${shorter}` : ''}`)
+  }
+  if (!resize.length) console.log(`DIAG3813 RESIZE ${w.tag} no ResizeObserver callback (${w.span})`)
+}
+
 // Recorder report (#3813, third run): calls, focus, geometry, variant line.
 function reportRecorder(tag: string, variant: Variant, run: number, R: any, rel: (ts: number) => number, before: number, after: number, drop: boolean) {
   const jumpT = R.jump ? rel(R.jump.ts) : null
   const end = jumpT ?? 1000
   const inWin = (e: any) => rel(e.ts) >= 0 && rel(e.ts) <= end
   const span = jumpT !== null ? `finger-up→jump t=${jumpT}` : 'finger-up→+1000ms (no jump frame)'
+  const w: RecWindow = { tag, span, rel }
   const calls = (R.calls as any[]).filter(inWin)
-  for (const c of calls) {
-    console.log(`DIAG3813 CALL ${tag} t=${rel(c.ts)} ${c.kind} on ${c.target} args=(${c.args}) app=${appFrame(c.stack)} stack=${c.stack.join(' | ')}`)
-  }
-  if (!calls.length) console.log(`DIAG3813 CALL ${tag} no recorded call (${span})`)
+  reportCalls(w, calls)
   const focus = (R.focus as any[]).filter(inWin)
-  for (const f of focus) console.log(`DIAG3813 FOCUS ${tag} t=${rel(f.ts)} ${f.kind} ${f.target}`)
-  if (!focus.length) console.log(`DIAG3813 FOCUS ${tag} no focusin/focusout (${span})`)
-  console.log(`DIAG3813 FOCUS ${tag} activeElement before=${R.before?.active ?? '?'} atJump=${R.jump?.active ?? 'no jump'}`)
-  const g = (x: any) => x ? `scrollTop=${x.scrollTop} scrollHeight=${x.scrollHeight} clientHeight=${x.clientHeight} swipeTop=${x.swipeTop}` : 'n/a'
-  console.log(`DIAG3813 GEOM ${tag} before-finger-up ${g(R.before?.geom)}`)
-  console.log(`DIAG3813 GEOM ${tag} jump-frame ${jumpT !== null ? `t=${jumpT} from=${Math.round(R.jump.from * 10) / 10} ${g(R.jump.geom)}` : 'no jump frame'}`)
+  reportFocus(w, R, focus)
+  reportGeom(tag, R, jumpT)
   if (variant !== 'base') {
     console.log(`DIAG3813 VARIANT ${variant} run=${run} before=${before} after=${after} jumped=${drop ? 'yes' : 'no'} jumpFrame=${jumpT ?? 'none'} calls=${calls.length} focusChanges=${focus.length}`)
   }
-  // Fourth run (#3813): ResizeObserver callbacks between finger-up and the jump frame (base case).
   const resize = ((R.resize || []) as any[]).filter(inWin)
-  if (variant === 'base') {
-    const refOH = R.before?.swipeOH
-    const refSH = R.before?.geom?.scrollHeight
-    console.log(`DIAG3813 RESIZE ${tag} before-finger-up swipeOH=${refOH ?? '?'} scrollHeight=${refSH ?? '?'}`)
-    for (const r of resize) {
-      const shorter = [
-        typeof refOH === 'number' && r.swipeOH < refOH ? `swipeOH ${refOH}→${r.swipeOH} (${r.swipeOH - refOH})` : '',
-        typeof refSH === 'number' && r.scrollHeight < refSH ? `scrollHeight ${refSH}→${r.scrollHeight} (${r.scrollHeight - refSH})` : '',
-      ].filter(Boolean).join(' ')
-      console.log(`DIAG3813 RESIZE ${tag} t=${rel(r.ts)} swipeOH=${r.swipeOH} scrollHeight=${r.scrollHeight} scrollTop=${r.scrollTop} targets=${r.targets}${shorter ? ` SHORTER ${shorter}` : ''}`)
-    }
-    if (!resize.length) console.log(`DIAG3813 RESIZE ${tag} no ResizeObserver callback (${span})`)
-  }
+  if (variant === 'base') reportResize(w, R, resize)
   return { jumpT, calls, focus, resize, scrolls: (R.scrolls as any[]).filter(inWin) }
 }
 
-async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
-  const variant = opts.variant ?? 'base'
-  const recorder = !!opts.recorder
-  const m = await install(page)
-  expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
-  // V-mid: 40 px short of the bottom; P1/P2: a fixed start (60 / 70); otherwise (base, V-anchor,
-  // P3, P4) the calendar's middle near the top — the base-case start, clamped to the bottom.
+// V-mid: 40 px short of the bottom; P1/P2: a fixed start (60 / 70); otherwise (base, V-anchor,
+// P3, P4) the calendar's middle near the top — the base-case start, clamped to the bottom.
+function startFor(variant: Variant, m: Measure) {
   const want = variant === 'mid'
     ? m.max - 40
     : variant === 'P1-start60'
@@ -628,6 +643,15 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
       : variant === 'P2-start70'
         ? 70
         : Math.max(0, Math.min(m.max, Math.round(m.gridTop + m.gridH / 2 - 40)))
+  return want
+}
+
+async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
+  const variant = opts.variant ?? 'base'
+  const recorder = !!opts.recorder
+  const m = await install(page)
+  expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
+  const want = startFor(variant, m)
   // V-anchor: turn scroll anchoring off everywhere before the swipe.
   if (variant === 'anchor') await page.addStyleTag({ content: '* { overflow-anchor: none !important; }' })
   // P3: hold the swipe element at its current height (test-only style, no app code).
