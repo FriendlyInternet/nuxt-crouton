@@ -10,6 +10,11 @@
  * Second measuring run: also observes every OTHER pane and fetch/XHR (Q1), names the
  * direct <body> children added/removed and who inserts them (Q2), and reads the heights
  * synchronously inside the calendar pane's MutationObserver callback + the next frame (Q3).
+ * Third measuring run (booking-demo only): a recorder of every call that can move a scroll
+ * position (with its stack), focusin/focusout, scroll events, the active element and the
+ * geometry before finger-up and at the jump frame — printed as DIAG3813 CALL / FOCUS / GEOM —
+ * plus two variants: V-mid (start 40 px short of the bottom) and V-anchor (overflow-anchor: none),
+ * one DIAG3813 VARIANT line per swipe.
  *
  * The jump itself is DATA, never a failure. A test fails only when the run did
  * nothing (month did not move by one, <20 frames, or <100 px of scroll room), so a
@@ -128,7 +133,7 @@ const scrollTo = (page: Page, y: number) => page.evaluate(async (y) => {
 }, y)
 
 /** Mark the calendar + every ancestor, then start the frame loop, observers and wrappers. */
-const arm = (page: Page, mark: string) => page.evaluate((mark) => {
+const arm = (page: Page, mark: string, recorder = false) => page.evaluate(({ mark, recorder }) => {
   const d = (window as any).__diag
   const swipe = d.swipe as HTMLElement
   const track = d.track as HTMLElement
@@ -290,8 +295,83 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
     }
   }
 
-  // Logging-only wrappers: each calls the original unchanged.
+  // Third measuring run (#3813): the scroll-move recorder. Every call that can move a scroll
+  // position, with its target, arguments and call stack; focus changes; scroll events; and the
+  // geometry before finger-up and at the jump frame. Each wrapper calls the original unchanged.
+  const R: any = { calls: [], focus: [], scrolls: [], before: null, jump: null }
+  d.R = recorder ? R : null
+  const where = (el: any) => {
+    if (el === window) return 'window'
+    if (el === document) return 'document'
+    if (el === sc || (d.isWindow && (el === document.scrollingElement || el === document.documentElement || el === document.body))) return 'page-scroller'
+    if (el instanceof Node && swipe.contains(el)) return 'in-calendar'
+    return 'elsewhere'
+  }
+  const rdesc = (el: any) => {
+    if (!el) return 'null'
+    if (el === window || el === document) return where(el)
+    const c = el.classList?.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''
+    return `${el.tagName}${c} [${where(el)}]`
+  }
+  R.geom = () => ({
+    scrollTop: Math.round(sc.scrollTop * 10) / 10,
+    scrollHeight: sc.scrollHeight,
+    clientHeight: d.isWindow ? window.innerHeight : sc.clientHeight,
+    swipeTop: Math.round((swipe.getBoundingClientRect().top - (d.isWindow ? 0 : sc.getBoundingClientRect().top)) * 10) / 10,
+  })
+  R.active = () => rdesc(document.activeElement)
+  if (recorder) {
+    const argStr = (args: any[]) => args.map((a) => {
+      try {
+        return typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a)
+      }
+      catch {
+        return '?'
+      }
+    }).join(',').slice(0, 120)
+    // Drop the wrapper's own frame, keep the next 12.
+    const stack12 = (raw: string | undefined) => (raw || '').split('\n').map(s => s.trim()).filter(s => s && s !== 'Error').slice(1, 13)
+    const rwrap = (obj: any, name: string, kind: string) => {
+      const orig = obj[name]
+      if (typeof orig !== 'function') return
+      obj[name] = function (this: any, ...args: any[]) {
+        R.calls.push({ ts: now(), kind, target: rdesc(this), args: argStr(args), stack: stack12(new Error().stack) })
+        return orig.apply(this, args)
+      }
+    }
+    rwrap(Element.prototype, 'scrollIntoView', 'Element.scrollIntoView')
+    rwrap(Element.prototype, 'scrollTo', 'Element.scrollTo')
+    rwrap(Element.prototype, 'scrollBy', 'Element.scrollBy')
+    rwrap(Element.prototype, 'scroll', 'Element.scroll')
+    rwrap(window, 'scrollTo', 'window.scrollTo')
+    rwrap(window, 'scrollBy', 'window.scrollBy')
+    rwrap(window, 'scroll', 'window.scroll')
+    rwrap(HTMLElement.prototype, 'focus', 'focus')
+    const rst = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')
+    if (rst?.set && rst.get) {
+      Object.defineProperty(Element.prototype, 'scrollTop', {
+        configurable: true,
+        enumerable: rst.enumerable,
+        get() { return rst.get!.call(this) },
+        set(v: number) {
+          R.calls.push({ ts: now(), kind: 'scrollTop=', target: rdesc(this), args: String(v), stack: stack12(new Error().stack) })
+          rst.set!.call(this, v)
+        },
+      })
+    }
+    document.addEventListener('focusin', e => R.focus.push({ ts: now(), kind: 'focusin', target: rdesc(e.target) }), { capture: true })
+    document.addEventListener('focusout', e => R.focus.push({ ts: now(), kind: 'focusout', target: rdesc(e.target) }), { capture: true })
+    window.addEventListener('scroll', (e) => {
+      const t = e.target as any
+      const el = t === document || t === window ? document.scrollingElement : t
+      R.scrolls.push({ ts: now(), target: rdesc(t), scrollTop: Math.round((el?.scrollTop ?? 0) * 10) / 10 })
+    }, { capture: true })
+  }
+
+  // Logging-only wrappers: each calls the original unchanged. (Skipped when the recorder
+  // above owns the wrapping, so each call is wrapped once and its stack stays clean.)
   const wrap = (obj: any, name: string, label: string) => {
+    if (recorder) return
     const orig = obj[name]
     if (typeof orig !== 'function') return
     obj[name] = function (this: any, ...args: any[]) {
@@ -307,7 +387,7 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
   wrap(Element.prototype, 'scrollTo', 'Element.scrollTo')
   wrap(Element.prototype, 'scrollBy', 'Element.scrollBy')
   const st = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')
-  if (st?.set && st.get) {
+  if (!recorder && st?.set && st.get) {
     Object.defineProperty(Element.prototype, 'scrollTop', {
       configurable: true,
       enumerable: st.enumerable,
@@ -324,8 +404,15 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
   const rec = { frames, events, bodyKinds, bodyStacks, touchendAt: -1, stopAt: Number.POSITIVE_INFINITY }
   d.rec = rec
   const winY = () => window.scrollY
+  let prevScY = Number.NaN
   const loop = () => {
     const ts = now()
+    const curScY = d.isWindow ? document.scrollingElement!.scrollTop : sc.scrollTop
+    // Recorder: the first frame after finger-up where the scroll fell by more than 2 px.
+    if (recorder && !R.jump && rec.touchendAt > 0 && ts > rec.touchendAt && prevScY - curScY > 2) {
+      R.jump = { ts, from: prevScY, geom: R.geom(), active: R.active() }
+    }
+    prevScY = curScY
     let lost = ''
     let ok = 0
     for (const el of marked) {
@@ -349,7 +436,7 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
   }
   requestAnimationFrame(loop)
   return marked.length
-}, mark)
+}, { mark, recorder })
 
 /** Finger swipe left (→ next month): plain Events with touch lists, as WebKit has no Touch constructor. */
 const swipeLeft = (page: Page) => page.evaluate(async () => {
@@ -373,6 +460,7 @@ const swipeLeft = (page: Page) => page.evaluate(async () => {
     await new Promise(res => setTimeout(res, 16))
     fire('touchmove', x)
   }
+  if (d.R) d.R.before = { ts: performance.now(), geom: d.R.geom(), active: d.R.active() }
   d.rec.touchendAt = performance.now()
   d.rec.stopAt = d.rec.touchendAt + 1000
   fire('touchend', x)
@@ -425,14 +513,56 @@ function reportQuestions(tag: string, frames: Row[], events: Row[], di: number, 
   for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 }
 
-async function runDiag(page: Page, app: string, run: number) {
+type Variant = 'base' | 'mid' | 'anchor'
+
+/** First stack line that points at a page script (http/https URL), i.e. the first app frame. */
+const appFrame = (stack: string[]) => {
+  for (const l of stack) {
+    const m = l.match(/https?:\/\/[^\s)]+:\d+(?::\d+)?/)
+    if (m) return m[0]
+  }
+  return 'no app frame'
+}
+
+// Recorder report (#3813, third run): calls, focus, geometry, variant line.
+function reportRecorder(tag: string, variant: Variant, run: number, R: any, rel: (ts: number) => number, before: number, after: number, drop: boolean) {
+  const jumpT = R.jump ? rel(R.jump.ts) : null
+  const end = jumpT ?? 1000
+  const inWin = (e: any) => rel(e.ts) >= 0 && rel(e.ts) <= end
+  const span = jumpT !== null ? `finger-up→jump t=${jumpT}` : 'finger-up→+1000ms (no jump frame)'
+  const calls = (R.calls as any[]).filter(inWin)
+  for (const c of calls) {
+    console.log(`DIAG3813 CALL ${tag} t=${rel(c.ts)} ${c.kind} on ${c.target} args=(${c.args}) app=${appFrame(c.stack)} stack=${c.stack.join(' | ')}`)
+  }
+  if (!calls.length) console.log(`DIAG3813 CALL ${tag} no recorded call (${span})`)
+  const focus = (R.focus as any[]).filter(inWin)
+  for (const f of focus) console.log(`DIAG3813 FOCUS ${tag} t=${rel(f.ts)} ${f.kind} ${f.target}`)
+  if (!focus.length) console.log(`DIAG3813 FOCUS ${tag} no focusin/focusout (${span})`)
+  console.log(`DIAG3813 FOCUS ${tag} activeElement before=${R.before?.active ?? '?'} atJump=${R.jump?.active ?? 'no jump'}`)
+  const g = (x: any) => x ? `scrollTop=${x.scrollTop} scrollHeight=${x.scrollHeight} clientHeight=${x.clientHeight} swipeTop=${x.swipeTop}` : 'n/a'
+  console.log(`DIAG3813 GEOM ${tag} before-finger-up ${g(R.before?.geom)}`)
+  console.log(`DIAG3813 GEOM ${tag} jump-frame ${jumpT !== null ? `t=${jumpT} from=${Math.round(R.jump.from * 10) / 10} ${g(R.jump.geom)}` : 'no jump frame'}`)
+  if (variant !== 'base') {
+    console.log(`DIAG3813 VARIANT ${variant} run=${run} jumped=${drop ? 'yes' : 'no'} scroll ${before}→${after} jumpFrame=${jumpT ?? 'none'} calls=${calls.length} focusChanges=${focus.length}`)
+  }
+  return { jumpT, calls, focus, scrolls: (R.scrolls as any[]).filter(inWin) }
+}
+
+async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
+  const variant = opts.variant ?? 'base'
+  const recorder = !!opts.recorder
   const m = await install(page)
   expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
-  const want = Math.max(0, Math.min(m.max, Math.round(m.gridTop + m.gridH / 2 - 40)))
+  // V-mid: 40 px short of the bottom; otherwise the calendar's middle near the top.
+  const want = variant === 'mid'
+    ? m.max - 40
+    : Math.max(0, Math.min(m.max, Math.round(m.gridTop + m.gridH / 2 - 40)))
+  // V-anchor: turn scroll anchoring off everywhere before the swipe.
+  if (variant === 'anchor') await page.addStyleTag({ content: '* { overflow-anchor: none !important; }' })
   const before = await scrollTo(page, want)
   const from = await page.evaluate(() => (window as any).__diag.month() as string)
 
-  await arm(page, String(run))
+  await arm(page, String(run), recorder)
   await page.waitForTimeout(100)
   await swipeLeft(page)
   await page.waitForTimeout(1300)
@@ -447,6 +577,7 @@ async function runDiag(page: Page, app: string, run: number) {
       events: d.rec.events as Array<{ ts: number, kind: string, detail: string }>,
       bodyKinds: d.rec.bodyKinds as Record<string, number>,
       bodyStacks: d.rec.bodyStacks as Record<string, number>,
+      R: d.R ? { calls: d.R.calls, focus: d.R.focus, scrolls: d.R.scrolls, before: d.R.before, jump: d.R.jump } : null,
     }
   })
   const t0 = out.touchendAt
@@ -454,7 +585,7 @@ async function runDiag(page: Page, app: string, run: number) {
   const frames = out.frames.map(f => ({ t: rel(f.ts), ...f }))
   const events = out.events.map(e => ({ t: rel(e.ts), ...e }))
   const drop = out.after < before - 2
-  const tag = `app=${app} run=${run} engine=${ENGINE}`
+  const tag = `app=${app}${variant !== 'base' ? ` variant=${variant}` : ''} run=${run} engine=${ENGINE}`
   console.log(`DIAG3813 ${tag} scroller=${m.scroller} before=${before} after=${out.after} month=${from}→${out.to} frames=${frames.length} events=${events.length} drop=${drop ? 'yes' : 'no'}`)
 
   const { di, dropInfo } = reportDrop(tag, frames, events, drop, before, out.after)
@@ -464,11 +595,13 @@ async function runDiag(page: Page, app: string, run: number) {
   for (const e of events) console.log(`DIAG3813 EVENT ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 
   reportQuestions(tag, frames, events, di, out)
+  const recorded = out.R ? reportRecorder(tag, variant, run, out.R, rel, before, out.after, drop) : null
 
   mkdirSync(OUT_DIR, { recursive: true })
-  writeFileSync(join(OUT_DIR, `${app}-run${run}.json`), JSON.stringify({
-    app, run, engine: ENGINE, scroller: m.scroller, max: m.max, before, after: out.after,
+  writeFileSync(join(OUT_DIR, `${app}${variant !== 'base' ? `-${variant}` : ''}-run${run}.json`), JSON.stringify({
+    app, variant, run, engine: ENGINE, scroller: m.scroller, max: m.max, before, after: out.after,
     from, to: out.to, drop, dropInfo, frames, events, bodyKinds: out.bodyKinds, bodyStacks: out.bodyStacks,
+    recorder: out.R ? { ...out.R, report: recorded } : null,
   }, null, 2))
 
   // No-op guards only — the jump itself is data, never a failure.
@@ -495,7 +628,18 @@ test.describe('booking-demo blocks: swipe diagnostics (#3813)', () => {
       expect(origin, 'BOOKING_DEMO_URL (or the staging url)').toBeTruthy()
       await login(context, 'booking-demo', origin)
       await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
-      await runDiag(page, 'booking-demo', run)
+      await runDiag(page, 'booking-demo', run, { recorder: true })
     })
+  }
+  // Third run (#3813): the same swipe from 40 px short of the bottom, and with scroll anchoring off.
+  for (const variant of ['mid', 'anchor'] as const) {
+    for (const run of [1, 2, 3]) {
+      test(`booking-demo V-${variant} swipe run ${run}`, async ({ page, context }) => {
+        expect(origin, 'BOOKING_DEMO_URL (or the staging url)').toBeTruthy()
+        await login(context, 'booking-demo', origin)
+        await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
+        await runDiag(page, 'booking-demo', run, { recorder: true, variant })
+      })
+    }
   }
 })
