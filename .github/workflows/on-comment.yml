@@ -15,6 +15,7 @@ name: On comment
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
+#   fresh-branch    fresh-branch             NEW (#3881): owner /fresh-branch on an epic (archive the branch)
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
 #   plan-needs-reason plan-needs-reason      NEW (#3272): a bare `ok` on a plan rejected twice (asks why)
@@ -340,6 +341,40 @@ jobs:
           script: |
             const { runCloseEpic } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/close-epic.mjs`)
             await runCloseEpic({ github, context, core })
+
+  fresh-branch:
+    needs: route
+    if: needs.route.outputs.kind == 'fresh-branch'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      # The Harness App token: a branch rename needs contents write, which GITHUB_TOKEN is not given here.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      # Logic in scripts/fresh-epic-branch.mjs (#3881): push-access check, one branch across the
+      # tree, no open PRs on it, rename to archive/<branch>, confirm, reply. Creates nothing.
+      - name: Set the epic branch aside
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { runFreshBranch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/fresh-epic-branch.mjs`)
+            await runFreshBranch({ github, context, core })
 
   dispatch:
     needs: route
