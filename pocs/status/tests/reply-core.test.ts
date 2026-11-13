@@ -48,6 +48,46 @@ describe('postReply', () => {
   })
 })
 
+describe('postReply since', () => {
+  const since = '2026-11-10T12:00:00.000Z'
+  it('(a) an identical ok created before since is ignored: posts a new comment', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(json([{ body: 'ok', html_url: 'old', created_at: '2026-11-01T00:00:00Z' }]))
+      .mockResolvedValueOnce(json({ html_url: 'new' }, 201))
+    const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch, { since })
+    expect(r.data).toEqual({ url: 'new', existing: false })
+    expect(f).toHaveBeenCalledTimes(2)
+    expect(f.mock.calls[1]![1].method).toBe('POST')
+  })
+  it('(b) the list URL asks GitHub for since=<encoded ISO>&per_page=100', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(json({ html_url: 'new' }, 201))
+    await postReply('o/r', reply, 't', f as unknown as typeof fetch, { since })
+    expect(f.mock.calls[0]![0]).toBe(`https://api.github.com/repos/o/r/issues/5/comments?since=${encodeURIComponent(since)}&per_page=100`)
+  })
+  it('(c) an identical ok created after since is a duplicate: no post', async () => {
+    const f = vi.fn().mockResolvedValueOnce(json([{ body: 'ok', html_url: 'recent', created_at: '2026-11-10T12:05:00Z' }]))
+    const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch, { since })
+    expect(r.data).toEqual({ url: 'recent', existing: true })
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+  it('(d) an old comment returned because it was edited after since still posts', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(json([{ body: 'ok', html_url: 'old', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-11T00:00:00Z' }]))
+      .mockResolvedValueOnce(json({ html_url: 'new' }, 201))
+    const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch, { since })
+    expect(r.data).toEqual({ url: 'new', existing: false })
+  })
+  it('(e) without since the URL stays ?per_page=100', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(json({ html_url: 'new' }, 201))
+    await postReply('o/r', reply, 't', f as unknown as typeof fetch)
+    expect(f.mock.calls[0]![0]).toBe('https://api.github.com/repos/o/r/issues/5/comments?per_page=100')
+  })
+})
+
 describe('owner gate', () => {
   it('rejects non-owner sessions', () => {
     expect(isOwnerSession({ user: { email: 'x@y.z' } }, 'me@y.z')).toBe(false)
