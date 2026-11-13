@@ -67,7 +67,6 @@ function canonicalNode(node: LayoutNode): Record<string, unknown> {
     put(out, 'label', node.label)
     out.layout = canonicalTree(node.layout)
   }
-  put(out, 'size', node.size)
   put(out, 'defaultSize', roundSize(node.defaultSize))
   put(out, 'minSize', roundSize(node.minSize))
   return out
@@ -87,11 +86,9 @@ function canonicalBreakpoint(bp: LayoutBreakpoint): Record<string, unknown> {
   return out
 }
 
-/** Canonicalise a whole tree (renderer → auto → root → breakpoints → sources). */
+/** Canonicalise a whole tree (renderer → root → breakpoints → sources). */
 function canonicalTree(tree: LayoutTree): Record<string, unknown> {
   const out: Record<string, unknown> = { renderer: 'panes' }
-  // Auto layout (#3816): `false` is the default, so only `true` is written.
-  if (tree.auto === true) out.auto = true
   out.root = canonicalNode(tree.root)
   put(out, 'breakpoints', tree.breakpoints?.map(canonicalBreakpoint))
   // The store copies' options (#3650). A key with no options is still a copy, so it

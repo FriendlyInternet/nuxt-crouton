@@ -22,7 +22,7 @@
  * `sources` map (nested trees too) are kept, so saving + loading never strips them.
  */
 import type { LayoutBreakpoint, LayoutNode, LayoutSourceSettings, LayoutTree } from '../types/layout'
-import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance, isLayoutCollapsePlacement, isLayoutCollapseReveal, isLayoutPaneSize } from '../types/layout'
+import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance, isLayoutCollapsePlacement, isLayoutCollapseReveal } from '../types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
 const MAX_DEPTH = 12
@@ -41,8 +41,6 @@ function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
   const defaultSize = clampSize(input.defaultSize)
   const minSize = clampSize(input.minSize)
   const base = {
-    // Auto layout (#3816): only a known pane size survives; an unknown value is dropped.
-    ...(isLayoutPaneSize(input.size) ? { size: input.size } : {}),
     ...(defaultSize !== undefined ? { defaultSize } : {}),
     ...(minSize !== undefined ? { minSize } : {}),
   }
@@ -172,11 +170,9 @@ function sanitizeTreeAtDepth(input: unknown, depth: number): LayoutTree | null {
     if (!root) return null
     const breakpoints = sanitizeBreakpoints(input.breakpoints, depth + 1)
     const sources = sanitizeSources(input.sources)
-    // Auto layout (#3816): only a literal `true` survives — false is the default.
     return {
       renderer: 'panes',
       root,
-      ...(input.auto === true ? { auto: true } : {}),
       ...(breakpoints ? { breakpoints } : {}),
       ...(sources ? { sources } : {}),
     }

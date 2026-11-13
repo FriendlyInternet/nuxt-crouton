@@ -38,7 +38,7 @@ describe('board groups: expand / collapse (#3906)', () => {
     expect(collapseGroups(expandGroups(deep))).toEqual(deep)
     const bps = { type: 'nested', layout: { renderer: 'panes', root: row([leaf('a'), leaf('b')]), breakpoints: [{ minWidth: 800, root: row([leaf('b'), leaf('a')]) }] }, defaultSize: 40 } as unknown as LayoutNode
     expect(collapseGroups(expandGroups(row([leaf('x', 60), bps])))).toEqual(row([leaf('x', 60), bps]))
-    const sized = G([leaf('a'), leaf('b')], { size: 'fixed', minSize: 20, label: 'Pair', defaultSize: 50 })
+    const sized = G([leaf('a'), leaf('b')], { minSize: 20, label: 'Pair', defaultSize: 50 })
     expect(collapseGroups(expandGroups(row([leaf('x', 50), sized])))).toEqual(row([leaf('x', 50), sized]))
   })
 
