@@ -1,0 +1,70 @@
+name: Calendar scroll diagnostics (#3813)
+
+# #3813 — DIAGNOSTIC only. Runs e2e/deployed/calendar-month-scroll.diag.spec.ts
+# (WebKit iPhone 13, touch) against STAGING (= main, still has the bug) and prints
+# every per-frame number to this job log as DIAG3813 lines, plus a per-run JSON
+# artifact. Changes no app code; never a gate. Falls back to Chromium iPhone
+# emulation only when WebKit never produced a single run line.
+
+on:
+  pull_request:
+    paths:
+      - 'e2e/deployed/**'
+      - '.github/workflows/calendar-scroll-diag.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calendar-scroll-diag-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  diag:
+    name: Calendar scroll diagnostics · staging (WebKit iPhone)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install (root only, for @playwright/test)
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
+      - name: Install WebKit (hard limit)
+        run: timeout -k 10 600 pnpm exec playwright install --with-deps webkit
+      - name: Run diagnostics against staging (WebKit)
+        id: webkit
+        run: |
+          set -o pipefail
+          timeout -k 10 900 pnpm exec playwright test --config e2e/deployed/playwright.config.ts 2>&1 | tee diag.log
+      - name: Chromium fallback (only if WebKit never ran a case)
+        if: failure() && steps.webkit.outcome == 'failure'
+        env:
+          CAL_DIAG_ENGINE: chromium
+        run: |
+          set -o pipefail
+          if grep -q 'DIAG3813 app=' diag.log 2>/dev/null; then
+            echo "WebKit produced run lines — no fallback; the WebKit failure stands."
+            exit 1
+          fi
+          timeout -k 10 600 pnpm exec playwright install --with-deps chromium
+          timeout -k 10 900 pnpm exec playwright test --config e2e/deployed/playwright.config.ts 2>&1 | tee -a diag.log
+      - name: Upload frame tables
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: calendar-diag-3813
+          path: |
+            test-results/calendar-diag/
+            diag.log
+          if-no-files-found: warn
+      - name: DIAG3813 lines → summary
+        if: always()
+        run: |
+          { echo '```'; grep 'DIAG3813' diag.log | grep -v 'DIAG3813 FRAME\|DIAG3813 EVENT' || echo 'no DIAG3813 lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
