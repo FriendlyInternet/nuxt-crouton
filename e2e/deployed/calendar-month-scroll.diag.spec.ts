@@ -7,6 +7,9 @@
  * ancestors are still the same DOM nodes. Between frames it logs scroll events, DOM
  * mutations on the calendar's pane, and calls to scrollIntoView / focus / scrollTo /
  * scrollBy / the scrollTop setter (logging-only wrappers: each calls the original).
+ * Second measuring run: also observes every OTHER pane and fetch/XHR (Q1), names the
+ * direct <body> children added/removed and who inserts them (Q2), and reads the heights
+ * synchronously inside the calendar pane's MutationObserver callback + the next frame (Q3).
  *
  * The jump itself is DATA, never a failure. A test fails only when the run did
  * nothing (month did not move by one, <20 frames, or <100 px of scroll room), so a
@@ -163,7 +166,7 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
   }, { capture: true })
   if (!d.isWindow) sc.addEventListener('scroll', () => log('scroll', `scroller y=${Math.round(sc.scrollTop)}`), { capture: true })
 
-  new MutationObserver((recs) => {
+  const summarize = (recs: MutationRecord[]) => {
     let added = 0
     let removed = 0
     const tags = new Set<string>()
@@ -173,10 +176,118 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
       r.addedNodes.forEach(n => n.nodeType === 1 && tags.add(`+${(n as Element).tagName}`))
       r.removedNodes.forEach(n => n.nodeType === 1 && tags.add(`-${(n as Element).tagName}`))
     }
-    log('mutation', `records=${recs.length} added=${added} removed=${removed} tags=${[...tags].slice(0, 8).join(',')}`)
+    return `records=${recs.length} added=${added} removed=${removed} tags=${[...tags].slice(0, 8).join(',')}`
+  }
+
+  // Q3 (#3813): heights read synchronously inside the MutationObserver callback (same task
+  // as the grid swap, before paint), then again in the next animation frame.
+  const geom = () => {
+    const de = document.documentElement
+    const scY = d.isWindow ? (document.scrollingElement?.scrollTop ?? 0) : sc.scrollTop
+    const scH = sc.scrollHeight
+    const scClient = d.isWindow ? window.innerHeight : sc.clientHeight
+    const docH = de.scrollHeight
+    const winY = window.scrollY
+    const vh = window.innerHeight
+    const short = scH < scY + scClient - 0.5
+    const docShort = docH < winY + vh - 0.5
+    return `scY=${Math.round(scY)} scH=${scH} scClient=${scClient} docH=${docH} winY=${Math.round(winY)} vh=${vh} trackOH=${track.offsetHeight} swipeOH=${swipe.offsetHeight} short=${short ? 'yes' : 'no'} docShort=${docShort ? 'yes' : 'no'}`
+  }
+  new MutationObserver((recs) => {
+    log('mutation', summarize(recs))
+    log('geom-sync', geom())
+    requestAnimationFrame(() => log('geom-raf', geom()))
   }).observe(pane, { childList: true, subtree: true })
+
+  // Q1 (#3813): one observer per OTHER leaf pane on the page.
+  const paneSel = '[data-crouton-pane], .croutonpane'
+  const candidates = [...document.querySelectorAll<HTMLElement>(paneSel)]
+    .filter(p => !p.contains(swipe) && !pane.contains(p))
+  const leaves = candidates.filter(p => !candidates.some(o => o !== p && p.contains(o)))
+  const paneLabel = (p: HTMLElement, i: number) => {
+    const h = p.querySelector('h1,h2,h3,h4,h5,h6')?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 40)
+    const block = (p.closest('[data-block-id]') || p.querySelector('[data-block-id]'))?.getAttribute('data-block-id')
+    const first = p.firstElementChild ? cls(p.firstElementChild) : 'empty'
+    return `pane${i}:${h ? `"${h}"` : block ? `block=${block}` : first}`
+  }
+  const paneLabels = leaves.map((p, i) => paneLabel(p, i))
+  leaves.forEach((p, i) => {
+    new MutationObserver(recs => log('mutation-other', `${paneLabels[i]} ${summarize(recs)}`))
+      .observe(p, { childList: true, subtree: true })
+  })
+  log('panes', `calendar=${cls(pane)} others=${leaves.length} ${paneLabels.join(' ; ')}`)
+
+  // Q1: requests — path only, never query values.
+  const pathOf = (u: any) => {
+    try {
+      return new URL(String(u instanceof Request ? u.url : u), location.href).pathname
+    }
+    catch {
+      return '?'
+    }
+  }
+  const origFetch = window.fetch
+  window.fetch = function (this: any, input: any, init?: any) {
+    log('request', `fetch ${(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()} ${pathOf(input)}`)
+    return origFetch.call(this, input, init)
+  } as typeof window.fetch
+  const origOpen = XMLHttpRequest.prototype.open
+  XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: any[]) {
+    log('request', `xhr ${String(method).toUpperCase()} ${pathOf(url)}`)
+    return (origOpen as any).call(this, method, url, ...rest)
+  } as any
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries() as PerformanceResourceTiming[]) {
+        if (e.initiatorType === 'fetch' || e.initiatorType === 'xmlhttprequest') log('resource', `${e.initiatorType} ${pathOf(e.name)} start=${Math.round(e.startTime)}`)
+      }
+    }).observe({ type: 'resource', buffered: false })
+  }
+  catch { /* no PerformanceObserver */ }
+
+  // Q2 (#3813): what the direct changes on <body> are.
+  const bodyKind = (n: Node) => {
+    if (n.nodeType === 3) return `#text(${JSON.stringify((n.nodeValue || '').slice(0, 20))})`
+    if (n.nodeType === 8) return `#comment(${JSON.stringify((n.nodeValue || '').slice(0, 20))})`
+    if (n.nodeType !== 1) return `#node${n.nodeType}`
+    const el = n as Element
+    const id = el.id ? `#${el.id}` : ''
+    const c = (el.getAttribute('class') || '').slice(0, 60)
+    const data = el.getAttributeNames().filter(a => a.startsWith('data-')).join(',')
+    return `${el.tagName}${id}${c ? ` class="${c}"` : ''}${data ? ` data=[${data}]` : ''}`
+  }
+  const bodyKinds: Record<string, number> = {}
+  const bodyStacks: Record<string, number> = {}
   if (pane !== document.body) {
-    new MutationObserver(recs => log('mutation-body', `records=${recs.length}`)).observe(document.body, { childList: true })
+    new MutationObserver((recs) => {
+      const kinds: Record<string, number> = {}
+      let added = 0
+      let removed = 0
+      for (const r of recs) {
+        added += r.addedNodes.length
+        removed += r.removedNodes.length
+        const count = (sign: string) => (n: Node) => {
+          const k = `${sign}${bodyKind(n)}`
+          kinds[k] = (kinds[k] || 0) + 1
+        }
+        r.addedNodes.forEach(count('+'))
+        r.removedNodes.forEach(count('-'))
+      }
+      for (const [k, v] of Object.entries(kinds)) bodyKinds[k] = (bodyKinds[k] || 0) + v
+      log('mutation-body', `records=${recs.length} added=${added} removed=${removed} kinds=${Object.entries(kinds).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${v}× ${k}`).join(' | ')}`)
+    }).observe(document.body, { childList: true })
+    // Logging-only: who inserts/removes direct <body> children (call stack, counted).
+    const longStack = () => (new Error('diag3813 body stack').stack || '').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('Error')).slice(2, 9).join(' | ')
+    for (const name of ['insertBefore', 'appendChild', 'removeChild'] as const) {
+      const orig = (Node.prototype as any)[name]
+      ;(Node.prototype as any)[name] = function (this: Node, ...args: any[]) {
+        if (this === document.body) {
+          const s = `${name} ${bodyKind(args[0])} @ ${longStack()}`
+          bodyStacks[s] = (bodyStacks[s] || 0) + 1
+        }
+        return orig.apply(this, args)
+      }
+    }
   }
 
   // Logging-only wrappers: each calls the original unchanged.
@@ -210,7 +321,7 @@ const arm = (page: Page, mark: string) => page.evaluate((mark) => {
   document.addEventListener('focusin', e => log('focusin', desc(e.target as Element)), { capture: true })
 
   const frames: any[] = []
-  const rec = { frames, events, touchendAt: -1, stopAt: Number.POSITIVE_INFINITY }
+  const rec = { frames, events, bodyKinds, bodyStacks, touchendAt: -1, stopAt: Number.POSITIVE_INFINITY }
   d.rec = rec
   const winY = () => window.scrollY
   const loop = () => {
@@ -295,6 +406,8 @@ async function runDiag(page: Page, app: string, run: number) {
       touchendAt: d.rec.touchendAt as number,
       frames: d.rec.frames as any[],
       events: d.rec.events as Array<{ ts: number, kind: string, detail: string }>,
+      bodyKinds: d.rec.bodyKinds as Record<string, number>,
+      bodyStacks: d.rec.bodyStacks as Record<string, number>,
     }
   })
   const t0 = out.touchendAt
@@ -327,10 +440,24 @@ async function runDiag(page: Page, app: string, run: number) {
   }
   for (const e of events) console.log(`DIAG3813 EVENT ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 
+  // Q1–Q3 summaries (#3813, second measuring run) — logging only.
+  const dropT = di > 0 ? frames[di].t : Number.POSITIVE_INFINITY
+  const win = events.filter(e => e.t >= 0 && e.t <= dropT)
+  for (const e of events.filter(e => e.kind === 'panes')) console.log(`DIAG3813 Q1-PANES ${tag} ${e.detail}`)
+  const other = win.filter(e => e.kind === 'mutation-other')
+  for (const e of other) console.log(`DIAG3813 Q1-OTHER ${tag} t=${e.t} ${e.detail}`)
+  if (!other.length) console.log(`DIAG3813 Q1-OTHER ${tag} (no mutation in any other pane between finger-up and the drop frame)`)
+  const reqs = win.filter(e => e.kind === 'request' || e.kind === 'resource')
+  for (const e of reqs) console.log(`DIAG3813 Q1-REQUEST ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+  if (!reqs.length) console.log(`DIAG3813 Q1-REQUEST ${tag} (no fetch/XHR between finger-up and the drop frame)`)
+  for (const [k, v] of Object.entries(out.bodyKinds).sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`DIAG3813 Q2-BODYKIND ${tag} ${v}× ${k}`)
+  for (const [k, v] of Object.entries(out.bodyStacks).sort((a, b) => b[1] - a[1]).slice(0, 6)) console.log(`DIAG3813 Q2-BODYSTACK ${tag} ${v}× ${k}`)
+  for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+
   mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(join(OUT_DIR, `${app}-run${run}.json`), JSON.stringify({
     app, run, engine: ENGINE, scroller: m.scroller, max: m.max, before, after: out.after,
-    from, to: out.to, drop, dropInfo, frames, events,
+    from, to: out.to, drop, dropInfo, frames, events, bodyKinds: out.bodyKinds, bodyStacks: out.bodyStacks,
   }, null, 2))
 
   // No-op guards only — the jump itself is data, never a failure.
