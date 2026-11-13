@@ -33,6 +33,7 @@
     "typecheck": "pnpm -r --filter './apps/*' --filter @fyit/crouton-cli typecheck",
     "typecheck:fixtures": "pnpm -r --filter './fixtures/*' typecheck",
     "typecheck:mcp": "pnpm --filter @fyit/crouton-mcp typecheck",
+    "typecheck:packages": "node scripts/typecheck-packages.mjs",
     "poc:scaffold-deploy": "node scripts/scaffold-poc-deploy.mjs",
     "db:clone": "node scripts/db-clone.mjs",
     "db:counts": "node scripts/db-counts.mjs",
