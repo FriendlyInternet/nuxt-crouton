@@ -13,7 +13,6 @@ import { provideLayoutStoreScope } from '../composables/useLayoutStoreScope'
 const props = defineProps<{ stores: LayoutStoreEntry[] }>()
 
 // Read once on purpose: a changed list re-mounts the scope via its `:key`.
-// eslint-disable-next-line vue/no-setup-props-reactivity-loss
 provideLayoutStoreScope(props.stores)
 </script>
 
