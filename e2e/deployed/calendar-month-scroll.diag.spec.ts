@@ -386,6 +386,45 @@ const shift = (ym: string, by: number) => {
 
 const FIELDS = ['winY', 'scY', 'vvTop', 'pageH', 'scH', 'calH', 'trackH', 'active', 'marks', 'month'] as const
 
+type Row = { t: number, ts: number, [k: string]: any }
+
+// The first frame where the scroll falls by more than 2px vs the frame before it.
+function reportDrop(tag: string, frames: Row[], events: Row[], drop: boolean, before: number, after: number) {
+  const di = frames.findIndex((f, i) => i > 0 && f.scY < frames[i - 1]!.scY - 2)
+  let dropInfo: any = null
+  if (di > 0) {
+    const a = frames[di - 1]!
+    const b = frames[di]!
+    const between = events.filter(e => e.ts > a.ts && e.ts <= b.ts)
+    const same = FIELDS.map(k => `${k} ${a[k]}→${b[k]}${a[k] !== b[k] ? '*' : ''}`).join(' · ')
+    console.log(`DIAG3813 DROP ${tag} t=${b.t} scroll ${a.scY}→${b.scY}`)
+    console.log(`DIAG3813 SAMEFRAME ${tag} t=${a.t}→${b.t} ${same}`)
+    for (const e of between) console.log(`DIAG3813 BETWEEN ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+    if (!between.length) console.log(`DIAG3813 BETWEEN ${tag} (no events logged between the two frames)`)
+    dropInfo = { index: di, from: a, to: b, between }
+  }
+  else if (drop) {
+    console.log(`DIAG3813 DROP ${tag} t=? scroll ${before}→${after} (no single-frame drop >2px in the table)`)
+  }
+  return { di, dropInfo }
+}
+
+// Q1–Q3 summaries (#3813, second measuring run) — logging only.
+function reportQuestions(tag: string, frames: Row[], events: Row[], di: number, out: { bodyKinds: Record<string, number>, bodyStacks: Record<string, number> }) {
+  const dropT = di > 0 ? frames[di]!.t : Number.POSITIVE_INFINITY
+  const win = events.filter(e => e.t >= 0 && e.t <= dropT)
+  for (const e of events.filter(e => e.kind === 'panes')) console.log(`DIAG3813 Q1-PANES ${tag} ${e.detail}`)
+  const other = win.filter(e => e.kind === 'mutation-other')
+  for (const e of other) console.log(`DIAG3813 Q1-OTHER ${tag} t=${e.t} ${e.detail}`)
+  if (!other.length) console.log(`DIAG3813 Q1-OTHER ${tag} (no mutation in any other pane between finger-up and the drop frame)`)
+  const reqs = win.filter(e => e.kind === 'request' || e.kind === 'resource')
+  for (const e of reqs) console.log(`DIAG3813 Q1-REQUEST ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+  if (!reqs.length) console.log(`DIAG3813 Q1-REQUEST ${tag} (no fetch/XHR between finger-up and the drop frame)`)
+  for (const [k, v] of Object.entries(out.bodyKinds).sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`DIAG3813 Q2-BODYKIND ${tag} ${v}× ${k}`)
+  for (const [k, v] of Object.entries(out.bodyStacks).sort((a, b) => b[1] - a[1]).slice(0, 6)) console.log(`DIAG3813 Q2-BODYSTACK ${tag} ${v}× ${k}`)
+  for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+}
+
 async function runDiag(page: Page, app: string, run: number) {
   const m = await install(page)
   expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
@@ -418,41 +457,13 @@ async function runDiag(page: Page, app: string, run: number) {
   const tag = `app=${app} run=${run} engine=${ENGINE}`
   console.log(`DIAG3813 ${tag} scroller=${m.scroller} before=${before} after=${out.after} month=${from}→${out.to} frames=${frames.length} events=${events.length} drop=${drop ? 'yes' : 'no'}`)
 
-  // The first frame where the scroll falls by more than 2px vs the frame before it.
-  const di = frames.findIndex((f, i) => i > 0 && f.scY < frames[i - 1].scY - 2)
-  let dropInfo: any = null
-  if (di > 0) {
-    const a = frames[di - 1]
-    const b = frames[di]
-    const between = events.filter(e => e.ts > a.ts && e.ts <= b.ts)
-    const same = FIELDS.map(k => `${k} ${a[k]}→${b[k]}${a[k] !== b[k] ? '*' : ''}`).join(' · ')
-    console.log(`DIAG3813 DROP ${tag} t=${b.t} scroll ${a.scY}→${b.scY}`)
-    console.log(`DIAG3813 SAMEFRAME ${tag} t=${a.t}→${b.t} ${same}`)
-    for (const e of between) console.log(`DIAG3813 BETWEEN ${tag} t=${e.t} ${e.kind} ${e.detail}`)
-    if (!between.length) console.log(`DIAG3813 BETWEEN ${tag} (no events logged between the two frames)`)
-    dropInfo = { index: di, from: a, to: b, between }
-  }
-  else if (drop) {
-    console.log(`DIAG3813 DROP ${tag} t=? scroll ${before}→${out.after} (no single-frame drop >2px in the table)`)
-  }
+  const { di, dropInfo } = reportDrop(tag, frames, events, drop, before, out.after)
   for (const f of frames) {
     console.log(`DIAG3813 FRAME ${tag} t=${f.t} ${FIELDS.map(k => `${k}=${f[k]}`).join(' ')}`)
   }
   for (const e of events) console.log(`DIAG3813 EVENT ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 
-  // Q1–Q3 summaries (#3813, second measuring run) — logging only.
-  const dropT = di > 0 ? frames[di].t : Number.POSITIVE_INFINITY
-  const win = events.filter(e => e.t >= 0 && e.t <= dropT)
-  for (const e of events.filter(e => e.kind === 'panes')) console.log(`DIAG3813 Q1-PANES ${tag} ${e.detail}`)
-  const other = win.filter(e => e.kind === 'mutation-other')
-  for (const e of other) console.log(`DIAG3813 Q1-OTHER ${tag} t=${e.t} ${e.detail}`)
-  if (!other.length) console.log(`DIAG3813 Q1-OTHER ${tag} (no mutation in any other pane between finger-up and the drop frame)`)
-  const reqs = win.filter(e => e.kind === 'request' || e.kind === 'resource')
-  for (const e of reqs) console.log(`DIAG3813 Q1-REQUEST ${tag} t=${e.t} ${e.kind} ${e.detail}`)
-  if (!reqs.length) console.log(`DIAG3813 Q1-REQUEST ${tag} (no fetch/XHR between finger-up and the drop frame)`)
-  for (const [k, v] of Object.entries(out.bodyKinds).sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`DIAG3813 Q2-BODYKIND ${tag} ${v}× ${k}`)
-  for (const [k, v] of Object.entries(out.bodyStacks).sort((a, b) => b[1] - a[1]).slice(0, 6)) console.log(`DIAG3813 Q2-BODYSTACK ${tag} ${v}× ${k}`)
-  for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
+  reportQuestions(tag, frames, events, di, out)
 
   mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(join(OUT_DIR, `${app}-run${run}.json`), JSON.stringify({
