@@ -57,6 +57,7 @@ function canonicalNode(node: LayoutNode): Record<string, unknown> {
     put(out, 'id', node.id)
     put(out, 'config', sortedRecord(node.config))
     if (node.collapse) put(out, 'collapse', { edge: node.collapse.edge, affordance: node.collapse.affordance, placement: node.collapse.placement, reveal: node.collapse.reveal })
+    put(out, 'source', node.source)
   } else if (node.type === 'split') {
     out.type = 'split'
     out.direction = node.direction
@@ -85,11 +86,14 @@ function canonicalBreakpoint(bp: LayoutBreakpoint): Record<string, unknown> {
   return out
 }
 
-/** Canonicalise a whole tree (renderer → root → breakpoints). */
+/** Canonicalise a whole tree (renderer → root → breakpoints → sources). */
 function canonicalTree(tree: LayoutTree): Record<string, unknown> {
   const out: Record<string, unknown> = { renderer: 'panes' }
   out.root = canonicalNode(tree.root)
   put(out, 'breakpoints', tree.breakpoints?.map(canonicalBreakpoint))
+  // The store copies' options (#3650). A key with no options is still a copy, so it
+  // serialises as `{}` (only the whole map folds away when empty).
+  put(out, 'sources', sortedRecord(tree.sources))
   return out
 }
 

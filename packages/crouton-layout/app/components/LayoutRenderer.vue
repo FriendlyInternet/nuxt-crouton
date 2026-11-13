@@ -32,6 +32,7 @@ import {
   onMounted,
   provide,
   ref,
+  toRef,
   watch,
   type ComponentPublicInstance,
   type CSSProperties,
@@ -48,6 +49,9 @@ import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
 import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY, LAYOUT_CONTAINER_WIDTH_KEY } from '../composables/useCroutonLayoutResponsive'
 import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
+import { collectLayoutStores } from '@fyit/crouton-core/app/utils/layout-stores'
+import { injectLayoutStoreScope, provideLayoutStoreScope } from '../composables/useLayoutStoreScope'
+import { useLayoutLeafBinding } from '../composables/useLayoutLeafBinding'
 
 const props = withDefaults(
   defineProps<{
@@ -101,6 +105,14 @@ const emit = defineEmits<{
 }>()
 
 const { blocks, resolveComponentName, sanitizeConfig } = useCroutonLayoutBlocks()
+
+// Layout stores (#3650): an outermost renderer with no `CroutonLayoutStoreScope`
+// above it creates one from its node's leaf sources (no options — a node carries no
+// `sources` map). Nested renderers always find the parent's scope, so they never
+// create one. Every leaf is then fed through the one binding helper.
+const outerScope = injectLayoutStoreScope()
+const storeScope = outerScope ?? provideLayoutStoreScope(collectLayoutStores({ renderer: 'panes', root: props.node }))
+const binding = useLayoutLeafBinding(toRef(props, 'node'), storeScope)
 
 // Allowlisted: only ids registered in croutonLayoutBlocks resolve to a component.
 const componentName = computed<string | null>(() =>
@@ -338,7 +350,7 @@ const PaneCollapseSync = defineComponent({
     <component
       :is="componentName"
       v-else-if="componentName"
-      v-bind="safeConfig"
+      v-bind="{ ...safeConfig, ...binding.props, ...binding.on }"
       :class="interactive ? 'h-full w-full overflow-auto' : 'w-full'"
     />
     <div
