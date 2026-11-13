@@ -51,6 +51,10 @@ signed-off behaviour); this file is the architecture and the decisions behind it
 - Board panes are floored at the same floor the served page uses (`boardPaneMinPct` →
   `deriveSizing(...).hardMinWidth`: a block's `minWidth`, a nested split's widest block), so
   editor and page give each pane the same width (#3746, `tests/board-vs-preview.test.ts`).
+- **Groups on the board** (#3906, `utils/board-groups.ts`): the board edits a working tree where a
+  group is a split marked `__boardGroup`; it is saved as today's `nested` node (`expandGroups` on
+  read, `collapseGroups` in `writeRoot`). A middle drop never makes a group inside a group; a group
+  left with one block stops being a group; the group's sheet has Ungroup.
 
 ## Gotchas
 
