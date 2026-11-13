@@ -84,7 +84,7 @@ const SEEDED_TEAM = 'test1'
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
  *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
- *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`-style segment → the seeded team;
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the seeded team (never `[slug]`, #3886);
  *    pages with any other dynamic segment are skipped (no data to open them with);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
@@ -96,7 +96,7 @@ function pageSurface(file, pagePath, app) {
   if (pagePath.startsWith('__review')) return null
   const segs = pagePath.split('/').filter(s => s !== 'index')
   const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
-  if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
+  if (dynamic.some(s => !/^\[(team|teamSlug|team-slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
   const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
   return { route, label: segs.join('-') || 'index' }
 }
