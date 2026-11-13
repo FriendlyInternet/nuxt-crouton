@@ -186,27 +186,27 @@ describe('#987 serializeLayoutDocument / parseLayoutDocument — the page-flow i
   })
 })
 
-describe('auto layout fields round-trip (#3816)', () => {
-  const autoTree: LayoutTree = {
-    renderer: 'panes',
-    auto: true,
-    root: {
-      type: 'split',
-      direction: 'vertical',
-      children: [
+describe('retired auto layout fields (#3919)', () => {
+  it('a tree still carrying auto: true and a leaf size serialises the same as without them', () => {
+    const plain: LayoutTree = {
+      renderer: 'panes',
+      root: { type: 'split', direction: 'vertical', children: [
+        { type: 'leaf', blockId: 'stats' },
+        { type: 'leaf', blockId: 'form', defaultSize: 40 },
+      ] },
+    }
+    const stale = {
+      renderer: 'panes',
+      auto: true,
+      root: { type: 'split', direction: 'vertical', children: [
         { type: 'leaf', blockId: 'stats', size: 'fit' },
-        { type: 'leaf', blockId: 'list', size: 'fill' },
-        { type: 'leaf', blockId: 'form', size: 'fixed', defaultSize: 40 },
-        { type: 'leaf', blockId: 'notes' },
-      ],
-    },
-  }
-
-  it('a tree with auto: true and mixed size survives load → save unchanged', () => {
-    const once = serializeLayoutTree(autoTree)
-    const back = parseLayoutTree(once)
-    expect(back).toEqual(autoTree)
-    expect(serializeLayoutTree(back!)).toBe(once)
+        { type: 'leaf', blockId: 'form', defaultSize: 40 },
+      ] },
+    } as unknown as LayoutTree
+    const out = serializeLayoutTree(stale)
+    expect(out).toBe(serializeLayoutTree(plain))
+    expect(out).not.toContain('"auto"')
+    expect(out).not.toContain('"size"')
   })
 
   it('an existing tree serialises byte-identically to today, with no auto/size keys', () => {
@@ -236,11 +236,5 @@ describe('auto layout fields round-trip (#3816)', () => {
     expect(out).toBe(before)
     expect(out).not.toContain('"auto"')
     expect(out).not.toContain('"size"')
-  })
-
-  it('auto: false serialises the same as absent; auto is the key right after renderer', () => {
-    const base: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'x' } }
-    expect(serializeLayoutTree({ ...base, auto: false })).toBe(serializeLayoutTree(base))
-    expect(Object.keys(JSON.parse(serializeLayoutTree(autoTree)))).toEqual(['renderer', 'auto', 'root'])
   })
 })

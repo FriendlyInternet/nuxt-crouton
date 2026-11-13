@@ -28,9 +28,9 @@ export interface BoardGroupMarker {
 }
 export type BoardGroup = LayoutSplit & { [GROUP_KEY]: BoardGroupMarker }
 
-const OUTER_KEYS = ['size', 'defaultSize', 'minSize'] as const
+const OUTER_KEYS = ['defaultSize', 'minSize'] as const
 
-/** The outer fields (`size`, `defaultSize`, `minSize`) that are set on `node`. */
+/** The outer fields (`defaultSize`, `minSize`) that are set on `node`. */
 function outerOf(node: LayoutNode): Partial<LayoutNodeBase> {
   const out: Record<string, unknown> = {}
   for (const k of OUTER_KEYS) if (node[k] !== undefined) out[k] = node[k]

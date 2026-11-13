@@ -327,19 +327,12 @@ _Source: `packages/crouton-core/app/types/layout-block.ts`_
 
 **Also exported from `packages/crouton-core/app/types/layout-block.ts`:** `DEFAULT_BLOCK_SIZING`
 
-## LayoutPaneSize
-
-```ts
-type LayoutPaneSize = (typeof LAYOUT_PANE_SIZES)[number]
-```
-
-_Source: `packages/crouton-core/app/types/layout.ts`_
-
 ## LayoutNodeBase
+
+Layout tree types — the persisted "layout is data" shape (Sprint 0 spike, #713).
 
 | Member | Type | Required | Description |
 | --- | --- | --- | --- |
-| `size` | `LayoutPaneSize` | no | Per-pane size override (#3816). Absent ⇒ follow the block's `sizing` rule; only read when the tree's `auto` is on (#3784). `fixed` = use `defaultSize`. |
 | `defaultSize` | `number` | no | Default size of this node within its parent split, as a percentage. |
 | `minSize` | `number` | no | Minimum size of this node within its parent split, as a percentage. |
 
@@ -468,13 +461,12 @@ _Source: `packages/crouton-core/app/types/layout.ts`_
 | Member | Type | Required | Description |
 | --- | --- | --- | --- |
 | `renderer` | `'panes'` | yes |  |
-| `auto` | `boolean` | no | Auto layout (#3784): panes size from their block's rule / `size` override. Absent or false ⇒ today's percentage behaviour. A nested sub-layout is its own `LayoutTree`, so it carries its own flag. |
 | `root` | `LayoutNode` | yes |  |
 | `breakpoints` | `LayoutBreakpoint[]` | no | Authored responsive breakpoints (WS5, #874), the *explicit* layer over the *intrinsic* (container-query) reflow. Optional; absent = no authored breakpoints (the intrinsic layer still reflows every region to its own width). A nested sub-layout is its own `LayoutTree`, so it carries its own breakpoints — responsiveness recurses with the layout. |
 
 _Source: `packages/crouton-core/app/types/layout.ts`_
 
-**Also exported from `packages/crouton-core/app/types/layout.ts`:** `LAYOUT_PANE_SIZES`, `isLayoutPaneSize`, `LAYOUT_COLLAPSE_STYLES`, `DEFAULT_COLLAPSE_STYLE`, `isLayoutCollapseStyle`, `isInPlaceCollapse`, `LAYOUT_COLLAPSE_EDGES`, `LAYOUT_COLLAPSE_AFFORDANCES`, `LAYOUT_COLLAPSE_PLACEMENTS`, `LAYOUT_COLLAPSE_REVEALS`, `DEFAULT_COLLAPSE_PLACEMENT`, `DEFAULT_COLLAPSE_REVEAL`, `collapsePlacement`, `collapseReveal`, `isLayoutCollapsePlacement`, `isLayoutCollapseReveal`, `DEFAULT_COLLAPSE_RECIPE`, `isLayoutCollapseEdge`, `isLayoutCollapseAffordance`, `normalizeCollapseRecipe`
+**Also exported from `packages/crouton-core/app/types/layout.ts`:** `LAYOUT_COLLAPSE_STYLES`, `DEFAULT_COLLAPSE_STYLE`, `isLayoutCollapseStyle`, `isInPlaceCollapse`, `LAYOUT_COLLAPSE_EDGES`, `LAYOUT_COLLAPSE_AFFORDANCES`, `LAYOUT_COLLAPSE_PLACEMENTS`, `LAYOUT_COLLAPSE_REVEALS`, `DEFAULT_COLLAPSE_PLACEMENT`, `DEFAULT_COLLAPSE_REVEAL`, `collapsePlacement`, `collapseReveal`, `isLayoutCollapsePlacement`, `isLayoutCollapseReveal`, `DEFAULT_COLLAPSE_RECIPE`, `isLayoutCollapseEdge`, `isLayoutCollapseAffordance`, `normalizeCollapseRecipe`
 
 ## TableColumn
 
