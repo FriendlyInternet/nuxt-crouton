@@ -35,6 +35,11 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   container-query stack), never the admin STACKED / HUG flex paths — those assume a fixed-height
   frame, and WebKit sizes a `flex:1 1 0` column item to zero without one. Blocks follow the same
   rule (`LayoutCollection`, `LayoutForm`: `admin` fills + scrolls, `page` sizes to content).
+- **The board draws the page's rows (#3865).** Vertical splits are the page's grid
+  (`pageRowTracks`, no row handle); side-by-side rows stay reka (in `BoardTree.vue`: widths + handles) but take
+  content height, top-aligned (`!h-auto !items-start`); a split with one visible child draws
+  that child alone; leaves render `page` context; the frame scrolls as one page. `h-full` /
+  `min-height: 100%` only inside a grid cell (`inGridCell`), like the renderer there.
 - **Board drag is one pointer gesture** (`board-drag.ts`): hold-then-drag with `elementFromPoint`
   hit-testing and `touchmove` cancelled only while a drag is live. No HTML5 drag — it never starts
   on iOS. Width authoring is a scaled frame (`useBoardWidth`), presets plus a free drag.
@@ -58,6 +63,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   layout reports and remounts on `currentId:activeBreakpoint`; BoardTree only forwards a layout
   report during a handle drag or key press, so reka's min-width clamp on open/width change never
   edits the page (#3746).
+- BoardTree decides stacking from the whole split (`deriveSizing(props.node)`) but lays out only
+  visible children; a hidden sibling's minWidth can stack a one-child split into a fixed 288px
+  item with an empty band below and no drag handle (#3814).
 - A `pocs/*` typecheck sweeps the whole monorepo and reports thousands of unrelated errors; the
   gate is `pnpm typecheck` (apps) after a package change.
 

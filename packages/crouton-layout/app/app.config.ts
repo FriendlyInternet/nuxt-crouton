@@ -7,6 +7,8 @@ import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/la
 // the deterministic layout pass (`composeDefaultLayout`). Package blocks (e.g. the
 // bookings calendar) register the same way through this registry; each layer can
 // contribute its own `croutonLayoutBlocks` entries (defu-merged across layers).
+// Sizing (#3815): every block writes `sizing.height` out (List/Form `fill`, Stats
+// `hug`) plus a `minHeight` floor picked from what the block draws.
 const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   'collection-list': {
     id: 'collection-list',
@@ -18,6 +20,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     category: 'data',
     // Sizing contract (#710): a list collapses to cards but needs ~260px to stay legible.
     minWidth: 260,
+    // Heading + ~3 rows before a list stops being usable.
+    minHeight: 240,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 34,
     configSchema: [
       // The collection (registry key, e.g. `mainItems`) this block binds to.
@@ -61,6 +66,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     category: 'data',
     // A form drops to a single column under ~480px; below ~320px fields crush.
     minWidth: 320,
+    // Heading + ~3 fields + submit.
+    minHeight: 320,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 50,
     configSchema: [
       { name: 'collection', type: 'text', label: 'Collection', default: '' },
@@ -75,8 +83,11 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     component: 'CroutonLayoutSpikeStats',
     kind: 'atomic',
     category: 'data',
-    // KPI cards reflow to one column gracefully — fluid, modest floor.
+    // KPI cards reflow to one column gracefully (modest width floor); Fit height —
+    // as tall as one row of cards (`p-4` + one UCard).
     minWidth: 200,
+    minHeight: 96,
+    sizing: { width: 'fill', height: 'hug' },
     defaultSize: 40,
   },
 }
