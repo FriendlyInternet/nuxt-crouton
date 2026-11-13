@@ -932,6 +932,6 @@ deleted row is still re-created, an existing one is left alone.
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck  # MANDATORY after changes (checks this package only)
 pnpm build          # Build with unbuild
 ```

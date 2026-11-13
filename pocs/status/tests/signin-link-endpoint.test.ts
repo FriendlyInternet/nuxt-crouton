@@ -119,6 +119,13 @@ describe('POST /api/status/signin-link', () => {
     expect([...kvMap.values()][0]).toBe('2')
   })
 
+  it('a long return path (key + to + card walk, #3840) reaches the mail as the callbackURL', async () => {
+    const h = await bootIsolate()
+    const back = `/api/status/login/velo?key=pr3805&to=%2Fadmin%2Ftest1%2Fbookings&walk=${'A'.repeat(2048)}`
+    await h({ body: { redirect: back }, headers: new Headers({ 'cf-connecting-ip': '1.1.1.1' }) })
+    expect(send.mock.calls[0][0].body.callbackURL).toBe(back)
+  })
+
   it('writes use KV-valid TTLs (120 for the IP key, 3700 for the global key)', async () => {
     const h = await bootIsolate()
     await h(ev('1.1.1.1'))

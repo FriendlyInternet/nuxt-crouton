@@ -161,12 +161,16 @@ registerDrop(onDrop)
 // only on a drag — a report that changes nothing is ignored (it would otherwise
 // dirty the board and, on a width/variant switch, feed stale proportions into the
 // breakpoint just switched to).
-function onResize(at: NodePath, sizes: number[]) {
+// Hidden children arrive as undefined and keep their stored size (#3828).
+function onResize(at: NodePath, sizes: (number | undefined)[]) {
   const r = root.value
   const split = r ? getNode(r, at) : null
   if (!r || !split || split.type !== 'split') return
-  const same = split.children.every((c, i) => Math.abs((c.defaultSize ?? 100 / split.children.length) - (sizes[i] ?? -1)) < 0.05)
-  if (!same) writeRoot(applySizes(r, at, sizes))
+  const same = split.children.every((c, i) => {
+    const s = sizes[i]
+    return s === undefined || Math.abs((c.defaultSize ?? 100 / split.children.length) - s) < 0.05
+  })
+  if (!same) writeRoot(applySizes(r, at, sizes as number[]))
 }
 
 // ── Palette strip: hold a chip, then drag it onto a pane edge; a tap adds beside the selection ──

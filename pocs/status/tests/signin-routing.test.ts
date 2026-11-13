@@ -32,6 +32,7 @@ describe('signed-out routing', () => {
     vi.stubGlobal('useRuntimeConfig', () => ({}))
     vi.stubGlobal('useServerAuth', () => ({ api: { getSession: async () => null } }))
     vi.stubGlobal('getRouterParam', (e: any) => e.app)
+    vi.stubGlobal('getQuery', (e: any) => e.query ?? {})
     vi.stubGlobal('sendRedirect', (_e: unknown, loc: string, code: number) => ({ loc, code }))
     return (await import('../server/api/status/login/[app].get')).default as unknown as (e: unknown) => Promise<any>
   }
@@ -44,5 +45,37 @@ describe('signed-out routing', () => {
   it('a bad slug falls back to /', async () => {
     const h = await loginHandler()
     expect((await h({ app: '../x' })).loc).toBe('/signin?redirect=%2F')
+  })
+
+  // #3840: a PR-preview link must still point at the preview + page after the sign-in mail.
+  it('keeps a valid key and to in the return path', async () => {
+    const h = await loginHandler()
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805', to: '/admin/test1/bookings' } })
+    const back = new URL(loc, 'http://h').searchParams.get('redirect')!
+    expect(back).toBe('/api/status/login/velo?key=pr3805&to=%2Fadmin%2Ftest1%2Fbookings')
+    const u = new URL(back, 'http://h')
+    expect(u.searchParams.get('key')).toBe('pr3805')
+    expect(u.searchParams.get('to')).toBe('/admin/test1/bookings')
+  })
+
+  it('a card link with a long walk keeps key, to and walk past the sign-in page check', async () => {
+    const h = await loginHandler()
+    const { safeRedirect } = await import('../shared/safe-path')
+    const walk = 'A'.repeat(2048)
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805', to: '/admin/test1/bookings', walk } })
+    const back = new URL(loc, 'http://h').searchParams.get('redirect')!
+    expect(back.length).toBeGreaterThan(500)
+    // What signin.vue does with route.query.redirect before mailing the link.
+    const kept = new URL(safeRedirect(back), 'http://h')
+    expect(kept.pathname).toBe('/api/status/login/velo')
+    expect(kept.searchParams.get('key')).toBe('pr3805')
+    expect(kept.searchParams.get('to')).toBe('/admin/test1/bookings')
+    expect(kept.searchParams.get('walk')).toBe(walk)
+  })
+
+  it('drops a bad key, unsafe to and junk params from the return path', async () => {
+    const h = await loginHandler()
+    const { loc } = await h({ app: 'velo', query: { key: 'pr3805x', to: '//evil.com', walk: 'a b', x: '1' } })
+    expect(new URL(loc, 'http://h').searchParams.get('redirect')).toBe('/api/status/login/velo')
   })
 })

@@ -11,7 +11,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { checkoutForReview } from './review-checkout.mjs'
+import { fileURLToPath } from 'node:url'
+import { checkoutForReview, trustedImportClosure, relativeSpecifiers } from './review-checkout.mjs'
 
 const MAIN_SETTINGS = '{"defaultProvider":"claude-bridge","packages":["npm:pi-claude-bridge@0.9.3"]}\n'
 const OLD_SETTINGS = '{"defaultProvider":"claude-cli","packages":["npm:pi-claude-cli"]}\n'
@@ -21,7 +22,7 @@ const put = (root, file, text) => { mkdirSync(dirname(join(root, file)), { recur
 const commit = (cwd, msg) => { git(cwd, 'add', '-A'); git(cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', msg); return git(cwd, 'rev-parse', 'HEAD').trim() }
 
 /** origin with `main` (+ trusted .pi), and a head commit (built by `editHead`) pushed to refs/pull/7/head. */
-function setup(t, editHead, { mainPi = true, headRef = 'refs/pull/7/head', git: gitImpl, sha: shaOverride } = {}) {
+function setup(t, editHead, { mainPi = true, mainExtDeps = false, headRef = 'refs/pull/7/head', git: gitImpl, sha: shaOverride } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'review-checkout-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const origin = join(root, 'origin.git')
@@ -38,6 +39,14 @@ function setup(t, editHead, { mainPi = true, headRef = 'refs/pull/7/head', git: 
   if (mainPi) {
     put(author, '.pi/settings.json', MAIN_SETTINGS)
     put(author, '.pi/extensions/complete-work.ts', 'export default () => {}\n')
+    if (mainExtDeps) {
+      // #3874 — trusted extensions import scripts/ files the old head lacks (or has stale).
+      put(author, '.pi/extensions/finish-check.ts', 'import { x } from "../../scripts/lib/loop.mjs";\nexport default () => x\n')
+      put(author, 'scripts/lib/loop.mjs', "export * from './dep.mjs'\n")
+      put(author, 'scripts/lib/dep.mjs', 'export const x = 1\n')
+      put(author, '.pi/extensions/packages-notice.ts', "import { a, b } from '../../src/a.js'\nexport default () => a + b\n")
+      put(author, 'src/a.js', 'export const a = 1\nexport const b = 2\n')
+    }
   } else {
     rmSync(join(author, '.pi'), { recursive: true, force: true })
   }
@@ -74,7 +83,8 @@ test('an old head (cut before claude-bridge) gets main\'s .pi but keeps its own 
   const diff = readFileSync(s.diffFile, 'utf8')
   assert.match(diff, /\+hello from the PR/)
   assert.match(s.logs[0], /^reviewer settings: \.pi\/ from origin\/main \(defaultProvider claude-bridge, 1 packages\)/)
-  assert.match(s.logs[1], /^diff\.patch: \d+ bytes$/)
+  assert.match(s.logs[1], /^reviewer extension deps: 0 files from origin\/main \(none\)$/)
+  assert.match(s.logs[2], /^diff\.patch: \d+ bytes$/)
 })
 
 test('a current head (same .pi as main) checks out exactly as before', (t) => {
@@ -141,6 +151,71 @@ test('a failing sha fetch falls back to pull/<pr>/head', (t) => {
 test('a sha neither fetch can find fails loudly', (t) => {
   const s = setup(t, (dir) => put(dir, 'README.md', 'x\n'), { headRef: 'refs/heads/work-7', sha: 'deadbeef'.repeat(5) })
   assert.throws(s.run)
+})
+
+// #3874 — the trusted extensions' relative import closure comes from <trusted> too.
+function worktreeClosure(work) {
+  const out = new Set()
+  const queue = git(work, 'ls-tree', '-r', '--name-only', 'origin/main', '--', '.pi/extensions').split('\n').filter(Boolean)
+  while (queue.length) {
+    const f = queue.shift()
+    assert.ok(existsSync(join(work, f)), `${f} must exist in the worktree`)
+    for (const spec of relativeSpecifiers(readFileSync(join(work, f), 'utf8'))) {
+      const target = join(dirname(f), spec)
+      if (out.has(target)) continue
+      out.add(target)
+      queue.push(target)
+    }
+  }
+  return [...out]
+}
+
+test('every trusted extension\'s relative imports resolve on an old head', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'old head\n'), { mainExtDeps: true })
+  s.run()
+  const deps = worktreeClosure(s.work)
+  assert.deepEqual(deps.sort(), ['scripts/lib/dep.mjs', 'scripts/lib/loop.mjs', 'src/a.js'])
+  for (const f of deps) assert.equal(readFileSync(join(s.work, f), 'utf8'), git(s.work, 'show', `origin/main:${f}`), `${f} is main's`)
+})
+
+test('a stale dep the head has is replaced by trusted\'s, but the head\'s version stays as data', (t) => {
+  const s = setup(t, (dir) => put(dir, 'src/a.js', 'export const a = 42\n'), { mainExtDeps: true })
+  s.run()
+  assert.equal(readFileSync(join(s.work, 'src/a.js'), 'utf8'), 'export const a = 1\nexport const b = 2\n')
+  assert.equal(git(s.work, 'show', 'HEAD:src/a.js'), 'export const a = 42\n')
+  assert.match(readFileSync(s.diffFile, 'utf8'), /\+export const a = 42/)
+})
+
+test('files outside the closure stay the head\'s', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'head readme\n'), { mainExtDeps: true })
+  s.run()
+  assert.equal(readFileSync(join(s.work, 'README.md'), 'utf8'), 'head readme\n')
+  assert.equal(existsSync(join(s.work, 'other.txt')), false, 'main-only file outside the closure is not brought in')
+})
+
+test('the log names the restored extension deps', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'x\n'), { mainExtDeps: true })
+  const r = s.run()
+  assert.deepEqual(r.extDeps, ['scripts/lib/dep.mjs', 'scripts/lib/loop.mjs', 'src/a.js'])
+  assert.ok(s.logs.some((l) => /^reviewer extension deps: 3 files from origin\/main \(scripts\/lib\/dep\.mjs, scripts\/lib\/loop\.mjs, src\/a\.js\)$/.test(l)))
+})
+
+test('the real repo\'s closure covers what the extensions import', () => {
+  const cwd = fileURLToPath(new URL('..', import.meta.url))
+  const run = (args) => execFileSync('git', args, { cwd, maxBuffer: 1024 * 1024 * 512 })
+  const closure = trustedImportClosure({ run, trusted: 'HEAD' })
+  for (const f of ['scripts/lib/finish-check-loop.mjs', 'scripts/packages-guard.mjs', 'scripts/pi-edited-files.mjs']) {
+    assert.ok(closure.includes(f), `closure includes ${f} (got ${closure.join(', ')})`)
+  }
+  assert.ok(closure.every((f) => !f.startsWith('.pi/')))
+})
+
+test('a trusted extension importing a missing file fails loudly', (t) => {
+  const s = setup(t, (dir) => put(dir, 'README.md', 'x\n'))
+  put(s.work, '.pi/extensions/broken.ts', "import { y } from '../../scripts/gone.mjs'\n")
+  commit(s.work, 'broken trusted tree')
+  const run = (args) => execFileSync('git', args, { cwd: s.work })
+  assert.throws(() => trustedImportClosure({ run, trusted: 'HEAD' }), /\.\.\/\.\.\/scripts\/gone\.mjs/)
 })
 
 test('a trusted ref without .pi/settings.json refuses to pin', (t) => {

@@ -212,6 +212,9 @@ function teamDb({ locations, bookings }) {
   d.exec(`
     CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER DEFAULT 0);
     CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    -- #3141: an existing review user now has its password reset before sign-in
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT, "providerId" TEXT, "password" TEXT);
+    INSERT INTO "account" VALUES ('a1', 'u1', 'credential', 'hash(old)');
     CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
     CREATE TABLE "bookings_locations" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
     CREATE TABLE "bookings_bookings" ("id" TEXT PRIMARY KEY, "teamId" TEXT NOT NULL);
@@ -304,38 +307,295 @@ test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-d
   assert.deepEqual(cfg.reviewLogin.requireData, ['bookings_locations', 'bookings_bookings'])
 })
 
-// ── #3533: member upsert quote escaping ──
-// The --seed-team member upsert used to be built inline in main(), so no test could
-// reach it. Runs the real SQL against an in-memory SQLite db.
-import { memberUpsertSql } from './seed-review-login.mjs'
+// ── #3340: an invite-only app refuses public sign-up → create the login via SQL ───────
+// The real CLI against a real SQLite file, with a stand-in for the Worker's auth routes
+// that answers sign-up the way crouton-auth's invite-only gate does.
+import { createReviewAccountSql, scryptHashPassword } from './seed-review-login.mjs'
 
-function memberDb() {
-  const d = new DatabaseSync(':memory:')
+const INVITE_ONLY = { status: 403, body: { message: 'Sign-up is by invitation only', code: 'SIGNUP_INVITE_ONLY' } }
+
+function authDb() {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-3340-'))
+  const file = join(dir, 'sqlite.db')
+  const d = new DatabaseSync(file)
   d.exec(`
-    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);
-    INSERT INTO "member" VALUES ('keep', 'u2', 'seed:org:test1', 'owner', 1);
+    CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL, "email" TEXT NOT NULL UNIQUE,
+      "emailVerified" INTEGER NOT NULL DEFAULT 0, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL,
+      "superAdmin" INTEGER NOT NULL DEFAULT 0, "banned" INTEGER NOT NULL DEFAULT 0, "role" TEXT DEFAULT 'user');
+    CREATE TABLE "account" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "accountId" TEXT NOT NULL,
+      "providerId" TEXT NOT NULL, "password" TEXT, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
   `)
-  return d
+  d.close()
+  return file
 }
 
-test('#3533 memberUpsertSql: quotes in ids are stored literally and cannot break out', () => {
-  const d = memberDb()
-  const userId = 'u\'); DELETE FROM "member"; --'
-  d.exec(memberUpsertSql({ memberId: "m'1", userId, orgId: "o'x", createdAt: 1 }))
-  const row = d.prepare('SELECT * FROM "member" WHERE "id" = ?').get("m'1")
-  assert.equal(row.userId, userId)
-  assert.equal(row.organizationId, "o'x")
-  assert.equal(row.role, 'owner')
-  assert.ok(d.prepare('SELECT 1 FROM "member" WHERE "id" = ?').get('keep'), 'bystander row survives')
-  assert.equal(d.prepare('SELECT count(*) AS n FROM "member"').get().n, 2)
+async function runInviteOnly(extraArgs) {
+  const seen = []
+  const server = createServer((req, res) => {
+    seen.push(req.url)
+    let status = 200
+    let body = {}
+    if (req.url === '/api/auth/sign-up/email') ({ status, body } = INVITE_ONLY)
+    else if (req.url === '/api/auth/get-session') body = { user: { id: 'whatever' }, session: { activeOrganizationId: 'o1' } }
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const result = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'Review+velo-pr9@example.com', '--password', 'pw', ...extraArgs],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  return { ...result, seen }
+}
+
+const rows = (file, sql) => {
+  const d = new DatabaseSync(file)
+  try { return d.prepare(sql).all() } finally { d.close() }
+}
+
+test('#3340 signUpDecision: 403 SIGNUP_INVITE_ONLY → invite-only (a plain 403 is not)', () => {
+  const base = { ok: false, attempt: 1, maxAttempts: 7 }
+  assert.equal(signUpDecision({ ...base, status: 403, code: 'SIGNUP_INVITE_ONLY' }), 'invite-only')
+  assert.equal(signUpDecision({ ...base, status: 403, code: 'FORBIDDEN' }), 'give-up')
 })
 
-test('#3533 memberUpsertSql: re-running updates the same row (idempotent)', () => {
-  const d = memberDb()
-  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'first', orgId: 'seed:org:test1', createdAt: 100 }))
-  d.exec(memberUpsertSql({ memberId: 'm1', userId: 'second', orgId: 'seed:org:test1', createdAt: 200 }))
-  const rows = d.prepare('SELECT * FROM "member" WHERE "id" = ?').all('m1')
-  assert.equal(rows.length, 1)
-  assert.equal(rows[0].userId, 'second')
-  assert.equal(rows[0].createdAt, 100)
+test('#3340 invite-only app + --sqlite → user + credential account created, signed in, exit 0; rerun adds nothing', async () => {
+  const file = authDb()
+  const r = await runInviteOnly(['--sqlite', file])
+  assert.equal(r.code, 0, r.out)
+  assert.ok(r.seen.includes('/api/auth/sign-in/email'), 'signs in after creating the account')
+  const users = rows(file, 'SELECT * FROM "user"')
+  assert.equal(users.length, 1)
+  assert.equal(users[0].email, 'review+velo-pr9@example.com')
+  assert.equal(users[0].emailVerified, 1) // marked verified right after creation, before sign-in (#3141)
+  assert.ok(users[0].createdAt < 1e11, 'createdAt is unix seconds')
+  const accounts = rows(file, 'SELECT * FROM "account"')
+  assert.equal(accounts.length, 1)
+  assert.equal(accounts[0].providerId, 'credential')
+  assert.equal(accounts[0].userId, users[0].id)
+  assert.equal(accounts[0].accountId, users[0].id)
+
+  const again = await runInviteOnly(['--sqlite', file])
+  assert.equal(again.code, 0, again.out)
+  assert.equal(rows(file, 'SELECT * FROM "user"').length, 1)
+  assert.equal(rows(file, 'SELECT * FROM "account"').length, 1)
+})
+
+test('#3340 invite-only app without --db/--sqlite → non-zero, no login', async () => {
+  const r = await runInviteOnly([])
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /invite-only app: pass --db/)
+})
+
+test('#3340 createReviewAccountSql: quotes in the email, name or hash cannot break out', async () => {
+  const file = authDb()
+  const d = new DatabaseSync(file)
+  d.exec(`INSERT INTO "user" ("id","name","email","createdAt","updatedAt") VALUES ('u2','Other','other@example.com',1,1)`)
+  d.exec(await createReviewAccountSql("x' OR '1'='1@example.com", "O'Brien", "it's", async pw => `hash(${pw})`))
+  const users = d.prepare('SELECT * FROM "user" ORDER BY "id" = \'u2\'').all()
+  assert.equal(users.length, 2)
+  assert.equal(users[0].email, "x' or '1'='1@example.com")
+  assert.equal(users[0].name, "O'Brien")
+  const accounts = d.prepare('SELECT * FROM "account"').all()
+  assert.equal(accounts.length, 1)
+  assert.equal(accounts[0].password, "hash(it's)")
+  assert.equal(accounts[0].userId, users[0].id)
+  d.close()
+})
+
+test('#3340 createReviewAccountSql: the default hasher is better-auth\'s, so sign-in verifies it', async (t) => {
+  let verifyPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    ;({ verifyPassword } = await import(req.resolve('better-auth/crypto')))
+  } catch {
+    t.skip('better-auth not installed in this checkout')
+    return
+  }
+  const file = authDb()
+  const d = new DatabaseSync(file)
+  d.exec(await createReviewAccountSql('review+velo-pr9@example.com', 'Review Tester', 'new-secret'))
+  const { password } = d.prepare('SELECT "password" FROM "account"').get()
+  d.close()
+  assert.equal(await verifyPassword({ hash: password, password: 'new-secret' }), true)
+})
+
+// CI's Node-only job has no `pnpm install`, so the seed falls back to its own scrypt
+// hash there — it must be one better-auth's sign-in accepts.
+test('#3340 scryptHashPassword (no-better-auth fallback) is verified by better-auth', async (t) => {
+  const hash = await scryptHashPassword('new-secret')
+  assert.match(hash, /^[0-9a-f]{32}:[0-9a-f]{128}$/)
+  let verifyPassword
+  try {
+    const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+    ;({ verifyPassword } = await import(req.resolve('better-auth/crypto')))
+  } catch {
+    t.skip('better-auth not installed in this checkout')
+    return
+  }
+  assert.equal(await verifyPassword({ hash, password: 'new-secret' }), true)
+  assert.equal(await verifyPassword({ hash, password: 'wrong' }), false)
+})
+
+// ── #3141 (R4): look the account up first — the review login survives e-mail verification ──
+// In an app with crouton-email, sign-up of an existing address returns 200 with no
+// session (not 422), and a new account gets no session until it is verified. These run
+// the real script against a real sqlite file and a fake Worker that enforces both rules.
+// "Existing review account whose password changed" needs better-auth's real hasher, so it
+// lives in seed-review-login.deps-test.mjs (the job that installs packages).
+import { reviewerExistsSql, deleteReviewerSessionsSql } from './seed-review-login.mjs'
+import { R4_EMAIL, r4Db, row, runR4, SESSION_COOKIE } from './seed-review-login.fixtures.mjs'
+
+test('R4 existing review account that still takes the current password: reused, verified, not reset', async () => {
+  const file = r4Db({ withUser: true })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-up/email') return { body: { token: null } } // verification on: hides "exists"
+    if (path === '/api/auth/sign-in/email') return { body: { token: 'tok' }, headers: SESSION_COOKIE }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u1' }, session: {} } }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(row(file, `SELECT "password" FROM "account" WHERE "id" = 'a1'`).password, 'hash-of-an-old-password', 'no password reset')
+  assert.equal(row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u1'`).v, 1)
+  assert.equal(r.calls.filter(c => c.url === '/api/auth/sign-up/email').length, 0, 'sign-up is never called')
+  const session = r.calls.find(c => c.url === '/api/auth/get-session')
+  assert.match(session.cookie, /better-auth\.session_token=tok/)
+})
+
+test('R4 new account in an app that requires verification', async () => {
+  const file = r4Db({ withUser: false })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-up/email') {
+      const d = new DatabaseSync(file)
+      d.exec(`INSERT INTO "user" VALUES ('u9', '${R4_EMAIL}', 0)`)
+      d.close()
+      return { body: { token: null, user: { id: 'u9' } } } // no cookie: verification required
+    }
+    if (path === '/api/auth/sign-in/email') {
+      const { v } = row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u9'`)
+      return v ? { body: { token: 'tok' }, headers: SESSION_COOKIE } : { status: 403, body: { code: 'EMAIL_NOT_VERIFIED' } }
+    }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u9' }, session: {} } }
+    if (path === '/api/auth/organization/create') return { status: 403 }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(row(file, `SELECT "emailVerified" AS v FROM "user" WHERE "id" = 'u9'`).v, 1)
+  const session = r.calls.find(c => c.url === '/api/auth/get-session')
+  assert.ok(session, 'get-session was called')
+  assert.match(session.cookie, /better-auth\.session_token=tok/)
+})
+
+// Owner review on #3807 (Qodo 1 + 2): only the reset branch takes the address back.
+test('R4 deleteReviewerSessionsSql: drops every session of that email, verified or not; others untouched', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT, "emailVerified" INTEGER);
+    CREATE TABLE "session" ("id" TEXT PRIMARY KEY, "userId" TEXT);
+    INSERT INTO "user" VALUES ('u1', 'review+t@example.com', 1), ('u2', 'other@example.com', 1);
+    INSERT INTO "session" VALUES ('s1', 'u1'), ('s2', 'u1'), ('s3', 'u2');`)
+  d.exec(deleteReviewerSessionsSql('Review+T@example.com'))
+  const ids = d.prepare('SELECT "id" FROM "session" ORDER BY "id"').all().map(r => r.id)
+  assert.deepEqual(ids, ['s3'])
+  d.exec(deleteReviewerSessionsSql("x' OR '1'='1"))
+  assert.equal(d.prepare('SELECT count(*) AS n FROM "session"').get().n, 1, 'quotes cannot break out')
+})
+
+test('R4 reuse path (account takes the current password) revokes no session', async () => {
+  // After the verify_existing_users backfill the account is verified; its existing session must survive.
+  const file = r4Db({ withUser: true, verified: true, sessions: [['s-old', 'u1']] })
+  const r = await runR4(file, async (path) => {
+    if (path === '/api/auth/sign-in/email') return { body: { token: 'tok' }, headers: SESSION_COOKIE }
+    if (path === '/api/auth/get-session') return { body: { user: { id: 'u1' }, session: {} } }
+  })
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /takes the current password — reusing/)
+  assert.equal(row(file, `SELECT count(*) AS n FROM "session" WHERE "id" = 's-old'`).n, 1)
+})
+
+test('R4 reviewerExistsSql: matches regardless of letter case; quotes cannot break out', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`CREATE TABLE "user" ("id" TEXT PRIMARY KEY, "email" TEXT);
+    INSERT INTO "user" VALUES ('u1', 'review+velo-main@example.com');`)
+  assert.equal(d.prepare(reviewerExistsSql('Review+Velo-Main@Example.com')).get().n, 1)
+  assert.equal(d.prepare(reviewerExistsSql('nobody@example.com')).get().n, 0)
+  assert.equal(d.prepare(reviewerExistsSql("x' OR '1'='1")).get().n, 0)
+})
+
+// ── #3340 + #3141: the 403 branch still verifies before signing in (defensive) ──
+// Today's better-auth does NOT send this pairing: with verification on it hides the
+// invite-only 403 behind a generic 200 / token:null (pinned against the real
+// createAuth in packages/crouton-auth/tests/unit/server/auth-hardening.test.ts,
+// "invite-only + verification: an uninvited browser sign-up creates no account";
+// velo's real path is the next test). This case guards the 403 branch: if a future
+// better-auth surfaced the 403 while sign-in still required a verified row, the seed
+// must mark the SQL-created account verified BEFORE signing in.
+test('#3340 sign-up 403 SIGNUP_INVITE_ONLY while sign-in requires a verified row (not sent by today\'s better-auth) → account created via SQL, marked verified BEFORE sign-in → exit 0', async () => {
+  const file = authDb()
+  const signInSawVerified = []
+  const server = createServer((req, res) => {
+    let status = 200
+    let body = {}
+    let headers = {}
+    if (req.url === '/api/auth/sign-up/email') ({ status, body } = INVITE_ONLY)
+    else if (req.url === '/api/auth/sign-in/email') {
+      const u = rows(file, `SELECT "emailVerified" AS v FROM "user" WHERE "email" = 'review+velo-pr9@example.com'`)[0]
+      signInSawVerified.push(u ? u.v : null)
+      if (u && u.v === 1) { body = { token: 'tok' }; headers = SESSION_COOKIE }
+      else { status = 403; body = { code: 'EMAIL_NOT_VERIFIED' } }
+    } else if (req.url === '/api/auth/get-session') body = { user: { id: 'whatever' }, session: { activeOrganizationId: 'o1' } }
+    res.writeHead(status, { 'content-type': 'application/json', ...headers })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const r = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'Review+velo-pr9@example.com', '--password', 'pw', '--sqlite', file],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(signInSawVerified, [1], 'one sign-in, and the row was already verified when it ran')
+  const users = rows(file, 'SELECT * FROM "user"')
+  assert.equal(users.length, 1)
+  assert.equal(users[0].emailVerified, 1)
+  assert.equal(rows(file, 'SELECT * FROM "account"').length, 1)
+})
+
+// PR #3861 owner review: the real velo preview. With verification on, better-auth
+// answers the invite-only 403 with its generic 200 / token:null (it hides whether the
+// address exists), so the seed took the "new user" branch, created nothing, and
+// sign-in said INVALID_EMAIL_OR_PASSWORD. The fake Worker below does exactly that.
+test('new review user in an app that requires verification (invite-only hides its 403) → account created + verified server-side, login works', async () => {
+  const file = authDb()
+  const E = 'review+velo-pr9@example.com'
+  const server = createServer((req, res) => {
+    let status = 200
+    let body = {}
+    let headers = {}
+    if (req.url === '/api/auth/sign-up/email') body = { token: null, user: { email: E } } // nothing created
+    else if (req.url === '/api/auth/sign-in/email') {
+      const u = rows(file, `SELECT u."emailVerified" AS v FROM "user" u JOIN "account" a ON a."userId" = u."id" AND a."providerId" = 'credential' WHERE u."email" = '${E}'`)[0]
+      if (!u) { status = 401; body = { code: 'INVALID_EMAIL_OR_PASSWORD' } }
+      else if (u.v !== 1) { status = 403; body = { code: 'EMAIL_NOT_VERIFIED' } }
+      else { body = { token: 'tok' }; headers = SESSION_COOKIE }
+    } else if (req.url === '/api/auth/get-session') body = { user: { id: 'whatever' }, session: { activeOrganizationId: 'o1' } }
+    res.writeHead(status, { 'content-type': 'application/json', ...headers })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const r = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'Review+velo-pr9@example.com', '--password', 'pw', '--sqlite', file],
+      { env: { ...process.env, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  assert.equal(r.code, 0, r.out)
+  const users = rows(file, 'SELECT * FROM "user"')
+  assert.equal(users.length, 1)
+  assert.equal(users[0].emailVerified, 1)
+  assert.equal(rows(file, 'SELECT * FROM "account" WHERE "providerId" = \'credential\'').length, 1)
 })

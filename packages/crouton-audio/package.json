@@ -4,6 +4,9 @@
   "description": "Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js)",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit"
+  },
   "files": [
     "app",
     "nuxt.config.ts",
