@@ -15,6 +15,12 @@
  * geometry before finger-up and at the jump frame — printed as DIAG3813 CALL / FOCUS / GEOM —
  * plus two variants: V-mid (start 40 px short of the bottom) and V-anchor (overflow-anchor: none),
  * one DIAG3813 VARIANT line per swipe.
+ * Fourth run (booking-demo only, the clamp theory): P1 start at scrollTop 60, P2 start at 70,
+ * P3 the swipe element's height held with an injected min-height, P4 a 200 px spacer appended
+ * to the scroller — each printed as `DIAG3813 VARIANT <name> run=<n> before=<y> after=<y> jumped=…`;
+ * and, for the base case, every ResizeObserver callback on the swipe element and the scroller's
+ * content between finger-up and the jump frame, as DIAG3813 RESIZE lines. One sign-in per app
+ * for the whole file (the session is saved and reused), so a long run no longer hits HTTP 429.
  *
  * The jump itself is DATA, never a failure. A test fails only when the run did
  * nothing (month did not move by one, <20 frames, or <100 px of scroll room), so a
@@ -28,7 +34,7 @@
  */
 import { test, expect, type Page, type BrowserContext } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = join(__dirname, '..', '..')
@@ -62,8 +68,24 @@ function reviewAccount(app: string) {
   }
 }
 
-/** Sign in through the API (password never logged) and hand the session to the browser context. */
+/**
+ * Saved sessions, one per app, for the whole file. Kept on disk OUTSIDE test-results/calendar-diag
+ * (that folder is uploaded as an artifact) so a worker restart after a failed test reuses it too.
+ */
+const AUTH_DIR = join(ROOT, 'test-results', '.calendar-diag-auth')
+
+/**
+ * Sign in through the API (password never logged) and hand the session to the browser context.
+ * Signs in ONCE per app for the whole file and reuses the saved cookies after that (#3813: one
+ * sign-in per swipe hit HTTP 429).
+ */
 async function login(context: BrowserContext, app: string, origin: string) {
+  const file = join(AUTH_DIR, `${app}-${KEY}.json`)
+  if (existsSync(file)) {
+    const state = JSON.parse(readFileSync(file, 'utf8'))
+    await context.addCookies(state.cookies)
+    return
+  }
   expect(SECRET, 'REVIEW_SEED_SECRET is required').not.toBe('')
   const { email, password } = reviewAccount(app)
   const res = await context.request.post(`${origin}/api/auth/sign-in/email`, {
@@ -71,6 +93,8 @@ async function login(context: BrowserContext, app: string, origin: string) {
     data: { email, password },
   })
   expect(res.ok(), `${app} review sign-in → HTTP ${res.status()}`).toBe(true)
+  mkdirSync(AUTH_DIR, { recursive: true })
+  writeFileSync(file, JSON.stringify(await context.storageState()))
 }
 
 type Measure = { top: number, max: number, scroller: string, gridTop: number, gridH: number }
@@ -133,7 +157,7 @@ const scrollTo = (page: Page, y: number) => page.evaluate(async (y) => {
 }, y)
 
 /** Mark the calendar + every ancestor, then start the frame loop, observers and wrappers. */
-const arm = (page: Page, mark: string, recorder = false) => page.evaluate(({ mark, recorder }) => {
+const arm = (page: Page, mark: string, recorder = false, resize = false) => page.evaluate(({ mark, recorder, resize }) => {
   const d = (window as any).__diag
   const swipe = d.swipe as HTMLElement
   const track = d.track as HTMLElement
@@ -298,7 +322,7 @@ const arm = (page: Page, mark: string, recorder = false) => page.evaluate(({ mar
   // Third measuring run (#3813): the scroll-move recorder. Every call that can move a scroll
   // position, with its target, arguments and call stack; focus changes; scroll events; and the
   // geometry before finger-up and at the jump frame. Each wrapper calls the original unchanged.
-  const R: any = { calls: [], focus: [], scrolls: [], before: null, jump: null }
+  const R: any = { calls: [], focus: [], scrolls: [], resize: [], before: null, jump: null }
   d.R = recorder ? R : null
   const where = (el: any) => {
     if (el === window) return 'window'
@@ -366,6 +390,33 @@ const arm = (page: Page, mark: string, recorder = false) => page.evaluate(({ mar
       const el = t === document || t === window ? document.scrollingElement : t
       R.scrolls.push({ ts: now(), target: rdesc(t), scrollTop: Math.round((el?.scrollTop ?? 0) * 10) / 10 })
     }, { capture: true })
+  }
+
+  // Fourth run (#3813, clamp theory): every ResizeObserver callback on the swipe element and on
+  // the scroller's content, with the swipe element's offsetHeight and the scroller's scrollHeight
+  // read inside the callback. Observing only — changes nothing.
+  if (recorder && resize) {
+    const content = [...(d.isWindow ? document.body.children : sc.children)] as HTMLElement[]
+    const label = (el: Element) => el === swipe ? 'swipe' : `content:${cls(el)}`
+    new ResizeObserver((entries) => {
+      R.resize.push({
+        ts: now(),
+        targets: entries.map(e => `${label(e.target)} h=${Math.round(e.contentRect.height * 10) / 10}`).join(' ; '),
+        swipeOH: swipe.offsetHeight,
+        scrollHeight: sc.scrollHeight,
+        scrollTop: Math.round(sc.scrollTop * 10) / 10,
+      })
+    }).observe(swipe)
+    const ro = new ResizeObserver((entries) => {
+      R.resize.push({
+        ts: now(),
+        targets: entries.map(e => `${label(e.target)} h=${Math.round(e.contentRect.height * 10) / 10}`).join(' ; '),
+        swipeOH: swipe.offsetHeight,
+        scrollHeight: sc.scrollHeight,
+        scrollTop: Math.round(sc.scrollTop * 10) / 10,
+      })
+    })
+    for (const el of content) ro.observe(el)
   }
 
   // Logging-only wrappers: each calls the original unchanged. (Skipped when the recorder
@@ -436,7 +487,7 @@ const arm = (page: Page, mark: string, recorder = false) => page.evaluate(({ mar
   }
   requestAnimationFrame(loop)
   return marked.length
-}, { mark, recorder })
+}, { mark, recorder, resize })
 
 /** Finger swipe left (→ next month): plain Events with touch lists, as WebKit has no Touch constructor. */
 const swipeLeft = (page: Page) => page.evaluate(async () => {
@@ -460,7 +511,7 @@ const swipeLeft = (page: Page) => page.evaluate(async () => {
     await new Promise(res => setTimeout(res, 16))
     fire('touchmove', x)
   }
-  if (d.R) d.R.before = { ts: performance.now(), geom: d.R.geom(), active: d.R.active() }
+  if (d.R) d.R.before = { ts: performance.now(), geom: d.R.geom(), active: d.R.active(), swipeOH: el.offsetHeight }
   d.rec.touchendAt = performance.now()
   d.rec.stopAt = d.rec.touchendAt + 1000
   fire('touchend', x)
@@ -513,7 +564,7 @@ function reportQuestions(tag: string, frames: Row[], events: Row[], di: number, 
   for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 }
 
-type Variant = 'base' | 'mid' | 'anchor'
+type Variant = 'base' | 'mid' | 'anchor' | 'P1-start60' | 'P2-start70' | 'P3-height-held' | 'P4-scroller-padded'
 
 /** First stack line that points at a page script (http/https URL), i.e. the first app frame. */
 const appFrame = (stack: string[]) => {
@@ -543,9 +594,24 @@ function reportRecorder(tag: string, variant: Variant, run: number, R: any, rel:
   console.log(`DIAG3813 GEOM ${tag} before-finger-up ${g(R.before?.geom)}`)
   console.log(`DIAG3813 GEOM ${tag} jump-frame ${jumpT !== null ? `t=${jumpT} from=${Math.round(R.jump.from * 10) / 10} ${g(R.jump.geom)}` : 'no jump frame'}`)
   if (variant !== 'base') {
-    console.log(`DIAG3813 VARIANT ${variant} run=${run} jumped=${drop ? 'yes' : 'no'} scroll ${before}→${after} jumpFrame=${jumpT ?? 'none'} calls=${calls.length} focusChanges=${focus.length}`)
+    console.log(`DIAG3813 VARIANT ${variant} run=${run} before=${before} after=${after} jumped=${drop ? 'yes' : 'no'} jumpFrame=${jumpT ?? 'none'} calls=${calls.length} focusChanges=${focus.length}`)
   }
-  return { jumpT, calls, focus, scrolls: (R.scrolls as any[]).filter(inWin) }
+  // Fourth run (#3813): ResizeObserver callbacks between finger-up and the jump frame (base case).
+  const resize = ((R.resize || []) as any[]).filter(inWin)
+  if (variant === 'base') {
+    const refOH = R.before?.swipeOH
+    const refSH = R.before?.geom?.scrollHeight
+    console.log(`DIAG3813 RESIZE ${tag} before-finger-up swipeOH=${refOH ?? '?'} scrollHeight=${refSH ?? '?'}`)
+    for (const r of resize) {
+      const shorter = [
+        typeof refOH === 'number' && r.swipeOH < refOH ? `swipeOH ${refOH}→${r.swipeOH} (${r.swipeOH - refOH})` : '',
+        typeof refSH === 'number' && r.scrollHeight < refSH ? `scrollHeight ${refSH}→${r.scrollHeight} (${r.scrollHeight - refSH})` : '',
+      ].filter(Boolean).join(' ')
+      console.log(`DIAG3813 RESIZE ${tag} t=${rel(r.ts)} swipeOH=${r.swipeOH} scrollHeight=${r.scrollHeight} scrollTop=${r.scrollTop} targets=${r.targets}${shorter ? ` SHORTER ${shorter}` : ''}`)
+    }
+    if (!resize.length) console.log(`DIAG3813 RESIZE ${tag} no ResizeObserver callback (${span})`)
+  }
+  return { jumpT, calls, focus, resize, scrolls: (R.scrolls as any[]).filter(inWin) }
 }
 
 async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
@@ -553,16 +619,43 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   const recorder = !!opts.recorder
   const m = await install(page)
   expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
-  // V-mid: 40 px short of the bottom; otherwise the calendar's middle near the top.
+  // V-mid: 40 px short of the bottom; P1/P2: a fixed start (60 / 70); otherwise (base, V-anchor,
+  // P3, P4) the calendar's middle near the top — the base-case start, clamped to the bottom.
   const want = variant === 'mid'
     ? m.max - 40
-    : Math.max(0, Math.min(m.max, Math.round(m.gridTop + m.gridH / 2 - 40)))
+    : variant === 'P1-start60'
+      ? 60
+      : variant === 'P2-start70'
+        ? 70
+        : Math.max(0, Math.min(m.max, Math.round(m.gridTop + m.gridH / 2 - 40)))
   // V-anchor: turn scroll anchoring off everywhere before the swipe.
   if (variant === 'anchor') await page.addStyleTag({ content: '* { overflow-anchor: none !important; }' })
+  // P3: hold the swipe element at its current height (test-only style, no app code).
+  if (variant === 'P3-height-held') {
+    const oh = await page.evaluate(() => {
+      const swipe = (window as any).__diag.swipe as HTMLElement
+      swipe.setAttribute('data-diag3813-hold', '')
+      return swipe.offsetHeight
+    })
+    await page.addStyleTag({ content: `[data-diag3813-hold] { min-height: ${oh}px !important; }` })
+    console.log(`DIAG3813 VARIANT-SETUP ${variant} run=${run} min-height=${oh}px`)
+  }
+  // P4: a 200 px spacer at the end of the scroller, so the same start is no longer the maximum.
+  if (variant === 'P4-scroller-padded') {
+    const max = await page.evaluate(() => {
+      const d = (window as any).__diag
+      const spacer = document.createElement('div')
+      spacer.setAttribute('style', 'height:200px;flex:none')
+      spacer.setAttribute('data-diag3813-spacer', '')
+      ;(d.isWindow ? document.body : d.sc as HTMLElement).appendChild(spacer)
+      return d.sc.scrollHeight - d.sc.clientHeight
+    })
+    console.log(`DIAG3813 VARIANT-SETUP ${variant} run=${run} spacer=200px max ${m.max}→${max} start=${want}`)
+  }
   const before = await scrollTo(page, want)
   const from = await page.evaluate(() => (window as any).__diag.month() as string)
 
-  await arm(page, String(run), recorder)
+  await arm(page, String(run), recorder, recorder && variant === 'base')
   await page.waitForTimeout(100)
   await swipeLeft(page)
   await page.waitForTimeout(1300)
@@ -577,7 +670,7 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
       events: d.rec.events as Array<{ ts: number, kind: string, detail: string }>,
       bodyKinds: d.rec.bodyKinds as Record<string, number>,
       bodyStacks: d.rec.bodyStacks as Record<string, number>,
-      R: d.R ? { calls: d.R.calls, focus: d.R.focus, scrolls: d.R.scrolls, before: d.R.before, jump: d.R.jump } : null,
+      R: d.R ? { calls: d.R.calls, focus: d.R.focus, scrolls: d.R.scrolls, resize: d.R.resize, before: d.R.before, jump: d.R.jump } : null,
     }
   })
   const t0 = out.touchendAt
@@ -635,6 +728,17 @@ test.describe('booking-demo blocks: swipe diagnostics (#3813)', () => {
   for (const variant of ['mid', 'anchor'] as const) {
     for (const run of [1, 2, 3]) {
       test(`booking-demo V-${variant} swipe run ${run}`, async ({ page, context }) => {
+        expect(origin, 'BOOKING_DEMO_URL (or the staging url)').toBeTruthy()
+        await login(context, 'booking-demo', origin)
+        await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
+        await runDiag(page, 'booking-demo', run, { recorder: true, variant })
+      })
+    }
+  }
+  // Fourth run (#3813): the clamp theory — four predictions stated before the run.
+  for (const variant of ['P1-start60', 'P2-start70', 'P3-height-held', 'P4-scroller-padded'] as const) {
+    for (const run of [1, 2, 3]) {
+      test(`booking-demo ${variant} swipe run ${run}`, async ({ page, context }) => {
         expect(origin, 'BOOKING_DEMO_URL (or the staging url)').toBeTruthy()
         await login(context, 'booking-demo', origin)
         await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
