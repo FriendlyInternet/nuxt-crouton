@@ -32,7 +32,6 @@ export default defineCroutonManifest({
       {
         name: 'CroutonFlow',
         description: 'Interactive node graph with DAG auto-layout, drag/drop, minimap, and optional real-time sync',
-        props: ['rows', 'collection', 'labelField', 'parentField', 'positionField', 'sync', 'flowId', 'controls', 'minimap', 'draggable'],
       },
     ],
     apiRoutes: [

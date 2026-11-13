@@ -89,3 +89,50 @@ test('server page lists list-exported utils and server types', () => {
     assert.match(page, new RegExp(`^${h}$`, 'm'))
   }
 })
+
+// ── component-names (#3898): every manifest component name is one Nuxt registers ────────────
+// In this file (not their own) so they never overlap the manifest-rewriting tests above. The
+// --fresh test runs first and writes every .nuxt/components.d.ts; the tests after it reuse them.
+const names = (...args) => spawnSync('node', ['scripts/component-names.mjs', ...args], { encoding: 'utf8' })
+const listed = (pkg) => {
+  const r = names('--list', pkg)
+  expectStatus(r, 0)
+  return r.stdout.split('\n').filter(Boolean).map(l => l.split('\t')[0])
+}
+
+// Change `file`, run `runner`, restore the file whatever happens; returns the run's result.
+function mutateAndRun(file, from, to, runner) {
+  const orig = readFileSync(file, 'utf8')
+  assert.ok(orig.includes(from), `${file} no longer contains ${JSON.stringify(from)} — update this test`)
+  try {
+    writeFileSync(file, orig.replace(from, to))
+    return runner()
+  } finally {
+    writeFileSync(file, orig)
+  }
+}
+
+test('component-names --check --fresh passes on the clean tree', () => {
+  const r = names('--check', '--fresh')
+  expectStatus(r, 0)
+  assert.match(r.stdout, /^70 components named, 0 without a file$/m)
+})
+
+test('--list crouton-calendar names exactly Month and Week', () => {
+  assert.deepEqual(listed('crouton-calendar'), ['CroutonCalendarMonth', 'CroutonCalendarWeek'])
+})
+
+test('--list resolves pathPrefix, cross-package and stub cases', () => {
+  const admin = listed('crouton-admin')
+  assert.ok(admin.includes('StatsCard'), 'crouton-admin (pathPrefix: false) should list StatsCard')
+  assert.ok(!admin.includes('AdminStatsCard'), 'crouton-admin should not list AdminStatsCard')
+  assert.ok(listed('crouton-auth').includes('CroutonUserPill'))
+  assert.ok(listed('crouton-bookings').includes('CroutonBookingsPanel'))
+  assert.ok(!listed('crouton-core').includes('CroutonAssetsPicker'), 'a stubs/ component must not count')
+})
+
+test('--check fails on a manifest name with no component', () => {
+  const r = mutateAndRun('packages/crouton-calendar/crouton.manifest.ts', "name: 'CroutonCalendarWeek'", "name: 'CroutonCalendarWeekX'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-calendar: manifest names CroutonCalendarWeekX/)
+})

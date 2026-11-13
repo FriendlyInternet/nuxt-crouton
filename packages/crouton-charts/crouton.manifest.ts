@@ -13,8 +13,7 @@ export default defineCroutonManifest({
     components: [
       {
         name: 'CroutonChartsWidget',
-        description: 'Collection-driven chart component (bar, line, area, donut)',
-        props: ['collection', 'type', 'xField', 'yFields', 'title', 'height', 'stacked']
+        description: 'Collection-driven chart component (bar, line, area, donut)'
       },
     ],
     composables: [

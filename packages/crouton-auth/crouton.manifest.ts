@@ -26,8 +26,6 @@ export default defineCroutonManifest({
   ],
   provides: {
     composables: ['useAuth', 'useTeamContext'],
-    components: [
-      { name: 'CroutonAuthForm', description: 'Authentication form', props: ['mode'] },
-    ],
+    components: [],
   },
 })
