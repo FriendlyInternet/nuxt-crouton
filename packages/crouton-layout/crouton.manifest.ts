@@ -17,4 +17,14 @@ export default defineCroutonManifest({
   version: '1.0.0',
   category: 'core',
   bundled: false,
+  provides: {
+    components: [
+      { name: 'CroutonLayout', description: 'The editable panes surface' },
+      { name: 'CroutonLayoutBreakpointAuthor', description: 'Breakpoints level of the Crouton Builder: author responsiveness by demonstration' },
+      { name: 'CroutonLayoutCollection', description: 'Data-bound list block for a layout' },
+      { name: 'CroutonLayoutForm', description: 'Data-bound form block: the detail half of a master/detail layout' },
+      { name: 'CroutonLayoutRenderer', description: 'Renders a layout data tree into resizable, nestable panes' },
+      { name: 'CroutonLayoutSpikeStats', description: 'Throwaway stats block from the layout spike (#713); goes when the spike does.' },
+    ],
+  },
 })

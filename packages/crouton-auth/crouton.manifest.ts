@@ -26,6 +26,18 @@ export default defineCroutonManifest({
   ],
   provides: {
     composables: ['useAuth', 'useTeamContext'],
-    components: [],
+    components: [
+      { name: 'AccountSettingsModal', description: 'Account settings wrapped in a modal, for public page navigation' },
+      { name: 'AdminEmailLogs', description: 'Auth email log history with stats, filtering and error details' },
+      { name: 'AuthRouteModal', description: 'Login, register and forgot-password forms in a modal overlay' },
+      { name: 'CroutonUserPill', description: 'One pill for account and status: member, PIN visitor or signed out' },
+      { name: 'TeamCreateForm', description: 'Form to create a new team (organization)' },
+      { name: 'TeamDeleteConfirm', description: 'Dialog to confirm deleting a team' },
+      { name: 'TeamInvitations', description: 'List of pending team invitations with cancel actions' },
+      { name: 'TeamMemberInviteForm', description: 'Form to invite a new member to the team' },
+      { name: 'TeamMembers', description: 'List of team members with management actions' },
+      { name: 'TeamSettings', description: 'Form to update team settings (name, slug, logo)' },
+      { name: 'TeamSwitcher', description: 'Select menu to switch between teams or create a new one' },
+    ],
   },
 })
