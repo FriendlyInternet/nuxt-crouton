@@ -476,6 +476,7 @@ const arm = (page: Page, mark: string, recorder = false, resize = false) => page
       scH: sc.scrollHeight,
       calH: Math.round(swipe.getBoundingClientRect().height * 10) / 10,
       trackH: Math.round(track.getBoundingClientRect().height * 10) / 10,
+      minH: swipe.style.minHeight || "''",
       active: desc(document.activeElement),
       marks: `${ok}/${marked.length}${lost ? ` lost=${lost}` : ''}`,
       month: d.month(),
@@ -520,7 +521,7 @@ const shift = (ym: string, by: number) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
 }
 
-const FIELDS = ['winY', 'scY', 'vvTop', 'pageH', 'scH', 'calH', 'trackH', 'active', 'marks', 'month'] as const
+const FIELDS = ['winY', 'scY', 'vvTop', 'pageH', 'scH', 'calH', 'trackH', 'minH', 'active', 'marks', 'month'] as const
 
 type Row = { t: number, ts: number, [k: string]: any }
 
@@ -712,6 +713,9 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   for (const e of events) console.log(`DIAG3813 EVENT ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 
   reportQuestions(tag, frames, events, di, out)
+  // PR #3925 measure: the strip's inline min-height at the frame the month changed and two frames later.
+  const mi = frames.findIndex(f => f.month !== from)
+  console.log(`DIAG3813 MINH ${tag} ${mi >= 0 ? `month-change t=${frames[mi]!.t} minHeight=${frames[mi]!.minH} · +2 frames t=${frames[mi + 2]?.t ?? '?'} minHeight=${frames[mi + 2]?.minH ?? '?'}` : 'month never changed in the frames'}`)
   const recorded = out.R ? reportRecorder(tag, variant, run, out.R, rel, before, out.after, drop) : null
 
   mkdirSync(OUT_DIR, { recursive: true })
@@ -759,7 +763,8 @@ test.describe('booking-demo blocks: swipe diagnostics (#3813)', () => {
       })
     }
   }
-  // Fourth run (#3813): the clamp theory — four predictions stated before the run.
+  // Fourth run (#3813): the clamp theory. Each case only records before → after; none asserts
+  // that a jump happens (P2's "jumps to 65" was a prediction about the unfixed build).
   for (const variant of ['P1-start60', 'P2-start70', 'P3-height-held', 'P4-scroller-padded'] as const) {
     for (const run of [1, 2, 3]) {
       test(`booking-demo ${variant} swipe run ${run}`, async ({ page, context }) => {
