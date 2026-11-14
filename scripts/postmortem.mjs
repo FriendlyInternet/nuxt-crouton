@@ -53,12 +53,16 @@ export function pendingClose(comments = []) {
  * Should a postmortem run start for this epic?
  * @returns {{ go: boolean, reason: string }}
  */
-export function decidePostmortemRun({ isEpic = false, subIssues = [], comments = [], manual = false } = {}) {
+// `pendingSteps` (#3846): steps of a `tickets:rolling` epic not finished yet (lib/epic-steps.mjs
+// stepsPending). Every sub-issue written so far can be closed after step 0 while later steps have no
+// ticket yet, so the automatic start waits; a manual run still goes.
+export function decidePostmortemRun({ isEpic = false, subIssues = [], comments = [], manual = false, pendingSteps = 0 } = {}) {
   if (!isEpic) return { go: false, reason: 'not an epic' }
   const state = postmortemState(comments)
   if (state === 'done') return { go: false, reason: 'postmortem already posted' }
   if (manual) return { go: true, reason: state === 'skipped' ? 'manual retry after a skipped run' : 'manual run' }
   if (state === 'skipped') return { go: false, reason: 'an earlier run was skipped — retry by hand' }
+  if (pendingSteps > 0) return { go: false, reason: 'steps still pending' }
   const kids = subIssues || []
   if (kids.length > 0 && kids.every(k => k.state === 'closed')) return { go: true, reason: 'every sub-issue is closed' }
   return { go: false, reason: 'not done' }

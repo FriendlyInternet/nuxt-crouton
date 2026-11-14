@@ -128,6 +128,19 @@ test('runAutoClose: all three hold → closed as completed, every status:* strip
   assert.match(notes[0][1], /closed by itself/)
   assert.match(notes[0][1], /checked on: merge/)
 })
+// #3846: a second safety net — a rolling epic with steps still to build never auto-closes.
+test('10. decideAutoClose: pending steps of a rolling epic → wait', () => {
+  const d = decideAutoClose({ labels: ['epic', 'status:verified'], subIssues: kids, prs: merged, comments: [PM], pendingSteps: 1 })
+  assert.equal(d.action, 'wait')
+  assert.match(d.reason, /1 step\(s\) not finished/)
+  assert.equal(decideAutoClose({ labels: ['epic', 'status:verified'], subIssues: kids, prs: merged, comments: [PM], pendingSteps: 0 }).action, 'close')
+})
+test('10. runAutoClose: a rolling epic whose bot step list has an unwritten step is not closed', async () => {
+  const list = { body: '<!-- epic-steps:v1 -->\n```json\n' + JSON.stringify([{ title: 'a', goal: 'g', proves: 'p', blockedBy: [], ticket: 1 }, { title: 'b', goal: 'g', proves: 'p', blockedBy: [0], ticket: null }]) + '\n```', user: { type: 'Bot', login: 'nuxt-harness[bot]' } }
+  const w = world({ labels: ['epic', 'tickets:rolling', 'status:verified'], comments: [PM, CARD, list] })
+  await runAutoClose(w.ctx, { epic: '7', via: 'sub-issue' })
+  assert.deepEqual(w.calls, [])
+})
 test('runAutoClose: still waiting (card waiting) → no update, no comment', async () => {
   const w = world({ labels: ['epic', 'status:to-test'] })
   await runAutoClose(w.ctx, { epic: '7', via: 'sub-issue' })

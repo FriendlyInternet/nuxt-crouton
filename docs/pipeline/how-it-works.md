@@ -18,8 +18,19 @@ exact word they reply.
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
      `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the
      failed tickets to `ticket-revise.yml`, which rewrites them from the review's findings
-     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds; a needs-owner verdict
-     or round 3 holds for the owner. For a design
+     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds per ticket (per epic
+     for epics without `tickets:rolling`), and 3 for the step list; a needs-owner verdict or round 3
+     holds for the owner. For a new epic (label `tickets:rolling`, #3846) the splitter writes the
+     step list plus only the first ticket; `ticket-review.yml -f subject=plan` reviews the step list
+     once, and the orchestrator writes each later ticket by hand (with `step=<k>` in its pipeline
+     block) and runs `gh workflow run ticket-review.yml -f epic=<E> -f subject=<n>`, which reviews
+     that ticket alone against the epic branch (`scripts/epic-checkout.mjs`); a no-go holds only that
+     ticket and the steps after it (`scripts/ticket-review-actions.mjs`, `scripts/lib/epic-steps.mjs`).
+     If a step list turns out wrong, the epic is held: fix the step-list comment by hand and run
+     `gh workflow run ticket-review.yml -f epic=<E> -f subject=plan`. To move an existing epic to
+     per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
+     epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
+     For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
    - c. `scripts/lib/plan-route.mjs` says `plan` → `work-issue-pidev.yml` in plan mode (step 2).

@@ -25,13 +25,23 @@ import { appendFileSync, readFileSync } from 'node:fs'
 // worker fires on, and the `Blocked-by: #NN` body format. Importing beats restating them.
 import { WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 import { parseBlockedBy } from './apply-decompose-plan.mjs'
+import { stepOf } from './lib/epic-steps.mjs'
+import { PIPELINE_LABELS } from './traffic-control.mjs'
+
+// A rolling-epic ticket (#3846) without a start label is waiting for its own ticket review, which
+// starts it on go — resuming must not start it unreviewed.
+const awaitingReview = (c) =>
+  stepOf(c.body || '') !== null && !(c.labels || []).some((l) => PIPELINE_LABELS.includes(typeof l === 'string' ? l : l?.name))
 
 /**
  * Which of an already-decomposed issue's children should be dispatched now?
  *
  * @param {Array} children  `[{ number, state, body?, hasOpenChildren? }]` — the target's
  *                          sub-issues, as returned by the sub_issues API.
- * @returns {{ resume: boolean, dispatch: Array<{number:number,label:string}>, waiting:number[], reason:string }}
+ * @returns {{ resume: boolean, dispatch: Array<{number:number,label:string}>, waiting:number[], awaitingReview:number[], reason:string }}
+ *
+ * A rolling-epic ticket (`step=<k>` in its block, #3846) with no trigger label is in NEITHER list:
+ * it is reported in `awaitingReview` — its ticket review starts it.
  *
  * `resume:false` means "not decomposed — classify normally". That covers BOTH an issue
  * with no children at all and one whose children are ALL CLOSED (a finished tree is not
@@ -45,6 +55,7 @@ export function planResume(children = []) {
       resume: false,
       dispatch: [],
       waiting: [],
+      awaitingReview: [],
       reason: kids.length
         ? `all ${kids.length} sub-issue(s) are closed — nothing to resume`
         : 'no sub-issues — not decomposed',
@@ -57,7 +68,9 @@ export function planResume(children = []) {
   const openNumbers = new Set(open.map((c) => c.number))
   const dispatch = []
   const waiting = []
+  const review = []
   for (const c of open) {
+    if (awaitingReview(c)) { review.push(c.number); continue }
     const blockers = parseBlockedBy(c.body || '')
     // Only a blocker that is still OPEN holds a child back. A blocker outside this tree
     // (or already gone) must not wedge it — an unresolvable reference would otherwise
@@ -72,9 +85,12 @@ export function planResume(children = []) {
     resume: true,
     dispatch,
     waiting,
+    awaitingReview: review,
     reason: dispatch.length
       ? `already decomposed — resuming ${dispatch.length} of ${open.length} open child(ren)`
-      : `already decomposed — all ${open.length} open child(ren) are blocked by siblings`,
+      : review.length
+        ? `already decomposed — ${review.length} open ticket(s) are waiting for their ticket review`
+        : `already decomposed — all ${open.length} open child(ren) are blocked by siblings`,
   }
 }
 
@@ -95,6 +111,7 @@ function main() {
   const v = planResume(children)
   console.log(`resume-decomposed: ${v.reason}`)
   if (v.waiting.length) console.log(`  waiting on siblings: ${v.waiting.map((n) => `#${n}`).join(', ')}`)
+  if (v.awaitingReview.length) console.log(`  awaiting ticket review: ${v.awaitingReview.map((n) => `#${n}`).join(', ')}`)
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, [
       `resume=${v.resume ? 1 : 0}`,

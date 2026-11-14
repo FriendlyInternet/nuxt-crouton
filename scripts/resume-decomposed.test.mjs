@@ -80,3 +80,19 @@ test('null/garbage entries are tolerated, not thrown on', () => {
   assert.equal(planResume([null, undefined, open(516)]).dispatch.length, 1)
   assert.equal(planResume(undefined).resume, false)
 })
+
+// #3846: a rolling-epic ticket (step=<k>) with no trigger label is waiting for ITS ticket review —
+// resuming the epic must not start it unreviewed. Rule: nothing starts a rolling ticket but its review.
+test('8. an open rolling ticket with no trigger label is in neither dispatch nor waiting — reported as awaiting review', () => {
+  const rolling = { ...open(601, '<!-- pipeline: epic=600 depth=1 step=1 dispatch=work-this -->'), labels: ['type:feat'] }
+  const started = { ...open(602, '<!-- pipeline: epic=600 depth=1 step=0 -->'), labels: [{ name: 'work-this' }] }
+  const plain = open(603)
+  const v = planResume([rolling, started, plain])
+  assert.deepEqual(v.dispatch.map((d) => d.number), [602, 603])
+  assert.deepEqual(v.waiting, [])
+  assert.deepEqual(v.awaitingReview, [601])
+  const only = planResume([rolling])
+  assert.equal(only.resume, true)
+  assert.deepEqual(only.dispatch, [])
+  assert.match(only.reason, /waiting for their ticket review/)
+})

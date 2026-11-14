@@ -12,6 +12,18 @@ run-name: "ticket-review #${{ inputs.epic }}"
 # Started by epic-scaffold.mjs / apply-decompose-plan.mjs (which create the children WITHOUT a
 # trigger label), or by hand: `gh workflow run ticket-review.yml -f epic=N`.
 #
+# `subject` (#3846, rolling epics labelled `tickets:rolling`):
+#   blank   the whole set (today's flow, unchanged for an epic without `tickets:rolling`)
+#   plan    the step list once (P1–P4: coverage, order, size, no owner decision) + the open
+#           ticket(s) of steps with no blocker — started by apply-decompose-plan.mjs for a new epic
+#   <n>     that ONE ticket, just before it is built — run by the orchestrator after writing it by
+#           hand: `gh workflow run ticket-review.yml -f epic=E -f subject=<n>`
+# A rolling epic decides PER TICKET (scripts/ticket-review-actions.mjs): a go ticket starts, a no-go
+# goes to ticket-revise.yml for that ticket only (3 rounds per ticket), never holding a sibling.
+# `plan-wrong` (the step list itself is wrong) removes `steps:approved` and holds the epic; the
+# orchestrator fixes the step-list comment by hand and re-runs `-f subject=plan`. Tickets are graded
+# against a read-only checkout of the epic branch (scripts/epic-checkout.mjs); the harness stays on main.
+#
 # SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false;
 # the App token is only used by the trusted steps). No hard-coded model and NO silent fallback.
 #
@@ -23,9 +35,13 @@ on:
       epic:
         description: Epic issue number whose tickets to review
         required: true
+      subject:
+        description: "Rolling epics (#3846): blank = the whole set, plan = the step list, <n> = that ticket only"
+        required: false
+        default: ''
 
 concurrency:
-  group: ticket-review-${{ inputs.epic }}
+  group: ticket-review-${{ inputs.epic }}-${{ inputs.subject }}
   cancel-in-progress: false
 
 jobs:
@@ -37,6 +53,7 @@ jobs:
       issues: write
     env:
       EPIC: ${{ inputs.epic }}
+      SUBJECT: ${{ inputs.subject }}
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
@@ -108,14 +125,19 @@ jobs:
             echo; echo "## Epic comments"
             gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
           } > "$D/epic.md"
+          gh issue view "$EPIC" --json number,labels --jq '{number, labels: [.labels[].name]}' > "$D/epic.json"
           # with authors: only the harness bot's own verdicts count toward the round (#3787)
           gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" \
             --jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > "$D/comments.json"
           gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
-            --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
-            | jq -s 'add // []' > "$D/tickets.json"
-          echo "tickets: $(jq length "$D/tickets.json")"
-          [ "$(jq length "$D/tickets.json")" -gt 0 ] || { echo "::error::epic #$EPIC has no open sub-issues to review"; exit 1; }
+            --jq '[.[] | {number, title, body, state, labels: [.labels[].name]}]' | jq -s 'add // []' > "$D/subs.json"
+          # #3846: the step list (rolling epics) + only the open tickets this subject reads; the epic
+          # branch as a read-only second checkout (blank when it has none → the main checkout).
+          node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json"
+          node scripts/lib/epic-steps.mjs narrow "$SUBJECT" "$D/subs.json" "$D/steps.json" > "$D/tickets.json"
+          echo "EPIC_SRC=$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")" >> "$GITHUB_ENV"
+          echo "tickets: $(jq length "$D/tickets.json") (subject: ${SUBJECT:-all})"
+          { [ "$SUBJECT" = plan ] && [ -s "$D/steps.json" ]; } || [ "$(jq length "$D/tickets.json")" -gt 0 ] || { echo "::error::epic #$EPIC has no open sub-issues to review"; exit 1; }
 
       # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
       - id: pi
@@ -127,7 +149,8 @@ jobs:
           D="$RUNNER_TEMP/ticket-review"
           awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/ticket-reviewer.md \
             | sed -e "s#{{epic}}#${EPIC}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
-                  -e "s#{{epic_file}}#$D/epic.md#g" -e "s#{{tickets_file}}#$D/tickets.json#g" > "$D/prompt.txt"
+                  -e "s#{{epic_file}}#$D/epic.md#g" -e "s#{{tickets_file}}#$D/tickets.json#g" \
+                  -e "s#{{subject}}#${SUBJECT}#g" -e "s#{{steps_file}}#$D/steps.json#g" -e "s#{{epic_src}}#${EPIC_SRC:-}#g" > "$D/prompt.txt"
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
           exit "${PIPESTATUS[0]}"
 
@@ -148,33 +171,29 @@ jobs:
             exit 1
           }
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
-          DECISION="$(node scripts/lib/ticket-verdict.mjs "$D/tickets.json" "$D/verdict.md")" || { echo "$DECISION"; fail "verdict was malformed"; }
-          VERDICT="$(echo "$DECISION" | jq -r .verdict)"
-          read -r ROUTE ROUND < <(node scripts/ticket-revise.mjs route <(echo "$DECISION") "$D/comments.json")
+          DECISION="$(node scripts/lib/ticket-verdict.mjs "$D/tickets.json" "$D/verdict.md" --subject "$SUBJECT")" || { echo "$DECISION"; fail "verdict was malformed"; }
+          echo "$DECISION" > "$D/decision.json"; VERDICT="$(jq -r .verdict "$D/decision.json")"
+          read -r ROUTE ROUND < <(node scripts/ticket-revise.mjs route "$D/decision.json" "$D/comments.json" --subject "$SUBJECT")
           REV=(); [ "$ROUTE" = revise ] && REV=(--revising "$ROUND")
-          node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" "${REV[@]}" > "$D/comment.md"
+          # What happens next (#3846): scripts/ticket-review-actions.mjs — per ticket for a rolling epic,
+          # today's whole-epic go / no-go / hold otherwise. One JSON line per hand-off.
+          node scripts/ticket-review-actions.mjs "$D/decision.json" "$D/comments.json" "$D/epic.json" "$D/subs.json" "$D/steps.json" --subject "$SUBJECT" > "$D/actions.jsonl" || fail "could not decide the next step"
+          node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" "${REV[@]}" --subject "$SUBJECT" > "$D/comment.md"
+          NOTES="$(jq -r 'select(.kind == "note") | "- " + .text' "$D/actions.jsonl")"
+          [ -z "$NOTES" ] || printf '\n**Next steps**\n%s\n' "$NOTES" | tee -a "$D/comment.md" >> "$GITHUB_STEP_SUMMARY"
           # remove-then-add: re-adding a label the issue already carries fires no event.
           gh issue edit "$EPIC" --remove-label "tickets:approved" 2>/dev/null || true
           URL="$(gh issue comment "$EPIC" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (route $ROUTE, round $ROUND) → $URL"
-          case "$VERDICT" in
-            go)
-              node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$EPIC" '{issue:$i,label:"tickets:approved"}')"
-              node scripts/lib/ticket-verdict.mjs releasable "$D/tickets.json" | jq -c '.[]' | while read -r R; do
-                N="$(echo "$R" | jq -r .number)"; L="$(echo "$R" | jq -r .label)"
-                node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$N" --arg l "$L" '{issue:$i,label:$l}')"
-                echo "released #$N with $L"
-              done
-              ;;
-            no-go)
-              if [ "$ROUTE" = revise ]; then
-                node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$EPIC" '{kind:"dispatch",issue:$i,workflow:"ticket-revise.yml",inputs:{epic:($i|tostring)}}')"
-              else gh issue edit "$EPIC" --add-label "status:blocked"; fi
-              ;;
-            *)
-              gh issue edit "$EPIC" --add-label "status:blocked"
-              ;;
-          esac
+          while read -r A; do
+            K="$(jq -r .kind <<<"$A")"; N="$(jq -r .issue <<<"$A")"
+            case "$K" in
+              label|dispatch) node scripts/handoff-exec.mjs "$K" "$A"; echo "$K #$N: $A" ;;
+              # || true: removing a label the epic does not carry (steps:approved never set) errors, and that is fine.
+              unlabel) gh issue edit "$N" --remove-label "$(jq -r .label <<<"$A")" 2>/dev/null || true ;;
+              block) gh issue edit "$N" --add-label "status:blocked" ;;
+            esac
+          done < "$D/actions.jsonl"
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).

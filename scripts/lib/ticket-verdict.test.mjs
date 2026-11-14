@@ -119,3 +119,47 @@ test('item 10 (own test steps) alone → no-go; only item 7 makes needs-owner (#
   const e = fx('clean.verdict.md').replace(/^- 10: .*\n/gm, '')
   assert.match(decide(set('clean.json'), e).errors.join(), /rubric item 10 missing a PASS\/FAIL line/)
 })
+
+// ── #3846: the step-list (`## Plan`) rubric, the plan-wrong verdict, the subject marker ──
+const PLAN = (v = 'go', fail = '') => `## Plan\n### Verdict\n${v}\n### Rubric\n${['P1', 'P2', 'P3', 'P4'].map((id) => `- ${id}: ${id === fail ? 'FAIL' : 'PASS'} — checked the order`).join('\n')}\n${v === 'needs-owner' ? '### Question\nShip both?\n' : ''}`
+
+test('14. a plan review never crashes for lack of an open ticket, and never passes without a step list section', () => {
+  const body = `<!-- ticket-review:v1 -->\n${PLAN()}`
+  const d = decide([], body, { subject: 'plan' })
+  assert.equal(d.ok, true)
+  assert.equal(d.plan.verdict, 'go')
+  assert.deepEqual(d.tickets, [])
+  assert.equal(d.verdict, 'go')
+  // without the plan subject, a verdict with no ticket section is still an error
+  assert.equal(decide([], body).ok, false)
+  // a plan review with no `## Plan` section is an error
+  assert.match(decide(set('clean.json'), fx('clean.verdict.md'), { subject: 'plan' }).errors.join(), /## Plan/)
+})
+
+test('the plan rubric: P1–P3 FAIL → no-go, P4 FAIL → needs-owner, a lenient go is refused', () => {
+  const v = (p) => `<!-- ticket-review:v1 -->\n${p}\n${fx('clean.verdict.md').replace('<!-- ticket-review:v1 -->', '')}`
+  assert.equal(decide(set('clean.json'), v(PLAN('no-go', 'P2')), { subject: 'plan' }).plan.verdict, 'no-go')
+  assert.equal(decide(set('clean.json'), v(PLAN('no-go', 'P2')), { subject: 'plan' }).verdict, 'no-go')
+  assert.equal(decide(set('clean.json'), v(PLAN('needs-owner', 'P4')), { subject: 'plan' }).plan.verdict, 'needs-owner')
+  assert.equal(decide(set('clean.json'), v(PLAN('go', 'P1')), { subject: 'plan' }).ok, false)
+  assert.match(renderComment(decide(set('clean.json'), v(PLAN('no-go', 'P3')), { subject: 'plan' }), { subject: 'plan' }), /Step list sent back/)
+})
+
+test('plan-wrong is a 4th ticket verdict and needs a Why', () => {
+  const wrong = fx('clean.verdict.md').replace(/(## Ticket #1\n### Verdict\n)go/, '$1plan-wrong')
+  assert.match(decide(set('clean.json'), wrong).errors.join(), /Why/)
+  const d = decide(set('clean.json'), wrong.replace(/(## Ticket #1\n[\s\S]*?)(\n## Ticket #2)/, '$1\n### Why\nstep 2 needs the table step 3 adds$2'))
+  assert.equal(d.ok, true)
+  assert.equal(d.tickets[0].verdict, 'plan-wrong')
+  assert.equal(d.verdict, 'plan-wrong')
+  assert.match(renderComment(d, { subject: '1' }), /step list looks wrong/)
+})
+
+test('the subject marker is written only for a subject review; the legacy marker stays', () => {
+  const d = decide(set('clean.json'), fx('clean.verdict.md'))
+  assert.doesNotMatch(renderComment(d), /ticket-review-subject/)
+  const one = decide([set('clean.json')[0]], fx('clean.verdict.md'))
+  const c = renderComment(one, { subject: '1' })
+  assert.match(c, /<!-- ticket-review-subject:1 -->/)
+  assert.match(c, /<!-- ticket-review-verdict:go -->/)
+})
