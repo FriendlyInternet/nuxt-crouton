@@ -10,6 +10,7 @@
  * BlockContent.vue wraps this in <ClientOnly> (clientOnly: true in block def).
  */
 import type { TableColumn } from '@nuxt/ui'
+import { downloadXlsx } from '../../utils/xlsx-writer'
 
 interface MatrixProduct {
   product: string
@@ -163,10 +164,10 @@ function csvCell(v: string | number) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-// Download the table (current measure) as a spreadsheet-friendly CSV.
-function downloadCsv() {
+// Table (current measure) as header + product rows + totals row, shared by CSV/XLSX.
+function exportLines(): (string | number)[][] | null {
   const m = matrix.value
-  if (!m) return
+  if (!m) return null
   const key = measure.value
 
   // Rows arrive grouped per category (server sort); price sits beside the
@@ -188,6 +189,14 @@ function downloadCsv() {
     ...m.days.map(d => fmt(m.dayTotals[d]?.[key] ?? 0)),
     fmt(m.grandTotal[key])
   ])
+  return lines
+}
+
+// Download the table (current measure) as a spreadsheet-friendly CSV.
+function downloadCsv() {
+  const lines = exportLines()
+  if (!lines) return
+  const key = measure.value
 
   // Prepend a UTF-8 BOM so Excel reads accented product names correctly.
   const csv = '﻿' + lines.map(r => r.map(csvCell).join(',')).join('\n')
@@ -198,6 +207,13 @@ function downloadCsv() {
   a.download = `sales-${key}-by-product-and-day.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// Download the table (current measure) as a native .xlsx workbook.
+function downloadXlsxFile() {
+  const lines = exportLines()
+  if (!lines) return
+  downloadXlsx(`sales-${measure.value}-by-product-and-day.xlsx`, 'Sales', lines)
 }
 </script>
 
@@ -239,6 +255,17 @@ function downloadCsv() {
           @click="downloadCsv"
         >
           <span class="hidden @sm:inline">CSV</span>
+        </UButton>
+        <UButton
+          size="sm"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-file-spreadsheet"
+          :disabled="!hasData"
+          aria-label="Excel"
+          @click="downloadXlsxFile"
+        >
+          <span class="hidden @sm:inline">Excel</span>
         </UButton>
       </div>
     </div>
