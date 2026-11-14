@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
 
 const run = () => spawnSync('node', ['scripts/gen-api-reference.mjs', '--check'], { encoding: 'utf8' })
 
@@ -88,4 +89,109 @@ test('server page lists list-exported utils and server types', () => {
   for (const h of ['## encryptSecret', '## decryptSecret', '## maskSecret', '## isEncryptedSecret', '### AuthContext', '### RedeemGrantResult']) {
     assert.match(page, new RegExp(`^${h}$`, 'm'))
   }
+})
+
+// ── component-names (#3898): every manifest component name is one Nuxt registers ────────────
+// In this file (not their own) so they never overlap the manifest-rewriting tests above. The
+// --fresh test runs first and writes every .nuxt/components.d.ts; the tests after it reuse them.
+const names = (...args) => spawnSync('node', ['scripts/component-names.mjs', ...args], { encoding: 'utf8' })
+const listed = (pkg) => {
+  const r = names('--list', pkg)
+  expectStatus(r, 0)
+  return r.stdout.split('\n').filter(Boolean).map(l => l.split('\t')[0])
+}
+
+// Change `file`, run `runner`, restore the file whatever happens; returns the run's result.
+function mutateAndRun(file, from, to, runner) {
+  const orig = readFileSync(file, 'utf8')
+  assert.ok(orig.includes(from), `${file} no longer contains ${JSON.stringify(from)} — update this test`)
+  try {
+    writeFileSync(file, orig.replace(from, to))
+    return runner()
+  } finally {
+    writeFileSync(file, orig)
+  }
+}
+
+test('component-names --check --fresh passes on the clean tree', () => {
+  const r = names('--check', '--fresh')
+  expectStatus(r, 0)
+  assert.match(r.stdout, /^70 components named, 0 without a file$/m)
+})
+
+test('--list crouton-calendar names exactly Month and Week', () => {
+  assert.deepEqual(listed('crouton-calendar'), ['CroutonCalendarMonth', 'CroutonCalendarWeek'])
+})
+
+test('--list resolves pathPrefix, cross-package and stub cases', () => {
+  const admin = listed('crouton-admin')
+  assert.ok(admin.includes('StatsCard'), 'crouton-admin (pathPrefix: false) should list StatsCard')
+  assert.ok(!admin.includes('AdminStatsCard'), 'crouton-admin should not list AdminStatsCard')
+  assert.ok(listed('crouton-auth').includes('CroutonUserPill'))
+  assert.ok(listed('crouton-bookings').includes('CroutonBookingsPanel'))
+  assert.ok(!listed('crouton-core').includes('CroutonAssetsPicker'), 'a stubs/ component must not count')
+})
+
+test('--check fails on a manifest name with no component', () => {
+  const r = mutateAndRun('packages/crouton-calendar/crouton.manifest.ts', "name: 'CroutonCalendarWeek'", "name: 'CroutonCalendarWeekX'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-calendar: manifest names CroutonCalendarWeekX/)
+})
+
+// ── reader trial (#3899): can vue-component-meta read other packages' components? ─────────
+// Measures only: prints one line per package; the one assertion is crouton-calendar.
+// Runs after the --check --fresh test above, so every .nuxt/components.d.ts already exists.
+const readerReq = createRequire(import.meta.url)
+// Same compiler options as gen-api-reference.mjs propsOf.
+const READER_OPTS = { strict: true, skipLibCheck: true, module: 'esnext', moduleResolution: 'bundler', target: 'esnext' }
+const IMPORT_RE = /^\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm
+const SCRIPT_RE = /<script[^>]*>([\s\S]*?)<\/script>/g
+
+// Static import specifiers in a .vue file's <script> blocks.
+const importsOf = abs => [...readFileSync(abs, 'utf8').matchAll(SCRIPT_RE)].flatMap(([, s]) => [...s.matchAll(IMPORT_RE)].map(m => m[1]))
+
+// Non-global props of one component, or the first line of the error the reader threw.
+function readProps(checker, abs) {
+  try {
+    return { props: checker.getComponentMeta(abs).props.filter(x => !x.global) }
+  } catch (e) {
+    return { error: String(e?.message ?? e).split('\n')[0] }
+  }
+}
+
+// Read every component `--list` gives for `pkg`; returns per-component results plus unresolved imports.
+function readPackage(pkg) {
+  const ts = readerReq('typescript')
+  const { createCheckerByJson } = readerReq('vue-component-meta')
+  const tsOpts = ts.convertCompilerOptionsFromJson(READER_OPTS, process.cwd()).options
+  const r = names('--list', pkg)
+  expectStatus(r, 0)
+  const dir = join(process.cwd(), 'packages', pkg)
+  const checker = createCheckerByJson(dir, { include: [join(dir, '**/*.vue')], compilerOptions: READER_OPTS }, {})
+  const rows = r.stdout.split('\n').filter(Boolean).map(l => l.split('\t'))
+  const results = rows.map(([name, file]) => ({ name, file, ...readProps(checker, join(dir, file)) }))
+  const unresolved = new Set(rows.flatMap(([, file]) => {
+    const abs = join(dir, file)
+    return importsOf(abs).filter(spec => !ts.resolveModuleName(spec, abs, tsOpts, ts.sys).resolvedModule)
+  }))
+  return { results, unresolved }
+}
+
+function reportPackage(pkg, { results, unresolved }) {
+  const ok = results.filter(x => x.props)
+  const props = ok.flatMap(x => x.props)
+  const any = props.filter(x => x.type === 'any').length
+  console.log(`${pkg}: read=${ok.length} failed=${results.length - ok.length} props=${props.length} any=${any} unresolved=${[...unresolved].sort().join(',') || '-'}`)
+  for (const x of results.filter(x => x.error)) console.log(`${pkg} failed: ${x.file}: ${x.error}`)
+}
+
+test('vue-component-meta reads the components of five packages (numbers printed)', () => {
+  let calendar
+  for (const pkg of ['crouton-calendar', 'crouton-sales', 'crouton-bookings', 'crouton-auth', 'crouton-themes']) {
+    const read = readPackage(pkg)
+    reportPackage(pkg, read)
+    if (pkg === 'crouton-calendar') calendar = read.results.filter(x => x.props)
+  }
+  assert.equal(calendar.length, 2, `crouton-calendar read ${calendar.length} components, wanted 2`)
+  for (const { name, props } of calendar) assert.ok(props.length > 0, `${name} has no non-global props`)
 })

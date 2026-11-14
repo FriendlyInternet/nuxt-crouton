@@ -45,11 +45,11 @@ export default defineCroutonManifest({
   provides: {
     composables: ['useCollections', 'useCollectionImport', 'useCroutonApps', 'useDisplayConfig'],
     components: [
-      { name: 'CroutonCollection', description: 'Full CRUD table with multi-layout support', props: ['collection', 'layout', 'columns'] },
-      { name: 'CroutonDetail', description: 'Generic detail view using display config', props: ['collection', 'item'] },
-      { name: 'CroutonFormLayout', description: 'Form layout with slots', props: ['collection'] },
-      { name: 'CroutonDefaultCard', description: 'Display-aware card', props: ['item', 'collection'] },
-      { name: 'CroutonImageUpload', description: 'File picker with optional crop support', props: ['modelValue', 'crop'] },
+      { name: 'CroutonCollection', description: 'Full CRUD table with multi-layout support' },
+      { name: 'CroutonDetail', description: 'Generic detail view using display config' },
+      { name: 'CroutonFormLayout', description: 'Form layout with slots' },
+      { name: 'CroutonDefaultCard', description: 'Display-aware card' },
+      { name: 'CroutonImageUpload', description: 'File picker with optional crop support' },
     ],
   },
 })
