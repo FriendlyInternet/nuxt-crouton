@@ -29,6 +29,8 @@ const now = today(getLocalTimeZone())
 const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month, 1))
 const placeholder = computed<DateValue>(() => new CalendarDate(date.value.getFullYear(), date.value.getMonth() + 1, 1))
 const swipeEl = ref<HTMLElement | null>(null)
+// Keep the strip's height while the month changes, so the page doesn't jump (#3924)
+useHoldHeight(swipeEl, date)
 
 const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
   a.year === b.year && a.month === b.month

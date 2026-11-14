@@ -102,6 +102,8 @@ const nextWeek = () => showWeek(referenceDate.value.add({ weeks: 1 }))
 // the next/previous week or spring back. Vertical drags pass through to the
 // page (touch-action: pan-y) (#2485, #2515)
 const swipeEl = ref<HTMLElement | null>(null)
+// Keep the strip's height while the week changes, so the page doesn't jump (#3924)
+useHoldHeight(swipeEl, date)
 const trackEl = ref<HTMLElement | null>(null)
 const { slide } = useSlideSwipe(swipeEl, {
   track: trackEl,

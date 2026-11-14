@@ -4,9 +4,10 @@
 // and builds exactly one new one. Runs the real Month.vue / Week.vue; only
 // Nuxt UI (UCalendar, UButton) and the Nuxt auto-imports are stubbed.
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { computed, defineComponent, h, ref } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { mount } from '@vue/test-utils'
+import { useHoldHeight } from '../app/composables/useHoldHeight'
 
 let built = 0
 
@@ -47,6 +48,9 @@ beforeAll(async () => {
   Object.assign(globalThis, {
     ref,
     computed,
+    watch,
+    onBeforeUnmount,
+    useHoldHeight,
     useT: () => ({ t: (k: string) => k }),
     useI18n: () => ({ locale: ref('en') }),
     useSlideSwipe: () => ({ slide() {} }),
