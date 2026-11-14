@@ -28,6 +28,18 @@ npx @fyit/crouton-cli <command>
 
 ## Quick Start
 
+The tested path from nothing to a working app (canonical copy: [Start here](/getting-started/start-here), which the release clean-room check runs):
+
+```bash
+npx @fyit/crouton-cli init my-app --out my-app
+cd my-app
+pnpm install
+echo '[{"name":"name","type":"string"},{"name":"price","type":"number"}]' > products.json && npx crouton generate shop products --fields-file=products.json
+pnpm dev
+```
+
+The steps below explain the generator in more detail.
+
 ### 1. Create a Schema
 
 First, create a JSON schema file defining your collection fields:
