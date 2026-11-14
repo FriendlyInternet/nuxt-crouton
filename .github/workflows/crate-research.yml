@@ -1,0 +1,47 @@
+name: crate-research
+
+# Nightly genre research for crate staging (#2229): an agent looks up to 25 inbox tracks per
+# run on the web and stores "Agent" tips. Logic lives in pocs/crate/scripts/research.mjs.
+# Staging only; production is the owner's call later.
+
+on:
+  schedule:
+    - cron: '17 2 * * *'   # ~03:17/04:17 Brussels, an off-hour minute
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Max tracks to research this run'
+        default: '25'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crate-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CRATE_URL: https://crate-staging.pmcp.dev
+      CRATE_EMAIL: ${{ secrets.CRATE_EMAIL }}
+      CRATE_PASSWORD: ${{ secrets.CRATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up the Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Research inbox tracks
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          LIMIT: ${{ inputs.limit || '25' }}
+        run: node pocs/crate/scripts/research.mjs --limit "$LIMIT"
