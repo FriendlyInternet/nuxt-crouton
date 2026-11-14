@@ -109,7 +109,9 @@
   "ignoreUnresolvedImports": [
     "**/collections/**/types",
     // NuxtHub v0.10 virtual modules (hub:db / hub:kv / hub:blob), generated at build time
-    "hub:*"
+    "hub:*",
+    // crouton-mcp's built validator, loaded at runtime by the Ask-Claude eval (#3169); dist isn't built at audit time
+    "**/crouton-mcp/dist/tools/validate-schema.js"
   ],
   // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
   "ignoreDependencies": [
