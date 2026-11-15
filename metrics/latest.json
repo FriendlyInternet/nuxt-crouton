@@ -1,13 +1,13 @@
 {
-  "as_of": "2026-11-14T23:12:53Z",
-  "data_commit": "3ba1b791dd3867c193bca37bf8b568760a08e9ef",
+  "as_of": "2026-11-15T02:52:19Z",
+  "data_commit": "55cf5ac8f75193413ce15d9e9d10b588ebea6daf",
   "weeks": {
     "2026-W46": {
       "jobs": {
         "automerge-epic-subpr.yml/automerge": {
           "failed": 4,
-          "rate": 0.0028,
-          "runs": 1454
+          "rate": 0.0027,
+          "runs": 1455
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -751,8 +751,8 @@
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 13957,
-        "runs_with_jobs": 13957
+        "eligible_runs": 13958,
+        "runs_with_jobs": 13958
       },
       "lines": {
         "building": {
@@ -775,8 +775,8 @@
         },
         "merging": {
           "failed": 32,
-          "runs": 5231,
-          "schedule_total": 243,
+          "runs": 5232,
+          "schedule_total": 250,
           "workflow_rate": 0.0061
         },
         "planning": {
@@ -788,7 +788,7 @@
         "scheduled": {
           "failed": 5,
           "runs": 109,
-          "schedule_total": 134,
+          "schedule_total": 137,
           "workflow_rate": 0.0459
         },
         "tickets": {
@@ -807,9 +807,9 @@
       "schedules": {
         "automerge-epic-subpr.yml": {
           "failed_runs": 0,
-          "missed": 121,
-          "slots": 141,
-          "total": 121
+          "missed": 124,
+          "slots": 145,
+          "total": 124
         },
         "e2e.yml": {
           "failed_runs": 0,
@@ -825,9 +825,9 @@
         },
         "handoff-sweep.yml": {
           "failed_runs": 1,
-          "missed": 121,
-          "slots": 141,
-          "total": 122
+          "missed": 125,
+          "slots": 145,
+          "total": 126
         },
         "housekeeping.yml": {
           "failed_runs": 0,
@@ -849,9 +849,9 @@
         },
         "pipeline-metrics.yml": {
           "failed_runs": 0,
-          "missed": 102,
-          "slots": 117,
-          "total": 102
+          "missed": 105,
+          "slots": 121,
+          "total": 105
         },
         "quality-digest.yml": {
           "failed_runs": 0,
@@ -876,7 +876,7 @@
         "automerge-epic-subpr.yml": {
           "failed": 8,
           "rate": 0.0055,
-          "runs": 1458
+          "runs": 1459
         },
         "build-review.yml": {
           "failed": 8,
