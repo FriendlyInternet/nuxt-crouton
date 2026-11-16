@@ -13,7 +13,7 @@ import { mediaTextBlockDefinition } from '../../utils/block-registry'
 import { generateBlockId, blockIdAttribute } from './block-utils'
 import MediaTextBlockView from '../../components/Blocks/Views/MediaTextBlockView.vue'
 
-export interface MediaTextBlockOptions {
+interface MediaTextBlockOptions {
   HTMLAttributes: Record<string, unknown>
 }
 
@@ -114,4 +114,3 @@ export const MediaTextBlock = Node.create<MediaTextBlockOptions>({
   }
 })
 
-export default MediaTextBlock

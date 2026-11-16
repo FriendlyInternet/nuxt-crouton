@@ -315,6 +315,7 @@ function yXmlElementToJson(element: Y.XmlElement): JsonNode {
 }
 
 /** Build Yjs children for a list of JSON nodes (adjacent text → one XmlText) */
+// fallow-ignore-next-line complexity -- the y-prosemirror encoding (text runs vs elements, attr values) is clearest as one walk
 function jsonChildrenToY(nodes: JsonNode[] | undefined): (Y.XmlElement | Y.XmlText)[] {
   const out: (Y.XmlElement | Y.XmlText)[] = []
   let pendingText: JsonNode[] = []
@@ -357,6 +358,7 @@ function jsonToYXmlFragment(json: unknown, fragment: Y.XmlFragment): void {
 }
 
 /** Convert a JSON element node to Y.XmlElement */
+// fallow-ignore-next-line complexity -- the y-prosemirror encoding (text runs vs elements, attr values) is clearest as one walk
 function jsonToYXmlElement(node: JsonNode): Y.XmlElement | null {
   if (!node.type || node.type === 'text') return null
   const element = new Y.XmlElement(node.type)

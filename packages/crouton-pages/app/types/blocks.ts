@@ -298,10 +298,6 @@ export interface TwoColumnBlock extends PageBlock<TwoColumnBlockAttrs> {
   type: 'twoColumnBlock'
 }
 
-export interface MediaTextBlock extends PageBlock<MediaTextBlockAttrs> {
-  type: 'mediaTextBlock'
-  content?: PageBlock[]
-}
 
 
 export type ImageBlockWidth = 'full' | 'large' | 'medium' | 'small'

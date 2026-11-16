@@ -269,6 +269,7 @@ const buildSeoUrl = (loc: string, path: string) =>
 
 // Plain text of the page's localized TipTap content — the meta-description
 // fallback when no seoDescription is set (crawlers flag an empty one).
+// fallow-ignore-next-line complexity -- walks a TipTap doc to plain text for the meta description; one guard per node shape
 function contentExcerpt(p: any, loc: string, max = 155): string | undefined {
   const raw = p?.translations?.[loc]?.content || p?.translations?.en?.content || p?.content
   if (!raw) return undefined

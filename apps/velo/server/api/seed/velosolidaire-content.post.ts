@@ -104,6 +104,7 @@ function textNode(text: string, marks: Node['marks'] = []): Node {
   return marks.length ? { type: 'text', text, marks } : { type: 'text', text }
 }
 
+// fallow-ignore-next-line complexity -- dev-only one-off importer (#2255): one branch per old-site content type reads best in one place
 function inline(nodes: any[], marks: Node['marks'] = []): Node[] {
   const out: Node[] = []
   for (const n of nodes) {
@@ -149,6 +150,7 @@ function inline(nodes: any[], marks: Node['marks'] = []): Node[] {
   return out
 }
 
+// fallow-ignore-next-line complexity -- dev-only one-off importer (#2255): one branch per old-site content type reads best in one place
 async function blocks(nodes: any[], upload: Upload): Promise<Node[]> {
   const out: Node[] = []
   for (const n of nodes) {
@@ -208,6 +210,7 @@ const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const MARK_TAGS: Record<string, string> = { bold: 'strong', italic: 'em', strike: 's', code: 'code', highlight: 'mark' }
 
 function nodesToHtml(nodes: Node[] = []): string {
+  // fallow-ignore-next-line complexity -- dev-only one-off importer (#2255): one branch per old-site content type reads best in one place
   return nodes.map((n) => {
     switch (n.type) {
       case 'text': {
@@ -241,6 +244,7 @@ function photoBesideText(name: string, data: Record<string, any>): boolean {
   return name !== 'homepage' && name !== 'bookings' && !!data.image && data.image !== 'null' && String(data.layout ?? '') !== '1'
 }
 
+// fallow-ignore-next-line complexity -- dev-only one-off importer (#2255): one branch per old-site content type reads best in one place
 async function pageDoc(data: Record<string, any>, body: string, upload: Upload, pageName = ''): Promise<string> {
   const content: Node[] = []
 
@@ -307,6 +311,7 @@ async function pageDoc(data: Record<string, any>, body: string, upload: Upload, 
 // Handler
 // ---------------------------------------------------------------------------
 
+// fallow-ignore-next-line complexity -- dev-only one-off importer (#2255): one branch per old-site content type reads best in one place
 export default defineEventHandler(async (event) => {
   if (!import.meta.dev) {
     throw createError({ status: 403, statusText: 'Seed endpoint is only available in development' })
