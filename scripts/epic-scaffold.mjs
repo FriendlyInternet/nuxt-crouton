@@ -123,12 +123,16 @@ export function resolveMainSha(run = exec) {
   return sha
 }
 
-/** Create the branch at main's sha on the remote, idempotently (never a duplicate). */
-function ensureBranch(branch, sha) {
-  if (exec('git', ['ls-remote', '--heads', 'origin', branch])) return false
+/**
+ * Create the branch at main's sha on the remote, idempotently (never a duplicate).
+ * The lookup is anchored to `refs/heads/`: an unanchored ls-remote pattern matches the END of a ref,
+ * so `epic/9-x` would also find `archive/epic/9-x` (a branch set aside by /fresh-branch, #3881).
+ */
+export function ensureBranch(branch, sha, run = exec) {
+  if (run('git', ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])) return false
   // Fetch main explicitly so the object exists locally, then push the SHA — not `origin/main`.
-  exec('git', ['fetch', 'origin', 'main'])
-  exec('git', ['push', 'origin', `${sha}:refs/heads/${branch}`])
+  run('git', ['fetch', 'origin', 'main'])
+  run('git', ['push', 'origin', `${sha}:refs/heads/${branch}`])
   return true
 }
 

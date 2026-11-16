@@ -20,6 +20,7 @@
     "README.md"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build"

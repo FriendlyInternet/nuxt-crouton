@@ -24,6 +24,7 @@ import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/ut
 import { pageRowTracks } from '@fyit/crouton-layout/app/utils/layout-viability'
 import { boardPaneMinPct } from '../../utils/board-pane-min'
 import { boardFloorStyle, boardStackThreshold, toChildSizes, visibleDefaultSizes, visibleSubtree } from '../../utils/board-visible'
+import { GROUP_KEY, isGroup } from '../../utils/board-groups'
 import { useElementSize } from '@vueuse/core'
 
 defineOptions({ name: 'BoardTree' })
@@ -105,6 +106,17 @@ const cellAttrs = (child: LayoutNode) => {
 }
 const childInGridCell = computed(() => isVertical.value || (!!onlyChild.value && props.inGridCell))
 
+// A GROUP (#3906) is laid out like any split; it only adds a dashed frame (an outline, so
+// no size changes) and its own handle. With one block showing at this width: no frame.
+const framedGroup = computed(() => isGroup(props.node) && !onlyChild.value)
+const groupLabel = computed(() => (isGroup(props.node) ? props.node[GROUP_KEY].label : undefined))
+const groupSelected = computed(() =>
+  !!props.selected && props.selected.length === props.path.length && props.selected.every((v, i) => v === props.path[i]),
+)
+const groupAttrs = computed(() => framedGroup.value
+  ? { 'class': ['relative board-group', { 'board-group--selected': groupSelected.value }], 'data-board-group': '', 'data-path': props.path.join('.') }
+  : {})
+
 // SIDE BY SIDE (not stacked): one reka group with the tested widths, minimums and handles
 // (#3746). Content height, panes top-aligned like the page (#3865): `!h-auto !items-start`
 // beat reka's inline `height: 100%`; the handle stretches to the row so it can still be
@@ -137,7 +149,9 @@ function onLayout(sizes: number[]) {
        visible child, the vertical grid, the stacked column or the reka row. Content-height
        like the page (#3865); `h-full` only inside a grid cell, where the cell is stretched by
        its row and a percentage min-height below needs a sized parent. -->
-  <div v-if="node.type === 'split'" ref="splitEl" class="w-full" :class="{ 'h-full': inGridCell }" data-handoff="board-split">
+  <div v-if="node.type === 'split'" ref="splitEl" class="w-full" :class="{ 'h-full': inGridCell }" data-handoff="board-split" v-bind="groupAttrs">
+    <!-- A group's own handle (#3906): drag the whole group, tap for its sheet (Ungroup). -->
+    <BoardGroupHandle :show="framedGroup" :path="path" :label="groupLabel" :selected="groupSelected" @select="onChildSelect" />
     <!-- COLUMN: ONE visible child is drawn in the split's place, like the page (#3865); a
          VERTICAL split is the page's content-flow grid — same row tracks, no row handle; a STACKED side-by-side row (#2523, narrower than its soft floor) goes
          one under the other like the page, each pane floored at its block's minimum. Grips +
@@ -187,6 +201,12 @@ function onLayout(sizes: number[]) {
     </SplitterGroup>
   </div>
 
-  <!-- Leaf or nested app: a pane. Hidden at this width → nothing (its trigger lives elsewhere). -->
+  <!-- Leaf: a pane (groups arrive as marked splits, see board-groups.ts). Hidden at this width → nothing (its trigger lives elsewhere). -->
   <BoardPane v-else-if="!isHidden" :node="node" :path="path" :selected="selected" :in-grid-cell="inGridCell" @select="onChildSelect" />
 </template>
+
+<style scoped>
+/* A group's frame: an outline, never a border or padding, so no pane changes size (#3906). */
+.board-group { outline: 1px dashed var(--ui-border-accented); outline-offset: -1px; }
+.board-group--selected { outline-color: var(--ui-primary); }
+</style>

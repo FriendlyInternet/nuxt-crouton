@@ -12,10 +12,11 @@ type Handler = (ev: unknown) => void
 let listeners: Record<string, Handler[]> = {}
 const fire = (type: string, ev: unknown) => [...(listeners[type] ?? [])].forEach(h => h(ev))
 
-// One board pane at path [0], 100×100 at the origin.
+// One board pane at path [0], 100×100 at the origin — not inside a board frame
+// (#3916), so the drag takes the plain pane-under-the-finger path.
 const pane = {
   dataset: { path: '0' },
-  closest: () => pane,
+  closest: (sel: string) => (sel === '[data-handoff="board-pane"]' ? pane : null),
   getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100 }),
 }
 const chip = { setPointerCapture() {}, releasePointerCapture() {} }
