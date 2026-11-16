@@ -171,22 +171,35 @@ const vueFiles = (dir, rel = '') => {
 }
 const globRe = g => new RegExp('^' + g.split(/\*\*\/?/).map(p => p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')).join('(?:.*/)?') + '$')
 /** Names Nuxt registers for one package's component dirs, scanned the way Nuxt scans them (deepest dir first; a file belongs to the first dir that scans it). */
+// The registered name of one .vue file (`rel`, relative to the components dir `dir`).
+function componentFileName(dir, rel) {
+  const relDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+  let fileName = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.vue$/, '').replace(/\.(client|server)$/, '')
+  if (fileName.toLowerCase() === 'index') fileName = dir.pathPrefix ? '' : (relDir.split('/').pop() || dir.path.split(/[\\/]/).pop())
+  const prefixParts = [...(dir.prefix ? splitByCase(dir.prefix) : []), ...(dir.pathPrefix ? splitByCase(relDir) : [])]
+  return pascal(nameSegments(fileName, prefixParts).filter(Boolean))
+}
+// The .vue files of one components dir that it registers: matching its pattern, not already
+// claimed by an earlier dir (or nested inside one already scanned).
+function ownedVueFiles(dir, seen, scanned) {
+  const patterns = [].concat(dir.pattern ?? []).map(globRe)
+  const owned = []
+  for (const rel of vueFiles(dir.path)) {
+    const full = join(dir.path, rel)
+    if (seen.has(full) || scanned.some(d => full.startsWith(d))) continue
+    if (patterns.length && !patterns.some(re => re.test(rel))) continue
+    seen.add(full)
+    owned.push(rel)
+  }
+  return owned
+}
 export function packageComponentNames(pkgDir) {
   const names = new Set()
   const scanned = []
   const seen = new Set()
   for (const dir of componentDirsOf(pkgDir)) {
-    const patterns = [].concat(dir.pattern ?? []).map(globRe)
-    for (const rel of vueFiles(dir.path)) {
-      const full = join(dir.path, rel)
-      if (seen.has(full) || scanned.some(d => full.startsWith(d))) continue
-      if (patterns.length && !patterns.some(re => re.test(rel))) continue
-      seen.add(full)
-      const relDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
-      let fileName = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.vue$/, '').replace(/\.(client|server)$/, '')
-      if (fileName.toLowerCase() === 'index') fileName = dir.pathPrefix ? '' : (relDir.split('/').pop() || dir.path.split(/[\\/]/).pop())
-      const prefixParts = [...(dir.prefix ? splitByCase(dir.prefix) : []), ...(dir.pathPrefix ? splitByCase(relDir) : [])]
-      const name = pascal(nameSegments(fileName, prefixParts).filter(Boolean))
+    for (const rel of ownedVueFiles(dir, seen, scanned)) {
+      const name = componentFileName(dir, rel)
       if (name) names.add(name)
     }
     scanned.push(dir.path.replace(/[\\/]?$/, '/'))
