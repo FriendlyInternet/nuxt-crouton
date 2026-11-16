@@ -81,10 +81,22 @@ const categoriesObject = computed(() =>
 const yAxisNames = computed(() => categories.value.map((c) => c.name))
 
 // xFormatter for BarChart / AreaChart / LineChart: map array index → actual x-field value
+// The library calls (tick, tickIndex): `tick` IS the row index. Using the tick ordinal shifted
+// every label once ticks were skipped (bar labels under the wrong bar).
 const xFormatter = computed(() => {
   const xKey = xAxisKey.value
-  return (_: number, i = 0) => String(chartData.value[i]?.[xKey] ?? '')
+  return (tick: number) => String(chartData.value[Math.round(Number(tick))]?.[xKey] ?? '')
 })
+
+// One tick per bar, so every bar gets its own label
+const xTicks = computed(() => chartData.value.map((_: unknown, i: number) => i))
+
+// A single series needs no legend ("count" under the chart says nothing)
+const singleSeries = computed(() => categories.value.length < 2)
+
+// Preset titles are i18n keys (packages register them); plain text passes through
+const { t } = useT()
+const displayTitle = computed(() => (props.title ? t(props.title, props.title) : ''))
 
 // DonutChart: data must be number[] (the Y values per row)
 const donutData = computed(() => {
@@ -110,8 +122,8 @@ const donutCategories = computed(() =>
 <template>
   <div class="crouton-charts-widget">
     <!-- Title -->
-    <h3 v-if="title" class="text-lg font-semibold mb-3">
-      {{ title }}
+    <h3 v-if="displayTitle" class="text-lg font-semibold mb-3">
+      {{ displayTitle }}
     </h3>
 
     <!-- Loading state -->
@@ -155,6 +167,8 @@ const donutCategories = computed(() =>
       :y-axis="yAxisNames"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :x-explicit-ticks="xTicks"
+      :hide-legend="singleSeries"
       :height="height"
       :stacked="stacked"
     />
@@ -165,6 +179,7 @@ const donutCategories = computed(() =>
       :data="chartData"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :hide-legend="singleSeries"
       :height="height"
     />
 
@@ -174,6 +189,7 @@ const donutCategories = computed(() =>
       :data="chartData"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :hide-legend="singleSeries"
       :height="height"
       :stacked="stacked"
     />
