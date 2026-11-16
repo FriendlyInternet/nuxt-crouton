@@ -247,117 +247,126 @@ export function useCollabLocalizedContent(
   }
 }
 
-/**
- * Convert Y.XmlFragment to JSON (TipTap compatible)
- */
-function yXmlFragmentToJson(fragment: Y.XmlFragment): unknown {
-  const content: unknown[] = []
+// ---------------------------------------------------------------------------
+// JSON <-> Y.XmlFragment, lossless and in y-prosemirror's encoding (what TipTap's
+// Collaboration extension reads/writes), so content survives the round trip:
+// - node attrs keep their real values (arrays/objects/numbers, not String(value))
+// - text marks are XmlText formatting attributes: { [markType]: markAttrs }
+// - adjacent text nodes share one XmlText (one delta per text node)
+// Before this, marks (bold/italic/links) were dropped and array attrs became
+// "[object Object]", so saving a page from the editor stripped its formatting.
+// ---------------------------------------------------------------------------
 
-  for (let i = 0; i < fragment.length; i++) {
-    const item = fragment.get(i)
-    if (item instanceof Y.XmlElement) {
-      content.push(yXmlElementToJson(item))
-    } else if (item instanceof Y.XmlText) {
-      content.push({ type: 'text', text: item.toString() })
-    }
-  }
+type JsonMark = { type: string; attrs?: Record<string, unknown> }
+type JsonNode = { type?: string; text?: string; attrs?: Record<string, unknown>; content?: JsonNode[]; marks?: JsonMark[] }
 
-  return {
-    type: 'doc',
-    content
-  }
+function marksToAttributes(marks: JsonMark[] | undefined): Record<string, unknown> | undefined {
+  if (!marks?.length) return undefined
+  const out: Record<string, unknown> = {}
+  for (const m of marks) out[m.type] = m.attrs ?? {}
+  return out
 }
 
-/**
- * Convert Y.XmlElement to JSON
- */
-function yXmlElementToJson(element: Y.XmlElement): unknown {
-  const result: Record<string, unknown> = {
-    type: element.nodeName
-  }
+function attributesToMarks(attributes: Record<string, unknown> | undefined): JsonMark[] | undefined {
+  if (!attributes) return undefined
+  const marks = Object.entries(attributes)
+    .filter(([, v]) => v !== null && v !== undefined)
+    .map(([type, v]) => (v && typeof v === 'object' && Object.keys(v as object).length
+      ? { type, attrs: v as Record<string, unknown> }
+      : { type }))
+  return marks.length ? marks : undefined
+}
 
-  // Get attributes
-  const attrs = element.getAttributes()
-  if (Object.keys(attrs).length > 0) {
-    result.attrs = attrs
+function xmlTextToJson(text: Y.XmlText): JsonNode[] {
+  const out: JsonNode[] = []
+  for (const op of text.toDelta() as { insert?: unknown; attributes?: Record<string, unknown> }[]) {
+    if (typeof op.insert !== 'string' || !op.insert) continue
+    const node: JsonNode = { type: 'text', text: op.insert }
+    const marks = attributesToMarks(op.attributes)
+    if (marks) node.marks = marks
+    out.push(node)
   }
+  return out
+}
 
-  // Get children
-  const content: unknown[] = []
-  for (let i = 0; i < element.length; i++) {
-    const child = element.get(i)
-    if (child instanceof Y.XmlElement) {
-      content.push(yXmlElementToJson(child))
-    } else if (child instanceof Y.XmlText) {
-      const text = child.toString()
-      if (text) {
-        content.push({ type: 'text', text })
-      }
-    }
+function childrenToJson(parent: Y.XmlFragment | Y.XmlElement): JsonNode[] {
+  const content: JsonNode[] = []
+  for (let i = 0; i < parent.length; i++) {
+    const child = parent.get(i)
+    if (child instanceof Y.XmlElement) content.push(yXmlElementToJson(child))
+    else if (child instanceof Y.XmlText) content.push(...xmlTextToJson(child))
   }
+  return content
+}
 
-  if (content.length > 0) {
-    result.content = content
-  }
+/** Convert Y.XmlFragment to JSON (TipTap compatible) */
+function yXmlFragmentToJson(fragment: Y.XmlFragment): unknown {
+  return { type: 'doc', content: childrenToJson(fragment) }
+}
 
+/** Convert Y.XmlElement to JSON */
+function yXmlElementToJson(element: Y.XmlElement): JsonNode {
+  const result: JsonNode = { type: element.nodeName }
+  const attrs = element.getAttributes() as Record<string, unknown>
+  if (Object.keys(attrs).length > 0) result.attrs = attrs
+  const content = childrenToJson(element)
+  if (content.length > 0) result.content = content
   return result
 }
 
-/**
- * Convert JSON to Y.XmlFragment content
- */
-function jsonToYXmlFragment(json: unknown, fragment: Y.XmlFragment): void {
-  if (!json || typeof json !== 'object') return
-
-  const doc = json as { type?: string; content?: unknown[] }
-  if (doc.type !== 'doc' || !Array.isArray(doc.content)) return
-
-  for (const node of doc.content) {
-    const element = jsonToYXmlElement(node)
-    if (element) {
-      fragment.push([element])
+/** Build Yjs children for a list of JSON nodes (adjacent text → one XmlText) */
+// fallow-ignore-next-line complexity -- the y-prosemirror encoding (text runs vs elements, attr values) is clearest as one walk
+function jsonChildrenToY(nodes: JsonNode[] | undefined): (Y.XmlElement | Y.XmlText)[] {
+  const out: (Y.XmlElement | Y.XmlText)[] = []
+  let pendingText: JsonNode[] = []
+  const flushText = () => {
+    if (!pendingText.length) return
+    const text = new Y.XmlText()
+    // insert() on a not-yet-integrated XmlText is queued by Yjs until it is pushed
+    // (applyDelta would read the detached type and warn)
+    let offset = 0
+    for (const n of pendingText) {
+      // Explicit nulls stop a run inheriting the previous run's marks
+      const attributes = marksToAttributes(n.marks) ?? {}
+      text.insert(offset, n.text!, attributes)
+      offset += n.text!.length
     }
+    out.push(text)
+    pendingText = []
   }
+  for (const node of nodes || []) {
+    if (!node || typeof node !== 'object') continue
+    if (node.type === 'text' && typeof node.text === 'string') {
+      if (node.text) pendingText.push(node)
+      continue
+    }
+    flushText()
+    const el = jsonToYXmlElement(node)
+    if (el) out.push(el)
+  }
+  flushText()
+  return out
 }
 
-/**
- * Convert JSON node to Y.XmlElement
- */
-function jsonToYXmlElement(node: unknown): Y.XmlElement | Y.XmlText | null {
-  if (!node || typeof node !== 'object') return null
+/** Convert JSON to Y.XmlFragment content */
+function jsonToYXmlFragment(json: unknown, fragment: Y.XmlFragment): void {
+  if (!json || typeof json !== 'object') return
+  const doc = json as JsonNode
+  if (doc.type !== 'doc' || !Array.isArray(doc.content)) return
+  const children = jsonChildrenToY(doc.content)
+  if (children.length) fragment.push(children)
+}
 
-  const nodeObj = node as { type?: string; text?: string; attrs?: Record<string, unknown>; content?: unknown[] }
-
-  // Text node
-  if (nodeObj.type === 'text' && typeof nodeObj.text === 'string') {
-    const text = new Y.XmlText()
-    text.insert(0, nodeObj.text)
-    return text
+/** Convert a JSON element node to Y.XmlElement */
+// fallow-ignore-next-line complexity -- the y-prosemirror encoding (text runs vs elements, attr values) is clearest as one walk
+function jsonToYXmlElement(node: JsonNode): Y.XmlElement | null {
+  if (!node.type || node.type === 'text') return null
+  const element = new Y.XmlElement(node.type)
+  for (const [key, value] of Object.entries(node.attrs || {})) {
+    // Real values, as y-prosemirror stores them (null attrs are omitted like prosemirror defaults)
+    if (value !== null && value !== undefined) element.setAttribute(key, value as any)
   }
-
-  // Element node
-  if (nodeObj.type) {
-    const element = new Y.XmlElement(nodeObj.type)
-
-    // Set attributes
-    if (nodeObj.attrs) {
-      for (const [key, value] of Object.entries(nodeObj.attrs)) {
-        element.setAttribute(key, String(value))
-      }
-    }
-
-    // Add children
-    if (Array.isArray(nodeObj.content)) {
-      for (const child of nodeObj.content) {
-        const childElement = jsonToYXmlElement(child)
-        if (childElement) {
-          element.push([childElement])
-        }
-      }
-    }
-
-    return element
-  }
-
-  return null
+  const children = jsonChildrenToY(node.content)
+  if (children.length) element.insert(0, children) // insert, not push: push reads .length of the detached type (Yjs warns)
+  return element
 }

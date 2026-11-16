@@ -22,6 +22,7 @@ export type BlockType =
   | 'collectionBlock'
   | 'faqBlock'
   | 'twoColumnBlock'
+  | 'mediaTextBlock'
   | 'embedBlock'
   | 'imageBlock'
   | 'logoBlock'
@@ -177,6 +178,21 @@ export interface TwoColumnBlockAttrs {
   rightLinks?: BlockLink[]
 }
 
+/**
+ * mediaTextBlock — a photo beside free-form content (the block holds child blocks).
+ * Wide screens: two columns, photo optionally sticky; phones: stacked, photo first.
+ */
+export interface MediaTextBlockAttrs {
+  src?: string
+  alt?: string
+  /** Which side the photo sits on (wide screens) */
+  side?: 'left' | 'right'
+  /** Keep the photo in view while the text scrolls */
+  sticky?: boolean
+  /** Rounded border + shadow around the photo */
+  frame?: boolean
+}
+
 export interface CollectionBlockAttrs {
   /** Collection name from registry (e.g., 'blogPosts', 'products') */
   collection: string
@@ -208,6 +224,7 @@ export type BlockAttrs =
   | CollectionBlockAttrs
   | FaqBlockAttrs
   | TwoColumnBlockAttrs
+  | MediaTextBlockAttrs
   | EmbedBlockAttrs
   | ImageBlockAttrs
   | LogoBlockAttrs
@@ -282,6 +299,7 @@ export interface TwoColumnBlock extends PageBlock<TwoColumnBlockAttrs> {
 }
 
 
+
 export type ImageBlockWidth = 'full' | 'large' | 'medium' | 'small'
 
 export interface ImageBlockAttrs {
@@ -293,6 +311,8 @@ export interface ImageBlockAttrs {
   caption?: string
   /** Display width: full (100%), large (80%), medium (60%), small (40%) */
   width?: ImageBlockWidth
+  /** Rounded border + shadow around the image (default true) */
+  frame?: boolean
 }
 
 export interface ImageBlock extends PageBlock<ImageBlockAttrs> {

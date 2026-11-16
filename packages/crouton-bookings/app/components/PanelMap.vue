@@ -87,7 +87,20 @@ const mapRef = ref<any>(null)
 
 function onMapLoad(map: any) {
   mapRef.value = map
+  fitToLocations()
   emit('ready')
+}
+
+// Show every location: a fixed zoom around the average point cut off far-apart ones
+function fitToLocations() {
+  const locs = locationsWithCoordinates.value
+  if (!mapRef.value || locs.length < 2) return
+  const lngs = locs.map(l => l.coordinates[0])
+  const lats = locs.map(l => l.coordinates[1])
+  mapRef.value.fitBounds(
+    [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+    { padding: { top: 60, bottom: 25, left: 40, right: 40 }, maxZoom: 15, duration: 0 } // pins stick up from their point
+  )
 }
 
 // Fly to a specific location by ID

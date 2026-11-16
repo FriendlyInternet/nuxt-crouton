@@ -1038,14 +1038,17 @@ function previewText(field: string, locale: string): string {
       <!-- Multi-field mode: show inputs for each field -->
       <div
         v-if="isMultiField"
-        class="space-y-4"
+        class="flex flex-1 min-h-0 flex-col gap-4"
       >
+        <!-- The page editor (with preview) fills the remaining height; other fields keep their size -->
         <UFormField
           v-for="field in fields"
           :key="field"
           :label="`${field.charAt(0).toUpperCase() + field.slice(1)} (${editingLocale.toUpperCase()})`"
           :name="`translations.${editingLocale}.${field}`"
           :required="editingLocale === requiredLocale"
+          :class="getFieldComponent(field) === 'CroutonPagesEditorBlockEditorWithPreview' ? 'flex flex-1 min-h-0 flex-col' : ''"
+          :ui="getFieldComponent(field) === 'CroutonPagesEditorBlockEditorWithPreview' ? { container: 'flex-1 min-h-0' } : undefined"
         >
           <!-- CroutonEditorSimple (rich text editor) - needs height container -->
           <div
@@ -1081,7 +1084,7 @@ function previewText(field: string, locale: string): string {
           <!-- CroutonPagesEditorBlockEditorWithPreview (block editor with preview toggle) -->
           <div
             v-else-if="getFieldComponent(field) === 'CroutonPagesEditorBlockEditorWithPreview'"
-            class="h-[500px] min-h-[350px] max-h-[600px]"
+            class="h-full min-h-[350px]"
           >
             <CroutonPagesEditorBlockEditorWithPreview
               :model-value="collab ? undefined : getFieldValue(field, editingLocale)"

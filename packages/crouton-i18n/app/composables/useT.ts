@@ -294,6 +294,11 @@ export function useT() {
 
     if (!i18n) return false
 
+    // te() checks without translating, so probing a free-text label (a
+    // collection name like "Redirects") doesn't log a missing-key warning.
+    const te = (i18n as any).te as ((k: string, l?: string) => boolean) | undefined
+    if (typeof te === 'function') return te(key) || te(key, 'en')
+
     const systemValue = i18n.t(key)
     return systemValue !== key
   }

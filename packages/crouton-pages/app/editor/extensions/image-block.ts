@@ -84,6 +84,11 @@ export const ImageBlock = Node.create<ImageBlockOptions>({
       },
       width: {
         default: imageBlockDefinition.defaultAttrs.width
+      },
+      frame: {
+        default: true,
+        parseHTML: el => el.getAttribute('data-frame') !== 'false',
+        renderHTML: attrs => ({ 'data-frame': String(attrs.frame !== false) })
       }
     }
   },

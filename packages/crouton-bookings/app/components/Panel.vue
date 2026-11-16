@@ -32,6 +32,10 @@ interface Props {
   scope?: 'personal' | 'team'
   /** Share one screen's state between several Panels (e.g. inline + full screen). */
   store?: BookingsStore
+  /** Start with the location chips row open */
+  initialShowLocations?: boolean
+  /** Start with the map open */
+  initialShowMap?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -45,6 +49,8 @@ const props = withDefaults(defineProps<Props>(), {
   emptyMessage: undefined,
   scope: 'personal',
   store: undefined,
+  initialShowLocations: false,
+  initialShowMap: false,
 })
 
 const emit = defineEmits<{
@@ -199,8 +205,8 @@ const filterState = store.filters
 
 // Visibility states for panel sections
 const showCalendar = ref(true)
-const showLocations = ref(false)
-const showMap = ref(false)
+const showLocations = ref(props.initialShowLocations)
+const showMap = ref(props.initialShowMap)
 
 // Calendar view mode (lifted from Calendar component)
 const calendarView = store.calendarView
@@ -320,7 +326,7 @@ defineExpose({
 
 <template>
   <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
-      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <!-- Fixed on top: filters + map + calendar. Only the list below scrolls. -->
       <div class="shrink-0 flex flex-col gap-2 border-b border-default">
         <!-- Filter controls -->
         <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
@@ -352,6 +358,26 @@ defineExpose({
           </CroutonBookingsPanelFilters>
         </div>
 
+        <!-- Map: above the calendar, so you see where before when -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[300px]"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 max-h-[300px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 md:px-4">
+            <CroutonBookingsPanelMap
+              ref="panelMapRef"
+              :locations="resolvedLocations"
+              :selected-locations="filterState.locations"
+              @toggle-location="toggleLocation"
+              @ready="onMapReady"
+            />
+          </div>
+        </Transition>
+
         <!-- Calendar -->
         <div v-if="showCalendar" class="px-2 pb-2">
           <CroutonBookingsCalendar
@@ -372,27 +398,8 @@ defineExpose({
         </div>
       </div>
 
-      <!-- Scroll area: map + list -->
+      <!-- Scroll area: the list -->
       <div ref="scrollAreaRef" class="flex-1 min-h-0 overflow-y-auto">
-        <!-- Map section (scrolls with content) -->
-        <Transition
-          enter-active-class="transition-all duration-300 ease-out"
-          enter-from-class="opacity-0 max-h-0"
-          enter-to-class="opacity-100 max-h-[300px]"
-          leave-active-class="transition-all duration-200 ease-in"
-          leave-from-class="opacity-100 max-h-[300px]"
-          leave-to-class="opacity-0 max-h-0"
-        >
-          <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
-            <CroutonBookingsPanelMap
-              ref="panelMapRef"
-              :locations="resolvedLocations"
-              :selected-locations="filterState.locations"
-              @toggle-location="toggleLocation"
-              @ready="onMapReady"
-            />
-          </div>
-        </Transition>
 
         <!-- List section -->
         <div class="px-2 py-3 md:px-4 md:py-4">

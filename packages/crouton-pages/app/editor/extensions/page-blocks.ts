@@ -17,6 +17,7 @@ import { SeparatorBlock } from './separator-block'
 import { CollectionBlock } from './collection-block'
 import { FaqBlock } from './faq-block'
 import { TwoColumnBlock } from './two-column-block'
+import { MediaTextBlock } from './media-text-block'
 import { EmbedBlock } from './embed-block'
 import { ImageBlock } from './image-block'
 import { LogoBlock } from './logo-block'
@@ -45,6 +46,7 @@ export interface PageBlocksOptions {
     collection?: boolean
     faq?: boolean
     twoColumn?: boolean
+    mediaText?: boolean
     embed?: boolean
     image?: boolean
     logo?: boolean
@@ -86,6 +88,7 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
         collection: true,
         faq: true,
         twoColumn: true,
+        mediaText: true,
         embed: true,
         image: true,
         logo: true,
@@ -109,7 +112,7 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     // All core block node types
     const coreBlockTypes = [
       'heroBlock', 'sectionBlock', 'ctaBlock', 'cardGridBlock',
-      'separatorBlock', 'collectionBlock', 'faqBlock', 'twoColumnBlock',
+      'separatorBlock', 'collectionBlock', 'faqBlock', 'twoColumnBlock', 'mediaTextBlock',
       'embedBlock', 'imageBlock', 'logoBlock', 'videoBlock',
       'fileBlock', 'buttonRowBlock', 'richTextBlock',
       'statsBlock', 'galleryBlock', 'contactBlock', 'mailingBlock',
@@ -158,6 +161,9 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     }
     if (blocks?.twoColumn !== false) {
       extensions.push(TwoColumnBlock)
+    }
+    if (blocks?.mediaText !== false) {
+      extensions.push(MediaTextBlock)
     }
     if (blocks?.embed !== false) {
       extensions.push(EmbedBlock)

@@ -106,6 +106,8 @@ interface Props {
   hideNav?: boolean
   /** Per-page chrome: hide the login/account/admin controls on the public page. */
   hideAuthControls?: boolean
+  /** Appearance: a leading photo runs full width at the top, behind the nav. */
+  headerMedia?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -115,7 +117,8 @@ const props = withDefaults(defineProps<Props>(), {
   accessCodePending: false,
   scopeProvidedByBlock: false,
   hideNav: false,
-  hideAuthControls: false
+  hideAuthControls: false,
+  headerMedia: false
 })
 
 const emit = defineEmits<{
@@ -125,6 +128,7 @@ const emit = defineEmits<{
   'update:parentId': [value: string | null]
   'update:hideNav': [value: boolean]
   'update:hideAuthControls': [value: boolean]
+  'update:headerMedia': [value: boolean]
   'layout-change': []
   'save-access-code': [code: string]
   'remove-access-code': []
@@ -209,6 +213,18 @@ const showAccessSection = computed(() => props.visibility === 'scoped')
             :options="layoutOptions"
             @update:model-value="(val: string) => emit('update:layout', val)"
             @layout-change="emit('layout-change')"
+          />
+        </UFormField>
+
+        <UFormField
+          :label="t('pages.editor.headerMedia')"
+          :description="t('pages.editor.headerMediaDescription')"
+          name="headerMedia"
+        >
+          <USwitch
+            :model-value="headerMedia ?? false"
+            size="sm"
+            @update:model-value="emit('update:headerMedia', $event)"
           />
         </UFormField>
       </section>

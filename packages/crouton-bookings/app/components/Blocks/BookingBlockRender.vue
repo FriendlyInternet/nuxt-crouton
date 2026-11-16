@@ -16,6 +16,9 @@ interface BookingBlockAttrs {
   /** What a logged-out visitor sees (#2263). Older pages may still carry `access`. */
   loggedOut?: 'prompt' | 'hide'
   scope?: 'personal' | 'team'
+  /** Start with the location list / map open (stored as boolean; HTML round trip may give a string) */
+  showLocations?: boolean | string
+  showMap?: boolean | string
 }
 
 interface Props {
@@ -74,6 +77,8 @@ const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route
         :title="attrs.title || undefined"
         :empty-message="attrs.emptyMessage || undefined"
         :scope="attrs.scope || 'personal'"
+        :initial-show-locations="attrs.showLocations === true || attrs.showLocations === 'true'"
+        :initial-show-map="attrs.showMap === true || attrs.showMap === 'true'"
         class="flex-1 min-h-0"
       />
     </div>

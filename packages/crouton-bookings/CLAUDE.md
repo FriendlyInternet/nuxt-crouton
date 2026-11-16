@@ -52,6 +52,10 @@ CroutonBooking
 └── PanelMap.vue        - Map display
 ```
 
+### Booking block settings (#3928)
+
+`bookingBlock` attrs `showLocations` / `showMap` (switches, default off) open the location chips row / map on first render (`Panel` props `initialShowLocations` / `initialShowMap`). The map sits in the fixed header above the calendar and fits all locations (`PanelMap` `fitBounds`). The list scrolls only its own container (`List.vue` `scrollWithinList`), never the page. Form titles/buttons use the translated singular `bookings.collections.<x>.singular` via crouton-core `useCollectionLabel()`.
+
 ### API Endpoints
 
 | Path | Method | Purpose |

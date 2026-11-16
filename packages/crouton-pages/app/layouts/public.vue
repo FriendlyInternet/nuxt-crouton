@@ -108,7 +108,9 @@ const mainRef = ref<HTMLElement>()
 // Top padding: when there's no center nav pill (single page, or hidden via
 // page chrome), content starts at same height as the utility pill
 // Nav pill is at top-4 sm:top-6, so content aligns with it instead of clearing below it
-const topPadding = computed(() => navPillHidden.value ? 'pt-4 sm:pt-6' : 'pt-20 sm:pt-24')
+// The crouton-pt-* class publishes the same padding as --crouton-top-offset (see <style>),
+// so a photo header can pull itself up behind the nav in the server HTML — no page state, no jump.
+const topPadding = computed(() => navPillHidden.value ? 'pt-4 sm:pt-6 crouton-pt-bare' : 'pt-20 sm:pt-24 crouton-pt-nav')
 
 // Apply layout classes to DOM elements
 // Needed because: 1) SSR hydration mismatch, 2) navigation between pages
@@ -132,8 +134,8 @@ function applyLayoutClasses() {
       main.className = 'p-3 sm:p-4'
       break
     default:
-      container.className = 'bg-background min-h-screen'
-      main.className = `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${pt} pb-8`
+      container.className = 'bg-background min-h-screen overflow-x-clip'
+      main.className = `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${pt} pb-32`
   }
 }
 
@@ -155,7 +157,7 @@ const containerClasses = computed(() => {
     case 'full-screen':
       return 'min-h-screen'
     default:
-      return 'min-h-screen'
+      return 'min-h-screen overflow-x-clip'
   }
 })
 
@@ -167,7 +169,7 @@ const mainClasses = computed(() => {
     case 'full-screen':
       return 'p-3 sm:p-4'
     default:
-      return `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${pt} pb-8`
+      return `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${pt} pb-32`
   }
 })
 </script>
@@ -229,3 +231,13 @@ const mainClasses = computed(() => {
     </UDrawer>
   </div>
 </template>
+
+<style>
+/* Top padding as a variable (keep in step with the pt-* classes in topPadding) */
+.crouton-pt-nav { --crouton-top-offset: 5rem; }
+.crouton-pt-bare { --crouton-top-offset: 1rem; }
+@media (min-width: 640px) {
+  .crouton-pt-nav { --crouton-top-offset: 6rem; }
+  .crouton-pt-bare { --crouton-top-offset: 1.5rem; }
+}
+</style>

@@ -2,7 +2,11 @@
 import { promiseTimeout } from '@vueuse/core'
 
 export default function () {
-  const { t } = useT()
+  // Global i18n instance, not useT()/useI18n(): this composable is created from
+  // plugins (crouton-collab's form presence) and used from click handlers,
+  // where useI18n() has no component instance and logs a fallback warning.
+  const nuxtApp = useNuxtApp()
+  const t = (key: string): string => (nuxtApp.$i18n as { t?: (k: string) => string } | undefined)?.t?.(key) ?? key
   const activeToast = useState('activeToasts', () => false)
   const toastVibration = useState('toastVibration', () => false)
 

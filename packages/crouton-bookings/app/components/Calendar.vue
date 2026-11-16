@@ -2,6 +2,7 @@
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { isDayFullyBooked as isDayFull } from '../utils/day-availability'
 import { createHoverCard } from '../utils/hover-card'
+import { useElementSize } from '@vueuse/core'
 import type { Booking, LocationData, SettingsData, SlotItem } from '../types/booking'
 
 interface FilterState {
@@ -39,6 +40,12 @@ const props = withDefaults(defineProps<Props>(), {
   isDateUnavailable: null,
   getBlockedReason: null,
 })
+
+// Month cells grow when the calendar itself is wide (sized to its container, not the viewport,
+// so a narrow booking block in a wide page stays compact)
+const rootRef = ref<HTMLElement | null>(null)
+const { width: calendarWidth } = useElementSize(rootRef)
+const monthRoomy = computed(() => calendarWidth.value >= 640)
 
 const emit = defineEmits<{
   'select': [value: Date | null]
@@ -206,6 +213,16 @@ const visibleLocations = computed(() => props.filters.locations.length > 0
   : props.locations)
 
 // Get indicators data for a specific date (all locations, capacity-aware)
+/** openDays: JS weekdays (0=Sun) the location is open; null/empty = every day (same rule as useScheduleRules) */
+function isOpenOnWeekday(location: { openDays?: unknown }, date: Date): boolean {
+  let days: unknown = location.openDays
+  if (typeof days === 'string') {
+    try { days = JSON.parse(days) } catch { days = null }
+  }
+  if (!Array.isArray(days) || days.length === 0) return true
+  return days.includes(date.getDay())
+}
+
 function getIndicatorsForDate(date: Date): IndicatorData[] {
   const dayBookings = getBookingsForDate(date)
 
@@ -222,6 +239,8 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
   const indicators: IndicatorData[] = []
 
   for (const location of visibleLocations.value) {
+    // Closed that weekday (openDays) → no dots: nothing can be booked there
+    if (!isOpenOnWeekday(location, date)) continue
     const isInventoryMode = !!location.inventoryMode
     // Inventory mode ignores named slots — treat as single all-day unit
     const locationSlots = isInventoryMode ? [] : parseLocationSlots(location)
@@ -419,7 +438,7 @@ onBeforeUnmount(card.close)
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div ref="rootRef" class="flex flex-col gap-3">
     <!-- Week View -->
     <CroutonCalendarWeek
       v-if="currentView === 'week'"
@@ -449,8 +468,8 @@ onBeforeUnmount(card.close)
         >
           <UIcon
             :name="isDayFullyBooked(jsDate) ? 'i-lucide-check' : 'i-lucide-plus'"
-            class="size-3.5"
-            :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-neutral-300'"
+            class="size-4"
+            :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-inverted'"
           />
         </button>
       </template>
@@ -529,8 +548,9 @@ onBeforeUnmount(card.close)
           >
             <!-- Day number -->
             <span
-              class="text-xs font-medium transition-colors"
+              class="font-medium transition-colors"
               :class="[
+                monthRoomy ? 'text-sm' : 'text-xs',
                 isDayUnavailable(jsDate)
                   ? 'text-muted line-through'
                   : isDayHighlighted(jsDate)
@@ -558,7 +578,7 @@ onBeforeUnmount(card.close)
                   :cancelled-slot-ids="indicator.cancelledSlotIds"
                   :bookings="indicator.bookings"
                   :color="indicator.color"
-                  size="2xs"
+                  :size="monthRoomy ? 'xs' : '2xs'"
                   :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
                   @hover-booking="(id) => emit('hoverBooking', id)"
                 />
@@ -582,8 +602,8 @@ onBeforeUnmount(card.close)
             >
               <UIcon
                 :name="isDayFullyBooked(jsDate) ? 'i-lucide-check' : 'i-lucide-plus'"
-                class="size-2.5"
-                :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-neutral-300'"
+                class="size-3"
+                :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-inverted'"
               />
             </button>
           </div>

@@ -198,7 +198,9 @@
       "editingFullscreen": "Bewerken in volledig scherm…",
       "blockPlaceholder": "Typ / om een blok in te voegen...",
       "item": "Item",
-      "anonymous": "Anoniem"
+      "anonymous": "Anoniem",
+      "headerMedia": "Fotobanner",
+      "headerMediaDescription": "De eerste foto loopt over de volle breedte bovenaan de pagina, achter het menu."
     },
     "sidebar": {
       "drafts": "Concepten",
@@ -677,6 +679,10 @@
               "medium": "Middel (60%)",
               "small": "Klein (40%)"
             }
+          },
+          "frame": {
+            "label": "Kader",
+            "description": "Afgeronde rand en schaduw rond de afbeelding"
           }
         }
       },
@@ -1063,6 +1069,34 @@
           },
           "height": {
             "label": "Hoogte"
+          }
+        }
+      },
+      "mediaText": {
+        "name": "Afbeelding + tekst",
+        "description": "Een foto naast tekst; de foto kan in beeld blijven terwijl de tekst scrolt",
+        "fields": {
+          "src": {
+            "label": "Afbeelding"
+          },
+          "alt": {
+            "label": "Alt-tekst",
+            "description": "Beschrijf de afbeelding voor schermlezers"
+          },
+          "side": {
+            "label": "Kant van de afbeelding",
+            "options": {
+              "left": "Links",
+              "right": "Rechts"
+            }
+          },
+          "sticky": {
+            "label": "Afbeelding in beeld houden",
+            "description": "De afbeelding blijft staan terwijl de tekst scrolt (brede schermen)"
+          },
+          "frame": {
+            "label": "Kader",
+            "description": "Afgeronde rand en schaduw rond de afbeelding"
           }
         }
       }

@@ -101,7 +101,7 @@ function onLayoutChange() { layoutManuallyChanged.value = true }
 
 // ── Chrome flags (config.hideNav / config.hideAuthControls): hide the public page's nav
 // pill and/or login/account controls. Stored sparsely: false is removed, not persisted. ──
-function configChromeFlag(key: 'hideNav' | 'hideAuthControls') {
+function configChromeFlag(key: 'hideNav' | 'hideAuthControls' | 'headerMedia') {
   return computed<boolean>({
     get: () => !!page.value.config?.[key],
     set: (value) => {
@@ -114,6 +114,7 @@ function configChromeFlag(key: 'hideNav' | 'hideAuthControls') {
 }
 const hideNav = configChromeFlag('hideNav')
 const hideAuthControls = configChromeFlag('hideAuthControls')
+const headerMedia = configChromeFlag('headerMedia')
 
 // Mirror of the server's read-time scope derivation, for the editor hint only: a scoped page
 // whose content holds a block with `providesScope` (e.g. the sales kassa block) is gated by
@@ -218,12 +219,14 @@ async function setAccessCode(code: string | null) {
       :scope-provided-by-block="scopeProvidedByBlock"
       :hide-nav="hideNav"
       :hide-auth-controls="hideAuthControls"
+      :header-media="headerMedia"
       @update:page-type="page.pageType = $event"
       @update:show-in-navigation="page.showInNavigation = $event"
       @update:layout="page.layout = $event"
       @update:parent-id="page.parentId = $event"
       @update:hide-nav="hideNav = $event"
       @update:hide-auth-controls="hideAuthControls = $event"
+      @update:header-media="headerMedia = $event"
       @layout-change="onLayoutChange"
       @save-access-code="setAccessCode($event)"
       @remove-access-code="setAccessCode(null)"

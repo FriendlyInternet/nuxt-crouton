@@ -226,17 +226,20 @@ async function findOrCreateUser(db: any, now: Date, email: string, associationNa
     emailVerified: true,
     createdAt: now,
     updatedAt: now,
-    superAdmin: false,
+    superAdmin: email === 'hi@maartenlauwaert.eu',
     banned: false
   })
 
-  // Create a credential account (no password for regular users)
+  // Credential account. Only the owner gets a local dev password, from
+  // VELO_DEV_OWNER_PASSWORD (.env) — never a literal: this repo is public (#2360).
+  const ownerPassword = process.env.VELO_DEV_OWNER_PASSWORD?.trim()
+  const devPassword = email === 'hi@maartenlauwaert.eu' && ownerPassword ? await hashPassword(ownerPassword) : undefined
   await (db as any).insert(account).values({
     id: nanoid(),
     userId,
     accountId: userId,
     providerId: 'credential',
-    password: undefined,
+    password: devPassword,
     createdAt: now,
     updatedAt: now
   })

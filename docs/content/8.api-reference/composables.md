@@ -60,6 +60,16 @@ useCollectionItem(collection: string, id: string | Ref<string> | (() => string))
 
 _Source: `packages/crouton-core/app/composables/useCollectionItem.ts`_
 
+## useCollectionLabel
+
+Translated singular name of a collection for UI labels ("Lieu" for bookingsLocations).
+
+```ts
+useCollectionLabel()
+```
+
+_Source: `packages/crouton-core/app/composables/useCollectionLabel.ts`_
+
 ## useCollectionMutation
 
 Collection mutation composable for Create, Update, Delete operations

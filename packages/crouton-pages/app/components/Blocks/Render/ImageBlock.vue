@@ -26,6 +26,10 @@ const widthClass = computed(() => {
     default: return 'max-w-full'
   }
 })
+
+// Frame (rounded border + shadow) is on unless switched off — logos and cut-outs look better bare.
+// The editor's HTML round trip can hand the flag back as the string 'false'.
+const hasFrame = computed(() => (props.attrs as { frame?: boolean | string }).frame !== false && (props.attrs as { frame?: boolean | string }).frame !== 'false')
 </script>
 
 <template>
@@ -44,7 +48,8 @@ const widthClass = computed(() => {
       v-else
       :src="attrs.src"
       :alt="attrs.alt || ''"
-      class="rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-full"
+      class="w-full"
+      :class="hasFrame ? 'rounded-xl shadow-sm border border-default' : ''"
     >
 
     <!-- Caption -->

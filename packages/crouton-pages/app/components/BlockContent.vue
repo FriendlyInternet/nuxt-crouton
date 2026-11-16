@@ -15,6 +15,8 @@ const { getBlock: getAddonBlock } = useCroutonBlocks()
 interface Props {
   /** Raw JSON content string or parsed PageBlockContent */
   content: string | PageBlockContent | null | undefined
+  /** Page setting "photo header" (`config.headerMedia`): a leading image runs full width at the top, behind the nav. */
+  headerMedia?: boolean
   /**
    * Render every block regardless of its `blockVisibility`.
    * Used by the editor previews, where an author must always see the block
@@ -50,6 +52,7 @@ const blockComponents: Record<string, string> = {
   collectionBlock: 'CroutonPagesBlocksRenderCollectionBlock',
   faqBlock: 'CroutonPagesBlocksRenderFaqBlock',
   twoColumnBlock: 'CroutonPagesBlocksRenderTwoColumnBlock',
+  mediaTextBlock: 'CroutonPagesBlocksRenderMediaTextBlock',
   embedBlock: 'CroutonPagesBlocksRenderEmbedBlock',
   imageBlock: 'CroutonPagesBlocksRenderImageBlock',
   logoBlock: 'CroutonPagesBlocksRenderLogoBlock',
@@ -118,8 +121,29 @@ function paragraphToHtml(block: PageBlock): string {
 }
 
 // Filter blocks to render (skip only truly empty structural blocks)
+// Block attrs can arrive with array/object values serialized as JSON strings
+// (e.g. via the live editor's HTML round trip: logo `items` as '[...]'), which
+// crashes renderers that call .filter/.map on them. Parse those back here so
+// every block renderer gets real arrays/objects.
+function normalizeAttrs(attrs: Record<string, unknown> | undefined) {
+  if (!attrs) return attrs
+  let out: Record<string, unknown> | undefined
+  for (const [key, value] of Object.entries(attrs)) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (!(trimmed.startsWith('[') && trimmed.endsWith(']')) && !(trimmed.startsWith('{') && trimmed.endsWith('}'))) continue
+    try {
+      out ??= { ...attrs }
+      out[key] = JSON.parse(trimmed)
+    } catch { /* keep the original string */ }
+  }
+  return out ?? attrs
+}
+
 const renderableBlocks = computed(() => {
-  return blocks.value.filter(block => !isEmptyParagraph(block))
+  return blocks.value
+    .filter(block => !isEmptyParagraph(block))
+    .map(block => (block as any).attrs ? { ...block, attrs: normalizeAttrs((block as any).attrs) } as typeof block : block)
 })
 
 // Check if block is a paragraph (for special rendering)
@@ -275,6 +299,20 @@ function getBlockWrapperClasses(block: PageBlock): (string | undefined)[] {
   return [size, ...viewportClasses(getBlockVisibility(block))]
 }
 
+// ── Photo header: a leading image runs full width at the top, behind the nav ──
+const headerMediaActive = computed(() =>
+  !!props.headerMedia && renderableBlocks.value.length > 0 && ['imageBlock', 'image'].includes(renderableBlocks.value[0]!.type)
+)
+function headerMediaClass(index: number): string {
+  return headerMediaActive.value && index === 0 ? 'crouton-header-media' : ''
+}
+
+/** Extra props for renderers that hold child blocks (mediaTextBlock) — others get none,
+ *  so no stray attribute lands on their root element */
+function childBlockProps(block: PageBlock): Record<string, unknown> {
+  return block.type === 'mediaTextBlock' ? { blocks: (block as { content?: unknown[] }).content || [] } : {}
+}
+
 /** Tailwind classes per heading level */
 const headingClasses: Record<number, string> = {
   1: 'text-4xl font-bold tracking-tight text-[var(--ui-text-highlighted)] mt-8 mb-4',
@@ -291,7 +329,7 @@ const headingClasses: Record<number, string> = {
 
     <template v-if="renderableBlocks.length > 0">
       <template v-for="(block, index) in renderableBlocks" :key="(block as any).attrs?.blockId || `${block.type}-${index}`">
-        <div v-if="shouldRenderBlock(block)" :class="getBlockWrapperClasses(block)">
+        <div v-if="shouldRenderBlock(block)" :class="[...getBlockWrapperClasses(block), headerMediaClass(index)]">
           <!-- Dynamic blocks: fetch runtime data, must render client-side only -->
           <ClientOnly
             v-if="isClientOnlyBlock(block.type)"
@@ -313,6 +351,7 @@ const headingClasses: Record<number, string> = {
             :is="getLazyBlockComponent(block.type)"
             :attrs="block.attrs"
             :is-first="index === 0"
+            v-bind="childBlockProps(block)"
           />
 
           <!-- Native TipTap image node fallback (legacy content) -->
@@ -394,6 +433,16 @@ const headingClasses: Record<number, string> = {
   max-width: none;
 }
 
+/* Photo header: full viewport width, out of the centred column (see .crouton-header-media),
+   and pulled up by the layout's top padding (--crouton-top-offset) so it starts behind the nav */
+.block-content > .crouton-header-media {
+  width: 100vw;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: calc(-1 * var(--crouton-top-offset, 0px));
+}
+
 /* List rendering — ensure bullets/numbers and proper spacing */
 .block-content-list :deep(ul) {
   list-style-type: disc;
@@ -426,5 +475,30 @@ const headingClasses: Record<number, string> = {
   border-bottom: 2px solid color-mix(in srgb, var(--ui-primary) 40%, transparent);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+</style>
+
+<style>
+/* Photo header (config.headerMedia): break out of the centred column to the full
+   viewport width, crop to 60vh, no frame. Plain CSS so it doesn't depend on the
+   app's Tailwind scanning this package's script strings. */
+.crouton-header-media {
+  position: relative;
+  left: 50%;
+  width: 100vw;
+  max-width: none !important;
+  transform: translateX(-50%);
+}
+.crouton-header-media figure {
+  width: 100%;
+  max-width: none;
+}
+.crouton-header-media img {
+  width: 100%;
+  height: 60vh;
+  object-fit: cover;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
 }
 </style>

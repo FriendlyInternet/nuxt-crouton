@@ -241,6 +241,7 @@ The package includes a block-based page editor using TipTap and Nuxt UI page com
 | `separatorBlock` | USeparator | Visual divider |
 | `richTextBlock` | prose div | Standard text content |
 | `qrCodeBlock` | CroutonQrCode | Scannable QR code linking to a CMS page (via the `page` field picker) or a custom URL. Resolves `pageId` → absolute public URL with `usePageLink().resolve()` + `useRequestURL().origin`. |
+| `mediaTextBlock` | MediaTextBlock (render) / MediaTextBlockView (editor) | **Image + text** — a node that HOLDS child blocks (`content: 'block+'`): a photo (`src`, `alt`, `frame`) on one `side` (left/right, optionally `sticky`) next to editable rich content. Render reuses `CroutonPagesBlockContent` for the children (BlockContent passes `blocks` only to this type). Two columns from 768 px, stacked on phones. Layout in scoped CSS. (#3928) |
 | `paneBlock` | CroutonLayoutRenderer (render) / CroutonLayout (editor) | **Bridge block (#716, completed #706)** — hosts a *pane layout* inside the document flow. `attrs.layout` is a `LayoutTree` (the "layout is data" shape) + `attrs.height`. Public render delegates to crouton-core's `CroutonLayoutRenderer`; the **in-editor composer** (`Blocks/Views/PaneBlockView.vue`) hosts the editable `CroutonLayout` so authors arrange panes inline. The TipTap node (`editor/extensions/pane-block.ts`) round-trips `attrs.layout` through an editor save (serializes to `data-layout` JSON; JSON content storage preserves the object). The pane tree serializes into the page's existing `content` JSON — no new page type or table. `attrs.layout` is untrusted → `sanitizeLayoutTree` on render; the renderer allowlists each leaf `blockId`. |
 
 ### Content Format
@@ -483,6 +484,12 @@ interface PageRecord {
   depth?: number          // Nesting level
 }
 ```
+
+### Photo header (`config.headerMedia`, #3928)
+
+Page setting **"Photo en bandeau"** (Settings → Appearance): when the first block is an image, it renders full viewport width at the very top, behind the floating nav (60vh, cropped, no frame). No page state is involved: `layouts/public.vue` marks its top padding with `crouton-pt-nav` / `crouton-pt-bare`, which publish the same padding as `--crouton-top-offset`; the header block (`.crouton-header-media` in `BlockContent.vue`) pulls itself up by that variable — correct in the server HTML, no jump on hydration. Keep the CSS variable in step with the `pt-*` classes in `topPadding`.
+
+Image blocks have a `frame` attr (default true; rounded border + shadow). The editor's HTML round trip stores it as `data-frame`.
 
 ### Per-page chrome flags (`config.hideNav` / `config.hideAuthControls`)
 

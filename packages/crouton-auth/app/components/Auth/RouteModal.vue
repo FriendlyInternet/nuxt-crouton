@@ -48,7 +48,21 @@ const isOpen = computed({
 // behind (see `dismissible` in useAuthModal).
 async function handleGoHome() {
   state.value.open = false
-  await navigateTo('/')
+  await navigateTo(homePath())
+}
+
+// "Home" is the homepage of the site being viewed (/<team>/<locale>, or /<locale>
+// on a custom domain / locale mode), not the app root — '/' dropped a visitor of a
+// team's public site onto the app's landing page.
+function homePath(): string {
+  const params = useRoute().params as Record<string, string | string[] | undefined>
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
+  const team = one(params.team)
+  const locale = one(params.locale)
+  if (team && locale) return `/${team}/${locale}`
+  if (team) return `/${team}`
+  if (locale) return `/${locale}`
+  return '/'
 }
 
 // Auth capabilities

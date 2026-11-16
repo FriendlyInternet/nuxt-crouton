@@ -198,7 +198,9 @@
       "editingFullscreen": "Editing in fullscreen…",
       "blockPlaceholder": "Type / to insert a block...",
       "item": "Item",
-      "anonymous": "Anonymous"
+      "anonymous": "Anonymous",
+      "headerMedia": "Photo header",
+      "headerMediaDescription": "The first photo spans the full width at the top of the page, behind the menu."
     },
     "sidebar": {
       "drafts": "Drafts",
@@ -677,6 +679,10 @@
               "medium": "Medium (60%)",
               "small": "Small (40%)"
             }
+          },
+          "frame": {
+            "label": "Frame",
+            "description": "Rounded border and shadow around the image"
           }
         }
       },
@@ -1063,6 +1069,34 @@
           },
           "height": {
             "label": "Height"
+          }
+        }
+      },
+      "mediaText": {
+        "name": "Image + text",
+        "description": "A photo beside text; the photo can stay in view while the text scrolls",
+        "fields": {
+          "src": {
+            "label": "Image"
+          },
+          "alt": {
+            "label": "Alt text",
+            "description": "Describe the image for screen readers"
+          },
+          "side": {
+            "label": "Image side",
+            "options": {
+              "left": "Left",
+              "right": "Right"
+            }
+          },
+          "sticky": {
+            "label": "Keep image in view",
+            "description": "The image stays in place while the text scrolls (wide screens)"
+          },
+          "frame": {
+            "label": "Frame",
+            "description": "Rounded border and shadow around the image"
           }
         }
       }

@@ -123,7 +123,9 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
     title: '',
     emptyMessage: '',
     loggedOut: 'prompt',
-    scope: 'personal'
+    scope: 'personal',
+    showLocations: false,
+    showMap: false
   },
   components: {
     editorView: 'CroutonBookingsBlocksBookingBlockView',
@@ -163,6 +165,18 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
         { label: 'bookings.blocks.booking.fields.scope.options.personal', value: 'personal' },
         { label: 'bookings.blocks.booking.fields.scope.options.team', value: 'team' }
       ]
+    },
+    {
+      name: 'showLocations',
+      type: 'switch',
+      label: 'bookings.blocks.booking.fields.showLocations.label',
+      description: 'bookings.blocks.booking.fields.showLocations.description'
+    },
+    {
+      name: 'showMap',
+      type: 'switch',
+      label: 'bookings.blocks.booking.fields.showMap.label',
+      description: 'bookings.blocks.booking.fields.showMap.description'
     }
   ],
   tiptap: {
@@ -171,7 +185,9 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
       title: { default: '' },
       emptyMessage: { default: '' },
       loggedOut: { default: 'prompt' },
-      scope: { default: 'personal' }
+      scope: { default: 'personal' },
+      showLocations: { default: false },
+      showMap: { default: false }
     }
   }
 }

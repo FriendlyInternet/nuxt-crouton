@@ -266,12 +266,29 @@ function onBookingDateClick(date: Date) {
   emit('dateClick', date)
 }
 
+// Scroll only the list's own scroll container, never the page: scrollIntoView also
+// scrolls every scrollable ancestor up to the window, so on a page with the booking
+// block in it, picking a day yanked the whole page down to that day.
+function scrollWithinList(el: HTMLElement) {
+  let parent = el.parentElement
+  while (parent && parent !== document.body && parent !== document.documentElement) {
+    const { overflowY } = getComputedStyle(parent)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight) {
+      const top = el.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop
+      parent.scrollTo({ top, behavior: 'smooth' })
+      return
+    }
+    parent = parent.parentElement
+  }
+}
+
 // The one scroll path: bring the target day's section into view once the DOM has it
 watch(
   () => props.scrollTarget,
   (target) => {
     if (!target) return
-    dateElementRefs.value.get(toDateKey(target))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = dateElementRefs.value.get(toDateKey(target))
+    if (el) scrollWithinList(el)
   },
   { flush: 'post' },
 )
@@ -429,31 +446,24 @@ const creatingAtDateKey = computed(() => {
               />
             </template>
 
-            <!-- Ghost row for the selected day: shaped like a booking card, dashed, starts a
-                 booking for that date. On a day without bookings it also says so. -->
-            <UButton
+            <!-- Row for the selected day: date (when the day has no bookings yet) and a clear
+                 primary "New booking" button; on a full day the button says so, disabled. -->
+            <div
               v-if="isSelectedDateKey(dateGroup.dateKey) && creatingAtDateKey !== dateGroup.dateKey"
-              block
-              variant="ghost"
-              color="neutral"
-              class="justify-start gap-3 p-1.5 md:p-2 rounded-lg border border-dashed border-accented text-muted hover:border-primary hover:text-primary hover:bg-primary/5 disabled:opacity-60"
-              :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
-              @click="emit('newBooking', new Date(dateGroup.date))"
+              class="flex items-center gap-3 p-1.5 md:p-2 rounded-lg border border-dashed border-accented"
             >
-              <template v-if="dateGroup.bookings.length === 0" #leading>
-                <CroutonBookingsDateBadge :date="dateGroup.date" variant="muted" />
-              </template>
-              <span class="flex items-center gap-1.5 text-sm font-medium">
-                <UIcon
-                  :name="isDayFullyBooked?.(new Date(dateGroup.date)) ? 'i-lucide-check' : 'i-lucide-plus'"
-                  class="size-4"
-                />
-                {{ isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking') }}
-              </span>
-              <template v-if="dateGroup.bookings.length === 0" #trailing>
-                <span class="ms-auto text-xs text-dimmed">{{ t('bookings.calendar.noBookings') }}</span>
-              </template>
-            </UButton>
+              <CroutonBookingsDateBadge v-if="dateGroup.bookings.length === 0" :date="dateGroup.date" variant="muted" />
+              <UButton
+                size="md"
+                :color="isDayFullyBooked?.(new Date(dateGroup.date)) ? 'neutral' : 'primary'"
+                :variant="isDayFullyBooked?.(new Date(dateGroup.date)) ? 'soft' : 'solid'"
+                :icon="isDayFullyBooked?.(new Date(dateGroup.date)) ? 'i-lucide-check' : 'i-lucide-plus'"
+                :label="isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking')"
+                :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
+                @click="emit('newBooking', new Date(dateGroup.date))"
+              />
+              <span v-if="dateGroup.bookings.length === 0" class="ms-auto text-xs text-dimmed">{{ t('bookings.calendar.noBookings') }}</span>
+            </div>
           </template>
         </div>
       </div>

@@ -251,7 +251,8 @@ onBeforeUnmount(() => {
 
 // Site URL for absolute Open Graph URLs
 const { croutonPages } = useRuntimeConfig().public as { croutonPages: { siteUrl: string } }
-const siteUrl = croutonPages.siteUrl || ''
+// Without a configured site URL, use the request origin so og:url/canonical stay absolute
+const siteUrl = croutonPages.siteUrl || useRequestURL().origin
 
 function toAbsoluteUrl(url: string | undefined | null, base: string): string | undefined {
   if (!url) return undefined
@@ -266,22 +267,38 @@ const localePrefixFor = (loc: string) => `${hideTeamInUrl.value ? '' : `/${team.
 const buildSeoUrl = (loc: string, path: string) =>
   `${siteUrl}${localePrefixFor(loc)}/${path}`.replace(/\/+$/, '') || `${siteUrl}${localePrefixFor(loc)}`
 
+// Plain text of the page's localized TipTap content — the meta-description
+// fallback when no seoDescription is set (crawlers flag an empty one).
+// fallow-ignore-next-line complexity -- walks a TipTap doc to plain text for the meta description; one guard per node shape
+function contentExcerpt(p: any, loc: string, max = 155): string | undefined {
+  const raw = p?.translations?.[loc]?.content || p?.translations?.en?.content || p?.content
+  if (!raw) return undefined
+  let doc: any
+  try { doc = typeof raw === 'string' ? JSON.parse(raw) : raw } catch { return undefined }
+  const parts: string[] = []
+  const walk = (n: any) => {
+    if (!n || parts.join(' ').length > max) return
+    if (n.type === 'text' && n.text) parts.push(n.text)
+    if (Array.isArray(n.content)) n.content.forEach(walk)
+  }
+  walk(doc)
+  const text = parts.join(' ').replace(/\s+/g, ' ').trim()
+  if (!text) return undefined
+  return text.length > max ? `${text.slice(0, max - 1).replace(/\s+\S*$/, '')}…` : text
+}
+
 // SEO meta (server-only — crawlers read SSR HTML). useServerSeoMeta left unhead 3.
 if (import.meta.server) {
+  const description = page.value?.seoDescription || contentExcerpt(page.value, urlLocale.value)
   useSeoMeta({
     title: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
-    description: page.value?.seoDescription || undefined,
+    description,
     // Open Graph
     ogTitle: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
-    ogDescription: page.value?.seoDescription || undefined,
+    ogDescription: description,
     ogImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
     ogUrl: buildSeoUrl(urlLocale.value, canonicalPath.value),
     ogType: 'website',
-    // Twitter Card
-    twitterCard: page.value?.ogImage ? 'summary_large_image' : 'summary',
-    twitterTitle: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
-    twitterDescription: page.value?.seoDescription || undefined,
-    twitterImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
     // Robots
     robots: page.value?.robots === 'noindex' ? 'noindex, nofollow' : undefined
   })
@@ -341,7 +358,7 @@ useHead({
 
     <!-- Page content -->
     <template v-else-if="page">
-      <CroutonPagesRenderer :page="previewPage" />
+      <CroutonPagesRenderer :page="previewPage" :locale="urlLocale" />
     </template>
 
     <!-- Scoped page without a token: inline access-code gate -->

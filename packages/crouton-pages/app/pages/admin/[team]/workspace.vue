@@ -81,8 +81,10 @@ function handleCancel(onCancel: () => void) {
     </template>
 
     <template #content="{ selectedId, mode, sessionKey, onSave, onDelete, onCancel, onClose }">
+      <!-- Keyed by page too: the editor joins one live-editing (collab) room per mount,
+           so reusing it across pages saved page A's content into page B. -->
       <CroutonPagesWorkspaceEditor
-        :key="sessionKey"
+        :key="`${sessionKey}:${selectedId ?? 'new'}`"
         :page-id="selectedId"
         :default-parent-id="mode === 'create' ? createParentId : null"
         show-back

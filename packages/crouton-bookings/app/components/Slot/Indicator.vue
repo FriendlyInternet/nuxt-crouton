@@ -87,7 +87,7 @@ function isCancelled(slotId: string): boolean {
 function getSlotOpacity(slotId: string): number {
   if (isBooked(slotId)) return 1
   if (isPartial(slotId)) return 0.5
-  return 0.1
+  return 0.18 // empty: visible enough to read as "free", lighter than half-booked (0.5)
 }
 
 function getSlotColor(slotId: string): string {

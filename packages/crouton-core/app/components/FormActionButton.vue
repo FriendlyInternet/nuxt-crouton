@@ -15,19 +15,23 @@
         name="i-lucide-triangle-alert"
         class="size-5"
       />
-      <span class="capitalize">{{ action }}</span><span class="lowercase">{{ collectionWithCapitalSingular(collection) }}</span>
+      <span>{{ label }}</span>
     </div>
   </UButton>
 </template>
 
 <script setup lang="ts">
-const { collectionWithCapitalSingular } = useFormatCollections()
+// Same wording as the form title ("Modifier Lieu"), from the locale files — not "Update  location"
+const { t } = useT()
+const { singular } = useCollectionLabel()
 
-defineProps<{
+const props = defineProps<{
   action: string
   collection: string
   items?: any[]
   loading?: string
   hasValidationErrors?: boolean
 }>()
+
+const label = computed(() => t(`form.titles.${props.action}`, { collection: singular(props.collection) }))
 </script>

@@ -87,6 +87,14 @@ const handleMapLoad = (map: MaplibreMap) => {
   emit('load', map)
 }
 
+// Some basemap styles reference sprite images they don't ship (e.g. "wood-pattern").
+// Fill each with a transparent 1x1 image so MapLibre doesn't warn; the style is unchanged.
+const handleMissingImage = (e: { id: string, target: MaplibreMap }) => {
+  if (e?.id && e.target && !e.target.hasImage(e.id)) {
+    e.target.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) })
+  }
+}
+
 // Handle map error
 const handleMapError = (err: Error | { message?: string } | unknown) => {
   const errorMessage = (err as { message?: string })?.message || t('maps.loadFailed')
@@ -142,13 +150,15 @@ defineExpose({
   <div
     class="crouton-map-wrapper"
     :class="props.class"
+    :style="{ height: props.height, width: props.width }"
   >
     <ClientOnly>
       <!-- MapLibre map via @geoql/v-maplibre -->
       <VMap
         :options="mapOptions"
-        :style="{ height: props.height, width: props.width }"
+        :style="{ height: '100%', width: '100%' }"
         @loaded="handleMapLoad"
+        @styleimagemissing="handleMissingImage"
         @error="handleMapError"
       >
         <!-- Pass through default slot for markers, popups, etc. -->
