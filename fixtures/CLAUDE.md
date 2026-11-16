@@ -14,6 +14,7 @@ authenticates, and does CRUD** after a `packages/` change or dependency bump.
 | `with-collab` | + `@fyit/crouton-collab` (spike: asserts the realtime collab UI mounts single-client) |
 | `with-maps` | + `@fyit/crouton-maps` (a `venues` collection with address+coordinate fields → asserts the MapLibre map mounts in the generated form + the `/api/maps/geocode` proxy geocodes against live Nominatim) |
 | `with-sales` | + `@fyit/crouton-printing` + `@fyit/crouton-sales` (the full POS + printing domain → three-tier `printing.smoke` boots, places an order, drives a print job pending → done against an in-test fake :9100 ESC/POS printer, asserts the order auto-completes, and flips the per-event transport row (#1324) to prove drainer/spooler routing) |
+| `with-relations` | core only, two app collections linked by a foreign key: `categories` (parent) ← `products.categoryId` (`refTarget: "categories"`) → multi-collection generation + multi-table migration, CRUD on both, and a surface asserting `CroutonFormReferenceSelect` mounts against the parent collection (#224). The FK is optional so the text-only CRUD harness can create products |
 | `with-devtools` | + `@fyit/crouton-devtools` + `@fyit/crouton-feedback` (asserts the feedback "glasses" launcher mounts via devtools `installModule`) |
 
 ## What you need to know

@@ -32,6 +32,7 @@ fixtures/                    # the apps under test — real crouton apps, one pe
   with-maps/                 # + @fyit/crouton-maps    (maps: map mounts in form + live Nominatim geocode)
   with-sales/                # + @fyit/crouton-printing + @fyit/crouton-sales (four-tier print + pairing smoke vs an in-test fake :9100 printer)
   with-devtools/             # + @fyit/crouton-devtools + @fyit/crouton-feedback (feedback glasses launcher mounts via devtools installModule)
+  with-relations/            # core only: categories ← products (categoryId refTarget FK); CRUD both + CroutonFormReferenceSelect mounts
   <name>/                    # add more here
     e2e.manifest.json        # declares what to smoke (collections, fields)
 ```
