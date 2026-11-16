@@ -91,3 +91,101 @@ test('server page lists list-exported utils and server types', () => {
     assert.match(page, new RegExp(`^${h}$`, 'm'))
   }
 })
+
+// ── component-names (#3898): every manifest component name is one Nuxt registers ────────────
+// In this file (not their own) so they never overlap the manifest-rewriting tests above. The
+// --fresh test runs first and writes every .nuxt/components.d.ts; the tests after it reuse them.
+const names = (...args) => spawnSync('node', ['scripts/component-names.mjs', ...args], { encoding: 'utf8' })
+const listed = (pkg) => {
+  const r = names('--list', pkg)
+  expectStatus(r, 0)
+  return r.stdout.split('\n').filter(Boolean).map(l => l.split('\t')[0])
+}
+
+// Change `file`, run `runner`, restore the file whatever happens; returns the run's result.
+function mutateAndRun(file, from, to, runner) {
+  const orig = readFileSync(file, 'utf8')
+  assert.ok(orig.includes(from), `${file} no longer contains ${JSON.stringify(from)} — update this test`)
+  try {
+    writeFileSync(file, orig.replace(from, to))
+    return runner()
+  } finally {
+    writeFileSync(file, orig)
+  }
+}
+
+test('component-names --check --fresh passes on the clean tree', () => {
+  const r = names('--check', '--fresh')
+  expectStatus(r, 0)
+  assert.match(r.stdout, /^\d+ components named, 0 without a file, 0 used outside and not named$/m)
+})
+
+// ── used outside its package but not named (#3909) ─────────────────────────────────────────────
+test('--check fails on a component used outside its package but not named', () => {
+  // CroutonCalendarWeek is used by tag in crouton-bookings Calendar.vue.
+  const r = mutateAndRun('packages/crouton-calendar/crouton.manifest.ts', "name: 'CroutonCalendarWeek'", "name: 'CroutonCalendarMonth'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-calendar: CroutonCalendarWeek is used outside the package, not named in the manifest/)
+})
+
+test("--check counts resolveComponent('Name') as a use", () => {
+  // TeamSwitcher's only outside use is resolveComponent('TeamSwitcher') in crouton-core AdminSidebar.vue.
+  const r = mutateAndRun('packages/crouton-auth/crouton.manifest.ts', "name: 'TeamSwitcher'", "name: 'TeamSettings'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-auth: TeamSwitcher is used outside the package, not named in the manifest/)
+})
+
+test('a TypeScript generic is not a tag use (TeamThemeSettings stays unnamed)', () => {
+  // `$type<TeamThemeSettings>()` in crouton-auth must not count as a use of crouton-admin's component.
+  const r = names('--check')
+  expectStatus(r, 0)
+  assert.ok(!readFileSync('packages/crouton-admin/crouton.manifest.ts', 'utf8').includes("name: 'TeamThemeSettings'"))
+})
+
+test('--list crouton-calendar names exactly Month and Week', () => {
+  assert.deepEqual(listed('crouton-calendar'), ['CroutonCalendarMonth', 'CroutonCalendarWeek'])
+})
+
+test('--list resolves pathPrefix, cross-package and stub cases', () => {
+  const admin = listed('crouton-admin')
+  assert.ok(admin.includes('StatsCard'), 'crouton-admin (pathPrefix: false) should list StatsCard')
+  assert.ok(!admin.includes('AdminStatsCard'), 'crouton-admin should not list AdminStatsCard')
+  assert.ok(listed('crouton-auth').includes('CroutonUserPill'))
+  assert.ok(listed('crouton-bookings').includes('CroutonBookingsPanel'))
+  assert.ok(!listed('crouton-core').includes('CroutonAssetsPicker'), 'a stubs/ component must not count')
+})
+
+test('--check fails on a manifest name with no component', () => {
+  const r = mutateAndRun('packages/crouton-calendar/crouton.manifest.ts', "name: 'CroutonCalendarWeek'", "name: 'CroutonCalendarWeekX'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-calendar: manifest names CroutonCalendarWeekX/)
+})
+
+// ── per-package component pages (#3933): packages/<pkg>/docs/components.md matches the code ────
+// After the component-names tests, so every .nuxt/components.d.ts already exists.
+const pkgDocs = (...args) => spawnSync('node', ['scripts/gen-package-docs.mjs', ...args], { encoding: 'utf8' })
+
+// covers: T1
+test('gen-package-docs --check passes on the clean tree (19 pages)', () => {
+  const r = pkgDocs('--check')
+  expectStatus(r, 0)
+  assert.equal(r.stdout.trim(), '19 package pages up to date')
+})
+
+// covers: T2
+test('crouton-calendar page lists Week props, events and slots', () => {
+  const lines = readFileSync('packages/crouton-calendar/docs/components.md', 'utf8').split('\n')
+  for (const want of [
+    '| `variant` | `"default" \\| "beams" \\| "bars"` | `"default"` | no |  |',
+    '| `select` | `[value: Date \\| null]` |',
+    '| `day-action` | `{ day: any; jsDate: any; weekday: any; dayNumber: any; }` |',
+    '| `date` | `Date` | - | yes |  |'
+  ]) assert.ok(lines.includes(want), `missing line: ${want}`)
+})
+
+// covers: T3
+test('gen-package-docs --check fails when a named component prop type changes', () => {
+  const r = mutateAndRun('packages/crouton-calendar/app/components/Week.vue', "variant?: 'default' | 'beams' | 'bars'", "variant?: 'default' | 'beams' | 'bars' | 'dots'", () => pkgDocs('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /stale: packages\/crouton-calendar\/docs\/components\.md/)
+})

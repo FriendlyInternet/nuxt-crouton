@@ -39,13 +39,13 @@ export default defineCroutonManifest({
   provides: {
     composables: ['useAssetUpload'],
     components: [
-      { name: 'CroutonAssetsPicker', description: 'Asset picker with gallery modal for selecting from media library', props: ['modelValue', 'crop', 'collection'] },
-      { name: 'CroutonAssetsLibrary', description: 'Full media library browser using CroutonCollection', props: ['collection'] },
-      { name: 'CroutonAssetsUploader', description: 'Upload component with optional crop step and metadata form', props: ['modelValue'] },
-      { name: 'CroutonAssetsCard', description: 'Media card for CroutonCollection grid (image/icon, edit/delete)', props: ['item'] },
-      { name: 'CroutonAssetsAssetTile', description: 'Selection tile for Picker modal with selected state and checkmark', props: ['item', 'selected'] },
-      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (the assets collection form)', props: [] },
-      { name: 'CroutonAssetsFormUpdate', description: 'Asset update/metadata edit form', props: ['item'] },
+      { name: 'CroutonAssetsPicker', description: 'Asset picker with gallery modal for selecting from media library' },
+      { name: 'CroutonAssetsLibrary', description: 'Full media library browser using CroutonCollection' },
+      { name: 'CroutonAssetsUploader', description: 'Upload component with optional crop step and metadata form' },
+      { name: 'CroutonAssetsCard', description: 'Media card for CroutonCollection grid (image/icon, edit/delete)' },
+      { name: 'CroutonAssetsAssetTile', description: 'Selection tile for Picker modal with selected state and checkmark' },
+      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (the assets collection form)' },
+      { name: 'CroutonAssetsFormUpdate', description: 'Asset update/metadata edit form' },
     ],
     apiRoutes: [
       '/api/assets/generate-alt-text',
