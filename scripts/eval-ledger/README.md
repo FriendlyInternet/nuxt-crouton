@@ -129,7 +129,10 @@ the run (`continue-on-error` + the script always exits 0).
 - **Overlap:** agent comments carry no run id, so two runs of the same workflow on the same issue/PR with
   intersecting windows are `attribution: "shared"` (listing each other in `overlap[]`); a comment that
   embeds `/actions/runs/<id>` is credited exactly to that run. Overlap is computed against records already
-  written, so the second run to finish sees the first.
+  written AND the workflow's runs still in flight, so both runs of a pair are flagged. A run counts as the
+  same ticket when its title names the issue/PR as `#N` (every dispatched run; not comment-triggered runs,
+  whose title is the issue's free text) or, for comment-triggered runs, equals the issue's title;
+  branch/PR-list matching is only a fallback, since agent runs all run on `main` (#3364).
 - **API usage:** `api_calls` = `GET /rate_limit` remaining at start minus at end (App token). `null` with
   `api_calls_reason` when the hourly window rolled over (`reset-window-changed`) or a read failed.
   Approximate — concurrent runs share the allowance. The start read is a step inside the agent job; the

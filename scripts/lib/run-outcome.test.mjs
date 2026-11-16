@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { classify, classifyComment, joinRuns, median, summarizeRuns, legacyClassifyComment, NOTE_MARKER } from './run-outcome.mjs'
-import { buildRecord, writeRecord, conclusionOf } from '../eval-ledger/record-run.mjs'
+import { buildRecord, writeRecord, conclusionOf, runMatchesSubject } from '../eval-ledger/record-run.mjs'
 import { subjectFromLog } from '../eval-ledger/backfill.mjs'
 
 const win = { start: '2026-11-03T10:00:00Z', end: '2026-11-03T10:30:00Z' }
@@ -161,6 +161,7 @@ const mkApi = (comments) => async (p) => {
   if (p.includes('/actions/runs/')) return { run_started_at: '2026-11-03T10:00:00Z' }
   if (p.includes('/actions/workflows/')) return { workflow_runs: runsList }
   if (p.includes('/pulls?')) return [{ number: 99 }]
+  if (p.endsWith('/issues/42')) return { number: 42, title: 'Fix the thing' }
   if (p.includes('/issues/42/')) return comments
   return []
 }
@@ -212,6 +213,68 @@ test('overlap needs the same issue/PR: overlapping runs on different issues are 
     const peer = await buildRecord({ env: { ...base, RUN_ID: '8' }, api: async (p) => p.includes('/actions/runs/') ? { run_started_at: win.run_started_at } : p.includes('/actions/workflows/') ? { workflow_runs: runsList } : p.includes('/pulls?') ? [{ number: 99 }] : [], listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:40:00Z') })
     assert.deepEqual(peer.overlap, ['9'])
   } finally { runsList = [] }
+})
+
+// ── real-shaped in-flight runs (#3364): agent runs all report head_branch main, pull_requests [] ──
+const real = (id, event, display_title, start = '2026-11-03T10:05:00Z', end = '2026-11-03T10:40:00Z') =>
+  ({ id, event, display_title, head_branch: 'main', pull_requests: [], run_started_at: start, updated_at: end })
+
+test('T1. two overlapping workflow_dispatch runs of work-issue-pidev on #42 flag each other (both sides)', async () => {
+  const env = { WORKFLOW_FILE: 'work-issue-pidev.yml', STAGE: 'plan' }
+  try {
+    runsList = [real(8, 'workflow_dispatch', '#42 · build'), real(9, 'workflow_dispatch', '#42 · plan', '2026-11-03T10:00:00Z', '2026-11-03T10:30:00Z')]
+    const a = await build({ ...env, RUN_ID: '9' }, [])
+    assert.deepEqual(a.overlap, ['8'])
+    assert.equal(a.attribution, 'shared')
+    const b = await build({ ...env, RUN_ID: '8' }, [])
+    assert.deepEqual(b.overlap, ['9'])
+    assert.equal(b.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('T2. two overlapping issue_comment runs of on-comment on #42 (title = the issue title) flag each other', async () => {
+  const env = { WORKFLOW_FILE: 'on-comment.yml', STAGE: 'interpret' }
+  try {
+    runsList = [real(8, 'issue_comment', 'Fix the thing'), real(9, 'issue_comment', 'Fix the thing', '2026-11-03T10:00:00Z', '2026-11-03T10:30:00Z')]
+    const a = await build({ ...env, RUN_ID: '9' }, [])
+    assert.deepEqual(a.overlap, ['8'])
+    assert.equal(a.attribution, 'shared')
+    const b = await build({ ...env, RUN_ID: '8' }, [])
+    assert.deepEqual(b.overlap, ['9'])
+    assert.equal(b.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('T3. overlapping runs on a different ticket are not flagged (#77, #420, another title, a comment run citing #42)', async () => {
+  try {
+    for (const [wf, r] of [
+      ['work-issue-pidev.yml', real(8, 'workflow_dispatch', '#77 · plan')],
+      ['work-issue-pidev.yml', real(8, 'workflow_dispatch', '#420 · plan')],
+      ['on-comment.yml', real(8, 'issue_comment', 'Another issue')],
+      ['on-comment.yml', real(8, 'issue_comment', 'Follow-up to the thing (#42)')],
+    ]) {
+      runsList = [r]
+      const rec = await build({ WORKFLOW_FILE: wf }, [])
+      assert.deepEqual(rec.overlap, [], r.display_title)
+      assert.equal(rec.attribution, 'exact', r.display_title)
+    }
+  } finally { runsList = [] }
+})
+
+test('T3. runMatchesSubject: #N on a word boundary for dispatch runs, exact title for comment runs, branch/PR fallback', () => {
+  const ctx = { subjects: [42, 99], title: 'Fix the thing', branch: 'work-42', pr: 99 }
+  const r = (event, display_title, extra = {}) => ({ event, display_title, head_branch: 'main', pull_requests: [], ...extra })
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#42 · plan'), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', 'build-review #99'), ctx), true) // the PR number counts too
+  assert.equal(runMatchesSubject(r('workflow_dispatch', 'fix-ci #42'), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#420 · plan'), ctx), false)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#77 · plan'), ctx), false)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Fix the thing'), ctx), true)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Follow-up to the thing (#42)'), ctx), false)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Fix the thing'), { ...ctx, title: null }), false)
+  assert.equal(runMatchesSubject(r('workflow_run', 'Build review (workflow run)'), ctx), false) // known gap: no number
+  assert.equal(runMatchesSubject(r('workflow_run', 'x', { head_branch: 'work-42' }), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_run', 'x', { pull_requests: [{ number: 99 }] }), ctx), true)
 })
 
 test('the unmarked auto-merge note from the real PR #3308 is the reason every workflow note carries the marker', () => {
