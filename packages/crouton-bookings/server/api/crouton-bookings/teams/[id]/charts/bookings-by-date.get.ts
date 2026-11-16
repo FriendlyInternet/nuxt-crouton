@@ -5,11 +5,12 @@
  * Used by the 'bookings:by-date' chart preset.
  */
 import { count, eq } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { bookingsBookings } from '../../../../../../collections/bookings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  // Team-wide statistics: admins only until a chart block can grant its own audience (#3938)
+  const { team } = await requireTeamAdmin(event)
   const db = useDB()
 
   const rows = await db
