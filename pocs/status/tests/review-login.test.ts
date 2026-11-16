@@ -60,4 +60,10 @@ describe('walk in the login redirect (#2681)', async () => {
     expect(u.searchParams.get('to')).toBe('/en/x')
     expect(u.searchParams.get('walk')).toMatch(/^[A-Za-z0-9_-]+$/)
   })
+  it('the walk names where to send its result', () => {
+    const u = new URL(loginHrefFor({ app: 'velo', number: 7, title: 'T', steps: ['one'] }, 'https://status.pmcp.dev'), 'http://h')
+    const b64 = u.searchParams.get('walk')!.replace(/-/g, '+').replace(/_/g, '/')
+    const data = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+    expect(data).toMatchObject({ ref: '#7', result: 'https://status.pmcp.dev/api/walk-result' })
+  })
 })

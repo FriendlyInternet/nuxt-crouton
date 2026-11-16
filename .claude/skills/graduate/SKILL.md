@@ -64,7 +64,7 @@ behaviour's bucket up front (the revision plan, A2) so the right gate governs it
    inventory walked on both** — the spec is the *walk script*, the live POC is the *expected result*.
 3. **Done = a spec entry checked + concretely signed off.** No proxy is "done" — not a green build,
    not a deploy URL, not the agent's own confidence (every one of those lied during #988). Status is
-   *derived* from a recorded `lgtm <id>`, never self-asserted.
+   *derived* from a recorded `ok <id>`, never self-asserted.
 
 **Two acceptance axes — a graduated app needs BOTH, both signed off:**
 
@@ -180,7 +180,7 @@ settled` / `stopgap`) **entry by entry** on both: same inventory (palette · ges
 `data-handoff` hooks · each entry's how-to-test). Every difference is triaged — **same** (preserved
 ✅) · **intentionally different** = a logged A2 decision (✨ ✅) · **unexplained** = drift/regression
 (🐛 fix). The gate passes at **zero unexplained differences**, and each entry is **checked + signed
-off** (`lgtm <id>`). The spec is the walk; the live POC is the expected.
+off** (`ok <id>`). The spec is the walk; the live POC is the expected.
 
 > **Add** entries (`status: new`) are **not** walked here — there's no POC to compare. They were signed
 > off through their own new-behaviour gate at A2/B (`/schema-review`, `/ui-proposal`, `/test-review`).

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildReply, postReply } from '../server/utils/reply-core'
+import { buildReply, postReply, findRecentDuplicate } from '../server/utils/reply-core'
 import { isOwnerSession } from '../server/utils/github-core'
 
 describe('buildReply', () => {
@@ -24,7 +24,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 describe('postReply', () => {
   it('posts when no identical comment exists', async () => {
     const f = vi.fn()
-      .mockResolvedValueOnce(json([{ body: 'other', html_url: 'u0' }]))
+      .mockResolvedValueOnce(json([{ event: 'commented', body: 'other', html_url: 'u0' }]))
       .mockResolvedValueOnce(json({ html_url: 'u1' }, 201))
     const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch)
     expect(r.data).toEqual({ url: 'u1', existing: false })
@@ -32,10 +32,26 @@ describe('postReply', () => {
     expect(JSON.parse(f.mock.calls[1]![1].body)).toEqual({ body: 'ok' })
   })
   it('double-post guard returns the existing comment without posting', async () => {
-    const f = vi.fn().mockResolvedValueOnce(json([{ body: 'ok\n', html_url: 'u0' }]))
+    const f = vi.fn().mockResolvedValueOnce(json([{ event: 'commented', body: 'ok\n', html_url: 'u0' }]))
     const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch)
     expect(r.data).toEqual({ url: 'u0', existing: true })
     expect(f).toHaveBeenCalledTimes(1)
+  })
+  it('an identical ok from before the latest commit/reference does not block a new one', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(json([{ event: 'commented', body: 'ok', html_url: 'old' }, { event: 'cross-referenced' }]))
+      .mockResolvedValueOnce(json({ html_url: 'new' }, 201))
+    const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch)
+    expect(r.data).toEqual({ url: 'new', existing: false })
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+  it('follows the timeline Link rel="next" to the newest events', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ event: 'commented', body: 'x', html_url: 'a' }]), { status: 200, headers: { link: '<https://api.github.com/p2>; rel="next"' } }))
+      .mockResolvedValueOnce(json([{ event: 'commented', body: 'ok', html_url: 'b' }]))
+    const r = await postReply('o/r', reply, 't', f as unknown as typeof fetch)
+    expect(r.data).toEqual({ url: 'b', existing: true })
+    expect(f.mock.calls[1]![0]).toBe('https://api.github.com/p2')
   })
   it('names the missing permission on 403/404', async () => {
     const issue = await postReply('o/r', reply, 't', (async () => json({}, 403)) as unknown as typeof fetch)
@@ -45,6 +61,16 @@ describe('postReply', () => {
   })
   it('errors without a token', async () => {
     expect((await postReply('o/r', reply, undefined)).error).toMatch(/GITHUB_TOKEN/)
+  })
+})
+
+describe('findRecentDuplicate', () => {
+  const c = (body: string) => ({ event: 'commented', body, html_url: body })
+  it('stops at a different verdict', () => {
+    expect(findRecentDuplicate([c('ok'), c('not ok: x')], 'ok')).toBeNull()
+  })
+  it('ignores non-verdict chatter after the match', () => {
+    expect(findRecentDuplicate([c('ok'), c('thanks')], 'ok')).toBe('ok')
   })
 })
 

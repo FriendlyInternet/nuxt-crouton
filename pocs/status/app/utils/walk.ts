@@ -1,11 +1,13 @@
 // Encode a card's "How to check" steps as the `walk` link param (base64url JSON) that
 // crouton-feedback's Spec walk opens. Stays under 2 KB by dropping trailing steps.
-export function walkParam(item: { app?: string | null, number: number, title: string, steps: string[] }): string {
+export function walkParam(item: { app?: string | null, number: number, title: string, steps: string[] }, origin = ''): string {
   const enc = (steps: string[]) => {
     const json = JSON.stringify({
       title: item.title.slice(0, 80),
       app: item.app ?? '',
       ref: `#${item.number}`,
+      // Where the walk sends its result — declared by this app, never guessed by the overlay.
+      ...(origin ? { result: `${origin}/api/walk-result` } : {}),
       steps: steps.map(text => ({ text: text.slice(0, 300) }))
     })
     const bin = String.fromCharCode(...new TextEncoder().encode(json))
@@ -18,10 +20,10 @@ export function walkParam(item: { app?: string | null, number: number, title: st
 }
 
 // The "Open and sign in" link: page deep link (`to`) and the card's walk travel together.
-export function loginHrefFor(item: { app?: string | null, number: number, title: string, steps?: string[] | null, to?: string | null }): string {
+export function loginHrefFor(item: { app?: string | null, number: number, title: string, steps?: string[] | null, to?: string | null }, origin = ''): string {
   const q = new URLSearchParams()
   if (item.to) q.set('to', item.to)
-  const w = item.steps?.length ? walkParam({ ...item, steps: item.steps }) : ''
+  const w = item.steps?.length ? walkParam({ ...item, steps: item.steps }, origin) : ''
   if (w) q.set('walk', w)
   const qs = q.toString()
   return `/api/status/login/${item.app}${qs ? `?${qs}` : ''}`

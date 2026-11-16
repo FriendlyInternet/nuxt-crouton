@@ -37,3 +37,17 @@ export function buildWalkReply(input: WalkResultInput): GhResult<ParsedReply> {
   const body = issues.length ? `not ok: ${issues.join('\n')}` : 'ok'
   return { data: { kind: 'issue', number, body }, error: null }
 }
+
+/**
+ * Origins allowed to send a walk result (CORS + the POST Origin check): exactly the staging apps
+ * listed in app-urls.generated.json. No wildcard — an `ok` here can pass a test card, so only our
+ * own apps may send one. Localhost only in dev.
+ */
+export function allowedWalkOrigins(configs: Record<string, { stagingUrl?: string }>, opts: { dev?: boolean } = {}): string[] {
+  const out = new Set<string>()
+  for (const c of Object.values(configs ?? {})) {
+    try { if (c?.stagingUrl) out.add(new URL(c.stagingUrl).origin) } catch { /* skip bad url */ }
+  }
+  if (opts.dev) for (let p = 3000; p <= 3010; p++) { out.add(`http://localhost:${p}`); out.add(`http://127.0.0.1:${p}`) }
+  return [...out]
+}

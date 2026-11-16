@@ -253,7 +253,7 @@ export default defineNuxtModule<FeedbackModuleOptions>({
     // Fifth tool: Spec walk — the "does it still work?" facet (#1038). No build
     // data of its own: it reuses the composed plan above (plan ⋈ spec ledger),
     // walks the LIVE behaviours against the running build, and exports the
-    // `lgtm <id>` sign-off. Hidden when the app configures no plan.
+    // `ok <id>` sign-off. Hidden when the app configures no plan.
     addPlugin({
       src: resolver.resolve('./runtime/plugins/tools/specwalk.client'),
       mode: 'client'

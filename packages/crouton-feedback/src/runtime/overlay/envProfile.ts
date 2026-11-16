@@ -2,7 +2,7 @@
  * Environment profile (#1181) — the context a check was taken in.
  *
  * A dependency-free snapshot of device / browser / OS / viewport that rides
- * along with a Spec-walk sign-off and an Annotate feedback, so a `lgtm <id>` or
+ * along with a Spec-walk sign-off and an Annotate feedback, so an `ok <id>` or
  * a pinned `⚠️` is self-describing ("checked on iPhone Safari 430×932, touch").
  * Pure + testable: `readEnvProfile` takes optional `window`/`navigator` (defaults
  * to globals, returns `null` on the server); `formatEnv` renders the one-liner.
