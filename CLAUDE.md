@@ -213,11 +213,18 @@ session catches what the PR would, not after:
    CI's `Type Check Packages` job runs the same script on every PR that touches a package.
    Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces
    thousands of false positives. Fix errors immediately. Never skip.
-2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
-   structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
-   dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
-   check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
-   dead-code` for a wider look.)
+2. **Fallow audit (always, it's fast + diff-scoped).** `git fetch origin <base> && npx fallow
+   audit --base origin/<base>`, where `<base>` is the branch your PR targets (`main` or its
+   `epic/*` branch). This is the same structural gate CI runs (`fallow-audit` in `ci.yml`, via
+   `scripts/fallow-audit.mjs`): dead code, duplication, complexity and dependency hygiene,
+   judged on **just your diff**. Always pass `--base`: without it fallow compares against your
+   branch's *upstream*, so a pushed branch is judged against itself and prints *No issues*
+   while CI fails. CI also feeds it test coverage (`--coverage coverage/coverage-final.json`,
+   from `pnpm test:coverage`), which changes the complexity (CRAP) scores. Read the *above
+   threshold* and *clone groups* sections, not only the summary line. Splitting a big file
+   creates **new** files, and everything in a new file counts as yours, so a split can fail on
+   complexity the old file was excused for. CI runs it only on app/package/infra PRs.
+   (`npx fallow health --score` / `npx fallow dead-code` for a wider look.)
 3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
    fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
    library's async state instead of deriving from the source event, an over-engineered
