@@ -8,6 +8,8 @@ name: Preview screenshot
 #     leaves a `preview-meta-<app>` artifact (app, workspace, url, pr) for each previewed app.
 #   • workflow_dispatch(pr) — re-run alone, no redeploy: reads the artifacts of the newest
 #     successful deploy run for the PR's head commit.
+#   Both triggers read the newest successful Deploy Apps AND Deploy POCs run for the head commit, then
+#   shoot only the apps the PR changed or names (scripts/screenshot-targets.mjs, #3970).
 #
 # Per app it logs into the live preview (login re-derived from REVIEW_SEED_SECRET, same formula as
 # the deploy's seed step; link-only apps use a preview-only token, #2700), captures the declared review surface(s) with
@@ -64,20 +66,23 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_PR: ${{ inputs.pr }}
         run: |
+          # Newest successful run of EACH deploy workflow for this exact commit: a PR touching an app
+          # and a POC has two deploy runs, and the capture must read both (#3970).
+          deploy_runs() {
+            for wf in deploy-apps.yml deploy-pocs.yml; do
+              gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?head_sha=$1&status=success&per_page=1" --jq '.workflow_runs[0].id // empty' 2>/dev/null || true
+            done
+          }
           if [ "$EVENT" = workflow_dispatch ]; then
             PR="$INPUT_PR"
             HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq ".head.sha")
-            # Newest successful deploy run for this exact commit that left preview records.
             RUN_ID=""
-            for wf in deploy-apps.yml deploy-pocs.yml; do
-              id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?head_sha=${HEAD_SHA}&status=success&per_page=1" --jq '.workflow_runs[0].id // empty' 2>/dev/null || true)
-              [ -n "$id" ] && RUN_ID="$RUN_ID $id"
-            done
-            RUN_ID="${RUN_ID# }"
           else
             PR=$(printf '%s' "$RUN_PRS" | jq -r '.[0].number // empty')
             HEAD_SHA="$RUN_SHA"
           fi
+          # Keep the triggering run even if the listing lags behind the event; de-duplicate.
+          RUN_ID=$(printf '%s\n' $RUN_ID $(deploy_runs "$HEAD_SHA") | sed '/^$/d' | sort -u | paste -sd' ' -)
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
@@ -144,6 +149,19 @@ jobs:
           node -e "import('playwright-core').catch(e => { console.error('::error::playwright-core failed to import: ' + e.message); process.exit(1) })"
           echo "::notice::Playwright install took $(( $(date +%s) - start ))s"
 
+      # Only the apps this PR changed or names get shot, not every app a package change redeployed (#3970).
+      - name: Pick apps to shoot
+        id: pick
+        if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.target.outputs.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+          CHANGED_FILES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename'); export CHANGED_FILES
+          node scripts/screenshot-targets.mjs --records "$RUNNER_TEMP/records" --pr "$PR_NUMBER" --out "$RUNNER_TEMP/targets.txt" >> "$GITHUB_OUTPUT"
+
       - name: Capture + post review-surface evidence
         id: capture
         if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
@@ -153,6 +171,7 @@ jobs:
           PR_NUMBER: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+          CAPTURE_NOTE: ${{ steps.pick.outputs.note }}
         run: |
           set -o pipefail
           # Changed files drive which page is shot when the PR declares no review-surface (#2698).
@@ -176,7 +195,7 @@ jobs:
             fi
             node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
               --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
-          done < <(find "$RUNNER_TEMP/records" -name meta.json)
+          done < "$RUNNER_TEMP/targets.txt"
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
           shopt -s nullglob; PNGS=("$OUT"/*.png)
           if [ ${#PNGS[@]} -eq 0 ]; then
@@ -203,7 +222,7 @@ jobs:
           SHA=$(printf '%s\n' "$PUB" | sed -n 's/^sha=//p' | tail -1)
           if node scripts/comment-review-captures.mjs --pr "$PR_NUMBER" --key "pr${PR_NUMBER}" --sha "$SHA" --files "$FILES" \
               --artifact-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; then
-            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=posted ${#PNGS[@]} shot(s): ${NAMES}" >> "$GITHUB_OUTPUT"
+            echo "result=ok" >> "$GITHUB_OUTPUT"; echo "summary=posted ${#PNGS[@]} shot(s): ${NAMES}${CAPTURE_NOTE:+ — $CAPTURE_NOTE}" >> "$GITHUB_OUTPUT"
           else
             echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not comment on PR #${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
@@ -223,7 +242,7 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           CHECK_ID: ${{ steps.check.outputs.id }}
           RESULT: ${{ steps.capture.outputs.result }}
-          SUMMARY: ${{ steps.pw.outcome == 'failure' && 'could not install Playwright — see the "Install Playwright (capture)" step log' || steps.capture.outputs.summary }}
+          SUMMARY: ${{ steps.pick.outcome == 'failure' && 'could not choose which apps to shoot — see the "Pick apps to shoot" step log' || steps.pw.outcome == 'failure' && 'could not install Playwright — see the "Install Playwright (capture)" step log' || steps.capture.outputs.summary }}
           RECORDS: ${{ steps.records.outputs.count }}
           EXPECTED: ${{ steps.records.outputs.expected }}
         run: |

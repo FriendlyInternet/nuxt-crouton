@@ -27,6 +27,20 @@ test('captureCommentBody with files', () => {
   assert.ok(!body.includes('@'))
 })
 
+test('T7 — captureCommentBody shows the skipped-apps note outside <details>; no note leaves the body unchanged', () => {
+  const base = { key: 'pr42', repo: 'o/r', sha: 'abc', files: ['a.png'], artifactUrl: 'https://x/art' }
+  const note = 'skipped 7: pins, crate (only redeployed because a package it uses changed)'
+  const body = captureCommentBody({ ...base, note })
+  const at = body.indexOf(`_${note}_`)
+  assert.ok(at > body.indexOf('📷 **Preview screenshot**'))
+  assert.ok(at < body.indexOf('<details>'))
+  assert.equal(captureCommentBody({ ...base, note: '' }), captureCommentBody(base))
+  assert.equal(
+    captureCommentBody(base),
+    '<!-- review-capture:pr42 -->\n📷 **Preview screenshot**\n\n![a](https://raw.githubusercontent.com/o/r/abc/a.png)\n\n<details><summary>Details</summary>\n\nDownload: https://x/art\n\n</details>\n'
+  )
+})
+
 test('captureCommentBody with no files has no image', () => {
   const body = captureCommentBody({ key: 'pr42', repo: 'o/r', sha: 'abc', files: [], reasons: 'login failed' })
   assert.ok(!body.includes('!['))
