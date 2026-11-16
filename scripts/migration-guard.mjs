@@ -129,7 +129,7 @@ function arg(argv, name) {
   return i >= 0 ? argv[i + 1] : undefined
 }
 
-function runGenerate(root, outPath) {
+export function runGenerate(root, outPath) {
   const results = {}
   const names = {}
   for (const t of listTargets(root)) {

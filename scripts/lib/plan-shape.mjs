@@ -9,10 +9,15 @@
  *  - `Reproduced` opens with yes/no; "no" needs a concrete reason after it → the run is
  *    labelled `plan:unverified`
  *  - `Needs owner` opens with yes/no
+ *  - `Test` (#3194) is a checklist (plan-checklist.mjs), one line per check:
+ *      `- [ ] T<n> — <what> — Run: \`cmd\`` or `- [ ] T<n> — <what> — Manual: <why>`
+ *    IDs are unique; a plan with nothing runnable writes the single line
+ *    `- [ ] T0 — no runnable test — Manual: <reason>`. Prose is rejected.
  *  - `Assumptions` is either the single line "none", or a list of bullets, each carrying
  *      `Why: …`, `Evidence: …` and `Status: verified|unverified`
- *    Evidence of a *verified* assumption must contain a link (https://…) — the proof;
- *    an *unverified* one must say why it could not be checked.
+ *    Status is read from its first word, so `unverified (could not reach staging)` is fine.
+ *    Evidence of a *verified* assumption must be checkable: an https link, a commit SHA, or
+ *    `path:line` / `path#Lnn` (shape only); an *unverified* one must say why it could not be checked.
  *
  *  - `Docs` (#3568) is either ONE line `none — <reason>` (bare "none" is rejected), or rows (bullets or
  *    table rows), one per doc claim: `<file:line> "<quote>" — Status: checked|wrong|can't tell —
@@ -31,6 +36,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { hasMarker } from './marker.mjs'
+import { parseChecklist } from './plan-checklist.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Docs', 'Assumptions', 'Needs owner']
@@ -62,6 +68,10 @@ const field = (text, key) => {
   return m ? m[1].replace(/^\**\s*/, '').trim() : ''
 }
 
+// Accepted forms of verified evidence (#3271): shape only, no git call (works in a shallow clone);
+// the reviewer checks a SHA exists.
+const EVIDENCE_FORMS = [/https?:\/\/\S+/, /\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/, /[\w./-]+\.\w+(?::\d+|#L\d+)\b/]
+
 export function parseAssumptions(text) {
   const errors = []
   const bullets = text.split('\n').map((l) => l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)).filter(Boolean).map((m) => m[1])
@@ -73,14 +83,14 @@ export function parseAssumptions(text) {
     const claim = b.split(/\s+[—–-]+\s+\**(?:Why|Evidence|Status):/i)[0].replace(/\*\*/g, '').trim()
     const why = field(b, 'Why')
     const evidence = field(b, 'Evidence')
-    const status = field(b, 'Status').toLowerCase().replace(/[^a-z]/g, '')
+    const status = field(b, 'Status').toLowerCase().match(/^[^a-z]*([a-z]+)/)?.[1] || ''
     const n = `assumption ${i + 1}`
     if (!claim) errors.push(`${n}: no claim`)
     if (!why) errors.push(`${n}: no "Why" (the reason it is taken as true)`)
     if (!evidence) errors.push(`${n}: no "Evidence"`)
     if (status !== 'verified' && status !== 'unverified') errors.push(`${n}: Status must be verified or unverified`)
-    if (status === 'verified' && evidence && !/https?:\/\/\S+/.test(evidence)) {
-      errors.push(`${n}: a verified assumption needs a linked proof (permalink, commit, run or doc URL)`)
+    if (status === 'verified' && evidence && !EVIDENCE_FORMS.some((re) => re.test(evidence))) {
+      errors.push(`${n}: a verified assumption needs a checkable proof: an https link, a commit SHA, or path:line / path#Lnn`)
     }
     return { claim, why, evidence, status }
   })
@@ -173,31 +183,37 @@ export function parseReread(text) {
   return { items, errors }
 }
 
+function markerErrors(body) {
+  if (!body.includes(PLAN_MARKER)) return [`missing marker ${PLAN_MARKER}`]
+  if (!hasMarker(body, PLAN_MARKER)) return [`marker ${PLAN_MARKER} must be the first line`]
+  return []
+}
+
+// The re-plan-only sections (#3149, #3341): Ticket re-read, and Changes unless --fresh.
+function parseRevision(sections, { revised, fresh }, errors) {
+  if (!revised) return []
+  const r = sections[REREAD] ? parseReread(sections[REREAD]) : { items: [], errors: [`missing or empty section: ${REREAD} (required on a re-plan)`] }
+  errors.push(...r.errors)
+  if (!fresh && !sections[CHANGES]) errors.push(`missing or empty section: ${CHANGES} (required on a re-plan; --fresh waives it)`)
+  return r.items
+}
+
 export function parsePlan(body, { revised = false, fresh = false } = {}) {
-  const errors = []
-  if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
-  else if (!hasMarker(body, PLAN_MARKER)) errors.push(`marker ${PLAN_MARKER} must be the first line`)
+  const errors = markerErrors(body)
   const sections = splitSections(body)
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
   }
-  let reread = []
-  if (revised) {
-    if (!sections[REREAD]) errors.push(`missing or empty section: ${REREAD} (required on a re-plan)`)
-    else {
-      const r = parseReread(sections[REREAD])
-      reread = r.items
-      errors.push(...r.errors)
-    }
-  }
-  if (revised && !fresh && !sections[CHANGES]) errors.push(`missing or empty section: ${CHANGES} (required on a re-plan; --fresh waives it)`)
+  const reread = parseRevision(sections, { revised, fresh }, errors)
   const reproduced = sections.Reproduced ? parseReproduced(sections.Reproduced, errors) : null
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
   errors.push(...a.errors)
   const d = sections.Docs ? parseDocs(sections.Docs) : { rows: [], errors: [] }
   errors.push(...d.errors)
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, reread, unverified: reproduced === false }
+  const t = sections.Test ? parseChecklist(sections.Test) : { items: [], errors: [] }
+  errors.push(...t.errors.map((e) => `Test: ${e}`))
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, checklist: t.items, reread, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

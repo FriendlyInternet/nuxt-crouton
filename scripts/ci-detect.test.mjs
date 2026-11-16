@@ -83,3 +83,10 @@ test('ci.yml: a docs-only PR runs the doc checks in the Build packages job (#316
   assert.match(prepare, /run: node scripts\/check-doc-claims\.mjs/)
   assert.doesNotMatch(job(yml, 'node-checks'), /check-doc-claims/, 'bare Node job has no typescript: the check would not run')
 })
+
+test('pipeline map edit runs node-checks', () => {
+  const r = run(['docs/pipeline/how-it-works.md'])
+  assert.equal(r.stage, 'none')
+  assert.equal(r.workflows, true)
+  assert.equal(run(['docs/x.md']).workflows, false)
+})

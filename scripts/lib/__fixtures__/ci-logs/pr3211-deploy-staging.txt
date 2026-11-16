@@ -1,0 +1,196 @@
+# #3668 fixture (#3270): trimmed raw log of job 125887149114 (run 41627100891, PR #3211, Deploy velo (staging)); ±20 lines around every ✗ / ##[error] line + the last 30; ESC rendered as ^[
+2026-11-03T11:24:43.0628837Z packages/crouton-feedback build: [log]
+2026-11-03T11:24:43.2299353Z packages/crouton-feedback build: Done
+2026-11-03T11:24:43.2303107Z packages/crouton-auth build$ unbuild
+2026-11-03T11:24:43.2306366Z packages/crouton-mcp build$ tsc
+2026-11-03T11:24:45.0275760Z packages/crouton-auth build: [info] Building crouton-auth
+2026-11-03T11:24:45.0277317Z packages/crouton-auth build: [info] Cleaning dist directory: `./dist`
+2026-11-03T11:24:45.2084133Z packages/crouton-auth build: Entry module "module.ts" is using named and default exports together. Consumers of your bundle will have to use `chunk.default` to access the default export, which may not be what you want. Use `output.exports: "named"` to disable this warning.
+2026-11-03T11:24:45.7767432Z packages/crouton-mcp build: Done
+2026-11-03T11:24:55.7732298Z packages/crouton-auth build: [success] Build succeeded for crouton-auth
+2026-11-03T11:24:55.7798872Z packages/crouton-auth build: [log]   dist/module.cjs (total size: 5.65 kB, chunk size: 5.65 kB, exports: default, name, version)
+2026-11-03T11:24:55.7807317Z packages/crouton-auth build: [log]   dist/schema/auth.cjs (total size: 24 kB, chunk size: 24 kB, exports: account, accountRelations, authEmailLog, authEmailLogRelations, domain, domainRelations, invitation, invitationRelations, member, memberRelations, organization, organizationRelations, passkey, passkeyRelations, scopedAccessGrant, scopedAccessToken, scopedAccessTokenRelations, session, sessionRelations, subscription, teamSettings, teamSettingsRelations, twoFactor, twoFactorRelations, user, userProfile, userProfileRelations, userRelations, verification)
+2026-11-03T11:24:55.7812517Z packages/crouton-auth build: [log]   dist/module.mjs (total size: 5.24 kB, chunk size: 5.24 kB, exports: default, name, version)
+2026-11-03T11:24:55.7818117Z packages/crouton-auth build: [log]   dist/schema/auth.mjs (total size: 20.7 kB, chunk size: 20.7 kB, exports: account, accountRelations, authEmailLog, authEmailLogRelations, domain, domainRelations, invitation, invitationRelations, member, memberRelations, organization, organizationRelations, passkey, passkeyRelations, scopedAccessGrant, scopedAccessToken, scopedAccessTokenRelations, session, sessionRelations, subscription, teamSettings, teamSettingsRelations, twoFactor, twoFactorRelations, user, userProfile, userProfileRelations, userRelations, verification)
+2026-11-03T11:24:55.7821484Z packages/crouton-auth build: Σ Total dist size (byte size): 427 kB
+2026-11-03T11:24:55.7822065Z packages/crouton-auth build: [log]
+2026-11-03T11:24:55.9581460Z packages/crouton-auth build: Done
+2026-11-03T11:24:55.9586370Z packages/crouton-core build$ unbuild
+2026-11-03T11:24:57.0574045Z packages/crouton-core build: [info] ^[[36mBuilding crouton-core^[[39m
+2026-11-03T11:24:57.0575761Z packages/crouton-core build: [info] Cleaning dist directory: `./dist/app/composables`
+2026-11-03T11:24:57.0737592Z packages/crouton-core build: [info] Cleaning dist directory: `./dist/server/database/schema`
+2026-11-03T11:25:02.1198004Z ##[error]packages/crouton-core build: app/composables/__tests__/test-utils.ts(8,17): error TS2742: The inferred type of 'createNuxtMocks' cannot be named without a reference to '.pnpm/@vitest+spy@4.1.12/node_modules/@vitest/spy'. This is likely not portable. A type annotation is necessary.
+2026-11-03T11:25:04.1090783Z packages/crouton-core build: [success] ^[[32mBuild succeeded for crouton-core^[[39m
+2026-11-03T11:25:04.1187115Z packages/crouton-core build: [log]   ^[[1mdist/app/composables^[[22m (total size: ^[[36m327 kB^[[39m)
+2026-11-03T11:25:04.1197728Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/test-utils.d.ts^[[39m
+2026-11-03T11:25:04.1199039Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionExport.d.ts^[[1m (2.62 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1200286Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useBlockEditRequest.d.ts^[[1m (1.34 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1201495Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionImport.mjs^[[1m (6.28 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1203366Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionExport.mjs^[[1m (6.04 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1205559Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionItem.d.ts^[[1m (1.02 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1207594Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionItem.mjs^[[1m (1.79 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1209643Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionMutation.d.ts^[[1m (2.25 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1212036Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionMutation.mjs^[[1m (5.6 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1237684Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionQuery.d.ts^[[1m (2.98 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1267746Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionQuery.mjs^[[1m (3.52 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1297960Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionSelection.mjs^[[1m (2.87 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1327816Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollectionSelection.d.ts^[[1m (3 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1329455Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollections.d.ts^[[1m (5.56 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1331235Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCollections.mjs^[[1m (563 B)^[[22m^[[39m
+2026-11-03T11:25:04.1333363Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCrouton.mjs^[[1m (4.84 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1335600Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCrouton.d.ts^[[1m (1.53 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1337460Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/useCroutonApps.d.ts^[[1m (1.25 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1433802Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTableData.test.mjs^[[1m (16.1 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1435034Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTeamContext.nuxt.test.d.ts^[[1m (1.03 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1436578Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTeamContext.test.d.ts^[[1m (11 B)^[[22m^[[39m
+2026-11-03T11:25:04.1437829Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTeamContext.nuxt.test.mjs^[[1m (7.39 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1439078Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTeamContext.test.mjs^[[1m (7.11 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1440206Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeDrag.test.d.ts^[[1m (11 B)^[[22m^[[39m
+2026-11-03T11:25:04.1441352Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeItemState.test.d.ts^[[1m (11 B)^[[22m^[[39m
+2026-11-03T11:25:04.1442484Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeDrag.test.mjs^[[1m (12.4 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1443648Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeItemState.test.mjs^[[1m (7.35 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1444826Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeMutation.test.d.ts^[[1m (11 B)^[[22m^[[39m
+2026-11-03T11:25:04.1446184Z packages/crouton-core build: ^[[90m  └─ dist/app/composables/__tests__/useTreeMutation.test.mjs^[[1m (13 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1447370Z packages/crouton-core build: [log]   ^[[1mdist/server/database/schema^[[22m (total size: ^[[36m8.75 kB^[[39m)
+2026-11-03T11:25:04.1448440Z packages/crouton-core build: ^[[90m  └─ dist/server/database/schema/redirects.d.ts^[[1m (7.14 kB)^[[22m^[[39m
+2026-11-03T11:25:04.1449510Z packages/crouton-core build: ^[[90m  └─ dist/server/database/schema/teamSettings.mjs^[[1m (106 B)^[[22m^[[39m
+2026-11-03T11:25:04.1450548Z packages/crouton-core build: ^[[90m  └─ dist/server/database/schema/redirects.mjs^[[1m (949 B)^[[22m^[[39m
+2026-11-03T11:25:04.1451607Z packages/crouton-core build: ^[[90m  └─ dist/server/database/schema/teamSettings.d.ts^[[1m (553 B)^[[22m^[[39m
+2026-11-03T11:25:04.1452539Z packages/crouton-core build: Σ Total dist size (byte size): ^[[36m336 kB^[[39m
+2026-11-03T11:25:04.1453161Z packages/crouton-core build: [log]
+2026-11-03T11:25:04.1453792Z packages/crouton-core build: [warn] Build is done with some warnings:
+2026-11-03T11:25:04.1454690Z packages/crouton-core build: - mkdist build failed for `dist/app/composables/__tests__/test-utils.d.ts`:
+2026-11-03T11:25:04.1458800Z ##[error]packages/crouton-core build:   - TypeError: app/composables/__tests__/test-utils.ts(8,17): error TS2742: The inferred type of 'createNuxtMocks' cannot be named without a reference to '.pnpm/@vitest+spy@4.1.12/node_modules/@vitest/spy'. This is likely not portable. A type annotation is necessary.
+2026-11-03T11:25:04.2245127Z packages/crouton-core build: Done
+2026-11-03T11:25:04.2252429Z packages/crouton-devtools build$ unbuild
+2026-11-03T11:25:04.2255149Z packages/crouton-printing build$ unbuild
+2026-11-03T11:25:05.4516460Z packages/crouton-printing build: [info] ^[[36mBuilding crouton-printing^[[39m
+2026-11-03T11:25:05.4518131Z packages/crouton-printing build: [info] Cleaning dist directory: `./dist/server/utils`
+2026-11-03T11:25:05.4833006Z packages/crouton-devtools build: [info] ^[[36mBuilding crouton-devtools^[[39m
+2026-11-03T11:25:05.4835268Z packages/crouton-devtools build: [info] Cleaning dist directory: `./dist`
+2026-11-03T11:25:10.2440688Z packages/crouton-printing build: [success] ^[[32mBuild succeeded for crouton-printing^[[39m
+2026-11-03T11:25:10.2488323Z packages/crouton-printing build: [log]   ^[[1mdist/server/utils^[[22m (total size: ^[[36m66.4 kB^[[39m)
+2026-11-03T11:25:10.2557383Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/drainer-gate.d.ts^[[1m (964 B)^[[22m^[[39m
+2026-11-03T11:25:10.2651397Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/drainer-gate.mjs^[[1m (469 B)^[[22m^[[39m
+2026-11-03T11:25:10.2653573Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/driver-registry.d.ts^[[1m (2.11 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2655573Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/driver-registry.mjs^[[1m (639 B)^[[22m^[[39m
+2026-11-03T11:25:10.2658543Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/escpos-drainer.d.ts^[[1m (2.77 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2660630Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/escpos-drainer.mjs^[[1m (5.68 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2662608Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/print-job-queue.d.ts^[[1m (2.33 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2664560Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/print-job-queue.mjs^[[1m (2.82 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2666816Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/print-job-status.d.ts^[[1m (788 B)^[[22m^[[39m
+2026-11-03T11:25:10.2668842Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/print-job-status.mjs^[[1m (1.78 kB)^[[22m^[[39m
+2026-11-03T11:25:10.2670902Z packages/crouton-printing build: ^[[90m  └─ dist/server/utils/print-queue-service.d.ts^[[1m (4.62 kB)^[[22m^[[39m
+2026-11-03T11:29:48.7658865Z   CLOUDFLARE_ACCOUNT_ID: ***
+2026-11-03T11:29:48.7659397Z   CLOUDFLARE_API_TOKEN: ***
+2026-11-03T11:29:48.7659799Z   NODE_OPTIONS: --max-old-space-size=8192
+2026-11-03T11:29:48.7660345Z   PNPM_HOME: /home/runner/setup-pnpm-velo-staging-pr3211/node_modules/.bin
+2026-11-03T11:29:48.7660936Z   URL: https://velo-pr3211.cloudflare-e53.workers.dev
+2026-11-03T11:29:48.7661417Z   EMAIL: review+velo-pr3211@example.com
+2026-11-03T11:29:48.7661850Z   PW: ***
+2026-11-03T11:29:48.7662159Z   APP: velo
+2026-11-03T11:29:48.7662466Z   WORKSPACE: apps
+2026-11-03T11:29:48.7662984Z ##[endgroup]
+2026-11-03T11:29:48.8261490Z [smoke] using smoke manifest from apps/velo/deploy.config.json
+2026-11-03T11:29:50.8616167Z [smoke] ✓ login proof — authenticated as review+velo-pr3211@example.com
+2026-11-03T11:29:51.2699868Z [smoke] ✓ crud.create ok (id=PsWnhiWCvU30IEb-byjm0)
+2026-11-03T11:29:51.7175075Z [smoke] ✓ crud.update ok
+2026-11-03T11:29:52.0541619Z [smoke] ✓ crud.read ok — saved record reads back
+2026-11-03T11:29:52.3237724Z [smoke] ✓ crud.delete ok
+2026-11-03T11:29:53.0917163Z [smoke] ✓ reads /api/crouton-bookings/teams/seed:org:test1/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02 → 200
+2026-11-03T11:29:53.3612927Z [smoke] ✓ reads /api/teams/seed:org:test1/pages-pages → 200
+2026-11-03T11:29:53.5958810Z [smoke] ✓ reads /api/teams/seed:org:test1/pages → 200
+2026-11-03T11:29:53.7913430Z [smoke] ✓ reads /api/teams/seed:org:test1/pages/_home → 200
+2026-11-03T11:29:53.9413443Z [smoke] ✗ reads /api/collab/token: HTTP 400, expected 200 — { "error": true, "url": "https://velo-pr3211.cloudflare-e53.workers.dev/api/collab/token", "statusCode": 400, "statusMessage": "teamId and room are required", "message": "" }
+2026-11-03T11:29:58.3360891Z [smoke] ✓ screenshot → screenshots/velo-smoke.png
+2026-11-03T11:29:58.3686321Z [smoke] ✗ smoke FAILED (1): reads /api/collab/token: HTTP 400, expected 200 — { "error": true, "url": "https://velo-pr3211.cloudflare-e53.workers.dev/api/collab/token", "statusCode": 400, "statusMessage": "teamId and room are required", "message": "" }
+2026-11-03T11:29:58.3936356Z ##[group]Run actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+2026-11-03T11:29:58.3936956Z with:
+2026-11-03T11:29:58.3941518Z   script: const fs = require('fs')
+const { APP: app, SHA: sha } = process.env
+let log = ''
+try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/smoke.log`, 'utf8') } catch { /* page-only smoke has no log */ }
+const lines = log.split('\n').filter(l => l.includes('✗')).map(l => l.replace(/^\[smoke\] /, '')).slice(0, 20)
+const detail = lines.length ? lines.join('\n') : 'The page did not answer 200 (see the run log).'
+const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+const marker = `<!-- deploy-smoke-fail:${app}:${sha} -->`
+const body = `${marker}\n⚠️ **${app}** deployed-preview smoke failed (report-only, so the PR is not blocked) — [run log](${runUrl})\n\n\`\`\`\n${detail.slice(0, 6000)}\n\`\`\`\n\n<sub>🤖 Set \`smoke.required: true\` in \`${app}/deploy.config.json\` to make this block the PR.</sub>`
+const { owner, repo } = context.repo
+const issue_number = context.issue.number
+const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 })
+const existing = comments.find(c => c.body && c.body.includes(marker))
+if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+else await github.rest.issues.createComment({ owner, repo, issue_number, body })
+
+2026-11-03T11:29:58.3948601Z   github-token: ***
+2026-11-03T11:29:58.3948947Z   debug: false
+2026-11-03T11:29:58.3949287Z   user-agent: actions/github-script
+2026-11-03T11:29:58.3949681Z   result-encoding: json
+2026-11-03T11:29:58.3950019Z   retries: 0
+2026-11-03T11:29:58.3950370Z   retry-exempt-status-codes: 400,401,403,404,422
+2026-11-03T11:29:58.3950781Z env:
+2026-11-03T11:29:58.3951162Z   CLOUDFLARE_ACCOUNT_ID: ***
+2026-11-03T11:29:58.3951688Z   CLOUDFLARE_API_TOKEN: ***
+2026-11-03T11:30:01.6554659Z ^[[36;1mif [ "$EVENT" = "push" ]; then^[[0m
+2026-11-03T11:30:01.6555242Z ^[[36;1m  GATE_ON_MAIN=$(jq -r '.smoke.gateOnMain // true' "$CONFIG" 2>/dev/null || echo true)^[[0m
+2026-11-03T11:30:01.6556060Z ^[[36;1m  if [ "$GATE_ON_MAIN" = "true" ]; then^[[0m
+2026-11-03T11:30:01.6557401Z ^[[36;1m    echo "::error::Deployed smoke failed on the shared staging after merge to main — failing the run so report-failed-deploy.yml opens an issue (#1106). A known-brittle smoke can opt out with smoke.gateOnMain=false in $APP/deploy.config.json."^[[0m
+2026-11-03T11:30:01.6558511Z ^[[36;1m    exit 1^[[0m
+2026-11-03T11:30:01.6558846Z ^[[36;1m  fi^[[0m
+2026-11-03T11:30:01.6559421Z ^[[36;1m  echo "::warning::Deployed smoke failed post-merge, but $APP sets smoke.gateOnMain=false (report-only)."^[[0m
+2026-11-03T11:30:01.6560069Z ^[[36;1m  exit 0^[[0m
+2026-11-03T11:30:01.6560387Z ^[[36;1mfi^[[0m
+2026-11-03T11:30:01.6561025Z ^[[36;1mecho "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."^[[0m
+2026-11-03T11:30:01.6582187Z shell: /usr/bin/bash -e {0}
+2026-11-03T11:30:01.6582575Z env:
+2026-11-03T11:30:01.6583003Z   CLOUDFLARE_ACCOUNT_ID: ***
+2026-11-03T11:30:01.6583541Z   CLOUDFLARE_API_TOKEN: ***
+2026-11-03T11:30:01.6583940Z   NODE_OPTIONS: --max-old-space-size=8192
+2026-11-03T11:30:01.6584498Z   PNPM_HOME: /home/runner/setup-pnpm-velo-staging-pr3211/node_modules/.bin
+2026-11-03T11:30:01.6585046Z   APP: velo
+2026-11-03T11:30:01.6585377Z   WORKSPACE: apps
+2026-11-03T11:30:01.6585711Z   EVENT: pull_request
+2026-11-03T11:30:01.6586410Z ##[endgroup]
+2026-11-03T11:30:01.6675409Z ##[error]Deployed-preview smoke failed and velo sets smoke.required=true.
+2026-11-03T11:30:01.6678435Z ##[error]Process completed with exit code 1.
+2026-11-03T11:30:01.6812313Z ##[warning]Input 'app-id' has been deprecated with message: Use 'client-id' instead.
+2026-11-03T11:30:01.6856527Z Post job cleanup.
+2026-11-03T11:30:02.1053676Z Token revoked
+2026-11-03T11:30:02.1525042Z Post job cleanup.
+2026-11-03T11:30:02.1529690Z ##[start-action display=Restore package dist cache;id=__764641af-e3bb-4c02-9ef4-5bf800301b15.cache]
+2026-11-03T11:30:02.1533092Z ##[end-action id=__764641af-e3bb-4c02-9ef4-5bf800301b15.cache;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-03T11:30:02.1603993Z Post job cleanup.
+2026-11-03T11:30:02.3198582Z Pruning is unnecessary.
+2026-11-03T11:30:02.3414239Z Post job cleanup.
+2026-11-03T11:30:02.4421963Z [command]/usr/bin/git version
+2026-11-03T11:30:02.4479272Z git version 2.56.0
+2026-11-03T11:30:02.4522880Z Temporarily overriding HOME='/home/runner/work/_temp/d1286b82-73d8-44e4-8600-514bbbf7db84' before making global git config changes
+2026-11-03T11:30:02.4524781Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-03T11:30:02.4530044Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-03T11:30:02.4576731Z Removing SSH command configuration
+2026-11-03T11:30:02.4586224Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-03T11:30:02.4631378Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-03T11:30:02.4929316Z Removing HTTP extra header
+2026-11-03T11:30:02.4937021Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-03T11:30:02.4983744Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-03T11:30:02.5281576Z Removing includeIf entries pointing to credentials config files
+2026-11-03T11:30:02.5288764Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-03T11:30:02.5335163Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-03T11:30:02.5337075Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-03T11:30:02.5338724Z includeif.gitdir:/github/workspace/.git.path
+2026-11-03T11:30:02.5340003Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-03T11:30:02.5346789Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-03T11:30:02.5388303Z /home/runner/work/_temp/git-credentials-18cd5c68-3868-4778-a18e-6b89e2145346.config
+2026-11-03T11:30:02.5400701Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-18cd5c68\-3868\-4778\-a18e\-6b89e2145346\.config
+2026-11-03T11:30:02.5494380Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-03T11:30:02.5530411Z /home/runner/work/_temp/git-credentials-18cd5c68-3868-4778-a18e-6b89e2145346.config
+2026-11-03T11:30:02.5542900Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-18cd5c68\-3868\-4778\-a18e\-6b89e2145346\.config
+2026-11-03T11:30:02.5589269Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-03T11:30:02.5625309Z /github/runner_temp/git-credentials-18cd5c68-3868-4778-a18e-6b89e2145346.config
+2026-11-03T11:30:02.5633384Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-18cd5c68\-3868\-4778\-a18e\-6b89e2145346\.config
+2026-11-03T11:30:02.5677570Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-03T11:30:02.5711561Z /github/runner_temp/git-credentials-18cd5c68-3868-4778-a18e-6b89e2145346.config
+2026-11-03T11:30:02.5720145Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-18cd5c68\-3868\-4778\-a18e\-6b89e2145346\.config
+2026-11-03T11:30:02.5766935Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-03T11:30:02.6023652Z Removing credentials config '/home/runner/work/_temp/git-credentials-18cd5c68-3868-4778-a18e-6b89e2145346.config'
+2026-11-03T11:30:02.6192250Z Cleaning up orphan processes

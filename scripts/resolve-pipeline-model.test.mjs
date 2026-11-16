@@ -71,7 +71,8 @@ test('plan-mode PI_MODEL reads steps.model.outputs.plan; every plan dispatch tar
     assert.match(readFileSync(f, 'utf8'), /work-issue-pidev\.yml/, f)
   }
   // plan-review re-plans through the saved-hand-off wrapper (#3306); the dispatch itself lives in handoff-exec.
-  assert.match(readFileSync('.github/workflows/plan-review.yml', 'utf8'), /handoff-exec\.mjs replan/)
+  // (the plan review is the plan-review job of on-comment.yml since #3313)
+  assert.match(readFileSync('.github/workflows/on-comment.yml', 'utf8'), /\n  plan-review:\n[\s\S]*handoff-exec\.mjs replan[\s\S]*\n  plan-review-outcome:\n/)
   assert.match(readFileSync('scripts/handoff-exec.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('scripts/plan-hold.mjs', 'utf8'), /mode: 'plan'/)
   assert.match(readFileSync('.github/workflows/label-router.yml', 'utf8'), /dispatch work-issue-pidev\.yml[^\n]*mode:"plan"/)
@@ -115,7 +116,8 @@ test('worker PI_MODEL and run record read the build tier (#3693)', async () => {
   const { tierModel } = await import('./eval-ledger/record-run.mjs')
   const wf = readFileSync('.github/workflows/work-issue-pidev.yml', 'utf8')
   assert.match(wf, /resolve-pipeline-model\.mjs build/)
-  assert.equal((wf.match(/steps\.model\.outputs\.build \}\}/g) || []).length, 2)
+  // pi step + finish step + the pi-request pass after a conflict merge (#3775)
+  assert.equal((wf.match(/steps\.model\.outputs\.build \}\}/g) || []).length, 3)
   assert.doesNotMatch(wf, /steps\.model\.outputs\.default/)
   assert.match(wf, /MODEL_TIER: "\$\{\{ inputs\.mode == 'plan' && 'plan' \|\| 'build' \}\}"/)
   assert.equal(tierModel('build'), 'claude-opus-5-5')

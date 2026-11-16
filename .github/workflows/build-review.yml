@@ -10,7 +10,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('build-review 
 #   needs-owner  → one yes/no question, held `status:blocked`
 #
 # SAFETY: the pi step is READ-ONLY and holds only a read-only App token (#3035; a probe proves it
-# cannot write; persist-credentials:false; the write token is only used by the trusted steps). It checks out the PR head as DATA and never runs it.
+# cannot write; persist-credentials:false; the write token is only used by the trusted steps). It checks out the PR head as DATA; the reviewer's `.pi/` (settings + extensions) is restored from the default branch by scripts/review-checkout.mjs, so no PR code starts with the reviewer (#3696).
 # No silent model fallback — the preflight fails loudly (same as plan review).
 #
 # Workflow-change: new workflow for the build-review gate (#2777).
@@ -189,11 +189,8 @@ jobs:
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" \
             --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- build-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
           echo "$PRIOR" > "$D/prior"
-          # The PR head as DATA (never executed here), diffed with copy detection against the base.
-          git fetch --no-tags origin "$BASE" "pull/${PR}/head"
-          git checkout --detach "$SHA"
-          git diff -C --find-copies-harder --no-color "origin/${BASE}...${SHA}" > "$D/diff.patch"
-          wc -c "$D/diff.patch"
+          # The PR head as DATA + its diff; .pi/ is pinned to the default branch so pi starts with trusted settings (#3696).
+          node scripts/review-checkout.mjs --base "$BASE" --pr "$PR" --sha "$SHA" --trusted "origin/${{ github.event.repository.default_branch }}" --diff "$D/diff.patch"
 
       # Prove once that the reviewer token cannot write: a no-op PATCH must fail (non-zero exit). On
       # success the reviewer never runs.
@@ -227,7 +224,7 @@ jobs:
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/build-review"
-          # Persona and the verdict parser come from the default branch, not the PR head.
+          # Persona, verdict parser and pi settings (.pi/, see review-checkout.mjs) come from the default branch, not the PR head.
           git show "origin/${{ github.event.repository.default_branch }}:.claude/agents/build-reviewer.md" \
             | awk '/^---$/ && n < 2 { n++; next } n >= 2' \
             | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{pr}}#${PR}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
@@ -265,7 +262,7 @@ jobs:
             gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$SHA" "$1" "$RUN_URL")" || true
             exit 1
           }
-          [ -s "$D/verdict.md" ] || fail "produced no verdict"
+          [ -s "$D/verdict.md" ] || fail "produced no verdict$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" stop-line "$D/pi.log")"
           DECISION="$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
           VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
           # #3173: on the final hold, tell the owner if their earlier `ok` came too early. Trusted default-branch

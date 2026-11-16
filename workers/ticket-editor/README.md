@@ -13,6 +13,7 @@ just-in-time (WebCrypto, dependency-free) and commits as `nuxt-harness[bot]` —
 
 - `GET /?slug=<slug>&branch=<branch>[&issue=<NN>]` — the editor (loads `writeups/diagrams/<slug>.excalidraw`). Pass `issue` to get a handoff comment on Save.
 - `POST /api/save` `{ slug, branch, scene, png, issue? }` — commits `<slug>.excalidraw` (+ `<slug>.png`) to `<branch>`. If `issue` is set, each Save also **posts a new comment** on that issue with the diagram **pinned to the commit it was saved at** (`raw.githubusercontent.com/<repo>/<sha>/<path>` is immutable, so the image never drifts). Result: a **timeline of frozen diagrams** — the original proposal comment keeps the original, each edit is its own comment — that a reviewer can compare and reply `approve`/`lgtm` to (#583). The comment is non-fatal — a commit always wins.
+  Each save comment opens with `📐 Diagram saved` and quotes any text you added in the drawing as your note. On an issue waiting on the owner (`status:blocked`) it resumes the pipeline with that comment as your answer (#3691). It is feedback, never an approval — `ok` must still be typed.
 
 **Owner-only saves (#3261).** `POST /api/save` needs `Authorization: Bearer <owner token>` — a 10-minute
 HMAC token minted by `https://status.pmcp.dev/api/editor/token` for the signed-in owner (the editor does

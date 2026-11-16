@@ -106,22 +106,9 @@ export function packagesApprovalCarry({ subPrs = [], owner } = {}) {
   return { packagesPrs, approved, unapproved, line }
 }
 
-/**
- * Every `Packages-approved:` line found in the given bodies (epic body, children's bodies),
- * de-duplicated, in first-seen order. PURE (#2748). Code spans/fences are skipped so a quoted
- * example never counts as a declaration.
- */
-export function collectApprovalLines(bodies = []) {
-  const seen = new Set()
-  for (const b of bodies) {
-    const prose = String(b || '').replace(/```[\s\S]*?```/g, '')
-    for (const l of prose.split('\n')) {
-      const t = l.trim()
-      if (ATTESTATION_RE.test(t) && !t.startsWith('`')) seen.add(t)
-    }
-  }
-  return [...seen]
-}
+// `collectApprovalLines` (#2748) now lives in packages-guard.mjs (#3701) so the pi finish step
+// and the run-time notice share one parser; re-exported here for epic-ready-pr.mjs + its tests.
+export { collectApprovalLines } from './packages-guard.mjs'
 
 /**
  * Build the epic→main PR title + body. PURE (#3619 — moved verbatim from the workflow).

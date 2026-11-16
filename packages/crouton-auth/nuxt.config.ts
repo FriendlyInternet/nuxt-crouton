@@ -46,6 +46,7 @@ export default defineNuxtConfig({
     public: {
       crouton: {
         auth: {
+          signup: 'open' as const, // 'invite' = invite-only sign-up (#3340)
           methods: {
             password: true,
             oauth: undefined,

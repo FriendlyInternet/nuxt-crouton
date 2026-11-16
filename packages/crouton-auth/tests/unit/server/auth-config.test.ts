@@ -196,4 +196,23 @@ describe('createAuth config', () => {
       expect(Object.keys(socialProviders!)).toEqual(['github', 'google'])
     })
   })
+
+  // #3340 — the behaviour is proven on a real better-auth in signup-gate.test.ts;
+  // these check createAuth wires it in and leaves other apps alone.
+  describe('invite-only sign-up', () => {
+    const hook = (c: CroutonAuthConfig) =>
+      (build(c) as any).databaseHooks.user.create.before as (u: { email: string }, ctx?: any) => Promise<void>
+
+    it('wires a user.create.before hook that, with signup unset, allows an HTTP sign-up without a lookup', async () => {
+      const before = hook({})
+      expect(typeof before).toBe('function')
+      const findMany = vi.fn()
+      await expect(before({ email: 'a@x.com' }, { request: new Request('https://velo.pmcp.dev'), context: { adapter: { findMany } } })).resolves.toBeUndefined()
+      expect(findMany).not.toHaveBeenCalled()
+    })
+
+    it('signup: \'invite\' keeps requireEmailVerificationOnInvitation false (invitees get no verification mail)', () => {
+      expect(plugin(build({ signup: 'invite' }), 'organization')!.config.requireEmailVerificationOnInvitation).toBe(false)
+    })
+  })
 })

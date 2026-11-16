@@ -163,5 +163,5 @@ Query events with filters and export as JSON/CSV.
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck  # MANDATORY after changes (checks this package only)
 ```

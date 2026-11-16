@@ -33,11 +33,14 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { basename } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { classifyHandoffError } from './lib/handoff.mjs'
 import { writePipelineBlock } from './pipeline-context.mjs'
 import { shouldReview, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { SIGNOFF_MARKER, HOLD_HEADING, signoffRoute } from './lib/signoff-route.mjs'
+import { diagramEditUrl, DIAGRAM_BRANCH } from './lib/diagram-edit-link.mjs'
+import { saveDiagramScene } from './lib/diagram-branch.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 
 export class PlanError extends Error {}
@@ -389,12 +392,20 @@ function renderSignoffArtifacts(signoff, state) {
       const gf = `${tmp}/signoff-diagram.json`
       writeFileSync(gf, JSON.stringify(signoff.diagram, null, 2))
       const before = new Set(state.artifacts)
-      state.exec('node', ['scripts/ticket-excalidraw.mjs', gf, '--out-dir', 'writeups/diagrams'])
+      // --excalidraw: also write the loose scene, which the ✏️ Edit link's editor loads (#3690).
+      state.exec('node', ['scripts/ticket-excalidraw.mjs', gf, '--out-dir', 'writeups/diagrams', '--excalidraw'])
       // ticket-excalidraw names files by slug; pick up the freshly written .png.
       const dir = 'writeups/diagrams'
       const pngs = (existsSync(dir) ? readdirSync(dir) : []).filter(f => f.endsWith('.png')).map(f => `${dir}/${f}`)
       const newest = pngs.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
-      if (newest && !before.has(newest) && linkable(newest, 'Diagram')) { state.artifacts.push(newest); out.images.push({ label: 'Diagram', path: newest }) }
+      if (newest && !before.has(newest) && linkable(newest, 'Diagram')) {
+        state.artifacts.push(newest); out.images.push({ label: 'Diagram', path: newest })
+        // The scene is saved to the `diagrams` branch by the hold handler, NOT added to artifacts:
+        // an epic-branch copy would drift from the owner's saved edits (#3690).
+        const slug = basename(newest, '.png')
+        const scene = `${dir}/${slug}.excalidraw`
+        if (existsSync(scene)) out.diagramScene = { slug, file: scene }
+      }
     })
   }
   if (signoff.ui) {
@@ -425,6 +436,52 @@ export function missingMockupReason(signoff, images = [], renderError = '') {
   return renderError ? `the mockup render failed (${renderError})` : 'the mockup image was not rendered or not committable (gitignored path?)'
 }
 
+/**
+ * The design sign-off hold comment (#1821), as a pure string. `editUrl` (from diagramEditUrl, #3690)
+ * adds an ✏️ Edit link under the Diagram image; with no `rawBase` (no epic branch) there are no
+ * images and so no link.
+ */
+export function renderSignoffHoldBody({ signoff, art, rawBase, editUrl = null }) {
+  // The marker is the FIRST line: label-router and on-comment recognise a real hold by it (#3238).
+  const lines = [SIGNOFF_MARKER]
+  lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI) · _design sign-off gate (#1821)_')
+  lines.push('')
+  lines.push(HOLD_HEADING)
+  lines.push('')
+  lines.push(signoff.summary)
+  lines.push('')
+  lines.push('### Decide these forks')
+  signoff.questions.forEach((q, i) => lines.push(`${i + 1}. ${q}`))
+  if (art.schemaMd) {
+    lines.push('')
+    lines.push('### Proposed schema')
+    lines.push(art.schemaMd)
+  }
+  if (art.images.length && rawBase) {
+    lines.push('')
+    lines.push('### Rendered')
+    for (const img of art.images) {
+      lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
+      if (img.label === 'Diagram' && editUrl) {
+        lines.push(`[✏️ Edit this diagram](${editUrl})`)
+        lines.push('Saving writes to the `diagrams` branch; nothing is merged from it.')
+      }
+    }
+  }
+  const missing = missingMockupReason(signoff, art.images, art.errors?.ui)
+  if (missing) {
+    lines.push('')
+    lines.push(`⚠️ **Mockup missing:** ${missing}. Reply and ask for it, or answer the forks without one.`)
+  }
+  lines.push('')
+  lines.push('---')
+  // @mention the owner: a hold is an ASK — it needs action, so it must notify (#1745). Without
+  // this the comment + status:blocked land silently and the hold waits on someone noticing it.
+  // Per CLAUDE.md an @mention is a request for action, which is exactly what this is.
+  lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
+  return lines.join('\n')
+}
+
 const ACTION_HANDLERS = {
   // A leaf: stamp the WS2 block onto the target's CURRENT body (merge, don't clobber prose).
   'edit-body'(a, { repo, exec, writeBody }) {
@@ -437,42 +494,21 @@ const ACTION_HANDLERS = {
     const { repo, exec, writeBody } = state
     const art = renderSignoffArtifacts(a.signoff, state)
     const rawBase = a.epic_branch ? `https://raw.githubusercontent.com/${repo}/${a.epic_branch}` : null
-    // The marker is the FIRST line: label-router and on-comment recognise a real hold by it (#3238).
-    const lines = [SIGNOFF_MARKER]
-    lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI) · _design sign-off gate (#1821)_')
-    lines.push('')
-    lines.push(HOLD_HEADING)
-    lines.push('')
-    lines.push(a.signoff.summary)
-    lines.push('')
-    lines.push('### Decide these forks')
-    a.signoff.questions.forEach((q, i) => lines.push(`${i + 1}. ${q}`))
-    if (art.schemaMd) {
-      lines.push('')
-      lines.push('### Proposed schema')
-      lines.push(art.schemaMd)
+    // Best-effort (#3690): save the scene to `diagrams` so the ✏️ Edit link opens it. A failed save
+    // drops only the link — the hold still posts.
+    let editUrl = null
+    if (art.diagramScene && rawBase) {
+      try {
+        saveDiagramScene({ exec, repo, slug: art.diagramScene.slug, file: art.diagramScene.file, issue: a.issue, tmpDir: process.env.RUNNER_TEMP || '/tmp' })
+        editUrl = diagramEditUrl({ slug: art.diagramScene.slug, branch: DIAGRAM_BRANCH, issue: a.issue })
+      } catch (e) { state.log(`diagram scene save failed: ${e.message}`); editUrl = null }
     }
-    if (art.images.length && rawBase) {
-      lines.push('')
-      lines.push('### Rendered')
-      for (const img of art.images) lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
-    }
-    const missing = missingMockupReason(a.signoff, art.images, art.errors.ui)
-    if (missing) {
-      lines.push('')
-      lines.push(`⚠️ **Mockup missing:** ${missing}. Reply and ask for it, or answer the forks without one.`)
-      state.mockupMissing = true
-    }
-    lines.push('')
-    lines.push('---')
-    // @mention the owner: a hold is an ASK — it needs action, so it must notify (#1745). Without
-    // this the comment + status:blocked land silently and the hold waits on someone noticing it.
-    // Per CLAUDE.md an @mention is a request for action, which is exactly what this is.
-    lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
-    const f = writeBody(`signoff-${a.issue}`, lines.join('\n'))
+    const body = renderSignoffHoldBody({ signoff: a.signoff, art, rawBase, editUrl })
+    if (missingMockupReason(a.signoff, art.images, art.errors.ui)) state.mockupMissing = true
+    const f = writeBody(`signoff-${a.issue}`, body)
     ghComment(exec, repo, a.issue, f)
     try { ghAddLabel(exec, repo, a.issue, 'status:blocked') } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
-    state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length })
+    state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length, diagramEdit: !!editUrl })
   },
   // Plain, idempotent add — for a label that describes the issue (`epic`, #2501), where adding
   // one already present is the desired no-op and no `labeled` event is wanted.

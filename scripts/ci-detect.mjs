@@ -14,7 +14,7 @@
  *   packages      JSON list of changed packages/*
  *   pocs          JSON list of changed pocs/*
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
- *   workflows     'true' when .github/(workflows|actions) changed
+ *   workflows     'true' when .github/(workflows|actions) changed, or the generated pipeline map (#3730)
  *   docs          'true' when docs/** or packages/** changed — the doc checks (#3166) run then, even
  *                 on a docs-only PR whose stage is 'none'
  *
@@ -65,7 +65,7 @@ export function detect({ files = [], event = '', apps = [], readPkg = () => null
     packages: [...packages].sort(),
     pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
-    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f)),
+    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f) || f === 'docs/pipeline/how-it-works.md'),
     docs: files.some(f => /^(docs|packages)\//.test(f))
   }
 }

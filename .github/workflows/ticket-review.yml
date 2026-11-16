@@ -6,7 +6,8 @@ run-name: "ticket-review #${{ inputs.epic }}"
 # child ticket and the code they name (.claude/agents/ticket-reviewer.md) and returns go / no-go /
 # needs-owner per ticket:
 #   go           → label the epic `tickets:approved`, then release the unblocked children
-#   no-go        → epic held `status:blocked`, the comment names each ticket and why; fix, re-run
+#   no-go        → ticket-revise.yml rewrites the sent-back tickets from the review and re-runs this
+#                  review (max 3 rounds, #3787), then holds `status:blocked`
 #   needs-owner  → one yes/no question, epic held `status:blocked`
 # Started by epic-scaffold.mjs / apply-decompose-plan.mjs (which create the children WITHOUT a
 # trigger label), or by hand: `gh workflow run ticket-review.yml -f epic=N`.
@@ -107,6 +108,9 @@ jobs:
             echo; echo "## Epic comments"
             gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
           } > "$D/epic.md"
+          # with authors: only the harness bot's own verdicts count toward the round (#3787)
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" \
+            --jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > "$D/comments.json"
           gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
             --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
             | jq -s 'add // []' > "$D/tickets.json"
@@ -146,11 +150,13 @@ jobs:
           [ -s "$D/verdict.md" ] || fail "produced no verdict"
           DECISION="$(node scripts/lib/ticket-verdict.mjs "$D/tickets.json" "$D/verdict.md")" || { echo "$DECISION"; fail "verdict was malformed"; }
           VERDICT="$(echo "$DECISION" | jq -r .verdict)"
-          node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" > "$D/comment.md"
+          read -r ROUTE ROUND < <(node scripts/ticket-revise.mjs route <(echo "$DECISION") "$D/comments.json")
+          REV=(); [ "$ROUTE" = revise ] && REV=(--revising "$ROUND")
+          node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" "${REV[@]}" > "$D/comment.md"
           # remove-then-add: re-adding a label the issue already carries fires no event.
           gh issue edit "$EPIC" --remove-label "tickets:approved" 2>/dev/null || true
           URL="$(gh issue comment "$EPIC" --body-file "$D/comment.md")"
-          echo "verdict: $VERDICT → $URL"
+          echo "verdict: $VERDICT (route $ROUTE, round $ROUND) → $URL"
           case "$VERDICT" in
             go)
               node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$EPIC" '{issue:$i,label:"tickets:approved"}')"
@@ -159,6 +165,11 @@ jobs:
                 node scripts/handoff-exec.mjs label "$(jq -nc --argjson i "$N" --arg l "$L" '{issue:$i,label:$l}')"
                 echo "released #$N with $L"
               done
+              ;;
+            no-go)
+              if [ "$ROUTE" = revise ]; then
+                node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$EPIC" '{kind:"dispatch",issue:$i,workflow:"ticket-revise.yml",inputs:{epic:($i|tostring)}}')"
+              else gh issue edit "$EPIC" --add-label "status:blocked"; fi
               ;;
             *)
               gh issue edit "$EPIC" --add-label "status:blocked"

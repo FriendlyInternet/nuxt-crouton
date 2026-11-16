@@ -99,8 +99,8 @@ test('requestReviewers throws → warning only', async () => {
   assert.equal(w.failed.length, 0)
   assert.ok(w.warns.some(m => m.startsWith('requestReviewers @pmcp')))
 })
-test('approved-then-throw keeps the earlier approval', async () => {
-  // quirk preserved — see #3619: a mid-loop failure still declares the PRs gathered so far.
+test('approved-then-throw withholds the approval (partial gather)', async () => {
+  // #3659: a partial gather never declares
   const w = world({
     issue: child,
     merged: [{ number: 11, merged_at: 'x', body: '' }, { number: 12, merged_at: 'x', body: '' }],
@@ -110,6 +110,22 @@ test('approved-then-throw keeps the earlier approval', async () => {
   await run(w)
   assert.ok(w.warns.some(m => m.includes('sub-PR approval gather for epic/7-x')))
   const body = w.calls.create[0].body
-  assert.ok(body.includes('Packages-approved: owner approved #11 (sub-PR sign-off carried by epic-ready-pr, #2494)'))
+  // the 🔒 section itself mentions "a `Packages-approved:` line", so match the declaration form
+  assert.ok(!body.includes('Packages-approved: owner approved'))
+  assert.ok(body.includes('🔒 Shared code not yet signed off'))
+  assert.ok(body.includes('#12'))
+  assert.ok(w.log.some(m => m.includes('incomplete=true')))
+})
+test('full gather with all packages PRs approved → declares', async () => {
+  const w = world({
+    issue: child,
+    merged: [{ number: 11, merged_at: 'x', body: '' }, { number: 12, merged_at: 'x', body: '' }],
+    files: { 11: ['packages/x/a.ts'], 12: ['packages/y/b.ts'] },
+    comments: { 11: [{ user: { login: 'pmcp' }, body: 'ok' }], 12: [{ user: { login: 'pmcp' }, body: 'ok' }] },
+  })
+  await run(w)
+  assert.equal(w.warns.length, 0)
+  const body = w.calls.create[0].body
+  assert.ok(body.includes('Packages-approved: owner approved #11, #12'))
   assert.ok(!body.includes('🔒'))
 })

@@ -37,48 +37,65 @@ describe('FIELD_TYPES', () => {
 
   describe('string type', () => {
     it('should have correct mapping', () => {
-      expect(FIELD_TYPES.string).toMatchObject({
+      expect(FIELD_TYPES.string).toEqual({
         db: 'TEXT',
         sqlite: { column: 'text' },
         zod: 'z.string()',
         default: '\'\'',
-        tsType: 'string'
+        tsType: 'string',
+        seed: { drizzleSeed: 'f.loremIpsum({ sentencesCount: 1 })', fixture: '`Sample ${name} ${i + 1}`' },
+        testSample: '\'sample\'',
+        canonical: 'string',
+        component: 'UInput',
+        translatable: true
       })
     })
   })
 
   describe('decimal type', () => {
     it('should have correct mapping', () => {
-      expect(FIELD_TYPES.decimal).toMatchObject({
+      expect(FIELD_TYPES.decimal).toEqual({
         db: 'REAL',
         sqlite: { column: 'real' },
         zod: 'z.number()',
         default: '0',
-        tsType: 'number'
+        tsType: 'number',
+        seed: { drizzleSeed: 'f.number({ minValue: 0, maxValue: 1000, precision: 100 })', fixture: 'i + 1' },
+        testSample: '1',
+        canonical: 'decimal',
+        component: 'UInputNumber'
       })
     })
   })
 
   describe('json type', () => {
     it('should have correct mapping', () => {
-      expect(FIELD_TYPES.json).toMatchObject({
+      expect(FIELD_TYPES.json).toEqual({
         db: 'TEXT (JSON)',
         sqlite: { column: 'json' },
         zod: 'z.record(z.string(), z.any())',
         default: '{}',
-        tsType: 'Record<string, any>'
+        tsType: 'Record<string, any>',
+        seed: { drizzleSeed: 'f.valuesFromArray({ values: [{}] })', fixture: '{}' },
+        testSample: '{}',
+        canonical: 'json',
+        component: 'UTextarea'
       })
     })
   })
 
   describe('repeater type', () => {
     it('should have correct mapping', () => {
-      expect(FIELD_TYPES.repeater).toMatchObject({
+      expect(FIELD_TYPES.repeater).toEqual({
         db: 'TEXT (JSON)',
         sqlite: { column: 'json' },
         zod: 'z.array(z.any())',
         default: '[]',
-        tsType: 'any[]'
+        tsType: 'any[]',
+        seed: { drizzleSeed: 'f.valuesFromArray({ values: [[]] })', fixture: '[]' },
+        testSample: '[]',
+        canonical: 'repeater',
+        component: 'CroutonFormRepeater'
       })
     })
   })

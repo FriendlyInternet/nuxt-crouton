@@ -44,6 +44,9 @@ test('pi-conflict-resolver, epic PR (#3002)', () => {
   assert.ok(!out.split('VISUAL EVIDENCE')[0].includes('work-227'))
   assert.ok(!out.includes('QUESTION'))
   assert.ok(!/issue body/i.test(out))
+  // #3775: the owner's request runs after the merge (pi-request step), so it can't land inside it.
+  assert.ok(!out.includes('Please rename `foo`'), 'the resolver prompt does not carry the owner comment')
+  assert.ok(out.includes('Resolve the conflict and nothing else'))
 })
 
 test('pi-conflict-resolver without a task is a hard error', () => {
