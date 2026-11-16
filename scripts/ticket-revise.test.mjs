@@ -156,9 +156,41 @@ test('wiring: both workflows keep each comment\'s author in comments.json and pa
   const wf = (f) => readFileSync(fileURLToPath(new URL(`../.github/workflows/${f}`, import.meta.url)), 'utf8')
   const KEEP = "--jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > \"$D/comments.json\""
   for (const f of ['ticket-review.yml', 'ticket-revise.yml']) assert.ok(wf(f).includes(KEEP), f)
-  assert.match(wf('ticket-review.yml'), /ticket-revise\.mjs route <\(echo "\$DECISION"\) "\$D\/comments\.json"\)/)
+  // #3846: the decision is written to a file first (the actions script reads it too).
+  assert.match(wf('ticket-review.yml'), /ticket-revise\.mjs route "\$D\/decision\.json" "\$D\/comments\.json" --subject "\$SUBJECT"\)/)
   assert.match(wf('ticket-revise.yml'), /ticket-revise\.mjs sent-back "\$D\/comments\.json"/)
   assert.match(wf('ticket-revise.yml'), /ticket-revise\.mjs findings "\$D\/comments\.json"/)
+})
+
+// ── #3846: rounds, sent-back and findings per subject (rolling epics) ──
+// A `subject=<n>` review grades that one ticket, so its decision holds only that ticket.
+const one = (n, fails) => decide([tickets[n - 1]], verdictFile(fails))
+const subjectVerdict = (subject, d) => renderComment(d, { subject })
+
+test('subject rounds: only that subject\'s bot verdicts count; blank keeps the whole-epic count', () => {
+  const d = twoNoGo()
+  const v1 = subjectVerdict('1', one(1, { 1: ['3'] }))
+  const c = [bot(v1), bot(v1), bot(subjectVerdict('2', one(2, { 2: ['4'] }))), human(v1)]
+  assert.equal(countRounds(c, '1'), 3)
+  assert.equal(countRounds(c, '2'), 2)
+  assert.equal(countRounds(c), 4)
+  assert.equal(route(d, countRounds(c, '1')), 'hold')
+  assert.equal(route(d, countRounds(c, '2')), 'revise')
+})
+
+test('subject sent-back/findings through the CLI: only that ticket, from its own latest verdict', () => {
+  const bin = fileURLToPath(new URL('./ticket-revise.mjs', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'ticket-revise-subj-'))
+  const both = one(2, { 2: ['4'] })
+  const onlyOne = one(1, { 1: ['5'] })
+  const f = join(dir, 'c.json')
+  // the newest comment overall is about subject 1; ticket 2's own verdict is the older one
+  writeFileSync(f, JSON.stringify([bot(subjectVerdict('2', both)), bot(subjectVerdict('1', onlyOne))]))
+  assert.deepEqual(JSON.parse(execFileSync('node', [bin, 'sent-back', f, '--subject', '2'], { encoding: 'utf8' })), [2])
+  assert.deepEqual(JSON.parse(execFileSync('node', [bin, 'sent-back', f, '--subject', '1'], { encoding: 'utf8' })), [1])
+  assert.deepEqual(JSON.parse(execFileSync('node', [bin, 'sent-back', f], { encoding: 'utf8' })), [1])
+  assert.match(execFileSync('node', [bin, 'findings', f, '2', '--subject', '2'], { encoding: 'utf8' }), /\*\*4\./)
+  assert.equal(latestVerdict([bot(subjectVerdict('2', both))], '3'), '')
 })
 
 test('renderComment with --revising through the ticket-verdict CLI', () => {
