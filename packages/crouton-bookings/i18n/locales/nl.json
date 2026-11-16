@@ -571,6 +571,23 @@
       "pending": "In afwachting",
       "sent": "Verzonden",
       "failed": "Mislukt"
+    },
+    "charts": {
+      "byDate": {
+        "title": "Reservaties per maand"
+      },
+      "byLocation": {
+        "title": "Reservaties per locatie"
+      },
+      "byStatus": {
+        "title": "Reservaties per status"
+      },
+      "bySlot": {
+        "title": "Reservaties per tijdslot"
+      },
+      "byGroup": {
+        "title": "Reservaties per groep"
+      }
     }
   }
 }

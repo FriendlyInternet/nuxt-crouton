@@ -571,6 +571,23 @@
       "pending": "Pending",
       "sent": "Sent",
       "failed": "Failed"
+    },
+    "charts": {
+      "byDate": {
+        "title": "Bookings per month"
+      },
+      "byLocation": {
+        "title": "Bookings per location"
+      },
+      "byStatus": {
+        "title": "Bookings by status"
+      },
+      "bySlot": {
+        "title": "Bookings per time slot"
+      },
+      "byGroup": {
+        "title": "Bookings per group"
+      }
     }
   }
 }

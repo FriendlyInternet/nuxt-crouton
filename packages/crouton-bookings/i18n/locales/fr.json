@@ -571,6 +571,23 @@
       "pending": "En attente",
       "sent": "Envoyé",
       "failed": "Échoué"
+    },
+    "charts": {
+      "byDate": {
+        "title": "Réservations par mois"
+      },
+      "byLocation": {
+        "title": "Réservations par lieu"
+      },
+      "byStatus": {
+        "title": "Réservations par statut"
+      },
+      "bySlot": {
+        "title": "Réservations par créneau"
+      },
+      "byGroup": {
+        "title": "Réservations par groupe"
+      }
     }
   }
 }
