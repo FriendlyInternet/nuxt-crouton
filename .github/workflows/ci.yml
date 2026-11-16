@@ -841,11 +841,6 @@ jobs:
       - name: Install dependencies
         if: steps.plan.outputs.needs_install == 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
-      # --ignore-scripts skips better-sqlite3's native build; a plan test that opens a real
-      # SQLite DB dies on "Could not locate the bindings file" without it (as in the test job).
-      - name: Build better-sqlite3's native binding
-        if: steps.plan.outputs.needs_install == 'true'
-        run: pnpm rebuild better-sqlite3
       - name: Run the plan's Test lines (no token)
         if: steps.plan.outputs.has_plan == 'true'
         run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
