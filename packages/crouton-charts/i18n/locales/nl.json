@@ -1,0 +1,26 @@
+{
+  "charts": {
+    "filters": {
+      "period": "Periode",
+      "from": "Van",
+      "to": "Tot",
+      "all": "Alle",
+      "clear": "Filters wissen",
+      "periods": {
+        "all": "Altijd",
+        "thisMonth": "Deze maand",
+        "last3Months": "Laatste 3 maanden",
+        "thisYear": "Dit jaar",
+        "lastYear": "Vorig jaar",
+        "custom": "Aangepast"
+      }
+    },
+    "blocks": {
+      "filters": {
+        "name": "Grafiekfilters",
+        "description": "Filterbalk voor de grafieken op deze pagina",
+        "editorHint": "Toont de filters die de grafieken op deze pagina ondersteunen (periode, locatie…)."
+      }
+    }
+  }
+}

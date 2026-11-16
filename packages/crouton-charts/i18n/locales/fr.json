@@ -1,0 +1,26 @@
+{
+  "charts": {
+    "filters": {
+      "period": "Période",
+      "from": "Du",
+      "to": "Au",
+      "all": "Tous",
+      "clear": "Effacer les filtres",
+      "periods": {
+        "all": "Toute la période",
+        "thisMonth": "Ce mois-ci",
+        "last3Months": "3 derniers mois",
+        "thisYear": "Cette année",
+        "lastYear": "L'année dernière",
+        "custom": "Personnalisée"
+      }
+    },
+    "blocks": {
+      "filters": {
+        "name": "Filtres de graphiques",
+        "description": "Barre de filtres pour les graphiques de cette page",
+        "editorHint": "Affiche les filtres pris en charge par les graphiques de cette page (période, lieu…)."
+      }
+    }
+  }
+}

@@ -26,6 +26,8 @@ export interface ChartPresetConfig {
   orientation?: 'vertical' | 'horizontal'
 }
 
+import type { ChartFilterDef } from '../utils/chart-filters'
+
 export interface ChartPreset {
   id: string
   name: string
@@ -34,6 +36,8 @@ export interface ChartPreset {
   /** Source package (e.g., 'crouton-bookings') */
   package: string
   config: ChartPresetConfig
+  /** Filters this chart understands (shown by a chart-filters block on the same page, #3928) */
+  filters?: ChartFilterDef[]
 }
 
 export function useCroutonChartRegistry() {

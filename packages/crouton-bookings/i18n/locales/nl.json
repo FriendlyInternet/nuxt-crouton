@@ -587,6 +587,10 @@
       },
       "byGroup": {
         "title": "Reservaties per groep"
+      },
+      "filters": {
+        "location": "Locatie",
+        "status": "Status"
       }
     }
   }

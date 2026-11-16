@@ -9,6 +9,7 @@
   },
   "files": [
     "app",
+    "i18n",
     "nuxt.config.ts",
     "crouton.manifest.ts"
   ],

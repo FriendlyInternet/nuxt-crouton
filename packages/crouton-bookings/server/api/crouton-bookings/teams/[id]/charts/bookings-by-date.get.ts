@@ -4,18 +4,20 @@
  * Booking counts per MONTH (per-day points were unreadable spikes), labelled in the
  * visitor's language ("nov. 2026"). Used by the 'bookings:by-date' chart preset.
  */
-import { eq } from 'drizzle-orm'
+
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { bookingChartFiltersFromEvent, bookingChartWhere } from '../../../../../utils/chart-filters'
 import { bookingsBookings } from '../../../../../../collections/bookings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   // Team-wide statistics: admins only until a chart block can grant its own audience (#3938)
   const { team } = await requireTeamAdmin(event)
+  const where = bookingChartWhere(team.id, bookingChartFiltersFromEvent(event))
   const db = useDB()
   const locale = String(getCookie(event, 'i18n_redirected') || 'fr')
 
   const rows = await db.select({ date: bookingsBookings.date })
-    .from(bookingsBookings).where(eq(bookingsBookings.teamId as any, team.id))
+    .from(bookingsBookings).where(where)
 
   const counts = new Map<string, number>()
   for (const r of rows as any[]) {

@@ -1,0 +1,26 @@
+{
+  "charts": {
+    "filters": {
+      "period": "Period",
+      "from": "From",
+      "to": "To",
+      "all": "All",
+      "clear": "Clear filters",
+      "periods": {
+        "all": "All time",
+        "thisMonth": "This month",
+        "last3Months": "Last 3 months",
+        "thisYear": "This year",
+        "lastYear": "Last year",
+        "custom": "Custom"
+      }
+    },
+    "blocks": {
+      "filters": {
+        "name": "Chart filters",
+        "description": "Filter bar for the charts on this page",
+        "editorHint": "Shows the filters the charts on this page support (period, location…)."
+      }
+    }
+  }
+}

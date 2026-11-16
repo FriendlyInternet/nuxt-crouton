@@ -14,6 +14,7 @@
 
 import type { ChartBlockAttrs } from '../../utils/chart-constants'
 import type { ChartPreset } from '../../composables/useCroutonChartRegistry'
+import { buildFilterQuery } from '../../utils/chart-filters'
 
 interface Props {
   attrs: ChartBlockAttrs
@@ -30,6 +31,21 @@ const resolvedPreset = computed(() => {
   return chartPresets.value.find(p => p.id === props.attrs.preset) || null
 })
 
+// Page filters (#3928): register this chart's preset so a chart-filters block on the page
+// shows its filters; send only the filters the preset declares.
+const { state: filterState, registerPreset, unregisterPreset } = useChartFilters()
+let registeredId: string | null = null
+watch(() => resolvedPreset.value?.id, (id) => {
+  if (registeredId) unregisterPreset(registeredId)
+  registeredId = id || null
+  if (registeredId) registerPreset(registeredId)
+}, { immediate: true })
+onBeforeUnmount(() => { if (registeredId) unregisterPreset(registeredId) })
+
+const filterQuery = computed(() =>
+  resolvedPreset.value ? buildFilterQuery(resolvedPreset.value.filters, filterState.value) : undefined
+)
+
 // Effective props to pass to CroutonChartsWidget
 const effectiveProps = computed(() => {
   if (resolvedPreset.value) {
@@ -42,7 +58,8 @@ const effectiveProps = computed(() => {
       yFields: pc.yFields,
       title: props.attrs.title || pc.title,
       height: height.value,
-      stacked: pc.stacked ?? false
+      stacked: pc.stacked ?? false,
+      query: filterQuery.value
     }
   }
   return {

@@ -587,6 +587,10 @@
       },
       "byGroup": {
         "title": "Bookings per group"
+      },
+      "filters": {
+        "location": "Location",
+        "status": "Status"
       }
     }
   }

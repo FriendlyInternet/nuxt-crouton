@@ -8,6 +8,11 @@
  * ready for CroutonChartsWidget to render without any manual field configuration.
  */
 export default defineNuxtPlugin(() => {
+  // Filters a preset declares; a chart-filters block on the page shows them (#3928)
+  const OPTIONS = '/api/crouton-bookings/teams/{teamId}/charts/filter-options'
+  const period = { key: 'period', type: 'period' as const }
+  const location = { key: 'location', type: 'select' as const, label: 'bookings.charts.filters.location', optionsApi: `${OPTIONS}?key=location` }
+  const status = { key: 'status', type: 'select' as const, label: 'bookings.charts.filters.status', optionsApi: `${OPTIONS}?key=status` }
   try {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore Optional auto-import from crouton-charts: unresolved when bookings loads alone, resolved when both layers load
@@ -25,7 +30,8 @@ export default defineNuxtPlugin(() => {
         xField: 'date',
         yFields: 'count',
         title: 'bookings.charts.byDate.title'
-      }
+      },
+      filters: [period, location, status]
     })
 
     registerChartPreset({
@@ -40,7 +46,8 @@ export default defineNuxtPlugin(() => {
         xField: 'location',
         yFields: 'count',
         title: 'bookings.charts.byLocation.title'
-      }
+      },
+      filters: [period, status]
     })
 
     registerChartPreset({
@@ -55,7 +62,8 @@ export default defineNuxtPlugin(() => {
         xField: 'status',
         yFields: 'count',
         title: 'bookings.charts.byStatus.title'
-      }
+      },
+      filters: [period, location]
     })
 
     registerChartPreset({
@@ -70,7 +78,8 @@ export default defineNuxtPlugin(() => {
         xField: 'slot',
         yFields: 'count',
         title: 'bookings.charts.bySlot.title'
-      }
+      },
+      filters: [period, location, status]
     })
 
     registerChartPreset({
@@ -85,7 +94,8 @@ export default defineNuxtPlugin(() => {
         xField: 'group',
         yFields: 'count',
         title: 'bookings.charts.byGroup.title'
-      }
+      },
+      filters: [period, location, status]
     })
   }
   catch {

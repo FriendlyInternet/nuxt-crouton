@@ -587,6 +587,10 @@
       },
       "byGroup": {
         "title": "Réservations par groupe"
+      },
+      "filters": {
+        "location": "Lieu",
+        "status": "Statut"
       }
     }
   }

@@ -36,5 +36,15 @@ export default defineNuxtConfig({
   // Composables auto-import
   imports: {
     dirs: [join(currentDir, 'app/composables')]
+  },
+
+  // i18n — translations auto-merge when this layer is extended (module from crouton-i18n)
+  i18n: {
+    locales: [
+      { code: 'en', name: 'English', file: 'en.json' },
+      { code: 'nl', name: 'Nederlands', file: 'nl.json' },
+      { code: 'fr', name: 'Français', file: 'fr.json' }
+    ],
+    langDir: '../i18n/locales'
   }
 })

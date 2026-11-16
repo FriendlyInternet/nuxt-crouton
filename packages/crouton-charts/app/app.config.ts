@@ -115,6 +115,27 @@ const chartBlockDefinition: CroutonBlockDefinition = {
   }
 }
 
+// Filter bar for the preset charts on the same page (#3928). Labels are i18n keys
+// (addon-block convention, resolved by crouton-pages' useBlockI18n).
+const chartFiltersBlockDefinition: CroutonBlockDefinition = {
+  type: 'chartFiltersBlock',
+  name: 'charts.blocks.filters.name',
+  description: 'charts.blocks.filters.description',
+  icon: 'i-lucide-sliders-horizontal',
+  category: 'data',
+  clientOnly: true,
+  defaultAttrs: {},
+  components: {
+    editorView: 'CroutonChartsBlocksChartFiltersBlockView',
+    renderer: 'CroutonChartsBlocksChartFiltersBlockRender'
+  },
+  schema: [],
+  tiptap: {
+    parseHTMLTag: 'div[data-type="chart-filters-block"]',
+    attributes: {}
+  }
+}
+
 export default defineAppConfig({
   // App auto-discovery registration for crouton-charts
   croutonApps: {
@@ -130,6 +151,7 @@ export default defineAppConfig({
   },
   // Block definitions for the page editor
   croutonBlocks: {
-    chartBlock: chartBlockDefinition
+    chartBlock: chartBlockDefinition,
+    chartFiltersBlock: chartFiltersBlockDefinition
   }
 })
