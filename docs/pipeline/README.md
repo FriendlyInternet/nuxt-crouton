@@ -1,5 +1,7 @@
 # Pipeline v1 — a plain guide
 
+> **New here?** Start with [How a ticket becomes a merged change](./how-it-works.md). This page covers only pipeline v1 merging.
+
 > **Read this first:** this guide is part of [#3458 — pipeline versions](https://github.com/FriendlyInternet/nuxt-crouton/issues/3458).
 
 ## What it is
@@ -14,7 +16,7 @@ created; adding it later does nothing.
 | --- | --- |
 | Leaf → v1 epic branch | GitHub auto-merges it once `CI Gate` and `Merge decision` are both green |
 | Epic → `main` | Unchanged: needs the owner's `ok` |
-| Leaf → `main` | Unchanged: needs the owner's `ok` |
+| Leaf → `main` | Needs the owner's `ok`, unless every changed file is in the incubator stage and the build review said go on the current commit — then it merges once green (#3757) |
 
 Holds still hold: a failing check, a draft sign-off PR, a missing review, or changes to
 `packages/` or workflow files keep `Merge decision` waiting, so GitHub does not merge.

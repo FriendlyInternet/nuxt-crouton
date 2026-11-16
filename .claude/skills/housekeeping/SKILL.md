@@ -48,6 +48,7 @@ the only thing it writes.
   LLM): a cited path that **vanished** (🔴), a cited file with commits **newer than the stamp**
   (🟡 possibly-stale), or a stamp **> 90d old** (🔵 re-verify due). Report-only — a re-verified,
   re-stamped skill drops off next run (#1100 WS3). Section dropped if the checker can't run.
+- **🧬 Generated collections behind the generator** — per app/POC, collections whose committed code differs from a fresh `crouton config --force` (run in a throwaway copy by `scripts/app-collection-drift.mjs`), plus routes missing body validation and apps that can't regenerate. Report-only; intentional hand edits go in its `ALLOW` with a reason (#3407).
 - **🗑 Retired projects** — `retired/` dirs with a `.retired.json` stamp, showing age and flagging entries past 60 days for full deletion via `/retire-delete`.
 
 ## Pipeline (deterministic — no LLM, no secrets)
@@ -56,6 +57,7 @@ Mirrors `.claude/skills/epic-digest/`:
 
 ```
 gather.mjs  → housekeeping.data.json   (git for branches + GitHub REST for issues/PRs/labels)
+app-collection-drift.mjs --json --out app-collection-drift.json  (needs pnpm install + the crouton-auth build; read by gather.mjs via APP_COLLECTION_DRIFT_FILE — missing file = 'could not run')
 render.mjs  → housekeeping-<date>.md   (JSON → Markdown, sections dropped when empty)
 post-comment.sh                        (upsert the one standing "🧹 Housekeeping" issue)
 schedule.mjs                           (cadence-as-data: is today a send day per .github/digests.yml?)

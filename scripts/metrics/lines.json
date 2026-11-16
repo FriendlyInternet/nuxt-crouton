@@ -1,0 +1,75 @@
+{
+  "lines": {
+    "tickets": [
+      "label-ready-epics.yml",
+      "label-router.yml",
+      "labels.yml",
+      "on-issue-close.yml",
+      "routing-registry.yml",
+      "ticket-review.yml",
+      "ticket-revise.yml",
+      "warn-closes-blocked.yml"
+    ],
+    "planning": [
+      "decompose-on-issue-pidev.yml",
+      "on-comment.yml",
+      "schedule-waves.yml"
+    ],
+    "building": [
+      "build-review.yml",
+      "ci.yml",
+      "e2e.yml",
+      "guard-package-approval.yml",
+      "migration-guard.yml",
+      "packages-guard.yml",
+      "post-test-card.yml",
+      "preview-screenshot.yml",
+      "qodo-second-opinion.yml",
+      "review.yml",
+      "secret-scan.yml",
+      "skill-freshness-pr.yml",
+      "skills-doc.yml",
+      "work-issue-pidev.yml"
+    ],
+    "fixing": [
+      "fix-ci-on-failure.yml",
+      "report-failed-deploy.yml",
+      "verify-fix-evidence.yml"
+    ],
+    "merging": [
+      "automerge-epic-subpr.yml",
+      "handoff-sweep.yml",
+      "on-pr-close.yml",
+      "owner-quiz.yml",
+      "postmortem.yml",
+      "status.yml"
+    ],
+    "deploys": [
+      "db-clone.yml",
+      "db-counts.yml",
+      "deploy-app.yml",
+      "deploy-apps.yml",
+      "deploy-docs.yml",
+      "deploy-pocs.yml",
+      "deploy-sandbox.yml",
+      "deploy-themes-playground.yml",
+      "deploy-ticket-editor.yml",
+      "release-venue-bundle.yml",
+      "teardown-app.yml",
+      "teardown-on-removal.yml"
+    ],
+    "scheduled": [
+      "canary.yml",
+      "epic-digest.yml",
+      "housekeeping.yml",
+      "loop-station-inventory.yml",
+      "loop-station-refresh.yml",
+      "pi-key-canary.yml",
+      "pipeline-metrics.yml",
+      "quality-digest.yml",
+      "skills-digest.yml",
+      "sync-changelogs.yml",
+      "weekly.yml"
+    ]
+  }
+}

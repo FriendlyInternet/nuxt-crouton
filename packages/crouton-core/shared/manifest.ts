@@ -162,7 +162,6 @@ export interface ManifestExtensionPoint {
 export interface ManifestComponent {
   name: string
   description: string
-  props?: string[]
 }
 
 export interface ManifestEditorBlock {

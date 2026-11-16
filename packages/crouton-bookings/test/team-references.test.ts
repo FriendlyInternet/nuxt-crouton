@@ -13,6 +13,7 @@ vi.mock('~~/server/db/schema', async () => {
 })
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'member' } }),
+  requireTeamAdmin: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } }),
 }))
 vi.mock('../collections/bookings/server/database/queries', async (orig) => ({
   ...(await orig() as object),

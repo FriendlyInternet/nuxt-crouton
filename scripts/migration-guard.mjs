@@ -24,6 +24,18 @@ export const SCHEMA_TRIGGER_RE = [
   /^packages\/[^/]+\/server\/db\/schema\/.+/,
 ]
 
+// App-owned schema/migration files (#3590): a PR changing these is also checked.
+export const APP_TRIGGER_RE = [
+  /^(apps|pocs)\/[^/]+\/server\/db\/schema\.ts$/,
+  /^pocs\/[^/]+\/layers\/[^/]+\/collections\/[^/]+\/server\/database\/schema\.ts$/,
+  /^(apps|pocs)\/[^/]+\/server\/db\/migrations\/.+/,
+  /^(apps|pocs)\/[^/]+\/drizzle\.config\.ts$/,
+]
+
+export function isAppSchemaChange(files = []) {
+  return files.some(f => typeof f === 'string' && APP_TRIGGER_RE.some(re => re.test(f)))
+}
+
 export function isSchemaChange(files = []) {
   return files.some(f => typeof f === 'string' && SCHEMA_TRIGGER_RE.some(re => re.test(f)))
 }
@@ -73,11 +85,11 @@ function classifyResults(results, names) {
   return { missing, errored, skipped }
 }
 
-function renderMarkdown({ status, missing, errored, skipped, reason }) {
+function renderMarkdown({ status, missing, errored, skipped, reason, cause = 'package' }) {
   const head = { fail: '❌ Missing app migration', notice: 'ℹ️ Migration guard notice', pass: '✅ App migrations are up to date' }[status]
   const lines = [`### ${head}`]
   if (missing.length) {
-    lines.push('', 'This PR changes a package schema, but these apps would still generate a migration. Run the command and commit the result:')
+    lines.push('', (cause === 'package' ? 'This PR changes a package schema' : 'This PR changes an app schema or migrations') + ', but these apps would still generate a migration. Run the command and commit the result:')
     for (const x of missing) {
       lines.push('', `- **${x.app}** — \`${x.command}\``, '  <details><summary>statements</summary>', '', '  ```sql')
       for (const s of x.statements) lines.push(`  ${s.replace(/\n/g, '\n  ')}`)
@@ -98,15 +110,17 @@ function renderMarkdown({ status, missing, errored, skipped, reason }) {
  * results: dir → { statements } | { error } | { skipped: 'legacy' }; names: dir → package name
  */
 export function evaluateMigrationGuard({ changedFiles = [], body = '', results = {}, names = {} } = {}) {
-  if (!isSchemaChange(changedFiles)) {
-    return { status: 'not-involved', missing: [], errored: [], skipped: [], markdown: 'No package schema file changed — migration guard not involved.' }
+  const pkgChange = isSchemaChange(changedFiles)
+  const appChange = isAppSchemaChange(changedFiles)
+  if (!pkgChange && !appChange) {
+    return { status: 'not-involved', missing: [], errored: [], skipped: [], markdown: 'No package or app schema file changed — migration guard not involved.' }
   }
   const { missing, errored, skipped } = classifyResults(results, names)
   let status = missing.length || errored.length ? 'fail' : skipped.length ? 'notice' : 'pass'
   const m = NOT_NEEDED_RE.exec(body || '')
   let reason = null
   if (status === 'fail' && m) { status = 'notice'; reason = m[1].trim() }
-  return { status, missing, errored, skipped, reason, markdown: renderMarkdown({ status, missing, errored, skipped, reason }) }
+  return { status, missing, errored, skipped, reason, markdown: renderMarkdown({ status, missing, errored, skipped, reason, cause: pkgChange ? 'package' : 'app' }) }
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
@@ -115,7 +129,7 @@ function arg(argv, name) {
   return i >= 0 ? argv[i + 1] : undefined
 }
 
-function runGenerate(root, outPath) {
+export function runGenerate(root, outPath) {
   const results = {}
   const names = {}
   for (const t of listTargets(root)) {

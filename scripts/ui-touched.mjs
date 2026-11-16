@@ -197,7 +197,7 @@ export function uiTouched(diff, getLines) {
 }
 
 /**
- * Same verdict from GitHub `pulls.listFiles` entries (#3228) -- for status.yml, which has no checkout.
+ * Same verdict from GitHub `pulls.listFiles` entries (#3228) -- for status.yml, which has no checkout of the PR's files.
  * @param {{filename:string, patch?:string, status?:string, previous_filename?:string}[]} files
  * @param {(ref:'head'|'merge-base', path:string) => string | null | Promise<string|null>} readText
  *   'head' = PR head; 'merge-base' = merge base of base...head (patch old-side line numbers

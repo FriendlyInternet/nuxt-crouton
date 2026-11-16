@@ -178,8 +178,9 @@ node .claude/skills/loop-station/aggregate-usage.mjs --window 7 trace1.jsonl tra
 ## In CI
 
 `.github/workflows/weekly.yml` (`usage` job) runs **weekly** (Mondays 06:30 UTC,
-first, before `findings` and `advisor`): list the window's `loop-station-trace-*` artifacts →
-download → aggregate → append → commit back `[skip ci]`. Fail-loud contract
+first, before `findings` and `advisor`): list the window's `loop-station-trace-*` and `pi-telemetry-*` artifacts with
+`scripts/fetch-artifacts.mjs` (stops at the cutoff, retries a bad page, downloads 8 at a time) →
+aggregate → append → open an auto-merge data PR (#3490). Fail-loud contract
 (#1037): a listing failure **fails the job** (an outage must not read as a
 quiet week); zero artifacts appends a meta-only record (a gap you can see).
 

@@ -18,7 +18,8 @@ test('automerge keeps no inline copy of the required-check rule', () => {
 })
 
 test('workflow-runs read for the live filter is gated on needsLiveFilter (#3453)', () => {
-  for (const f of ['automerge-epic-subpr.yml', 'status.yml']) {
+  // status.yml's logic moved into scripts/lib/pr-status-io.mjs (#3617); automerge is still inline.
+  for (const f of ['automerge-epic-subpr.yml', '../../scripts/lib/pr-status-io.mjs']) {
     const wf = readFileSync(new URL(f, dir), 'utf8')
     const gate = wf.indexOf('needsLiveFilter(')
     assert.ok(gate > -1, `${f} uses needsLiveFilter`)

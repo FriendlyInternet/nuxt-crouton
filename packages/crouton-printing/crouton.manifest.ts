@@ -14,6 +14,12 @@ export default defineCroutonManifest({
     id: 'printing',
   },
 
+  provides: {
+    components: [
+      { name: 'CroutonPrintingTransportPicker', description: 'Per-event picker for which transport delivers thermal print jobs' },
+    ],
+  },
+
   // NuxtHub auto-discovers the printers + print_jobs tables via
   // server/db/schema.ts, which re-exports them from server/database/schema.ts.
   //

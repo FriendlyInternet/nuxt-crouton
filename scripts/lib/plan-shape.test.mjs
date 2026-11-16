@@ -19,7 +19,7 @@ const plan = (over = {}) => {
     Cause: 'foo.ts:10 reads undefined',
     Fix: 'guard the read',
     Files: '- foo.ts',
-    Test: 'foo.test.ts',
+    Test: '- [ ] T1 — foo is guarded — Run: `node --test foo.test.mjs`',
     Assumptions: A_OK,
     Docs: 'none — test fixture',
     'Needs owner': 'no — mechanical',
@@ -65,12 +65,35 @@ test('an assumption with no evidence is malformed', () => {
 })
 
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
-  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
+  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /checkable proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
 })
 
 test('status must be verified or unverified', () => {
   assert.ok(parseAssumptions('- c — Why: w — Evidence: https://x.dev — Status: probably').errors.some((e) => /Status/.test(e)))
+})
+
+// #3271 — Status is its first word; verified evidence may be a link, a commit SHA or path:line / path#Lnn.
+const pa = (ev, st) => parseAssumptions(`- c — Why: w — Evidence: ${ev} — Status: ${st}`)
+
+test('Status reads first word; trailing reason allowed', () => {
+  const r = pa('no staging access', 'unverified (could not reach staging)')
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.items[0].status, 'unverified')
+  assert.ok(pa('x', 'maybe').errors.some((e) => /Status/.test(e)))
+})
+
+test('verified evidence forms', () => {
+  assert.ok(pa('I looked at it', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.ok(pa('defaced', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs:74', 'verified').errors, [])
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs#L74', 'verified').errors, [])
+  assert.deepEqual(pa('commit dd1b002a4', 'verified').errors, [])
+  assert.deepEqual(pa('https://x.dev/a', 'verified').errors, [])
+})
+
+test('unverified needs no evidence form', () => {
+  assert.deepEqual(pa('could not check', 'unverified').errors, [])
 })
 
 // #3149 — a re-plan (--revised) must carry a "Ticket re-read" section.
@@ -180,4 +203,40 @@ test('docs: checked needs a permalink; can\'t tell does not', () => {
 test('docs: neither Edit nor Debt, or a bad Regression → malformed', () => {
   assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: no').errors.some((e) => /Edit/.test(e)))
   assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: maybe — Edit: x').errors.some((e) => /Regression/.test(e)))
+})
+
+// #3194 — the Test checklist rule, through the CLI the workflow's plan step runs.
+function cli(over) {
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'))
+  const f = join(dir, 'p.md')
+  writeFileSync(f, plan(over))
+  const r = spawnSync('node', [fileURLToPath(new URL('./plan-shape.mjs', import.meta.url)), f], { encoding: 'utf8' })
+  return { status: r.status, verdict: JSON.parse(r.stdout) }
+}
+
+// covers: T3
+test('Test checklist: prose Test section exits 1 with a Test: error', () => {
+  const r = cli({ Test: 'foo.test.ts: a row without teamId gets the current teamId.' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => e.startsWith('Test: ')), r.verdict.errors.join('; '))
+})
+
+// covers: T3
+test('Test checklist: valid checklist exits 0', () => {
+  const r = cli({ Test: '- [ ] T1 — guarded — Run: `node --test foo.test.mjs`\n- [ ] T2 — looks right — Manual: a person must look' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+  assert.deepEqual(r.verdict.checklist.map((i) => i.id), ['T1', 'T2'])
+})
+
+// covers: T3
+test('Test checklist: lone T0 line exits 0', () => {
+  const r = cli({ Test: '- [ ] T0 — no runnable test — Manual: config only' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+})
+
+// covers: T3
+test('Test checklist: duplicate ID exits 1', () => {
+  const r = cli({ Test: '- [ ] T1 — a — Run: `node --test a.test.mjs`\n- [ ] T1 — b — Run: `node --test b.test.mjs`' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => /Test: .*duplicate id T1/.test(e)))
 })

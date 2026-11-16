@@ -345,7 +345,11 @@ defineExpose({
             @add-location="onAddLocation"
             @edit-location="onEditLocation"
             @focus-on-map="onFocusOnMap"
-          />
+          >
+            <template #toolbar-end>
+              <slot name="toolbar-end" />
+            </template>
+          </CroutonBookingsPanelFilters>
         </div>
 
         <!-- Calendar -->

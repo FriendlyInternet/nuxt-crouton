@@ -25,6 +25,7 @@ import { isAgentComment } from '../../../scripts/approval.mjs'
 import { staleWorkThisLabels as collectStaleWorkThis } from '../../../scripts/lib/stale-work-this-gather.mjs'
 import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
 import { fetchAllPages } from '../../../scripts/lib/gh-paginate.mjs'
+import { readDriftReport } from '../../../scripts/app-collection-drift.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -185,6 +186,19 @@ function loopStationBudget() {
     tokenizer: latest.tokenizer ?? null,
     commit: latest.commit ?? null,
     deltaTokens: prev && tok(latest) != null && tok(prev) != null ? tok(latest) - tok(prev) : null
+  }
+}
+
+// ── App collection drift (#3407) ──────────────────────────────────────────────
+// Unset env (local run) → null, section absent. Set (the workflow) → the parsed report, or
+// { error } when the report step wrote nothing, so a broken step is never a silent gap.
+function appCollectionDrift() {
+  const file = process.env.APP_COLLECTION_DRIFT_FILE
+  if (!file) return null
+  try {
+    return readDriftReport(file)
+  } catch {
+    return null
   }
 }
 
@@ -495,6 +509,7 @@ const data = {
   labelCoverage: labelCoverage(),
   loopStation: loopStationBudget(),
   skillFreshness: skillFreshness(),
+  appCollectionDrift: appCollectionDrift(),
   retiredProjects: retiredProjects(),
   ...drift
 }

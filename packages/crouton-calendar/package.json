@@ -14,7 +14,14 @@
     "crouton.manifest.ts"
   ],
   "scripts": {
-    "typecheck": "npx nuxt typecheck"
+    "typecheck": "npx nuxt typecheck",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "happy-dom": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@fyit/crouton-core": "workspace:*",

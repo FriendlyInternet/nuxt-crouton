@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { isPlanHold, resumeOutcome, replanDispatch } from './plan-hold.mjs'
+import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch } from './plan-hold.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const person = (body) => ({ body, userType: 'User' })
@@ -129,4 +129,30 @@ test('#3564 a later go after needs-owner ends the hold', () => {
 
 test('#3564 a person pasting the needs-owner marker is not a hold', () => {
   assert.equal(hold([person(OWNER)]), false)
+})
+
+// #3272: the owner-override hold is "rejected twice" only — never a needs-owner hold.
+const twice = (comments, labels = BLOCKED) => isRejectedTwice({ comments, labels })
+
+test('#3272 isRejectedTwice: two bot no-go ⇒ true', () => {
+  assert.equal(twice([bot(PLAN), bot(NOGO), bot(PLAN), bot(NOGO)]), true)
+})
+test('#3272 isRejectedTwice: one no-go ⇒ false', () => {
+  assert.equal(twice([bot(PLAN), bot(NOGO)]), false)
+})
+test('#3272 isRejectedTwice: a later go ⇒ false', () => {
+  assert.equal(twice([bot(PLAN), bot(NOGO), bot(NOGO), bot(GO)]), false)
+})
+test('#3272 isRejectedTwice: newest needs-owner ⇒ false (isPlanHold stays true)', () => {
+  const thread = [bot(PLAN), bot(NOGO), bot(PLAN), bot(NOGO), bot(OWNER)]
+  assert.equal(twice(thread), false)
+  assert.equal(hold(thread), true)
+})
+test('#3272 isRejectedTwice: human-pasted verdicts ⇒ false', () => {
+  assert.equal(twice([bot(PLAN), person(NOGO), person(NOGO)]), false)
+})
+test('#3272 isRejectedTwice: plan:approved or no status:blocked ⇒ false', () => {
+  const thread = [bot(PLAN), bot(NOGO), bot(PLAN), bot(NOGO)]
+  assert.equal(twice(thread, ['status:blocked', 'plan:approved']), false)
+  assert.equal(twice(thread, []), false)
 })

@@ -11,7 +11,7 @@ const hoisted = vi.hoisted(() => ({
   guarded: vi.fn(async (..._a: any[]) => ({}))
 }))
 
-vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member }))
+vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member, requireTeamAdmin: async () => hoisted.member }))
 vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: hoisted.assertRef }))
 // The bookings write path is the capacity-guarded one (#3379); its own cases live in booking-capacity.test.ts
 vi.mock('../server/utils/booking-capacity', async (orig) => ({ ...(await orig() as object), patchBookingGuarded: hoisted.guarded }))

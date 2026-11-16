@@ -50,8 +50,10 @@ async function getOverrides(emailType: EmailTemplateType, context: {
  */
 export default defineNitroPlugin((nitroApp) => {
   console.log('[crouton-email] 🔌 auth-email-listener plugin registered')
+  // Same flag crouton-auth uses; invitee data is never logged either way (#3143).
+  const debug = (useRuntimeConfig().public?.crouton?.auth as { debug?: boolean } | undefined)?.debug ?? false
   nitroApp.hooks.hook('crouton:auth:email', async (payload) => {
-    console.log(`[crouton-email] 📨 Hook received: type=${payload.type}, to=${payload.to}`)
+    if (debug) console.log(`[crouton-email] 📨 Hook received: type=${payload.type}`)
     let sendResult: SendEmailResult | undefined
     let caughtError: string | undefined
     try {
@@ -103,8 +105,10 @@ export default defineNitroPlugin((nitroApp) => {
             || (runtimeConfig as any).auth?.baseUrl
             || brand.appUrl
           const acceptLink = `${actionBaseUrl}/auth/accept-invitation/${payload.invitationId}`
-          console.log(`[crouton-email] 🔗 Invitation accept link: ${acceptLink}`)
-          console.log(`[crouton-email] 🔍 origin=${requestOrigin}, BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
+          if (debug) {
+            console.log(`[crouton-email] 🔗 Invitation accept link: ${actionBaseUrl}/auth/accept-invitation/…`)
+            console.log(`[crouton-email] 🔍 origin=${requestOrigin}, BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
+          }
           const overrides = await getOverrides('team-invite', {
             organizationName: payload.organizationName
           })
