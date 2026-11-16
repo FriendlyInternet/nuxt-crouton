@@ -10,6 +10,8 @@
 //   scripts/lib/owner-screens.mjs (ownerScreenEmoji)
 //   scripts/owner-quiz.mjs (quiz marker, isQuizReply)
 //   scripts/lib/signoff-route.mjs (isHoldComment/ownerQuestionKind)
+//   scripts/traffic-control.mjs (PIPELINE_LABELS, WAITING_LABEL)
+//   scripts/sync-epic-branch.sh (epic-sync conflict marker + comment text)
 //
 // Read-failure rule: an item whose GitHub read failed (`readError`) makes no ask and its existing
 // cards are left exactly as they are; a failed list read (`listsComplete: false`) never marks a
@@ -33,6 +35,15 @@ export const QUIZ_RE = /<!-- owner-quiz:v1 pr=(\d+) sha=([0-9a-f]*) key=([A-Za-z
 export const CI_FIX_MARKER = 'CI-Fix: true'
 const EDIT_LINK_RE = /\[✏️ Edit this diagram\]\(([^)\s]+)\)/u
 const HEADING_OWN_LINE = new RegExp(`^${HOLD_HEADING}\\s*$`, 'm')
+// Stuck rules (#3880)
+export const PIPELINE_LABELS = ['delegate', 'delegate-pi', 'work-this']
+export const WAITING_LABEL = 'traffic:waiting'
+export const EPIC_SYNC_MARKER = '<!-- epic-sync:conflict -->'
+export const EPIC_SYNC_TEXT = 'no longer merges cleanly with main'
+export const DRAFT_BOT = 'nuxt-harness[bot]'
+export const QUIET_MS = 3 * 3_600_000
+export const DRAFT_MS = 3_600_000
+const EPIC_SYNC_BRANCH_RE = /merge `main` into `([^`]+)`/
 
 // ---------------------------------------------------------------- GitHub shapes
 
@@ -65,6 +76,21 @@ export interface SyncItem {
   commits?: GhCommit[]
   headSha?: string
   closesIssue?: number | null
+  /** GitHub `updated_at` (stuck rules). */
+  updatedAt?: string
+  /** PR only: GitHub `draft`. */
+  draft?: boolean
+  readError?: boolean
+}
+
+/** An open epic found by the epic-sync search, with its whole comment thread. */
+export interface EpicSyncItem {
+  number: number
+  title: string
+  html_url: string
+  comments: GhComment[]
+  /** How far the branch is behind main's commit from the time of the conflict comment; null = branch missing. */
+  behindBy: number | null
   readError?: boolean
 }
 
@@ -345,6 +371,9 @@ function appFromLabels(labels: string[]): string | null {
 export interface CollectInput {
   items: SyncItem[]
   quizItems?: QuizItem[]
+  epicItems?: EpicSyncItem[]
+  /** Clock for the stuck rules (ms); default Date.now(). */
+  now?: number
 }
 
 /**
@@ -352,14 +381,24 @@ export interface CollectInput {
  * skipped by the rest; an issue named by a claimed PR's `Closes #N` gets no link card. Delivery
  * (7) and quiz (8) are separate asks on the same epic and do not take part in claiming.
  */
-export function collectAsks({ items, quizItems = [] }: CollectInput): { asks: Ask[], unreadable: number[] } {
+export function collectAsks({ items, quizItems = [], epicItems = [], now = Date.now() }: CollectInput): { asks: Ask[], unreadable: number[] } {
   const sink = new AskSink()
   const closers = new Set<number>()
+  const stuck: StuckCtx = {
+    now,
+    blockedIssues: new Set(items.filter(x => !x.isPr && isBlocked(x)).map(x => x.number)),
+    noQuiet: new Set(),
+    prActive: new Set(),
+    prNeedsMerge: new Set()
+  }
   // PRs first, so their `Closes #N` issues are known before the issues are looked at.
-  for (const i of items.filter(x => x.isPr)) collectPr(i, sink, closers)
-  for (const i of items.filter(x => !x.isPr)) collectIssue(i, sink, closers)
+  for (const i of items.filter(x => x.isPr)) collectPrWithDraft(i, sink, closers, stuck)
+  for (const i of items.filter(x => !x.isPr)) {
+    if (!collectIssue(i, sink, closers)) sink.add(i.number, quietAsk(i, stuck, closers))
+  }
   for (const i of items.filter(isDeliveryItem)) sink.add(i.number, deliveryAsk(i))
   for (const q of quizItems) collectQuiz(q, sink)
+  for (const e of epicItems) collectEpicSync(e, sink)
   return { asks: sink.asks, unreadable: [...sink.unreadable] }
 }
 
@@ -379,21 +418,135 @@ const validTime = (iso: string) => !!iso && !Number.isNaN(new Date(iso).getTime(
 const isBlocked = (i: { labels: string[] }) => i.labels.includes('status:blocked')
 const isDeliveryItem = (i: SyncItem) => !i.isPr && !i.readError && i.labels.includes('status:to-test')
 
-function collectPr(i: SyncItem, sink: AskSink, closers: Set<number>) {
+/** True when the PR was claimed (a hold rule or link card) or unreadable. */
+function collectPr(i: SyncItem, sink: AskSink, closers: Set<number>): boolean {
   if (i.readError) sink.skip(i.number)
   else {
     const hit = holdRules(i) ?? (isBlocked(i) ? { ask: linkAsk(i) } : null)
-    if (!hit) return
+    if (!hit) return false
     sink.add(i.number, hit.ask)
   }
   if (i.closesIssue) closers.add(i.closesIssue)
+  return true
 }
 
-function collectIssue(i: SyncItem, sink: AskSink, closers: Set<number>) {
-  if (i.readError) return sink.skip(i.number)
+/** True when the issue was claimed (a hold rule, a link card, or a claimed PR names it) or unreadable. */
+function collectIssue(i: SyncItem, sink: AskSink, closers: Set<number>): boolean {
+  if (i.readError) { sink.skip(i.number); return true }
   const hit = holdRules(i)
-  if (hit) return sink.add(i.number, hit.ask)
-  if (isBlocked(i) && !closers.has(i.number)) sink.add(i.number, linkAsk(i))
+  if (hit) { sink.add(i.number, hit.ask); return true }
+  if (isBlocked(i) && !closers.has(i.number)) { sink.add(i.number, linkAsk(i)); return true }
+  return false
+}
+
+// ---------------------------------------------------------------- stuck rules (#3880)
+
+interface StuckCtx {
+  now: number
+  /** Open issues labelled `status:blocked` (a draft whose issue is blocked is that issue's ask). */
+  blockedIssues: Set<number>
+  /** Issues whose bot draft PR already has the stuck card. */
+  noQuiet: Set<number>
+  /** Issues with an open `Closes #N` PR updated in the last QUIET_MS. */
+  prActive: Set<number>
+  /** Issues whose open `Closes #N` PR is labelled `status:needs-merge` (that PR has the review card). */
+  prNeedsMerge: Set<number>
+}
+
+const ageMs = (iso: string | undefined, now: number) => (validTime(iso ?? '') ? now - new Date(iso!).getTime() : -1)
+
+/** Hold rules first; an unclaimed readable PR then runs the `draft` stuck rule. */
+function collectPrWithDraft(i: SyncItem, sink: AskSink, closers: Set<number>, ctx: StuckCtx) {
+  notePrActivity(i, ctx)
+  if (collectPr(i, sink, closers)) return
+  const a = draftAsk(i, ctx)
+  if (!a) return
+  sink.add(i.number, a)
+  if (i.closesIssue) ctx.noQuiet.add(i.closesIssue)
+}
+
+function notePrActivity(i: SyncItem, ctx: StuckCtx) {
+  if (!i.closesIssue) return
+  const age = ageMs(i.updatedAt, ctx.now)
+  if (age >= 0 && age <= QUIET_MS) ctx.prActive.add(i.closesIssue)
+  if (i.labels.includes('status:needs-merge')) ctx.prNeedsMerge.add(i.closesIssue)
+}
+
+/** Stuck rule `draft` — a pipeline-bot draft PR untouched for > 1 h waits for "Ready for review". */
+function draftAsk(i: SyncItem, ctx: StuckCtx): Ask | null {
+  if (i.draft !== true || i.user?.type !== 'Bot' || lower(i.user?.login) !== DRAFT_BOT) return null
+  if (ageMs(i.updatedAt, ctx.now) <= DRAFT_MS) return null
+  if (i.labels.includes('status:needs-merge')) return null
+  if (i.closesIssue && ctx.blockedIssues.has(i.closesIssue)) return null
+  return {
+    ...base(i),
+    kind: 'issue',
+    sourceCommentId: i.headSha ? `draft:${i.headSha}` : '',
+    title: `Stuck: draft PR #${i.number} waits for "Ready for review"`,
+    ask: 'A bot draft PR gets no review until someone marks it ready — open it on GitHub.',
+    payload: { stuck: 'draft' },
+    askedAt: i.updatedAt ?? ''
+  }
+}
+
+/** Stuck rule `quiet` — a pipeline ticket (not an epic, not held) with no activity and no active PR for > 3 h. */
+function quietAsk(i: SyncItem, ctx: StuckCtx, closers: Set<number>): Ask | null {
+  const l = i.labels
+  if (!PIPELINE_LABELS.some(x => l.includes(x)) || l.includes('epic') || isBlocked(i) || l.includes(WAITING_LABEL)) return null
+  const n = i.number
+  if (closers.has(n) || ctx.noQuiet.has(n) || ctx.prNeedsMerge.has(n) || ctx.prActive.has(n)) return null
+  const age = ageMs(i.updatedAt, ctx.now)
+  if (age <= QUIET_MS) return null
+  return {
+    ...base(i),
+    kind: 'issue',
+    sourceCommentId: `quiet:${i.updatedAt}`,
+    title: `Stuck: no pipeline activity on #${n} for ${Math.floor(age / 3_600_000)} h`,
+    ask: 'The pipeline went quiet on this ticket — open it on GitHub.',
+    payload: { stuck: 'quiet' },
+    askedAt: i.updatedAt ?? ''
+  }
+}
+
+/** The newest pipeline-bot comment whose leading marker is the epic-sync conflict marker, or null. */
+export function epicSyncComment(comments: GhComment[] = []): GhComment | null {
+  for (let k = comments.length - 1; k >= 0; k--) {
+    const c = comments[k]!
+    if (isPipelineBot(c) && hasMarker(c.body, EPIC_SYNC_MARKER)) return c
+  }
+  return null
+}
+
+/** The epic branch named in the conflict comment (`` merge `main` into `<branch>` ``), or null. */
+export function epicSyncBranch(body: string | null | undefined): string | null {
+  return EPIC_SYNC_BRANCH_RE.exec(String(body ?? ''))?.[1] ?? null
+}
+
+/** Stuck rule `epic-sync` — the branch still lacks main's commit from the time of the conflict comment. */
+function collectEpicSync(e: EpicSyncItem, sink: AskSink) {
+  if (e.readError) return sink.skip(e.number)
+  const c = epicSyncComment(e.comments)
+  const branch = c ? epicSyncBranch(c.body) : null
+  if (!c || !branch || !(typeof e.behindBy === 'number' && e.behindBy > 0)) return
+  sink.add(e.number, {
+    kind: 'issue',
+    sourceType: 'issue',
+    sourceNumber: e.number,
+    sourceCommentId: String(c.id),
+    title: `Stuck: epic #${e.number} no longer merges with main`,
+    ask: `Merge \`main\` into \`${branch}\` and resolve the conflicts — open it on GitHub.`,
+    link: c.html_url || e.html_url,
+    payload: { stuck: 'epic-sync', branch },
+    askedAt: c.created_at
+  })
+}
+
+export interface StuckCounts { quiet: number, draft: number, epicSync: number }
+
+/** Stuck cards waiting after this sync, per rule. */
+export function stuckCounts(asks: Ask[]): StuckCounts {
+  const n = (v: string) => asks.filter(a => a.payload?.stuck === v).length
+  return { quiet: n('quiet'), draft: n('draft'), epicSync: n('epic-sync') }
 }
 
 /** A rule's result: null = the rule does not apply; `{ ask: null }` = claimed, nothing waiting. */

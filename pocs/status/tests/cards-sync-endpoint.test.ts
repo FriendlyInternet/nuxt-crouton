@@ -12,6 +12,13 @@ const SIGNOFF = '<!-- deploy-preview: full-watch -->'
 let sessionEmail: string | null
 let kv: ReturnType<typeof createStorage>
 let failComments: number | null
+/** #3880: page 1 of open PRs is 100 bot drafts (#1000–#1099) and page 2 holds the sign-off PRs. */
+let pagedPulls: boolean
+/** #3880: one open epic (#900) with a bot conflict comment; `behind_by` of the compare. */
+let epicBehind: number | null | undefined
+const EPIC_COMMENT_AT = '2026-11-10T12:00:00Z'
+const EPIC_BRANCH = 'epic/900-thing'
+const MAIN_SHA = 'mainsha900'
 
 const createInboxCard = vi.fn(async (c: unknown) => c)
 const updateInboxCard = vi.fn(async () => ({}))
@@ -27,20 +34,54 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
 const BOT = { login: 'nuxt-harness[bot]', type: 'Bot' }
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
 
-/** Fake GitHub: two bot sign-off PRs (#10, #12), nothing else waiting. */
+const OLD = '2026-11-01T00:00:00Z'
+const signoffPulls = () => [10, 12].map(n => ({ number: n, title: `PR ${n}`, body: `Closes #${n + 1}\n${SIGNOFF}`, html_url: `https://github.com/o/r/pull/${n}`, user: BOT, labels: [], head: { sha: `sha${n}` }, updated_at: OLD }))
+const draftPulls = () => Array.from({ length: 100 }, (_, k) => ({ number: 1000 + k, title: `Draft ${k}`, body: '', html_url: `https://github.com/o/r/pull/${1000 + k}`, user: BOT, labels: [], head: { sha: `d${k}` }, draft: true, updated_at: OLD }))
+
+const EPIC_ISSUE = { number: 900, title: 'Epic 900', body: '', html_url: 'https://github.com/o/r/issues/900', labels: [{ name: 'epic' }] }
+const EPIC_CONFLICT = {
+  id: 9001, user: BOT, created_at: EPIC_COMMENT_AT, html_url: 'https://github.com/o/r/issues/900#issuecomment-9001',
+  body: `<!-- epic-sync:conflict -->\n> 🤖 sync\n\nThe epic branch no longer merges cleanly with main. Someone needs to merge \`main\` into \`${EPIC_BRANCH}\` and resolve the conflicts.`
+}
+
+function searchRoute(url: URL) {
+  const epicSearch = (url.searchParams.get('q') ?? '').includes('no longer merges cleanly with main')
+  return json({ items: epicSearch && epicBehind !== undefined ? [EPIC_ISSUE] : [] })
+}
+function pullsRoute(url: URL) {
+  if (!pagedPulls) return json(signoffPulls())
+  return json(url.searchParams.get('page') === '1' ? draftPulls() : signoffPulls())
+}
+const mainCommitsRoute = (url: URL) => json(url.searchParams.get('until') === EPIC_COMMENT_AT ? [{ sha: MAIN_SHA }] : [])
+function compareRoute(url: URL) {
+  if (!url.pathname.endsWith(`/compare/${MAIN_SHA}...${EPIC_BRANCH}`)) return json({ message: 'wrong base' }, 422)
+  return epicBehind === null ? json({ message: 'Not Found' }, 404) : json({ behind_by: epicBehind })
+}
+function commentsRoute(n: number) {
+  if (n === 900) return json([EPIC_CONFLICT])
+  return n === failComments ? json({ message: 'boom' }, 500) : json([])
+}
+const prCommitsRoute = (n: string) => json([{ sha: `sha${n}`, parents: [{}], commit: { message: 'feat', committer: { name: 'x', date: '2026-11-01T09:00:00Z' } } }])
+
+/** Path matcher → response; first match wins. */
+const ROUTES: Array<[RegExp, (url: URL, m: RegExpExecArray) => Response]> = [
+  [/\/search\/issues$/, url => searchRoute(url)],
+  [/\/issues$/, () => json([])],
+  [/\/pulls$/, url => pullsRoute(url)],
+  [/\/repos\/[^/]+\/[^/]+\/commits$/, url => mainCommitsRoute(url)],
+  [/\/compare\//, url => compareRoute(url)],
+  [/\/issues\/(\d+)\/comments$/, (_u, m) => commentsRoute(Number(m[1]))],
+  [/\/issues\/\d+\/events$/, () => json([])],
+  [/\/pulls\/(\d+)\/commits$/, (_u, m) => prCommitsRoute(m[1]!)]
+]
+
+/** Fake GitHub: two bot sign-off PRs (#10, #12), nothing else waiting (unless #3880's switches are on). */
 const fetchSpy = vi.fn(async (input: string | URL | Request) => {
   const url = new URL(String(input))
-  const p = url.pathname
-  if (p.endsWith('/search/issues')) return json({ items: [] })
-  if (p.endsWith('/issues') ) return json([])
-  if (p.endsWith('/pulls')) {
-    return json([10, 12].map(n => ({ number: n, title: `PR ${n}`, body: `Closes #${n + 1}\n${SIGNOFF}`, html_url: `https://github.com/o/r/pull/${n}`, user: BOT, labels: [], head: { sha: `sha${n}` } })))
+  for (const [re, route] of ROUTES) {
+    const m = re.exec(url.pathname)
+    if (m) return route(url, m)
   }
-  const m = /\/issues\/(\d+)\/comments$/.exec(p)
-  if (m) return Number(m[1]) === failComments ? json({ message: 'boom' }, 500) : json([])
-  if (/\/issues\/\d+\/events$/.test(p)) return json([])
-  const k = /\/pulls\/(\d+)\/commits$/.exec(p)
-  if (k) return json([{ sha: `sha${k[1]}`, parents: [{}], commit: { message: 'feat', committer: { name: 'x', date: '2026-11-01T09:00:00Z' } } }])
   return json({ message: 'not found' }, 404)
 })
 
@@ -61,6 +102,8 @@ async function run() {
 beforeEach(() => {
   sessionEmail = OWNER
   failComments = null
+  pagedPulls = false
+  epicBehind = undefined
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
   createInboxCard.mockClear()
@@ -78,12 +121,12 @@ describe('POST /api/cards/sync', () => {
 
   it('owner → one review card per sign-off PR, then a second call < 60 s later is throttled with no GitHub call', async () => {
     const first = await run()
-    expect(first.body).toEqual({ created: 2, updated: 0, stale: 0, answered: 0 })
+    expect(first.body).toEqual({ created: 2, updated: 0, stale: 0, answered: 0, stuck: { quiet: 0, draft: 0, epicSync: 0 } })
     expect(createInboxCard).toHaveBeenCalledTimes(2)
     expect((createInboxCard.mock.calls[0] as any[])[0]).toMatchObject({ kind: 'review', sourceType: 'pr', teamId: 'team1', owner: 'u1', state: 'waiting' })
     fetchSpy.mockClear()
     const second = await run()
-    expect(second.body).toEqual({ created: 0, updated: 0, stale: 0, answered: 0, throttled: true })
+    expect(second.body).toEqual({ created: 0, updated: 0, stale: 0, answered: 0, stuck: { quiet: 0, draft: 0, epicSync: 0 }, throttled: true })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -97,5 +140,35 @@ describe('POST /api/cards/sync', () => {
     expect(createInboxCard).toHaveBeenCalledTimes(1)
     expect((createInboxCard.mock.calls[0] as any[])[0].sourceNumber).toBe(10)
     expect(updateInboxCard).not.toHaveBeenCalled()
+  })
+
+  it('#3880: open PRs are read past page 1 — 100 old bot drafts on page 1, sign-off PRs on page 2', async () => {
+    pagedPulls = true
+    const out = await run()
+    expect(out.body.stuck).toEqual({ quiet: 0, draft: 100, epicSync: 0 })
+    expect(out.body.created).toBe(102)
+    const pages = fetchSpy.mock.calls.map(c => new URL(String(c[0]))).filter(u => u.pathname.endsWith('/pulls')).map(u => u.searchParams.get('page'))
+    expect(pages).toEqual(['1', '2'])
+  })
+
+  it('#3880: epic-sync compares the branch against main\'s commit from the comment time', async () => {
+    epicBehind = 1 // e.g. a sub-PR merge moved the branch, but that main commit is still missing
+    const out = await run()
+    expect(out.body.stuck).toEqual({ quiet: 0, draft: 0, epicSync: 1 })
+    const card = createInboxCard.mock.calls.map(c => (c as any[])[0]).find(c => c.sourceNumber === 900)
+    expect(card).toMatchObject({ kind: 'issue', sourceType: 'issue', sourceCommentId: '9001', payload: { stuck: 'epic-sync', branch: EPIC_BRANCH } })
+    expect(fetchSpy.mock.calls.some(c => String(c[0]).includes(`/compare/${MAIN_SHA}...${EPIC_BRANCH}`))).toBe(true)
+  })
+
+  it('#3880: epic-sync branch caught up (behind_by 0) or deleted (404) → no card, no error', async () => {
+    for (const behind of [0, null]) {
+      kv = createStorage({ driver: memory() })
+      createInboxCard.mockClear()
+      epicBehind = behind
+      const out = await run()
+      expect(out.body.stuck.epicSync).toBe(0)
+      expect(out.body.error).toBeUndefined()
+      expect(out.body.skipped).toBeUndefined()
+    }
   })
 })
