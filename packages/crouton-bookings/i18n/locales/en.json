@@ -399,6 +399,14 @@
               "personal": "Their own bookings",
               "team": "All team bookings"
             }
+          },
+          "showLocations": {
+            "label": "Show locations",
+            "description": "Start with the location list open"
+          },
+          "showMap": {
+            "label": "Show map",
+            "description": "Start with the map open"
           }
         }
       }
@@ -475,19 +483,24 @@
     },
     "collections": {
       "locations": {
-        "title": "Locations"
+        "title": "Locations",
+        "singular": "Location"
       },
       "bookings": {
-        "title": "Bookings"
+        "title": "Bookings",
+        "singular": "Booking"
       },
       "settings": {
-        "title": "Settings"
+        "title": "Settings",
+        "singular": "Settings"
       },
       "emailtemplates": {
-        "title": "Email Templates"
+        "title": "Email Templates",
+        "singular": "Email template"
       },
       "emaillogs": {
-        "title": "Email Logs"
+        "title": "Email Logs",
+        "singular": "Email log"
       }
     },
     "fields": {

@@ -399,6 +399,14 @@
               "personal": "Ses propres réservations",
               "team": "Toutes les réservations de l'équipe"
             }
+          },
+          "showLocations": {
+            "label": "Afficher les lieux",
+            "description": "Commencer avec la liste des lieux ouverte"
+          },
+          "showMap": {
+            "label": "Afficher la carte",
+            "description": "Commencer avec la carte ouverte"
           }
         }
       }
@@ -475,19 +483,24 @@
     },
     "collections": {
       "locations": {
-        "title": "Emplacements"
+        "title": "Lieux",
+        "singular": "Lieu"
       },
       "bookings": {
-        "title": "Réservations"
+        "title": "Réservations",
+        "singular": "Réservation"
       },
       "settings": {
-        "title": "Paramètres"
+        "title": "Paramètres",
+        "singular": "Paramètres"
       },
       "emailtemplates": {
-        "title": "Modèles d'e-mail"
+        "title": "Modèles d'e-mail",
+        "singular": "Modèle d'e-mail"
       },
       "emaillogs": {
-        "title": "Journaux d'e-mails"
+        "title": "Journaux d'e-mails",
+        "singular": "Journal d'e-mail"
       }
     },
     "fields": {

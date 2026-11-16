@@ -121,35 +121,48 @@ const settingsItems = computed(() => {
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- One short row: Week|Month · Today · settings · fold -->
+    <!-- One short row: [show/hide · Week | Month] Today ……… settings -->
     <div class="flex items-center justify-between gap-2">
-      <UFieldGroup v-if="viewToggles && showCalendar" size="sm">
+      <UFieldGroup v-if="viewToggles" size="sm">
+        <!-- Show/hide the calendar (folded: the only button, with a label so the row isn't empty) -->
         <UButton
-          :color="calendarView === 'week' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'week' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'week')"
-        >
-          {{ t('bookings.filters.week') }}
-        </UButton>
-        <UButton
-          :color="calendarView === 'month' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'month' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'month')"
-        >
-          {{ t('bookings.filters.month') }}
-        </UButton>
-      </UFieldGroup>
-      <div class="flex items-center gap-1 shrink-0 ms-auto">
-        <UButton
-          v-if="viewToggles && showCalendar"
-          size="sm"
           color="neutral"
-          variant="soft"
-          @click="emit('go-to-today')"
-        >
-          {{ t('bookings.filters.today') }}
-        </UButton>
-
+          variant="outline"
+          :icon="showCalendar ? 'i-lucide-eye' : 'i-lucide-eye-off'"
+          :label="showCalendar ? undefined : t('bookings.filters.unfoldCalendar')"
+          :aria-label="showCalendar ? t('bookings.filters.foldCalendar') : t('bookings.filters.unfoldCalendar')"
+          :aria-pressed="showCalendar"
+          @click="emit('update:showCalendar', !showCalendar)"
+        />
+        <template v-if="showCalendar">
+          <UButton
+            :color="calendarView === 'week' ? 'primary' : 'neutral'"
+            :variant="calendarView === 'week' ? 'solid' : 'outline'"
+            @click="emit('update:calendarView', 'week')"
+          >
+            {{ t('bookings.filters.week') }}
+          </UButton>
+          <UButton
+            :color="calendarView === 'month' ? 'primary' : 'neutral'"
+            :variant="calendarView === 'month' ? 'solid' : 'outline'"
+            @click="emit('update:calendarView', 'month')"
+          >
+            {{ t('bookings.filters.month') }}
+          </UButton>
+        </template>
+      </UFieldGroup>
+      <!-- Today is an action, not a view: its own button next to the group -->
+      <UButton
+        v-if="viewToggles && showCalendar"
+        size="sm"
+        color="neutral"
+        variant="soft"
+        class="me-auto"
+        @click="emit('go-to-today')"
+      >
+        {{ t('bookings.filters.today') }}
+      </UButton>
+      <div class="flex items-center gap-1 shrink-0 ms-auto">
         <UDropdownMenu :items="settingsItems">
           <UChip :show="hasActiveFilter" color="primary" size="md">
             <UButton
@@ -161,17 +174,6 @@ const settingsItems = computed(() => {
             />
           </UChip>
         </UDropdownMenu>
-
-        <UButton
-          v-if="viewToggles"
-          size="sm"
-          color="neutral"
-          variant="ghost"
-          :icon="showCalendar ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-          :aria-label="showCalendar ? t('bookings.filters.foldCalendar') : t('bookings.filters.unfoldCalendar')"
-          :aria-expanded="showCalendar"
-          @click="emit('update:showCalendar', !showCalendar)"
-        />
         <slot name="toolbar-end" />
       </div>
     </div>
@@ -224,6 +226,20 @@ const settingsItems = computed(() => {
           @click="emit('add-location')"
         >
           {{ t('bookings.filters.addLocation') }}
+        </UButton>
+
+        <!-- Show/hide the map, next to the locations it shows -->
+        <UButton
+          v-if="hasLocationsWithCoordinates"
+          size="sm"
+          color="neutral"
+          :variant="showMap ? 'soft' : 'outline'"
+          :icon="showMap ? 'i-lucide-map' : 'i-lucide-map-off'"
+          :aria-pressed="showMap"
+          class="self-center ms-auto"
+          @click="emit('update:showMap', !showMap)"
+        >
+          {{ t('bookings.filters.map') }}
         </UButton>
       </div>
     </Transition>

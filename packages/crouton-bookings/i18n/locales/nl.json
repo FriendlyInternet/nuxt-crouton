@@ -399,6 +399,14 @@
               "personal": "Hun eigen reserveringen",
               "team": "Alle reserveringen van het team"
             }
+          },
+          "showLocations": {
+            "label": "Locaties tonen",
+            "description": "Start met de locatielijst open"
+          },
+          "showMap": {
+            "label": "Kaart tonen",
+            "description": "Start met de kaart open"
           }
         }
       }
@@ -475,19 +483,24 @@
     },
     "collections": {
       "locations": {
-        "title": "Locaties"
+        "title": "Locaties",
+        "singular": "Locatie"
       },
       "bookings": {
-        "title": "Boekingen"
+        "title": "Boekingen",
+        "singular": "Reservering"
       },
       "settings": {
-        "title": "Instellingen"
+        "title": "Instellingen",
+        "singular": "Instellingen"
       },
       "emailtemplates": {
-        "title": "E-mailsjablonen"
+        "title": "E-mailsjablonen",
+        "singular": "E-mailsjabloon"
       },
       "emaillogs": {
-        "title": "E-maillogs"
+        "title": "E-maillogs",
+        "singular": "E-maillog"
       }
     },
     "fields": {
