@@ -9,6 +9,15 @@
       "group": "bookingDetails"
     }
   },
+  "product": {
+    "type": "reference",
+    "meta": {
+      "label": "Product",
+      "area": "main",
+      "group": "bookingDetails",
+      "help": "The product this booking is for."
+    }
+  },
   "date": {
     "type": "date",
     "meta": {

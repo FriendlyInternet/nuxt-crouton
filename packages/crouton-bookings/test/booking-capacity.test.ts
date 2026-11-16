@@ -3,8 +3,8 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer);
-CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 
 const hoisted = vi.hoisted(() => ({ role: 'admin' as string, body: {} as any, params: { bookingId: 'b1' } as any }))
@@ -20,7 +20,7 @@ let db: any
 const rows = () => db.$client.prepare('select * from bookings_bookings order by id').all()
 const DAY = Date.parse('2026-11-09T23:00:00Z') / 1000
 const book = (id: string, over: Record<string, unknown> = {}) =>
-  db.$client.prepare(`insert into bookings_bookings values (@id,'t1','u1',0,@location,@date,@slot,null,@quantity,@status,1,1,'u1','u1')`)
+  db.$client.prepare(`insert into bookings_bookings values (@id,'t1','u1',0,@location,@date,@slot,null,@quantity,@status,1,1,'u1','u1',null)`)
     .run({ id, location: 's', date: DAY, slot: '["am"]', quantity: 1, status: 'active', ...over })
 
 type Handler = (e: any) => Promise<any>
