@@ -293,4 +293,4 @@ Type: [Domain][Entity] (e.g., BookingWithRelations)
 Table: bookings[Collection] (e.g., bookingsBookings)
 ```
 
-**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.
+**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`) (D1: one raw `$client.batch` of bound statements — drizzle's `db.batch` can't batch `db.run()` there, #3968; tested in `test/run-atomic-d1.test.ts`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.
