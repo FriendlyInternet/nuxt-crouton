@@ -19,7 +19,12 @@ const fixtures: InboxCard[] = [
   card({ id: 'review', kind: 'review', askedAt: new Date('2026-11-02T00:00:00Z') }),
   card({ id: 'edit', kind: 'review', askedAt: '2026-11-05T00:00:00Z', payload: { editUrl: 'https://edit.example/1' } }),
   card({ id: 'issue', kind: 'issue', askedAt: Date.parse('2026-11-04T00:00:00Z') }),
-  card({ id: 'quiz', kind: 'quiz', askedAt: '2026-11-01T00:00:00Z' }),
+  card({
+    id: 'quiz',
+    kind: 'quiz',
+    askedAt: '2026-11-01T00:00:00Z',
+    payload: { pr: 1, questions: [1, 2, 3].map(n => ({ statement: `S${n}`, choices: ['a', 'b', 'c'] })) }
+  }),
   card({ id: 'delivery', kind: 'delivery', askedAt: '2026-11-03T00:00:00Z' }),
   card({ id: 'answered', state: 'answered', askedAt: '2026-11-09T00:00:00Z' }),
   card({ id: 'stale', state: 'stale', askedAt: '2026-11-08T00:00:00Z' })
@@ -41,14 +46,20 @@ describe('waitingCards', () => {
 
 describe('cardView', () => {
   const byId = (id: string) => fixtures.find(c => c.id === id)!
+  // covers: T3
   it('maps each kind to its component', () => {
     expect(cardView(byId('review'))).toBe('review')
     expect(cardView(byId('edit'))).toBe('edit')
     expect(cardView(byId('issue'))).toBe('issue')
-    expect(cardView(byId('quiz'))).toBe('placeholder')
+    expect(cardView(byId('quiz'))).toBe('quiz')
     expect(cardView(byId('delivery'))).toBe('delivery')
     expect(cardView(card({ id: 'c', kind: 'choice' }))).toBe('placeholder')
     expect(cardView(card({ id: 'u', kind: 'whatever' }))).toBe('placeholder')
+  })
+  // covers: T3
+  it('a quiz card with no readable questions stays a placeholder', () => {
+    expect(cardView(card({ id: 'q1', kind: 'quiz' }))).toBe('placeholder')
+    expect(cardView(card({ id: 'q2', kind: 'quiz', payload: { questions: [] } }))).toBe('placeholder')
   })
   it('an edit-kind card needs an editUrl', () => {
     expect(cardView(card({ id: 'e1', kind: 'edit', payload: { editUrl: 'https://e' } }))).toBe('edit')

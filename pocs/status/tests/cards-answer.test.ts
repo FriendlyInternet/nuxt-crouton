@@ -123,6 +123,47 @@ describe('answerCard', () => {
   it('11. tokenLogin without a token → GITHUB_TOKEN is not configured', async () => {
     expect((await tokenLogin(undefined)).error).toBe('GITHUB_TOKEN is not configured')
   })
+
+  const quizPayload = {
+    pr: 3715,
+    questions: [
+      { statement: 'S1', choices: ['a', 'b', 'c'] },
+      { statement: 'S2', choices: ['a', 'b', 'c'] },
+      { statement: 'S3', choices: ['a', 'b', 'c'] }
+    ]
+  }
+  const quiz = (payload: Record<string, unknown> | null = quizPayload) => ({ ...card('quiz'), payload })
+
+  // covers: T2
+  it('12. quiz answer line → posts exactly the canonical line and stores it as the answer', async () => {
+    const { f, calls } = fakeGh()
+    const r = await answerCard({ card: quiz(), input: { answer: ' 1b 2a 3c ' }, repo: 'o/r', token: 't', fetchImpl: f, now: NOW })
+    expect(r.error).toBeNull()
+    const p = posts(calls)
+    expect(p).toHaveLength(1)
+    expect(p[0].url).toBe('https://api.github.com/repos/o/r/issues/42/comments')
+    expect(JSON.parse(p[0].body!)).toEqual({ body: '1B 2A 3C' })
+    expect(r.data!.updates!.answer).toBe('1B 2A 3C')
+  })
+
+  // covers: T2
+  it('13. quiz: incomplete, extra, triage or empty-payload answers → 400, no post', async () => {
+    const cases: [ReturnType<typeof quiz>, Record<string, unknown>][] = [
+      [quiz(), { answer: '1B 2A' }],
+      [quiz(), { answer: '1B 2A 3C 4A' }],
+      [quiz(), { answer: '2 code' }],
+      [quiz(), { answer: 'ok' }],
+      [quiz(), { verdict: 'ok' }],
+      [quiz({ pr: 1, questions: [] }), { answer: '1B' }],
+      [quiz(null), { answer: '1B' }]
+    ]
+    for (const [c, input] of cases) {
+      const { f, calls } = fakeGh()
+      const r = await answerCard({ card: c, input, repo: 'o/r', token: 't', fetchImpl: f, now: NOW })
+      expect(r.status, JSON.stringify(input)).toBe(400)
+      expect(posts(calls)).toHaveLength(0)
+    }
+  })
 })
 
 // Drives the REAL handler (server/api/cards/[cardId]/answer.post.ts) with Nitro globals stubbed.
@@ -171,5 +212,22 @@ describe('POST /api/cards/[cardId]/answer', () => {
     expect([id, teamId, userId, opts]).toEqual(['c1', 'team1', 'u1', { role: 'owner' }])
     expect(updates.state).toBe('answered')
     expect(updates.answeredVia).toBe('inbox')
+  })
+
+  // covers: T2
+  it('quiz card + { answer } body → the handler posts the line and stores it', async () => {
+    const queries = await import('../layers/inbox/collections/cards/server/database/queries')
+    vi.mocked(queries.getInboxCardsByIds).mockResolvedValueOnce([{
+      id: 'c1', kind: 'quiz', sourceType: 'issue', sourceNumber: 42, askedAt: ASKED,
+      payload: { questions: [1, 2, 3].map(n => ({ statement: `S${n}`, choices: ['a', 'b', 'c'] })) }
+    }] as any)
+    vi.stubGlobal('readBody', async () => ({ answer: '1B 2? 3C' }))
+    const gh = fakeGh()
+    vi.stubGlobal('fetch', gh.f)
+    const out = await handle()
+    expect(out.ok).toBe(true)
+    expect(posts(gh.calls).map(c => JSON.parse(c.body!).body)).toEqual(['1B 2? 3C'])
+    const updates = (updateInboxCard.mock.calls[0] as unknown as [string, string, string, any])[3]
+    expect(updates.answer).toBe('1B 2? 3C')
   })
 })

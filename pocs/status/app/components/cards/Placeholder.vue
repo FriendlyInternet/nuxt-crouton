@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Quiz / delivery / choice cards until their own components land (#3780, #3781):
+// Choice cards (and a quiz whose text could not be read) until their own components land:
 // show the ask and send the owner to GitHub to answer.
 import type { InboxCard } from '~/utils/inbox-core'
 
