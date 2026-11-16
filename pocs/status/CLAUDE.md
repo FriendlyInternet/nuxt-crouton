@@ -11,6 +11,9 @@ Cards are filled by `POST /api/cards/sync` (owner-only, run by the inbox page on
 upserts one card per waiting ask under the owner's team, never changes a card answered from the inbox, and leaves an
 item's cards untouched when its GitHub read fails. Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
 logic — keep in step).
+A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
+closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
+(`app/utils/package-lines.ts`, `app/components/cards/Packages.vue`).
 
 Answering a card: `POST /api/cards/[cardId]/answer` posts the reply via `postReply` with `since = askedAt`,
 and refuses every answer unless `GET /api/cards/token-account` reports `pmcp` (the pipeline acts only on the
