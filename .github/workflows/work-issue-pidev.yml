@@ -1217,7 +1217,7 @@ jobs:
                 ACCEPT="$(printf '%s\n' "$TC_OUT" | sed -n 's/^ACCEPT=//p')"; ACCEPT=${ACCEPT:-neutral}
                 ACCEPT_MSG="$(printf '%s\n' "$TC_OUT" | sed -n 's/^ACCEPT_MSG=//p')"; NOT_IN_DIFF="$(printf '%s\n' "$TC_OUT" | sed -n 's/^NOT_IN_DIFF=//p')"; NOT_IN_DIFF=${NOT_IN_DIFF:-0}
                 [ "$ACCEPT" = "pass" ] && [ "$BORROWED" = "1" ] && [ "$NOT_IN_DIFF" = "0" ] && ACCEPT_MSG="${APP_DIR} typechecks with this package change"
-                [ "$ACCEPT" = "fail" ] && { echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"; head -15 "$RUNNER_TEMP/tc-stderr.txt" || true; }
+                [ "$ACCEPT" = "fail" ] && { echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"; head -15 "$RUNNER_TEMP/tc-stderr.txt" || true; }  # || true: stderr dump is best-effort context; the verdict is already in ACCEPT
               fi
             fi
             # COMPILE HARD-FAIL (#2182) — a committed .vue that does not parse is a BROKEN build,
