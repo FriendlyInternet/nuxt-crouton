@@ -109,31 +109,41 @@ export function nothingWaits(s: InboxLoadState): boolean {
  * list again. A failed refresh keeps the stored cards and reports `syncError`; a failed list
  * reports `loadError`. Every change goes through `update`, so the page sees each step at once.
  */
-export async function loadInbox<T extends InboxCard>(args: {
+interface InboxSources<T extends InboxCard> {
   list: () => Promise<T[] | unknown>
   sync: () => Promise<unknown>
   update: (patch: Partial<InboxLoadState<T>>) => void
-}): Promise<void> {
-  const { list, sync, update } = args
-  const fetchList = async () => {
-    try {
-      const result = await list()
-      update({ cards: waitingCards(Array.isArray(result) ? result as T[] : []), loadError: null })
-    } catch (e) {
-      update({ loadError: errorText(e, 'Could not load cards.') })
-    }
+}
+
+const fetchListInto = async <T extends InboxCard>({ list, update }: InboxSources<T>) => {
+  try {
+    const result = await list()
+    update({ cards: waitingCards(Array.isArray(result) ? result as T[] : []), loadError: null })
+  } catch (e) {
+    update({ loadError: errorText(e, 'Could not load cards.') })
   }
+}
 
-  update({ loading: true, refreshing: true, loadError: null, syncError: null })
-  await fetchList()
-  update({ loading: false })
+export async function loadInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
+  args.update({ loading: true, refreshing: true, loadError: null, syncError: null })
+  await fetchListInto(args)
+  args.update({ loading: false })
+  await refreshInbox(args)
+}
 
+/**
+ * The background half of `loadInbox`: refresh from GitHub, then list again. The page calls this
+ * after it already rendered the stored cards on the server, so nothing on screen waits on GitHub.
+ */
+export async function refreshInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
+  const { sync, update } = args
+  update({ refreshing: true, syncError: null })
   try {
     await sync()
   } catch (e) {
     update({ syncError: `Could not refresh from GitHub: ${errorText(e, 'sync failed')}`, refreshing: false })
     return
   }
-  await fetchList()
+  await fetchListInto(args)
   update({ refreshing: false })
 }

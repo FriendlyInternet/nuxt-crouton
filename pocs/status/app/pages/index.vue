@@ -1,18 +1,24 @@
 <script setup lang="ts">
-// The inbox: every card that waits on the owner, newest first. On load it shows the stored cards
-// at once, then syncs from GitHub (POST /api/cards/sync) in the background and lists again.
-// Load/list/answer rules: utils/inbox-core.ts.
-import { cardView, loadInbox, nothingWaits, submitAnswer, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
+// The inbox: every card that waits on the owner, newest first. The server renders the stored
+// cards (no GitHub call), then the browser syncs from GitHub (POST /api/cards/sync) in the
+// background and lists again. Load/list/answer rules: utils/inbox-core.ts.
+import { cardView, errorText, nothingWaits, refreshInbox, submitAnswer, waitingCards, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
 
 definePageMeta({ middleware: 'auth' })
 
 const { getTeamId } = useTeamContext()
+// One-team mode: the slug `test1` resolves too if the team is not known yet.
+const listUrl = `/api/teams/${getTeamId() ?? 'test1'}/inbox-cards`
 
-const cards = ref<InboxCard[]>([])
-const loading = ref(true)
-const refreshing = ref(false)
+// Stored cards only, fetched during the server render so the first HTML already shows them.
+const { data: stored, error: storedError } = await useFetch<InboxCard[]>(listUrl)
+
+const cards = ref<InboxCard[]>(waitingCards(Array.isArray(stored.value) ? stored.value : []))
+const loading = ref(false)
+// The GitHub refresh runs once the page is open; until it ends, an empty list is not "nothing".
+const refreshing = ref(true)
 const syncError = ref<string | null>(null)
-const loadError = ref<string | null>(null)
+const loadError = ref<string | null>(storedError.value ? errorText(storedError.value, 'Could not load cards.') : null)
 
 const showNothing = computed(() => nothingWaits({
   cards: cards.value,
@@ -30,10 +36,9 @@ function applyLoad(patch: Partial<InboxLoadState>) {
   if (patch.syncError !== undefined) syncError.value = patch.syncError
 }
 
-function load() {
-  return loadInbox({
-    // One-team mode: the slug `test1` resolves too if the team is not known on the client yet.
-    list: () => $fetch<InboxCard[]>(`/api/teams/${getTeamId() ?? 'test1'}/inbox-cards`),
+function refresh() {
+  return refreshInbox({
+    list: () => $fetch<InboxCard[]>(listUrl),
     sync: async () => { await $fetch('/api/cards/sync', { method: 'POST' }) },
     update: applyLoad
   })
@@ -55,7 +60,7 @@ const answerFor = (cardId: string) => async (verdict: 'ok' | 'not-ok', note: str
   return { error: res.error }
 }
 
-onMounted(load)
+onMounted(refresh)
 </script>
 
 <template>
