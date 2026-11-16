@@ -28,6 +28,7 @@
     "@libsql/client": "^0.17.0",
     "drizzle-orm": "^0.45.1",
     "nuxt": "^4.2.2",
+    "reka-ui": "2.10.5",
     "vue": "^3.5.26",
     "vue-router": "^4.6.4"
   },

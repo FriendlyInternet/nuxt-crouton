@@ -22,7 +22,7 @@ test('rl-start has the same job-level if as route', () => {
 
 test('the shared filter skips bots and runs for people', () => {
   const expr = jobIf('rl-start').replace(/==/g, '===').replace(/!=/g, '!==')
-  const runs = (comment) => new Function('github', `return !!(${expr})`)({ event: { comment } })
+  const runs = (comment) => new Function('github', 'startsWith', `return !!(${expr})`)({ event: { comment: { body: '', ...comment } } }, (s, p) => String(s).startsWith(p))
   const f = (c) => runs({ ...c, performed_via_github_app: c.performed_via_github_app ?? null })
   assert.equal(f({ user: { type: 'Bot' } }), false)
   assert.equal(f({ user: { type: 'User' }, performed_via_github_app: { name: 'Harness' } }), false)

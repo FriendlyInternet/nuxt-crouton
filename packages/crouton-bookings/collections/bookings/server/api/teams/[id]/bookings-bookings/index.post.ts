@@ -1,11 +1,11 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
+// The requireTeamAdmin utility handles team resolution and auth
 // Hand-edited (#3379): picks allowed fields only and checks capacity in the same statement.
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { assertBookingsBookingReferences } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { bookingsBookings } from '../../../../database/schema'
 import { bookingsLocations } from '../../../../../../locations/server/database/schema'
 import { LOCATION_COLS, dayRange, validateSelection, guardSql, guardedInsert, runAtomic } from '../../../../../../../server/utils/booking-capacity'
@@ -21,7 +21,7 @@ const bodySchema = z.object({
 }).strip()
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await requireTeamAdmin(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
   const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'

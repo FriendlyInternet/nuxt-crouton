@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // epic-ready.mjs — the pure "is this epic assembled and ready to PR into main?" decision (#1815).
 //
-// WHY a pure module. The GitHub I/O (list sub-issues, list PRs, compare branches) lives in
-// .github/workflows/epic-ready-pr.yml; this file is the deterministic predicate it calls, so the
+// WHY a pure module. The GitHub I/O lives in scripts/epic-ready-pr.mjs, called by the epic-ready-pr
+// job in .github/workflows/on-issue-close.yml; this file is the deterministic predicate it calls, so the
 // rule is unit-tested in isolation (mirrors apply-decompose-plan.mjs's pure-core / thin-executor
 // split). The workflow fires on `issues: closed` — by then schedule-waves.yml has already closed
 // the child whose sub-PR merged (a non-default-branch merge does NOT auto-close its `Closes #NN`,
@@ -121,6 +121,37 @@ export function collectApprovalLines(bodies = []) {
     }
   }
   return [...seen]
+}
+
+/**
+ * Build the epic→main PR title + body. PURE (#3619 — moved verbatim from the workflow).
+ *   subIssues: [{ number, title }]; carry: packagesApprovalCarry() result;
+ *   declared:  collectApprovalLines() result (the carry line is de-duplicated here).
+ */
+export function buildEpicMainPr({ epicNumber, epicBranch, epicTitle, subIssues = [], carry, declared = [], owner }) {
+  const OWNER = owner
+  declared = declared.filter(l => l !== carry.line)
+  const declaredSection = declared.length ? `\n\n${declared.join('\n')}\n` : ''
+  const carrySection = declaredSection + (carry.packagesPrs.length === 0 ? '' :
+    carry.line
+      ? `\n\n${carry.line}\n`
+      : `\n\n## 🔒 Shared code not yet signed off\n` +
+        `These sub-PRs changed \`packages/**\` without an approval from @${OWNER} on the PR or its issue: ` +
+        `${carry.unapproved.map(n => `#${n}`).join(', ')}. The "Packages edit declared" check stays red until you ` +
+        `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`)
+  const childList = subIssues.map(s => `- #${s.number} ${s.title}`).join('\n')
+  const cleanTitle = epicTitle.replace(/^Epic:\s*/i, '')
+  const title = `Epic #${epicNumber}: ${cleanTitle}`.slice(0, 250)
+  const body =
+    `Assembles epic #${epicNumber} — all ${subIssues.length} children closed and merged into ` +
+    `\`${epicBranch}\`, ready for \`main\`.\n\n` +
+    `> Referenced, not \`Closes\` — the epic closes via the \`/close-epic\` postmortem flow (#856), ` +
+    `not on this merge.\n\n` +
+    `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}\n\n` +
+    `## 🧪 How to test\nReview the assembled \`${epicBranch}\` → \`main\` diff; CI runs on this PR. ` +
+    `Reply \`ok\` and it merges itself once green — you are the review gate. (\`not ok: what's wrong\` sends it back.)` + carrySection + `\n\n` +
+    `<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @${OWNER}</sub>`
+  return { title, body }
 }
 
 // The guard and the carry must agree on the attestation shape — asserted at import time too,

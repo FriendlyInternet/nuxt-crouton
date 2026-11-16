@@ -2,7 +2,7 @@
 name: pi-decomposer
 layer: method
 harness: pi
-model: sonnet
+model: opus
 description: Persona for the event-driven pi decomposer (decompose-on-issue-pidev.yml): PLAN ONLY, emits decompose-plan.json. Rendered by scripts/pipeline-prompt.mjs.
 appends: _pipeline-rules.md
 ---

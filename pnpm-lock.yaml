@@ -1268,6 +1268,9 @@ importers:
       nuxt:
         specifier: ^4.6.2
         version: 4.6.3(122b1bad7d07187925d8fa8c314b47e7)
+      reka-ui:
+        specifier: 2.10.5
+        version: 2.10.5(vue@3.5.44(typescript@5.9.3))
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -1443,9 +1446,6 @@ importers:
       nuxt:
         specifier: ^4.6.2
         version: 4.6.3(1dec25e89bba8b767dc00c25f371eb44)
-      reka-ui:
-        specifier: ^2.9.0
-        version: 2.10.1(vue@3.5.44(typescript@5.9.3))
       vue-i18n:
         specifier: ^11.4.14
         version: 11.4.14(vue@3.5.44(typescript@5.9.3))
@@ -1707,6 +1707,9 @@ importers:
       nuxt:
         specifier: ^4.6.2
         version: 4.6.3(122b1bad7d07187925d8fa8c314b47e7)
+      reka-ui:
+        specifier: 2.10.5
+        version: 2.10.5(vue@3.5.44(typescript@5.9.3))
       vue:
         specifier: ^3.5.44
         version: 3.5.44(typescript@5.9.3)
@@ -12660,11 +12663,6 @@ packages:
 
   rehype-sort-attributes@5.0.1:
     resolution: {integrity: sha512-Bxo+AKUIELcnnAZwJDt5zUDDRpt4uzhfz9d0PVGhcxYWsbFj5Cv35xuWxu5r1LeYNFNhgGqsr9Q2QiIOM/Qctg==}
-
-  reka-ui@2.10.1:
-    resolution: {integrity: sha512-drcOQ4rQtDYAcGCsyQBqQg8QQ+H3B+zDaMJU0h8KPEPMa7g9BHu3zcOi4OB39XJSWizceFoNO0Z9tctSGLOXqg==}
-    peerDependencies:
-      vue: ^3.5.44
 
   reka-ui@2.10.5:
     resolution: {integrity: sha512-/8o0y9BThE0hcHKFg+3770tWcJh3qKdOEFxLOPb9HIajXeFoH/J530cZH62jUJunbqwBgpSBL9v7nB8LJ5pDXA==}
@@ -33832,22 +33830,6 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.5
       unist-util-visit: 5.1.0
-
-  reka-ui@2.10.1(vue@3.5.44(typescript@5.9.3)):
-    dependencies:
-      '@floating-ui/dom': 1.8.0
-      '@floating-ui/vue': 1.1.9(vue@3.5.44(typescript@5.9.3))
-      '@internationalized/date': 3.10.1
-      '@internationalized/number': 3.6.5
-      '@tanstack/vue-virtual': 3.13.45(vue@3.5.44(typescript@5.9.3))
-      '@vueuse/core': 14.3.0(vue@3.5.44(typescript@5.9.3))
-      '@vueuse/shared': 14.3.0(vue@3.5.44(typescript@5.9.3))
-      aria-hidden: 1.2.6
-      defu: 6.1.7
-      ohash: 2.0.12
-      vue: 3.5.44(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@vue/composition-api'
 
   reka-ui@2.10.5(vue@3.5.44(typescript@5.9.3)):
     dependencies:

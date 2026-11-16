@@ -220,8 +220,8 @@ it — the ref binds before an async-setup component's exposed object attaches, 
 are explained rows in the Event Details card; the full event form (incl. slug) isn't reachable here.
 Beside the POS, up to three **side panes** open via vertical tabs stacked in a reserved gutter at
 the kassa's right edge (Shell-owned, no prop plumbing). Any combination can be open at once, each
-resizable via Reka UI's Splitter (`SplitterGroup`/`Panel`/`ResizeHandle`; panels carry explicit
-`id`/`order` because the set is dynamic; ratios persist via `autoSaveId`). Pane visibility
+resizable via Nuxt UI's `USplitter` (`:items` = the visible panes, stable ids; ratios persist via
+`auto-save-id`). Pane visibility
 persists too: `useLocalStorage('sales-workspace-{orders,clients,data}-open')` with `initOnMounted`
 (SSR renders closed, restores after hydration); the keys are global across events, so the
 clients flag is gated per event by `requiresClient` (`clientsPaneOpen`) and the data flag per

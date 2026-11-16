@@ -17,13 +17,13 @@ vi.mock('../server/utils/booking-capacity', async orig => ({ ...(await orig() as
 
 // Only the columns the checks read (id, teamId); drizzle selects nothing else.
 const DDL = ['bookings_locations', 'bookings_bookings', 'bookings_emailtemplates']
-  .map(t => `CREATE TABLE ${t} (id text primary key, teamId text not null);`).join('\n')
+  .map(t => `CREATE TABLE ${t} (id text primary key, teamId text not null${t === 'bookings_bookings' ? ', owner text' : ''});`).join('\n')
 
 const client = new Database(':memory:')
 client.exec(DDL)
 client.exec(`
 INSERT INTO bookings_locations VALUES ('loc-t1','t1'), ('loc-t2','t2');
-INSERT INTO bookings_bookings VALUES ('bk-t1','t1'), ('bk-t2','t2');
+INSERT INTO bookings_bookings (id, teamId, owner) VALUES ('bk-t1','t1','u1'), ('bk-t2','t2','u1');
 INSERT INTO bookings_emailtemplates VALUES ('tpl-t1','t1'), ('tpl-t2','t2');
 `)
 const db = drizzle(client) as any

@@ -35,9 +35,10 @@ jobs:
     name: Read API allowance at start
     # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      startsWith(github.event.comment.body, '🎯 **Preview feedback**') ||
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude'))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
@@ -71,9 +72,10 @@ jobs:
     # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
     # and consumed by reading the thread (revise), not by this trigger.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      startsWith(github.event.comment.body, '🎯 **Preview feedback**') ||
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -1149,6 +1151,9 @@ jobs:
   test-card:
     needs: route
     if: needs.route.outputs.kind == 'test-card'
+    concurrency:
+      group: test-card-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -1167,6 +1172,7 @@ jobs:
           DIGEST_REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
           COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs

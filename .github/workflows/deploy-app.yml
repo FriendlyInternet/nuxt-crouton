@@ -126,6 +126,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write   # for the staging-URL PR comment
+      issues: read           # resolve-review-epic lists the app's status:to-test epic (#3051)
     # Serialize (don't cancel — a cancel mid-migration is unsafe) deploys to the
     # same app+env so concurrent runs can't race on auto-provisioning / sync / D1.
     #
@@ -263,6 +264,24 @@ jobs:
         run: npx nuxt prepare
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
 
+      # REVIEW TARGET (#3051): the thread overlay pins post to. A PR deploy/dispatch names its PR;
+      # a staging deploy from main targets the app's status:to-test epic. None → overlay off.
+      - name: Resolve review target
+        id: review-target
+        if: ${{ inputs.environment == 'staging' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP: ${{ inputs.app }}
+          REVIEW_PR: ${{ inputs.review-pr }}
+          REVIEW_KEY_PR: ${{ github.event.pull_request.number || inputs.review-pr }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          N="$(node scripts/resolve-review-epic.mjs "$APP" "$REVIEW_PR")" || N=""
+          echo "number=$N" >> "$GITHUB_OUTPUT"
+          # Seed key mirrors the seed step: the PR number, else the sanitised ref (main).
+          if [ -n "$REVIEW_KEY_PR" ]; then KEY="pr${REVIEW_KEY_PR}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
       # The one real step: run the SAME script a developer runs locally. It builds
       # with NITRO_PRESET=cloudflare_module, deploys (auto-provisioning id-less
       # D1/KV on first run), syncs the provisioned ids back into wrangler.jsonc,
@@ -341,9 +360,9 @@ jobs:
           # would then push their secrets to a Worker serving no overlay, the deploy would
           # succeed, and every "walk the preview" ask had nothing behind it (#2037 sat
           # unrunnable for weeks on exactly this). One place, so it cannot drift per app.
-          # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
-          # stay overlay-free — and the bridge needs a PR to post to anyway.
-          NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
+          # Gated on the resolved review target (#3051): the PR, or — for a staging deploy from
+          # main — the app's status:to-test epic. No target → overlay stays off.
+          NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && steps.review-target.outputs.number != '') && 'true' || '' }}
           # SEARCH ENGINES (#2244) — only production may be indexed. Read by nuxt-site-config
           # at build; non-indexable makes @nuxtjs/robots serve `Disallow: /` (staging + PR previews).
           NUXT_SITE_ENV: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
@@ -599,7 +618,7 @@ jobs:
       # not PR-tied, or the App creds are absent — so the bridge simply stays off.
       - name: Mint Harness App installation id (for review bridge)
         id: review-app-token
-        if: ${{ inputs.environment == 'staging' && inputs.review-pr != '' }}
+        if: ${{ inputs.environment == 'staging' && steps.review-target.outputs.number != '' }}
         continue-on-error: true
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -608,11 +627,12 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Wire preview-review bridge config (staging, PR-tied)
-        if: ${{ inputs.environment == 'staging' && inputs.review-pr != '' && steps.review-app-token.outputs.installation-id != '' }}
+        if: ${{ inputs.environment == 'staging' && steps.review-target.outputs.number != '' && steps.review-app-token.outputs.installation-id != '' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           REPOSITORY: ${{ github.repository }}
-          PR: ${{ inputs.review-pr }}
+          PR: ${{ steps.review-target.outputs.number }}
+          REVIEW_KEY: ${{ steps.review-target.outputs.key }}
           APP_ID: ${{ secrets.HARNESS_APP_ID }}
           INSTALLATION_ID: ${{ steps.review-app-token.outputs.installation-id }}
           PRIVATE_KEY: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -635,7 +655,7 @@ jobs:
             REVIEWERS=""
             WHY="REVIEW_SEED_SECRET is not set, so no review login is seeded"
           else
-            REVIEWERS="review+${APP}-pr${PR}@example.com"
+            REVIEWERS="review+${APP}-${REVIEW_KEY}@example.com"
             WHY=""
           fi
           if [ -z "$REVIEWERS" ]; then
@@ -699,7 +719,7 @@ jobs:
       #                             (`runtimeConfig.public.croutonReview = true`, set only
       #                             when NUXT_PUBLIC_CROUTON_REVIEW === 'true').
       - name: Verify the review overlay is live
-        if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
+        if: ${{ inputs.environment == 'staging' && steps.review-target.outputs.number != '' }}
         env:
           URL: ${{ steps.deploy.outputs.url || inputs['staging-url'] }}
           WORKSPACE: ${{ inputs.workspace }}

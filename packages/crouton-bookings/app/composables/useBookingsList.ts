@@ -71,7 +71,7 @@ export function useBookingsList(options?: { scope?: 'personal' | 'team' }) {
   if (scope === 'personal') {
     const { data, refresh: refreshAll } = useFetch<Booking[]>(
       () => currentTeam.value?.id
-        ? `/api/crouton-bookings/teams/${currentTeam.value.id}/admin-bookings`
+        ? `/api/crouton-bookings/teams/${currentTeam.value.id}/calendar-bookings`
         : null as any,
       {
         key: 'crouton-booking-calendar-all',
