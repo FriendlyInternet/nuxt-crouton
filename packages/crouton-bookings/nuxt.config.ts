@@ -16,6 +16,8 @@ export default defineNuxtConfig({
   extends: [
     '@fyit/crouton-editor',
     '@fyit/crouton-calendar',
+    // The shared team product list (catalogProducts) — locations will give it a stock
+    '@fyit/crouton-catalog',
     join(currentDir, 'collections/bookings'),
     join(currentDir, 'collections/locations'),
     join(currentDir, 'collections/settings'),

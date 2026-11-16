@@ -11,6 +11,7 @@ import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/se
 import { bookingsEmailtemplates } from '@fyit/crouton-bookings/collections/emailtemplates/server/database/schema'
 import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
 import { bookingsEmaillogs } from '@fyit/crouton-bookings/collections/emaillogs/server/database/schema'
+import { catalogProducts } from '@fyit/crouton-catalog/collections/products/server/database/schema'
 import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 
 export default defineEventHandler(async () => {
@@ -44,6 +45,9 @@ export default defineEventHandler(async () => {
 
   await (db as any).delete(bookingsLocations).where(eq(bookingsLocations.teamId as any, orgId))
   log.push(`Deleted locations`)
+
+  await (db as any).delete(catalogProducts).where(eq(catalogProducts.teamId as any, orgId))
+  log.push(`Deleted products`)
 
   await (db as any).delete(pagesPages).where(eq(pagesPages.teamId as any, orgId))
   log.push(`Deleted pages`)
