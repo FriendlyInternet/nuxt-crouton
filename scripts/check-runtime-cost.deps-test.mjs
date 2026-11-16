@@ -105,6 +105,7 @@ test('6 · removing a hit passes', () => {
   assert.equal(r.status, 0, r.stdout)
 })
 
+// covers: T8
 test('7 · without --base-ref it prints totals and exits 0', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
   assert.equal(r.status, 0, r.stdout)
@@ -145,6 +146,7 @@ test('countHits · at most one B hit per element', () => {
   assert.equal(c.B.length, 1)
 })
 
+// covers: T8
 test('countHits · a file without a template has no hits', () => {
   assert.deepEqual(countHits('<script setup>\nconst a = 1\n</script>\n', parse), { A: [], B: [], C: [], D: [], E: [], allowed: 0, unparsable: false })
 })
@@ -173,6 +175,7 @@ test('checkChanged · failure, warning and rename paths in process', () => {
   assert.deepEqual([t.A, t.B, t.allowed, t.unparsable], [2, 0, 0, ['bad.vue']])
 })
 
+// covers: T8
 test('formatRegression · B lines and the generated-file note', () => {
   const lines = formatRegression({ file: 'g.vue', kind: 'B', base: 0, head: 1, hits: [{ line: 3, tag: 'button', why: 'opacity-0 revealed only by hover:opacity-100' }] }, '<!-- @crouton-generated -->\n')
   assert.equal(lines[0], 'g.vue: B 0 → 1')
@@ -182,6 +185,7 @@ test('formatRegression · B lines and the generated-file note', () => {
   assert.equal(lines[4], `  ${GENERATED_HINT}`)
 })
 
+// covers: T8
 test('compare · rename maps to the old base count; a missing base is 0', () => {
   const one = { A: [{ line: 1, tag: 'UPopover', under: 'v-for@1' }], B: [], C: [], D: [], E: [] }
   const none = { A: [], B: [], C: [], D: [], E: [] }
@@ -194,6 +198,7 @@ test('compare · rename maps to the old base count; a missing base is 0', () => 
 
 const ALLOW = '    <!-- runtime-cost-ok: shown once in a static page -->\n'
 
+// covers: T1
 test('T1 · C: a heavy component per item', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: sfc('    <CroutonEditorPreview v-for="i in items" :key="i" />') } })
   assert.equal(r.status, 1, r.stdout)
@@ -213,6 +218,7 @@ test('T1 · C: a heavy component per item', () => {
   assert.match(ok.stdout, /allowed=1/)
 })
 
+// covers: T2
 test('T2 · D: a key that rebuilds a block', () => {
   const r = runCase({ head: { [`${C}/K.vue`]: sfc('    <div :key="tick"><span /></div>') } })
   assert.equal(r.status, 1, r.stdout)
@@ -235,6 +241,7 @@ test('T2 · D: a key that rebuilds a block', () => {
   assert.match(allowed.stdout, /allowed=1/)
 })
 
+// covers: T3
 test('T3 · E: a composable called from the template', () => {
   const r = runCase({ head: { [`${C}/E.vue`]: sfc('    <span>{{ useTimeAgo(d).value }}</span>') } })
   assert.equal(r.status, 1, r.stdout)
@@ -258,6 +265,7 @@ test('T3 · E: a composable called from the template', () => {
   assert.match(top.stdout, /allowed=1/)
 })
 
+// covers: T4
 test('T4 · :enable-touch="false" counts as no enable-touch', () => {
   const pop = attr => sfc(`    <UPopover mode="hover" ${attr}><span /></UPopover>`)
   assert.equal(runCase({ head: { [`${C}/P.vue`]: pop(':enable-touch="false"') } }).status, 1)
@@ -265,6 +273,7 @@ test('T4 · :enable-touch="false" counts as no enable-touch', () => {
   assert.equal(runCase({ head: { [`${C}/P.vue`]: pop('enable-touch') } }).status, 0)
 })
 
+// covers: T5
 test('T5 · a failure lists all hits of the kind under a label', () => {
   const tips = n => sfc(Array.from({ length: n }, (_, k) => `    <UTooltip v-for="a in l${k}" :key="a" text="x"><span /></UTooltip>`).join('\n'))
   const r = runCase({ base: { [`${C}/Tips.vue`]: tips(2) }, head: { [`${C}/Tips.vue`]: tips(3) } })
@@ -272,12 +281,14 @@ test('T5 · a failure lists all hits of the kind under a label', () => {
   assert.match(r.stdout, /Tips\.vue: A 2 → 3\n {2}all A hits now in this file:\n(?: {2}\S+Tips\.vue:\d+ UTooltip under v-for@\d+\n){3}/)
 })
 
+// covers: T6
 test('T6 · the totals line carries all five kinds', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
   assert.equal(r.status, 0, r.stdout)
   assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ allowed=\d+ unparsable=\d+$/m)
 })
 
+// covers: T7
 test('T7 · C going down while D goes up names only D', () => {
   const r = runCase({
     base: { [`${C}/Swap.vue`]: sfc('    <CroutonMapsPreview v-for="i in items" :key="i" />') },
