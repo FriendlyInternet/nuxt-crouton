@@ -551,7 +551,8 @@ function draftAsk(i: SyncItem, ctx: StuckCtx): Ask | null {
   return {
     ...base(i),
     kind: 'issue',
-    sourceCommentId: i.headSha ? `draft:${i.headSha}` : '',
+    // keyed on the quiet stretch too: a touch that adds no commit stales the card, and the next silence must make a new one
+    sourceCommentId: i.headSha ? `draft:${i.headSha}:${i.updatedAt ?? ''}` : '',
     title: `Stuck: draft PR #${i.number} waits for "Ready for review"`,
     ask: 'A bot draft PR gets no review until someone marks it ready — open it on GitHub.',
     payload: { stuck: 'draft' },

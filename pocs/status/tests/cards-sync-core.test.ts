@@ -399,6 +399,18 @@ describe('cards-sync-core — stuck rules (#3880)', () => {
     const first = stuckSync({ items: [botDraft(110, 2)] })
     const ready = stuckSync({ items: [botDraft(110, 2, { draft: false })] }, first.cards, noReplies(first.cards))
     expect(ready.cards.map(c => c.state)).toEqual(['stale'])
+    // covers: T3 — touched with no new commit (a bot comment) → stale; quiet again 2 h later → a new waiting card
+    const touchedDraft = botDraft(110, 0.5)
+    const touched = stuckSync({ items: [touchedDraft] }, first.cards, noReplies(first.cards))
+    expect(touched.cards.map(c => c.state)).toEqual(['stale'])
+    const later = NOW + 2 * 3_600_000
+    const again = stuckSync({ items: [touchedDraft], now: later }, touched.cards)
+    expect(again.plan.counts.created).toBe(1)
+    expect(again.plan.create[0]!.sourceCommentId).toBe(`draft:sha110:${ago(0.5)}`)
+    expect(again.cards.map(c => c.state)).toEqual(['stale', 'waiting'])
+    expect(stuckCounts(again.asks).draft).toBe(1)
+    // its issue still gets no quiet card while the draft card holds it
+    expect(stuckOf(collectAsks({ items: [touchedDraft, quietTicket(111, 4)], now: later }).asks)).toEqual([['draft', 'pr', 110]])
     // a bot draft that is a sign-off hold → only #3777's review card
     const hold = botDraft(110, 2, { body: `Closes #111\n${SIGNOFF_PREVIEW_MARKER}` })
     expect(collectAsks({ items: [hold, quietTicket(111, 4)], now: NOW }).asks.map(a => [a.kind, a.sourceNumber, a.payload.stuck])).toEqual([['review', 110, undefined]])
@@ -436,7 +448,7 @@ describe('cards-sync-core — stuck rules (#3880)', () => {
     const by = Object.fromEntries(asks.map(a => [a.payload.stuck as string, a]))
     expect([by.quiet!.askedAt, by.quiet!.sourceCommentId]).toEqual([ago(4), `quiet:${ago(4)}`])
     expect(by.quiet!.title).toBe('Stuck: no pipeline activity on #100 for 4 h')
-    expect([by.draft!.askedAt, by.draft!.sourceCommentId]).toEqual([ago(2), 'draft:deadbeef'])
+    expect([by.draft!.askedAt, by.draft!.sourceCommentId]).toEqual([ago(2), `draft:deadbeef:${ago(2)}`])
     expect([by['epic-sync']!.askedAt, by['epic-sync']!.sourceCommentId, by['epic-sync']!.link]).toEqual([c.created_at, String(c.id), c.html_url])
     for (const a of asks) expect(a.kind).toBe('issue')
   })

@@ -19,7 +19,7 @@ Stuck cards (#3880): also `issue` link cards (a `Stuck` badge, no buttons), `pay
 `quiet` (an open `work-this`/`delegate`/`delegate-pi` ticket — not an epic, not `status:blocked`/`traffic:waiting`,
 no open `Closes #n` PR labelled `status:needs-merge` — with no activity and no `Closes #n` PR updated for 3 h;
 key `quiet:<updated_at>`), `draft` (a `nuxt-harness[bot]` draft PR untouched for 1 h that is not a sign-off hold,
-not `status:needs-merge`, and whose issue is not blocked; key `draft:<head sha>`; its issue gets no quiet card),
+not `status:needs-merge`, and whose issue is not blocked; key `draft:<head sha>:<updated_at>`, so a touch then a new silence makes a new card; its issue gets no quiet card),
 `epic-sync` (an open epic whose branch still lacks the `main` commit from the time of its bot
 `<!-- epic-sync:conflict -->` comment; a missing branch → stale; key = the comment id). The sync response adds
 `stuck: { quiet, draft, epicSync }` — stuck cards waiting after the sync. Known gap: `scripts/sync-epic-branch.sh`
