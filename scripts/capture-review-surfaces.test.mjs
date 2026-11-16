@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces } from './capture-review-surfaces.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -265,4 +265,57 @@ test('resolveSurfaces: declared wins over derived; derived wins over the landing
   assert.equal(resolveSurfaces({ manifest: {}, prBody: body, app: 'velo', changedFiles }).surfaces[0].path, '/x')
   assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles }).surfaces[0].path, '/about')
   assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: [] }).surfaces[0].path, '/')
+})
+
+// #3957: the workflow_run capture has no PR_BODY, so the body is read from the API by --pr.
+function stubFetch(res) {
+  const calls = []
+  const fn = async (url, opts) => {
+    calls.push({ url, opts })
+    if (res instanceof Error) throw res
+    return res
+  }
+  return { fn, calls }
+}
+const ok = body => ({ ok: true, status: 200, json: async () => ({ body }) })
+const MARKER = '<!-- review-surface: crouton-builder /builder/a -->'
+
+test('readPrBody: a non-empty PR_BODY is used without fetching; an empty one fetches', async () => {
+  const a = stubFetch(ok('x'))
+  assert.equal(await readPrBody({ env: { PR_BODY: 'given', REPO: 'o/r', GH_TOKEN: 't' }, pr: '12', fetchFn: a.fn }), 'given')
+  assert.equal(a.calls.length, 0)
+  const b = stubFetch(ok('fetched'))
+  assert.equal(await readPrBody({ env: { PR_BODY: '', REPO: 'o/r', GH_TOKEN: 't' }, pr: '12', fetchFn: b.fn }), 'fetched')
+  assert.equal(b.calls.length, 1)
+})
+
+test('readPrBody: GETs /repos/<repo>/pulls/<pr> with a Bearer token and returns the body', async () => {
+  const s = stubFetch(ok(MARKER))
+  const body = await readPrBody({ env: { REPO: 'o/r', GH_TOKEN: 't' }, pr: '12', fetchFn: s.fn })
+  assert.equal(body, MARKER)
+  assert.equal(s.calls[0].url, 'https://api.github.com/repos/o/r/pulls/12')
+  assert.equal(s.calls[0].opts.headers.Authorization, 'Bearer t')
+})
+
+test('readPrBody: a PR with a null body returns an empty string', async () => {
+  const s = stubFetch(ok(null))
+  assert.equal(await readPrBody({ env: { REPO: 'o/r', GH_TOKEN: 't' }, pr: '12', fetchFn: s.fn }), '')
+})
+
+test('readPrBody: a 404, a throwing fetch and a missing token all reject', async () => {
+  const env = { REPO: 'o/r', GH_TOKEN: 't' }
+  await assert.rejects(readPrBody({ env, pr: '12', fetchFn: stubFetch({ ok: false, status: 404 }).fn }), /PR #12.*404/)
+  await assert.rejects(readPrBody({ env, pr: '12', fetchFn: stubFetch(new Error('network down')).fn }), /PR #12.*network down/)
+  const s = stubFetch(ok(MARKER))
+  await assert.rejects(readPrBody({ env: { REPO: 'o/r' }, pr: '12', fetchFn: s.fn }), /PR #12.*no repo\/token/)
+  assert.equal(s.calls.length, 0)
+})
+
+test('pickSurfaces: the marker read from the API is the declared surface; a failed read rejects', async () => {
+  const env = { REPO: 'o/r', GH_TOKEN: 't' }
+  const args = { pr: '12', app: 'crouton-builder' }
+  const r = await pickSurfaces({ env, args, manifest: {}, fetchFn: stubFetch(ok(MARKER)).fn })
+  assert.equal(r.reason, 'declared on the PR')
+  assert.equal(r.surfaces[0].path, '/builder/a')
+  await assert.rejects(pickSurfaces({ env, args, manifest: {}, fetchFn: stubFetch({ ok: false, status: 404 }).fn }), /404/)
 })

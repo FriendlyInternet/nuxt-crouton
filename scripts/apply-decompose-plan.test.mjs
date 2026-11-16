@@ -14,8 +14,9 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason,
+  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason, needsTicketReview,
 } from './apply-decompose-plan.mjs'
+import { nextAction, parseSteps, PlanError as LibPlanError } from './lib/epic-steps.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
 
@@ -467,4 +468,74 @@ test('#3690 runActions hold: no epic branch → no diagrams-branch calls and no 
   assert.ok(!r.calls.some(c => c.some(a => /git\/ref|\/contents\//.test(String(a)))))
   assert.ok(!r.body.includes('✏️ Edit'))
   assert.equal(r.summary.held[0].diagramEdit, false)
+})
+
+// ── #3846: the ROLLING split — a step list + only step 0's ticket, then one plan review ──
+const STEPS4 = [0, 1, 2, 3].map(i => ({ title: `Step ${i}`, goal: `g${i}`, proves: `p${i}`, blockedBy: i ? [i - 1] : [] }))
+const ROLLING = () => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 0 })] })
+
+test('1. new epic → one create, one post-steps with 4 steps, tickets:rolling, one plan review, no trigger label', () => {
+  const acts = planToActions(ROLLING(), CTX)
+  assert.deepEqual(acts.map(a => a.type), ['ensure-label', 'ensure-label', 'create', 'link', 'post-steps', 'request-plan-review'])
+  assert.equal(acts.filter(a => a.type === 'create').length, 1)
+  assert.equal(acts.find(a => a.type === 'post-steps').steps.length, 4)
+  assert.deepEqual(acts.filter(a => a.type === 'ensure-label').map(a => a.label), ['epic', 'tickets:rolling'])
+  assert.ok(!acts.some(a => a.type === 'trigger-label' || a.type === 'request-ticket-review'))
+  // step 0's ticket carries step=0 and its recorded dispatch label, never a trigger label
+  const block = parsePipelineBlock(acts.find(a => a.type === 'create').body)
+  assert.equal(block.step, 0)
+  assert.equal(block.dispatch, WORKER_TRIGGER)
+})
+
+test('1. runActions posts the step list with ticket 1\'s number, dispatches subject=plan, and nextAction asks for the plan review', () => {
+  const calls = []
+  const bodies = {}
+  const exec = (file, args) => {
+    calls.push([file, ...args])
+    if (args.includes('POST') && args.includes('repos/o/r/issues')) return '5001'
+    if (args.includes('--paginate')) return ''
+    if (args.includes('POST') && String(args[3]).endsWith('/comments')) return '777'
+    return '9'
+  }
+  const s = runActions(planToActions(ROLLING(), CTX), { repo: 'o/r', exec, log: () => {}, writeBody: (t, b) => { bodies[t] = b; return `/tmp/${t}` } })
+  assert.deepEqual(s.stepsPosted, [{ epic: 1706, comment: 777 }])
+  assert.deepEqual(s.created.map(c => c.number), [5001])
+  assert.ok(calls.some(c => c.includes('workflow') && c.includes('ticket-review.yml') && c.includes('subject=plan')))
+  const posted = { body: bodies['steps-1706'], user: { login: 'nuxt-harness[bot]', type: 'Bot' } }
+  const steps = parseSteps([posted])
+  assert.equal(steps[0].ticket, 5001)
+  assert.equal(steps[1].ticket, null)
+  assert.deepEqual(nextAction({ rolling: true, plan: {}, steps, tickets: { 5001: { state: 'open', step: 0 } } }), [{ type: 'plan-review' }])
+})
+
+test('post-steps edits the existing bot step list in place on a re-run (never a second one)', () => {
+  const calls = []
+  const old = JSON.stringify({ id: 42, body: '<!-- epic-steps:v1 -->\nold', user: { login: 'nuxt-harness[bot]', type: 'Bot' } })
+  const exec = (file, args) => { calls.push(args); if (args.includes('--paginate')) return old; return '' }
+  const s = runActions([{ type: 'post-steps', epic: 7, steps: ROLLING().steps, ticketRefs: {} }], { repo: 'o/r', exec, log: () => {}, writeBody: t => `/tmp/${t}` })
+  assert.ok(calls.some(a => a.includes('PATCH') && a.includes('repos/o/r/issues/comments/42')))
+  assert.ok(!calls.some(a => a.includes('POST')))
+  assert.deepEqual(s.stepsPosted, [{ epic: 7, comment: 42 }])
+})
+
+test('a rolling plan has exactly one child, step 0, and step 0 waits on nothing', () => {
+  assert.throws(() => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 0 }), CHILD({ step: 1 })] }), PlanError)
+  assert.throws(() => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 1 })] }), /step 0/)
+  assert.throws(() => parsePlan({ leaf: false, steps: [{ ...STEPS4[0], goal: '' }], children: [CHILD({ step: 0 })] }), /goal/)
+  assert.equal(PlanError, LibPlanError, 'one PlanError class, re-exported')
+})
+
+test('14. a step=replan plan is a PlanError (fix the step list by hand); no children still fails', () => {
+  assert.throws(() => parsePlan('{"leaf":false,"step":"replan","steps":[{"step":0,"title":"a","goal":"g","proves":"p","blockedBy":[]}],"children":[]}'), (e) => e instanceof PlanError && /replan is not supported/.test(e.message))
+  assert.throws(() => parsePlan({ leaf: false, children: [] }), /non-empty children/)
+})
+
+test('7. needsTicketReview: a plain split keeps today\'s whole-set review; a rolling plan needs no children or the label', () => {
+  const ctx = { target: 7, depth: 0 }
+  const plain = parsePlan({ leaf: false, children: [{ title: 'a', body: 'edit packages/x/y.ts', labels: ['type:feat'] }] })
+  assert.equal(needsTicketReview(plain, ctx, { hasLabel: () => false }), true)
+  assert.equal(needsTicketReview(plain, ctx, { hasLabel: (n, l) => l === 'tickets:approved' }), false)
+  assert.equal(needsTicketReview(ROLLING(), ctx, { hasLabel: () => false, hasChildren: () => false }), 'rolling')
+  assert.equal(needsTicketReview(ROLLING(), ctx, { hasLabel: (n, l) => l === 'tickets:rolling', hasChildren: () => true }), 'rolling')
+  assert.throws(() => needsTicketReview(ROLLING(), ctx, { hasLabel: () => false, hasChildren: () => true }), /tickets:rolling/)
 })

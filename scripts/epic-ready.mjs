@@ -7,7 +7,8 @@
 // split). The workflow fires on `issues: closed` — by then schedule-waves.yml has already closed
 // the child whose sub-PR merged (a non-default-branch merge does NOT auto-close its `Closes #NN`,
 // so schedule-waves closes it explicitly), which is why "all sub-issues closed" is the correct
-// completeness signal and racing `pull_request: closed` is not.
+// completeness signal and racing `pull_request: closed` is not — except a `tickets:rolling` epic
+// (#3846), whose later tickets don't exist yet: there `stepsPending` (lib/epic-steps.mjs) must also be 0.
 
 /** epic/<n>-<slug> → n (number), else null. */
 export function parseEpicNumber(ref) {
@@ -46,13 +47,17 @@ export function resolveEpicTarget({ closedIssueNumber, blockEpicNumber = null, s
  *   subIssues:           [{ state: 'open'|'closed' }]  — the epic's DIRECT sub-issues
  *   existingEpicMainPrs: [ ... ]                        — OPEN PRs already head=epic-branch base=main
  *   aheadCount:          number                         — commits the epic branch is ahead of main
- * Open iff the epic HAS children, ALL are closed, the branch actually landed work, and no PR exists.
+ *   pendingSteps:        number                         — steps of a rolling epic not finished yet
+ *                                                         (lib/epic-steps.mjs stepsPending; 0 = not rolling)
+ * Open iff the epic HAS children, ALL are closed, the branch actually landed work, no step of a
+ * rolling epic is still pending, and no PR exists.
  * Any miss returns a human-readable `reason` (logged, never thrown — a false skip is safe, a false
  * open is not, so the predicate is deliberately conservative).
  */
-export function decideOpen({ subIssues = [], existingEpicMainPrs = [], aheadCount = 0 } = {}) {
+export function decideOpen({ subIssues = [], existingEpicMainPrs = [], aheadCount = 0, pendingSteps = 0 } = {}) {
   if (existingEpicMainPrs.length > 0) return { open: false, reason: 'epic→main PR already open' }
   if (subIssues.length === 0) return { open: false, reason: 'epic has no sub-issues' }
+  if (pendingSteps > 0) return { open: false, reason: `${pendingSteps} step(s) of the step list not finished yet (rolling epic)` }
   const openChildren = subIssues.filter(s => s.state !== 'closed').length
   if (openChildren > 0) return { open: false, reason: `${openChildren} child issue(s) still open` }
   if (aheadCount <= 0) return { open: false, reason: 'epic branch has no commits ahead of main' }
