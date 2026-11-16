@@ -8,6 +8,8 @@ import { generateMigrations, manualMigrationSteps } from './utils/generate-migra
 
 interface InitAppOptions {
   features?: string[]
+  /** Add `@fyit/crouton-layout` (default true; `--no-layout` opts out, #3956). */
+  layout?: boolean
   theme?: string
   dialect?: string
   cf?: boolean
@@ -18,10 +20,18 @@ interface InitAppOptions {
 }
 
 /**
+ * The feature list `crouton init` scaffolds with: the given features plus
+ * `layout` unless opted out (#3956). An explicit `layout` is never duplicated.
+ */
+export function initFeatures(features: string[] = [], layout = true): string[] {
+  return layout && !features.includes('layout') ? [...features, 'layout'] : features
+}
+
+/**
  * Run the full init pipeline: scaffold -> generate -> doctor -> summary.
  */
 export async function initApp(name: string, options: InitAppOptions = {}): Promise<void> {
-  const { features = [], theme, dialect = 'sqlite', cf = true, domain, dryRun = false, out } = options
+  const { features = [], layout = true, theme, dialect = 'sqlite', cf = true, domain, dryRun = false, out } = options
 
   console.log(`\n  crouton init — creating ${name}${out ? ` in ${out}` : ''}\n`)
 
@@ -30,7 +40,18 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   let appDir
   try {
     const { scaffoldApp } = await import('./scaffold-app.ts')
-    const result = await scaffoldApp(name, { features, theme, dialect, cf, domain, dryRun, outDir: out })
+    // The default layout is only added when the module registry can see crouton-layout —
+    // outside the monorepo (no packages/ or node_modules/@fyit) it would be an
+    // "Unknown feature" and fail a bare `crouton init`. An explicit --features layout still errors.
+    let addLayout = layout
+    if (addLayout && !features.includes('layout')) {
+      const { loadModules } = await import('./module-registry.ts')
+      if (!(await loadModules()).layout) {
+        consola.warn('crouton-layout not found in the module registry — scaffolding without it (add it later with `crouton add layout`).')
+        addLayout = false
+      }
+    }
+    const result = await scaffoldApp(name, { features: initFeatures(features, addLayout), theme, dialect, cf, domain, dryRun, outDir: out })
     appDir = result.appDir
   } catch (error) {
     consola.error('Step 1/3 — Scaffold failed')

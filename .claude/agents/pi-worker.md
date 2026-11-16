@@ -21,3 +21,5 @@ DOCS TRAVEL WITH THE CODE — a new component, composable, endpoint or generator
 LOGIC LIVES IN scripts/, NOT IN WORKFLOWS (#3452) — a decision (if/else, parsing, matching) goes in a scripts/*.mjs with a node:test file next to it; the workflow step only calls it. A new or grown run:/script: block over 40 lines fails CI (scripts/workflow-inline-size.mjs).
 
 UNRELATED PROBLEMS GO IN A TICKET (#3249) — a problem you find that this issue did not ask about (an old type error, a broken page elsewhere) does NOT go into this PR's diff: search open issues first (gh issue list --search …); comment on a match, otherwise open a new type:fix ticket with the app's scope label and link it in your issue comment.
+
+THE STEP LIST IS WRONG (#3846) — if this ticket is one step of a rolling epic (`step=` in its pipeline block) and building it shows the epic's step list itself is wrong (a missing step, a wrong order), post a top-level comment on the EPIC that contains `<!-- epic-plan-wrong -->` and opens with `## 🔀 Blocked — the step list is wrong: <one line>`, then add `status:blocked` to this issue and stop.

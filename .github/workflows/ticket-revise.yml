@@ -9,6 +9,8 @@ run-name: "ticket-revise #${{ inputs.epic }}"
 # Unblocks lines and the pipeline marker frozen, 🧪 kept), applies them, posts one note on the epic
 # and dispatches ticket-review.yml again. A needs-owner answer or a refused body edits NOTHING and
 # holds the epic `status:blocked`. The round cap lives in ticket-review.yml (ticket-revise.mjs route).
+# `subject=<n>` (#3846, rolling epics): rewrite only ticket n from its own latest verdict, and pass
+# the subject on to the re-review, so the round is counted for that ticket alone.
 #
 # SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false;
 # the App token is only used by the trusted steps). No hard-coded model and NO silent fallback.
@@ -21,9 +23,13 @@ on:
       epic:
         description: Epic issue number whose sent-back tickets to rewrite
         required: true
+      subject:
+        description: "Rolling epics (#3846): the ticket number to rewrite (blank = every sent-back ticket)"
+        required: false
+        default: ''
 
 concurrency:
-  group: ticket-revise-${{ inputs.epic }}
+  group: ticket-revise-${{ inputs.epic }}-${{ inputs.subject }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +41,7 @@ jobs:
       issues: write
     env:
       EPIC: ${{ inputs.epic }}
+      SUBJECT: ${{ inputs.subject }}
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
     steps:
@@ -113,13 +120,13 @@ jobs:
             --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
             | jq -s 'add // []' > "$D/tickets.json"
           # Only tickets the latest verdict sent back (no-go) AND still open sub-issues of this epic.
-          node scripts/ticket-revise.mjs sent-back "$D/comments.json" \
+          node scripts/ticket-revise.mjs sent-back "$D/comments.json" --subject "$SUBJECT" \
             | jq -c --slurpfile t "$D/tickets.json" '[.[] | select(. as $n | $t[0] | map(.number) | index($n))]' > "$D/sent-back.json"
           echo "sent back: $(cat "$D/sent-back.json")"
           [ "$(jq length "$D/sent-back.json")" -gt 0 ] || { echo "::error::the latest ticket review on #$EPIC sent no open ticket back"; exit 1; }
           for N in $(jq -r '.[]' "$D/sent-back.json"); do
             jq -r --argjson n "$N" '.[] | select(.number == $n) | .body' "$D/tickets.json" > "$D/ticket-$N.md"
-            node scripts/ticket-revise.mjs findings "$D/comments.json" "$N" > "$D/findings-$N.md"
+            node scripts/ticket-revise.mjs findings "$D/comments.json" "$N" --subject "$SUBJECT" > "$D/findings-$N.md"
           done
 
       # ── The reviser: READ-ONLY, no GitHub token in its env ───────────────────────
@@ -172,7 +179,7 @@ jobs:
           for N in "${DONE[@]}"; do gh issue edit "$N" --body-file "$D/out-$N.md"; echo "rewrote #$N"; done
           LIST="$(printf '#%s, ' "${DONE[@]}")"; LIST="${LIST%, }"
           gh issue comment "$EPIC" --body "$(printf "${HEAD}"'🔁 Rewrote %s from the review; checking again.' "$LIST")"
-          node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$EPIC" '{kind:"dispatch",issue:$i,workflow:"ticket-review.yml",inputs:{epic:($i|tostring)}}')"
+          node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$EPIC" --arg s "$SUBJECT" '{kind:"dispatch",issue:$i,workflow:"ticket-review.yml",inputs:({epic:($i|tostring)} + (if $s == "" then {} else {subject:$s} end))}')"
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished. Read-only against
