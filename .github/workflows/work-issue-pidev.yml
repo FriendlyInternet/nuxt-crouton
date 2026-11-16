@@ -404,6 +404,7 @@ jobs:
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
+          cp scripts/preexisting-type-tickets.mjs "$RUNNER_TEMP/"  # imports ./pi-finish.mjs beside it (#3249)
           # Push retry (#3306): one GitHub server error must not throw away a finished build.
           cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
@@ -1064,10 +1065,9 @@ jobs:
           fi
 
           # 6) ACCEPTANCE GATE (#1849) — VERIFY the result, don't assert it. Typecheck the touched app,
-          #    but fail ONLY on type errors INSIDE it: a Nuxt app's typecheck also surfaces PRE-EXISTING
-          #    errors across the whole workspace graph (`../other-poc/…`), which are not this task's
-          #    fault and MUST NOT false-block (the #1855 lesson — gadget had 0 own-errors but 8 in other
-          #    pocs). A real broken deliverable (app-local errors) FAILS, and the PR opens as a DRAFT,
+          #    but fail ONLY on type errors in files this PR changed; errors elsewhere in the app pass and
+          #    are ticketed once (#3249). `../other-poc/…` errors are ignored outright (the #1855 lesson —
+          #    gadget had 0 own-errors but 8 in other pocs). An in-diff error FAILS, and the PR opens as a DRAFT,
           #    which automerge already skips (#339) — no commit-status scope needed. NEUTRAL (non-block)
           #    when the app has no typecheck to run.
           # ── ONE plan call feeds BOTH gates (#1904) ──────────────────────────────────────────
@@ -1211,25 +1211,13 @@ jobs:
                 echo "acceptance: NEUTRAL — $APP_DIR has no typecheck script (raw nuxt typecheck would false-fail on auto-imports)"
               fi
               if [ -n "$TC_EXIT" ]; then
-                # OWN = `error TS` inside the app (no `../` escape); ANY = all TS errors (proves it RAN).
-                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"; OWN=${OWN:-0}
-                ANY="$(grep -acE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null || true)"; ANY=${ANY:-0}
-                # AUTOIMP = app-local `TS2304: Cannot find name` = Nuxt AUTO-IMPORTS unresolved, which
-                # means `nuxt prepare` did NOT run in this env (a fresh poc the worker couldn't prepare).
-                # The code is fine; the typecheck is just unreliable — so DON'T false-fail it (#1863/#1869).
-                AUTOIMP="$(grep -aE 'error TS2304: Cannot find name' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"; AUTOIMP=${AUTOIMP:-0}
-                if [ "$OWN" -gt 0 ] && [ "$AUTOIMP" -gt 0 ]; then
-                  ACCEPT="neutral"; ACCEPT_MSG="typecheck env not prepared for ${APP_DIR} (auto-imports unresolved) — not verified"
-                elif [ "$OWN" -gt 0 ]; then
-                  # Real type errors (a prepared env, no auto-import misses) ⇒ a genuine failure.
-                  ACCEPT="fail"; ACCEPT_MSG="${OWN} type error(s) in ${APP_DIR}"
-                  echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
-                  grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" | grep -avE '(^|[[:space:](])\.\./' | head -15 || true
-                elif [ "$TC_EXIT" = "0" ] || [ "$ANY" -gt 0 ]; then
-                  ACCEPT="pass"; ACCEPT_MSG="${APP_DIR} typechecks clean"; [ "$BORROWED" = "1" ] && ACCEPT_MSG="${APP_DIR} typechecks with this package change"; [ "$ANY" -gt 0 ] && ACCEPT_MSG="${ACCEPT_MSG} (ignored pre-existing error(s) elsewhere)"
-                else
-                  ACCEPT="neutral"; ACCEPT_MSG="typecheck could not run for ${APP_DIR} — not verified"
-                fi
+                # #3249: scripts/pi-finish.mjs decides (in-diff error → fail; untouched files → pass +
+                # groups to ticket; auto-import misses → neutral). Always exits 0; read with sed, never eval.
+                TC_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" typecheck "$RUNNER_TEMP/acc.log" "$TC_EXIT" "$APP_DIR" "$COMMITTED" "$PR_FILES" "$RUNNER_TEMP/preexisting.json" 2>"$RUNNER_TEMP/tc-stderr.txt" || true)"
+                ACCEPT="$(printf '%s\n' "$TC_OUT" | sed -n 's/^ACCEPT=//p')"; ACCEPT=${ACCEPT:-neutral}
+                ACCEPT_MSG="$(printf '%s\n' "$TC_OUT" | sed -n 's/^ACCEPT_MSG=//p')"; NOT_IN_DIFF="$(printf '%s\n' "$TC_OUT" | sed -n 's/^NOT_IN_DIFF=//p')"; NOT_IN_DIFF=${NOT_IN_DIFF:-0}
+                [ "$ACCEPT" = "pass" ] && [ "$BORROWED" = "1" ] && [ "$NOT_IN_DIFF" = "0" ] && ACCEPT_MSG="${APP_DIR} typechecks with this package change"
+                [ "$ACCEPT" = "fail" ] && { echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"; head -15 "$RUNNER_TEMP/tc-stderr.txt" || true; }
               fi
             fi
             # COMPILE HARD-FAIL (#2182) — a committed .vue that does not parse is a BROKEN build,
@@ -1372,8 +1360,10 @@ jobs:
           if [ -n "$PRNUM" ]; then
             cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
             EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || true)"
+            # #3249: ticket the errors this PR passed over (dedup by marker, ≤3 new); always exits 0.
+            LINE=""; [ "$ACCEPT" = "pass" ] && [ "${NOT_IN_DIFF:-0}" -gt 0 ] && LINE="$(node "$RUNNER_TEMP/preexisting-type-tickets.mjs" --groups "$RUNNER_TEMP/preexisting.json" --pr "$PRNUM" --app "$APP_DIR" | sed -n 's/^LINE=//p' || true)"
             case "$ACCEPT" in
-              pass) ACC_LINE="✅ **acceptance: passed** — ${ACCEPT_MSG}" ;;
+              pass) ACC_LINE="✅ **acceptance: passed** — ${ACCEPT_MSG}"; [ -n "$LINE" ] && ACC_LINE="✅ **${LINE}**" ;;
               na)   ACC_LINE="➖ **acceptance: n/a** — ${ACCEPT_MSG}" ;;
               fail) ACC_LINE="🔴 **acceptance: FAILED** — ${ACCEPT_MSG}. Held: automerge won't land a red result — fix, then re-dispatch." ;;
               *)    ACC_LINE="⚠️ **acceptance: not verified** — ${ACCEPT_MSG}" ;;
