@@ -10,7 +10,7 @@ import { requireStatusOwner, ghFetch } from '../../utils/github'
 import { ghGetAll } from '../../utils/gh-paged'
 import {
   SIGNOFF_PREVIEW_MARKER, cardKey, collectAsks, goneCandidates, isPipelineBot, planSync,
-  type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhUser, type QuizItem, type SyncItem
+  type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhFile, type GhUser, type QuizItem, type SyncItem
 } from '../../utils/cards-sync-core'
 
 const REPO = 'FriendlyInternet/nuxt-crouton'
@@ -56,6 +56,10 @@ export default defineEventHandler(async (event) => {
   const comments = (n: number) => ghGetAll<GhComment>(event, `/repos/${REPO}/issues/${n}/comments?per_page=100`)
   const events = (n: number) => ghGetAll<GhEvent>(event, `/repos/${REPO}/issues/${n}/events?per_page=100`)
   const commits = (n: number) => ghGetAll<GhCommit>(event, `/repos/${REPO}/pulls/${n}/commits?per_page=100`)
+  // A PR's files: GitHub lists up to 3000 (30 pages). Names the packages a review card warns about (#3785).
+  const files = (n: number) => ghGetAll<GhFile>(event, `/repos/${REPO}/pulls/${n}/files?per_page=100`, 30)
+  const closedIssue = async (n: number | null | undefined) =>
+    n ? ghFetch<GhIssue>(event, `/repos/${REPO}/issues/${n}`, { fresh: true }) : { data: null, error: null }
 
   // Open PRs: comments for every one (the build-review state lives there); events + commits only
   // for PRs a rule could claim.
@@ -71,10 +75,14 @@ export default defineEventHandler(async (event) => {
     const signoff = isPipelineBot(p) && (p.body ?? '').includes(SIGNOFF_PREVIEW_MARKER)
     const reviewed = item.comments.some(x => isPipelineBot(x) && /<!-- build-review-/.test(x.body ?? ''))
     if (!(signoff || reviewed || labels.includes('status:needs-merge') || labels.includes('status:blocked'))) return item
-    const [e, k] = await Promise.all([events(p.number), commits(p.number)])
-    if (e.error || k.error) { note(e.error); note(k.error); item.readError = true; return item }
+    const [e, k, f, ci] = await Promise.all([events(p.number), commits(p.number), files(p.number), closedIssue(item.closesIssue)])
+    if (e.error || k.error || f.error || ci.error) {
+      note(e.error); note(k.error); note(f.error); note(ci.error); item.readError = true; return item
+    }
     item.events = e.data ?? []
     item.commits = k.data ?? []
+    item.files = f.data ?? []
+    item.closedIssueBody = ci.data?.body ?? null
     return item
   }))
 

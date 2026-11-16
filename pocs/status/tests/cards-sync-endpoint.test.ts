@@ -12,6 +12,8 @@ const SIGNOFF = '<!-- deploy-preview: full-watch -->'
 let sessionEmail: string | null
 let kv: ReturnType<typeof createStorage>
 let failComments: number | null
+/** PR number → its changed files (served 100 per page); unset → no files. */
+let prFiles: Record<number, Array<{ filename: string }>>
 
 const createInboxCard = vi.fn(async (c: unknown) => c)
 const updateInboxCard = vi.fn(async () => ({}))
@@ -41,6 +43,12 @@ const fetchSpy = vi.fn(async (input: string | URL | Request) => {
   if (/\/issues\/\d+\/events$/.test(p)) return json([])
   const k = /\/pulls\/(\d+)\/commits$/.exec(p)
   if (k) return json([{ sha: `sha${k[1]}`, parents: [{}], commit: { message: 'feat', committer: { name: 'x', date: '2026-11-01T09:00:00Z' } } }])
+  const f = /\/pulls\/(\d+)\/files$/.exec(p)
+  if (f) {
+    const page = Number(url.searchParams.get('page') ?? 1)
+    return json((prFiles[Number(f[1])] ?? []).slice((page - 1) * 100, page * 100))
+  }
+  if (/\/issues\/\d+$/.test(p)) return json({ body: '## 👤 For humans\nAdds a field to the core.\n\n## 🤖 For agents\n- x' })
   return json({ message: 'not found' }, 404)
 })
 
@@ -61,6 +69,7 @@ async function run() {
 beforeEach(() => {
   sessionEmail = OWNER
   failComments = null
+  prFiles = {}
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
   createInboxCard.mockClear()
@@ -97,5 +106,20 @@ describe('POST /api/cards/sync', () => {
     expect(createInboxCard).toHaveBeenCalledTimes(1)
     expect((createInboxCard.mock.calls[0] as any[])[0].sourceNumber).toBe(10)
     expect(updateInboxCard).not.toHaveBeenCalled()
+  })
+
+  it('#3785: 150 files over two pages, the only packages/ file on page 2 → the card still names it', async () => {
+    prFiles[10] = [
+      ...Array.from({ length: 149 }, (_, i) => ({ filename: `pocs/status/f${i}.ts` })),
+      { filename: 'packages/crouton-core/app/x.ts' }
+    ]
+    const out = await run()
+    expect(out.body.created).toBe(2)
+    const calls = createInboxCard.mock.calls.map(c => (c as any[])[0])
+    const c10 = calls.find(c => c.sourceNumber === 10)
+    expect(c10.payload.packages).toEqual([{ name: 'crouton-core', why: 'Adds a field to the core.', approval: null }])
+    expect(calls.find(c => c.sourceNumber === 12).payload).not.toHaveProperty('packages')
+    const fileUrls = fetchSpy.mock.calls.map(c => String(c[0])).filter(u => u.includes('/pulls/10/files'))
+    expect(fileUrls.some(u => u.includes('page=2'))).toBe(true)
   })
 })
