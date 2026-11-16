@@ -156,7 +156,6 @@ import type { CroutonState } from '../composables/useCrouton'
 
 // Use the composables - destructure only needed properties
 const { croutonStates, close, closeAll, removeState } = useCrouton()
-const { collectionWithCapitalSingular } = useFormatCollections()
 const { t } = useT()
 
 // Filter states by container type
@@ -173,9 +172,8 @@ const slideoverStates = computed(() =>
 )
 
 // Get formatted collection name
-const getCollectionName = (collection: string | null): string => {
-  return collection ? collectionWithCapitalSingular(collection) : ''
-}
+const { singular: collectionLabel } = useCollectionLabel()
+const getCollectionName = (collection: string | null): string => collectionLabel(collection)
 
 // Translated title, e.g. "Create Booking"
 const getFormTitle = (state: CroutonState): string => {

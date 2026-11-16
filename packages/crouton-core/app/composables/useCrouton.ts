@@ -37,6 +37,9 @@ export default function () {
 
   // useState - now using array of states for multiple slideovers
   const croutonStates = useState<CroutonState[]>('croutonStates', () => [])
+  // Created here (setup context), not inside open(): open() runs from click
+  // handlers, where useT()/useI18n() has no component instance.
+  const croutonError = useCroutonError()
   const MAX_DEPTH = 5 // Maximum nesting depth
 
   // Computed values for backward compatibility
@@ -48,7 +51,7 @@ export default function () {
   const activeItem = computed(() => croutonStates.value[croutonStates.value.length - 1]?.activeItem || {})
 
   const open = async (actionIn: CroutonAction, collection: string, ids: string[] = [], container: 'slideover' | 'modal' | 'dialog' | 'inline' = 'slideover', initialData?: any): Promise<void> => {
-    const hasErrors = useCroutonError().foundErrors()
+    const hasErrors = croutonError.foundErrors()
     if (hasErrors) {
       return
     }

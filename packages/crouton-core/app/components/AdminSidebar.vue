@@ -49,10 +49,13 @@ const themeHelpers = computed(() => {
 const getVariant = (base: string) => themeHelpers.value.getVariant(base)
 
 // Translation support
-const { t } = useT()
+const { t, hasTranslation } = useT()
 
-// Translate with graceful fallback — vue-i18n wraps missing keys in brackets
+// Translate with graceful fallback. Labels are often plain text (a collection
+// or app name), not keys — only translate when the key exists, so a missing
+// key neither renders "[Label]" nor logs an intlify warning.
 function tLabel(label: string): string {
+  if (!hasTranslation(label)) return label
   const translated = t(label)
   if (translated.startsWith('[') && translated.endsWith(']')) return label
   return translated
