@@ -1,5 +1,6 @@
 // Pure core for the inbox page (`/`) — which cards show, which component renders each, and how a
 // tapped answer updates the list. No refs, no $fetch, no auto-imports, so it unit-tests.
+import { quizStatements } from './quiz-core'
 
 export interface InboxCard {
   id: string
@@ -15,7 +16,7 @@ export interface InboxCard {
   sourceNumber: number
 }
 
-export type CardView = 'review' | 'edit' | 'issue' | 'delivery' | 'placeholder'
+export type CardView = 'review' | 'edit' | 'issue' | 'delivery' | 'quiz' | 'placeholder'
 
 export interface AnswerInput {
   verdict: unknown
@@ -45,12 +46,14 @@ const hasEditUrl = (card: InboxCard) => typeof card.payload?.editUrl === 'string
 
 /**
  * Which card component renders this card. An edit ask is a `review` card carrying `payload.editUrl`;
- * a `delivery` card is an epic waiting to be tried (open, sign in, Works / Not ok).
+ * a `delivery` card is an epic waiting to be tried (open, sign in, Works / Not ok); a `quiz` card
+ * whose questions could not be read keeps the "Answer on GitHub" placeholder.
  */
 export function cardView(card: InboxCard): CardView {
   if (card.kind === 'review') return hasEditUrl(card) ? 'edit' : 'review'
   if (card.kind === 'issue') return 'issue'
   if (card.kind === 'delivery') return 'delivery'
+  if (card.kind === 'quiz') return quizStatements(card.payload).length ? 'quiz' : 'placeholder'
   if (card.kind === 'edit') return hasEditUrl(card) ? 'edit' : 'placeholder'
   return 'placeholder'
 }

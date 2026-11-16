@@ -16,6 +16,9 @@ Answering a card: `POST /api/cards/[cardId]/answer` posts the reply via `postRep
 and refuses every answer unless `GET /api/cards/token-account` reports `pmcp` (the pipeline acts only on the
 owner's own comments). The param is `cardId`, never `id` — crouton reads `id` as the team.
 It answers `review` cards (`ok`/`not-ok`) and `delivery` cards (`works` → posts `ok`, `not-ok` → `not ok: <note>`).
+A `quiz` card takes `{ answer: '1B 2A 3C' }` instead of a verdict: one A/B/C/? per statement, checked with a copy of
+`parseAnswers` from `scripts/owner-quiz.mjs` (`app/utils/quiz-core.ts`, keep in step); it never posts `ok`.
+The quiz card is `app/components/cards/QuizCard.vue`; a quiz with no readable `payload.questions` stays a placeholder.
 The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/delivery-core.ts`) opens the app
 signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 

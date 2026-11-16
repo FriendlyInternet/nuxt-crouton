@@ -4,6 +4,7 @@
 // owner's own comments, so a bot's `ok` would be ignored and the card would lie "answered".
 import type { GhResult } from './github-core'
 import { buildReply, postReply, type ParsedReply } from './reply-core'
+import { parseAnswers, quizStatements } from '../../app/utils/quiz-core'
 
 const GH_API = 'https://api.github.com'
 
@@ -14,11 +15,14 @@ export interface AnswerableCard {
   sourceType: string
   sourceNumber: number
   askedAt: Date | string | number
+  payload?: Record<string, unknown> | null
 }
 
 export interface CardAnswerInput {
   verdict?: unknown
   note?: unknown
+  /** Quiz cards only: the `1B 2A 3C` answer line. */
+  answer?: unknown
 }
 
 export interface CardUpdates {
@@ -53,7 +57,9 @@ export async function tokenLogin(token: string | undefined, fetchImpl: typeof fe
 
 /**
  * Map a card + tapped answer to the reply to post. Answers `review` cards (ok / not-ok) and
- * `delivery` cards (works / not-ok — Works posts `ok` on the epic, like a review ok).
+ * `delivery` cards (works / not-ok — Works posts `ok` on the epic, like a review ok), and `quiz`
+ * cards (the `1B 2A 3C` line, checked with the quiz's own parser; `verdict` is ignored, so a quiz
+ * never posts `ok`).
  */
 export function buildCardReply(card: AnswerableCard, input: CardAnswerInput): GhResult<ParsedReply> {
   if (card.kind === 'review') {
@@ -64,7 +70,23 @@ export function buildCardReply(card: AnswerableCard, input: CardAnswerInput): Gh
     const verdict = input.verdict === 'works' ? 'ok' : 'not-ok'
     return buildReply({ kind: card.sourceType, number: card.sourceNumber, verdict, note: input.note })
   }
+  if (card.kind === 'quiz') return buildQuizReply(card, input)
   return { data: null, error: `answers for "${card.kind}" cards are not supported yet` }
+}
+
+function buildQuizReply(card: AnswerableCard, input: CardAnswerInput): GhResult<ParsedReply> {
+  const kind = card.sourceType
+  if (kind !== 'issue' && kind !== 'pr') return { data: null, error: 'kind must be "issue" or "pr"' }
+  const number = Number(card.sourceNumber)
+  if (!Number.isInteger(number) || number <= 0) return { data: null, error: 'number must be a positive integer' }
+  const n = quizStatements(card.payload).length
+  if (n === 0) return { data: null, error: 'quiz card has no questions' }
+  const line = typeof input.answer === 'string' ? input.answer.trim() : ''
+  const parsed = parseAnswers(line, n)
+  if (parsed.error || !parsed.answers) return { data: null, error: `not a quiz answer: ${parsed.error ?? 'unreadable'}` }
+  const answers = parsed.answers
+  const body = Array.from({ length: n }, (_, i) => `${i + 1}${answers[i + 1]}`).join(' ')
+  return { data: { kind, number, body }, error: null }
 }
 
 export interface AnswerCardArgs {
@@ -106,7 +128,7 @@ export async function answerCard({ card, input, repo, token, fetchImpl = fetch, 
   const note = typeof input.note === 'string' ? input.note.trim() : ''
   const updates: CardUpdates = {
     state: 'answered',
-    answer: String(input.verdict),
+    answer: card.kind === 'quiz' ? reply.data.body : String(input.verdict),
     answerNote: note || null,
     answeredVia: 'inbox',
     answerUrl: posted.data.url,
