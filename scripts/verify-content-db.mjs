@@ -36,7 +36,10 @@ function parseRows(stdout) {
   }
 }
 
-/** Returns { healthy, ready, status, elapsed } and never throws. */
+// @nuxt/content 3.16 only accepts `COUNT(x) as count` (security.js SQL_COUNT_REGEX).
+export const probeSql = c => `SELECT COUNT(*) as count FROM _content_${c} ORDER BY "stem" ASC`
+
+/** Returns { healthy, ready, status, elapsed, count, message, probeFault } and never throws. */
 export async function checkCollection(c, { exec, fetch: doFetch, now }) {
   let ready = null
   try {
@@ -49,31 +52,49 @@ export async function checkCollection(c, { exec, fetch: doFetch, now }) {
   }
   const start = now()
   let status = 0
+  let count = null
+  let message = ''
   try {
     const res = await doFetch(`${BASE_URL}/__nuxt_content/${c}/query`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sql: `SELECT COUNT(*) FROM _content_${c} ORDER BY "stem" ASC` }),
+      body: JSON.stringify({ sql: probeSql(c) }),
       signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     })
     status = res.status
+    const text = (await res.text?.()) ?? ''
+    message = String(text).slice(0, 200)
+    try {
+      const p = JSON.parse(text)
+      count = Array.isArray(p) ? Number(p[0]?.count) : null
+    }
+    catch {
+      count = null
+    }
   }
   catch {
     status = 0
   }
   const elapsed = now() - start
-  const healthy = ready === 1 && status === 200 && elapsed < QUERY_TIMEOUT_MS
-  return { healthy, ready, status, elapsed }
+  const healthy = ready === 1 && status === 200 && elapsed < QUERY_TIMEOUT_MS && count > 0
+  // A fast HTTP error while ready=1 means our probe is wrong, not a stuck DB.
+  const probeFault = ready === 1 && status >= 400
+  return { healthy, ready, status, elapsed, count, message, probeFault }
 }
 
 export async function verifyCollection(c, deps) {
   const { exec, now, sleep, log = () => {} } = deps
   const check = async (label) => {
     const r = await checkCollection(c, deps)
-    log(`[${c}] ${label}: ready=${r.ready} status=${r.status} elapsed=${r.elapsed}ms healthy=${r.healthy}`)
+    log(`[${c}] ${label}: ready=${r.ready} status=${r.status} elapsed=${r.elapsed}ms count=${r.count} healthy=${r.healthy}`)
     return r
   }
-  if ((await check('check')).healthy) return true
+  const first = await check('check')
+  if (first.healthy) return true
+  if (first.probeFault) {
+    log(`[${c}] probe rejected (status=${first.status}): ${first.message} — not touching D1`)
+    return false
+  }
 
   log(`[${c}] unhealthy: deleting checksum_${c} once`)
   await exec(`DELETE FROM _content_info WHERE id = 'checksum_${c}'`)

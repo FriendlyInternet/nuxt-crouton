@@ -146,3 +146,5 @@ The digest follows automatically (it reads the live tree). Two housekeeping step
    it shows under "⚠️ Uncategorised" in both the doc and this digest.
 2. Run `node scripts/gen-skills-doc.mjs` so `skills-and-triggers.html` stays current (CI enforces
    this via `skills-doc.yml`; `sync-docs` does it before `/commit`).
+
+> Note (moved from root CLAUDE.md, #3350): mirrors `epic-digest` — `gather.mjs → render.mjs → email via Resend`.

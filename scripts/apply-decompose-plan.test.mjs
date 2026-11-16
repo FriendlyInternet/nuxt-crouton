@@ -14,8 +14,9 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason,
+  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason, needsTicketReview,
 } from './apply-decompose-plan.mjs'
+import { nextAction, parseSteps, PlanError as LibPlanError } from './lib/epic-steps.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
 
@@ -90,7 +91,7 @@ test('sanitizeLabels keeps known and drops unknown (the bad-label create failure
 // ── buildChildBody ───────────────────────────────────────────────────────────────
 test('buildChildBody injects the WS2 block at childDepth', () => {
   const body = buildChildBody('## body', { epic: 1685, childDepth: 2, epic_branch: BRANCH })
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null, base: null })
   assert.match(body, /^## body/)
 })
 
@@ -352,4 +353,189 @@ test('missingMockupReason: silent for non-UI holds, loud when a mockup was promi
   assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
   assert.match(missingMockupReason({ summary: 'x', questions: [], ui: '<p/>' }, [], 'boom'), /boom/)
   assert.equal(missingMockupReason({ summary: 'mockup', questions: [], ui: '<p/>' }, [{ label: 'UI mockup', path: 'a.png' }]), '')
+})
+
+// ── #3238: a ticket that asks for a design sign-off never slips through as a leaf ──
+import { applySignoffFallback } from './apply-decompose-plan.mjs'
+import { signoffRoute, SIGNOFF_MARKER } from './lib/signoff-route.mjs'
+const ASKS = 'Do X\n**Hold for design sign-off first** (`signoff` with a `ui` mockup)'
+
+test('#3238 (5) leaf + ticket asks + no hold → one signoff-hold, no work-this', () => {
+  const plan = applySignoffFallback({ leaf: true, children: [] }, { text: ASKS, comments: [] })
+  assert.ok(plan.signoff)
+  const acts = planToActions(plan, CTX)
+  assert.equal(acts.length, 1)
+  assert.equal(acts[0].type, 'signoff-hold')
+  assert.ok(!acts.some(a => a.type === 'add-label'))
+})
+test('#3238 (6) the rendered hold starts with the marker and counts as asked', () => {
+  const plan = applySignoffFallback({ leaf: true, children: [] }, { text: ASKS, comments: [] })
+  const bodies = []
+  runActions(planToActions(plan, CTX), { repo: 'o/r', exec: () => '', log: () => {}, writeBody: (n, b) => { bodies.push(b); return n } })
+  assert.ok(bodies[0].startsWith(SIGNOFF_MARKER))
+  assert.equal(signoffRoute({ text: ASKS, comments: [{ body: bodies[0] }] }).route, 'none')
+})
+test('#3238 (7) marker already present → leaf unchanged', () => {
+  const leaf = { leaf: true, children: [] }
+  assert.equal(applySignoffFallback(leaf, { text: ASKS, comments: [{ body: `${SIGNOFF_MARKER}\nx` }] }), leaf)
+})
+test('#3238 (8) ticket does not ask → leaf unchanged', () => {
+  const leaf = { leaf: true, children: [] }
+  assert.equal(applySignoffFallback(leaf, { text: 'plain', comments: [] }), leaf)
+})
+
+// ── #3690: every posted hold diagram gets an ✏️ Edit link, saved to `diagrams`, never `main` ──
+import { renderSignoffHoldBody } from './apply-decompose-plan.mjs'
+import { diagramEditUrl } from './lib/diagram-edit-link.mjs'
+import { mkdtempSync, mkdirSync as mkdirS, writeFileSync as writeF } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join as joinP } from 'node:path'
+
+const HOLD = { summary: 'why we hold', questions: ['which?'] }
+const ART = { images: [{ label: 'Diagram', path: 'writeups/diagrams/s.png' }], schemaMd: '', errors: {} }
+const RAW = 'https://raw.githubusercontent.com/o/r/epic/1--v1-x'
+
+test('#3690 renderSignoffHoldBody: Edit link under the diagram when editUrl is set, never at main', () => {
+  const body = renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: RAW, editUrl: diagramEditUrl({ slug: 's', branch: 'diagrams', issue: 7 }) })
+  assert.match(body, /✏️ Edit/)
+  for (const s of ['slug=s', 'branch=diagrams', 'issue=7']) assert.ok(body.includes(s), s)
+  assert.ok(!body.includes('branch=main'))
+  assert.ok(body.startsWith(SIGNOFF_MARKER))
+})
+
+test('#3690 renderSignoffHoldBody: no editUrl → no link; no epic branch → no images and no link', () => {
+  assert.ok(!renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: RAW, editUrl: null }).includes('✏️ Edit'))
+  const noBranch = renderSignoffHoldBody({ signoff: HOLD, art: ART, rawBase: null, editUrl: null })
+  assert.ok(!noBranch.includes('### Rendered'))
+  assert.ok(!noBranch.includes('✏️ Edit'))
+})
+
+// Drive the real runActions in a temp cwd: the mock generator writes the png + scene, the mock gh
+// answers the diagrams-branch REST calls. `putFails` makes every scene PUT throw.
+function runDiagramHold({ epic_branch, putFails = false }) {
+  const uniq = `hold-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+  const dir = mkdtempSync(joinP(tmpdir(), 'apply-3690-'))
+  const prev = process.cwd()
+  const calls = []
+  const logs = []
+  let body = ''
+  const exec = (file, args) => {
+    calls.push([file, ...args])
+    if (file === 'node' && String(args[0]).endsWith('ticket-excalidraw.mjs')) {
+      mkdirS('writeups/diagrams', { recursive: true })
+      writeF(`writeups/diagrams/${uniq}.png`, 'png')
+      writeF(`writeups/diagrams/${uniq}.excalidraw`, '{"elements":[]}')
+      return ''
+    }
+    if (file === 'git') throw new Error('exit 1') // check-ignore: not ignored
+    const url = args.find(a => String(a).startsWith('repos/')) || ''
+    if (url.endsWith('/git/ref/heads/diagrams')) return 'sha'
+    if (url.includes('/contents/') && !args.includes('PUT')) throw new Error('gh: Not Found (HTTP 404)')
+    if (args.includes('PUT')) { if (putFails) throw new Error('gh: Conflict (HTTP 409)'); return '' }
+    return ''
+  }
+  const acts = planToActions(parsePlan({ signoff: { ...HOLD, diagram: { slug: uniq, nodes: [], edges: [] } } }), { ...CTX, epic_branch })
+  let summary
+  process.chdir(dir)
+  try {
+    summary = runActions(acts, { repo: 'o/r', exec, log: m => logs.push(m), writeBody: (t, b) => { if (t.startsWith('signoff')) body = b; return `/tmp/${t}` } })
+  } finally { process.chdir(prev) }
+  return { uniq, calls, logs, body, summary }
+}
+
+test('#3690 runActions hold: --excalidraw, scene PUT to diagrams, Edit link posted, scene not an epic artifact', () => {
+  const r = runDiagramHold({ epic_branch: 'epic/1--v1-x' })
+  assert.ok(r.calls.some(c => String(c[1]).endsWith('ticket-excalidraw.mjs') && c.includes('--excalidraw')))
+  assert.ok(r.calls.some(c => c.includes('PUT') && c.includes(`repos/o/r/contents/writeups/diagrams/${r.uniq}.excalidraw`)))
+  assert.ok(r.body.includes('branch=diagrams'))
+  assert.ok(r.summary.artifacts.includes(`writeups/diagrams/${r.uniq}.png`))
+  assert.ok(!r.summary.artifacts.some(p => p.endsWith('.excalidraw')))
+  assert.equal(r.summary.held[0].diagramEdit, true)
+})
+
+test('#3690 runActions hold: a failed scene save still posts the hold, without the link', () => {
+  const r = runDiagramHold({ epic_branch: 'epic/1--v1-x', putFails: true })
+  assert.equal(r.calls.filter(c => c.includes('PUT')).length, 2, 'one retry, then give up')
+  assert.ok(r.calls.some(c => c.includes('repos/o/r/issues/1706/comments')))
+  assert.ok(r.calls.some(c => c.includes('labels[]=status:blocked')))
+  assert.ok(!r.body.includes('✏️ Edit'))
+  assert.equal(r.summary.held[0].diagramEdit, false)
+  assert.ok(r.logs.some(m => /diagram scene save failed/.test(m)))
+})
+
+test('#3690 runActions hold: no epic branch → no diagrams-branch calls and no link', () => {
+  const r = runDiagramHold({ epic_branch: '' })
+  assert.ok(!r.calls.some(c => c.some(a => /git\/ref|\/contents\//.test(String(a)))))
+  assert.ok(!r.body.includes('✏️ Edit'))
+  assert.equal(r.summary.held[0].diagramEdit, false)
+})
+
+// ── #3846: the ROLLING split — a step list + only step 0's ticket, then one plan review ──
+const STEPS4 = [0, 1, 2, 3].map(i => ({ title: `Step ${i}`, goal: `g${i}`, proves: `p${i}`, blockedBy: i ? [i - 1] : [] }))
+const ROLLING = () => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 0 })] })
+
+test('1. new epic → one create, one post-steps with 4 steps, tickets:rolling, one plan review, no trigger label', () => {
+  const acts = planToActions(ROLLING(), CTX)
+  assert.deepEqual(acts.map(a => a.type), ['ensure-label', 'ensure-label', 'create', 'link', 'post-steps', 'request-plan-review'])
+  assert.equal(acts.filter(a => a.type === 'create').length, 1)
+  assert.equal(acts.find(a => a.type === 'post-steps').steps.length, 4)
+  assert.deepEqual(acts.filter(a => a.type === 'ensure-label').map(a => a.label), ['epic', 'tickets:rolling'])
+  assert.ok(!acts.some(a => a.type === 'trigger-label' || a.type === 'request-ticket-review'))
+  // step 0's ticket carries step=0 and its recorded dispatch label, never a trigger label
+  const block = parsePipelineBlock(acts.find(a => a.type === 'create').body)
+  assert.equal(block.step, 0)
+  assert.equal(block.dispatch, WORKER_TRIGGER)
+})
+
+test('1. runActions posts the step list with ticket 1\'s number, dispatches subject=plan, and nextAction asks for the plan review', () => {
+  const calls = []
+  const bodies = {}
+  const exec = (file, args) => {
+    calls.push([file, ...args])
+    if (args.includes('POST') && args.includes('repos/o/r/issues')) return '5001'
+    if (args.includes('--paginate')) return ''
+    if (args.includes('POST') && String(args[3]).endsWith('/comments')) return '777'
+    return '9'
+  }
+  const s = runActions(planToActions(ROLLING(), CTX), { repo: 'o/r', exec, log: () => {}, writeBody: (t, b) => { bodies[t] = b; return `/tmp/${t}` } })
+  assert.deepEqual(s.stepsPosted, [{ epic: 1706, comment: 777 }])
+  assert.deepEqual(s.created.map(c => c.number), [5001])
+  assert.ok(calls.some(c => c.includes('workflow') && c.includes('ticket-review.yml') && c.includes('subject=plan')))
+  const posted = { body: bodies['steps-1706'], user: { login: 'nuxt-harness[bot]', type: 'Bot' } }
+  const steps = parseSteps([posted])
+  assert.equal(steps[0].ticket, 5001)
+  assert.equal(steps[1].ticket, null)
+  assert.deepEqual(nextAction({ rolling: true, plan: {}, steps, tickets: { 5001: { state: 'open', step: 0 } } }), [{ type: 'plan-review' }])
+})
+
+test('post-steps edits the existing bot step list in place on a re-run (never a second one)', () => {
+  const calls = []
+  const old = JSON.stringify({ id: 42, body: '<!-- epic-steps:v1 -->\nold', user: { login: 'nuxt-harness[bot]', type: 'Bot' } })
+  const exec = (file, args) => { calls.push(args); if (args.includes('--paginate')) return old; return '' }
+  const s = runActions([{ type: 'post-steps', epic: 7, steps: ROLLING().steps, ticketRefs: {} }], { repo: 'o/r', exec, log: () => {}, writeBody: t => `/tmp/${t}` })
+  assert.ok(calls.some(a => a.includes('PATCH') && a.includes('repos/o/r/issues/comments/42')))
+  assert.ok(!calls.some(a => a.includes('POST')))
+  assert.deepEqual(s.stepsPosted, [{ epic: 7, comment: 42 }])
+})
+
+test('a rolling plan has exactly one child, step 0, and step 0 waits on nothing', () => {
+  assert.throws(() => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 0 }), CHILD({ step: 1 })] }), PlanError)
+  assert.throws(() => parsePlan({ leaf: false, steps: STEPS4, children: [CHILD({ step: 1 })] }), /step 0/)
+  assert.throws(() => parsePlan({ leaf: false, steps: [{ ...STEPS4[0], goal: '' }], children: [CHILD({ step: 0 })] }), /goal/)
+  assert.equal(PlanError, LibPlanError, 'one PlanError class, re-exported')
+})
+
+test('14. a step=replan plan is a PlanError (fix the step list by hand); no children still fails', () => {
+  assert.throws(() => parsePlan('{"leaf":false,"step":"replan","steps":[{"step":0,"title":"a","goal":"g","proves":"p","blockedBy":[]}],"children":[]}'), (e) => e instanceof PlanError && /replan is not supported/.test(e.message))
+  assert.throws(() => parsePlan({ leaf: false, children: [] }), /non-empty children/)
+})
+
+test('7. needsTicketReview: a plain split keeps today\'s whole-set review; a rolling plan needs no children or the label', () => {
+  const ctx = { target: 7, depth: 0 }
+  const plain = parsePlan({ leaf: false, children: [{ title: 'a', body: 'edit packages/x/y.ts', labels: ['type:feat'] }] })
+  assert.equal(needsTicketReview(plain, ctx, { hasLabel: () => false }), true)
+  assert.equal(needsTicketReview(plain, ctx, { hasLabel: (n, l) => l === 'tickets:approved' }), false)
+  assert.equal(needsTicketReview(ROLLING(), ctx, { hasLabel: () => false, hasChildren: () => false }), 'rolling')
+  assert.equal(needsTicketReview(ROLLING(), ctx, { hasLabel: (n, l) => l === 'tickets:rolling', hasChildren: () => true }), 'rolling')
+  assert.throws(() => needsTicketReview(ROLLING(), ctx, { hasLabel: () => false, hasChildren: () => true }), /tickets:rolling/)
 })

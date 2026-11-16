@@ -32,6 +32,7 @@ export async function getActiveCroutonRedirects() {
 
   return db
     .select({
+      teamId: croutonRedirects.teamId,
       fromPath: croutonRedirects.fromPath,
       toPath: croutonRedirects.toPath,
       statusCode: croutonRedirects.statusCode

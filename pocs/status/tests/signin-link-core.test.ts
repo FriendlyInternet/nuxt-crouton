@@ -19,6 +19,12 @@ describe('safeRedirect', () => {
     expect(safeRedirect('//evil.com')).toBe('/')
     expect(safeRedirect('/\\evil.com')).toBe('/')
     expect(safeRedirect(undefined)).toBe('/')
+    expect(safeRedirect('/a\r\nb')).toBe('/')
+    expect(safeRedirect(`/${'a'.repeat(4096)}`)).toBe('/')
+  })
+  it('keeps a long sign-in return path (key + to + a card walk, #3840)', () => {
+    const long = `/api/status/login/velo?key=pr1&to=%2Fx&walk=${'A'.repeat(2048)}`
+    expect(safeRedirect(long)).toBe(long)
   })
 })
 

@@ -17,7 +17,7 @@ export default defineBuildConfig({
       input: 'src/runtime/server',
       outDir: 'dist/runtime/server',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // Client plugins: launcher mount + tool registrations (console)
@@ -25,7 +25,7 @@ export default defineBuildConfig({
       input: 'src/runtime/plugins',
       outDir: 'dist/runtime/plugins',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // Tool registry composable
@@ -33,7 +33,7 @@ export default defineBuildConfig({
       input: 'src/runtime/composables',
       outDir: 'dist/runtime/composables',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // Tool definitions: Console (eruda) factory
@@ -41,7 +41,7 @@ export default defineBuildConfig({
       input: 'src/runtime/tools',
       outDir: 'dist/runtime/tools',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // Launcher SFC — mkdist compiles the .vue to .mjs (+ .css)
@@ -49,7 +49,7 @@ export default defineBuildConfig({
       input: 'src/runtime/components',
       outDir: 'dist/runtime/components',
       builder: 'mkdist',
-      pattern: ['**/*.vue'],
+      pattern: ['**/*.vue', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['vue', 'js']
     },
     // Shared overlay mount helper
@@ -57,7 +57,7 @@ export default defineBuildConfig({
       input: 'src/runtime/overlay',
       outDir: 'dist/runtime/overlay',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     }
   ],

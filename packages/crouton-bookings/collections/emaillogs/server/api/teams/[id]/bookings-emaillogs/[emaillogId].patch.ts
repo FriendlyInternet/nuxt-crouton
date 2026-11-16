@@ -1,17 +1,30 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateBookingsEmaillog } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import type { BookingsEmaillog } from '../../../../../types'
+// The requireTeamAdmin utility handles team resolution and auth
+import { z } from 'zod'
+import { updateBookingsEmaillog, assertBookingsEmaillogReferences } from '../../../../database/queries'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+
+// Hand-added body validation (#3377)
+const bodySchema = z.object({
+  bookingId: z.string().nullish(),
+  templateId: z.string().nullish(),
+  recipientEmail: z.string().min(1),
+  triggerType: z.string().min(1),
+  status: z.string().min(1),
+  sentAt: z.string().nullish(),
+  error: z.string().nullish()
+}).partial().strip()
 
 export default defineEventHandler(async (event) => {
   const { emaillogId } = getRouterParams(event)
   if (!emaillogId) {
     throw createError({ status: 400, statusText: 'Missing emaillog ID' })
   }
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await requireTeamAdmin(event)
 
-  const body = await readBody<Partial<BookingsEmaillog>>(event)
+  const body = await readValidatedBody(event, bodySchema.parse)
+
+  await assertBookingsEmaillogReferences(team.id, body)
 
   return await updateBookingsEmaillog(emaillogId, team.id, user.id, {
     bookingId: body.bookingId,
@@ -21,5 +34,5 @@ export default defineEventHandler(async (event) => {
     status: body.status,
     sentAt: body.sentAt,
     error: body.error
-  }, { role: membership.role })
+  } as Parameters<typeof updateBookingsEmaillog>[3], { role: membership.role })
 })

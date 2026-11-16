@@ -17,7 +17,8 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     },
     "testSample": "'sample'",
     "canonical": "string",
-    "component": "UInput"
+    "component": "UInput",
+    "translatable": true
   },
   "text": {
     "db": "TEXT",
@@ -33,7 +34,8 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     },
     "testSample": "'sample'",
     "canonical": "text",
-    "component": "UTextarea"
+    "component": "UTextarea",
+    "translatable": true
   },
   "number": {
     "db": "INTEGER",
@@ -244,7 +246,8 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     },
     "testSample": "'sample'",
     "canonical": "richText",
-    "component": "CroutonEditorSimple"
+    "component": "CroutonEditorSimple",
+    "translatable": true
   }
 }
 

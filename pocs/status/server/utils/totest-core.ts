@@ -1,4 +1,6 @@
 // Pure helpers for GET /api/status/totest — no Nitro auto-imports, so they unit-test.
+import { isSafePath } from '../../shared/safe-path'
+
 export interface ToTestItem {
   kind: 'epic' | 'pr'
   number: number
@@ -62,13 +64,7 @@ export function hasOwnerOk(comments: Array<{ body?: string | null, user?: { logi
   )
 }
 
-/** A redirect target is safe only as a same-origin absolute path: `/x`, never `//host`, `\\`, or a scheme. */
-export function isSafePath(to: unknown): to is string {
-  return typeof to === 'string'
-    && to.length <= 500
-    && /^\/(?!\/)/.test(to)
-    && !/[\\\u0000-\u001f\u007f]/.test(to)
-}
+export { isSafePath }
 
 /** First app path (`/admin/x?y=1`) or same-host URL found in the steps, else ''. */
 export function extractTargetPath(steps: string[], stagingUrl?: string | null): string {

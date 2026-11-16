@@ -12,6 +12,12 @@
       "name": "pages workspace renders",
       "path": "/admin/{team}/workspace",
       "expect": { "visible": "[id$='-panel-pages-sidebar']" }
+    },
+    {
+      "name": "page editor mounts the real block editor, not the stub",
+      "path": "/admin/{team}/workspace",
+      "click": ["[aria-label='Create Page']", "[data-review='editor-tab-content']"],
+      "expect": { "visible": ".crouton-editor-blocks .ProseMirror", "a11y": false }
     }
   ]
 }

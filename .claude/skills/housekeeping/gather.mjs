@@ -21,10 +21,19 @@
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
+import { isAgentComment } from '../../../scripts/approval.mjs'
+import { staleWorkThisLabels as collectStaleWorkThis } from '../../../scripts/lib/stale-work-this-gather.mjs'
+import { epicNoCi, okButConflicting } from '../../../scripts/lib/stuck-prs.mjs'
+import { fetchAllPages } from '../../../scripts/lib/gh-paginate.mjs'
+import { readDriftReport } from '../../../scripts/app-collection-drift.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
 const staleDays = Number(process.env.HOUSEKEEPING_STALE_DAYS || 14)
+const epicNoCiDays = Number(process.env.HOUSEKEEPING_EPIC_NO_CI_DAYS || 3)
+const okConflictDays = Number(process.env.HOUSEKEEPING_OK_CONFLICT_DAYS || 1)
+// The human owner (NOT OWNER above, which is the repo org) — same source as automerge-epic-subpr.yml.
+const OWNER_LOGIN = process.env.OWNER_LOGIN || 'pmcp'
 const token = process.env.GITHUB_TOKEN
 if (!token) {
   console.error('gather.mjs: GITHUB_TOKEN is required')
@@ -37,8 +46,8 @@ const PROTECTED = new Set(['main', 'HEAD', 'gh-pages'])
 // This digest posts to its own standing issue — don't let it list itself.
 const STANDING_TITLE = process.env.HOUSEKEEPING_ISSUE_TITLE || '🧹 Housekeeping'
 
-async function gh(path) {
-  const res = await fetch('https://api.github.com' + path, {
+async function ghRaw(url) {
+  const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -46,8 +55,17 @@ async function gh(path) {
       'User-Agent': 'housekeeping-digest'
     }
   })
-  if (!res.ok) throw new Error(`GitHub ${res.status} on ${path}: ${await res.text()}`)
-  return res.json()
+  if (!res.ok) throw new Error(`GitHub ${res.status} on ${url}: ${await res.text()}`)
+  return { data: await res.json(), link: res.headers.get('link') }
+}
+async function gh(path) {
+  return (await ghRaw('https://api.github.com' + path)).data
+}
+// Follow Link rel="next" so lists longer than one page are complete; warn if the page cap cuts one short.
+async function ghAll(path, label) {
+  const { items, truncated } = await fetchAllPages(ghRaw, 'https://api.github.com' + path)
+  if (truncated) console.error(`stuckPRs: ${label}: page cap hit (${items.length} items) — list is incomplete`)
+  return items
 }
 const search = async (q) =>
   (await gh(`/search/issues?per_page=100&q=${encodeURIComponent(q)}`)).items || []
@@ -171,6 +189,19 @@ function loopStationBudget() {
   }
 }
 
+// ── App collection drift (#3407) ──────────────────────────────────────────────
+// Unset env (local run) → null, section absent. Set (the workflow) → the parsed report, or
+// { error } when the report step wrote nothing, so a broken step is never a silent gap.
+function appCollectionDrift() {
+  const file = process.env.APP_COLLECTION_DRIFT_FILE
+  if (!file) return null
+  try {
+    return readDriftReport(file)
+  } catch {
+    return null
+  }
+}
+
 // ── Skill freshness (#1100 WS3) ───────────────────────────────────────────────
 // Read-only: reuse scripts/skill-freshness.mjs (fs+git, no LLM) to surface knowledge-skills
 // whose cited paths drifted or whose `verified:` stamp aged out. Returns just the flagged
@@ -274,6 +305,87 @@ function epicBranchAheadOfMain(epicNumber) {
   }
 }
 
+// ── Stuck PRs (#3317) ────────────────────────────────────────────────────────
+// Epic→main PRs with no `CI Gate` run, and owner-approved PRs that went conflicting.
+// Read-only GETs; any per-PR fetch failure skips that PR rather than failing the digest.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function stuckPRs(openPRs) {
+  const repo = `/repos/${OWNER}/${NAME}`
+  const epicPrs = []
+  const oked = []
+  for (const s of openPRs) {
+    try {
+      let pr = await gh(`${repo}/pulls/${s.number}`)
+      const isEpic = pr.base?.ref === 'main' && String(pr.head?.ref).startsWith('epic/')
+      const comments = await ghAll(`${repo}/issues/${s.number}/comments?per_page=100`, `#${s.number} comments`)
+      const hasOwner = comments.some((c) => c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase())
+
+      if (isEpic) {
+        const runs = await gh(`${repo}/commits/${pr.head.sha}/check-runs?per_page=100`)
+        const head = await gh(`${repo}/commits/${pr.head.sha}`)
+        epicPrs.push({
+          number: pr.number,
+          title: pr.title,
+          html_url: pr.html_url,
+          created_at: pr.created_at,
+          headCommitDate: head.commit?.committer?.date,
+          base: pr.base.ref,
+          head: pr.head.ref,
+          checkRunNames: (runs.check_runs || []).map((r) => r.name)
+        })
+      }
+
+      if (hasOwner) {
+        if (pr.mergeable_state === 'unknown') {
+          await sleep(2000)
+          pr = await gh(`${repo}/pulls/${s.number}`)
+        }
+        if (pr.mergeable_state !== 'dirty') continue
+        const commits = await ghAll(`${repo}/pulls/${s.number}/commits?per_page=100`, `#${s.number} commits`)
+        if (pr.commits > commits.length) {
+          console.error(`stuckPRs: #${s.number}: PR has ${pr.commits} commits, API returned ${commits.length} (250 cap) — verdict may be wrong`)
+        }
+        // File lists only matter for commits newer than the latest comment-able ok; fetch them
+        // for the tail so ui-proposals-only capture commits are not mistaken for revisions.
+        const lastOwner = comments
+          .filter(
+            (c) =>
+              c.user?.login?.toLowerCase() === OWNER_LOGIN.toLowerCase() &&
+              c.user?.type !== 'Bot' &&
+              !isAgentComment(c.body)
+          )
+          .map((c) => Date.parse(c.created_at))
+          .sort((a, b) => b - a)[0]
+        for (const k of commits) {
+          const d = Date.parse(k.commit?.committer?.date)
+          if (!(d <= lastOwner) && (k.parents || []).length <= 1) {
+            const full = await gh(`${repo}/commits/${k.sha}`)
+            k.files = (full.files || []).map((f) => f.filename)
+          }
+        }
+        const hit = okButConflicting({
+          pr,
+          comments,
+          commits,
+          owner: OWNER_LOGIN,
+          days: okConflictDays
+        })
+        if (hit) oked.push(hit)
+      }
+    } catch (e) {
+      console.error(`stuckPRs: skipping #${s.number}: ${e.message}`)
+    }
+  }
+  return {
+    epicPrsNoCi: epicNoCi({ prs: epicPrs, days: epicNoCiDays }),
+    okedPrsConflicting: oked.sort((a, b) => b.okAgeDays - a.okAgeDays)
+  }
+}
+
+// ── Forgotten work-this labels (#3018) ───────────────────────────────────────
+const staleWorkThisLabels = () => collectStaleWorkThis({ gh, owner: OWNER, name: NAME })
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -373,7 +485,19 @@ async function gather() {
     }))
     .sort((a, b) => b.ageDays - a.ageDays)
 
-  return { unlabeled, stuck, staleEpics, epicsMissingInProgress, orphanedInProgress, idlePRs }
+  const { epicPrsNoCi, okedPrsConflicting } = await stuckPRs(openPRs)
+
+  return {
+    unlabeled,
+    stuck,
+    staleEpics,
+    epicsMissingInProgress,
+    orphanedInProgress,
+    idlePRs,
+    epicPrsNoCi,
+    okedPrsConflicting,
+    staleWorkThis: await staleWorkThisLabels()
+  }
 }
 
 const drift = await gather()
@@ -385,6 +509,7 @@ const data = {
   labelCoverage: labelCoverage(),
   loopStation: loopStationBudget(),
   skillFreshness: skillFreshness(),
+  appCollectionDrift: appCollectionDrift(),
   retiredProjects: retiredProjects(),
   ...drift
 }

@@ -48,6 +48,7 @@
     "@fyit/crouton-core": "workspace:*"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run"
   }
 }

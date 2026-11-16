@@ -167,3 +167,5 @@ For each **high/critical candidate**, try to actually prove it before calling it
   or perf. Security findings only.
 - **Local only.** All probing targets this repo's own local fixtures — never an external or
   production system.
+
+> Note (moved from root CLAUDE.md, #3350): input is `{ scope, depth }`.

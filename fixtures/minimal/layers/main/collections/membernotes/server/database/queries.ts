@@ -192,3 +192,5 @@ export async function deleteMainMembernote(
 
   return { success: true }
 }
+
+export const MainMembernotesAccess = {"create":"member","list":"own"} as const

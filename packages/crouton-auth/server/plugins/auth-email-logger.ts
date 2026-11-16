@@ -5,7 +5,7 @@
  * Hooks into crouton:auth:email and persists a log entry for every email
  * dispatched through the auth system. Runs independently of crouton-email.
  */
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { useDB, tables } from '../utils/database'
 
 interface AuthEmailPayload {
@@ -75,7 +75,7 @@ export default defineNitroPlugin((nitroApp) => {
   // same recipient/type in the same instant are effectively unique). A miss
   // (e.g. the result arrived before the insert) safely leaves the row
   // `pending` rather than fabricating a status.
-  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error }) => {
+  nitroApp.hooks.hook('crouton:auth:email:result', async ({ to, type, ok, error, providerId }) => {
     try {
       const db = useDB()
 
@@ -97,12 +97,37 @@ export default defineNitroPlugin((nitroApp) => {
         .set({
           status: ok ? 'sent' : 'failed',
           sentAt: ok ? new Date() : null,
+          ...(ok && providerId ? { providerId } : {}),
           error: ok ? null : (error ?? 'send failed')
         })
         .where(eq(tables.authEmailLog.id, row.id))
     }
     catch (err) {
       console.error('[crouton-auth] Failed to reconcile email log:', err)
+    }
+  })
+
+  // Provider delivery confirmation (#3419): matched by the provider's message
+  // id ONLY — never by recipient address, which could put one team's result on
+  // another team's row. Unknown id → no update.
+  // `delivered` never overwrites a worse state that arrived first (bounce is final).
+  nitroApp.hooks.hook('crouton:email:delivery', async ({ providerId, state, detail }) => {
+    if (!providerId) return
+    try {
+      const db = useDB()
+      await db
+        .update(tables.authEmailLog)
+        .set({
+          status: state,
+          ...(state === 'bounced' || state === 'complained' ? { error: detail ?? state } : {})
+        })
+        .where(and(
+          eq(tables.authEmailLog.providerId, providerId),
+          inArray(tables.authEmailLog.status, state === 'delivered' ? ['sent', 'delayed'] : ['sent', 'delayed', 'delivered'])
+        ))
+    }
+    catch (err) {
+      console.error('[crouton-auth] Failed to apply email delivery event:', err)
     }
   })
 })

@@ -13,17 +13,17 @@ export default defineCroutonManifest({
   // Rich text is a real field type: same TEXT column as `text`, edited with CroutonEditorSimple.
   // Only valid in apps that extend crouton-editor (core alone rejects it as an unknown type).
   fieldTypes: {
-    richText: { label: 'Rich text', icon: 'i-lucide-pen-tool', description: 'Rich text content (TipTap editor, translatable)', db: 'TEXT', sqlite: { column: 'text' }, zod: 'z.string()', tsType: 'string', defaultValue: "''", seed: { drizzleSeed: 'f.loremIpsum({ sentencesCount: 3 })', fixture: '`Sample ${name} content for row ${i + 1}.`' }, testSample: '\'sample\'', component: 'CroutonEditorSimple' },
+    richText: { label: 'Rich text', icon: 'i-lucide-pen-tool', description: 'Rich text content (TipTap editor, translatable)', db: 'TEXT', sqlite: { column: 'text' }, zod: 'z.string()', tsType: 'string', defaultValue: "''", seed: { drizzleSeed: 'f.loremIpsum({ sentencesCount: 3 })', fixture: '`Sample ${name} content for row ${i + 1}.`' }, testSample: '\'sample\'', component: 'CroutonEditorSimple', translatable: true },
   },
 
   provides: {
     composables: ['useEditorVariables'],
     components: [
-      { name: 'CroutonEditorSimple', description: 'Full-featured TipTap editor wrapper with image upload and AI translation support', props: ['modelValue', 'placeholder', 'contentType', 'editable', 'enableImageUpload', 'enableTranslationAI'] },
-      { name: 'CroutonEditorBlocks', description: 'Block-based editor with NodeView blocks and property panel slot', props: ['modelValue', 'placeholder', 'contentType', 'editable', 'extensions', 'showToolbar'] },
-      { name: 'CroutonEditorVariables', description: 'Variable insertion menu triggered by {{ — for email templates and dynamic content', props: ['editor', 'variables', 'groups', 'char'] },
-      { name: 'CroutonEditorPreview', description: 'Live preview with variable interpolation', props: ['content', 'title', 'values', 'variables', 'mode', 'expandable'] },
-      { name: 'CroutonEditorWithPreview', description: 'Editor and preview side-by-side with responsive layout (tabs on mobile)', props: ['modelValue', 'variables', 'previewValues', 'previewTitle', 'contentType', 'editable', 'showVariableChips'] },
+      { name: 'CroutonEditorSimple', description: 'Full-featured TipTap editor wrapper with image upload and AI translation support' },
+      { name: 'CroutonEditorBlocks', description: 'Block-based editor with NodeView blocks and property panel slot' },
+      { name: 'CroutonEditorVariables', description: 'Variable insertion menu triggered by {{ — for email templates and dynamic content' },
+      { name: 'CroutonEditorPreview', description: 'Live preview with variable interpolation' },
+      { name: 'CroutonEditorWithPreview', description: 'Editor and preview side-by-side with responsive layout (tabs on mobile)' },
     ],
   },
 

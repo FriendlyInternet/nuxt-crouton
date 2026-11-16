@@ -119,8 +119,11 @@ export default defineCroutonManifest({
     }
   ],
 
+  runtimeConfigKey: 'croutonSales',
+
   configuration: {
     'print.enabled': {
+      runtimeConfig: 'server',
       type: 'boolean',
       label: 'Enable Thermal Printing',
       description: 'Enable receipt printing to thermal printers. Requires network-connected printers.',
@@ -152,18 +155,18 @@ export default defineCroutonManifest({
       'useHelperAuth'
     ],
     components: [
-      { name: 'SalesClientOrderInterface', description: 'Main customer-facing order page', props: ['eventId', 'teamId'] },
-      { name: 'SalesClientCart', description: 'Shopping cart with quantity controls', props: ['modelValue'] },
-      { name: 'SalesClientProductList', description: 'Product grid with inline options', props: ['products', 'categories'] },
-      { name: 'SalesClientCategoryTabs', description: 'Category navigation tabs', props: ['categories', 'modelValue'] },
-      { name: 'SalesClientProductOptionsSelect', description: 'Product variant/option selection', props: ['product', 'modelValue'] },
-      { name: 'SalesClientCartTotal', description: 'Order total with item count', props: ['total', 'itemCount'] },
-      { name: 'SalesClientSelector', description: 'Client selector with create-on-type', props: ['clients', 'modelValue'] },
-      { name: 'SalesClientOfflineBanner', description: 'Offline mode indicator', props: [] },
-      { name: 'SalesPosOrdersList', description: 'Orders table with status filtering', props: ['eventId', 'filters'] },
-      { name: 'SalesAdminPosSidebar', description: 'Admin navigation sidebar', props: [] },
-      { name: 'SalesSettingsReceiptSettingsModal', description: 'Receipt text customization modal', props: ['modelValue'] },
-      { name: 'SalesSettingsPrintPreviewModal', description: 'Receipt preview with test print', props: ['modelValue', 'order'] }
+      { name: 'SalesClientOrderInterface', description: 'Main customer-facing order page' },
+      { name: 'SalesClientCart', description: 'Shopping cart with quantity controls' },
+      { name: 'SalesClientProductList', description: 'Product grid with inline options' },
+      { name: 'SalesClientCategoryTabs', description: 'Category navigation tabs' },
+      { name: 'SalesClientProductOptionsSelect', description: 'Product variant/option selection' },
+      { name: 'SalesClientCartTotal', description: 'Order total with item count' },
+      { name: 'SalesClientSelector', description: 'Client selector with create-on-type' },
+      { name: 'SalesClientOfflineBanner', description: 'Offline mode indicator' },
+      { name: 'SalesPosOrdersList', description: 'Orders table with status filtering' },
+      { name: 'SalesAdminPosSidebar', description: 'Admin navigation sidebar' },
+      { name: 'SalesSettingsReceiptSettingsModal', description: 'Receipt text customization modal' },
+      { name: 'SalesSettingsPrintPreviewModal', description: 'Receipt preview with test print' }
     ],
     apiRoutes: [
       '/api/crouton-sales/events/[eventId]/orders',

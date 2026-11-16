@@ -7,7 +7,9 @@ import { isDayFullyBooked } from '../utils/day-availability'
  *
  * Filters, the selected day, the hovered booking, the date of the "new booking"
  * form, which week/month the calendar shows and where the list scrolls. The Panel owns one; a page composed
- * from bookings blocks owns one — never shared between screens. The store holds no
+ * from bookings blocks owns one — never shared between screens. A screen may
+ * show the Panel twice (inline + full screen): the page then creates the store
+ * and hands it to both Panels. The store holds no
  * data: it is handed the bookings and locations the page already loads.
  */
 
@@ -69,6 +71,8 @@ export function createBookingsStore(src: BookingsStoreSources) {
   const scrollTarget = ref<Date | null>(null)
   const hoveredBookingId = ref<string | null>(null)
   const creatingAt = ref<Date | null>(null)
+  /** Which view the calendar shows — shared so inline + full screen agree. */
+  const calendarView = ref<'week' | 'month'>('week')
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const hasActiveFilters = computed(() =>
@@ -179,6 +183,7 @@ export function createBookingsStore(src: BookingsStoreSources) {
     hoveredBookingId, hover,
     closedReason, isFullyBooked,
     creatingAt, startCreate, cancelCreate, finishCreate,
+    calendarView,
   }
 }
 
@@ -186,9 +191,12 @@ export type BookingsStore = ReturnType<typeof createBookingsStore>
 
 const BOOKINGS_STORE_KEY: InjectionKey<BookingsStore> = Symbol('croutonBookingsStore')
 
-/** Create this screen's store and share it with the bookings components under it. */
-export function provideBookingsStore(src: BookingsStoreSources): BookingsStore {
-  const store = createBookingsStore(src)
+/**
+ * Share this screen's store with the bookings components under it. Creates one
+ * unless the page already made `existing` (several Panels on one screen).
+ */
+export function provideBookingsStore(src: BookingsStoreSources, existing?: BookingsStore): BookingsStore {
+  const store = existing ?? createBookingsStore(src)
   provide(BOOKINGS_STORE_KEY, store)
   return store
 }

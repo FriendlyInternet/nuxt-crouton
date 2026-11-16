@@ -83,12 +83,11 @@ const updateItem = (index: number, val: any) => {
 // Repeater item from the build-time collection map (Nuxt's resolved winner)
 const itemComponent = computed(() => collectionForms[props.componentName])
 
-// Warn in development if component cannot be resolved
+// A wrong repeater name is a bug in every environment: warn once per mount.
+// The text is on the e2e console guard's fail list (e2e/console-guard.cjs).
 onMounted(() => {
-  if (!itemComponent.value && import.meta.dev) {
-    console.warn(`[CroutonFormRepeater] Warning: Component "${props.componentName}" may not be resolved correctly. Check that:
-1. The component file exists in a layer's components dir
-2. The component name matches the file's canonical name (<Layer><Plural><Field>Input)`)
+  if (!itemComponent.value) {
+    console.warn(`[CroutonFormRepeater] Failed to resolve component: ${props.componentName} — check the component file exists in a layer's components dir and the name matches its canonical name (<Layer><Plural><Field>Input)`)
   }
 })
 </script>
@@ -131,8 +130,17 @@ onMounted(() => {
         <div class="flex-1 min-w-0">
           <component
             :is="itemComponent"
+            v-if="itemComponent"
             :model-value="item"
             @update:model-value="(val: unknown) => updateItem(index, val)"
+          />
+          <UAlert
+            v-else
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-triangle-alert"
+            :title="t('repeater.componentMissing', { name: componentName })"
+            data-testid="repeater-missing-component"
           />
         </div>
 

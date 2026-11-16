@@ -342,6 +342,7 @@ export function getTypeMapping(
         // every field by loadFields so generators render it instead of keeping
         // a private type→component switch (#2286).
         component: def.component,
+        translatable: def.translatable,
       }
       mapping[name] = entry
       if (def.aliases) {

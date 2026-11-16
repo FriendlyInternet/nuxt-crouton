@@ -168,6 +168,7 @@ const initCmd = defineCommand({
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
+    layout: { type: 'boolean', default: true, description: 'Add the crouton-layout engine (default on; --no-layout to leave it out)' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
@@ -188,6 +189,7 @@ const initCmd = defineCommand({
 
     await initApp(args.name, {
       features,
+      layout: args.layout,
       theme: args.theme,
       dialect: args.dialect,
       cf: !args.noCf,

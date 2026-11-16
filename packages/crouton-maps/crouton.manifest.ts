@@ -20,8 +20,11 @@ export default defineCroutonManifest({
   // No collections — this is a UI/composable-only package
   collections: [],
 
+  runtimeConfigKey: 'maps',
+
   configuration: {
     'style': {
+      runtimeConfig: 'public',
       type: 'select',
       label: 'Default Map Style',
       description: 'Default OpenFreeMap style for all maps. Keyless — no token required. Can be overridden per component or via MAPS_STYLE env var.',
@@ -35,6 +38,7 @@ export default defineCroutonManifest({
       ]
     },
     'geocodingUrl': {
+      runtimeConfig: 'server',
       type: 'string',
       label: 'Nominatim URL',
       description: 'Base URL for the Nominatim geocoding server. Set via NOMINATIM_URL env var. Defaults to the public OpenStreetMap instance; point at a self-hosted instance to avoid rate limits.',
@@ -54,10 +58,11 @@ export default defineCroutonManifest({
     ],
     components: [
       // Component prefix is 'CroutonMaps' — Map.vue → CroutonMapsMap, etc.
-      { name: 'CroutonMapsMap', description: 'Main map container with MapLibre GL (@geoql/v-maplibre, OpenFreeMap tiles)', props: ['center', 'zoom', 'style', 'height', 'flyToOnCenterChange'] },
-      { name: 'CroutonMapsMarker', description: 'Map marker with optional popup text and drag support', props: ['map', 'position', 'color', 'options', 'popupText', 'animateTransitions'] },
-      { name: 'CroutonMapsPopup', description: 'Map popup with custom slot content', props: ['map', 'position'] },
-      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells', props: ['location'] }
+      { name: 'CroutonMapsMap', description: 'Main map container with MapLibre GL (@geoql/v-maplibre, OpenFreeMap tiles)' },
+      { name: 'CroutonMapsMarker', description: 'Map marker with optional popup text and drag support' },
+      { name: 'CroutonMapsPopup', description: 'Map popup with custom slot content' },
+      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells' },
+      { name: 'CroutonMapsCurrentLocationButton', description: 'Button that finds the user\'s current location and reverse-geocodes it' }
     ],
     apiRoutes: [
       '/api/maps/geocode',

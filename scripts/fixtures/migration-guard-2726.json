@@ -1,0 +1,9 @@
+{
+  "changedFiles": ["packages/crouton-sales/server/db/schema.ts"],
+  "results": {
+    "apps/kassa": {
+      "statements": ["ALTER TABLE `sales_sync_status` ADD `team_id` text;"]
+    }
+  },
+  "names": { "apps/kassa": "kassa" }
+}

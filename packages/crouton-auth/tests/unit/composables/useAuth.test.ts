@@ -326,7 +326,8 @@ describe('useAuth', () => {
 
   describe('register', () => {
     it('should call signUp.email with data', async () => {
-      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {} }, error: null })
+      // A token = signed in straight away (no verification required, #3141)
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: 'session-token' }, error: null })
 
       const { register } = useAuth()
       await register({ email: 'new@example.com', password: 'password123', name: 'New User' })
@@ -363,6 +364,41 @@ describe('useAuth', () => {
       await expect(register({ email: 'existing@example.com', password: 'password123' }))
         .rejects.toThrow('Email already exists')
       expect(error.value).toBe('Email already exists')
+    })
+
+    it('returns requiresVerification: true and skips refresh when sign-up gives no token', async () => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: null }, error: null })
+
+      const { register } = useAuth()
+      const result = await register({ email: 'new@example.com', password: 'password123' })
+
+      expect(result).toEqual({ requiresVerification: true })
+      expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('returns requiresVerification: false and refreshes when sign-up returns a token', async () => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: 'session-token' }, error: null })
+
+      const { register } = useAuth()
+      const result = await register({ email: 'new@example.com', password: 'password123' })
+
+      expect(result).toEqual({ requiresVerification: false })
+      expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('passes the redirect, sanitized, as callbackURL', async () => {
+      mockAuthClient.signUp.email.mockResolvedValue({ data: { user: {}, token: null }, error: null })
+      const { register } = useAuth()
+
+      await register({ email: 'new@example.com', password: 'password123', callbackURL: '/auth/accept-invitation/inv1' })
+      expect(mockAuthClient.signUp.email).toHaveBeenLastCalledWith(
+        expect.objectContaining({ callbackURL: '/auth/accept-invitation/inv1' })
+      )
+
+      await register({ email: 'new@example.com', password: 'password123', callbackURL: 'https://evil.example' })
+      expect(mockAuthClient.signUp.email).toHaveBeenLastCalledWith(
+        expect.objectContaining({ callbackURL: '/' })
+      )
     })
   })
 

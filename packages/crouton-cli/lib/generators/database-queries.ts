@@ -1,6 +1,8 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -15,6 +17,31 @@ interface TreeQueryContext {
 }
 
 // Section banner + the TreeItem interface shared by the tree query templates
+/**
+ * Person-field membership check (#1958): a person field may only hold a member of the caller's
+ * team. Built on crouton-auth's `getMembership` (fails closed → null on a DB error). Emits a
+ * separate function from `assert<X>References` because `getMembership` needs the event.
+ * Exported so the test can compile and run the emitted code.
+ */
+export function buildPersonRefCheck(personFields: Array<Record<string, any>>, prefixedPascalCase: string): string {
+  if (personFields.length === 0) return ''
+  return `
+
+// A person field may only hold a member of the caller's team (#1958)
+export async function assert${prefixedPascalCase}TeamMembers(event: Parameters<typeof getMembership>[0], teamId: string, data: Record<string, any>) {
+  for (const [field, value] of [${personFields.map(f => `['${f.name}', data.${f.name}]`).join(', ')}] as const) {
+    if (value === undefined || value === null || value === '') continue
+    const ids = typeof value === 'string'
+      ? [value]
+      : Array.isArray(value) && value.every(v => typeof v === 'string') ? value.filter(v => v !== '') : null
+    if (!ids) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    for (const id of new Set(ids)) {
+      if (!(await getMembership(event, teamId, id))) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    }
+  }
+}`
+}
+
 function buildTreeQueriesHeader(ctx: TreeQueryContext): string {
   return `
 
@@ -816,7 +843,14 @@ export function generateQueries(
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const own = data.collectionConfig?.access?.list === 'own'
+  const access = resolveAccess(data)
+  const own = access.list === 'own'
+  // The runtime registry reads this to refuse public exposure of 'own' collections (#3380)
+  const accessExport = Object.keys(access).length === 0
+    ? ''
+    : `
+
+export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const`
   const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
@@ -841,12 +875,30 @@ export function generateQueries(
     own
   }
 
+  // Team-scoped reference check (#3378) — only emitted when the collection has such refs
+  const teamRefFields = collectTeamRefFields(data)
+  const assertRefsQuery = teamRefFields.length === 0
+    ? ''
+    : `
+
+export async function assert${prefixedPascalCase}References(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.${getTargetLayerCamelCase(f.refTarget)}${pascal(f.refTarget)}, value: data.${f.name} },`).join('\n')}
+  ])
+}`
+
+  const personFields = collectPersonRefFields(data)
+
   return buildFileHeader(ctx)
+    + (personFields.length > 0 ? `import { getMembership } from '@fyit/crouton-auth/server/utils/team'\n` : '')
     + buildGetAllQuery(ctx)
     + buildGetByIdsQuery(ctx)
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + accessExport
+    + assertRefsQuery
+    + buildPersonRefCheck(personFields, prefixedPascalCase)
     + treeQueries
     + sortableQueries
 }

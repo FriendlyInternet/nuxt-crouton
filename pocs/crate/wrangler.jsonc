@@ -34,6 +34,7 @@
   // via scripts/inject-wrangler-env.mjs before deploying.
   "env": {
     "staging": {
+      "vars": { "NUXT_CRATE_DEMO_SEED": "true" },
       "routes": [{ "pattern": "crate-staging.pmcp.dev", "custom_domain": true }],
       "d1_databases": [
         {

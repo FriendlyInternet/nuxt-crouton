@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-layout",
   "version": "0.1.0",
-  "description": "Deterministic layout engine for Nuxt Crouton \u2014 the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core.",
+  "description": "Deterministic layout engine for Nuxt Crouton \u2014 the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. On by default in `crouton init` apps; an app gets it by extending it next to @fyit/crouton-core.",
   "type": "module",
   "main": "./nuxt.config.ts",
   "exports": {
@@ -17,6 +17,7 @@
     "./app/composables/useCroutonComposeGestures": "./app/composables/useCroutonComposeGestures.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -50,7 +51,7 @@
   "peerDependencies": {
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
-    "@nuxt/ui": "^4.3.0",
+    "@nuxt/ui": "^4.11.0",
     "nuxt": "^4.0.0"
   },
   "devDependencies": {

@@ -15,23 +15,17 @@
  * Auto-imported as <SalesSyncStatus>. Mount inside a clientOnly surface (the
  * dashboard block) — it polls and uses live timers.
  */
+import type { SalesLostEdit, SalesSyncDevice } from '../../types'
+import { shortDeviceId } from '../../utils/sync-devices'
+
 interface SyncStatusResponse {
   lastContactAt: number | null
   lastEventAt: number | null
   lastBatchApplied: number
   /** Every till of the team, freshest first (#2725). */
-  devices?: Array<{ deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }>
+  devices?: SalesSyncDevice[]
   /** Latest config edits that lost a conflict, newest first (#816). */
-  lostEdits?: Array<{
-    id: string
-    deviceId: string | null
-    entityType: string
-    entityId: string
-    reason: string
-    lost: Record<string, unknown>
-    kept: Record<string, unknown>
-    at: number
-  }>
+  lostEdits?: SalesLostEdit[]
   serverNow: number
 }
 
@@ -96,7 +90,7 @@ const title = computed(() => {
   if (deviceCount.value > 1) {
     lines.push(t('sales.sync.tillsSynced', { n: deviceCount.value }))
     for (const d of data.value!.devices!) {
-      lines.push(`${d.deviceId.replace('device:', '').slice(0, 8)} — ${d.lastContactAt ? ago(d.lastContactAt, serverNow.value) : '…'}`)
+      lines.push(`${shortDeviceId(d.deviceId)} — ${d.lastContactAt ? ago(d.lastContactAt, serverNow.value) : '…'}`)
     }
   }
   return lines.join('\n')

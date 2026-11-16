@@ -14,6 +14,13 @@ definePageMeta({
 
 const { t } = useT()
 const { logout } = useAuth()
+const { canCreateTeam } = useTeam()
+
+// Direct link guard: users who may not create a team never see the form
+const guardTarget = resolveCreateTeamGuard(canCreateTeam.value)
+if (guardTarget) {
+  await navigateTo(guardTarget, { replace: true })
+}
 
 const navigating = ref(false)
 

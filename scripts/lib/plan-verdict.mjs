@@ -93,6 +93,14 @@ export function planNotes(planBody) {
   return unverified.length ? { 3: `plan declares ${unverified.length} unverified assumption(s): ${unverified.map((a) => a.claim).join('; ')}` } : {}
 }
 
+export const SIGNOFF_QUESTION = 'design sign-off pending — reply `ok` on the mockup first'
+
+/** PURE. Does the plan itself say its only open owner item is a ticket-requested design sign-off? (#3238) */
+export function pendingSignoff(planBody) {
+  const plan = parsePlan(planBody)
+  return plan.needsOwner === true && /design sign-?off/i.test(section(planBody, 'Needs owner'))
+}
+
 /** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision. */
 export function decide(planBody, verdictBody) {
   const v = parseVerdict(verdictBody)
@@ -107,6 +115,10 @@ export function decide(planBody, verdictBody) {
   if (hardFails.length) verdict = 'no-go'
   else if (!items['7'].pass) verdict = 'needs-owner'
   else verdict = 'go'
+  // A pending design sign-off is a hold, never a pass or a rejection (#3238).
+  if (pendingSignoff(planBody)) {
+    return { ok: true, verdict: 'needs-owner', stated: v.stated, items, failed, question: SIGNOFF_QUESTION, overridden: Object.keys(floor), notes: planNotes(planBody) }
+  }
   if (v.stated === 'go' && verdict !== 'go' && !Object.keys(floor).length) {
     errors.push(`reviewer said go but its own rubric fails: ${failed.join(', ')}`)
   }
@@ -115,15 +127,26 @@ export function decide(planBody, verdictBody) {
   return { ok: true, verdict, stated: v.stated, items, failed, question: v.question, overridden: Object.keys(floor), notes: planNotes(planBody) }
 }
 
+export const MAX_ROUNDS = 3
+export const JUDGEMENT = ['7', '9']
+
+/** PURE. After a no-go: hold for the owner, or re-run the planner? Only a failed judgement check
+ *  (7, 9) holds from round 2; mechanical failures retry up to MAX_ROUNDS (#3279). */
+export function holdOrRetry({ round, failedChecks = [] }) {
+  if (round >= MAX_ROUNDS) return 'hold'
+  if (round < 2) return 'retry'
+  return failedChecks.some((id) => JUDGEMENT.includes(String(id))) ? 'hold' : 'retry'
+}
+
 /** PURE. The typed-brief comment (plain language, depth collapsed). */
-export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) {
-  const final = d.verdict === 'no-go' && round >= maxRounds
+export function renderComment(d, { round = 1, model = '' } = {}) {
+  const final = d.verdict === 'no-go' && holdOrRetry({ round, failedChecks: d.failed }) === 'hold'
   const lines = RUBRIC.map((r) => `- ${d.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${d.items[r.id].evidence}${d.notes?.[r.id] ? `\n  - _Declared:_ ${d.notes[r.id]}` : ''}`).join('\n')
   const head = {
     go: '✅ **Plan approved** — safe to build from it.\n**Next:** none, the build can start.',
     'no-go': final
-      ? `🔴 **Plan rejected twice** — the planner could not fix ${d.failed.filter((i) => i !== '7').length} check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.`
-      : `🔴 **Plan sent back** (round ${round} of ${maxRounds}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
+      ? `🔴 **Plan rejected after ${round} round${round === 1 ? '' : 's'}** — the planner could not fix ${d.failed.filter((i) => i !== '7').length} check(s). Held for you.\n**Needs:** answer — reply with guidance on how the plan should change.`
+      : `🔴 **Plan sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
   return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
@@ -132,12 +155,18 @@ export function renderComment(d, { round = 1, maxRounds = 2, model = '' } = {}) 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const render = args[0] === 'render'
-  const [planFile, verdictFile, round, model] = render ? args.slice(1) : args
-  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render] <plan-file> <verdict-file> [round model]'); process.exit(2) }
+  const route = args[0] === 'route'
+  const [planFile, verdictFile, round, model] = render || route ? args.slice(1) : args
+  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render|route] <plan-file> <verdict-file> [round model]'); process.exit(2) }
   let d
   try { d = decide(readFileSync(planFile, 'utf8'), readFileSync(verdictFile, 'utf8')) }
   catch (e) { console.error(e.message); process.exit(1) }
   if (!d.ok) console.error(d.errors.join('\n'))
+  if (route) {
+    if (!d.ok || d.verdict !== 'no-go') { console.error('route needs a no-go decision'); process.exit(1) }
+    console.log(holdOrRetry({ round: Number(round) || 1, failedChecks: d.failed }))
+    process.exit(0)
+  }
   console.log(render && d.ok ? renderComment(d, { round: Number(round) || 1, model: model || '' }) : JSON.stringify(d))
   process.exit(d.ok ? 0 : 1)
 }

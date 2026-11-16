@@ -62,6 +62,13 @@ const impersonatedUser = computed(() => {
   return uniqueBookers.value.find(u => u.id === impersonatedUserId.value) ?? null
 })
 
+// "View as user" picker items (shared by the desktop row and the phone launcher)
+const impersonateItems = computed(() => uniqueBookers.value.map(u => ({
+  label: u.name,
+  icon: 'i-lucide-user',
+  onSelect: () => startImpersonation(u.id)
+})))
+
 // Start impersonation for a specific user
 function startImpersonation(userId: string) {
   impersonatedUserId.value = userId
@@ -74,6 +81,14 @@ function exitPreview() {
   impersonatedUserId.value = null
 }
 
+// One store for the screen: the inline and full-screen Panels share day, filters and view
+const store = createBookingsStore({
+  bookings,
+  calendarBookings: bookings,
+  locations,
+  readOnly: isPreview,
+})
+
 // Shared Panel props + handlers (inline and fullscreen modal)
 const panelProps = computed(() => ({
   bookings: bookings.value,
@@ -81,6 +96,7 @@ const panelProps = computed(() => ({
   settings: firstSettings.value,
   loading: loading.value,
   title: '',
+  store,
   emptyMessage: isPreview.value
     ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser.value?.name || t('bookings.admin.thisUser') })
     : t('bookings.admin.noBookingsForTeam'),
@@ -119,25 +135,34 @@ async function handleBookingChange() {
       </div>
     </Transition>
 
-    <div class="flex items-center justify-end gap-2">
-      <UButton
-        class="lg:hidden"
-        size="xs"
-        color="neutral"
-        variant="soft"
-        icon="i-lucide-maximize-2"
-        @click="fullscreenOpen = true"
-      >
-        {{ t('bookings.admin.openFullScreen') }}
+    <!-- Phone (below lg): kassa-style launcher — a hint and one big button that
+         opens the full-screen tool; "View as user" sits small under it (#3046). -->
+    <UCard class="lg:hidden" :ui="{ body: 'flex flex-col items-center gap-5 text-center' }">
+      <p class="text-sm text-muted">{{ t('bookings.admin.openBookingsHint') }}</p>
+      <UButton size="xl" block class="max-w-md" @click="fullscreenOpen = true">
+        {{ t('bookings.admin.openBookingsTool') }}
       </UButton>
-      <!-- Impersonate user dropdown -->
       <UDropdownMenu
         v-if="!isPreview && uniqueBookers.length > 0"
-        :items="uniqueBookers.map(u => ({
-          label: u.name,
-          icon: 'i-lucide-user',
-          onSelect: () => startImpersonation(u.id)
-        }))"
+        :items="impersonateItems"
+        :content="{ align: 'center' }"
+      >
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-user-check"
+        >
+          {{ t('bookings.admin.viewAsUser') }}
+        </UButton>
+      </UDropdownMenu>
+    </UCard>
+
+    <!-- Desktop: impersonate user dropdown above the inline calendar -->
+    <div class="flex items-center justify-end gap-2 max-lg:hidden">
+      <UDropdownMenu
+        v-if="!isPreview && uniqueBookers.length > 0"
+        :items="impersonateItems"
         :content="{ align: 'end' }"
       >
         <UButton
@@ -151,20 +176,33 @@ async function handleBookingChange() {
       </UDropdownMenu>
     </div>
 
-    <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
+    <!-- Phone (below lg): no inline calendar, only the launcher above (#3046).
+         max-lg:hidden, not hidden lg:flex — the Panel root already carries flex. -->
+    <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0 max-lg:hidden" />
 
+    <!-- #content drops the modal's title bar; title stays as the hidden
+         screen-reader title and the close X sits in the toolbar row (#3046). -->
     <UModal
       v-model:open="fullscreenOpen"
       fullscreen
-      close
       :title="t('bookings.admin.title')"
       :ui="{
-        content: 'bg-default pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
-        body: 'p-0 sm:p-0 flex-1 min-h-0 flex flex-col'
+        content: 'bg-default pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]'
       }"
     >
-      <template #body>
-        <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
+      <template #content="{ close }">
+        <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0">
+          <template #toolbar-end>
+            <UButton
+              size="sm"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :aria-label="t('bookings.admin.closeFullScreen')"
+              @click="close"
+            />
+          </template>
+        </CroutonBookingsPanel>
       </template>
     </UModal>
   </div>

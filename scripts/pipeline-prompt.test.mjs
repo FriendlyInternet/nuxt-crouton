@@ -8,6 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { renderPrompt } from './pipeline-prompt.mjs'
 
 const fx = (n) => readFileSync(new URL(`./fixtures/pipeline-prompt/${n}`, import.meta.url), 'utf8')
@@ -43,6 +44,9 @@ test('pi-conflict-resolver, epic PR (#3002)', () => {
   assert.ok(!out.split('VISUAL EVIDENCE')[0].includes('work-227'))
   assert.ok(!out.includes('QUESTION'))
   assert.ok(!/issue body/i.test(out))
+  // #3775: the owner's request runs after the merge (pi-request step), so it can't land inside it.
+  assert.ok(!out.includes('Please rename `foo`'), 'the resolver prompt does not carry the owner comment')
+  assert.ok(out.includes('Resolve the conflict and nothing else'))
 })
 
 test('pi-conflict-resolver without a task is a hard error', () => {
@@ -50,7 +54,27 @@ test('pi-conflict-resolver without a task is a hard error', () => {
 })
 
 test('pi-decomposer (+ shared dedup rule)', () => {
-  assertGolden(renderPrompt('pi-decomposer', { issue: '1932' }), 'pi-decomposer')
+  assertGolden(renderPrompt('pi-decomposer', { issue: '1932', epic_src: '' }), 'pi-decomposer')
+})
+
+// #3846: the decomposer grades ticket claims against a read-only epic-branch checkout; the path
+// comes from scripts/epic-checkout.mjs (blank for a brand-new epic → the main checkout).
+test('pi-decomposer names the epic-branch checkout it grades against (#3846)', () => {
+  const blank = renderPrompt('pi-decomposer', { issue: '1932', epic_src: '' })
+  const set = renderPrompt('pi-decomposer', { issue: '1932', epic_src: '/tmp/x' })
+  assert.ok(set.includes('EPIC BRANCH CHECKOUT (read-only): `/tmp/x`'))
+  assert.match(blank, /path is empty, the epic has no branch yet and the current checkout \(main\) is its code/)
+  assert.ok(set.includes('ROLLING SPLIT'))
+  assert.throws(() => renderPrompt('pi-decomposer', { issue: '1' }), /missing --var epic_src/)
+})
+
+test('the decomposer workflow passes epic_src and has no step input (#3846: later tickets are written by hand)', () => {
+  const wf = readFileSync(new URL('../.github/workflows/decompose-on-issue-pidev.yml', import.meta.url), 'utf8')
+  assert.match(wf, /pipeline-prompt\.mjs pi-decomposer --var "issue=\$ISSUE" --var "epic_src=\$\(node scripts\/epic-checkout\.mjs --epic "\$ISSUE" --dest "\$RUNNER_TEMP\/epic-src"\)"/)
+  const inputs = wf.slice(wf.indexOf('workflow_dispatch:'), wf.indexOf('\njobs:'))
+  assert.doesNotMatch(inputs, /^\s+step:/m)
+  assert.ok(!wf.includes('step=next'))
+  assert.ok(!/replan/i.test(wf))
 })
 
 test('pi-planner (plan mode, #2755)', () => {
@@ -59,4 +83,14 @@ test('pi-planner (plan mode, #2755)', () => {
 
 test('a missing variable is a hard error, not an empty string', () => {
   assert.throws(() => renderPrompt('pi-worker', { issue: '1' }), /missing --var branch_instr/)
+})
+
+test('pi-worker reuse search finds an existing helper (#3073)', () => {
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main' })
+  assert.ok(out.includes('REUSE BEFORE YOU WRITE'))
+  assert.ok(out.includes('Maintaining AI Documentation'))
+  const cmd = out.match(/`(grep -rniE '<verb\|noun>'[^`]*)`/)[1].replace('<verb|noun>', 'redirect')
+  const root = new URL('..', import.meta.url).pathname
+  const found = execFileSync('bash', ['-c', cmd], { cwd: root, encoding: 'utf8' })
+  assert.ok(found.includes('sanitizeRedirectUrl'))
 })

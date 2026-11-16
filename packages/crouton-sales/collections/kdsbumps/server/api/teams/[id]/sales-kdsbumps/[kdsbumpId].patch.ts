@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateSalesKdsbump } from '../../../../database/queries'
+import { updateSalesKdsbump, assertSalesKdsbumpReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { z } from 'zod'
 
@@ -31,6 +31,8 @@ export default defineEventHandler(async (event) => {
       updates[key] = value
     }
   }
+
+  await assertSalesKdsbumpReferences(team.id, updates)
 
   const dbTimer = timing.start('db')
   const result = await updateSalesKdsbump(kdsbumpId, team.id, user.id, updates, { role: membership.role })

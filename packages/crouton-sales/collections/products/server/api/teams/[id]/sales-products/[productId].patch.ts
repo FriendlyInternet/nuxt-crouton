@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateSalesProduct } from '../../../../database/queries'
+import { updateSalesProduct, assertSalesProductReferences } from '../../../../database/queries'
 import { captureConfigWrite } from '../../../../../../../server/utils/config-capture'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { z } from 'zod'
@@ -41,6 +41,8 @@ export default defineEventHandler(async (event) => {
       updates[key] = value
     }
   }
+
+  await assertSalesProductReferences(team.id, updates)
 
   const dbTimer = timing.start('db')
   const result = await updateSalesProduct(productId, team.id, user.id, updates, { role: membership.role })

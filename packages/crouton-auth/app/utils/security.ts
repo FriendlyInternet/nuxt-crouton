@@ -181,10 +181,18 @@ export function sanitizeRedirectUrl(url: string): string {
       console.warn('[@crouton/auth] Blocked redirect to external URL:', url)
       return '/'
     }
-    return parsed.pathname + parsed.search
+    // Check the rule on the value we actually return, not on the input:
+    // `/.//evil.com` normalises to `//evil.com`, which the browser reads as
+    // another site (#3143).
+    const out = parsed.pathname + parsed.search + parsed.hash
+    if (new URL(out, window.location.origin).origin !== window.location.origin) {
+      console.warn('[@crouton/auth] Blocked redirect to external URL:', url)
+      return '/'
+    }
+    return out
   } catch {
     // Invalid URL, return safe default
-    return url.startsWith('/') ? url : '/'
+    return '/'
   }
 }
 

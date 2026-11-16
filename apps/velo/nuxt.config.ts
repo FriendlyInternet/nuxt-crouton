@@ -19,6 +19,7 @@ export default defineNuxtConfig({
   devServer: { port: 3006 },
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-assets',
     '@fyit/crouton-pages',
@@ -68,6 +69,11 @@ export default defineNuxtConfig({
 
   // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
   croutonAuth: {
+    appName: 'Velo',
+    // Invite-only: only people with a pending invitation can create an account (#3340)
+    signup: 'invite',
+    // Only the site admin creates books (teams); everyone else joins by invite
+    teams: { allowCreate: 'superAdmin' },
     methods: {
       passkeys: false
     }

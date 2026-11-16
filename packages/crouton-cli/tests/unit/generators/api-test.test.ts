@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateApiTest } from '../../../lib/generators/api-test.ts'
+import { buildFieldsSchema } from '../../../lib/generate-collection.ts'
 
 // Minimal `data` shape the orchestrator passes to generators (see buildGeneratorData
 // in generate-collection.ts). The API test imports the generated route handlers and
@@ -113,5 +114,95 @@ describe('generateApiTest (#791)', () => {
   it('emits no nondeterministic calls', () => {
     expect(code).not.toContain('Date.now(')
     expect(code).not.toContain('Math.random(')
+  })
+})
+
+describe('generateApiTest — team references (#3378)', () => {
+  it('mocks assert<X>References only when the collection has reference fields', () => {
+    const withRef = {
+      ...baseData,
+      fields: [...baseData.fields, { name: 'categoryId', type: 'string', refTarget: 'categories', zod: 'z.string()', meta: {} }],
+    }
+    expect(generateApiTest(withRef, null)).toContain('assertShopProductReferences: vi.fn()')
+    expect(generateApiTest(baseData, null)).not.toContain('References')
+  })
+})
+
+describe('generateApiTest — same-team reference cases (#3424)', () => {
+  const withRef = {
+    ...baseData,
+    fields: [...baseData.fields, { name: 'categoryId', type: 'string', refTarget: 'categories', zod: 'z.string()', meta: {} }],
+  }
+  const code = generateApiTest(withRef, null)
+
+  it('POST and PATCH each get other-team, missing-id, same-team and null cases', () => {
+    expect(code.match(/rejects a reference to another team\\'s record \(400\)/g)).toHaveLength(2)
+    expect(code.match(/rejects a reference id that does not exist \(400\)/g)).toHaveLength(2)
+    expect(code.match(/accepts references that belong to the team/g)).toHaveLength(2)
+    expect(code.match(/accepts null for the optional reference `categoryId`/g)).toHaveLength(2)
+    expect(code).toContain('expect(createShopProduct).not.toHaveBeenCalled()')
+    expect(code).toContain('expect(updateShopProduct).not.toHaveBeenCalled()')
+    expect(code).toMatch(/import \{[^}]*assertShopProductReferences[^}]*\} from '.\/server\/database\/queries'/)
+  })
+
+  it('sends the reference value and asserts the check received it', () => {
+    expect(code).toContain("categoryId: 'ref_1'")
+    expect(code).toContain("expect.objectContaining({ categoryId: 'ref_1' })")
+    expect(code).toContain("categoryId: 'other_team_ref'")
+    expect(code).toContain("categoryId: 'missing_ref'")
+  })
+
+  it('emits a list reference as an array, never a bare string', () => {
+    const list = { ...baseData, fields: [...baseData.fields, { name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())', meta: {} }] }
+    const out = generateApiTest(list, null)
+    expect(out).toContain("tags: ['ref_1']")
+    expect(out).not.toContain("tags: 'ref_1'")
+  })
+
+  it('uses once-only rejections so a failing check cannot leak into later cases', () => {
+    expect(code).not.toMatch(/assertShopProductReferences as any\)\.mockRejectedValue\(/)
+  })
+
+  it('omits the null case when every reference is required, and all cases without references', () => {
+    const required = { ...withRef, fields: withRef.fields.map(f => (f.name === 'categoryId' ? { ...f, meta: { required: true } } : f)) }
+    expect(generateApiTest(required, null)).not.toContain('accepts null for the optional reference')
+    expect(generateApiTest(baseData, null)).not.toContain('another team')
+  })
+})
+
+describe('generateApiTest — list references use the schema generator\'s list rule (#3600)', () => {
+  const ref = (extra: Record<string, any>) => ({ type: 'string', zod: 'z.string()', meta: {}, ...extra })
+  const cases = [
+    ['zod list', ref({ name: 'tags', refTarget: 'tags', zod: 'z.array(z.string())' })],
+    ['dependsOn', ref({ name: 'slots', refTarget: 'slots', meta: { dependsOn: 'location', dependsOnCollection: 'locations', dependsOnField: 'slots' } })],
+    ['slotButtonGroup', ref({ name: 'slots', refTarget: 'slots', meta: { displayAs: 'slotButtonGroup' } })],
+  ] as const
+
+  it.each(cases)('%s: sends a list, keeps the null case, and matches the server schema', (_label, field) => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, field] }, null)
+    for (const id of ['ref_1', 'other_team_ref', 'missing_ref']) {
+      expect(out).toContain(`${field.name}: ['${id}']`)
+      expect(out).not.toContain(`${field.name}: '${id}'`)
+    }
+    expect(out).toContain(`accepts null for the optional reference \`${field.name}\``)
+    expect(out).toContain(`${field.name}: null`)
+    const schema = buildFieldsSchema({ fields: [...baseData.fields, field] as any, config: null, hierarchy: { enabled: false } as any, cases: { plural: 'products' }, layerCamelCase: 'shop', mode: 'server' })
+    expect(schema).toMatch(new RegExp(`${field.name}: z\\.array\\(.*\\.nullish\\(\\)`))
+  })
+
+  it('a type: array ref gets the null case', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())' })] }, null)
+    expect(out).toContain('accepts null for the optional reference `tags`')
+  })
+
+  it('prefers an optional single ref for the null case', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'tags', type: 'array', refTarget: 'tags', zod: 'z.array(z.string())' }), ref({ name: 'categoryId', refTarget: 'categories' })] }, null)
+    expect(out).toContain('accepts null for the optional reference `categoryId`')
+    expect(out).not.toContain('accepts null for the optional reference `tags`')
+  })
+
+  it('dependsOn without dependsOnCollection stays a single value', () => {
+    const out = generateApiTest({ ...baseData, fields: [...baseData.fields, ref({ name: 'slots', refTarget: 'slots', meta: { dependsOn: 'location' } })] }, null)
+    expect(out).toContain("slots: 'ref_1'")
   })
 })

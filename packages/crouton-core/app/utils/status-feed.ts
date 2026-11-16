@@ -50,35 +50,82 @@ export interface TeamEventRow {
  * Merge the current user's own events into the local history (so they survive a reload).
  * Other users' events are dropped unless `includeOthers` (live sync on); with no
  * `currentUserId` nothing is merged. Dedupes by id and against in-memory entries for the same
- * collection+item+operation, newest first, capped at STATUS_RECENT_MAX.
+ * collection+item+operation, newest first, capped at STATUS_RECENT_MAX. With `includeOthers`, `ownFloor` slots
+ * are kept for the newest own entries (default 0 = plain newest-first).
  */
-export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false): StatusMessage[] {
+export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string, includeOthers = false, ownFloor = 0): StatusMessage[] {
   if (!currentUserId) return history
+  const ownIds = collectOwnIds(history, events, currentUserId)
+  const fromEvents = newEventMessages(history, events, t, currentUserId, includeOthers)
+  const sorted = [...history, ...fromEvents].sort((a, b) => b.timestamp - a.timestamp)
+  return capWithOwnFloor(sorted, includeOthers ? ownFloor : 0, ownIds)
+}
+
+/**
+ * A StatusMessage keeps no userId, so own entries are recognised from this call's inputs:
+ * locally pushed history entries plus every fetched row of the current user (even already-known ones).
+ */
+function collectOwnIds(history: StatusMessage[], events: TeamEventRow[], currentUserId: string): Set<string> {
+  const ownIds = new Set(history.filter(m => !m.id.startsWith('event-')).map(m => m.id))
+  for (const ev of events) if (ev.userId === currentUserId) ownIds.add(`event-${ev.id}`)
+  return ownIds
+}
+
+/** Whether a fetched event should be skipped (unknown time, someone else's, or already shown locally). */
+function skipEvent(history: StatusMessage[], ev: TeamEventRow, own: boolean, includeOthers: boolean, timestamp: number): boolean {
+  if (Number.isNaN(timestamp)) return true
+  if (!own) return !includeOthers
+  return hasLocalEntry(history, ev)
+}
+
+/** Turn fetched rows into status messages, deduped by id and against in-memory entries. */
+function newEventMessages(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId: string, includeOthers: boolean): StatusMessage[] {
   const known = new Set(history.map(m => m.id))
-  const fromEvents: StatusMessage[] = []
+  const out: StatusMessage[] = []
   for (const ev of events) {
     const id = `event-${ev.id}`
     const timestamp = new Date(ev.timestamp).getTime()
-    if (known.has(id) || Number.isNaN(timestamp)) continue
     const own = ev.userId === currentUserId
-    if (!own && !includeOthers) continue
-    if (own && ev.itemId && history.some(m =>
-      !m.id.startsWith('event-')
-      && m.collection === ev.collectionName
-      && m.itemId === ev.itemId
-      && m.operation === ev.operation,
-    )) continue
+    if (known.has(id) || skipEvent(history, ev, own, includeOthers, timestamp)) continue
     known.add(id)
     const { text, icon } = mutationStatus({
       operation: ev.operation,
       collection: ev.collectionName,
       userName: own ? undefined : ev.userName?.split(' ')[0] || undefined,
     }, t)
-    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
+    out.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
   }
-  return [...history, ...fromEvents]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, STATUS_RECENT_MAX)
+  return out
+}
+
+const NAME_FIELDS = ['title', 'name', 'label', 'subject', 'displayName']
+
+/** An item's display name: the configured title field first, then common name-like string fields. */
+export function itemNameFromRecord(record: Record<string, unknown> | undefined, titleField?: string): string | undefined {
+  if (!record) return undefined
+  if (titleField && record[titleField]) return String(record[titleField])
+  const field = NAME_FIELDS.find(f => record[f] && typeof record[f] === 'string')
+  return field ? record[field] as string : undefined
+}
+
+/** True when an in-memory (non-event) entry already covers this event's collection+item+operation. */
+function hasLocalEntry(history: StatusMessage[], ev: TeamEventRow): boolean {
+  if (!ev.itemId) return false
+  return history.some(m =>
+    !m.id.startsWith('event-')
+    && m.collection === ev.collectionName
+    && m.itemId === ev.itemId
+    && m.operation === ev.operation,
+  )
+}
+
+/** Cap newest-first list at STATUS_RECENT_MAX, reserving `ownFloor` slots for the newest own entries. */
+function capWithOwnFloor(sorted: StatusMessage[], ownFloor: number, ownIds: Set<string>): StatusMessage[] {
+  if (ownFloor <= 0) return sorted.slice(0, STATUS_RECENT_MAX)
+  // Reserve `ownFloor` slots for the newest own entries so a busy team can't push them out
+  const ownKept = new Set(sorted.filter(m => ownIds.has(m.id)).slice(0, Math.min(ownFloor, STATUS_RECENT_MAX)))
+  const rest = sorted.filter(m => !ownKept.has(m)).slice(0, STATUS_RECENT_MAX - ownKept.size)
+  return [...ownKept, ...rest].sort((a, b) => b.timestamp - a.timestamp)
 }
 
 /** Drop entries that came from team events (used when the team changes). */

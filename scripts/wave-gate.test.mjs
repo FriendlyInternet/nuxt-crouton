@@ -138,7 +138,7 @@ test('the hold comment is deduped, self-resolving and overridable', () => {
   assert.ok(c.startsWith(HOLD_MARKER))
   assert.match(c, /epic\/1652-sales-paste-import` is red/)
   assert.match(c, /releases itself/)       // no human action needed in the normal case
-  assert.match(c, /apply `delegate` by hand to override/) // but an escape hatch exists
+  assert.match(c, /apply `work-this` by hand to override/) // but an escape hatch exists
 })
 
 test('the release comment names the blocker and only claims green when it is', () => {
@@ -162,7 +162,7 @@ test('releaseLabel honours a recorded dispatch, else falls back to delegate', ()
 
 test('an unrecognised dispatch value is NOT applied as a label', () => {
   // the body is model-authored and this value becomes a label that starts a run — allow-list only
-  for (const bad of ['status:blocked', 'epic', 'rm -rf', 'WORK-THIS', 'delegate-hard']) {
+  for (const bad of ['status:blocked', 'epic', 'rm -rf', 'WORK-THIS', 'delegate-x']) {
     assert.equal(releaseLabel(`<!-- pipeline: epic=1 dispatch=${bad} -->`), 'delegate', `must reject: ${bad}`)
   }
 })
