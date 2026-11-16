@@ -1,4 +1,4 @@
-// Tests for scripts/check-runtime-cost.mjs (#3910). Runs in the "Run scripts/*.deps-test.mjs"
+// Tests for scripts/check-runtime-cost.mjs (#3910, part 2 #3936: cases T1-T7). Runs in the "Run scripts/*.deps-test.mjs"
 // step because it needs @vue/compiler-sfc. The 9 ticket cases go through the real CLI in a
 // temp git repo (base commit → origin/main, head commit), plus a few countHits unit checks.
 import { test, after } from 'node:test'
@@ -105,10 +105,11 @@ test('6 · removing a hit passes', () => {
   assert.equal(r.status, 0, r.stdout)
 })
 
+// covers: T8
 test('7 · without --base-ref it prints totals and exits 0', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
   assert.equal(r.status, 0, r.stdout)
-  assert.match(r.stdout, /\[runtime-cost\] files=\d+ A=\d+ B=\d+ allowed=\d+/)
+  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ allowed=\d+ unparsable=\d+$/m)
   assert.match(r.stdout, /files=1 A=1 B=0/)
 })
 
@@ -145,8 +146,9 @@ test('countHits · at most one B hit per element', () => {
   assert.equal(c.B.length, 1)
 })
 
+// covers: T8
 test('countHits · a file without a template has no hits', () => {
-  assert.deepEqual(countHits('<script setup>\nconst a = 1\n</script>\n', parse), { A: [], B: [], allowed: 0, unparsable: false })
+  assert.deepEqual(countHits('<script setup>\nconst a = 1\n</script>\n', parse), { A: [], B: [], C: [], D: [], E: [], allowed: 0, unparsable: false })
 })
 
 test('parseNameStatus · keeps A/M/R .vue under the three roots, by new path', () => {
@@ -173,18 +175,126 @@ test('checkChanged · failure, warning and rename paths in process', () => {
   assert.deepEqual([t.A, t.B, t.allowed, t.unparsable], [2, 0, 0, ['bad.vue']])
 })
 
+// covers: T8
 test('formatRegression · B lines and the generated-file note', () => {
   const lines = formatRegression({ file: 'g.vue', kind: 'B', base: 0, head: 1, hits: [{ line: 3, tag: 'button', why: 'opacity-0 revealed only by hover:opacity-100' }] }, '<!-- @crouton-generated -->\n')
   assert.equal(lines[0], 'g.vue: B 0 → 1')
-  assert.match(lines[1], /g\.vue:3 button opacity-0/)
-  assert.match(lines[2], /pointer-coarse/)
-  assert.equal(lines[3], `  ${GENERATED_HINT}`)
+  assert.equal(lines[1], '  all B hits now in this file:')
+  assert.match(lines[2], /g\.vue:3 button opacity-0/)
+  assert.match(lines[3], /pointer-coarse/)
+  assert.equal(lines[4], `  ${GENERATED_HINT}`)
 })
 
+// covers: T8
 test('compare · rename maps to the old base count; a missing base is 0', () => {
-  const one = { A: [{ line: 1, tag: 'UPopover', under: 'v-for@1' }], B: [] }
-  const none = { A: [], B: [] }
+  const one = { A: [{ line: 1, tag: 'UPopover', under: 'v-for@1' }], B: [], C: [], D: [], E: [] }
+  const none = { A: [], B: [], C: [], D: [], E: [] }
   assert.deepEqual(compare({ 'old.vue': one }, { 'new.vue': one }, { 'new.vue': 'old.vue' }), [])
   assert.equal(compare({}, { 'n.vue': one })[0].base, 0)
   assert.deepEqual(compare({ 'a.vue': one }, { 'a.vue': none }), [])
+})
+
+// ── part 2 (#3936): C heavy per item, D rebuilding key, E composable in template ──
+
+const ALLOW = '    <!-- runtime-cost-ok: shown once in a static page -->\n'
+
+// covers: T1
+test('T1 · C: a heavy component per item', () => {
+  const r = runCase({ head: { [`${C}/New.vue`]: sfc('    <CroutonEditorPreview v-for="i in items" :key="i" />') } })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /New\.vue: C 0 → 1/)
+  assert.match(r.stdout, /New\.vue:\d+ CroutonEditorPreview under v-for@\d+/)
+
+  const cell = `<template>\n  <UTable :data="rows">\n    <template #notes-cell="{ row }">\n      <CroutonEditorPreview :content="row.notes" />\n    </template>\n  </UTable>\n</template>\n`
+  assert.equal(runCase({ head: { [`${C}/Cell.vue`]: cell } }).status, 1)
+  assert.equal(runCase({ head: { [`${C}/Lazy.vue`]: sfc('    <LazyCroutonChartsWidget v-for="i in items" :key="i" />') } }).status, 1)
+
+  const once = runCase({ head: { [`${C}/Once.vue`]: sfc('    <CroutonEditorPreview />') } })
+  assert.equal(once.status, 0, once.stdout)
+  assert.match(once.stdout, / C=0 /)
+
+  const ok = runCase({ head: { [`${C}/Ok.vue`]: sfc(`${ALLOW}    <CroutonEditorPreview v-for="i in items" :key="i" />`) } })
+  assert.equal(ok.status, 0, ok.stdout)
+  assert.match(ok.stdout, /allowed=1/)
+})
+
+// covers: T2
+test('T2 · D: a key that rebuilds a block', () => {
+  const r = runCase({ head: { [`${C}/K.vue`]: sfc('    <div :key="tick"><span /></div>') } })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /K\.vue: D 0 → 1/)
+  assert.match(r.stdout, /:key="tick"/)
+  assert.equal(runCase({ head: { [`${C}/K.vue`]: sfc('    <component :is="c" :key="tick" />') } }).status, 1)
+
+  for (const body of [
+    '    <ul><li v-for="i in items" :key="i.id" /></ul>',
+    '    <ul><template v-for="i in items"><li :key="i.id" /></template></ul>',
+    '    <Transition><div :key="step" /></Transition>',
+  ]) {
+    const ok = runCase({ head: { [`${C}/K.vue`]: sfc(body) } })
+    assert.equal(ok.status, 0, `${body}\n${ok.stdout}`)
+    assert.match(ok.stdout, / D=0 /)
+  }
+
+  const allowed = runCase({ head: { [`${C}/K.vue`]: sfc(`${ALLOW}    <div :key="tick"><span /></div>`) } })
+  assert.equal(allowed.status, 0, allowed.stdout)
+  assert.match(allowed.stdout, /allowed=1/)
+})
+
+// covers: T3
+test('T3 · E: a composable called from the template', () => {
+  const r = runCase({ head: { [`${C}/E.vue`]: sfc('    <span>{{ useTimeAgo(d).value }}</span>') } })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /E\.vue: E 0 → 1/)
+  assert.match(r.stdout, /useTimeAgo\(\)/)
+  assert.equal(runCase({ head: { [`${C}/E.vue`]: sfc(`    <span :title="useFormat().label('x')" />`) } }).status, 1)
+
+  for (const body of ['    <button @click="useExample(x)">x</button>', '    <span>{{ reuseThing(x) }}</span>', '    <span>{{ user.name }}</span>']) {
+    const ok = runCase({ head: { [`${C}/E.vue`]: sfc(body) } })
+    assert.equal(ok.status, 0, `${body}\n${ok.stdout}`)
+    assert.match(ok.stdout, / E=0 /)
+  }
+
+  const parent = runCase({ head: { [`${C}/E.vue`]: sfc(`${ALLOW}    <span>{{ useTimeAgo(d).value }}</span>`) } })
+  assert.equal(parent.status, 0, parent.stdout)
+  assert.match(parent.stdout, /allowed=1/)
+
+  const root = '<template>\n  <!-- runtime-cost-ok: shown once in a static page -->\n  {{ useX() }}\n</template>\n'
+  const top = runCase({ head: { [`${C}/Root.vue`]: root } })
+  assert.equal(top.status, 0, top.stdout)
+  assert.match(top.stdout, /allowed=1/)
+})
+
+// covers: T4
+test('T4 · :enable-touch="false" counts as no enable-touch', () => {
+  const pop = attr => sfc(`    <UPopover mode="hover" ${attr}><span /></UPopover>`)
+  assert.equal(runCase({ head: { [`${C}/P.vue`]: pop(':enable-touch="false"') } }).status, 1)
+  assert.equal(runCase({ head: { [`${C}/P.vue`]: pop(':enable-touch="isTouch"') } }).status, 0)
+  assert.equal(runCase({ head: { [`${C}/P.vue`]: pop('enable-touch') } }).status, 0)
+})
+
+// covers: T5
+test('T5 · a failure lists all hits of the kind under a label', () => {
+  const tips = n => sfc(Array.from({ length: n }, (_, k) => `    <UTooltip v-for="a in l${k}" :key="a" text="x"><span /></UTooltip>`).join('\n'))
+  const r = runCase({ base: { [`${C}/Tips.vue`]: tips(2) }, head: { [`${C}/Tips.vue`]: tips(3) } })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /Tips\.vue: A 2 → 3\n {2}all A hits now in this file:\n(?: {2}\S+Tips\.vue:\d+ UTooltip under v-for@\d+\n){3}/)
+})
+
+// covers: T6
+test('T6 · the totals line carries all five kinds', () => {
+  const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
+  assert.equal(r.status, 0, r.stdout)
+  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ allowed=\d+ unparsable=\d+$/m)
+})
+
+// covers: T7
+test('T7 · C going down while D goes up names only D', () => {
+  const r = runCase({
+    base: { [`${C}/Swap.vue`]: sfc('    <CroutonMapsPreview v-for="i in items" :key="i" />') },
+    head: { [`${C}/Swap.vue`]: sfc('    <CroutonMapsPreview :key="tick" />') },
+  })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /: D 0 → 1/)
+  assert.doesNotMatch(r.stdout, /: C /)
 })
