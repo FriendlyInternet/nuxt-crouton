@@ -17,6 +17,15 @@ const SKIPPED = '<!-- postmortem:skipped epic=#7 -->\nno run'
 const closed = n => ({ number: n, state: 'closed' })
 const open = n => ({ number: n, state: 'open' })
 
+// #3846 rule: a rolling epic's postmortem waits for its last step, not its first closed ticket.
+test('10. decidePostmortemRun: pending steps hold the automatic start; a manual run still goes', () => {
+  const d = decidePostmortemRun({ isEpic: true, subIssues: [closed(1)], comments: [], pendingSteps: 2 })
+  assert.equal(d.go, false)
+  assert.match(d.reason, /steps still pending/)
+  assert.equal(decidePostmortemRun({ isEpic: true, subIssues: [closed(1)], comments: [], pendingSteps: 2, manual: true }).go, true)
+  assert.equal(decidePostmortemRun({ isEpic: true, subIssues: [closed(1)], comments: [], pendingSteps: 0 }).go, true)
+})
+
 test('trigger: all sub-issues closed, no marker → go', () => {
   assert.equal(decidePostmortemRun({ isEpic: true, subIssues: [closed(1), closed(2)], comments: [] }).go, true)
 })

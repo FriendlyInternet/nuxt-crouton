@@ -23,7 +23,8 @@
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
 //        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
-//   PR_BODY (env): the PR body, read for review-surface markers (#2433).
+//   PR_BODY (env, optional): the PR body, read for review-surface markers (#2433); unset or empty → read
+//   from the GitHub API by --pr (GH_TOKEN + REPO), and a failed read captures nothing (#3957).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
 //   shoot is derived from them (#2698).
 //
@@ -139,6 +140,35 @@ export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
     return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
   }
   return { surfaces: parseSurfaces(manifest), reason: 'app default' }
+}
+
+/**
+ * The PR body to read markers from (#3957). The workflow_run capture has no pull_request event,
+ * so PR_BODY is usually unset: read it from the GitHub API by PR number. A failed read THROWS —
+ * an empty body would silently drop the declared surface and shoot the app default instead.
+ */
+export async function readPrBody({ env, pr, fetchFn = fetch }) {
+  if (env.PR_BODY) return env.PR_BODY
+  const repo = env.REPO || env.GITHUB_REPOSITORY
+  const token = env.GH_TOKEN
+  const prefix = `cannot read the body of PR #${pr}`
+  if (!repo || !token) throw new Error(`${prefix}: no repo/token`)
+  let res
+  try {
+    res = await fetchFn(`https://api.github.com/repos/${repo}/pulls/${pr}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }
+    })
+  } catch (e) {
+    throw new Error(`${prefix}: ${e.message}`)
+  }
+  if (!res.ok) throw new Error(`${prefix}: HTTP ${res.status}`)
+  return (await res.json()).body ?? ''
+}
+
+/** Read the PR body, then resolve what to capture for this app (#3957). */
+export async function pickSurfaces({ env, args, manifest, fetchFn = fetch }) {
+  const prBody = await readPrBody({ env, pr: args.pr, fetchFn })
+  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n') })
 }
 
 /**
@@ -281,7 +311,14 @@ async function main() {
   const outDir = args.out || 'screenshots/review-captures'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
   const app = args.app || ''
-  const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app, changedFiles: (process.env.CHANGED_FILES || '').split('\n') })
+  let surfaces, reason
+  try {
+    ({ surfaces, reason } = await pickSurfaces({ env: process.env, args, manifest: loadManifest(args.manifest) }))
+  } catch (e) {
+    log(`origin=${origin} app=${app || '-'} surfaces=0 (${e.message})`)
+    report('-', 'error', e.message)
+    return
+  }
   log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
   if (!surfaces.length) { report('-', 'none', reason); return }
 

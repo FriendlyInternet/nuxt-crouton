@@ -31,7 +31,9 @@ test('committed api-reference pages match the code', () => {
 })
 
 test('--check fails when a component prop is renamed', () => {
-  expectStaleAfter('packages/crouton-core/app/components/ConfirmButton.vue', 'confirmLabel?: string', 'confirmText?: string', /components\.md/)
+  // Not ConfirmButton: check-doc-claims.deps-test.mjs reads its props and runs in parallel with this
+  // file (`node --test scripts/*.deps-test.mjs`), so renaming its prop here made that test flaky.
+  expectStaleAfter('packages/crouton-core/app/components/ShortcutHint.vue', 'subtle?: boolean', 'faint?: boolean', /components\.md/)
 })
 
 test('composables page lists default-exported composables', () => {

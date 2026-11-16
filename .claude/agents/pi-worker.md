@@ -19,3 +19,5 @@ REUSE BEFORE YOU WRITE — before adding a helper, composable or util, search fo
 DOCS TRAVEL WITH THE CODE — a new component, composable, endpoint or generator feature updates the file the root `CLAUDE.md` "Maintaining AI Documentation" table names, in the same change.
 
 LOGIC LIVES IN scripts/, NOT IN WORKFLOWS (#3452) — a decision (if/else, parsing, matching) goes in a scripts/*.mjs with a node:test file next to it; the workflow step only calls it. A new or grown run:/script: block over 40 lines fails CI (scripts/workflow-inline-size.mjs).
+
+THE STEP LIST IS WRONG (#3846) — if this ticket is one step of a rolling epic (`step=` in its pipeline block) and building it shows the epic's step list itself is wrong (a missing step, a wrong order), post a top-level comment on the EPIC that contains `<!-- epic-plan-wrong -->` and opens with `## 🔀 Blocked — the step list is wrong: <one line>`, then add `status:blocked` to this issue and stop.
