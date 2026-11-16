@@ -189,6 +189,8 @@ jobs:
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" \
             --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- build-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
           echo "$PRIOR" > "$D/prior"
+          # All PR comments, so the prompt renderer can pick CI's plan-checks table for this head (#3196).
+          gh api --paginate --slurp "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" > "$D/pr-comments.json"
           # The PR head as DATA + its diff; .pi/ is pinned to the default branch so pi starts with trusted settings (#3696).
           node scripts/review-checkout.mjs --base "$BASE" --pr "$PR" --sha "$SHA" --trusted "origin/${{ github.event.repository.default_branch }}" --diff "$D/diff.patch"
 
@@ -221,14 +223,20 @@ jobs:
           GH_TOKEN: ${{ steps.ro-token.outputs.token }}
           ISSUE: ${{ steps.pr.outputs.issue }}
           PR: ${{ steps.pr.outputs.pr }}
+          SHA: ${{ steps.pr.outputs.sha }}
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/build-review"
-          # Persona, verdict parser and pi settings (.pi/, see review-checkout.mjs) come from the default branch, not the PR head.
-          git show "origin/${{ github.event.repository.default_branch }}:.claude/agents/build-reviewer.md" \
-            | awk '/^---$/ && n < 2 { n++; next } n >= 2' \
-            | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{pr}}#${PR}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
-                  -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" -e "s#{{diff_file}}#$D/diff.patch#g" > "$D/prompt.txt"
+          DEF="origin/${{ github.event.repository.default_branch }}"
+          # Persona, prompt renderer, verdict parser and pi settings (.pi/, see review-checkout.mjs) come from the default branch, not the PR head.
+          mkdir -p "$RUNNER_TEMP/trusted/scripts/lib"
+          git show "$DEF:scripts/lib/build-review-prompt.mjs" > "$RUNNER_TEMP/trusted/scripts/lib/build-review-prompt.mjs"
+          git show "$DEF:scripts/pipeline-prompt.mjs" > "$RUNNER_TEMP/trusted/scripts/pipeline-prompt.mjs"
+          git show "$DEF:.claude/agents/build-reviewer.md" > "$D/persona.md"
+          ISSUE="$ISSUE" PR="$PR" D="$D" node -e 'const e=process.env; process.stdout.write(JSON.stringify({ issue: e.ISSUE, pr: e.PR, verdict_file: e.D + "/verdict.md", issue_file: e.D + "/issue.md", plan_file: e.D + "/plan.md", diff_file: e.D + "/diff.patch" }))' > "$D/vars.json"
+          # The reviewer takes CI's plan-checks table for this sha as fact (#3196).
+          node "$RUNNER_TEMP/trusted/scripts/lib/build-review-prompt.mjs" "$D/persona.md" --vars "$D/vars.json" \
+            --comments "$D/pr-comments.json" --sha "$SHA" > "$D/prompt.txt" || exit 1
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
           exit "${PIPESTATUS[0]}"
 
