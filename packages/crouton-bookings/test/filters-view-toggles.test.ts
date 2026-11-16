@@ -28,10 +28,11 @@ describe('viewToggles', () => {
     expect(filters).toMatch(/viewToggles:\s*true/)
   })
 
-  it('Week/Month, Today, fold button, Map, Location cards and cards row are all guarded', () => {
-    expect(filters).toMatch(/v-if="viewToggles && showCalendar"/g)
-    expect(filters.match(/v-if="viewToggles && showCalendar"/g)?.length).toBe(2)
-    expect(filters).toMatch(/v-if="viewToggles"/)
+  it('Show/hide + Week/Month group, Today, Map, Location cards and cards row are all guarded', () => {
+    // One group holds show/hide + Week/Month (#3928): the group itself is guarded…
+    expect(filters).toMatch(/<UFieldGroup v-if="viewToggles"/)
+    // …Today is its own button next to it
+    expect(filters.match(/v-if="viewToggles && showCalendar"/g)?.length).toBe(1)
     expect(filters).toMatch(/props\.viewToggles && props\.hasLocationsWithCoordinates/)
     expect(filters).toMatch(/props\.viewToggles && locationItems\.length > 0/)
     expect(filters).toMatch(/v-if="viewToggles && showLocations/)

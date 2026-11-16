@@ -32,7 +32,8 @@ const translations: Record<string, string> = {
   'errors.checkConnection': 'Check your connection status.',
   'errors.notLoggedIn': 'You are not logged in.',
 }
-vi.stubGlobal('useT', () => ({ t: (key: string) => translations[key] || key }))
+// useCroutonError translates via the app-wide $i18n (works outside setup), not useT()
+vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t: (key: string) => translations[key] || key } }))
 
 // Mock useNotify — delegates to mockToastAdd
 vi.stubGlobal('useNotify', () => ({
