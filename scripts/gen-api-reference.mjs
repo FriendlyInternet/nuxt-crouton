@@ -21,12 +21,12 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { evalLiteral, manifestOf } from './lib/read-manifest.mjs'
+import { oneLine, code, createReader, componentProps } from './lib/component-meta.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_DIR = join(ROOT, 'docs/content/8.api-reference')
 const require = createRequire(import.meta.url)
 const ts = require('typescript')
-const { createCheckerByJson } = require('vue-component-meta')
 
 const rd = p => readFileSync(join(ROOT, p), 'utf8')
 const sf = (name, text) => ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
@@ -36,8 +36,6 @@ const jsdoc = (node) => {
   const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => x.text ?? '').join('') : ''
   return text.trim()
 }
-const oneLine = s => s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim()
-const code = s => '`' + String(s).replace(/`/g, "'").replace(/\\?\|/g, '\\|') + '`'
 
 const walk = (node, fn) => { fn(node); ts.forEachChild(node, c => walk(c, fn)) }
 
@@ -54,13 +52,8 @@ function leadDoc(text) {
 // Props come from vue-component-meta (the Volar checker) — no hand-rolled prop parsing.
 let checker
 function propsOf(file) {
-  checker ??= createCheckerByJson(join(ROOT, 'packages/crouton-core'), {
-    include: [join(ROOT, COMPONENTS_DIR, '**/*.vue')],
-    compilerOptions: { strict: true, skipLibCheck: true, module: 'esnext', moduleResolution: 'bundler', target: 'esnext' }
-  }, {})
-  const props = checker.getComponentMeta(join(ROOT, file)).props
-    .filter(p => !p.global)
-    .map(p => ({ name: p.name, type: p.required ? p.type : p.type.replace(/ \| undefined$/, ''), required: p.required, doc: p.description }))
+  checker ??= createReader(join(ROOT, 'packages/crouton-core'), [join(ROOT, COMPONENTS_DIR, '**/*.vue')])
+  const props = componentProps(checker, join(ROOT, file))
   return { props, doc: leadDoc(rd(file)) }
 }
 
