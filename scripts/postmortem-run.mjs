@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parseEpicNumber } from './epic-ready.mjs'
 import { decidePostmortemRun, postmortemState, pendingClose, finalizeBody, renderSkipped, buildPostmortemPrompt } from './postmortem.mjs'
+import { stepsPending } from './lib/epic-steps.mjs'
 
 const labelNames = ls => (ls || []).map(l => (typeof l === 'string' ? l : l.name))
 const listComments = ({ github, context }, issue_number) =>
@@ -33,11 +34,15 @@ export async function target({ github, context, core }, { epic, headRef, closedI
   }
   if (!n) return out(false, null, 'no epic to look at')
   const issue = (await github.rest.issues.get({ ...context.repo, issue_number: n })).data
+  const labels = labelNames(issue.labels)
+  const subIssues = await listSubIssues({ github, context }, n)
+  const comments = await listComments({ github, context }, n)
   const d = decidePostmortemRun({
-    isEpic: labelNames(issue.labels).includes('epic'),
-    subIssues: await listSubIssues({ github, context }, n),
-    comments: await listComments({ github, context }, n),
-    manual: !!manual
+    isEpic: labels.includes('epic'),
+    subIssues,
+    comments,
+    manual: !!manual,
+    pendingSteps: stepsPending({ labels, comments, subIssues }) // #3846: a rolling epic waits for its last step
   })
   return out(d.go, n, d.reason)
 }

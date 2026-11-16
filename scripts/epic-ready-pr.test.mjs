@@ -34,6 +34,24 @@ function world(o = {}) {
 const run = (w, extra) => runEpicReadyPr(w, { ownerLogin: 'pmcp', ...extra })
 const child = { number: 1, body: BLOCK(7, 'epic/7-x') }
 
+// #3846 rule: a rolling epic is finished only when every step has a closed ticket — after step 0
+// merges, every sub-issue written so far is closed, but the epic→main PR must not open.
+const STEP_LIST = (tickets) => ({ body: '<!-- epic-steps:v1 -->\n```json\n' + JSON.stringify(tickets.map((t, i) => ({ title: `s${i}`, goal: 'g', proves: 'p', blockedBy: i ? [i - 1] : [], ticket: t }))) + '\n```', user: { login: 'nuxt-harness[bot]', type: 'Bot' } })
+const rollingEpic = (w) => { w.github.rest.issues.get = async () => ({ data: { title: 'Epic: T', body: '', labels: [{ name: 'epic' }, { name: 'tickets:rolling' }] } }) }
+test('10. a rolling epic with a step still missing its ticket never opens the epic→main PR', async () => {
+  const w = world({ issue: child, subIssues: [{ number: 1, state: 'closed', title: 'a' }], comments: { 7: [STEP_LIST([1, null])] } })
+  rollingEpic(w)
+  await run(w)
+  assert.equal(w.calls.create.length, 0)
+  assert.ok(w.log.some(m => /1 step\(s\) of the step list not finished/.test(m)))
+})
+test('10. a rolling epic whose every step has a closed ticket opens it as today', async () => {
+  const w = world({ issue: child, subIssues: [{ number: 1, state: 'closed', title: 'a' }, { number: 2, state: 'closed', title: 'b' }], comments: { 7: [STEP_LIST([1, 2])] } })
+  rollingEpic(w)
+  await run(w)
+  assert.equal(w.calls.create.length, 1)
+})
+
 test('dispatch with no epic number → skip', async () => {
   const w = world({ event: 'workflow_dispatch' })
   await run(w, { dispatchBranch: 'feature/x' })
