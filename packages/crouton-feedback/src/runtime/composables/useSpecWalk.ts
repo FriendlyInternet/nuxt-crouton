@@ -7,9 +7,12 @@ import {
   stepsOf,
   selectorFor,
   exportText as buildExport,
-  isSendTarget,
+  sendTargetHost,
+  sendStateFor,
+  IDLE_SEND,
   walkResultPayload,
   createResultSender,
+  type SendState,
   type WalkEntry,
   type Verdict,
   type VerdictMap
@@ -47,8 +50,7 @@ const adhocTitle = ref('')
 // Where a link walk sends its result (from the link's `ref` + `result`). Empty ⇒ plan walk: copy export.
 const adhocRef = ref('')
 const adhocResult = ref('')
-type SendState = { status: 'idle' | 'sending' | 'sent' | 'error', url: string, error: string, unauthorized: boolean }
-const sendState = ref<SendState>({ status: 'idle', url: '', error: '', unauthorized: false })
+const sendState = ref<SendState>(IDLE_SEND)
 // One sender per walk — a fresh walk (new link) can be sent again; the same walk posts once.
 let sender = createResultSender()
 
@@ -62,20 +64,17 @@ function slug(s: string): string {
 
 /** Send-result state for a link walk: only one carrying `ref` + `result`, and only to a sibling host. */
 function useResultSend(adhocEntries: Ref<WalkEntry[] | null>, verdicts: Ref<VerdictMap>) {
-  const sendTarget = computed(() => {
-    if (!adhocEntries.value || !adhocRef.value || !adhocResult.value || !import.meta.client) return ''
-    return isSendTarget(adhocResult.value, location.hostname) ? new URL(adhocResult.value).host : ''
-  })
+  const sendTarget = computed(() => import.meta.client
+    ? sendTargetHost({ entries: adhocEntries.value, ref: adhocRef.value, result: adhocResult.value }, location.hostname)
+    : '')
   const canSend = computed(() => !!sendTarget.value && adhocEntries.value!.every(e => verdicts.value[e.id]?.verdict))
   async function sendResult() {
-    if (!canSend.value || sendState.value.status === 'sending') return
-    const payload = walkResultPayload(adhocEntries.value!, verdicts.value, adhocRef.value)
+    const payload = canSend.value && sendState.value.status !== 'sending'
+      ? walkResultPayload(adhocEntries.value!, verdicts.value, adhocRef.value)
+      : null
     if (!payload) return
-    sendState.value = { status: 'sending', url: '', error: '', unauthorized: false }
-    const r = await sender(adhocResult.value, payload)
-    sendState.value = r.error
-      ? { status: 'error', url: '', error: r.error, unauthorized: r.status === 401 }
-      : { status: 'sent', url: r.url || '', error: '', unauthorized: false }
+    sendState.value = { ...IDLE_SEND, status: 'sending' }
+    sendState.value = sendStateFor(await sender(adhocResult.value, payload))
   }
   return { sendTarget, canSend, sendResult }
 }
@@ -173,7 +172,7 @@ export function useSpecWalk() {
     adhocTitle.value = w.title
     adhocRef.value = w.ref
     adhocResult.value = w.result
-    sendState.value = { status: 'idle', url: '', error: '', unauthorized: false }
+    sendState.value = IDLE_SEND
     sender = createResultSender()
     scopeIds.value = null
     idx.value = 0

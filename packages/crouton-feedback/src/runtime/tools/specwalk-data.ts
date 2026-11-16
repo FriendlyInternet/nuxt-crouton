@@ -145,6 +145,25 @@ export function isSendTarget(resultUrl: string, pageHostname: string): boolean {
   return tail(host) === tail(pageHostname)
 }
 
+/**
+ * The host a link walk sends to, or '' when it has no Send result: needs steps, a `ref`,
+ * a declared `result` URL, and that URL must be a sibling of the page (`isSendTarget`).
+ */
+export function sendTargetHost(walk: { entries: WalkEntry[] | null, ref: string, result: string }, pageHostname: string): string {
+  const ready = !!walk.entries?.length && !!walk.ref && isSendTarget(walk.result, pageHostname)
+  return ready ? new URL(walk.result).host : ''
+}
+
+export interface SendState { status: 'idle' | 'sending' | 'sent' | 'error', url: string, error: string, unauthorized: boolean }
+
+export const IDLE_SEND: SendState = { status: 'idle', url: '', error: '', unauthorized: false }
+
+/** A finished send → the overlay's state; a 401 means "sign in to the status app first". */
+export function sendStateFor(r: SendOutcome): SendState {
+  if (r.error) return { status: 'error', url: '', error: r.error, unauthorized: r.status === 401 }
+  return { status: 'sent', url: r.url ?? '', error: '', unauthorized: false }
+}
+
 export interface WalkResultPayload {
   ref: string
   steps: Array<{ text: string, verdict: Verdict, note?: string }>
@@ -167,6 +186,26 @@ export function walkResultPayload(entries: WalkEntry[], verdicts: VerdictMap, re
 
 export interface SendOutcome { url?: string, error?: string, status?: number }
 
+function failureMessage(body: any, status: number): string {
+  return body?.statusMessage || body?.message || `HTTP ${status}`
+}
+
+async function postResult(fetchImpl: typeof fetch, url: string, payload: WalkResultPayload): Promise<SendOutcome> {
+  try {
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const body = await res.json().catch(() => null) as any
+    if (!res.ok) return { error: failureMessage(body, res.status), status: res.status }
+    return { url: body?.data?.url || '' }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 /**
  * One sender per walk: a second tap while sending, or after success, returns the first
  * outcome without a second request. An error allows a retry.
@@ -175,21 +214,7 @@ export function createResultSender(fetchImpl: typeof fetch = fetch) {
   let inflight: Promise<SendOutcome> | null = null
   return function send(url: string, payload: WalkResultPayload): Promise<SendOutcome> {
     if (inflight) return inflight
-    const p: Promise<SendOutcome> = (async () => {
-      try {
-        const res = await fetchImpl(url, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        const body = await res.json().catch(() => null) as any
-        if (!res.ok) return { error: body?.statusMessage || body?.message || `HTTP ${res.status}`, status: res.status }
-        return { url: body?.data?.url || '' }
-      } catch (e) {
-        return { error: e instanceof Error ? e.message : String(e) }
-      }
-    })()
+    const p = postResult(fetchImpl, url, payload)
     inflight = p
     p.then((r) => { if (r.error && inflight === p) inflight = null })
     return p

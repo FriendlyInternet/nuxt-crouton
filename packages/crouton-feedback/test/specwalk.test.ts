@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { consumeWalkQuery, parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, isSendTarget, walkResultPayload, createResultSender, type VerdictMap } from '../src/runtime/tools/specwalk-data'
+import { consumeWalkQuery, parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, isSendTarget, walkResultPayload, createResultSender, sendTargetHost, sendStateFor, type VerdictMap } from '../src/runtime/tools/specwalk-data'
 import { createSpecWalkTool } from '../src/runtime/tools/specwalk'
 import type { ComposedPlan } from '../src/runtime/tools/plan-data'
 
@@ -197,6 +197,19 @@ describe('link walk → Send result', () => {
     expect(isSendTarget('https://status.pmcp.dev/x', 'velo.pmcp.dev')).toBe(true)
     expect(isSendTarget('http://localhost:3000/x', 'velo.pmcp.dev')).toBe(false)
   })
+  it('Send result button shows only for a link walk with ref + a sibling result url', () => {
+    const w = link()
+    expect(sendTargetHost(w, 'velo.pmcp.dev')).toBe('status.pmcp.dev')
+    expect(sendTargetHost(link({ ref: '' }), 'velo.pmcp.dev')).toBe('')
+    expect(sendTargetHost(link({ result: undefined }), 'velo.pmcp.dev')).toBe('')
+    expect(sendTargetHost({ entries: null, ref: '#1', result: w.result }, 'velo.pmcp.dev')).toBe('')
+    expect(sendTargetHost(w, 'evil.com')).toBe('')
+  })
+  it('a send outcome maps to the overlay state; 401 asks to sign in', () => {
+    expect(sendStateFor({ url: 'u' })).toEqual({ status: 'sent', url: 'u', error: '', unauthorized: false })
+    expect(sendStateFor({ error: 'nope', status: 401 })).toEqual({ status: 'error', url: '', error: 'nope', unauthorized: true })
+    expect(sendStateFor({ error: 'boom' }).unauthorized).toBe(false)
+  })
   it('send twice (concurrent and sequential) → one request; an error allows a retry', async () => {
     const payload = { ref: '#1', steps: [{ text: 'a', verdict: 'works' as const }] }
     const f = vi.fn(async () => new Response(JSON.stringify({ data: { url: 'u1' } }), { status: 200 }))
@@ -211,5 +224,10 @@ describe('link walk → Send result', () => {
     expect((await s2('https://s/x', payload)).status).toBe(401)
     expect((await s2('https://s/x', payload)).url).toBe('u2')
     expect(g).toHaveBeenCalledTimes(2)
+
+    const h = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ statusMessage: 'Origin not allowed' }), { status: 403 })).mockRejectedValueOnce(new Error('offline'))
+    const s3 = createResultSender(h as unknown as typeof fetch)
+    expect(await s3('https://s/x', payload)).toEqual({ error: 'Origin not allowed', status: 403 })
+    expect((await s3('https://s/x', payload)).error).toBe('offline')
   })
 })
