@@ -71,6 +71,18 @@ test('report-only by default (exit 0 with findings)', () => {
   assert.equal(run('`npx crouton frobnicate`\n').status, 0)
 })
 
+test('a misspelled non-Crouton composable fails with page and line; package, Nuxt and VueUse ones pass', () => {
+  const bad = run('# T\n\n```ts\nconst { items } = useCollectionQuerry(\'posts\')\n```\n', '--strict')
+  assert.equal(bad.status, 1)
+  assert.match(bad.stdout, /page\.md:4 .*composable `useCollectionQuerry`/)
+  const good = run('```ts\nconst { items } = useCollectionQuery(\'posts\')\nconst { data } = useFetch(\'/api/x\')\nconst v = useLocalStorage(\'k\', 1)\nconst toast = useToast()\nconst r = useRoute()\nconst s = useSlots()\n```\n', '--strict')
+  assert.equal(good.status, 0, good.stdout)
+})
+
+test('a composable the page defines itself is not reported', () => {
+  assert.equal(run('```ts\nexport function useMyThing() { return 1 }\nconst x = useMyThing()\n```\n', '--strict').status, 0)
+})
+
 test('missing component / composable is reported with page and line; real ones pass', () => {
   const r = run('# T\n\nUse <CroutonDoesNotExistXyz /> here\n', '--strict')
   assert.equal(r.status, 1)

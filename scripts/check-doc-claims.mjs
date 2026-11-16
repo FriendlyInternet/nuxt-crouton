@@ -14,8 +14,9 @@
  *
  *   1. names     — `crouton <command>` and its `--flags` exist in the CLI; <CroutonX>/<UX> components
  *                  are names an app really registers (a package's own nuxt.config `components` prefix +
- *                  file name, or Nuxt UI) and useCroutonX composables exist in packages/ (outside
- *                  comments); props passed to a crouton-core component exist on it; a package config key referenced as
+ *                  file name, or Nuxt UI) and every `useX()` call names a package composable (the
+ *                  generator's reader over packages/*\/app/composables) or one from an outside source
+ *                  read from the install (Vue, Nuxt `#imports`, VueUse, Nuxt UI); props passed to a crouton-core component exist on it; a package config key referenced as
  *                  `features.<alias>.<key>` or `<runtimeConfigKey>.<key>` (also after
  *                  `runtimeConfig.` / `runtimeConfig.public.`) is one of that package's
  *                  manifest `configuration` keys (or a prefix of one, e.g. `croutonBookings.email`)
@@ -31,7 +32,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
-import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf, configManifestsOf, registeredComponentsOf } from './gen-api-reference.mjs'
+import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf, configManifestsOf, registeredComponentsOf, composableNamesOf } from './gen-api-reference.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ts = createRequire(import.meta.url)('typescript')
@@ -69,32 +70,6 @@ export function extractBlocks(md) {
 
 const isFragment = (code) => /(^|\s)\.\.\.(\s|$)|\/\/\s*\.\.\./.test(code)
 const camel = s => s.replace(/-(\w)/g, (_, c) => c.toUpperCase())
-
-/** Every `use…` composable word in package sources (ts/vue/js/mjs), outside comments.
- *  Existence only, across ALL packages — the generator lists crouton-core composables alone.
- *  Component names are NOT read here: they come from the generator's registeredComponentsOf(). */
-export function sourceWords(pkgDir) {
-  const words = new Set()
-  const visit = (d) => {
-    for (const e of readdirSync(d)) {
-      if (['node_modules', 'dist', '.nuxt', '.output', '.git'].includes(e)) continue
-      const p = join(d, e)
-      if (statSync(p).isDirectory()) { visit(p); continue }
-      if (!/\.(ts|vue|js|mjs)$/.test(e)) continue
-      for (const m of stripComments(readFileSync(p, 'utf8')).matchAll(/\buse[A-Za-z0-9]+/g)) words.add(m[0])
-    }
-  }
-  visit(pkgDir)
-  return words
-}
-
-/** Source text with block, line and `<!-- -->` comments blanked (a `//` inside a string or URL is kept). */
-export function stripComments(text) {
-  return text
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:'"`\\\w])\/\/.*/g, '$1')
-}
 
 /** Index of the first non-whitespace character at or after `j`. */
 function skipSpace(text, j) {
@@ -154,6 +129,49 @@ export function propOfAttr(attr) {
   return camel(name)
 }
 
+// ---------- composables from outside the packages ----------
+
+// Each source is read from what crouton-core has installed, so a new release's composables count
+// without editing this file. Not a list of names: a source that yields none fails the run.
+const coreRequire = createRequire(join(root, 'packages/crouton-core/package.json'))
+const isUse = n => /^use[A-Z]/.test(n)
+const pkgDir = name => dirname(coreRequire.resolve(`${name}/package.json`))
+/** `use…` names declared in the .d.ts files under `dir` (recursive). */
+function declaredUses(dir, out = new Set()) {
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e)
+    if (statSync(p).isDirectory()) declaredUses(p, out)
+    else if (e.endsWith('.d.ts')) for (const m of readFileSync(p, 'utf8').matchAll(/export\s+declare\s+(?:function|const)\s+(use[A-Z]\w*)/g)) out.add(m[1])
+  }
+  return out
+}
+export const OUTSIDE_SOURCES = {
+  // Vue's exports, resolved the way Nuxt resolves it
+  vue: () => Object.keys(createRequire(join(pkgDir('nuxt'), 'package.json'))('vue')).filter(isUse),
+  // Nuxt's `#imports` auto-imports: every `imports: [...]` preset in its build (app, router, head, scripts, vue)
+  nuxt: () => [...readFileSync(join(pkgDir('nuxt'), 'dist/index.mjs'), 'utf8').matchAll(/imports:\s*\[([^\]]*)\]/g)]
+    .flatMap(m => [...m[1].matchAll(/["'](use[A-Z]\w*)["']/g)].map(n => n[1])),
+  vueuse: () => Object.keys(coreRequire('@vueuse/core')).filter(isUse),
+  // Nuxt UI's runtime composables (its module auto-imports that dir)
+  'nuxt-ui': () => [...declaredUses(join(root, 'packages/crouton-core/node_modules/@nuxt/ui/dist/runtime/composables'))],
+}
+
+/** Composables a page may call: the generator's reader over every package's app/composables + server/utils, plus OUTSIDE_SOURCES.
+ *  Throws when a source yields no names — "could not read" is never "all found". */
+export function composableNames() {
+  const names = new Set()
+  // app/composables (composables.md) and server/utils (server.md): both auto-imported, both read by the generator
+  for (const d of readdirSync(join(root, 'packages'))) {
+    for (const sub of ['app/composables', 'server/utils']) for (const n of composableNamesOf(`packages/${d}/${sub}`)) names.add(n)
+  }
+  for (const [src, read] of Object.entries(OUTSIDE_SOURCES)) {
+    const got = read()
+    if (!got.length) throw new Error(`no composables read from ${src}`)
+    for (const n of got) names.add(n)
+  }
+  return names
+}
+
 // ---------- checks ----------
 
 const lineAt = (text, index) => text.slice(0, index).split('\n').length
@@ -162,10 +180,12 @@ const lineAt = (text, index) => text.slice(0, index).split('\n').length
  *  (the package's own prefix + file name, or Nuxt UI); `useCroutonFoo()` composables must exist in package code. */
 export function checkSymbols(file, md, facts) {
   const hits = []
+  // a composable the page itself defines (`function useX(` / `const useX =`) is the example's own code
+  const defined = new Set([...md.matchAll(/\b(?:function\s+|(?:const|let)\s+)(use[A-Z][A-Za-z0-9]*)\b/g)].map(m => m[1]))
   md.split('\n').forEach((text, i) => {
-    for (const m of text.matchAll(/<((?:Crouton|U(?=[A-Z]))[A-Za-z0-9]+)|\b(useCrouton[A-Za-z0-9]*)\s*\(/g)) {
+    for (const m of text.matchAll(/<((?:Crouton|U(?=[A-Z]))[A-Za-z0-9]+)|\b(use[A-Z][A-Za-z0-9]*)\s*\(/g)) {
       if (m[1] && !facts.registered.has(m[1])) hits.push({ file, line: i + 1, check: 'names', msg: `component \`${m[1]}\` is not a registered component name (package prefix + file name, or Nuxt UI)` })
-      if (m[2] && !facts.words.has(m[2])) hits.push({ file, line: i + 1, check: 'names', msg: `composable \`${m[2]}\` not found in packages/` })
+      if (m[2] && !defined.has(m[2]) && !facts.composables.has(m[2])) hits.push({ file, line: i + 1, check: 'names', msg: `composable \`${m[2]}\` is not a package composable or a Vue / Nuxt / VueUse / Nuxt UI one` })
     }
   })
   return hits
@@ -297,7 +317,7 @@ export function loadFacts() {
     config.set(`features.${o.id.replace(/^crouton-/, '')}`, entry)
     if (o.runtimeConfigKey) config.set(o.runtimeConfigKey, entry)
   }
-  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, config, registered: registeredComponentsOf(), words: sourceWords(join(root, 'packages')) }
+  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, config, registered: registeredComponentsOf(), composables: composableNames() }
 }
 
 export function run(docsDir, facts) {

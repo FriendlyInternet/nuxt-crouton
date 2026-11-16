@@ -303,6 +303,12 @@ function composableEntry(s, e, dir, f) {
   if (d) out += d.split('\n').filter(l => !l.trim().startsWith('@')).join('\n').trim().split(/\n\n/)[0] + '\n\n'
   return out + `\`\`\`ts\n${e.name}(${params})${ret}\n\`\`\`\n\n_Source: \`${dir}/${f}\`_\n`
 }
+/** Names of the composables one `app/composables` dir exports, read the same way as composables.md (empty when the dir is missing). */
+export function composableNamesOf(dir = 'packages/crouton-core/app/composables') {
+  if (!existsSync(join(ROOT, dir))) return []
+  return readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.ts')).sort()
+    .flatMap(f => exportedFunctions(sf(f, rd(`${dir}/${f}`)), f).map(e => e.name))
+}
 function genComposables() {
   const dir = 'packages/crouton-core/app/composables'
   const files = readdirSync(join(ROOT, dir)).filter(f => f.endsWith('.ts')).sort()
