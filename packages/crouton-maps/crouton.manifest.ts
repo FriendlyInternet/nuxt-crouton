@@ -61,7 +61,8 @@ export default defineCroutonManifest({
       { name: 'CroutonMapsMap', description: 'Main map container with MapLibre GL (@geoql/v-maplibre, OpenFreeMap tiles)' },
       { name: 'CroutonMapsMarker', description: 'Map marker with optional popup text and drag support' },
       { name: 'CroutonMapsPopup', description: 'Map popup with custom slot content' },
-      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells' }
+      { name: 'CroutonMapsPreview', description: 'Location preview thumbnail with modal — used in collection list cells' },
+      { name: 'CroutonMapsCurrentLocationButton', description: 'Button that finds the user\'s current location and reverse-geocodes it' }
     ],
     apiRoutes: [
       '/api/maps/geocode',

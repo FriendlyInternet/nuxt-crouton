@@ -33,6 +33,10 @@ export default defineCroutonManifest({
         name: 'CroutonFlow',
         description: 'Interactive node graph with DAG auto-layout, drag/drop, minimap, and optional real-time sync',
       },
+      {
+        name: 'CroutonFlowSiteFlow',
+        description: 'Site level of the Crouton Builder: a canvas of page cards wired into a sitemap',
+      },
     ],
     apiRoutes: [
       '/api/crouton-flow/teams/[id]/flows',

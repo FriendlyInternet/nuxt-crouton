@@ -116,7 +116,29 @@ function mutateAndRun(file, from, to, runner) {
 test('component-names --check --fresh passes on the clean tree', () => {
   const r = names('--check', '--fresh')
   expectStatus(r, 0)
-  assert.match(r.stdout, /^70 components named, 0 without a file$/m)
+  assert.match(r.stdout, /^135 components named, 0 without a file, 0 used outside and not named$/m)
+})
+
+// ── used outside its package but not named (#3909) ─────────────────────────────────────────────
+test('--check fails on a component used outside its package but not named', () => {
+  // CroutonCalendarWeek is used by tag in crouton-bookings Calendar.vue.
+  const r = mutateAndRun('packages/crouton-calendar/crouton.manifest.ts', "name: 'CroutonCalendarWeek'", "name: 'CroutonCalendarMonth'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-calendar: CroutonCalendarWeek is used outside the package, not named in the manifest/)
+})
+
+test("--check counts resolveComponent('Name') as a use", () => {
+  // TeamSwitcher's only outside use is resolveComponent('TeamSwitcher') in crouton-core AdminSidebar.vue.
+  const r = mutateAndRun('packages/crouton-auth/crouton.manifest.ts', "name: 'TeamSwitcher'", "name: 'TeamSettings'", () => names('--check'))
+  expectStatus(r, 1)
+  assert.match(r.stderr, /crouton-auth: TeamSwitcher is used outside the package, not named in the manifest/)
+})
+
+test('a TypeScript generic is not a tag use (TeamThemeSettings stays unnamed)', () => {
+  // `$type<TeamThemeSettings>()` in crouton-auth must not count as a use of crouton-admin's component.
+  const r = names('--check')
+  expectStatus(r, 0)
+  assert.ok(!readFileSync('packages/crouton-admin/crouton.manifest.ts', 'utf8').includes("name: 'TeamThemeSettings'"))
 })
 
 test('--list crouton-calendar names exactly Month and Week', () => {

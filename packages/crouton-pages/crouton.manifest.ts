@@ -47,6 +47,7 @@ export default defineCroutonManifest({
       { name: 'CroutonPagesRegularContent', description: 'Rich text content display' },
       { name: 'CroutonPagesBlockContent', description: 'Block-based content display' },
       { name: 'CroutonPagesEditorBlockEditor', description: 'Block-based page editor' },
+      { name: 'CroutonPagesEditorBlockEditorWithPreview', description: 'Block page editor with a live preview panel' },
     ],
     apiRoutes: [
       '/api/teams/[id]/pages',

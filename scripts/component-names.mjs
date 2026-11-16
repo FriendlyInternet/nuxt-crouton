@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
  * Check every component a package manifest names against the components Nuxt itself registers
- * for that package (#3898). A manifest name with no component fails `--check`.
+ * for that package (#3898). A manifest name with no component fails `--check`. A component used
+ * outside its package (tag, resolveComponent('Name'), or a quoted 'Crouton…' string in apps/, pocs/
+ * or another package) that the manifest does not name fails it too (#3909).
  *
- *   node scripts/component-names.mjs --check            # exit 1 on a name with no component (CI)
+ *   node scripts/component-names.mjs --check            # exit 1 on a name with no component, or a component used elsewhere but not named (CI)
  *   node scripts/component-names.mjs --list <pkg>       # print `Name<TAB>file`, sorted
  *   add --fresh to re-run `nuxt prepare` even when .nuxt/components.d.ts exists
  *
@@ -73,20 +75,66 @@ function list(pkg, fresh) {
 }
 
 /** `<pkg>: manifest names <Name>, no such component` for each name the package does not register. */
-function missingIn(pkg, fresh) {
-  const have = registered(pkg, fresh)
+function missingIn(pkg, have) {
   return manifestNames(pkg).filter(n => !have.has(n)).map(n => `${pkg}: manifest names ${n}, no such component`)
+}
+
+// ── used outside its package (#3909): comments are not stripped, so a mention there counts ───────────────────────────────────────────────────────────
+const SKIP_DIRS = new Set(['node_modules', '.nuxt', '.output', 'dist', '_archive', 'e2e', 'tests', '__tests__'])
+const SEARCH_EXT = /\.(vue|ts|js|mjs)$/
+const SKIP_FILE = /\.(test|spec)\.|\.d\.ts$/
+
+function walk(dir, out) {
+  if (!existsSync(dir)) return out
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (d.isDirectory()) {
+      if (!SKIP_DIRS.has(d.name)) walk(join(dir, d.name), out)
+    } else if (d.isFile() && SEARCH_EXT.test(d.name) && !SKIP_FILE.test(d.name)) {
+      const file = join(dir, d.name)
+      out.push({ file, text: readFileSync(file, 'utf8') })
+    }
+  }
+  return out
+}
+
+let sources
+const allSources = () => (sources ??= ['apps', 'pocs', 'packages'].reduce((acc, d) => walk(join(ROOT, d), acc), []))
+
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** True when a file outside packages/<pkg>/ uses `name` as a tag, via resolveComponent, or (Crouton…) as a quoted string. */
+function usedOutside(pkg, name) {
+  const own = join(PKGS, pkg) + sep
+  const forms = [
+    new RegExp(`(?<![A-Za-z0-9_$)\\]])<${esc(name)}(?![A-Za-z0-9-])`),
+    new RegExp(`resolveComponent\\((['"])${esc(name)}\\1\\)`)
+  ]
+  if (name.startsWith('Crouton')) forms.push(new RegExp(`(['"])${esc(name)}\\1`))
+  return allSources().some(({ file, text }) => !file.startsWith(own) && forms.some(re => re.test(text)))
+}
+
+/** `<pkg>: <Name> is used outside the package, not named in the manifest` for each such component. */
+function unnamedIn(pkg, have) {
+  const named = new Set(manifestNames(pkg))
+  return [...have.keys()].filter(n => !named.has(n) && usedOutside(pkg, n))
+    .map(n => `${pkg}: ${n} is used outside the package, not named in the manifest`)
 }
 
 function check(fresh) {
   const pkgs = packages()
-  const missing = pkgs.flatMap(pkg => missingIn(pkg, fresh))
-  if (missing.length) {
-    for (const m of missing) console.error(m)
+  const missing = []
+  const unnamed = []
+  for (const pkg of pkgs) {
+    const have = registered(pkg, fresh)
+    missing.push(...missingIn(pkg, have))
+    unnamed.push(...unnamedIn(pkg, have))
+  }
+  if (missing.length || unnamed.length) {
+    for (const m of [...missing, ...unnamed]) console.error(m)
     process.exit(1)
   }
   const named = pkgs.reduce((n, pkg) => n + manifestNames(pkg).length, 0)
-  console.log(`${named} components named, 0 without a file`)
+  console.log(`${named} components named, 0 without a file, 0 used outside and not named`)
 }
 
 function main(argv) {

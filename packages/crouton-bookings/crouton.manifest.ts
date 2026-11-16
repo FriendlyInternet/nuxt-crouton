@@ -123,7 +123,9 @@ export default defineCroutonManifest({
       { name: 'CroutonBookingsList', description: 'Bookings list with filters' },
       { name: 'CroutonBookingsBookingCard', description: 'Individual booking display card' },
       { name: 'CroutonBookingsSlotIndicator', description: 'Visual slot availability indicator' },
-      { name: 'CroutonBookingsDateBadge', description: 'Date display badge' }
+      { name: 'CroutonBookingsDateBadge', description: 'Date display badge' },
+      { name: 'CroutonBookingsLayoutList', description: 'The bookings list as a placeable layout block' },
+      { name: 'CroutonBookingsLayoutCalendar', description: 'The bookings calendar as a placeable layout block' }
     ],
     apiRoutes: [
       '/api/crouton-bookings/teams/[teamId]/availability',
