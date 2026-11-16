@@ -35,7 +35,9 @@ async function loadPage() {
   const out = compileScript(descriptor, { id: 'inbox-page', inlineTemplate: true, templateOptions: { ssr: true } })
   tmp = mkdtempSync(join(here, '.ssr-'))
   const file = join(tmp, 'index.page.ts')
-  writeFileSync(file, out.content.replace(/(['"])~\/utils\/inbox-core\1/, JSON.stringify(corePath)))
+  // Every `~/utils/<name>` import the page makes points at the real util file.
+  const src = out.content.replace(/(['"])~\/utils\/([\w-]+)\1/g, (_m, _q, name: string) => JSON.stringify(resolve(dirname(corePath), `${name}.ts`)))
+  writeFileSync(file, src)
   return (await import(/* @vite-ignore */ file)).default
 }
 
@@ -53,7 +55,7 @@ async function renderPage(fetchCalls: unknown[]) {
   const Page = await loadPage()
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
   for (const n of ['UContainer', 'UButton', 'UAlert']) app.component(n, wrap('div'))
-  for (const n of ['CardsEdit', 'CardsReview', 'CardsIssue', 'CardsPlaceholder']) app.component(n, card)
+  for (const n of ['CardsEdit', 'CardsReview', 'CardsIssue', 'CardsDelivery', 'CardsPlaceholder']) app.component(n, card)
   // Suspense-free async setup: renderToString awaits the page's top-level await.
   return renderToString(app)
 }

@@ -51,10 +51,18 @@ export async function tokenLogin(token: string | undefined, fetchImpl: typeof fe
   }
 }
 
-/** Map a card + tapped answer to the reply to post. v1 answers `review` cards only. */
+/**
+ * Map a card + tapped answer to the reply to post. Answers `review` cards (ok / not-ok) and
+ * `delivery` cards (works / not-ok — Works posts `ok` on the epic, like a review ok).
+ */
 export function buildCardReply(card: AnswerableCard, input: CardAnswerInput): GhResult<ParsedReply> {
   if (card.kind === 'review') {
     return buildReply({ kind: card.sourceType, number: card.sourceNumber, verdict: input.verdict, note: input.note })
+  }
+  if (card.kind === 'delivery') {
+    if (input.verdict !== 'works' && input.verdict !== 'not-ok') return { data: null, error: 'verdict must be "works" or "not-ok"' }
+    const verdict = input.verdict === 'works' ? 'ok' : 'not-ok'
+    return buildReply({ kind: card.sourceType, number: card.sourceNumber, verdict, note: input.note })
   }
   return { data: null, error: `answers for "${card.kind}" cards are not supported yet` }
 }

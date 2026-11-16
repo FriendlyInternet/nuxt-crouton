@@ -15,6 +15,9 @@ logic — keep in step).
 Answering a card: `POST /api/cards/[cardId]/answer` posts the reply via `postReply` with `since = askedAt`,
 and refuses every answer unless `GET /api/cards/token-account` reports `pmcp` (the pipeline acts only on the
 owner's own comments). The param is `cardId`, never `id` — crouton reads `id` as the team.
+It answers `review` cards (`ok`/`not-ok`) and `delivery` cards (`works` → posts `ok`, `not-ok` → `not ok: <note>`).
+The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/delivery-core.ts`) opens the app
+signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
 `/apps` is the four-tab page (Apps, To test, Decisions, Changelog).

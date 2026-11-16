@@ -15,7 +15,7 @@ export interface InboxCard {
   sourceNumber: number
 }
 
-export type CardView = 'review' | 'edit' | 'issue' | 'placeholder'
+export type CardView = 'review' | 'edit' | 'issue' | 'delivery' | 'placeholder'
 
 export interface AnswerInput {
   verdict: unknown
@@ -43,10 +43,14 @@ export function waitingCards<T extends InboxCard>(cards: readonly T[] | null | u
 
 const hasEditUrl = (card: InboxCard) => typeof card.payload?.editUrl === 'string' && card.payload.editUrl !== ''
 
-/** Which card component renders this card. An edit ask is a `review` card carrying `payload.editUrl`. */
+/**
+ * Which card component renders this card. An edit ask is a `review` card carrying `payload.editUrl`;
+ * a `delivery` card is an epic waiting to be tried (open, sign in, Works / Not ok).
+ */
 export function cardView(card: InboxCard): CardView {
   if (card.kind === 'review') return hasEditUrl(card) ? 'edit' : 'review'
   if (card.kind === 'issue') return 'issue'
+  if (card.kind === 'delivery') return 'delivery'
   if (card.kind === 'edit') return hasEditUrl(card) ? 'edit' : 'placeholder'
   return 'placeholder'
 }

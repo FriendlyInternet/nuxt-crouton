@@ -1,5 +1,6 @@
 // POST /api/cards/[cardId]/answer — answer an inbox card by posting the owner's reply on GitHub.
-// Body: { verdict: 'ok'|'not-ok', note? } → { data: { url, existing }, error }
+// Body: { verdict: 'ok'|'not-ok', note? } (review) or { verdict: 'works'|'not-ok', note? } (delivery)
+// → { data: { url, existing }, error }
 // The param is `cardId`, never `id` — crouton reads `id` as the team. Refused unless the app's
 // token posts as the owner (see GET /api/cards/token-account). On any error the card stays `waiting`.
 import { getInboxCardsByIds, updateInboxCard } from '../../../../layers/inbox/collections/cards/server/database/queries'
