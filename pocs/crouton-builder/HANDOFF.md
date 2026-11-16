@@ -62,6 +62,9 @@ signed-off behaviour); this file is the architecture and the decisions behind it
   **block above** (empty space under a short block: that block's bottom). Resize handles are never a
   target. A page/group target's bar is `BoardDropBar` (fixed, over the clipped rect); a move that
   changes nothing writes nothing (`movePaneToTarget` returns the same root).
+- Editor header scrolls sideways on narrow screens, never widens the page (#3765): the header row
+  is `overflow-x-auto` (scrollbar hidden), and "Saved" shows once, on the Save button
+  (`tests/editor-header-fit.test.ts`).
 
 ## Gotchas
 
