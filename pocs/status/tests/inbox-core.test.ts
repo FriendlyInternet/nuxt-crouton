@@ -46,7 +46,7 @@ describe('cardView', () => {
     expect(cardView(byId('edit'))).toBe('edit')
     expect(cardView(byId('issue'))).toBe('issue')
     expect(cardView(byId('quiz'))).toBe('placeholder')
-    expect(cardView(byId('delivery'))).toBe('placeholder')
+    expect(cardView(byId('delivery'))).toBe('delivery')
     expect(cardView(card({ id: 'c', kind: 'choice' }))).toBe('placeholder')
     expect(cardView(card({ id: 'u', kind: 'whatever' }))).toBe('placeholder')
   })

@@ -2,6 +2,8 @@
 // The inbox: every card that waits on the owner, newest first. The server renders the stored
 // cards (no GitHub call), then the browser syncs from GitHub (POST /api/cards/sync) in the
 // background and lists again. Load/list/answer rules: utils/inbox-core.ts.
+import { sendDelivery } from '~/utils/delivery-core'
+import { resolveComponent } from 'vue'
 import { cardView, errorText, nothingWaits, refreshInbox, submitAnswer, waitingCards, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
 
 definePageMeta({ middleware: 'auth' })
@@ -53,11 +55,30 @@ const sendToServer: SendAnswer = async (cardId, body) => {
   }
 }
 
+// A delivery card's "Works" button is ReplyButtons' ok → sent as `works` (posts `ok` on the epic).
+const sendDeliveryToServer: SendAnswer = (cardId, body) =>
+  sendDelivery({ cardId, verdict: body.verdict === 'ok' ? 'works' : 'not-ok', note: body.note })
+
 // ReplyButtons calls this; on success the card leaves the list (and unmounts).
-const answerFor = (cardId: string) => async (verdict: 'ok' | 'not-ok', note: string) => {
-  const res = await submitAnswer({ cards: cards.value, cardId, input: { verdict, note }, send: sendToServer })
+const answerFor = (cardId: string, send: SendAnswer = sendToServer) => async (verdict: 'ok' | 'not-ok', note: string) => {
+  const res = await submitAnswer({ cards: cards.value, cardId, input: { verdict, note }, send })
   cards.value = res.cards
   return { error: res.error }
+}
+
+// One component per card view; answerable views also get their `send`.
+const cardComponents = {
+  edit: resolveComponent('CardsEdit'),
+  review: resolveComponent('CardsReview'),
+  issue: resolveComponent('CardsIssue'),
+  delivery: resolveComponent('CardsDelivery'),
+  placeholder: resolveComponent('CardsPlaceholder')
+}
+const cardProps = (c: InboxCard) => {
+  const view = cardView(c)
+  if (view === 'delivery') return { card: c, send: answerFor(c.id, sendDeliveryToServer) }
+  if (view === 'edit' || view === 'review') return { card: c, send: answerFor(c.id) }
+  return { card: c }
 }
 
 onMounted(refresh)
@@ -78,12 +99,7 @@ onMounted(refresh)
       <p v-else-if="showNothing" class="text-muted">Nothing waits on you.</p>
       <p v-else-if="refreshing && !cards.length && !loadError" class="text-muted">Checking GitHub…</p>
 
-      <template v-for="c in cards" :key="c.id">
-        <CardsEdit v-if="cardView(c) === 'edit'" :card="c" :send="answerFor(c.id)" />
-        <CardsReview v-else-if="cardView(c) === 'review'" :card="c" :send="answerFor(c.id)" />
-        <CardsIssue v-else-if="cardView(c) === 'issue'" :card="c" />
-        <CardsPlaceholder v-else :card="c" />
-      </template>
+      <component :is="cardComponents[cardView(c)]" v-for="c in cards" :key="c.id" v-bind="cardProps(c)" />
     </div>
   </UContainer>
 </template>
