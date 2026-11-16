@@ -67,6 +67,7 @@
   },
   "dependencies": {
     "@fyit/crouton-calendar": "workspace:*",
+    "@fyit/crouton-catalog": "workspace:*",
     "@fyit/crouton-editor": "workspace:*"
   },
   "peerDependencies": {

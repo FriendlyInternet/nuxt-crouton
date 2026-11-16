@@ -57,6 +57,13 @@
       "when": 1794486209097,
       "tag": "0007_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794846020889,
+      "tag": "0008_bent_madame_masque",
+      "breakpoints": true
     }
   ]
 }

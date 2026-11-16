@@ -16,6 +16,7 @@
     "@fyit/crouton-auth": "#3871",
     "@fyit/crouton-bookings": "#3871",
     "@fyit/crouton-calendar": "#3871",
+    "@fyit/crouton-catalog": "#3871",
     "@fyit/crouton-charts": "#3871",
     "@fyit/crouton-collab": "#3871",
     "@fyit/crouton-core": "#3871",

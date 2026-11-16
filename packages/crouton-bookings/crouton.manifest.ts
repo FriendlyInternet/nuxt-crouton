@@ -22,7 +22,8 @@ export default defineCroutonManifest({
 
   dependencies: [
     '@fyit/crouton-core',
-    '@fyit/crouton-auth'
+    '@fyit/crouton-auth',
+    '@fyit/crouton-catalog'
   ],
 
   // The collections below ship from this package (collections/*), end to end (#2278).

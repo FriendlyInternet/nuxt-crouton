@@ -5,7 +5,8 @@
   "smoke": {
     "reads": [
       { "path": "/api/crouton-bookings/teams/{teamId}/customer-locations", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" },
-      { "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" }
+      { "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" },
+      { "path": "/api/teams/{teamId}/catalog-products", "expectStatus": 200, "expectIncludes": "seed:catalog-product:test1" }
     ]
   }
 }

@@ -19,6 +19,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-auth` | `packages/crouton-auth` | Authentication layer for Nuxt applications using Better Auth with teams, passkeys, and 2FA support |
 | `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations |
 | `@fyit/crouton-calendar` | `packages/crouton-calendar` | Swipeable week/month calendar views for nuxt-crouton - opt-in addon layer |
+| `@fyit/crouton-catalog` | `packages/crouton-catalog` | Shared team product list for nuxt-crouton: what a team offers, used by bookings (stock) and later sales (price) |
 | `@fyit/crouton-charts` | `packages/crouton-charts` | Chart visualizations for nuxt-crouton - collection-driven charts powered by nuxt-charts |
 | `@fyit/crouton-cli` | `packages/crouton-cli` | CLI for Nuxt Crouton - Generate complete CRUD collections with API, components, and database schema |
 | `@fyit/crouton-collab` | `packages/crouton-collab` | Real-time collaboration layer for Nuxt Crouton using Yjs CRDTs |
