@@ -4,6 +4,19 @@
  */
 import type { EventChange } from '../types/events'
 
+// The events endpoint accepts only string|null values (≤10,000 chars), and
+// JSON.stringify(undefined) is undefined (rejected → "400 Invalid changes").
+// Long values (page bodies, location descriptions) are not copied into the log at
+// all: the entry records THAT the field changed, not two full copies of it.
+const MAX_LOGGED_VALUE = 1_000
+function toEventValue(value: unknown): string | null {
+  if (value === undefined) return null
+  const json = JSON.stringify(value)
+  if (json === undefined) return null
+  return json.length > MAX_LOGGED_VALUE ? JSON.stringify('(changed — long content not stored)') : json
+}
+
+
 interface TrackEventOptions {
   operation: 'create' | 'update' | 'delete'
   collection: string
@@ -40,7 +53,7 @@ export function useCroutonEventTracker() {
         changes.push({
           fieldName: key,
           oldValue: null,
-          newValue: JSON.stringify(after[key])
+          newValue: toEventValue(after[key])
         })
       })
       return changes
@@ -61,8 +74,8 @@ export function useCroutonEventTracker() {
         if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
           changes.push({
             fieldName: key,
-            oldValue: JSON.stringify(oldValue),
-            newValue: JSON.stringify(newValue)
+            oldValue: toEventValue(oldValue),
+            newValue: toEventValue(newValue)
           })
         }
       })
@@ -79,7 +92,7 @@ export function useCroutonEventTracker() {
 
         changes.push({
           fieldName: key,
-          oldValue: JSON.stringify(before[key]),
+          oldValue: toEventValue(before[key]),
           newValue: null
         })
       })
@@ -130,7 +143,7 @@ export function useCroutonEventTracker() {
           changes = Object.keys(updates).map(key => ({
             fieldName: key,
             oldValue: null, // We don't have the old value
-            newValue: JSON.stringify(updates[key])
+            newValue: toEventValue(updates[key])
           }))
         }
         break
