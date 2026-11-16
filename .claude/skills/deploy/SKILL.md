@@ -152,7 +152,7 @@ step in `deploy-app.yml`), so the app gets its packages' demo data and the `test
 review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
 `@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
 
-**Live sync (collab):** add `extends: ['@fyit/crouton-collab']` + `"collab": true` in `deploy.config.json`; the deploy ships the collab Worker, migration and `NUXT_PUBLIC_COLLAB_WORKER_URL` for you (worker → migration → app). No manual worker setup.
+**Live sync (collab):** add `extends: ['@fyit/crouton-collab']` + `"collab": true` in `deploy.config.json`; the deploy ships the collab Worker, migration and `NUXT_PUBLIC_COLLAB_WORKER_URL` for you (worker → migration → app). No manual worker setup. Without `"collab": true` the app is not opted in: crouton-collab opens no socket and shows no presence, even when crouton-flow loads it (#3810).
 A failed seed warns on the run; it never fails the deploy. Production never seeds.
 
 ### Apps without a database or sign-in (#2377)

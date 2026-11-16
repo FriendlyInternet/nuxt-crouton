@@ -15,7 +15,7 @@ export default defineBuildConfig({
       input: 'src/runtime/server',
       outDir: 'dist/runtime/server',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     },
     // Runtime RPC files (server handlers)
@@ -23,7 +23,7 @@ export default defineBuildConfig({
       input: 'src/runtime/server-rpc',
       outDir: 'dist/runtime/server-rpc',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     }
     // The launcher / Console / Annotate / overlay / transform entries moved to

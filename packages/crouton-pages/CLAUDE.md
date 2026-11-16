@@ -801,5 +801,5 @@ export default defineNuxtConfig({
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck  # MANDATORY after changes (checks this package only)
 ```

@@ -202,12 +202,23 @@ function isNotNull(e: any): boolean {
 }
 
 /**
- * Run statements all-or-nothing. D1/libsql: one `db.batch`; better-sqlite3: one
- * transaction. A refused guard (NOT NULL on slot) becomes 409.
+ * Run statements all-or-nothing. A refused guard (NOT NULL on slot) becomes 409.
+ * - D1: one raw `$client.batch` of bound statements (D1 batches are transactions).
+ *   drizzle's `db.batch([db.run(sql)])` can't be used there: `db.run()` returns a
+ *   `SQLiteRaw` with no `.stmt`, so the D1 session crashes on `stmt.bind` (#3968).
+ * - libsql: one `db.batch`.
+ * - better-sqlite3: one immediate transaction.
  */
 export async function runAtomic(db: any, statements: SQL[], noRoomMessage = 'No room left'): Promise<void> {
   try {
-    if (typeof db.batch === 'function') {
+    const client = db.$client
+    if (typeof client?.prepare === 'function' && typeof client?.batch === 'function') {
+      await client.batch(statements.map((s) => {
+        const q = db.dialect.sqlToQuery(s)
+        return client.prepare(q.sql).bind(...q.params)
+      }))
+    }
+    else if (typeof db.batch === 'function') {
       await db.batch(statements.map(s => db.run(s)))
     }
     else {

@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
+import { applyBookingToForm, groupLabel, initialFormFromBooking } from '../utils/booking-form'
 
 interface Props {
   /** The date for this booking */
@@ -54,15 +55,7 @@ const {
 const notify = useNotify()
 const { t } = useT()
 
-// For parsing slot JSON strings
-const { parseSlotIds } = useBookingSlots()
 const { locale } = useI18n()
-
-// Helper to extract all slot IDs from booking slot (which is JSON string like '["matin","apres-midi"]')
-function getSlotIdsFromBooking(slot: string | null | undefined): string[] {
-  if (!slot) return []
-  return parseSlotIds(slot)
-}
 
 // Get localized location title with fallbacks
 function getLocationTitle(location: LocationData): string {
@@ -95,9 +88,10 @@ function getLocationAddress(location: LocationData): string | null {
 }
 
 // Local state - initialize from booking if in edit mode
-const localLocationId = ref<string | null>(props.booking?.location ?? null)
-const localSlotIds = ref<string[]>(getSlotIdsFromBooking(props.booking?.slot))
-const localGroupId = ref<string | null>(props.booking?.group ?? null)
+const initialForm = initialFormFromBooking(props.booking)
+const localLocationId = ref<string | null>(initialForm.locationId)
+const localSlotIds = ref<string[]>(initialForm.slotIds)
+const localGroupId = ref<string | null>(initialForm.groupId)
 
 // Track if we're updating
 const isUpdating = ref(false)
@@ -121,16 +115,15 @@ watch(() => props.date, (newDate) => {
 }, { immediate: true })
 
 // Initialize from booking when entering edit mode
+// (#3843) The form starts from the booking's saved values (incl. quantity),
+// never from what an earlier form left in the shared state; a new booking
+// starts at quantity 1. editingBookingId excludes the booking from availability.
 watch(() => props.booking, (booking) => {
+  const initial = applyBookingToForm(formState, booking)
   if (booking) {
-    // Set editing booking ID to exclude from availability check
-    formState.editingBookingId = booking.id
-    localLocationId.value = booking.location
-    localSlotIds.value = getSlotIdsFromBooking(booking.slot)
-    localGroupId.value = booking.group ?? null
-  } else {
-    // Clear editing state when not in edit mode
-    formState.editingBookingId = null
+    localLocationId.value = initial.locationId
+    localSlotIds.value = initial.slotIds
+    localGroupId.value = initial.groupId
   }
 }, { immediate: true })
 
@@ -367,7 +360,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
               :color="localGroupId === group.id ? 'primary' : 'neutral'"
               @click="localGroupId = group.id"
             >
-              {{ group.label }}
+              {{ groupLabel(group, locale) }}
             </UButton>
           </div>
 

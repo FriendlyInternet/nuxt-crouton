@@ -11,6 +11,20 @@ import { buildTranslationField, generateFormComponent } from '../../lib/generato
 
 const f = (name: string, type: string, translatable?: boolean, component?: string) => ({ name, type, translatableType: translatable, component, meta: {} }) as any
 
+// Load a schema through the real loadFields + the real core/editor manifests, so the
+// translatable flag comes from the manifest rows — never typed in by the test (#3614).
+const mapping = getTypeMapping([coreManifest as any, editorManifest as any])
+async function loadSchema(schema: Record<string, any>) {
+  const dir = await mkdtemp(join(tmpdir(), 'crouton-autodetect-'))
+  const p = join(dir, 'schema.json')
+  await writeFile(p, JSON.stringify(schema))
+  try {
+    return await loadFields(p, mapping)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 function detect(fields: any[]) {
   const config = resolveTranslationConfig({ fields, config: null, collectionConfig: { translatable: true }, noTranslations: false, plural: 'posts' })
   return config?.translations?.collections?.posts ?? []
@@ -39,24 +53,39 @@ describe('translation field editor', () => {
 
 describe('auto-detect with the real manifests (no hand-built translatable flag)', () => {
   it('marks a richText schema field translatable and auto-detect picks it up', async () => {
-    const mapping = getTypeMapping([coreManifest as any, editorManifest as any])
-    const dir = await mkdtemp(join(tmpdir(), 'crouton-autodetect-'))
-    const p = join(dir, 'schema.json')
-    await writeFile(p, JSON.stringify({ title: { type: 'string' }, content: { type: 'richText' }, count: { type: 'number' } }))
-    try {
-      const fields = await loadFields(p, mapping)
-      expect(fields.find(x => x.name === 'content')?.translatableType).toBe(true)
-      expect(fields.find(x => x.name === 'count')?.translatableType).toBeFalsy()
-      expect(detect(fields)).toEqual(['title', 'content'])
-    } finally {
-      await rm(dir, { recursive: true, force: true })
-    }
+    const fields = await loadSchema({ title: { type: 'string' }, content: { type: 'richText' }, count: { type: 'number' } })
+    expect(fields.find(x => x.name === 'content')?.translatableType).toBe(true)
+    expect(fields.find(x => x.name === 'count')?.translatableType).toBeFalsy()
+    expect(detect(fields)).toEqual(['title', 'content'])
+  })
+
+  it('the real manifests mark only string, text and richText translatable', async () => {
+    const fields = await loadSchema({
+      aString: { type: 'string' },
+      aText: { type: 'text' },
+      aRich: { type: 'richText' },
+      aJson: { type: 'json' },
+      anImage: { type: 'image' },
+      aRef: { type: 'reference' },
+      aNumber: { type: 'number' }
+    })
+    expect(Object.fromEntries(fields.map(x => [x.type, !!x.translatableType]))).toEqual({
+      string: true,
+      text: true,
+      richText: true,
+      json: false,
+      image: false,
+      reference: false,
+      number: false
+    })
   })
 })
 
 describe('auto-detect edge cases and the generated form', () => {
-  it('does not detect a json field even when its name is on the auto-detect list', () => {
-    expect(detect([f('content', 'json')])).toEqual([])
+  it('does not detect a json field even when its name is on the auto-detect list', async () => {
+    const fields = await loadSchema({ content: { type: 'json' } })
+    expect(fields[0]?.translatableType).toBeFalsy()
+    expect(detect(fields)).toEqual([])
   })
 
   it('noTranslations: true skips detection entirely', () => {
@@ -70,8 +99,12 @@ describe('auto-detect edge cases and the generated form', () => {
   })
   const formConfig = { translations: { collections: { posts: ['content'] } } }
 
-  it('generateFormComponent renders the translated editor for a richText field', () => {
-    const out = generateFormComponent(formData([f('content', 'richText', true, 'CroutonEditorSimple')]), formConfig)
+  it('generateFormComponent renders the translated editor for a richText field', async () => {
+    // schema → loadFields (real manifests) → auto-detect → form: nothing hand-built.
+    const fields = await loadSchema({ title: { type: 'string' }, content: { type: 'richText' } })
+    const config = resolveTranslationConfig({ fields, config: null, collectionConfig: { translatable: true }, noTranslations: false, plural: 'posts' })
+    expect(config?.translations?.collections?.posts).toEqual(['title', 'content'])
+    const out = generateFormComponent(formData(fields), config)
     expect(out).toContain('<CroutonI18nInput')
     expect(out).toContain('CroutonEditorSimple')
   })

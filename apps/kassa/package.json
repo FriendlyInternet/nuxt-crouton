@@ -29,6 +29,7 @@
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",

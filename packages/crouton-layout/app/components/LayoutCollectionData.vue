@@ -10,12 +10,13 @@
  *    pane and scrolls internally (the working dashboard surface). Unchanged.
  *  - `page` — a CONTENT-SIZED render: shows `pageSize` rows at natural height with
  *    NO internal scrollbar, then a bounded viewer control (load-more / paginate /
- *    search), plus the display variant (rows / cards). An empty list collapses to
+ *    search), plus the display variant (rows / cards / table). An empty list collapses to
  *    a compact block, not a full-height void. Reuses the shared per-row card
  *    (`CroutonDefaultCard`) — the same card the admin list/grid render — so the
  *    page render stays inside the expressiveness boundary (no per-instance flex).
  */
 import { computed, ref } from 'vue'
+import type { TableColumn as UiTableColumn } from '@nuxt/ui'
 
 const props = withDefaults(defineProps<{
   collection: string
@@ -61,7 +62,34 @@ const hasMore = computed(() => props.viewer === 'load-more' && remaining.value >
 function loadMore() { shown.value += props.pageSize }
 
 const isEmpty = computed(() => !pending.value && all.value.length === 0)
-const asCards = computed(() => props.layout === 'grid') // rows (list/table) vs cards (grid)
+const asCards = computed(() => props.layout === 'grid') // cards (grid)
+const asTable = computed(() => props.layout === 'table') // a real table (#3812)
+
+// --- Page-context table (#3812) ---------------------------------------------------
+// Same column builder the admin `CroutonTable` uses (core `useTableColumns`), fed the
+// collection's own declared columns. A page is a read view: no row checkboxes, no
+// edit/delete actions. Audit/timestamp columns appear only as a fallback when the
+// collection declares no columns, so the table is never empty.
+const { getConfig } = useCollections()
+const configColumns = getConfig(props.collection)?.columns ?? []
+const hasDeclared = configColumns.length > 0
+const { allColumns: tableColumns } = useTableColumns({
+  columns: configColumns,
+  hideDefaultColumns: {
+    select: true,
+    actions: true,
+    presence: true,
+    createdBy: hasDeclared,
+    updatedBy: hasDeclared,
+    createdAt: hasDeclared,
+    updatedAt: hasDeclared
+  }
+})
+// Crouton's TableColumn has `id` and `accessorKey` both optional; Nuxt UI's needs one.
+const uiColumns = computed<UiTableColumn<Record<string, unknown>>[]>(() =>
+  tableColumns.value.map(c => c.accessorKey
+    ? { ...c, accessorKey: c.accessorKey }
+    : { ...c, id: c.id ?? (typeof c.header === 'string' ? c.header : '') }))
 </script>
 
 <template>
@@ -113,7 +141,12 @@ const asCards = computed(() => props.layout === 'grid') // rows (list/table) vs 
         />
       </div>
 
-      <!-- rows variant (list / table both render as a content-height row list) -->
+      <!-- table variant: content-height; a wide table scrolls sideways inside its own wrapper only -->
+      <div v-else-if="asTable" data-handoff="collection-table" class="overflow-x-auto px-2">
+        <UTable :data="rows" :columns="uiColumns" />
+      </div>
+
+      <!-- rows variant (list) -->
       <ul v-else role="list" class="divide-y divide-default">
         <li
           v-for="(row, i) in rows"

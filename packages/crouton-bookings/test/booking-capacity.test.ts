@@ -10,6 +10,7 @@ CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner
 const hoisted = vi.hoisted(() => ({ role: 'admin' as string, body: {} as any, params: { bookingId: 'b1' } as any }))
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: hoisted.role } }),
+  requireTeamAdmin: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: hoisted.role } }),
 }))
 
 // Reference checks (#3378) are covered in team-references.test.ts; the DB here has no auth/team tables

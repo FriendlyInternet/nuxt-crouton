@@ -12,3 +12,16 @@ export function collectTeamRefFields(data: Record<string, any>): Array<Record<st
     f.refTarget && f.refScope !== 'external' && f.refScope !== 'adapter',
   )
 }
+
+/**
+ * A person field (#1958): a reference to the auth `user` table, spelled
+ * `refScope: 'external'` + `refTarget: 'users'`. Its value must be a member of the caller's team,
+ * which `assertRefsInTeam` cannot check (users have no `teamId`), so it gets its own check.
+ */
+export function isPersonRef(field: Record<string, any>): boolean {
+  return !!field.refTarget && field.refScope === 'external' && field.refTarget === 'users'
+}
+
+export function collectPersonRefFields(data: Record<string, any>): Array<Record<string, any>> {
+  return (data.fields || []).filter((f: Record<string, any>) => isPersonRef(f))
+}

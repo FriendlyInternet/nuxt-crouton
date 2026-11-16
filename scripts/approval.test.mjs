@@ -140,3 +140,11 @@ test('#3060 generated-by trailer does not turn an approval into a change request
   assert.equal(isApproval('ok' + T + '\n\nbut do not merge yet'), false)
   assert.equal(isApproval('ok, but change X' + T), false)
 })
+
+// ── #3691: owner-screen comments are feedback, never approvals ────────────────────────────────────
+test('an owner-screen comment never approves', () => {
+  assert.equal(isApproval('📐 Diagram saved — continuing from your edit\nok'), false)
+  assert.equal(isApproval('🎯 **Preview feedback**\n\n> ok'), false)
+  assert.equal(isApproval('🎯 x\nlgtm'), false)
+  assert.equal(isApproval('🎯 x\n✅'), false)
+})

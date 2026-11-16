@@ -15,6 +15,7 @@
 
 import { pathToFileURL } from 'node:url'
 import { stripNonCommandRegions } from './comment-command.mjs'
+import { ownerScreenEmoji } from './lib/owner-screens.mjs'
 
 /**
  * A line that is NOTHING BUT check marks means "approved".
@@ -66,6 +67,8 @@ export function isAgentComment(body) {
  */
 export function isApproval(body) {
   if (isAgentComment(body)) return false
+  // A 📐 diagram save / 🎯 preview comment is feedback, never an approval — `ok` must be typed (#3691).
+  if (ownerScreenEmoji(body)) return false
   const text = stripNonCommandRegions(String(body || ''))
   if (CHECK_ONLY_LINE.test(text)) return true
   if (OK_ONLY_REPLY.test(text)) return true
