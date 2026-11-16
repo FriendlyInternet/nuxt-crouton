@@ -32,6 +32,7 @@ import {
   onMounted,
   provide,
   ref,
+  toRef,
   watch,
   type ComponentPublicInstance,
   type CSSProperties,
@@ -42,12 +43,15 @@ import { useElementSize, unrefElement } from '@vueuse/core'
 import { rendererSplitterItems, rendererHandleClass, collapseAction } from '../utils/layout-splitter-items'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import { isInPlaceCollapse } from '@fyit/crouton-core/app/types/layout'
-import { minWidthResolver, panelMinSizePct, deriveSizing } from '../utils/layout-viability'
+import { minWidthResolver, panelMinSizePct, deriveSizing, pageRowTracks } from '../utils/layout-viability'
 import { siblingKeys } from '../utils/layout-flip'
 import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
 import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY, LAYOUT_CONTAINER_WIDTH_KEY } from '../composables/useCroutonLayoutResponsive'
 import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
+import { collectLayoutStores } from '@fyit/crouton-core/app/utils/layout-stores'
+import { injectLayoutStoreScope, provideLayoutStoreScope } from '../composables/useLayoutStoreScope'
+import { useLayoutLeafBinding } from '../composables/useLayoutLeafBinding'
 
 const props = withDefaults(
   defineProps<{
@@ -101,6 +105,14 @@ const emit = defineEmits<{
 }>()
 
 const { blocks, resolveComponentName, sanitizeConfig } = useCroutonLayoutBlocks()
+
+// Layout stores (#3650): an outermost renderer with no `CroutonLayoutStoreScope`
+// above it creates one from its node's leaf sources (no options — a node carries no
+// `sources` map). Nested renderers always find the parent's scope, so they never
+// create one. Every leaf is then fed through the one binding helper.
+const outerScope = injectLayoutStoreScope()
+const storeScope = outerScope ?? provideLayoutStoreScope(collectLayoutStores({ renderer: 'panes', root: props.node }))
+const binding = useLayoutLeafBinding(toRef(props, 'node'), storeScope)
 
 // Allowlisted: only ids registered in croutonLayoutBlocks resolve to a component.
 const componentName = computed<string | null>(() =>
@@ -217,17 +229,20 @@ const viewGridStyle = computed<CSSProperties>(() => {
   const base: CSSProperties = { gap: '1px', minHeight: '100%', width: '100%' }
   if (props.node.type !== 'split') return { ...base, display: 'grid' }
   if (viewHorizontal.value) {
-    return { ...base, display: 'flex', flexWrap: 'wrap', '--stack-at': `${viewStackThreshold.value}px` }
+    // Top-aligned (#3865, owner rule): the row is as tall as its tallest pane; a shorter pane
+    // keeps its own height at the top instead of stretching. `alignContent` keeps wrapped
+    // (stacked) lines packed at the top inside a fixed-height box (crouton-pages PaneBlock).
+    return { ...base, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', alignContent: 'flex-start', '--stack-at': `${viewStackThreshold.value}px` }
   }
-  const rows = props.node.children
-    .map((_, i) => (hugAlongAxis.value[i] ? 'auto' : `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`))
-    .join(' ')
-  return { ...base, display: 'grid', gridTemplateRows: rows }
+  return { ...base, display: 'grid', gridTemplateRows: pageRowTracks(props.node.children, blocks.value) }
 })
 function viewChildStyle(i: number): CSSProperties {
   if (props.node.type !== 'split' || !viewHorizontal.value) return {}
+  // No longer stretched (#3865), so floor each pane at its block's minimum height — the
+  // same floor the vertical grid uses.
+  const minHeight = `${Math.round(childSizings.value[i]!.minHeight)}px`
   // A hug pane keeps its content width (no block declares width-hug today).
-  if (hugAlongAxis.value[i]) return { flex: '0 0 auto' }
+  if (hugAlongAxis.value[i]) return { flex: '0 0 auto', minHeight }
   const child = props.node.children[i]!
   const size = child.defaultSize ?? (100 / props.node.children.length)
   const floor = Math.round(childSizings.value[i]!.hardMinWidth)
@@ -236,6 +251,7 @@ function viewChildStyle(i: number): CSSProperties {
     flexShrink: '1',
     flexBasis: 'calc((var(--stack-at) - 100%) * 999)',
     minWidth: `min(${floor}px, 100%)`,
+    minHeight,
   }
 }
 
@@ -334,7 +350,7 @@ const PaneCollapseSync = defineComponent({
     <component
       :is="componentName"
       v-else-if="componentName"
-      v-bind="safeConfig"
+      v-bind="{ ...safeConfig, ...binding.props, ...binding.on }"
       :class="interactive ? 'h-full w-full overflow-auto' : 'w-full'"
     />
     <div

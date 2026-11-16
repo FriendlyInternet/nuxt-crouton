@@ -31,6 +31,18 @@ export function boardStackThreshold(
   return Math.round(deriveSizing(view, registry).softMinWidth)
 }
 
+/**
+ * A side-by-side / stacked pane's height floor on the board (#3865): its block's minimum
+ * height, from the visible tree — the same number the page's `viewChildStyle` uses.
+ */
+export function boardFloorStyle(
+  child: LayoutNode,
+  hidden: Set<string>,
+  registry: CroutonLayoutBlockRegistry,
+): { minHeight: string } {
+  return { minHeight: `${Math.round(deriveSizing(visibleSubtree(child, hidden) ?? child, registry).minHeight)}px` }
+}
+
 /** The visible children's default sizes, scaled to add up to 100 (render-only). */
 export function visibleDefaultSizes(children: LayoutNode[]): number[] {
   const n = children.length

@@ -9,6 +9,10 @@
  *  - `Reproduced` opens with yes/no; "no" needs a concrete reason after it → the run is
  *    labelled `plan:unverified`
  *  - `Needs owner` opens with yes/no
+ *  - `Test` (#3194) is a checklist (plan-checklist.mjs), one line per check:
+ *      `- [ ] T<n> — <what> — Run: \`cmd\`` or `- [ ] T<n> — <what> — Manual: <why>`
+ *    IDs are unique; a plan with nothing runnable writes the single line
+ *    `- [ ] T0 — no runnable test — Manual: <reason>`. Prose is rejected.
  *  - `Assumptions` is either the single line "none", or a list of bullets, each carrying
  *      `Why: …`, `Evidence: …` and `Status: verified|unverified`
  *    Status is read from its first word, so `unverified (could not reach staging)` is fine.
@@ -32,6 +36,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { hasMarker } from './marker.mjs'
+import { parseChecklist } from './plan-checklist.mjs'
 
 export const PLAN_MARKER = '<!-- pipeline-plan:v1 -->'
 export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Docs', 'Assumptions', 'Needs owner']
@@ -178,31 +183,37 @@ export function parseReread(text) {
   return { items, errors }
 }
 
+function markerErrors(body) {
+  if (!body.includes(PLAN_MARKER)) return [`missing marker ${PLAN_MARKER}`]
+  if (!hasMarker(body, PLAN_MARKER)) return [`marker ${PLAN_MARKER} must be the first line`]
+  return []
+}
+
+// The re-plan-only sections (#3149, #3341): Ticket re-read, and Changes unless --fresh.
+function parseRevision(sections, { revised, fresh }, errors) {
+  if (!revised) return []
+  const r = sections[REREAD] ? parseReread(sections[REREAD]) : { items: [], errors: [`missing or empty section: ${REREAD} (required on a re-plan)`] }
+  errors.push(...r.errors)
+  if (!fresh && !sections[CHANGES]) errors.push(`missing or empty section: ${CHANGES} (required on a re-plan; --fresh waives it)`)
+  return r.items
+}
+
 export function parsePlan(body, { revised = false, fresh = false } = {}) {
-  const errors = []
-  if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
-  else if (!hasMarker(body, PLAN_MARKER)) errors.push(`marker ${PLAN_MARKER} must be the first line`)
+  const errors = markerErrors(body)
   const sections = splitSections(body)
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
   }
-  let reread = []
-  if (revised) {
-    if (!sections[REREAD]) errors.push(`missing or empty section: ${REREAD} (required on a re-plan)`)
-    else {
-      const r = parseReread(sections[REREAD])
-      reread = r.items
-      errors.push(...r.errors)
-    }
-  }
-  if (revised && !fresh && !sections[CHANGES]) errors.push(`missing or empty section: ${CHANGES} (required on a re-plan; --fresh waives it)`)
+  const reread = parseRevision(sections, { revised, fresh }, errors)
   const reproduced = sections.Reproduced ? parseReproduced(sections.Reproduced, errors) : null
   const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
   const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
   errors.push(...a.errors)
   const d = sections.Docs ? parseDocs(sections.Docs) : { rows: [], errors: [] }
   errors.push(...d.errors)
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, reread, unverified: reproduced === false }
+  const t = sections.Test ? parseChecklist(sections.Test) : { items: [], errors: [] }
+  errors.push(...t.errors.map((e) => `Test: ${e}`))
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, checklist: t.items, reread, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

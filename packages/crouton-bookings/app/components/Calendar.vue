@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { isDayFullyBooked as isDayFull } from '../utils/day-availability'
+import { createHoverCard } from '../utils/hover-card'
 import type { Booking, LocationData, SettingsData, SlotItem } from '../types/booking'
 
 interface FilterState {
@@ -401,6 +402,20 @@ function getLocationAddress(locationId: string): string | null {
 const monthCellHeight = computed(() => {
   return Math.max(40, 24 + 6 * maxIndicatorCount.value)
 })
+
+// ONE shared location card (#3895) instead of one UPopover per indicator per day.
+// The card has no trigger, so reka never closes it by itself — createHoverCard owns
+// the open/close timing and we close it on period/view change, scroll and unmount.
+const cardState = shallowReactive<{ open: boolean, anchor?: HTMLElement, data?: IndicatorData }>({ open: false })
+const card = createHoverCard<IndicatorData>({
+  openDelay: 300,
+  closeDelay: 100,
+  onChange: s => Object.assign(cardState, s),
+})
+watch([date, currentView], () => card.close())
+// Target-less form: the window in the browser, nothing on the server.
+useEventListener('scroll', card.close, { capture: true, passive: true })
+onBeforeUnmount(card.close)
 </script>
 
 <template>
@@ -442,13 +457,12 @@ const monthCellHeight = computed(() => {
 
       <template #day="{ jsDate }">
         <div class="flex flex-col gap-1 mt-1 min-h-[12px] w-fit mx-auto">
-          <UPopover
+          <!-- Hovering opens the ONE shared location card below (#3895) -->
+          <div
             v-for="indicator in getIndicatorsForDate(jsDate)"
             :key="indicator.locationId"
-            mode="hover"
-            :content="{ side: 'top', sideOffset: 8 }"
-            :open-delay="300"
-            :close-delay="100"
+            @pointerenter="(e: PointerEvent) => card.triggerEnter(e, e.currentTarget as HTMLElement, indicator)"
+            @pointerleave="card.triggerLeave"
           >
             <CroutonBookingsSlotIndicator
               :slots="indicator.slots"
@@ -461,45 +475,7 @@ const monthCellHeight = computed(() => {
               :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
               @hover-booking="(id) => emit('hoverBooking', id)"
             />
-            <template #content>
-              <div class="p-3 min-w-44 max-w-60">
-                <div class="flex items-center gap-2">
-                  <span class="size-2.5 rounded-full shrink-0" :style="{ backgroundColor: indicator.color }" />
-                  <span class="text-sm font-medium text-highlighted truncate">{{ indicator.locationTitle }}</span>
-                </div>
-                <p v-if="getLocationAddress(indicator.locationId)" class="text-xs text-muted mt-1">
-                  {{ getLocationAddress(indicator.locationId) }}
-                </p>
-
-                <!-- Inventory mode summary -->
-                <div v-if="indicator.isInventoryMode" class="mt-2 flex items-center justify-between text-xs">
-                  <span class="text-muted">{{ t('bookings.calendar.units') }}</span>
-                  <span class="tabular-nums" :class="indicator.inventoryBookedCount >= indicator.inventoryQuantity ? 'text-red-400' : 'text-dimmed'">
-                    {{ indicator.inventoryBookedCount }} / {{ indicator.inventoryQuantity }}
-                  </span>
-                </div>
-
-                <!-- Slot mode: per-slot breakdown -->
-                <div v-else-if="indicator.slotStatuses.length > 1 || (indicator.slotStatuses[0]?.capacity ?? 0) > 1" class="mt-2 flex flex-col gap-0.5">
-                  <div
-                    v-for="slot in indicator.slotStatuses"
-                    :key="slot.id"
-                    class="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span class="text-muted truncate">{{ slot.label }}</span>
-                    <span class="shrink-0 tabular-nums" :class="slot.isFull ? 'text-red-400' : 'text-dimmed'">
-                      {{ slot.bookedCount }} / {{ slot.capacity }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Simple count for single all-day slot with capacity 1 -->
-                <p v-else class="text-xs text-dimmed mt-1">
-                  {{ indicator.bookings.length > 0 ? (t as any)('bookings.calendar.bookingCount', { count: indicator.bookings.length }, indicator.bookings.length) : t('bookings.calendar.noBookings') }}
-                </p>
-              </div>
-            </template>
-          </UPopover>
+          </div>
         </div>
       </template>
     </CroutonCalendarWeek>
@@ -569,13 +545,11 @@ const monthCellHeight = computed(() => {
 
             <!-- Slot indicators (all locations) -->
             <div class="flex flex-col gap-0.5 mt-0.5 w-fit mx-auto">
-              <UPopover
+              <div
                 v-for="indicator in getIndicatorsForDate(jsDate)"
                 :key="indicator.locationId"
-                mode="hover"
-                :content="{ side: 'top', sideOffset: 8 }"
-                :open-delay="300"
-                :close-delay="100"
+                @pointerenter="(e: PointerEvent) => card.triggerEnter(e, e.currentTarget as HTMLElement, indicator)"
+                @pointerleave="card.triggerLeave"
               >
                 <CroutonBookingsSlotIndicator
                   :slots="indicator.slots"
@@ -588,45 +562,7 @@ const monthCellHeight = computed(() => {
                   :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
                   @hover-booking="(id) => emit('hoverBooking', id)"
                 />
-                <template #content>
-                  <div class="p-3 min-w-44 max-w-60">
-                    <div class="flex items-center gap-2">
-                      <span class="size-2.5 rounded-full shrink-0" :style="{ backgroundColor: indicator.color }" />
-                      <span class="text-sm font-medium text-highlighted truncate">{{ indicator.locationTitle }}</span>
-                    </div>
-                    <p v-if="getLocationAddress(indicator.locationId)" class="text-xs text-muted mt-1">
-                      {{ getLocationAddress(indicator.locationId) }}
-                    </p>
-
-                    <!-- Inventory mode summary -->
-                    <div v-if="indicator.isInventoryMode" class="mt-2 flex items-center justify-between text-xs">
-                      <span class="text-muted">{{ t('bookings.calendar.units') }}</span>
-                      <span class="tabular-nums" :class="indicator.inventoryBookedCount >= indicator.inventoryQuantity ? 'text-red-400' : 'text-dimmed'">
-                        {{ indicator.inventoryBookedCount }} / {{ indicator.inventoryQuantity }}
-                      </span>
-                    </div>
-
-                    <!-- Slot mode: per-slot breakdown -->
-                    <div v-else-if="indicator.slotStatuses.length > 1 || (indicator.slotStatuses[0]?.capacity ?? 0) > 1" class="mt-2 flex flex-col gap-0.5">
-                      <div
-                        v-for="slot in indicator.slotStatuses"
-                        :key="slot.id"
-                        class="flex items-center justify-between gap-3 text-xs"
-                      >
-                        <span class="text-muted truncate">{{ slot.label }}</span>
-                        <span class="shrink-0 tabular-nums" :class="slot.isFull ? 'text-red-400' : 'text-dimmed'">
-                          {{ slot.bookedCount }} / {{ slot.capacity }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Simple count for single all-day slot with capacity 1 -->
-                    <p v-else class="text-xs text-dimmed mt-1">
-                      {{ indicator.bookings.length > 0 ? (t as any)('bookings.calendar.bookingCount', { count: indicator.bookings.length }, indicator.bookings.length) : t('bookings.calendar.noBookings') }}
-                    </p>
-                  </div>
-                </template>
-              </UPopover>
+              </div>
             </div>
 
             <!-- Add booking tab (slides down from under the date block on hover) -->
@@ -653,5 +589,59 @@ const monthCellHeight = computed(() => {
           </div>
       </template>
     </CroutonCalendarMonth>
+
+    <!-- ONE shared location card for every indicator (#3895): positioned on the
+         hovered indicator via `reference`; createHoverCard owns open/close. -->
+    <UPopover
+      mode="hover"
+      :open="cardState.open"
+      :reference="cardState.anchor"
+      :content="{ side: 'top', sideOffset: 8 }"
+      @update:open="(v: boolean) => { if (!v) card.close() }"
+    >
+      <template #content>
+        <div
+          v-if="cardState.data"
+          class="p-3 min-w-44 max-w-60"
+          @pointerenter="card.cardEnter"
+          @pointerleave="card.cardLeave"
+        >
+          <div class="flex items-center gap-2">
+            <span class="size-2.5 rounded-full shrink-0" :style="{ backgroundColor: cardState.data.color }" />
+            <span class="text-sm font-medium text-highlighted truncate">{{ cardState.data.locationTitle }}</span>
+          </div>
+          <p v-if="getLocationAddress(cardState.data.locationId)" class="text-xs text-muted mt-1">
+            {{ getLocationAddress(cardState.data.locationId) }}
+          </p>
+
+          <!-- Inventory mode summary -->
+          <div v-if="cardState.data.isInventoryMode" class="mt-2 flex items-center justify-between text-xs">
+            <span class="text-muted">{{ t('bookings.calendar.units') }}</span>
+            <span class="tabular-nums" :class="cardState.data.inventoryBookedCount >= cardState.data.inventoryQuantity ? 'text-red-400' : 'text-dimmed'">
+              {{ cardState.data.inventoryBookedCount }} / {{ cardState.data.inventoryQuantity }}
+            </span>
+          </div>
+
+          <!-- Slot mode: per-slot breakdown -->
+          <div v-else-if="cardState.data.slotStatuses.length > 1 || (cardState.data.slotStatuses[0]?.capacity ?? 0) > 1" class="mt-2 flex flex-col gap-0.5">
+            <div
+              v-for="slot in cardState.data.slotStatuses"
+              :key="slot.id"
+              class="flex items-center justify-between gap-3 text-xs"
+            >
+              <span class="text-muted truncate">{{ slot.label }}</span>
+              <span class="shrink-0 tabular-nums" :class="slot.isFull ? 'text-red-400' : 'text-dimmed'">
+                {{ slot.bookedCount }} / {{ slot.capacity }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Simple count for single all-day slot with capacity 1 -->
+          <p v-else class="text-xs text-dimmed mt-1">
+            {{ cardState.data.bookings.length > 0 ? (t as any)('bookings.calendar.bookingCount', { count: cardState.data.bookings.length }, cardState.data.bookings.length) : t('bookings.calendar.noBookings') }}
+          </p>
+        </div>
+      </template>
+    </UPopover>
   </div>
 </template>

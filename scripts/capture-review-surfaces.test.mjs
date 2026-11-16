@@ -230,6 +230,19 @@ test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
 })
 
+test('deriveSurfaces: a [slug] segment is not the team (#3886)', () => {
+  assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles: ['pocs/crouton-builder/app/pages/site/[slug].vue'] }), [])
+})
+
+test('deriveSurfaces: [team], [teamSlug], [team-slug] still map to the seeded team (#3886)', () => {
+  const s = deriveSurfaces({ app: 'velo', changedFiles: [
+    'apps/velo/app/pages/a/[team]/x.vue',
+    'apps/velo/app/pages/b/[teamSlug]/x.vue',
+    'apps/velo/app/pages/c/[team-slug]/x.vue'
+  ] })
+  assert.deepEqual(s.map(x => x.path), ['/a/test1/x', '/b/test1/x', '/c/test1/x'])
+})
+
 test('deriveSurfaces: a packages/ page maps for any app (#3794)', () => {
   const changedFiles = ['packages/crouton-x/app/pages/foo.vue']
   for (const app of ['velo', 'gallery']) {

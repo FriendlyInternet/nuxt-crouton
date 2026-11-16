@@ -19,6 +19,9 @@ import { fileURLToPath } from 'node:url'
 /** The scripts suite — must match ci.yml's. `node --test scripts/` treats the dir as a module path and fails on Node 22. */
 export const SCRIPTS_TEST_CMD = 'node --test scripts/*.test.mjs scripts/lib/*.test.mjs'
 
+/** A conflicted package's tests. `--if-present` must come BEFORE the script name — after it, pnpm passes it to the script (#3900). */
+export function packageTestCmd(p) { return `pnpm --filter "./packages/${p}" run --if-present test` }
+
 /** Files a generator produces are regenerated, never hand-merged. `inputs` + `outputs` are exact paths or prefixes. */
 export const GENERATORS = [
   {
@@ -131,7 +134,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
     if (!run(SCRIPTS_TEST_CMD)) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
     const pkgs = [...new Set(files.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
-    for (const p of pkgs) if (!run(`pnpm --filter "./packages/${p}" test --if-present`)) { console.error(`::error::${p} tests fail after resolution`); process.exit(1) }
+    for (const p of pkgs) if (!run(packageTestCmd(p))) { console.error(`::error::${p} tests fail after resolution`); process.exit(1) }
     console.log(files.join('\n'))
   } else {
     console.error('usage: conflict-resolution.mjs prompt <base> <choice-file> | verify <choice-file>')
