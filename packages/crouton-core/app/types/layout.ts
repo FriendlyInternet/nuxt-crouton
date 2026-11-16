@@ -11,25 +11,7 @@
  * new `layout_configs` table.
  */
 
-/**
- * How a pane sizes itself along its parent split's axis under Auto layout (#3784):
- * `fit` = shrink to its content, `fill` = take the remaining space, `fixed` = use
- * `defaultSize`.
- */
-export const LAYOUT_PANE_SIZES = ['fit', 'fill', 'fixed'] as const
-export type LayoutPaneSize = (typeof LAYOUT_PANE_SIZES)[number]
-
-/** Type-guard for the closed `LayoutPaneSize` set (#3816). */
-export function isLayoutPaneSize(value: unknown): value is LayoutPaneSize {
-  return typeof value === 'string' && (LAYOUT_PANE_SIZES as readonly string[]).includes(value)
-}
-
 export interface LayoutNodeBase {
-  /**
-   * Per-pane size override (#3816). Absent ⇒ follow the block's `sizing` rule;
-   * only read when the tree's `auto` is on (#3784). `fixed` = use `defaultSize`.
-   */
-  size?: LayoutPaneSize
   /** Default size of this node within its parent split, as a percentage. */
   defaultSize?: number
   /** Minimum size of this node within its parent split, as a percentage. */
@@ -55,6 +37,13 @@ export interface LayoutLeaf extends LayoutNodeBase {
    * `DEFAULT_COLLAPSE_RECIPE` (right-edge tab — the original gutter behaviour).
    */
   collapse?: LayoutCollapseRecipe
+  /**
+   * The layout store copy this pane is fed from (#3650): `'<storeId>'` or
+   * `'<storeId>#<copy>'`. Each distinct string is its own copy, owned by the
+   * surrounding `CroutonLayoutStoreScope`; the block receives the store only as
+   * props + events, through the store's declared feed for this `blockId`.
+   */
+  source?: string
 }
 
 export interface LayoutSplit extends LayoutNodeBase {
@@ -235,12 +224,6 @@ export interface LayoutBreakpoint {
 
 export interface LayoutTree {
   renderer: 'panes'
-  /**
-   * Auto layout (#3784): panes size from their block's rule / `size` override.
-   * Absent or false ⇒ today's percentage behaviour. A nested sub-layout is its own
-   * `LayoutTree`, so it carries its own flag.
-   */
-  auto?: boolean
   root: LayoutNode
   /**
    * Authored responsive breakpoints (WS5, #874), the *explicit* layer over the
@@ -250,4 +233,55 @@ export interface LayoutTree {
    * breakpoints — responsiveness recurses with the layout.
    */
   breakpoints?: LayoutBreakpoint[]
+  /**
+   * Per-source options for the layout's store copies (#3650), keyed by the source
+   * string a leaf names (`'bookings'`, `'bookings#mine'`). A key with no leaf still
+   * creates a copy. On a clash with a nested sub-layout's map, the outer level wins.
+   */
+  sources?: Record<string, LayoutSourceSettings>
+}
+
+/** Settings for one store copy in `LayoutTree.sources` (#3650). */
+export interface LayoutSourceSettings {
+  options?: Record<string, unknown>
+}
+
+/** One store copy a layout needs — what `collectLayoutStores` returns (#3650). */
+export interface LayoutStoreEntry {
+  source: string
+  options?: Record<string, unknown>
+}
+
+/** What a store's `setup` receives for one copy (#3650). */
+export interface LayoutStoreContext {
+  /**
+   * Unique per scope + source (`layout-store:<scopeId>:<source>`). Build every
+   * `useFetch` / `useAsyncData` key from it, so two copies never share data.
+   */
+  key: string
+  /** The full source string (`'test'`, `'test#2'`). */
+  source: string
+  /** The options from the layout's `sources` map (`{}` when none). */
+  options: Record<string, unknown>
+}
+
+/**
+ * How one store feeds one block (#3650): `props` maps the store to the block's
+ * props; `events` maps a block event name (`bump` → the block emits `bump`) to an
+ * intent on the store. Blocks never inject the store themselves.
+ */
+export interface CroutonLayoutStoreFeed<S = any> {
+  props?: (store: S) => Record<string, unknown>
+  events?: Record<string, (store: S, ...args: any[]) => void>
+}
+
+/**
+ * A layout store definition (#3650), registered with `defineCroutonLayoutStore`
+ * from a Nuxt plugin. `setup` runs once per copy, inside the scope's own setup.
+ */
+export interface CroutonLayoutStoreDefinition<S = any> {
+  id: string
+  setup: (ctx: LayoutStoreContext) => S
+  /** Keyed by block id. */
+  feeds: Record<string, CroutonLayoutStoreFeed<S>>
 }

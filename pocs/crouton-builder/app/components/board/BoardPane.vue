@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * BoardPane — one pane of the board: a leaf (or a read-only nested app) that
- * is also a drop target and carries the grip that moves it. Drop feedback comes
+ * BoardPane — one pane of the board: a leaf that is also a drop target and
+ * carries the grip that moves it. Drop feedback comes
  * from the shared drag state (the drag resolves the pane under the pointer with
  * elementFromPoint), so this pane only compares paths.
  */
@@ -21,8 +21,7 @@ const emit = defineEmits<{ select: [at: NodePath] }>()
 const { blocks } = useCroutonLayoutBlocks()
 const { payload, hover, arm, consumeClick } = useBoardDrag()
 
-const isLeaf = computed(() => props.node.type === 'leaf')
-const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.name ?? props.node.blockId : 'App'))
+const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.name ?? props.node.blockId : ''))
 const isSelected = computed(() => !!props.selected && samePath(props.selected, props.path))
 
 // A pane can't be dropped onto itself or into its own subtree.
@@ -31,7 +30,7 @@ const canAccept = computed(() => {
   return !!d && !(d.kind === 'pane' && isWithin(props.path, d.path))
 })
 const hoverEdge = computed<DropEdge | null>(() =>
-  hover.value && samePath(hover.value.path, props.path) ? hover.value.edge : null,
+  hover.value && hover.value.scope === 'pane' && samePath(hover.value.path, props.path) ? hover.value.edge : null,
 )
 
 // Tapping the block selects it — but a control INSIDE the block (a row's edit
@@ -59,9 +58,8 @@ function onGripDown(e: PointerEvent) {
   >
     <!-- A leaf renders through the package renderer (registry resolution, config
          sanitising) in the PAGE render context, content-height like the served page
-         (#3865); a nested app renders read-only too. -->
-    <CroutonLayoutRenderer v-if="isLeaf" :node="node" :interactive="false" />
-    <CroutonLayoutRenderer v-else :node="(node as any).layout.root" :interactive="false" />
+         (#3865). -->
+    <CroutonLayoutRenderer :node="node" :interactive="false" />
 
     <!-- Grab handle: hold briefly, then drag this pane onto another pane. -->
     <button
