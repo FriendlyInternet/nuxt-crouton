@@ -44,7 +44,8 @@ test('composables page lists default-exported composables', () => {
 })
 
 test('--check fails when a config key is renamed', () => {
-  expectStaleAfter('packages/crouton-sales/crouton.manifest.ts', `'print.enabled': {`, `'printing.enabled': {`, /config-keys\.md/)
+  // Not sales' print.enabled: check-doc-claims.deps-test.mjs reads it and runs in parallel with this file.
+  expectStaleAfter('packages/crouton-maps/crouton.manifest.ts', `'geocodingUrl': {`, `'geocodingEndpoint': {`, /config-keys\.md/)
 })
 
 test('--check fails when a type member is renamed', () => {
