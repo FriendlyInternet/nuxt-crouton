@@ -10,6 +10,7 @@ Rich text editor addon for Nuxt Crouton. Wraps Nuxt UI's `UEditor` (TipTap-based
 |------|---------|
 | `app/components/Simple.vue` | `CroutonEditorSimple` - Full-featured UEditor wrapper |
 | `app/components/Blocks.vue` | `CroutonEditorBlocks` - Block editor with property panel support |
+| `app/utils/remote-change-highlight.ts` | Collab-only TipTap extension: blocks added by someone else slide in + glow, removed ones fade out (local edits/undo/first load never animate) |
 | `app/components/Variables.vue` | `CroutonEditorVariables` - Variable insertion menu ({{ trigger) |
 | `app/components/Preview.vue` | `CroutonEditorPreview` - Live preview with variable interpolation |
 | `app/components/WithPreview.vue` | `CroutonEditorWithPreview` - Editor + preview side-by-side |
