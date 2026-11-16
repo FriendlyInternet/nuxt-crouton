@@ -40,7 +40,18 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   let appDir
   try {
     const { scaffoldApp } = await import('./scaffold-app.ts')
-    const result = await scaffoldApp(name, { features: initFeatures(features, layout), theme, dialect, cf, domain, dryRun, outDir: out })
+    // The default layout is only added when the module registry can see crouton-layout —
+    // outside the monorepo (no packages/ or node_modules/@fyit) it would be an
+    // "Unknown feature" and fail a bare `crouton init`. An explicit --features layout still errors.
+    let addLayout = layout
+    if (addLayout && !features.includes('layout')) {
+      const { loadModules } = await import('./module-registry.ts')
+      if (!(await loadModules()).layout) {
+        consola.warn('crouton-layout not found in the module registry — scaffolding without it (add it later with `crouton add layout`).')
+        addLayout = false
+      }
+    }
+    const result = await scaffoldApp(name, { features: initFeatures(features, addLayout), theme, dialect, cf, domain, dryRun, outDir: out })
     appDir = result.appDir
   } catch (error) {
     consola.error('Step 1/3 — Scaffold failed')
