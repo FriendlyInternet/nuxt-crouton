@@ -25,6 +25,7 @@ export default defineCroutonManifest({
       { name: 'CroutonLayoutForm', description: 'Data-bound form block: the detail half of a master/detail layout' },
       { name: 'CroutonLayoutRenderer', description: 'Renders a layout data tree into resizable, nestable panes' },
       { name: 'CroutonLayoutSpikeStats', description: 'Throwaway stats block from the layout spike (#713); goes when the spike does.' },
+      { name: 'CroutonLayoutStoreScope', description: 'Owns the layout store copies that the layouts rendered inside it read; wrap a page\'s layouts in it.' },
     ],
   },
 })
