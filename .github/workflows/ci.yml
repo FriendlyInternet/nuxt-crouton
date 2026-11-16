@@ -785,6 +785,64 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: node scripts/fallow-audit.mjs --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
 
+  # The approved plan's Test lines, run by CI itself (#3195, epic #3193). NO job-level `if:` — a
+  # skipped job reads as passing in the gate (#2089); the script decides inside and exits 0 with a
+  # summary when this is not a work-* PR or the issue has no approved plan. The judge (script +
+  # parser) comes from the DEFAULT branch, so a PR cannot edit what checks it; the commands run in
+  # the PR head checkout with no token in their environment. One sticky `<!-- plan-checks -->`.
+  plan-checks:
+    name: Plan checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      # Bootstrap only: until #3195 is on the default branch there is no trusted judge to run.
+      - name: Is the judge on the default branch?
+        id: judge
+        run: |
+          if [ -f trusted/scripts/plan-checks.mjs ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::plan-checks: no judge on the default branch yet (bootstrap) — nothing checked"; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Find the approved plan
+        id: plan
+        if: steps.judge.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node trusted/scripts/plan-checks.mjs fetch --out "$RUNNER_TEMP/plan.json"
+      - name: Setup pnpm
+        if: steps.plan.outputs.needs_install == 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Install dependencies
+        if: steps.plan.outputs.needs_install == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run the plan's Test lines (no token)
+        if: steps.plan.outputs.has_plan == 'true'
+        run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
+      - name: Post the result table and judge
+        if: always() && steps.judge.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$RUNNER_TEMP/results.json" ] || echo '[]' > "$RUNNER_TEMP/results.json"
+          node trusted/scripts/plan-checks.mjs report --plan "$RUNNER_TEMP/plan.json" --results "$RUNNER_TEMP/results.json"
+
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job
   # failed/was cancelled, and passes when every job either succeeded or was skipped.
@@ -794,7 +852,7 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, typecheck-packages, build-kassa, compile-check,
-            test, package-check, node-checks, removed-tests, actionlint, fallow-audit]
+            test, package-check, node-checks, removed-tests, actionlint, fallow-audit, plan-checks]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
