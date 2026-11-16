@@ -22,7 +22,8 @@
     "types",
     "nuxt.config.ts",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/llms.txt"
   ],
   "scripts": {
     "build": "unbuild",

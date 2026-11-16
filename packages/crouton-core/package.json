@@ -43,7 +43,9 @@
     "types",
     "dist",
     "nuxt.config.ts",
-    "crouton-hooks.d.ts"
+    "crouton-hooks.d.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
