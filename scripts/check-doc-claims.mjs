@@ -92,28 +92,47 @@ export function sourceWords(pkgDir) {
   return words
 }
 
+/** Index of the first non-whitespace character at or after `j`. */
+function skipSpace(text, j) {
+  while (/\s/.test(text[j] ?? '')) j++
+  return j
+}
+/** Index after a `<!-- … -->` starting at `j` (the end of the text when it never closes). */
+function skipComment(text, j) {
+  const end = text.indexOf('-->', j)
+  return end < 0 ? text.length : end + 3
+}
+/** Index after an attribute value starting at `j` — quoted (`"…"` / `'…'`) or bare. */
+function skipValue(text, j) {
+  const q = text[j]
+  if (q === '"' || q === "'") { const end = text.indexOf(q, j + 1); return end < 0 ? text.length : end + 1 }
+  while (j < text.length && !/[\s>]/.test(text[j])) j++
+  return j
+}
+/** One attribute starting at `j`: its name and the index after its optional `= value`. */
+function readAttr(text, j) {
+  const start = j
+  while (j < text.length && !/[\s=/>]/.test(text[j])) j++
+  const name = text.slice(start, j)
+  j = skipSpace(text, j)
+  if (text[j] === '=') j = skipValue(text, skipSpace(text, j + 1))
+  return { name, end: j }
+}
 /** `<Tag attr="v" :x='y' @e="z">` starting at `i` (the `<`): attribute names + the index after `>`. */
 export function readTag(text, i) {
   const attrs = []
   const nameEnd = text.slice(i).search(/[\s/>]/) // past the tag name
   let j = nameEnd < 0 ? text.length : i + nameEnd
   while (j < text.length) {
-    while (/\s/.test(text[j] ?? '')) j++
-    if (text[j] === '>' || text[j] === undefined) break
-    if (text[j] === '/') { j++; continue }
-    if (text.startsWith('<!--', j)) { const end = text.indexOf('-->', j); j = end < 0 ? text.length : end + 3; continue } // a comment between attributes
-    const start = j
-    while (j < text.length && !/[\s=/>]/.test(text[j])) j++
-    const name = text.slice(start, j)
-    if (!name) { j++; continue }
-    while (/\s/.test(text[j] ?? '')) j++
-    if (text[j] === '=') {
-      j++
-      while (/\s/.test(text[j] ?? '')) j++
-      const q = text[j]
-      if (q === '"' || q === "'") { const end = text.indexOf(q, j + 1); j = end < 0 ? text.length : end + 1 } else while (j < text.length && !/[\s>]/.test(text[j])) j++
-    }
-    attrs.push({ name, index: start })
+    j = skipSpace(text, j)
+    const c = text[j]
+    if (c === '>' || c === undefined) break
+    if (c === '/') { j++; continue }
+    if (text.startsWith('<!--', j)) { j = skipComment(text, j); continue } // a comment between attributes
+    const attr = readAttr(text, j)
+    if (!attr.name) { j++; continue }
+    attrs.push({ name: attr.name, index: j })
+    j = attr.end
   }
   return { attrs, end: j }
 }

@@ -248,19 +248,18 @@ export function cliCommandsOf() {
   })
   return cmds
 }
+const cliFlag = (k, a) => (a.type === 'positional' ? `<${k}>` : `--${k}`)
+const cliArgRow = ([k, a]) => `| ${code(cliFlag(k, a))} | ${a.type ?? ''} | ${a.alias ? code('-' + a.alias) : ''} | ${a.default !== undefined ? code(a.default) : ''} | ${oneLine(a.description ?? '')} |\n`
+/** One command's section: heading, description and (when it has any) its argument table. */
+function cliSection(c) {
+  const head = `\n## ${c.name}\n\n${c.description ?? ''}\n\n`
+  const args = Object.entries(c.args)
+  if (!args.length) return head
+  return head + '| Argument | Type | Alias | Default | Description |\n| --- | --- | --- | --- | --- |\n' + args.map(cliArgRow).join('')
+}
 function genCli() {
-  let out = `---\ntitle: CLI\ndescription: crouton CLI commands and flags (generated from the code)\nicon: i-lucide-terminal\n---\n\n${HEADER(CLI_FILE)}\n# CLI\n\nRun with \`npx crouton <command>\`.\n`
-  for (const c of cliCommandsOf()) {
-    out += `\n## ${c.name}\n\n${c.description ?? ''}\n\n`
-    const args = Object.entries(c.args)
-    if (!args.length) continue
-    out += '| Argument | Type | Alias | Default | Description |\n| --- | --- | --- | --- | --- |\n'
-    for (const [k, a] of args) {
-      const flag = a.type === 'positional' ? `<${k}>` : `--${k}`
-      out += `| ${code(flag)} | ${a.type ?? ''} | ${a.alias ? code('-' + a.alias) : ''} | ${a.default !== undefined ? code(a.default) : ''} | ${oneLine(a.description ?? '')} |\n`
-    }
-  }
-  return out
+  const out = `---\ntitle: CLI\ndescription: crouton CLI commands and flags (generated from the code)\nicon: i-lucide-terminal\n---\n\n${HEADER(CLI_FILE)}\n# CLI\n\nRun with \`npx crouton <command>\`.\n`
+  return out + cliCommandsOf().map(cliSection).join('')
 }
 
 // ── config keys ────────────────────────────────────────────────────────
