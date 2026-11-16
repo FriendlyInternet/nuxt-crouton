@@ -3,7 +3,7 @@
 // gallery POC (pocs/gallery) is deployed for the PR and each changed piece gets a direct link
 // (`/__review?file=<path>` — the gallery maps a file to its component page).
 //
-// Used by deploy-pocs.yml (deploy the gallery?) and deploy-app.yml (the PR comment's links).
+// Used by deploy-detect.mjs (deploy the gallery?) and deploy-app.yml (the PR comment's links).
 // Contract: scripts/gallery-links.test.mjs (`node --test`).
 
 const PIECE_RE = /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/
@@ -34,11 +34,4 @@ export function galleryLinks(baseUrl, files = []) {
   return changedPieces(files)
     .slice(0, MAX_LINKS)
     .map(file => ({ file, url: `${base}/__review?file=${encodeURIComponent(file)}` }))
-}
-
-// CLI: `git diff --name-only … | node scripts/gallery-links.mjs --touches` → prints true/false.
-if (import.meta.url === `file://${process.argv[1]}` && process.argv.includes('--touches')) {
-  const { readFileSync } = await import('node:fs')
-  const files = readFileSync(0, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
-  console.log(touchesPieces(files) ? 'true' : 'false')
 }

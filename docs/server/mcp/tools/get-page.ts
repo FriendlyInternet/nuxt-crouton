@@ -8,12 +8,13 @@ export default defineMcpTool({
   },
   async handler({ path }) {
     const { queryCollection } = await import('@nuxt/content/server')
+    const { useEvent } = await import('nitropack/runtime')
 
     // Normalize path
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
 
-    const results = await queryCollection('docs')
-      .where('_path', 'LIKE', `%${normalizedPath}%`)
+    const results = await queryCollection(useEvent(), 'docs')
+      .where('path', 'LIKE', `%${normalizedPath}%`)
       .limit(1)
       .all()
 
@@ -30,31 +31,32 @@ export default defineMcpTool({
 
     // Extract text content from body if available
     let bodyText = ''
-    if (doc.body && Array.isArray(doc.body)) {
-      bodyText = extractText(doc.body)
+    const bodyValue = (doc.body as any)?.value
+    if (Array.isArray(bodyValue)) {
+      bodyText = extractText(bodyValue)
     }
 
     return {
       content: [{
         type: 'text' as const,
-        text: `# ${doc.title || 'Untitled'}\n\n**Path:** ${doc._path}\n**Description:** ${doc.description || 'N/A'}\n\n---\n\n${bodyText || 'Content not available in text format. Please visit the documentation website for full content.'}`
+        text: `# ${doc.title || 'Untitled'}\n\n**Path:** ${doc.path}\n**Description:** ${doc.description || 'N/A'}\n\n---\n\n${bodyText || 'Content not available in text format. Please visit the documentation website for full content.'}`
       }]
     }
   }
 })
 
+// Content v3 minimark: a node is a string or [tag, props, ...children]
 function extractText(nodes: any[]): string {
   let text = ''
   for (const node of nodes) {
     if (typeof node === 'string') {
       text += node
-    } else if (node.type === 'text' && node.value) {
-      text += node.value
-    } else if (node.children && Array.isArray(node.children)) {
-      text += extractText(node.children)
-    }
-    if (node.tag === 'p' || node.tag?.startsWith('h')) {
-      text += '\n\n'
+    } else if (Array.isArray(node)) {
+      const [tag, , ...children] = node
+      text += extractText(children)
+      if (typeof tag === 'string' && (tag === 'p' || /^h[1-6]$/.test(tag))) {
+        text += '\n\n'
+      }
     }
   }
   return text.trim()

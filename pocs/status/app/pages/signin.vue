@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { safeRedirect } from '~~/shared/safe-path'
+
 definePageMeta({ layout: false })
 
 const route = useRoute()
-const redirect = computed(() => {
-  const r = String(route.query.redirect ?? '')
-  return r.startsWith('/') && !r.startsWith('//') ? r : '/'
-})
+
+const redirect = computed(() => safeRedirect(route.query.redirect))
 
 const loading = ref(false)
 const hint = ref('')

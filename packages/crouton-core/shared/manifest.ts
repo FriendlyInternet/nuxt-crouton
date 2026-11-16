@@ -48,6 +48,14 @@ export interface CroutonManifest {
    */
   ownsCollections?: boolean
 
+  /**
+   * The `runtimeConfig` key this package reads its `configuration` answers from
+   * (e.g. 'maps' for `useRuntimeConfig().public.maps`). The generator writes
+   * the answers under exactly this key. Undeclared: it guesses `crouton<Feature>`
+   * and warns (#3398).
+   */
+  runtimeConfigKey?: string
+
   // Configuration options
   configuration?: Record<string, ManifestConfigOption>
 
@@ -90,6 +98,8 @@ export interface FieldTypeDefinition {
   seed: FieldTypeSeed
   /** Source literal of a schema-valid value, embedded in the generated `<Collection>.test.ts`. */
   testSample: string
+  /** Collection-level `translatable: true` auto-detect may translate fields of this type. */
+  translatable?: boolean
   component?: string
   previewComponent?: string
   aliases?: string[]
@@ -112,7 +122,7 @@ export interface FieldTypeSeed {
  * `defaultValue` renamed `default` and the canonical type name attached.
  */
 export type FieldTypeMapping
-  = Pick<FieldTypeDefinition, 'db' | 'sqlite' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component'>
+  = Pick<FieldTypeDefinition, 'db' | 'sqlite' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component' | 'translatable'>
     & { default: string; canonical: string }
 
 export interface ManifestCollection {
@@ -139,6 +149,8 @@ export interface ManifestConfigOption {
   description?: string
   default: unknown
   options?: Array<{ value: string; label: string }>
+  /** Where the package reads this setting: 'public', 'server' or 'both' (default). */
+  runtimeConfig?: 'public' | 'server' | 'both'
 }
 
 export interface ManifestExtensionPoint {

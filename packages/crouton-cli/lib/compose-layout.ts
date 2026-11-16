@@ -93,6 +93,8 @@ export async function writeDefaultLayout(opts: WriteDefaultLayoutOptions): Promi
   const cwd = opts.cwd ?? process.cwd()
   const collections = opts.allCollections ?? []
   if (!collections.length) return { written: false, reason: 'no-collections' }
+  // Opt-in (#2282): only an app that extends @fyit/crouton-layout gets a layout file.
+  if (!(opts.packages ?? []).includes('crouton-layout')) return { written: false, reason: 'layout not enabled' }
 
   const hasBookings = bookingsEnabled(opts.packages, collections)
   const registry: CroutonLayoutBlockRegistry = {

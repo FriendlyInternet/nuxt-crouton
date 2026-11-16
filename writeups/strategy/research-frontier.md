@@ -143,4 +143,4 @@ Volatile facts — re-verify before relying:
 | routing.json CI-loop model still unpinned | `python3 -c "import json;print(json.load(open('.claude/routing.json'))['_known_gaps'])"` |
 | Latest measurement record | `tail -1 writeups/loop-station/history.jsonl` (mind the tokenizer field) |
 
-If a front produces (or falsifies) a result: update the status labels here, record the evidence on the relevant issue first, and keep this skill an index — the mechanics stay owned by the skills it defers to. New-skill registration (this file's `META` entry in `scripts/gen-skills-doc.mjs` + the root CLAUDE.md artifacts table) follows the repo's normal skill-add flow.
+If a front produces (or falsifies) a result: update the status labels here, record the evidence on the relevant issue first, and keep this skill an index — the mechanics stay owned by the skills it defers to. New-skill registration (this file's `META` entry in `scripts/gen-skills-doc.mjs` + a run of `gen-skills-doc.mjs`) follows the repo's normal skill-add flow.

@@ -138,14 +138,16 @@ test('status:in-progress contributes its timestamp only when the label is presen
   assert.equal(withLabel.inProgressSince, '2026-08-06T00:00:00Z')
 })
 
-test('two PRs on our own branch (one closed, one open) are both self — must not refuse', async () => {
+test('two PRs on our own branch (one closed, one open) are both self — a closed one is no claim, the open one is (#2990)', async () => {
   const github = fakeGithub({ prs: [
     { number: 1500, state: 'closed', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
     { number: 1501, state: 'open', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
   ] })
   const facts = await gatherClaimFacts({ github, context, issueNumber: 1491 })
   assert.deepEqual(facts.self.prs, [1500, 1501])
-  assert.equal(decideClaim(facts).action, 'proceed')
+  const v = decideClaim(facts)
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 1501)
 })
 
 // ── #3061: revision facts ───────────────────────────────────────────────────────────
@@ -174,4 +176,38 @@ test('no reviseBranch → no revision key and no pulls.list call', async () => {
   const f = await gatherClaimFacts({ github, context, issueNumber: 1 })
   assert.equal('revision' in f, false)
   assert.equal(calls.length, 0)
+})
+
+// ── #2990: run mode reaches the guard through the gathered facts ─────────────────────
+test('plain run on an open own PR: the guard refuses (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  github.rest.pulls.list = async () => ({ data: [] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50 })
+  assert.equal('revision' in f, false)
+  assert.equal(decideClaim(f).action, 'refuse')
+})
+
+test('revise run (reviseBranch) passes the revision through, and the same open own PR proceeds (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  github.rest.pulls.list = async () => ({ data: [{ number: 7, state: 'open', merged_at: null }] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50, reviseBranch: 'work-50' })
+  assert.deepEqual(f.revision, { branch: 'work-50', pr: 7, state: 'open', merged: false })
+  assert.equal(decideClaim(f).action, 'proceed')
+})
+
+test('mode reaches the facts, and plan mode lets the guard proceed past an open own PR (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  const plan = await gatherClaimFacts({ github, context, issueNumber: 50, mode: 'plan' })
+  assert.equal(plan.mode, 'plan')
+  assert.equal(decideClaim(plan).action, 'proceed')
+  const build = await gatherClaimFacts({ github, context, issueNumber: 50, mode: 'build' })
+  assert.equal(build.mode, 'build')
+  assert.equal(decideClaim(build).action, 'refuse')
+})
+
+test('no mode given (decomposer lane) → facts carry an empty mode and the guard still refuses (#2990)', async () => {
+  const github = fakeGithub({ prs: [{ number: 7, state: 'open', body: 'Closes #50', headRef: 'work-50', baseRef: 'main' }] })
+  const f = await gatherClaimFacts({ github, context, issueNumber: 50 })
+  assert.equal(f.mode, '')
+  assert.equal(decideClaim(f).action, 'refuse')
 })

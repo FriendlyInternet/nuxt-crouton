@@ -39,6 +39,89 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
  * Returns the file content as a string (the orchestrator decides whether to
  * write it, honouring `--tests`).
  */
+import { resolveAccess } from './api-endpoints.ts'
+import { isListField } from '../utils/list-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
+
+/**
+ * Query mocks that only exist for some collections (reference checks, tree/sort helpers).
+ * Split out of generateApiTest to keep it small.
+ */
+function optionalQueryExports(data: Record<string, any>, S: string, P: string, hierarchy: boolean, hasReorder: boolean): string[] {
+  const out: string[] = []
+  if (collectTeamRefFields(data).length > 0) out.push(`assert${S}References: vi.fn()`)
+  if (collectPersonRefFields(data).length > 0) out.push(`assert${S}TeamMembers: vi.fn()`)
+  if (hierarchy) out.push(`updatePosition${S}: vi.fn()`)
+  if (hasReorder) out.push(`reorderSiblings${P}: vi.fn()`)
+  return out
+}
+
+/**
+ * Same-team reference test cases for POST/PATCH (#3378/#3424), split out of generateApiTest to keep it small.
+ */
+function buildRefCases(ctx: { S: string, idParam: string, assertFn: string, hasTeamRefs: boolean, optionalRef: any, teamRefs: any[] }): { postRefCases: string, patchRefCases: string } {
+  const { S, idParam, assertFn, hasTeamRefs, optionalRef, teamRefs } = ctx
+  // Same-team reference check (#3378/#3424). The queries module is mocked here, so these prove the
+  // ROUTE wiring (check runs before the write, its rejection stops the write, a null optional
+  // reference passes); the check itself is tested against a real database in its own package.
+    // Body fragment carrying every reference field with the given id (list refs take an array).
+  const refBody = (id: string) => teamRefs.map(f => `${f.name}: ${isListField(f) ? `['${id}']` : `'${id}'`}`).join(', ')
+  const refMatch = (id: string) => `expect.objectContaining({ ${refBody(id)} })`
+  const refRejection = (bodyFor: (id: string) => string, call: (b: string) => string, writeFn: string) => `
+    it('rejects a reference to another team\\'s record (400) and never writes', async () => {
+      ;(${assertFn} as any).mockRejectedValueOnce(Object.assign(new Error('Invalid reference'), { status: 400 }))
+      await expect(${call(bodyFor('other_team_ref'))}).rejects.toMatchObject({ status: 400 })
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('other_team_ref')})
+      expect(${writeFn}).not.toHaveBeenCalled()
+    })
+
+    it('rejects a reference id that does not exist (400) and never writes', async () => {
+      ;(${assertFn} as any).mockRejectedValueOnce(Object.assign(new Error('Invalid reference'), { status: 400 }))
+      await expect(${call(bodyFor('missing_ref'))}).rejects.toMatchObject({ status: 400 })
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('missing_ref')})
+      expect(${writeFn}).not.toHaveBeenCalled()
+    })`
+  const postBody = (id: string) => `{ ...VALID_BODY, ${refBody(id)} }`
+  const patchBody = (id: string) => `{ ${refBody(id)} }`
+  const postCall = (b: string) => `postHandler({ __body: ${b} } as any)`
+  const patchCall = (b: string) => `patchHandler({ __params: { ${idParam}: 'rec_1' }, __body: ${b} } as any)`
+  const postRefCases = hasTeamRefs ? `
+${refRejection(postBody, postCall, `create${S}`)}
+
+    it('accepts references that belong to the team', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(create${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await ${postCall(postBody('ref_1'))}
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('ref_1')})
+      expect(create${S}).toHaveBeenCalledWith(expect.objectContaining({ ${refBody('ref_1')} }))
+    })${optionalRef ? `
+
+    it('accepts null for the optional reference \`${optionalRef.name}\`', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(create${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await postHandler({ __body: { ...VALID_BODY, ${optionalRef.name}: null } } as any)
+      expect(create${S}).toHaveBeenCalled()
+    })` : ''}` : ''
+  const patchRefCases = hasTeamRefs ? `
+${refRejection(patchBody, patchCall, `update${S}`)}
+
+    it('accepts references that belong to the team', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(update${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await ${patchCall(patchBody('ref_1'))}
+      expect(${assertFn}).toHaveBeenCalledWith(TEAM.id, ${refMatch('ref_1')})
+      expect(update${S}).toHaveBeenCalled()
+    })${optionalRef ? `
+
+    it('accepts null for the optional reference \`${optionalRef.name}\`', async () => {
+      ;(${assertFn} as any).mockResolvedValue(undefined)
+      ;(update${S} as any).mockResolvedValue({ id: 'rec_1' })
+      await patchHandler({ __params: { ${idParam}: 'rec_1' }, __body: { ${optionalRef.name}: null } } as any)
+      expect(update${S}).toHaveBeenCalled()
+    })` : ''}` : ''
+  return { postRefCases, patchRefCases }
+}
+
 export function generateApiTest(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { layer, plural, singular, camelCase, pascalCase, pascalCasePlural, layerPascalCase, originalCollectionName } = data
 
@@ -47,6 +130,12 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
   const apiPath = apiPathFor(layer, plural, originalCollectionName || singular || plural)
   const idParam = `${camelCase}Id`                   // productId        — router param + filename
   const routeBase = `./server/api/teams/[id]/${apiPath}`
+
+  // Declared access (#3148): role-guarded handlers call requireTeamRole, so the
+  // mocked auth module must expose it too. No access → output unchanged.
+  const access = resolveAccess(data)
+  const usesRoleGuard = access.create === 'admin' || access.reorder === 'admin'
+  const listOwn = access.list === 'own'
 
   const hierarchy = data.hierarchy?.enabled === true
   const sortable = !hierarchy && data.sortable?.enabled === true
@@ -64,11 +153,17 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     `update${S}: vi.fn()`,
     `delete${S}: vi.fn()`,
   ]
-  if (hierarchy) queryExports.push(`updatePosition${S}: vi.fn()`)
-  if (hasReorder) queryExports.push(`reorderSiblings${P}: vi.fn()`)
+  queryExports.push(...optionalQueryExports(data, S, P, hierarchy, hasReorder))
 
   // Named imports we assert against.
   const queryImports = [`getAll${P}`, `create${S}`, `update${S}`, `delete${S}`]
+  const teamRefs = collectTeamRefFields(data)
+  const hasTeamRefs = teamRefs.length > 0
+  const assertFn = `assert${S}References`
+  if (hasTeamRefs) queryImports.push(assertFn)
+  // An optional reference for the "null is fine" case — single preferred, list refs too: optional
+  // fields are `.nullish()` on the wire either way (#3424, #3600)
+  const optionalRef = teamRefs.find(f => !f.meta?.required && !isListField(f)) ?? teamRefs.find(f => !f.meta?.required)
   if (hierarchy) queryImports.push(`updatePosition${S}`)
   if (hasReorder) queryImports.push(`reorderSiblings${P}`)
 
@@ -100,6 +195,8 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     })`
   }
 
+  const { postRefCases, patchRefCases } = buildRefCases({ S, idParam, assertFn, hasTeamRefs, optionalRef, teamRefs })
+
   // --- describe blocks
   const getBlock = `
   describe('index.get', () => {
@@ -115,7 +212,19 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
       expect(getAll${P}).toHaveBeenCalled()
       // first positional arg is always the resolved team id (FK filters ride in opts)
       expect((getAll${P} as any).mock.calls[0][0]).toBe(TEAM.id)
+    })${listOwn ? `
+
+    it('scopes a member to their own rows (list: own)', async () => {
+      ;(getAll${P} as any).mockResolvedValue([])
+      await getHandler({ __query: {} } as any)
+      expect((getAll${P} as any).mock.calls[0][1]).toMatchObject({ ownerId: USER.id })
     })
+
+    it('scopes ?ids= lookups to their own rows (list: own)', async () => {
+      ;(get${P}ByIds as any).mockResolvedValue([])
+      await getHandler({ __query: { ids: 'a,b' } } as any)
+      expect((get${P}ByIds as any).mock.calls[0][2]).toBe(USER.id)
+    })` : ''}
   })`
 
   const postBlock = `
@@ -131,7 +240,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
       const result = await postHandler({ __body: VALID_BODY } as any)
       expect(create${S}).toHaveBeenCalledWith(expect.objectContaining({ teamId: TEAM.id, owner: USER.id }))
       expect(result).toMatchObject({ id: 'rec_1' })
-    })${invalidPostCase}
+    })${invalidPostCase}${postRefCases}
   })`
 
   const patchBlock = `
@@ -155,7 +264,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
     it('propagates a not-found from the query as a 404', async () => {
       ;(update${S} as any).mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }))
       await expect(patchHandler({ __params: { ${idParam}: 'missing' }, __body: {} } as any)).rejects.toMatchObject({ status: 404 })
-    })
+    })${patchRefCases}
   })`
 
   const deleteBlock = `
@@ -259,13 +368,13 @@ vi.hoisted(() => {
 })
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
-  resolveTeamAndCheckMembership: vi.fn(),
+  resolveTeamAndCheckMembership: vi.fn(),${usesRoleGuard ? '\n  requireTeamRole: vi.fn(),' : ''}
 }))
 vi.mock('./server/database/queries', () => ({
   ${queryExports.join(',\n  ')},
 }))
 
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { resolveTeamAndCheckMembership${usesRoleGuard ? ', requireTeamRole' : ''} } from '@fyit/crouton-auth/server/utils/team'
 import {
   ${queryImports.join(',\n  ')},
 } from './server/database/queries'
@@ -276,8 +385,18 @@ const USER = { id: 'user_1' }
 const MEMBERSHIP = { role: 'member' }
 const VALID_BODY = ${validBodyLiteral}${invalidConst}
 
-const authed = () => (resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
-const unauth = () => (resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+${usesRoleGuard
+    ? `const authed = () => {
+  ;(resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
+  // role-guarded handlers: the test caller is an admin
+  ;(requireTeamRole as any).mockResolvedValue({ team: TEAM, user: USER, membership: { role: 'admin' } })
+}
+const unauth = () => {
+  ;(resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+  ;(requireTeamRole as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+}`
+    : `const authed = () => (resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
+const unauth = () => (resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))`}
 
 beforeEach(() => {
   vi.clearAllMocks()

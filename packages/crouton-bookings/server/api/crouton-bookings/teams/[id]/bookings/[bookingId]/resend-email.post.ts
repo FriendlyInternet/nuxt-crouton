@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
   const { bookingId } = getRouterParams(event)
 
   // Validate request body
@@ -107,6 +107,11 @@ export default defineEventHandler(async (event) => {
       status: 404,
       statusText: 'Booking not found'
     })
+  }
+
+  // Members may only resend for their own bookings (#3135)
+  if (membership?.role !== 'admin' && membership?.role !== 'owner' && booking.owner !== user.id) {
+    throw createError({ status: 403, statusText: 'Not your booking' })
   }
 
   // Build booking context for email — resolve translations

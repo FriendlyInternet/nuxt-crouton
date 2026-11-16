@@ -116,22 +116,27 @@ describe('toCase', () => {
 })
 
 describe('mapType', () => {
-  it('returns valid type unchanged (fallback mode)', () => {
-    expect(mapType('string')).toBe('string')
-    expect(mapType('text')).toBe('text')
-    expect(mapType('number')).toBe('number')
-    expect(mapType('decimal')).toBe('decimal')
-    expect(mapType('boolean')).toBe('boolean')
-    expect(mapType('date')).toBe('date')
-    expect(mapType('json')).toBe('json')
-    expect(mapType('repeater')).toBe('repeater')
-    expect(mapType('array')).toBe('array')
+  const manifestTypes = new Set(['string', 'text', 'number', 'decimal', 'boolean', 'date', 'json', 'repeater', 'array'])
+
+  it('returns valid type unchanged', () => {
+    expect(mapType('string', manifestTypes)).toBe('string')
+    expect(mapType('text', manifestTypes)).toBe('text')
+    expect(mapType('number', manifestTypes)).toBe('number')
+    expect(mapType('decimal', manifestTypes)).toBe('decimal')
+    expect(mapType('boolean', manifestTypes)).toBe('boolean')
+    expect(mapType('date', manifestTypes)).toBe('date')
+    expect(mapType('json', manifestTypes)).toBe('json')
+    expect(mapType('repeater', manifestTypes)).toBe('repeater')
+    expect(mapType('array', manifestTypes)).toBe('array')
   })
 
-  it('returns string for unknown types (fallback mode)', () => {
-    expect(mapType('unknown')).toBe('string')
-    expect(mapType('invalid')).toBe('string')
-    expect(mapType('')).toBe('string')
+  it('returns string for unknown types', () => {
+    expect(mapType('unknown', manifestTypes)).toBe('string')
+    expect(mapType('invalid', manifestTypes)).toBe('string')
+  })
+
+  it('returns string for an empty type', () => {
+    expect(mapType('', manifestTypes)).toBe('string')
   })
 
   it('validates against provided validTypes set', () => {

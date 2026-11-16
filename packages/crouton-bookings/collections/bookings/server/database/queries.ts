@@ -1,12 +1,12 @@
 // Generated with JSON field post-processing support (v2025-01-11)
-import { eq, and, desc, inArray } from 'drizzle-orm'
+import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
-import type { BookingsBooking, NewBookingsBooking } from '../../types'
 import * as locationsSchema from '../../../locations/server/database/schema'
 import { user } from '~~/server/db/schema'
 
-export async function getAllBookingsBookings(teamId: string) {
+// Non-admins pass { ownerId } to see only their own rows, with no user emails (#3135)
+export async function getAllBookingsBookings(teamId: string, scope?: { ownerId?: string }) {
   const db = useDB()
 
   const ownerUser = alias(user as any, 'ownerUser')
@@ -20,19 +20,19 @@ export async function getAllBookingsBookings(teamId: string) {
       ownerUser: {
         id: ownerUser.id,
         name: ownerUser.name,
-        email: ownerUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : ownerUser.email,
         image: ownerUser.image
       },
       createdByUser: {
         id: createdByUser.id,
         name: createdByUser.name,
-        email: createdByUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : createdByUser.email,
         image: createdByUser.image
       },
       updatedByUser: {
         id: updatedByUser.id,
         name: updatedByUser.name,
-        email: updatedByUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : updatedByUser.email,
         image: updatedByUser.image
       }
     } as any)
@@ -41,13 +41,13 @@ export async function getAllBookingsBookings(teamId: string) {
     .leftJoin(ownerUser, eq(tables.bookingsBookings.owner, ownerUser.id))
     .leftJoin(createdByUser, eq(tables.bookingsBookings.createdBy, createdByUser.id))
     .leftJoin(updatedByUser, eq(tables.bookingsBookings.updatedBy, updatedByUser.id))
-    .where(eq(tables.bookingsBookings.teamId, teamId))
+    .where(and(eq(tables.bookingsBookings.teamId, teamId), scope?.ownerId ? eq(tables.bookingsBookings.owner, scope.ownerId) : undefined))
     .orderBy(desc(tables.bookingsBookings.createdAt))
 
   return bookings
 }
 
-export async function getBookingsBookingsByIds(teamId: string, bookingIds: string[]) {
+export async function getBookingsBookingsByIds(teamId: string, bookingIds: string[], scope?: { ownerId?: string }) {
   const db = useDB()
 
   const ownerUser = alias(user as any, 'ownerUser')
@@ -61,19 +61,19 @@ export async function getBookingsBookingsByIds(teamId: string, bookingIds: strin
       ownerUser: {
         id: ownerUser.id,
         name: ownerUser.name,
-        email: ownerUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : ownerUser.email,
         image: ownerUser.image
       },
       createdByUser: {
         id: createdByUser.id,
         name: createdByUser.name,
-        email: createdByUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : createdByUser.email,
         image: createdByUser.image
       },
       updatedByUser: {
         id: updatedByUser.id,
         name: updatedByUser.name,
-        email: updatedByUser.email,
+        email: scope?.ownerId ? sql<string | null>`NULL` : updatedByUser.email,
         image: updatedByUser.image
       }
     } as any)
@@ -85,60 +85,13 @@ export async function getBookingsBookingsByIds(teamId: string, bookingIds: strin
     .where(
       and(
         eq(tables.bookingsBookings.teamId, teamId),
-        inArray(tables.bookingsBookings.id, bookingIds)
+        inArray(tables.bookingsBookings.id, bookingIds),
+        scope?.ownerId ? eq(tables.bookingsBookings.owner, scope.ownerId) : undefined
       )
     )
     .orderBy(desc(tables.bookingsBookings.createdAt))
 
   return bookings
-}
-
-export async function createBookingsBooking(data: NewBookingsBooking) {
-  const db = useDB()
-
-  const [booking] = await (db as any)
-    .insert(tables.bookingsBookings)
-    .values(data)
-    .returning()
-
-  return booking
-}
-
-export async function updateBookingsBooking(
-  recordId: string,
-  teamId: string,
-  userId: string,
-  updates: Partial<BookingsBooking>,
-  options?: { role?: string }
-) {
-  const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
-
-  const conditions = [
-    eq(tables.bookingsBookings.id, recordId),
-    eq(tables.bookingsBookings.teamId, teamId),
-  ]
-  if (!isAdmin) {
-    conditions.push(eq(tables.bookingsBookings.owner, userId))
-  }
-
-  const [booking] = await (db as any)
-    .update(tables.bookingsBookings)
-    .set({
-      ...updates,
-      updatedBy: userId
-    })
-    .where(and(...conditions))
-    .returning()
-
-  if (!booking) {
-    throw createError({
-      status: 404,
-      statusText: 'BookingsBooking not found or unauthorized'
-    })
-  }
-
-  return booking
 }
 
 export async function deleteBookingsBooking(
@@ -171,4 +124,11 @@ export async function deleteBookingsBooking(
   }
 
   return { success: true }
+}
+
+// Referenced records must belong to this team (#3378)
+export async function assertBookingsBookingReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'location', table: locationsSchema.bookingsLocations, value: data.location },
+  ])
 }

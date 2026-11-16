@@ -24,6 +24,7 @@ import type { User } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 import { magicLinkCallbackURL } from '../utils/magicLinkCallback'
+import { sanitizeRedirectUrl } from '../utils/security'
 
 export interface LoginCredentials {
   email: string
@@ -35,6 +36,20 @@ export interface RegisterData {
   email: string
   password: string
   name?: string
+  /**
+   * Where the verification link should land (e.g. an invite page) when the app
+   * requires a verified e-mail (#3141). Sanitized to a same-origin path.
+   */
+  callbackURL?: string
+}
+
+export interface RegisterResult {
+  /**
+   * True when sign-up created the account but gave no session — the app
+   * requires a verified e-mail (crouton-email installed) and a verification
+   * e-mail was sent. The user is NOT signed in yet.
+   */
+  requiresVerification: boolean
 }
 
 export interface PasskeyInfo {
@@ -266,9 +281,11 @@ export function useAuth() {
   }
 
   /**
-   * Register a new user with email and password
+   * Register a new user with email and password.
+   * With crouton-email installed there is no session until the e-mail is
+   * verified: the result's `requiresVerification` is then true (#3141).
    */
-  async function register(data: RegisterData): Promise<void> {
+  async function register(data: RegisterData): Promise<RegisterResult> {
     loading.value = true
     error.value = null
 
@@ -282,7 +299,8 @@ export function useAuth() {
       const result = await requireAuthClient().signUp.email({
         email: data.email,
         password: data.password,
-        name: displayName
+        name: displayName,
+        ...(data.callbackURL ? { callbackURL: sanitizeRedirectUrl(data.callbackURL) } : {})
       })
 
       if (debug) {
@@ -296,6 +314,16 @@ export function useAuth() {
 
       if (result.error) {
         throw new AuthError(AUTH_ERROR_CODES.AUTH_REGISTRATION_FAILED, result.error.message)
+      }
+
+      // No token = the account exists but must verify its e-mail first (#3141).
+      // There is no session to pull in, so skip the refresh.
+      const requiresVerification = !result.data?.token
+      if (requiresVerification) {
+        if (debug) {
+          console.log('[@crouton/auth] register: verification required, no session yet')
+        }
+        return { requiresVerification: true }
       }
 
       if (debug) {
@@ -312,6 +340,7 @@ export function useAuth() {
           activeOrg: activeOrganization.value?.slug ?? null
         })
       }
+      return { requiresVerification: false }
     } catch (e: unknown) {
       if (debug) {
         console.error('[@crouton/auth] register: error', e)

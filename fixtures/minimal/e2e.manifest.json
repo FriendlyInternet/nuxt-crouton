@@ -8,6 +8,10 @@
       "requiredField": "name"
     }
   ],
+  "access": {
+    "admindocs": { "apiPath": "main-admindocs" },
+    "membernotes": { "apiPath": "main-membernotes" }
+  },
   "i18n": {
     "path": "/",
     "switchTo": "NL",

@@ -10,10 +10,13 @@
  * Required setup:
  * - Enable: runtimeConfig.croutonBookings.email.enabled = true
  * - Install: @fyit/crouton-email (or implement custom email provider)
- * - Generate: email-template and email-log collections
+ * - Tables: bookings_emailtemplates / bookings_emaillogs ship from this package (#2278);
+ *   the app only needs its migrations applied. A missing table is logged as an error.
  */
 import { eq, and, inArray } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
+import { bookingsEmailtemplates } from '../../collections/emailtemplates/server/database/schema'
+import { bookingsEmaillogs } from '../../collections/emaillogs/server/database/schema'
 import {
   isBookingEmailEnabled,
   getBookingEmailService,
@@ -25,15 +28,6 @@ import {
   type BookingEmailVariables,
   type BookingWithEmailContext
 } from './booking-emails'
-
-/**
- * The consuming app's generated schema. Each app generates its own tables at build time,
- * so the package can't type the exports; a collection the app doesn't have is just absent.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-async function loadAppSchema(): Promise<Record<string, any>> {
-  return await import('~~/server/db/schema')
-}
 
 /**
  * Email template record shape (from generated bookingsEmailtemplates table)
@@ -107,11 +101,6 @@ export async function getActiveTemplatesForTrigger(
   const db = useDB()
 
   try {
-    // Import from the centralized schema index (always exists, Vite resolves ~~ alias)
-    const schema = await loadAppSchema()
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmailtemplates) return []
-
     // Build conditions
     const conditions = [
       eq(bookingsEmailtemplates.teamId as any, teamId),
@@ -202,10 +191,6 @@ export async function logEmailSend(options: {
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return null
-
     const [log] = await db
       .insert(bookingsEmaillogs)
       .values({
@@ -247,10 +232,6 @@ export async function updateEmailLogStatus(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return
-
     await db
       .update(bookingsEmaillogs)
       .set({
@@ -483,6 +464,13 @@ export async function sendBookingEmails(
           status: 'pending'
         })
 
+        if (!logId) {
+          console.error(`[booking-email] Not sending ${triggerType} to ${customerEmail}: could not write the email log`)
+          results.success = false
+          results.errors?.push('Customer email not sent: email log could not be written')
+          continue
+        }
+
         // Send
         const result = await sendSingleEmail({
           to: customerEmail,
@@ -548,6 +536,13 @@ export async function sendBookingEmails(
         triggerType,
         status: 'pending'
       })
+
+      if (!logId) {
+        console.error(`[booking-email] Not sending ${triggerType} to ${adminEmail}: could not write the email log`)
+        results.success = false
+        results.errors?.push('Admin email not sent: email log could not be written')
+        continue
+      }
 
       // Send
       const result = await sendSingleEmail({
@@ -680,10 +675,6 @@ export async function getBatchBookingEmailStats(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return new Map()
-
     // D1 has a 100-parameter limit — chunk the IDs
     const chunks = chunkArray(bookingIds, D1_PARAM_CHUNK_SIZE)
     const allLogs: Array<{ bookingId: string; status: string }> = []
@@ -745,11 +736,6 @@ export async function getBatchBookingEmailDetails(
   const bookingIds = bookings.map(b => b.id)
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmaillogs || !bookingsEmailtemplates) return new Map()
-
     // D1 has a 100-parameter limit — chunk the booking IDs
     const chunks = chunkArray(bookingIds, D1_PARAM_CHUNK_SIZE)
 
@@ -934,10 +920,6 @@ export async function getBookingEmailStats(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return { total: 0, sent: 0, pending: 0, failed: 0 }
-
     const logs = await db
       .select({
         status: bookingsEmaillogs.status
@@ -997,11 +979,6 @@ export async function getBookingEmailDetails(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmaillogs || !bookingsEmailtemplates) return results
-
     // Get all email logs for this booking
     const logs = await db
       .select({

@@ -5,7 +5,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // NB (#1448 probe finding): import with the explicit .ts extension.
-import { resolveSchemaSources } from '../../../lib/utils/schema-sources.ts'
+import { resolveSchemaSources, resolveSchemaGraph } from '../../../lib/utils/schema-sources.ts'
 
 // Synthetic layer trees exercise the GRAPH-WALK mechanics (extends resolution,
 // app-root inclusion, layers/* auto-scan, realpath dedup, the exact glob) on
@@ -170,5 +170,55 @@ describe('resolveSchemaSources', () => {
       const paths = await resolveSchemaSources(root)
       expect(paths).toEqual([join(root, 'server/db/schema.ts')])
     })
+  })
+})
+
+// #1742: layers like @fyit/crouton-admin export `.` with the `import` condition
+// only. A CJS resolver rejects that (ERR_PACKAGE_PATH_NOT_EXPORTED), which left
+// them unresolved and made every app soft-defer its migration.
+describe('resolveLayerDir — import-only exports', () => {
+  /** An import-only package `@x/layer` at `<nodeModulesParent>/node_modules/@x/layer`. */
+  function mkImportOnlyPkg(nodeModulesParent: string, exportsMap: Record<string, unknown>): string {
+    const pkg = join(nodeModulesParent, 'node_modules', '@x', 'layer')
+    mklayer(pkg, { schema: true })
+    writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name: '@x/layer', type: 'module', exports: exportsMap }))
+    return pkg
+  }
+
+  it('(a) resolves an import-only package in the app\'s own node_modules', () => {
+    const app = join(root, 'app')
+    mklayer(app, { extends: ['@x/layer'] })
+    const pkg = mkImportOnlyPkg(app, { '.': { import: './nuxt.config.ts' } })
+    const graph = resolveSchemaGraph(app)
+    expect(graph.unresolved).toEqual([])
+    expect(graph.paths.map(x => realpathSync(x))).toContain(join(pkg, 'server/db/schema.ts'))
+  })
+
+  it('(b) resolves an import-only package hoisted ABOVE the app (monorepo shape)', () => {
+    const app = join(root, 'apps', 'app')
+    mklayer(app, { extends: ['@x/layer'] })
+    const pkg = mkImportOnlyPkg(root, { '.': { import: './nuxt.config.ts' } })
+    const graph = resolveSchemaGraph(app)
+    expect(graph.unresolved).toEqual([])
+    expect(graph.paths.map(x => realpathSync(x))).toContain(join(pkg, 'server/db/schema.ts'))
+  })
+
+  it('(c) resolves a mapped subpath to its sub-layer root; an unmapped one is unresolved, no throw', () => {
+    const app = join(root, 'app')
+    mklayer(app, { extends: ['@x/layer/themes/a', '@x/layer/themes/nope'] })
+    const pkg = mkImportOnlyPkg(app, {
+      '.': { import: './nuxt.config.ts' },
+      './themes/a': { import: './themes/a/nuxt.config.ts' },
+    })
+    mklayer(join(pkg, 'themes', 'a'), { schema: true })
+    const graph = resolveSchemaGraph(app)
+    expect(graph.unresolved).toEqual(['@x/layer/themes/nope'])
+    expect(graph.paths.map(x => realpathSync(x))).toContain(join(pkg, 'themes/a/server/db/schema.ts'))
+  })
+
+  it('(d) a package that exists nowhere stays unresolved (the defer stays honest)', () => {
+    const app = join(root, 'app')
+    mklayer(app, { extends: ['@x/missing'] })
+    expect(resolveSchemaGraph(app).unresolved).toEqual(['@x/missing'])
   })
 })

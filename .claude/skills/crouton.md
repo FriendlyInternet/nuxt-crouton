@@ -60,8 +60,8 @@ If the Crouton MCP server is configured, you can use these tools for AI-assisted
 3. Call `validate_schema` to check schema
 4. Call `dry_run` to preview what will be generated
 5. **Schema sign-off gate (#314)** — run the **`schema-review`** skill and get **human sign-off**
-   on the field table **before** generating (see the `schema-review` skill + the "Schema Sign-Off"
-   rule in root `CLAUDE.md`). `validate_schema` is the machine check; this is the human one.
+   on the field table **before** generating (see the `schema-review` skill + the schema sign-off
+   gate in `crouton-change-control` §7). `validate_schema` is the machine check; this is the human one.
 6. Call `generate_collection` to create files — **only after approval**
 
 **Quick Commands:**
@@ -112,6 +112,7 @@ Use this skill when the user mentions:
 | tags, string list | `array` | `"tags": { "type": "array" }` |
 | image, photo, picture | `image` | `"coverImage": { "type": "image" }` |
 | file, attachment, document | `file` | `"attachment": { "type": "file" }` |
+| link to another collection, foreign key | `reference` | `"authorId": { "type": "reference", "refTarget": "authors" }` |
 
 ### Common Field Meta Options
 
@@ -340,7 +341,7 @@ crouton {layer} {collection} --fields-file=./schemas/{collection}.json --dialect
 
 ### Step 6: Default Layout (generate → POC, #709)
 
-The generator's final step runs the **deterministic layout pass** and writes
+For an app that extends `@fyit/crouton-layout` only (opt-in, parked, #2282; others get a one-line skip and no file), the generator's final step runs the **deterministic layout pass** and writes
 **`crouton.layout.json`** at the app root — a `layout_configs`-format tree that
 arranges the just-generated collections into a good default (no LLM):
 

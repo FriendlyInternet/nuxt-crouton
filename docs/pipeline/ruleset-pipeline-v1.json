@@ -1,0 +1,38 @@
+{
+  "name": "pipeline-v1",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/epic/*--v1-*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": true,
+        "required_status_checks": [
+          { "context": "CI Gate", "integration_id": 15368 },
+          { "context": "Merge decision", "integration_id": 4107840 }
+        ]
+      }
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["merge"]
+      }
+    }
+  ],
+  "bypass_actors": [
+    { "actor_id": 4107840, "actor_type": "Integration", "bypass_mode": "always" }
+  ]
+}

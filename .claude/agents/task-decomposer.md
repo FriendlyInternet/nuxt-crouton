@@ -69,6 +69,7 @@ An issue is **leaf-sized** when:
    a small/contained set (not "touches the whole layer").
 3. **Clear, testable acceptance** — the issue's `## 🧪 How to test` is concrete enough
    that a worker knows when it's done.
+   A child's `## 🧪 How to test` may only exercise what THAT child adds and must pass on that child's PR preview alone. Any step that needs a sibling's work (its seed data, its API, its screen) belongs on the epic's `## 🧪 How to test`, not the child's. Do not copy the epic's end-to-end check onto a child.
 4. **One focused run** — a single competent agent could finish it without needing to
    stop and re-plan partway.
 

@@ -51,17 +51,13 @@ export function toCase(str: string): CaseVariants {
 /**
  * Validate and normalize a field type against a set of known types.
  */
-export function mapType(t: string, validTypes?: Set<string>): string {
+export function mapType(t: string, validTypes: Set<string>): string {
   // `integer` is an alias for `number` (crouton's int column type). Normalize it
   // up front so schemas declaring "type": "integer" produce integer columns
   // instead of silently falling back to text. Everything downstream keys off the
   // resolved `number` type (schema → integer(), zod → z.number(), ts → number).
   if (t === 'integer') t = 'number'
-  if (validTypes) {
-    return validTypes.has(t) ? t : 'string'
-  }
-  // Fallback for callers that don't pass validTypes (backward compat during migration)
-  return ['string', 'text', 'richText', 'number', 'decimal', 'boolean', 'date', 'json', 'repeater', 'array', 'image', 'file'].includes(t) ? t : 'string'
+  return validTypes.has(t) ? t : 'string'
 }
 
 interface Field {

@@ -266,3 +266,12 @@ export async function reorderSiblingsSalesProducts(
 
   return { success: true, updated: results.flat().length }
 }
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesProductReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'eventId', table: eventsSchema.salesEvents, value: data.eventId },
+    { field: 'categoryId', table: categoriesSchema.salesCategories, value: data.categoryId },
+    { field: 'locationId', table: locationsSchema.salesLocations, value: data.locationId },
+  ])
+}

@@ -50,6 +50,34 @@
       "when": 1793183537432,
       "tag": "0006_thankful_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793955340403,
+      "tag": "0007_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793955340405,
+      "tag": "0008_domain_per_team_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794486050461,
+      "tag": "0009_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794486194461,
+      "tag": "0010_verify_existing_users",
+      "breakpoints": true
     }
   ]
 }

@@ -87,7 +87,49 @@ Full operating runbooks for the app-facing ones are in **crouton-run-and-operate
 
 ## 5. Verify capabilities, don't assume (#629)
 
-Root CLAUDE.md ("You HAVE a headless browser") is the standing rule; the incident behind it is [#629](https://github.com/FriendlyInternet/nuxt-crouton/issues/629): an agent checked the default Playwright path (empty), saw `npx playwright install` fail (egress-blocked CDN), and declared "no browser" — while chromium sat preinstalled at `/opt/pw-browsers`. **Two partial negatives are not proof of absence.** Before declaring anything unavailable: env vars → non-default paths → filesystem search → system binaries. Same doctrine applies to TodoWrite (absent on some harnesses — fall back per root CLAUDE.md, don't retry-spam) and any "X isn't available here" claim inherited from a prior session: probe for 5 seconds first. `app-shots.mjs`'s `findChromium()` is the codified fix (env override: `PLAYWRIGHT_CHROMIUM_PATH`).
+Root CLAUDE.md ("You HAVE a headless browser") is a one-line pointer to this section; the full how-to is at the end of §5 (below); the incident behind it is [#629](https://github.com/FriendlyInternet/nuxt-crouton/issues/629): an agent checked the default Playwright path (empty), saw `npx playwright install` fail (egress-blocked CDN), and declared "no browser" — while chromium sat preinstalled at `/opt/pw-browsers`. **Two partial negatives are not proof of absence.** Before declaring anything unavailable: env vars → non-default paths → filesystem search → system binaries. Same doctrine applies to TodoWrite (absent on some harnesses — fall back per root CLAUDE.md, don't retry-spam) and any "X isn't available here" claim inherited from a prior session: probe for 5 seconds first. `app-shots.mjs`'s `findChromium()` is the codified fix (env override: `PLAYWRIGHT_CHROMIUM_PATH`).
+
+**Headless-browser how-to (moved from root CLAUDE.md, #3350).**
+
+**This environment has a working headless browser** — Playwright + a chromium
+pre-installed under `/opt/pw-browsers/`. You **can** render pages, screenshot UI,
+and drive a live preview locally. The recurring trap: the Playwright browser
+**download host is egress-blocked**, so `npx playwright install` fails — and a
+session wrongly concludes "no Chromium / no browser" and plans around a
+limitation that **doesn't exist**. Don't. Use the already-installed browser:
+
+```bash
+# Easiest — screenshot a running app (auto-resolves the chromium build):
+node scripts/app-shots.mjs <baseUrl> <path[:name]> [more...]   # → screenshots/<name>.png
+# In Playwright code, point launch() at the installed binary (build number varies):
+#   chromium.launch({ executablePath: <…/opt/pw-browsers/chromium-*/chrome-linux/chrome> })
+```
+
+The `SessionStart` hook announces the browser + its path every session. **General
+rule:** a prior session's (or a task brief's) claimed limitation is a
+*hypothesis* — verify it with a 5-second check before designing around it. The
+same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
+don't trust a stale assertion.
+
+**The sandbox can BOTH run a crouton app locally AND reach the live staging preview.**
+Local: `pnpm dev` + this chromium. Deployed: `*.pmcp.dev` staging egress is now
+**allowlisted** (#760), so from a web session you can `curl`/`$fetch`-drive the **real
+deployed build** — log in with the review creds, hit the live API, and observe
+deploy-only state (remote D1, a seed that actually ran) that local dev cannot show
+(verified: signup → set-active → create round-trips against a live `*.pmcp.dev`).
+Match the bug to the right rung of the **fidelity ladder** (`typecheck → local dev →
+deployed staging → the user's device`): a **runtime** bug (reload loop, 500, broken
+interaction) reproduce + verify **locally** first (the #988 board-reload lesson: three
+blind pushes vs one local repro), but a **deploy-only / production-build** bug must be
+checked against the **live** preview, not local. **Two residual gaps:** (a) **iOS/WebKit**
+— no Safari engine here, so a device-specific crash stays the user's call to confirm;
+(b) live **screenshots** — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
+egress proxy's re-terminated TLS, so pixel capture of a `*.pmcp.dev` page needs the proxy
+CA trusted in a chromium NSS profile first (**#1172**; functional/API drive already works).
+Never push an unverified guess and wait ~15 min for a deploy to learn it was wrong. The
+method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*, incl.
+the fidelity ladder); the concrete boot + browser-drive + auth/team recipe is the
+**`crouton-run-and-operate`** skill.
 
 ## 6. What has NO instrumentation (open gaps)
 
@@ -116,3 +158,31 @@ grep -rl crouton-analytics --include=package.json apps pocs fixtures || echo "st
 gh issue view 629 --json state -q .state                    # capability-assumption incident still open?
 grep -l '"logs"' apps/*/package.json                        # which apps have a logs script (2 at verification, both prod-tail)
 ```
+
+## TodoWrite fallback (moved from root CLAUDE.md, #3350)
+
+**Use the TodoWrite tool proactively for complex tasks — *when the harness exposes it*.**
+
+> ⚠️ **TodoWrite is not available on every harness** (notably Claude Code on the
+> web, where the tool errors with *"not enabled in this context"*). It's a
+> **capability, not a guarantee** — don't assume it, and don't waste turns
+> retrying it after it errors. When it's absent, **fall back** to:
+> 1. a short inline checklist in your reply (the breakdown lives in chat), and
+> 2. the **GitHub issue's own acceptance-criteria checkboxes** as the durable,
+>    coarse tracker — tick them as you satisfy each criterion.
+>
+> Do **not** push ephemeral per-step micro-todos onto the GitHub issue (comment
+> spam / body churn) — the issue tracks the *unit of work* (epic + sub-issues +
+> acceptance criteria), the inline checklist tracks *this session's steps*.
+
+**When to use:** Any task with 3+ steps, multi-file changes, debugging, feature implementations.
+**When NOT to use:** Single straightforward tasks, trivial changes, purely conversational queries.
+
+**Critical Rules (when using TodoWrite):**
+- Exactly ONE task must be `in_progress` at any time
+- Mark tasks `completed` IMMEDIATELY after finishing
+- ONLY mark complete when FULLY accomplished — never if tests fail or work is partial
+
+Each todo requires:
+- `content`: Imperative form (e.g., "Fix authentication bug")
+- `activeForm`: Present continuous (e.g., "Fixing authentication bug")

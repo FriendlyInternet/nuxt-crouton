@@ -22,6 +22,9 @@
 //     HTML-comment wrapper). `parsePipelineBlock` still reads that legacy shape so already-
 //     labelled issues keep working; `formatPipelineBlock` always emits the wrapped form.
 //
+// `base=main` (#3504) means "main on purpose": the worker then ignores the GitHub parent epic.
+// Absent → the worker falls back to the open parent epic's branch (scripts/epic-base.mjs).
+//
 // `dispatch` (#1923). When the decomposer WITHHOLDS a trigger label from a blocked child (#1750),
 // the leaf-vs-split classification it already made would otherwise be thrown away — so the wave
 // scheduler released everything with `delegate`, spending a whole decompose run to re-derive
@@ -42,7 +45,7 @@ const LEGACY_RE = /^[ \t]*pipeline:\s*(.+?)\s*$/im
 
 // Keys we understand. Anything else in the block is ignored (forward-compatible).
 const INT_KEYS = new Set(['epic', 'depth'])
-const STR_KEYS = new Set(['epic_branch', 'dispatch'])
+const STR_KEYS = new Set(['epic_branch', 'dispatch', 'base'])
 
 // A value that can actually be a git branch / label name. Anything else (`…`, `<slug>`, `N`) is
 // a placeholder copied from documentation, and a placeholder must read as ABSENT — #2444: an
@@ -71,7 +74,7 @@ function spliceMatch(body, m, text) {
 
 /** Parse the `k=v k=v` token string into a typed object. Unknown keys are dropped. */
 function parseTokens(tokenStr) {
-  const out = { epic: null, depth: null, epic_branch: null, dispatch: null }
+  const out = { epic: null, depth: null, epic_branch: null, dispatch: null, base: null }
   if (!tokenStr) return out
   for (const tok of tokenStr.trim().split(/\s+/)) {
     const eq = tok.indexOf('=')
@@ -94,12 +97,12 @@ function parseTokens(tokenStr) {
  * Prefers the wrapped `<!-- pipeline: ... -->` form; falls back to the legacy bare line.
  */
 export function parsePipelineBlock(body) {
-  if (!body || typeof body !== 'string') return { epic: null, depth: null, epic_branch: null, dispatch: null }
+  if (!body || typeof body !== 'string') return { epic: null, depth: null, epic_branch: null, dispatch: null, base: null }
   const wrapped = matchOutsideCode(body, BLOCK_RE)
   if (wrapped) return parseTokens(wrapped[1])
   const legacy = matchOutsideCode(body, LEGACY_RE)
   if (legacy) return parseTokens(legacy[1])
-  return { epic: null, depth: null, epic_branch: null, dispatch: null }
+  return { epic: null, depth: null, epic_branch: null, dispatch: null, base: null }
 }
 
 /**
@@ -107,12 +110,13 @@ export function parsePipelineBlock(body) {
  * non-null/defined value are emitted, in a stable order (epic, depth, epic_branch, dispatch).
  * Returns null if nothing is worth writing (so callers can skip an empty block).
  */
-export function formatPipelineBlock({ epic, depth, epic_branch, dispatch } = {}) {
+export function formatPipelineBlock({ epic, depth, epic_branch, dispatch, base } = {}) {
   const toks = []
   if (epic !== null && epic !== undefined && `${epic}` !== '') toks.push(`epic=${epic}`)
   if (depth !== null && depth !== undefined && `${depth}` !== '') toks.push(`depth=${depth}`)
   if (epic_branch) toks.push(`epic_branch=${epic_branch}`)
   if (dispatch) toks.push(`dispatch=${dispatch}`)
+  if (base) toks.push(`base=${base}`)
   if (toks.length === 0) return null
   return `<!-- pipeline: ${toks.join(' ')} -->`
 }

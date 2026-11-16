@@ -6,6 +6,7 @@ import {
   markAllStatusSeen,
   mutationStatus,
   mergeTeamEvents,
+  itemNameFromRecord,
   dropTeamEvents,
   STATUS_RECENT_MAX,
   type StatusMessage,
@@ -159,5 +160,65 @@ describe('mergeTeamEvents with live sync', () => {
   it('keeps own entries unchanged', () => {
     const own = mergeTeamEvents([], [ev({ userId: 'me', id: 'e2' })], t, 'me', true)
     expect(own[0]!.text).toContain('You saved')
+  })
+})
+
+describe('mergeTeamEvents own floor', () => {
+  const row = (id: string, ts: number, userId: string) => ({ id, timestamp: ts, operation: 'update', collectionName: 'posts', userId, itemId: id })
+  const own = Array.from({ length: 10 }, (_, i) => row(`own${i}`, 1000 + i, 'me'))
+  const team = Array.from({ length: 30 }, (_, i) => row(`team${i}`, 5000 + i, 'bob'))
+
+  it('keeps the newest own entries in the feed despite newer teammate rows', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-own9', 'event-own8', 'event-own7'])
+  })
+
+  it('fills the rest with teammates when there are few own entries', () => {
+    const ids = mergeTeamEvents([], [own[0]!, ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-own0'])
+  })
+
+  it('never pushes out the newest teammate change', () => {
+    const day = 24 * 3600 * 1000
+    const oldOwn = [0, 1, 2].map(i => row(`o${i}`, 1000 + i * day, 'me'))
+    const ids = mergeTeamEvents([], [...oldOwn, row('fresh', 9e12, 'bob')], t, 'me', true, 3).map(m => m.id)
+    expect(ids[0]).toBe('event-fresh')
+    expect(ids).toHaveLength(4)
+  })
+
+  it('recognises own entries across refreshes', () => {
+    const first = mergeTeamEvents([], own.slice(0, 3), t, 'me', true, 3)
+    const ids = mergeTeamEvents(first, [...own.slice(0, 3), ...team], t, 'me', true, 3).map(m => m.id)
+    expect(ids).toEqual(expect.arrayContaining(['event-own0', 'event-own1', 'event-own2']))
+    expect(ids).toHaveLength(5)
+  })
+
+  it('behaves as before without a floor', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', true).map(m => m.id)
+    expect(ids).toEqual(['event-team29', 'event-team28', 'event-team27', 'event-team26', 'event-team25'])
+  })
+
+  it('has no effect when others are excluded', () => {
+    const ids = mergeTeamEvents([], [...own, ...team], t, 'me', false, 3).map(m => m.id)
+    expect(ids).toEqual(['event-own9', 'event-own8', 'event-own7', 'event-own6', 'event-own5'])
+  })
+})
+
+describe('itemNameFromRecord', () => {
+  it('prefers the display-config title field', () => {
+    expect(itemNameFromRecord({ headline: 'H', title: 'T' }, 'headline')).toBe('H')
+  })
+  it.each(['title', 'name', 'label', 'subject', 'displayName'])('falls back to %s', (f) => {
+    expect(itemNameFromRecord({ [f]: 'X' })).toBe('X')
+  })
+  it('falls back when the configured field is empty', () => {
+    expect(itemNameFromRecord({ headline: '', name: 'N' }, 'headline')).toBe('N')
+  })
+  it('ignores non-string fallback values', () => {
+    expect(itemNameFromRecord({ title: 5, name: 'N' })).toBe('N')
+  })
+  it('returns undefined when nothing is found', () => {
+    expect(itemNameFromRecord({ other: 'x' })).toBeUndefined()
+    expect(itemNameFromRecord(undefined)).toBeUndefined()
   })
 })

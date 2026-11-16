@@ -505,7 +505,10 @@ function createSessionComputeds(ctx: SessionContext) {
       image: (u.image as string | null) ?? null,
       emailVerified: (u.emailVerified as boolean) ?? false,
       createdAt: new Date(u.createdAt as string | Date),
-      updatedAt: new Date(u.updatedAt as string | Date)
+      updatedAt: new Date(u.updatedAt as string | Date),
+      // Carried through so useTeam can apply allowCreate: 'superAdmin'
+      role: u.role as string | undefined,
+      superAdmin: u.superAdmin as boolean | undefined
     } satisfies User
   })
 

@@ -1,7 +1,7 @@
 # Crouton — The Vision (canonical)
 
 > **This is the one place the bigger story lives.** It pulls a through-line that was scattered
-> across `writeups/marketing/nuxt-harness.html`, `writeups/briefings/crouton-os-vision-brief.md`,
+> across `writeups/marketing/nuxt-harness.html`, `writeups/_archive/briefings/crouton-os-vision-brief.md`,
 > and the `writeups/strategy/atelier-*` set into a single read. It is **strategy framing, not agent
 > instructions** — nothing here is a directive. Concrete, trackable work lives in GitHub epics
 > (notably layout #703 and analytics #945).
@@ -16,7 +16,7 @@
 **Crouton is an app builder for the AI age that hands you the code.** Not vibe-to-lock-in —
 **vibe-to-code.** AI gives you velocity; an opinionated, secured foundation gives you *a floor you
 can't fall through*; and ownership means there's no ceiling and no eject cost — because there's
-nothing to eject *from*. (`crouton-os-vision-brief.md:11-14`)
+nothing to eject *from*. (`crouton-os-vision-brief.md:13-16`)
 
 ## The core thesis: ours appreciates, theirs degrades
 
@@ -36,7 +36,7 @@ Crouton's bet is the inverse:
   into; you get a normal, excellent Nuxt codebase.
 
 > *"Their base degrades as the app grows. Ours appreciates — because every generated collection
-> follows the same patterns, the 30th feature is as clean as the 1st."* (`crouton-os-vision-brief.md:34-35`)
+> follows the same patterns, the 30th feature is as clean as the 1st."* (`crouton-os-vision-brief.md:36-37`)
 
 ## The core loop: POC → validate → app (lean startup, made structural)
 
@@ -69,7 +69,7 @@ flowchart LR
 
 > *"The generic builders have one mode: everything is production from keystroke one — so you're
 > either reckless or slow. Crouton separates the two: a place where being wrong is free, and a
-> deliberate gate to cross when you're right."* (`crouton-os-vision-brief.md:120-122`)
+> deliberate gate to cross when you're right."* (`crouton-os-vision-brief.md:122-124`)
 
 ## The two pillars (+ one enabler)
 
@@ -83,7 +83,7 @@ Cloudflare deploy are baked in. (`atelier-strategy.md:69-74`)
 and an agent picks it up with the whole skill set (`/commit`, `crouton`, `/task-decompose`, deploy,
 the `.claude/` arsenal) and emits a reviewed PR. *"Anyone can bolt an LLM onto a code generator;
 almost nobody has a way of working where an issue is the prompt and an agent carries the whole skill
-set to a PR."* (`crouton-os-vision-brief.md:78-86`)
+set to a PR."* (`crouton-os-vision-brief.md:80-88`)
 
 **The layout maker** sits across both: a layout engine + placeable blocks
 (`crouton-layout`, epics #703/#710) that compose components and arrange a fresh POC into a
@@ -100,7 +100,7 @@ words, **faith not data**:
 
 > *"'Ours appreciates, theirs degrades' is the whole bet, and right now it's faith, not data. It is
 > measurable, and we should treat proving it as a first-class goal, not a tagline."*
-> (`crouton-os-vision-brief.md:38-39`) — measured via **time-to-POC**, **time-to-promote**, and
+> (`crouton-os-vision-brief.md:40-41`) — measured via **time-to-POC**, **time-to-promote**, and
 > **regressions over a lifetime**.
 
 The lean loop above has a **build** half and a **measure** half — and only the build half was real.
@@ -137,11 +137,11 @@ a chat UI) scaffolds and evolves apps through self-documenting tools backed by t
 One level above "does the code stay clean": **does any of this work for a builder who isn't us?**
 The whole thing is dogfooded by one person. *One external builder* taking an idea through to a
 promoted production app — via the harness — would validate more of the company-level bet than another
-package would. (`crouton-os-vision-brief.md:46-49`)
+package would. (`crouton-os-vision-brief.md:48-51`)
 
 ## Sources
 
-- `writeups/briefings/crouton-os-vision-brief.md` — the primary thesis + the measurement gap
+- `writeups/_archive/briefings/crouton-os-vision-brief.md` — the primary thesis + the measurement gap
 - `writeups/marketing/nuxt-harness.html` — the marketing framing ("the CLI is the runtime, the harness is the app")
 - `writeups/strategy/atelier-strategy.md` · `atelier-plan.md` · `atelier-capabilities.md` — pillars, principles, capability map
 - `writeups/strategy/pivot-mcp-universal.md` — the visual-builder → MCP/CLI pivot

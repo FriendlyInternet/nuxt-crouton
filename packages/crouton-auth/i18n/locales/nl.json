@@ -1,5 +1,8 @@
 {
   "onboarding": {
+    "signOut": "Uitloggen",
+    "noTeamTitle": "Je zit nog niet in een team",
+    "noTeamDescription": "Vraag een uitnodiging om lid te worden van een team.",
     "createTeamTitle": "Maak Je Eerste Team",
     "createTeamDescription": "Begin door een werkruimte voor je projecten aan te maken.",
     "settingUpWorkspace": "Je werkruimte wordt klaargezet",
@@ -7,6 +10,11 @@
   },
   "auth": {
     "resetLinkSentDescription": "We hebben een link om je wachtwoord te resetten naar je e-mail gestuurd. Klik op de link om je wachtwoord te resetten.",
+    "inviteOnly": {
+      "title": "{app} werkt alleen op uitnodiging",
+      "description": "Vraag een team om een uitnodiging. Heb je al een account? Log dan in.",
+      "thisApp": "Deze app"
+    },
     "magicLinkSentDescription": "We hebben een magic link naar je e-mail gestuurd. Klik op de link om in te loggen.",
     "tryAnotherEmail": "Probeer een ander e-mailadres",
     "enterEmailAndPassword": "Voer je e-mailadres en wachtwoord in.",

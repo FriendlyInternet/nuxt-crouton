@@ -63,6 +63,11 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    email: {
+      from: 'noreply@messages.friendlyinter.net',
+      fromName: 'Friendly Internet'
+    },
+
     croutonBookings: {
       email: {
         enabled: false

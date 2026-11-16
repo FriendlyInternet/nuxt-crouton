@@ -32,7 +32,8 @@ export default defineNuxtConfig({
       resendApiKey: '', // NUXT_EMAIL_RESEND_API_KEY (or RESEND_API_KEY for local dev via process.env)
       from: '', // EMAIL_FROM (e.g., noreply@example.com)
       fromName: '', // EMAIL_FROM_NAME (e.g., My App)
-      replyTo: '' // EMAIL_REPLY_TO (optional)
+      replyTo: '', // EMAIL_REPLY_TO (optional)
+      resendWebhookSecret: '' // NUXT_EMAIL_RESEND_WEBHOOK_SECRET (whsec_…, for delivery callbacks)
     },
 
     // Public config

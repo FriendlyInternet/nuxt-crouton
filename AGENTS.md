@@ -211,7 +211,7 @@ code: what changed, the concrete surface, numbered steps with before/after, test
 acceptance check.
 
 **The epic is the verification unit.** When the last child merges, post one `## 🧪 Verify the whole
-thing` rollup, **walk up the tree** (a parent never auto-closes), run the postmortem, close on
+thing` rollup, **walk up the tree** (a parent closes only once its work is on trunk, its test is confirmed and its postmortem is posted), run the postmortem, close on
 confirmation. Human-action tasks are discrete **assigned** issues closed by a confirming comment.
 
 **Agent comments carry provenance** — posted under a *human* account, disclaim it

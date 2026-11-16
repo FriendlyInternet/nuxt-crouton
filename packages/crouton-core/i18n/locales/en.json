@@ -149,6 +149,7 @@
     "preview": "Image preview"
   },
   "repeater": {
+    "componentMissing": "Can't show this item: component \"{name}\" was not found.",
     "emptyState": "No items yet. Click \"{label}\" to get started.",
     "addItem": "Add Item"
   },

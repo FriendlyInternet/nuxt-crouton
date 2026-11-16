@@ -93,6 +93,10 @@ Designed to work with [SuperSaaS](https://supersaas.dev/), a Nuxt 4 starter temp
 - Drizzle ORM setup
 - Best practices and opinionated structure
 
+## How this repo is built
+
+- Agent pipeline (ticket → merged change): https://github.com/FriendlyInternet/nuxt-crouton/blob/main/docs/pipeline/how-it-works.md
+
 ## Related Links
 
 - GitHub: https://github.com/FriendlyInternet/nuxt-crouton

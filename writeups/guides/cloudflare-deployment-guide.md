@@ -3,7 +3,7 @@
 > ⚠️ **Superseded (kept for history).** Crouton apps now deploy to **Cloudflare Workers
 > (static assets) with auto-provisioning**, not Pages (#108/#114), under the two-domain
 > topology (production → `friendlyinter.net`, staging → `pmcp.dev`; #133). Current,
-> canonical instructions live in **`CLAUDE.md` → "NuxtHub's role + Deployment"** and the
+> canonical instructions live in **the `crouton-ci-and-deploy-map` skill → "NuxtHub's role + deploy anatomy"** and the
 > **`/deploy` skill** (`.claude/skills/deploy/SKILL.md`). triage/velo/fanfare are migrated.
 > This Pages-era guide is retained only for historical reference.
 

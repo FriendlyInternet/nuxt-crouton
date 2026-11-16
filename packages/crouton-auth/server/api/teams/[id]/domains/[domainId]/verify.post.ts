@@ -75,6 +75,15 @@ export default defineEventHandler(async (event) => {
     })
 
     if (verified) {
+      // First verified claim wins; the partial unique index backs this up.
+      const taken = await db
+        .select()
+        .from(tables.domain)
+        .where(and(eq(tables.domain.domain, domain.domain), eq(tables.domain.status, 'verified')))
+        .get()
+      if (taken && taken.id !== domainId) {
+        return { verified: false, message: 'Domain is already verified by another team.' }
+      }
       await db
         .update(tables.domain)
         .set({ status: 'verified', verifiedAt: new Date() })

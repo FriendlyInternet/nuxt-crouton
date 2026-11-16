@@ -177,7 +177,7 @@ async function discoverProviders(
  */
 // Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
 // fallow-ignore-next-line complexity
-function collectCollectionFixtureSql(appDir: string, core: any, teamId: string): string {
+export function collectCollectionFixtureSql(appDir: string, core: any, teamId: string): string {
   const layersDir = join(appDir, 'layers')
   if (!existsSync(layersDir)) return ''
 
@@ -200,7 +200,7 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
         continue
       }
 
-      const { table, key, rows } = fixture ?? {}
+      const { table, key, rows, personFields } = fixture ?? {}
       if (!table || !Array.isArray(rows) || rows.length === 0) continue
 
       rows.forEach((row: Record<string, unknown>, i: number) => {
@@ -214,6 +214,13 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
           createdAt: now,
           updatedAt: now,
           ...row,
+        }
+        // Person fields (#1958): a real member of the seeded team, NULL when none exists yet.
+        for (const field of Array.isArray(personFields) ? personFields : []) {
+          if (!/^\w+$/.test(String(field))) continue
+          ;(values as Record<string, unknown>)[field] = core.raw(
+            `(SELECT "userId" FROM "member" WHERE "organizationId" = ${core.sqlValue(teamId)} ORDER BY "createdAt" LIMIT 1)`,
+          )
         }
         stmts.push(core.buildUpsert(table, { id }, values, { immutable: ['createdAt'] }))
       })
@@ -237,7 +244,7 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
  * layout for the POC's single seeded team; multi-team seeding is out of scope here.
  *
  * Only for an app that extends `@fyit/crouton-layout`: the generator writes the file
- * for every app, but `layout_configs` exists only where that layer is migrated (#2249).
+ * only for such apps; a leftover file elsewhere is skipped (#2249, #2282).
  */
 // Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
 // fallow-ignore-next-line complexity

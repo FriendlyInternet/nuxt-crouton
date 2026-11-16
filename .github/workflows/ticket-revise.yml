@@ -1,0 +1,219 @@
+name: Ticket revise (rewrite sent-back tickets — pi.dev)
+run-name: "ticket-revise #${{ inputs.epic }}"
+
+# #3787 — the ticket review's rewrite loop (same shape as the plan review's re-plan loop). When
+# ticket-review.yml says no-go at round < 3, it dispatches this workflow for the epic. For each ticket
+# the latest verdict sent back (`#### ❌ #N … — no-go`), a reviser (.claude/agents/ticket-reviser.md)
+# rewrites ONLY that ticket, ONLY to fix its listed findings. A trusted step then validates every new
+# body (scripts/ticket-revise.mjs validate: Packages-approved / Workflow-change / Blocked-by /
+# Unblocks lines and the pipeline marker frozen, 🧪 kept), applies them, posts one note on the epic
+# and dispatches ticket-review.yml again. A needs-owner answer or a refused body edits NOTHING and
+# holds the epic `status:blocked`. The round cap lives in ticket-review.yml (ticket-revise.mjs route).
+#
+# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false;
+# the App token is only used by the trusted steps). No hard-coded model and NO silent fallback.
+#
+# Workflow-change: new workflow for the ticket-review rewrite loop (#3787).
+
+on:
+  workflow_dispatch:
+    inputs:
+      epic:
+        description: Epic issue number whose sent-back tickets to rewrite
+        required: true
+
+concurrency:
+  group: ticket-revise-${{ inputs.epic }}
+  cancel-in-progress: false
+
+jobs:
+  revise:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+    env:
+      EPIC: ${{ inputs.epic }}
+    outputs:
+      rl_start: ${{ steps.rl-start.outputs.rl_start }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Allowance at run start (#3251); the record-outcome job reads it again.
+      - name: Read API allowance at start
+        id: rl-start
+        # allowed to fail: the allowance read is observability only, never a reason to stop a rewrite
+        continue-on-error: true
+        if: ${{ steps.app-token.outputs.token != '' }}
+        env:
+          RL_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RL="$(curl -fsS -H "Authorization: Bearer $RL_TOKEN" -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/rate_limit" | jq -c '{remaining: .resources.core.remaining, reset: .resources.core.reset, limit: .resources.core.limit}' 2>/dev/null)" || RL='{"error":"read failed"}'
+          echo "rl_start=$RL" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Preflight — the review model runs on claude-bridge
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -uo pipefail
+          # Probe with `claude -p`, NOT `pi --print` (see ticket-review.yml: a bare reply is a
+          # tool-less turn that .pi/extensions/complete-work.ts intercepts).
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — tickets NOT rewritten, no fallback to another model (#3787)"
+            # allowed to fail: the step still exits 1 below, so a lost note never hides the failure
+            gh issue comment "$EPIC" --body "$(printf '<!-- pipeline-note -->\n<!-- ticket-revise-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket rewrite (#3787)_\n\n🔴 **Ticket rewrite could not run** — the preflight probe to review model `%s` failed (see the [run log](%s/%s/actions/runs/%s)). No ticket was changed.\n**Needs:** action — check the run log, then re-run this workflow.' "$MODEL" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" || true
+            # allowed to fail: the label may already be set; the exit 1 below still fails the run
+            gh issue edit "$EPIC" --add-label "status:blocked" || true
+            exit 1
+          fi
+
+      - name: Gather the epic, the latest verdict and the sent-back tickets
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/ticket-revise"; mkdir -p "$D"
+          { gh issue view "$EPIC" --json title,body --jq '"# " + .title + "\n\n" + .body'
+            echo; echo "## Epic comments"
+            gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
+          } > "$D/epic.md"
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '[.[] | {body, user: {login: .user.login, type: .user.type}}]' | jq -s 'add // []' > "$D/comments.json"
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
+            --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
+            | jq -s 'add // []' > "$D/tickets.json"
+          # Only tickets the latest verdict sent back (no-go) AND still open sub-issues of this epic.
+          node scripts/ticket-revise.mjs sent-back "$D/comments.json" \
+            | jq -c --slurpfile t "$D/tickets.json" '[.[] | select(. as $n | $t[0] | map(.number) | index($n))]' > "$D/sent-back.json"
+          echo "sent back: $(cat "$D/sent-back.json")"
+          [ "$(jq length "$D/sent-back.json")" -gt 0 ] || { echo "::error::the latest ticket review on #$EPIC sent no open ticket back"; exit 1; }
+          for N in $(jq -r '.[]' "$D/sent-back.json"); do
+            jq -r --argjson n "$N" '.[] | select(.number == $n) | .body' "$D/tickets.json" > "$D/ticket-$N.md"
+            node scripts/ticket-revise.mjs findings "$D/comments.json" "$N" > "$D/findings-$N.md"
+          done
+
+      # ── The reviser: READ-ONLY, no GitHub token in its env ───────────────────────
+      - id: pi
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/ticket-revise"
+          RC=0
+          for N in $(jq -r '.[]' "$D/sent-back.json"); do
+            awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/ticket-reviser.md \
+              | sed -e "s#{{epic}}#${EPIC}#g" -e "s#{{ticket}}#${N}#g" -e "s#{{epic_file}}#$D/epic.md#g" \
+                    -e "s#{{ticket_file}}#$D/ticket-$N.md#g" -e "s#{{findings_file}}#$D/findings-$N.md#g" \
+                    -e "s#{{out_file}}#$D/out-$N.md#g" > "$D/prompt-$N.txt"
+            pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills < "$D/prompt-$N.txt" 2>&1 | tee "$D/pi-$N.log"
+            [ "${PIPESTATUS[0]}" -eq 0 ] || RC=1
+          done
+          exit "$RC"
+
+      - name: Validate, apply, and run the review again
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/ticket-revise"
+          HEAD='<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket rewrite (#3787)_\n\n'
+          hold() { # $1 headline · $2 needs · $3 detail — edits nothing, holds the epic
+            # allowed to fail: a failed comment must not skip the status:blocked label added after it
+            gh issue comment "$EPIC" --body "$(printf "${HEAD}"'## 🔀 Blocked — %s\n**Needs:** %s\n\n@pmcp — no ticket was changed; the review stops here until you reply.\n\n<details><summary>Details</summary>\n\n%s\n\n[run log](%s)\n\n</details>' "$1" "$2" "$3" "$RUN_URL")" || true
+            gh issue edit "$EPIC" --add-label "status:blocked"; exit 0
+          }
+          [ -s "$D/sent-back.json" ] || hold "the rewrite found no ticket to fix" action "Gather failed — see the run log."
+          ASK=""; BAD=""; DONE=()
+          for N in $(jq -r '.[]' "$D/sent-back.json"); do
+            if [ ! -s "$D/out-$N.md" ]; then BAD+="- #$N: the reviser wrote no new body"$'\n'; continue; fi
+            if grep -qiE '^\s*needs-owner:' "$D/out-$N.md"; then
+              ASK+="- #$N: $(sed -E 's/^\s*needs-owner:\s*//I' "$D/out-$N.md" | head -n 1)"$'\n'; continue
+            fi
+            if ERR="$(node scripts/ticket-revise.mjs validate "$D/ticket-$N.md" "$D/out-$N.md")"; then DONE+=("$N")
+            else BAD+="- #$N: ${ERR//$'\n'/; }"$'\n'; fi
+          done
+          [ -z "$ASK" ] || hold "a sent-back ticket needs your decision" answer "$ASK"
+          [ -z "$BAD" ] || hold "a rewritten ticket was refused, so none was applied" action "Fix these tickets by hand, then re-run the ticket review:"$'\n'"$BAD"
+          for N in "${DONE[@]}"; do gh issue edit "$N" --body-file "$D/out-$N.md"; echo "rewrote #$N"; done
+          LIST="$(printf '#%s, ' "${DONE[@]}")"; LIST="${LIST%, }"
+          gh issue comment "$EPIC" --body "$(printf "${HEAD}"'🔁 Rewrote %s from the review; checking again.' "$LIST")"
+          node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$EPIC" '{kind:"dispatch",issue:$i,workflow:"ticket-review.yml",inputs:{epic:($i|tostring)}}')"
+
+  # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
+  # One record per workflow RUN, written after every other job finished. Read-only against
+  # issues/PRs; a failure here never fails the run (continue-on-error + script exits 0).
+  record-outcome:
+    name: Record run outcome
+    needs: [revise]
+    if: ${{ always() && needs.revise.result != 'skipped' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        # allowed to fail: the run record is read-only bookkeeping and must never fail the run
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts
+            .claude/pipeline-models.json
+          persist-credentials: false
+      - name: Write the run record (never fails the run)
+        # allowed to fail: the run record is observability only — losing it must never fail a ticket rewrite that already ran
+        continue-on-error: true
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_FILE: ticket-revise.yml
+          ISSUE: "${{ inputs.epic }}"
+          STAGE: ticket-revise
+          MODEL_TIER: review
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RL_START: ${{ needs.revise.outputs.rl_start }}
+          TOKEN_KIND: ${{ steps.app-token.outputs.token && 'app' || 'github_token' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          DATA_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/eval-ledger/record-run.mjs

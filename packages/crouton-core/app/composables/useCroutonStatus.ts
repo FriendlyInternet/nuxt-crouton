@@ -2,10 +2,30 @@
 let hookRegistered = false
 let lastEventsFetch = 0
 let eventsTeamId: string | undefined
+// Newest teammate row timestamp seen so far: "new" is judged against this, not the 5-slot feed
+let newestTeamTs = 0
 
 const EVENTS_REFRESH_MIN_MS = 60_000
 const EVENTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const EVENTS_LIMIT = 20
+/** Of the 5 feed slots, how many stay reserved for own changes (also the size of the separate own fetch with collab) */
+const OWN_SLOTS = 3
+/** One retry when the collab signal arrived before the teammate's event row was stored */
+const REMOTE_RETRY_MS = 2000
+
+function mutationRecord(data?: Record<string, unknown>, result?: unknown): Record<string, unknown> | undefined {
+  return (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
+}
+
+/** The collection's configured title field, if it has a display config. */
+function displayTitleField(collection: string): string | undefined {
+  try {
+    return useDisplayConfig(collection).title || undefined
+  } catch {
+    // Collection may not have config — fall through to heuristics
+    return undefined
+  }
+}
 
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
@@ -15,24 +35,7 @@ function extractItemName(
   data?: Record<string, unknown>,
   result?: unknown,
 ): string | undefined {
-  const record = (result && typeof result === 'object' ? result : data) as Record<string, unknown> | undefined
-  if (!record) return undefined
-
-  try {
-    const display = useDisplayConfig(collection)
-    if (display.title && record[display.title]) {
-      return String(record[display.title])
-    }
-  } catch {
-    // Collection may not have config — fall through to heuristics
-  }
-
-  for (const field of ['title', 'name', 'label', 'subject', 'displayName']) {
-    if (record[field] && typeof record[field] === 'string') {
-      return record[field] as string
-    }
-  }
-  return undefined
+  return itemNameFromRecord(mutationRecord(data, result), displayTitleField(collection))
 }
 
 /**
@@ -103,8 +106,8 @@ export function useCroutonStatus() {
    * Merge recent changes (own; teammates' too with collab) from crouton-events into the feed. No-op without the
    * events app; throttled to once per minute unless `force`. Call on mount / pill open.
    */
-  const refreshTeamEvents = async (force = false) => {
-    if (!useCroutonApps().hasApp('events')) return
+  const refreshTeamEvents = async (force = false): Promise<number | null> => {
+    if (!useCroutonApps().hasApp('events')) return null
     const userId = getUserId()
     const live = useCroutonApps().hasApp('collab')
     const teamId = useTeamContext().getTeamId()
@@ -112,17 +115,41 @@ export function useCroutonStatus() {
     if (teamId !== eventsTeamId) {
       eventsTeamId = teamId
       lastEventsFetch = 0
+      newestTeamTs = 0
       history.value = dropTeamEvents(history.value)
     }
-    if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return
+    if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return null
     lastEventsFetch = now
     try {
-      const rows = await $fetch<TeamEventRow[]>(`/api/teams/${teamId}/crouton-events`, {
-        query: { userId: live ? undefined : userId, pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
-      })
-      history.value = mergeTeamEvents(history.value, rows, t, userId, live)
+      const url = `/api/teams/${teamId}/crouton-events`
+      const dateFrom = new Date(now - EVENTS_WINDOW_MS).toISOString()
+      const requests = live
+        ? [
+            $fetch<TeamEventRow[]>(url, { query: { userId, pageSize: OWN_SLOTS, dateFrom } }),
+            $fetch<TeamEventRow[]>(url, { query: { pageSize: EVENTS_LIMIT, dateFrom } }),
+          ]
+        : [$fetch<TeamEventRow[]>(url, { query: { userId, pageSize: EVENTS_LIMIT, dateFrom } })]
+      const settled = await Promise.allSettled(requests)
+      // Any request failed (e.g. 403 for non-admins): not a timing gap, so no retry
+      if (settled.some(r => r.status === 'rejected')) return null
+      const rows = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []))
+      history.value = mergeTeamEvents(history.value, rows, t, userId, live, live ? OWN_SLOTS : 0)
+      const stamps = rows.filter(r => r.userId !== userId).map(r => new Date(r.timestamp).getTime()).filter(n => !Number.isNaN(n))
+      const added = stamps.filter(n => n > newestTeamTs).length
+      newestTeamTs = Math.max(newestTeamTs, ...stamps)
+      return added
     } catch {
       // Feed falls back to own changes
+      return null
+    }
+  }
+
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  const onRemoteChange = async () => {
+    const added = await refreshTeamEvents(true)
+    if (added === 0) {
+      clearTimeout(retryTimer)
+      retryTimer = setTimeout(() => { refreshTeamEvents(true) }, REMOTE_RETRY_MS)
     }
   }
 
@@ -132,9 +159,9 @@ export function useCroutonStatus() {
 
   // Live sync: a teammate's change lands in the feed within seconds (no polling, no throttle)
   if (import.meta.client && getCurrentInstance() && useCroutonApps().hasApp('collab') && useCroutonApps().hasApp('events')) {
-    const debouncedRefresh = useDebounceFn(() => refreshTeamEvents(true), 1000)
+    const debouncedRefresh = useDebounceFn(onRemoteChange, 1000)
     const stop = useNuxtApp().hook('crouton:remoteChange' as any, () => { debouncedRefresh() })
-    onScopeDispose(stop)
+    onScopeDispose(() => { stop(); clearTimeout(retryTimer) })
   }
 
   // Register listener once per JS runtime (SSR and client each get their own)
@@ -155,5 +182,5 @@ export function useCroutonStatus() {
     })
   }
 
-  return { messages, current, recent, unread, lastMessage, push, dismiss, markAllSeen, refreshTeamEvents }
+  return { messages, current, recent, unread, lastMessage, push, dismiss, markAllSeen, refreshTeamEvents, onRemoteChange }
 }

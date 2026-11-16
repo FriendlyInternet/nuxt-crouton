@@ -170,6 +170,7 @@ interface CroutonAuthConfig {
   // Default team for single-tenant mode
   defaultTeamId?: string
   appName?: string
+  signup?: 'open' | 'invite'  // Default 'open'; 'invite' = only invited emails can create an account (site admin still can)
 
   // Authentication methods
   methods?: {
@@ -218,7 +219,7 @@ interface CroutonAuthConfig {
 
   // Team configuration
   teams?: {
-    allowCreate?: boolean             // Default: true (multi-tenant)
+    allowCreate?: boolean | 'superAdmin' // Default: true (multi-tenant); 'superAdmin' = only super-admins may create teams
     limit?: number                    // Max teams per user, default: 5
     memberLimit?: number              // Max members per team, default: 100
     requireInvite?: boolean           // Default: true
@@ -311,7 +312,7 @@ const {
   loginWithPasskey,        // () => Promise<void>
   loginWithPasskeyAutofill,// () => Promise<void>
   loginWithMagicLink,      // (email: string) => Promise<void>
-  register,                // (data: RegisterData) => Promise<void>
+  register,                // (data: RegisterData) => Promise<{ requiresVerification: boolean }> — with crouton-email installed, no session until the e-mail is verified
   logout,                  // () => Promise<void>
   forgotPassword,          // (email: string) => Promise<void>
   resetPassword,           // (token: string, password: string) => Promise<void>
@@ -765,7 +766,7 @@ definePageMeta({
 
 ### `guest` Middleware
 
-Requires NO authentication. Redirects to home if authenticated.
+Requires NO authentication. Signed-in users are sent to the `?redirect=` target if it is on the same site (anything else falls back to `/`), otherwise to `ui.redirects.authenticated`.
 
 ```vue
 <script setup lang="ts">
@@ -804,6 +805,7 @@ export * from '@crouton/auth/server/database/schema/auth'
 | `invitation` | Pending invitations |
 | `passkey` | WebAuthn credentials |
 | `twoFactor` | 2FA settings |
+| `rateLimit` | Rate-limit counters for auth endpoints |
 | `subscription` | Stripe subscriptions |
 
 ### Generate Migrations

@@ -169,7 +169,8 @@ human has hand-arranged the scene, prefer the importer in §4 to preserve their 
 - **One-tap mobile editing = the hosted `ticket-editor` Worker** (`workers/ticket-editor`, epic
   #483). Link `…/?slug=<slug>&branch=<branch>&issue=<NN>` — pass **`&issue=<NN>`** so each Save
   posts a **new** comment on issue `NN` with that edit's diagram (a timeline of versions, not just
-  silent `nuxt-harness[bot]` commits). Requires the loose `<slug>.excalidraw` committed (generate
+  silent `nuxt-harness[bot]` commits) — that 📐 comment quotes the text you added; on a
+  `status:blocked` issue it also resumes the run (#3691). Requires the loose `<slug>.excalidraw` committed (generate
   with `--excalidraw`), since the editor reads it.
 - **Pin a diagram image you want to stay put to its commit, not the branch.** A
   `raw.githubusercontent.com/<repo>/<branch>/…png` URL re-renders whenever the file is later

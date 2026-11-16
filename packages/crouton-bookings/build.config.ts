@@ -7,7 +7,7 @@ export default defineBuildConfig({
       input: 'server/utils',
       outDir: 'dist/server/utils',
       builder: 'mkdist',
-      pattern: ['**/*.ts'],
+      pattern: ['**/*.ts', '!**/__tests__/**', '!**/*.test.ts', '!**/*.spec.ts'],
       loaders: ['js']
     }
   ],

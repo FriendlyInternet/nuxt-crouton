@@ -78,6 +78,7 @@ export function generateQueryRegistry(collections: CollectionQueryInfo[]): strin
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  access?: () => Promise<any>
 }> = {}
 `
   }
@@ -88,6 +89,8 @@ export const queryRegistry: Record<string, {
       .then(m => m.getAll${col.prefixedPascalCasePlural}),
     getByIds: () => import('${col.importPath}')
       .then(m => m.get${col.prefixedPascalCasePlural}ByIds),
+    access: () => import('${col.importPath}')
+      .then((m: any) => m.${col.prefixedPascalCasePlural}Access),
   }`
   }).join(',\n')
 
@@ -117,6 +120,7 @@ ${collections.map(col => ` * - ${col.collectionKey} (${col.layer}/${col.collecti
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  access?: () => Promise<any>
 }> = {
 ${entries},
 }

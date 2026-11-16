@@ -37,8 +37,9 @@ test('head not work-N is skipped', () => {
   assert.equal(isPipelinePr(pr({ headRefName: 'work-12-extra' })), false)
 })
 
-test('base not epic/* is skipped', () => {
-  assert.equal(isPipelinePr(pr({ baseRefName: 'main' })), false)
+test('base main is picked (#3218), other bases are skipped', () => {
+  assert.equal(isPipelinePr(pr({ baseRefName: 'main' })), true)
+  assert.equal(isPipelinePr(pr({ baseRefName: 'feature/x' })), false)
 })
 
 test('draft, closed and merged PRs are skipped', () => {

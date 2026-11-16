@@ -68,12 +68,15 @@ export default defineNitroPlugin((nitroApp) => {
       return originalHandler(event)
     }
 
-    // Skip if path already has a team segment (e.g., /acme/about)
+    // A slug-shaped first segment (e.g., /acme/about) is not rewritten, but the
+    // host's team is still resolved so team-scoped middleware (redirects) can
+    // use the host, never the path, to pick the team.
+    let hasTeamSegment = false
     const pathSegments = path.split('/').filter(Boolean)
     if (pathSegments.length >= 1) {
       const firstSegment = pathSegments[0]
       if (firstSegment && /^[a-z0-9][a-z0-9-]*$/i.test(firstSegment) && !firstSegment.includes('.')) {
-        return originalHandler(event)
+        hasTeamSegment = true
       }
     }
 
@@ -149,7 +152,7 @@ export default defineNitroPlugin((nitroApp) => {
       event.context.isCustomDomain = true
 
       // Rewrite the URL before h3 processes it
-      const newPath = `/${orgRecord.slug}${path === '/' ? '' : path}`
+      const newPath = hasTeamSegment ? path : `/${orgRecord.slug}${path === '/' ? '' : path}`
       event.node.req.url = newPath
 
       if (config.public?.croutonPages?.debug) {

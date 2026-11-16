@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import type { CratePile } from '~/composables/useCrate'
 
-defineProps<{ inPiles: CratePile[], otherTags: string[], pathLabel: (p: CratePile) => string }>()
-const emit = defineEmits<{ remove: [pile: CratePile] }>()
+defineProps<{
+  inPiles: CratePile[]
+  otherTags: string[]
+  pathLabel: (p: CratePile) => string
+  /** The level we're inside, when the track is in it: "↑ Not <pile>" takes it out (#2210). */
+  notIn: CratePile | null
+}>()
+const emit = defineEmits<{ remove: [pile: CratePile], not: [pile: CratePile] }>()
 </script>
 
 <template>
@@ -16,5 +22,6 @@ const emit = defineEmits<{ remove: [pile: CratePile] }>()
     <UBadge v-for="tag in otherTags" :key="tag" color="neutral" variant="soft" class="max-w-full">
       <span class="truncate">{{ tag }}</span>
     </UBadge>
+    <UButton v-if="notIn" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="soft" class="ms-auto shrink-0" :label="`Not ${notIn.name}`" @click="emit('not', notIn)" />
   </div>
 </template>

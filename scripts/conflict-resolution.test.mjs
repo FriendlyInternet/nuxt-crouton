@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { generatorsFor, withMarkers, verdict, buildPrompt, SCRIPTS_TEST_CMD } from './conflict-resolution.mjs'
+import { generatorsFor, withMarkers, verdict, buildPrompt, resolutionPaths, SCRIPTS_TEST_CMD } from './conflict-resolution.mjs'
 
 // A real conflicted merge: `base` and `side` both edit `file` from a common ancestor.
 function conflict(file, ancestor, base, side) {
@@ -69,4 +69,105 @@ test('the prompt names the files, the generators, the choice file and the keep-b
 test('scripts test command matches the one CI runs', () => {
   const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
   assert.ok(ci.includes(`run: ${SCRIPTS_TEST_CMD}`))
+})
+
+// ── verify, end to end (#3322): the real CLI in a temp repo mid-merge ──
+import { spawnSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const CLI = fileURLToPath(new URL('./conflict-resolution.mjs', import.meta.url))
+
+function midMerge({ attrs = false } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'verify-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put('a.md', 'one\n'); put('keep.md', 'ok\n'); git('add', '-A'); git('commit', '-qm', 'base0')
+  git('checkout', '-qb', 'work'); put('a.md', 'one\nside\n'); git('commit', '-qam', 'side')
+  git('checkout', '-q', 'main'); put('a.md', 'one\nbase\n'); put('keep.md', 'ok   \n\n\n'); put('other.md', 'x  \n')
+  if (attrs) put('.gitattributes', 'a.md merge=union\n')
+  git('add', '-A'); git('commit', '-qm', 'base1')
+  git('checkout', '-q', 'work')
+  if (attrs) writeFileSync(join(dir, '.git/info/attributes'), 'a.md merge=union\n')
+  const m = git('merge', '--no-edit', 'main')
+  const verify = (choice = join(dir, 'none.md')) => spawnSync('node', [CLI, 'verify', choice], { cwd: dir, encoding: 'utf8' })
+  return { dir, git, put, verify, m }
+}
+
+test('verify: resolved file passes despite whitespace in untouched base files', () => {
+  const r = midMerge()
+  r.put('a.md', 'one\nbase\nside\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+  assert.equal(r.git('commit', '-qm', 'merge').status, 0)
+  assert.equal(r.git('rev-list', '--parents', '-n1', 'HEAD').stdout.trim().split(' ').length, 3)
+})
+
+test('verify: markers left -> exit 1 naming the file', () => {
+  const r = midMerge()
+  const v = r.verify()
+  assert.equal(v.status, 1)
+  assert.match(v.stderr, /a\.md/)
+})
+
+test('verify: a choice file -> exit 3', () => {
+  const r = midMerge()
+  const c = join(r.dir, 'choice.md'); writeFileSync(c, 'A vs B')
+  assert.equal(r.verify(c).status, 3)
+})
+
+test('verify: whitespace the resolver adds in a conflicted file fails, naming it', () => {
+  const r = midMerge()
+  r.put('a.md', 'one\nbase   \nside\n')
+  const v = r.verify()
+  assert.equal(v.status, 1)
+  assert.match(v.stderr, /a\.md/)
+})
+
+test('resolutionPaths: only conflicted files and their generator outputs, sorted, no duplicates (#3775)', () => {
+  assert.deepEqual(resolutionPaths({ modified: ['a.md', 'keep.md', 'a.md'], conflicted: ['a.md'] }), ['a.md'])
+  assert.deepEqual(
+    resolutionPaths({ modified: ['.claude/routing.json', 'writeups/architecture/routing-registry.md', 'x.md'], conflicted: ['.claude/routing.json'] }),
+    ['.claude/routing.json', 'writeups/architecture/routing-registry.md'],
+  )
+})
+
+test('verify: an edit outside the conflict stays out of the merge (#3775)', () => {
+  const r = midMerge()
+  r.put('a.md', 'one\nbase\nside\n')
+  r.put('keep.md', 'worker extra\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+  assert.equal(r.git('commit', '-qm', 'merge').status, 0)
+  const inMerge = r.git('show', '--name-only', '--format=', 'HEAD').stdout
+  assert.match(inMerge, /^a\.md$/m)
+  assert.doesNotMatch(inMerge, /keep\.md/)
+  assert.equal(r.git('show', 'HEAD:keep.md').stdout, 'ok   \n\n\n', "the merge holds the base's keep.md")
+  assert.equal(r.git('diff', '--name-only').stdout.trim(), 'keep.md', 'left in the worktree for the next commit')
+})
+
+test('verify: a generator output of a conflicted input is staged with the merge (#2848 still works)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'verify-gen-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  const R = '.claude/routing.json'; const REG = 'writeups/architecture/routing-registry.md'
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put(R, '{"a":1}\n'); put(REG, 'reg\n'); put('x.md', 'x\n'); git('add', '-A'); git('commit', '-qm', 'b0')
+  git('checkout', '-qb', 'work'); put(R, '{"a":2}\n'); git('commit', '-qam', 'side')
+  git('checkout', '-q', 'main'); put(R, '{"a":3}\n'); git('commit', '-qam', 'base1')
+  git('checkout', '-q', 'work'); git('merge', '--no-edit', 'main')
+  put(R, '{"a":3,"b":2}\n'); put(REG, 'reg regenerated\n'); put('x.md', 'unrelated\n')
+  // stub the gen-routing --check: this fixture has no scripts/, so the real one is not runnable here
+  mkdirSync(join(dir, 'scripts')); writeFileSync(join(dir, 'scripts/gen-routing.mjs'), 'process.exit(0)\n')
+  const v = spawnSync('node', [CLI, 'verify', join(dir, 'none.md')], { cwd: dir, encoding: 'utf8', env: { ...process.env } })
+  assert.equal(v.status, 0, v.stderr)
+  const staged = git('diff', '--cached', '--name-only').stdout.split('\n').filter(Boolean).sort()
+  assert.deepEqual(staged, [R, REG])
+  assert.equal(git('diff', '--name-only').stdout.trim(), 'x.md')
+})
+
+test('stale branch with base .gitattributes seeded in info/attributes: merge=union leaves no conflict', () => {
+  const r = midMerge({ attrs: true })
+  assert.equal(r.git('diff', '--name-only', '--diff-filter=U').stdout.trim(), '')
 })

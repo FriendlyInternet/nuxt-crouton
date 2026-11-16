@@ -4,7 +4,8 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { crateTracks, cratePiles } from '~~/server/db/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
+  if (demoSeedEnabled()) await seedDemoLibrary({ teamId: team.id, owner: user.id, createdBy: user.id, updatedBy: user.id })
   const db = useDB()
   const [piles, tracks] = await Promise.all([
     db.select({ id: cratePiles.id, name: cratePiles.name, parentId: cratePiles.parentId, order: cratePiles.order })
@@ -17,6 +18,6 @@ export default defineEventHandler(async (event) => {
   ])
   return {
     piles,
-    tracks: (tracks as (Omit<typeof crateTracks.$inferSelect, 'tags'> & { tags: string[] | null })[]).map(({ audioPath, ...t }) => ({ ...t, tags: (t.tags ?? []) as string[], hasAudio: !!audioPath }))
+    tracks: (tracks as (Omit<typeof crateTracks.$inferSelect, 'tags'> & { tags: string[] | null })[]).map(({ audioPath, ...t }) => ({ ...t, tags: (t.tags ?? []) as string[], hasAudio: !!audioPath, uploaded: !!audioPath?.startsWith('blob:') }))
   }
 })
