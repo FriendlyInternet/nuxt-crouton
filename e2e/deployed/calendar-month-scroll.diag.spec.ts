@@ -19,7 +19,12 @@
  * P3 the swipe element's height held with an injected min-height, P4 a 200 px spacer appended
  * to the scroller — each printed as `DIAG3813 VARIANT <name> run=<n> before=<y> after=<y> jumped=…`;
  * and, for the base case, every ResizeObserver callback on the swipe element and the scroller's
- * content between finger-up and the jump frame, as DIAG3813 RESIZE lines. One sign-in per app
+ * content between finger-up and the jump frame, as DIAG3813 RESIZE lines.
+ * Fifth run (booking-demo only, all from the bottom): Q-A prints every node replaced OUTSIDE a
+ * day cell (DIAG3813 REPLACED, with the height recorded before the swipe) plus totals; Q-B holds
+ * the strip with an inline min-height at finger-up (H-up), +200 ms (H-200), the first removal
+ * inside the strip (H-first-change), the same on the pane (H-pane), and H-probe reads scrollTop /
+ * scrollHeight at that first removal without holding anything. One sign-in per app
  * for the whole file (the session is saved and reused), so a long run no longer hits HTTP 429.
  *
  * The jump itself is DATA, never a failure. A test fails only when the run did
@@ -512,6 +517,8 @@ const swipeLeft = (page: Page) => page.evaluate(async () => {
   if (d.R) d.R.before = { ts: performance.now(), geom: d.R.geom(), active: d.R.active(), swipeOH: el.offsetHeight }
   d.rec.touchendAt = performance.now()
   d.rec.stopAt = d.rec.touchendAt + 1000
+  // Fifth run (#3813, Q-B): H-up / H-200 set their hold here, right before the touchend fires.
+  if (typeof d.onFingerUp === 'function') d.onFingerUp()
   fire('touchend', x)
 })
 
@@ -562,7 +569,135 @@ function reportQuestions(tag: string, frames: Row[], events: Row[], di: number, 
   for (const e of events.filter(e => e.kind === 'geom-sync' || e.kind === 'geom-raf')) console.log(`DIAG3813 Q3 ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 }
 
-type Variant = 'base' | 'mid' | 'anchor' | 'P1-start60' | 'P2-start70' | 'P3-height-held' | 'P4-scroller-padded'
+type HoldVariant = 'H-up' | 'H-200' | 'H-first-change' | 'H-pane' | 'H-probe'
+type Variant = 'base' | 'mid' | 'anchor' | 'P1-start60' | 'P2-start70' | 'P3-height-held' | 'P4-scroller-padded' | 'Q-A-replaced' | HoldVariant
+
+const HOLD_VARIANTS: HoldVariant[] = ['H-up', 'H-200', 'H-first-change', 'H-pane', 'H-probe']
+const isHold = (v: Variant): v is HoldVariant => (HOLD_VARIANTS as string[]).includes(v)
+
+/**
+ * Fifth run (#3813, Q-A): before the swipe, tag every element inside the calendar pane with
+ * `data-diag` = `<offsetHeight>|<path>|strip=<yes|no|self>`; then, between finger-up and +1000 ms,
+ * record every removed / added node that is NOT inside a day cell (`td` / `[data-value]`).
+ * Observing only — the attribute is the one write, and it is made before the swipe.
+ */
+const armReplaced = (page: Page) => page.evaluate(() => {
+  const d = (window as any).__diag
+  const swipe = d.swipe as HTMLElement
+  const pane = (swipe.closest('[data-crouton-pane]') || swipe.closest('.croutonpane') || swipe.parentElement || swipe) as HTMLElement
+  const short = (el: Element) => `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map(c => `.${c}`).join('')}`
+  const path = (el: Element) => {
+    const parts: string[] = []
+    for (let e: Element | null = el, i = 0; e && i < 4; e = e.parentElement, i++) parts.unshift(short(e))
+    return parts.join('>')
+  }
+  const stripOf = (el: Element) => el === swipe ? 'self' : swipe.contains(el) ? 'yes' : 'no'
+  let tagged = 0
+  for (const el of [pane, ...pane.querySelectorAll('*')]) {
+    el.setAttribute('data-diag', `${(el as HTMLElement).offsetHeight ?? 0}|${path(el)}|strip=${stripOf(el)}`)
+    tagged++
+  }
+  const CELL = 'td, [data-value]'
+  const inCell = (n: Node, parent: Node) => (n.nodeType === 1 && (n as Element).matches(CELL))
+    || (parent.nodeType === 1 && !!(parent as Element).closest(CELL))
+  const kind = (n: Node) => n.nodeType === 3 ? `#text(${JSON.stringify((n.nodeValue || '').slice(0, 16))})` : n.nodeType === 8 ? `#comment(${JSON.stringify((n.nodeValue || '').slice(0, 16))})` : `#node${n.nodeType}`
+  const Q: any = { tagged, lines: [], totals: { removedInCell: 0, removedOutside: 0, addedInCell: 0, addedOutside: 0 } }
+  d.Q = Q
+  new MutationObserver((recs) => {
+    const t0 = d.rec?.touchendAt ?? -1
+    const ts = performance.now()
+    if (!(t0 > 0) || ts < t0 || ts > t0 + 1000) return
+    for (const r of recs) {
+      const parent = r.target
+      const parentStrip = parent.nodeType === 1 ? stripOf(parent as Element) : 'no'
+      const one = (sign: 'removed' | 'added') => (n: Node) => {
+        const cell = inCell(n, parent)
+        Q.totals[`${sign}${cell ? 'InCell' : 'Outside'}`]++
+        if (cell) return
+        if (n.nodeType !== 1) {
+          Q.lines.push({ ts, sign, what: kind(n), height: 'n/a', strip: parentStrip === 'no' ? 'no' : 'yes' })
+          return
+        }
+        const el = n as HTMLElement
+        const tag = el.getAttribute('data-diag')
+        if (sign === 'removed') {
+          const [h, p, s] = (tag || `?|${short(el)} (untagged)|strip=?`).split('|')
+          Q.lines.push({ ts, sign, what: p, height: h, strip: (s || '').replace('strip=', ''), parent: short(parent as Element) })
+        }
+        else {
+          Q.lines.push({ ts, sign, what: `${path(el)}${tag ? ' (moved: was tagged)' : ''}`, height: String(el.offsetHeight), strip: swipe.isConnected ? stripOf(el) : parentStrip, parent: short(parent as Element) })
+        }
+      }
+      r.removedNodes.forEach(one('removed'))
+      r.addedNodes.forEach(one('added'))
+    }
+  }).observe(pane, { childList: true, subtree: true })
+  return tagged
+})
+
+/**
+ * Fifth run (#3813, Q-B): the hold variants. Each writes an INLINE min-height (the strip's
+ * getBoundingClientRect().height at arm time) on the strip — or, for H-pane, on the `.croutonpane`
+ * that contains it — at a chosen moment after finger-up. H-probe holds nothing: at the first DOM
+ * removal inside the strip it reads the scroller's scrollTop / scrollHeight before the removal runs.
+ */
+const armHold = (page: Page, variant: HoldVariant) => page.evaluate((variant) => {
+  const d = (window as any).__diag
+  const swipe = d.swipe as HTMLElement
+  const sc = d.sc as HTMLElement
+  const pane = (swipe.closest('.croutonpane') || swipe.closest('[data-crouton-pane]') || swipe.parentElement) as HTMLElement
+  const H: any = { variant, height: Math.round(swipe.getBoundingClientRect().height * 10) / 10, target: variant === 'H-pane' ? 'pane' : 'strip', firedAt: -1, probe: null }
+  d.H = H
+  const hold = () => {
+    const el = variant === 'H-pane' ? pane : swipe
+    el.style.minHeight = `${H.height}px`
+    H.firedAt = performance.now()
+  }
+  if (variant === 'H-up') d.onFingerUp = hold
+  if (variant === 'H-200') d.onFingerUp = () => setTimeout(hold, 200)
+  if (variant === 'H-up' || variant === 'H-200') return H
+  let done = false
+  const fire = (removed: Node | null) => {
+    if (done || !(d.rec?.touchendAt > 0) || !removed || !swipe.contains(removed)) return
+    done = true
+    if (variant === 'H-probe') {
+      H.firedAt = performance.now()
+      H.probe = { scrollTop: Math.round(sc.scrollTop * 10) / 10, scrollHeight: sc.scrollHeight }
+    }
+    else {
+      hold()
+    }
+  }
+  const origRemoveChild = Node.prototype.removeChild
+  Node.prototype.removeChild = function <T extends Node>(this: Node, child: T): T {
+    fire(child)
+    return origRemoveChild.call(this, child) as T
+  }
+  const origRemove = Element.prototype.remove
+  Element.prototype.remove = function (this: Element) {
+    fire(this)
+    return origRemove.call(this)
+  }
+  return H
+}, variant)
+
+function reportReplaced(tag: string, Q: any, rel: (ts: number) => number) {
+  console.log(`DIAG3813 REPLACED ${tag} tagged=${Q.tagged} elements before the swipe`)
+  for (const l of Q.lines) {
+    console.log(`DIAG3813 REPLACED ${tag} t=${rel(l.ts)} ${l.sign} ${l.what} height=${l.height} inStrip=${l.strip}${l.parent ? ` parent=${l.parent}` : ''}`)
+  }
+  if (!Q.lines.length) console.log(`DIAG3813 REPLACED ${tag} none outside day cells`)
+  const t = Q.totals
+  console.log(`DIAG3813 REPLACED-TOTALS ${tag} removed: inCell=${t.removedInCell} outside=${t.removedOutside} · added: inCell=${t.addedInCell} outside=${t.addedOutside}`)
+}
+
+function reportHold(variant: HoldVariant, run: number, H: any, rel: (ts: number) => number, before: number, after: number, drop: boolean) {
+  const fired = H?.firedAt > 0 ? `${rel(H.firedAt)}ms` : 'never'
+  const hook = variant === 'H-up' || variant === 'H-200' ? '' : ` hook=${fired}`
+  const probe = variant === 'H-probe' ? ` probe=${H?.probe ? `scrollTop=${H.probe.scrollTop} scrollHeight=${H.probe.scrollHeight}` : 'none'}` : ''
+  const holdInfo = variant === 'H-probe' ? '' : ` hold=${H?.target}:${H?.height}px set=${fired}`
+  console.log(`DIAG3813 VARIANT ${variant} run=${run} before=${before} after=${after} jumped=${drop ? 'yes' : 'no'}${hook}${probe}${holdInfo}`)
+}
 
 /** First stack line that points at a page script (http/https URL), i.e. the first app frame. */
 const appFrame = (stack: string[]) => {
@@ -637,6 +772,8 @@ function reportRecorder(tag: string, variant: Variant, run: number, R: any, rel:
 // V-mid: 40 px short of the bottom; P1/P2: a fixed start (60 / 70); otherwise (base, V-anchor,
 // P3, P4) the calendar's middle near the top — the base-case start, clamped to the bottom.
 function startFor(variant: Variant, m: Measure) {
+  // Fifth run (Q-A / Q-B): start at the bottom.
+  if (variant === 'Q-A-replaced' || isHold(variant)) return m.max
   const want = variant === 'mid'
     ? m.max - 40
     : variant === 'P1-start60'
@@ -681,6 +818,8 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   const from = await page.evaluate(() => (window as any).__diag.month() as string)
 
   await arm(page, String(run), recorder, recorder && variant === 'base')
+  if (variant === 'Q-A-replaced') await armReplaced(page)
+  if (isHold(variant)) await armHold(page, variant)
   await page.waitForTimeout(100)
   await swipeLeft(page)
   await page.waitForTimeout(1300)
@@ -696,6 +835,8 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
       bodyKinds: d.rec.bodyKinds as Record<string, number>,
       bodyStacks: d.rec.bodyStacks as Record<string, number>,
       R: d.R ? { calls: d.R.calls, focus: d.R.focus, scrolls: d.R.scrolls, resize: d.R.resize, before: d.R.before, jump: d.R.jump } : null,
+      Q: d.Q ?? null,
+      H: d.H ?? null,
     }
   })
   const t0 = out.touchendAt
@@ -717,12 +858,14 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   const mi = frames.findIndex(f => f.month !== from)
   console.log(`DIAG3813 MINH ${tag} ${mi >= 0 ? `month-change t=${frames[mi]!.t} minHeight=${frames[mi]!.minH} · +2 frames t=${frames[mi + 2]?.t ?? '?'} minHeight=${frames[mi + 2]?.minH ?? '?'}` : 'month never changed in the frames'}`)
   const recorded = out.R ? reportRecorder(tag, variant, run, out.R, rel, before, out.after, drop) : null
+  if (out.Q) reportReplaced(tag, out.Q, rel)
+  if (isHold(variant)) reportHold(variant, run, out.H, rel, before, out.after, drop)
 
   mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(join(OUT_DIR, `${app}${variant !== 'base' ? `-${variant}` : ''}-run${run}.json`), JSON.stringify({
     app, variant, run, engine: ENGINE, scroller: m.scroller, max: m.max, before, after: out.after,
     from, to: out.to, drop, dropInfo, frames, events, bodyKinds: out.bodyKinds, bodyStacks: out.bodyStacks,
-    recorder: out.R ? { ...out.R, report: recorded } : null,
+    recorder: out.R ? { ...out.R, report: recorded } : null, replaced: out.Q, hold: out.H,
   }, null, 2))
 
   // No-op guards only — the jump itself is data, never a failure.
@@ -772,6 +915,18 @@ test.describe('booking-demo blocks: swipe diagnostics (#3813)', () => {
         await login(context, 'booking-demo', origin)
         await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
         await runDiag(page, 'booking-demo', run, { recorder: true, variant })
+      })
+    }
+  }
+  // Fifth run (#3813): Q-A — what is replaced that is not a day cell; Q-B — from which moment a
+  // hold stops the jump. Both start at the bottom; recorder off so the hooks are the only extra work.
+  for (const variant of ['Q-A-replaced', ...HOLD_VARIANTS] as const) {
+    for (const run of [1, 2, 3]) {
+      test(`booking-demo ${variant} swipe run ${run}`, async ({ page, context }) => {
+        expect(origin, 'BOOKING_DEMO_URL (or the staging url)').toBeTruthy()
+        await login(context, 'booking-demo', origin)
+        await page.goto(`${origin}/admin/${BD_TEAM}/blocks`)
+        await runDiag(page, 'booking-demo', run, { variant })
       })
     }
   }
