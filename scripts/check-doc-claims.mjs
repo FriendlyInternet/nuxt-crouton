@@ -6,7 +6,7 @@
  * pass --strict to exit 1 on any finding (flip the CI step to --strict once the rebuilt
  * sections pass).
  *
- * The code-side lists (component props, CLI commands + flags, field types) come from the
+ * The code-side lists (component props, CLI commands + flags, field types, config keys) come from the
  * api-reference generator (scripts/gen-api-reference.mjs, #3661) — this script does not parse
  * that code a second time. Needs `typescript` + `vue-component-meta`, so it runs in the CI job
  * that installs packages; without them the import fails and the run exits non-zero
@@ -14,7 +14,10 @@
  *
  *   1. names     — `crouton <command>` and its `--flags` exist in the CLI; <CroutonX> components
  *                  and useCroutonX composables exist in packages/; props passed to a crouton-core
- *                  component exist on it (config keys: follow once #3702 adds that list)
+ *                  component exist on it; a package config key referenced as
+ *                  `features.<alias>.<key>` or `<runtimeConfigKey>.<key>` (also after
+ *                  `runtimeConfig.` / `runtimeConfig.public.`) is one of that package's
+ *                  manifest `configuration` keys (or a prefix of one, e.g. `croutonBookings.email`)
  *   2. schemas   — every ```json block that looks like a collection schema uses known field types
  *   3. code      — ```ts / ```js blocks parse (syntax only; blocks containing `...` or `// ...`
  *                  are fragments and skipped, or mark a block `<!-- doc-check: skip -->` above it)
@@ -27,7 +30,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
-import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf } from './gen-api-reference.mjs'
+import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf, configManifestsOf } from './gen-api-reference.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ts = createRequire(import.meta.url)('typescript')
@@ -193,6 +196,24 @@ export function checkCli(file, md, facts) {
   return hits
 }
 
+/** `features.<alias>.<key>` / `<runtimeConfigKey>.<key>` references must name a key in that package's manifest `configuration`. */
+export function checkConfigKeys(file, md, facts) {
+  const hits = []
+  const roots = [...facts.config.keys()].map(r => r.replace(/[.$]/g, '\\$&'))
+  if (!roots.length) return hits
+  // a root only counts at the start of a dotted chain, or right after runtimeConfig(.public). / config. / `).`
+  const re = new RegExp(`(?:(?<![\\w.$])|(?<=(?:runtimeConfig|config|\\))\\.(?:public\\.)?))(${roots.join('|')})((?:\\.[A-Za-z_$][\\w$]*)+)`, 'g')
+  md.split('\n').forEach((text, i) => {
+    for (const m of text.matchAll(re)) {
+      const { pkg, keys } = facts.config.get(m[1])
+      const path = m[2].slice(1)
+      if (keys.some(k => k === path || k.startsWith(path + '.') || path.startsWith(k + '.'))) continue
+      hits.push({ file, line: i + 1, check: 'names', msg: `config key \`${m[1]}.${path}\` not in ${pkg}'s manifest configuration` })
+    }
+  })
+  return hits
+}
+
 const SCHEMA_KEYS = new Set(['type', 'meta', 'refTarget'])
 function stripJsonComments(s) {
   return s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/[^"\n]*$/gm, '')
@@ -245,7 +266,14 @@ export function loadFacts() {
     components.set(componentName(f), { props: () => (props ??= new Set(propsOf(`${COMPONENTS_DIR}/${f}`).props.map(p => p.name))) })
   }
   const fieldTypes = new Set(fieldTypesOf().flatMap(t => [t.name, ...(t.def.aliases ?? [])]))
-  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, words: sourceWords(join(root, 'packages')) }
+  // root → keys: `features.<alias>` (alias = id without `crouton-`, as crouton-cli derives it) and `<runtimeConfigKey>`
+  const config = new Map()
+  for (const o of configManifestsOf()) {
+    const entry = { pkg: o.id, keys: Object.keys(o.configuration) }
+    config.set(`features.${o.id.replace(/^crouton-/, '')}`, entry)
+    if (o.runtimeConfigKey) config.set(o.runtimeConfigKey, entry)
+  }
+  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, config, words: sourceWords(join(root, 'packages')) }
 }
 
 export function run(docsDir, facts) {
@@ -257,6 +285,7 @@ export function run(docsDir, facts) {
     per.names.push(...checkCli(rel, md, facts))
     per.names.push(...checkSymbols(rel, md, facts))
     per.names.push(...checkProps(rel, md, facts))
+    per.names.push(...checkConfigKeys(rel, md, facts))
     per.schemas.push(...checkSchemas(rel, blocks, facts))
     per.code.push(...checkCode(rel, blocks))
   }
@@ -268,8 +297,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const docsDir = args.find(a => !a.startsWith('--')) ?? join(root, 'docs/content')
   if (!existsSync(docsDir)) { console.error(`no such dir: ${docsDir}`); process.exit(2) }
   const facts = loadFacts()
-  if (!facts.commands.size || !facts.fieldTypes.size || !facts.components.size) {
-    console.error('could not read CLI commands / field types / components from code — refusing to report "all clear"')
+  if (!facts.commands.size || !facts.fieldTypes.size || !facts.components.size || !facts.config.size) {
+    console.error('could not read CLI commands / field types / components / config keys from code — refusing to report "all clear"')
     process.exit(2)
   }
   const per = run(docsDir, facts)

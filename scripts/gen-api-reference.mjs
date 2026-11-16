@@ -279,15 +279,17 @@ function configSection(o) {
   out += '| Key | Type | Default | Runtime config | Options | Description |\n| --- | --- | --- | --- | --- | --- |\n'
   return out + Object.entries(o.configuration).map(configRow).join('')
 }
-function genConfigKeys() {
-  const files = readdirSync(join(ROOT, 'packages')).sort()
+/** Every manifest that declares `configuration`, in package order: `{ id, runtimeConfigKey, configuration }`. */
+export function configManifestsOf() {
+  return readdirSync(join(ROOT, 'packages')).sort()
     .map(d => `packages/${d}/crouton.manifest.ts`)
     .filter(f => existsSync(join(ROOT, f)))
+    .map(manifestOf)
+    .filter(o => o?.configuration && Object.keys(o.configuration).length)
+}
+function genConfigKeys() {
   let out = `---\ntitle: Config keys\ndescription: Per-package settings an app can set (generated from the code)\nicon: i-lucide-settings-2\n---\n\n${HEADER('packages/*/crouton.manifest.ts')}\n# Config keys\n\nThe per-package settings an app can set: each package's manifest \`configuration\`. \`crouton config\` asks for them when the app extends the package (defaults in CI). For the top-level \`crouton.config.js\` shape (\`collections\`, \`targets\`, \`dialect\`) see the [CLI reference](/generation/cli-reference).\n`
-  for (const f of files) {
-    const o = manifestOf(f)
-    if (o?.configuration && Object.keys(o.configuration).length) out += configSection(o)
-  }
+  for (const o of configManifestsOf()) out += configSection(o)
   return out
 }
 

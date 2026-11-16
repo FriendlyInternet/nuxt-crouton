@@ -79,6 +79,15 @@ test('missing component / composable is reported with page and line; real ones p
   assert.equal(run('Call useCrouton() or <CroutonFormLayout /> now\n', '--strict').status, 0)
 })
 
+test('made-up config key is reported with page and line; real keys and prefixes pass', () => {
+  const bad = run('# T\n\nSet `croutonBookings.email.enabeld: true`\n\nand `features.maps.madeUpKey`\n', '--strict')
+  assert.equal(bad.status, 1)
+  assert.match(bad.stdout, /page\.md:3 .*config key `croutonBookings\.email\.enabeld` not in crouton-bookings/)
+  assert.match(bad.stdout, /page\.md:5 .*config key `features\.maps\.madeUpKey` not in crouton-maps/)
+  const good = run('Set `croutonBookings.email.enabled: true`, `croutonBookings.email`, `runtimeConfig.public.maps.style` and `config.features.sales.print.enabled`\n', '--strict')
+  assert.equal(good.status, 0, good.stdout)
+})
+
 test('unknown prop on a crouton-core component is reported; real props, events, slots and class pass', () => {
   const bad = run('```vue\n<CroutonConfirmButton\n  :confirm-text="x"\n/>\n```\n', '--strict')
   assert.equal(bad.status, 1)
