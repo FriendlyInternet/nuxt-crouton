@@ -41,6 +41,7 @@ Use TodoWrite for 3+ step tasks *when the harness exposes it* (one `in_progress`
 See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
 
 - **Hand off** by labelling the ticket `work-this` — the one label a human applies; `delegate*` are bot-only hand-offs (#3208) (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Claim** what you drive (#3996): `node scripts/claim.mjs claim <epic> --name <nick>`; `who <n>` / `release <n>`. Your chat id is printed at session start (`CROUTON_CHAT_ID`). The `require-unclaimed` hook refuses `work-this`, removing `status:blocked`, and `**Worker:**` comments on another chat's claimed ticket (a child counts through its epic), and `work-this` on a ticket with an open `Blocked-by:`. A claim ends when the issue closes, on `release`, or after 24 h with nothing from that chat on it.
 - **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
 - **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
 
@@ -69,7 +70,7 @@ Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and fol
 Work lands via a PR on a feature branch (`/commit`, `(#NN)`, `Closes #NN` in the PR body). Issue rules, links, typed brief, mentions: `AGENTS.md` → *Issues* and the `owner-brief` skill (the `require-owner-brief` hook enforces the brief; it also holds the `@`-mention detail).
 
 **Agent comments LEAD with a 🤖 provenance header** (`require-comment-provenance` hook), by who the comment posts as:
-- interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping.
+- interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · chat <id> · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping; `<id>` is the chat id printed at session start (the hook requires it, #3996).
 - pipeline (bot account): `> 🤖 **Claude Code** · agent pipeline (CI) · _<context>_` — no human disclaimer.
 
 **A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop.
