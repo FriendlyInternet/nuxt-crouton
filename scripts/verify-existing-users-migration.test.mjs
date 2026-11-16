@@ -1,9 +1,9 @@
 // #3141 — turning on e-mail verification would lock out every existing password user
 // (the column defaults to false and sign-up never sent a verification e-mail). Each
 // app/POC/fixture migration history therefore carries a data-only backfill that marks
-// existing users verified. This test proves (1) every folder has exactly one, with a chained
-// data-only snapshot (later schema migrations may follow it), and (2) the real SQL,
-// run on a real sqlite DB, verifies everyone.
+// existing users verified. This test proves (1) every folder has exactly one, journaled
+// with a chained data-only snapshot (later schema migrations may follow it), and (2) the
+// real SQL, run on a real sqlite DB, verifies everyone.
 //
 // Run: node --test scripts/verify-existing-users-migration.test.mjs
 import { test } from 'node:test'
@@ -43,12 +43,12 @@ test('the list covers every sqlite migration folder in the repo', () => {
 })
 
 for (const folder of FOLDERS) {
-  test(`${folder}: the backfill is in the journal, with a chained snapshot`, () => {
+  test(`${folder}: the backfill is a journal entry, with a chained snapshot`, () => {
     const file = backfillFile(folder)
     const dir = migrationsDir(folder)
     const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8'))
     const last = journal.entries.find(e => e.tag === file.replace(/\.sql$/, ''))
-    assert.ok(last, `${folder}: backfill must be in the journal`)
+    assert.ok(last, `${folder}: backfill must be a journal entry`)
     assert.ok(last.idx > 0)
 
     const nnnn = String(last.idx).padStart(4, '0')

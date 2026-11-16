@@ -54,6 +54,7 @@ Create a new crouton app end-to-end (scaffold → generate → doctor → summar
 | `--features` | string |  | `` | Comma-separated feature names (e.g., bookings,pages,editor) |
 | `--theme` | string |  |  | Theme to wire into extends (e.g., ko) |
 | `--dialect` | string | `-d` | `sqlite` | Database dialect (only sqlite is supported) |
+| `--layout` | boolean |  | `true` | Add the crouton-layout engine (default on; --no-layout to leave it out) |
 | `--noCf` | boolean |  |  | Skip Cloudflare-specific config (wrangler.jsonc, CF stubs) |
 | `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev) |
 | `--poc` | boolean |  |  | Scaffold into pocs/<name> (the incubator) instead of apps/<name> |
