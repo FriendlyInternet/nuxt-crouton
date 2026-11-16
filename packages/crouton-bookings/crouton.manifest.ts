@@ -119,12 +119,14 @@ export default defineCroutonManifest({
       'useBookingOptions'
     ],
     components: [
-      { name: 'CroutonBookingPanel', description: 'Main booking sidebar container', props: ['locationId', 'teamId'] },
-      { name: 'CroutonBookingCalendar', description: 'Calendar date picker for booking', props: ['modelValue', 'availableDates'] },
-            { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
-      { name: 'CroutonBookingCard', description: 'Individual booking display card', props: ['booking'] },
-      { name: 'CroutonBookingSlotIndicator', description: 'Visual slot availability indicator', props: ['slots', 'bookings'] },
-      { name: 'CroutonBookingDateBadge', description: 'Date display badge', props: ['date', 'format'] }
+      { name: 'CroutonBookingsPanel', description: 'Main booking sidebar container' },
+      { name: 'CroutonBookingsCalendar', description: 'Calendar date picker for booking' },
+      { name: 'CroutonBookingsList', description: 'Bookings list with filters' },
+      { name: 'CroutonBookingsBookingCard', description: 'Individual booking display card' },
+      { name: 'CroutonBookingsSlotIndicator', description: 'Visual slot availability indicator' },
+      { name: 'CroutonBookingsDateBadge', description: 'Date display badge' },
+      { name: 'CroutonBookingsLayoutList', description: 'The bookings list as a placeable layout block' },
+      { name: 'CroutonBookingsLayoutCalendar', description: 'The bookings calendar as a placeable layout block' }
     ],
     apiRoutes: [
       '/api/crouton-bookings/teams/[teamId]/availability',

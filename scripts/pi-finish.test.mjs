@@ -323,3 +323,73 @@ test('formatAcceptanceLine: exact run-record string, with and without tickets, p
     "acceptance: pass — 5 error(s) in files this PR didn't touch → #1; not ticketed: a.ts:TS1, b.ts:TS2",
   );
 });
+
+// ── #3249: the `typecheck` CLI the finish step calls, and the workflow wiring ────────────────────────
+
+const PI_FINISH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'pi-finish.mjs');
+const kv = (out, k) => (new RegExp(`^${k}=(.*)$`, 'm').exec(out) || [])[1];
+
+function runTypecheckCli({ log, committed = REAL_3245_COMMITTED, tcExit = '2' } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-tc-'));
+  const logPath = path.join(dir, 'acc.log');
+  if (log !== undefined) fs.writeFileSync(logPath, log);
+  fs.writeFileSync(path.join(dir, 'c.txt'), `${committed.join('\n')}\n`);
+  fs.writeFileSync(path.join(dir, 'p.txt'), `${committed.join('\n')}\n`);
+  const groupsPath = path.join(dir, 'groups.json');
+  const r = spawnSync('node', [PI_FINISH, 'typecheck', logPath, tcExit, 'pocs/status', path.join(dir, 'c.txt'), path.join(dir, 'p.txt'), groupsPath], { encoding: 'utf8' });
+  const groups = fs.existsSync(groupsPath) ? JSON.parse(fs.readFileSync(groupsPath, 'utf8')) : null;
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { ...r, groups };
+}
+
+test('CLI typecheck: the real #3245 log passes with one pre-existing group written (#3249)', () => {
+  const r = runTypecheckCli({ log: `> nuxi typecheck\n${REAL_3245}\n` });
+  assert.equal(r.status, 0);
+  assert.equal(kv(r.stdout, 'ACCEPT'), 'pass');
+  assert.equal(kv(r.stdout, 'NOT_IN_DIFF'), '1');
+  assert.equal(kv(r.stdout, 'IN_DIFF'), '0');
+  assert.match(kv(r.stdout, 'ACCEPT_MSG'), /didn't touch/);
+  assert.equal(r.groups.length, 1);
+  assert.equal(r.groups[0].marker, '<!-- preexisting-type-error:pocs/status/server/api/status/signin-link.post.ts:TS2551 -->');
+});
+
+test('CLI typecheck: an error in a file this PR changed prints ACCEPT=fail (#3249)', () => {
+  const r = runTypecheckCli({
+    log: '##[error]server/utils/live-apps-core.ts(3,1): error TS2322: Type string is not assignable to number.\n',
+  });
+  assert.equal(r.status, 0);
+  assert.equal(kv(r.stdout, 'ACCEPT'), 'fail');
+  assert.equal(kv(r.stdout, 'IN_DIFF'), '1');
+});
+
+test('CLI typecheck: groups are written uncapped, so the 3-ticket cap applies to NEW tickets only (#3249)', () => {
+  const log = ['a', 'b', 'c', 'd', 'e'].map((n) => `server/${n}.ts(1,1): error TS2322: bad`).join('\n');
+  const r = runTypecheckCli({ log });
+  assert.equal(kv(r.stdout, 'ACCEPT'), 'pass');
+  assert.equal(kv(r.stdout, 'NOT_IN_DIFF'), '5');
+  assert.equal(r.groups.length, 5);
+});
+
+test('CLI typecheck: a missing log exits 0 with ACCEPT=neutral, never a pass (#3249)', () => {
+  const r = runTypecheckCli({ log: undefined });
+  assert.equal(r.status, 0);
+  assert.equal(kv(r.stdout, 'ACCEPT'), 'neutral');
+  assert.equal(kv(r.stdout, 'NOT_IN_DIFF'), '0');
+  assert.match(r.stderr, /::warning::/);
+});
+
+test('CLI typecheck: an empty log with a clean exit passes; with a failed exit it is neutral (#3249)', () => {
+  assert.equal(kv(runTypecheckCli({ log: '', tcExit: '0' }).stdout, 'ACCEPT'), 'pass');
+  assert.equal(kv(runTypecheckCli({ log: '', tcExit: '1' }).stdout, 'ACCEPT'), 'neutral');
+});
+
+test('workflow: the finish step calls `pi-finish.mjs typecheck` + the ticket script, and the shell count is gone (#3249)', () => {
+  const wf = fs.readFileSync(path.join(path.dirname(PI_FINISH), '..', '.github', 'workflows', 'work-issue-pidev.yml'), 'utf8');
+  assert.match(wf, /pi-finish\.mjs" typecheck /);
+  assert.match(wf, /cp scripts\/preexisting-type-tickets\.mjs "\$RUNNER_TEMP\//);
+  assert.match(wf, /node "\$RUNNER_TEMP\/preexisting-type-tickets\.mjs" --groups /);
+  assert.doesNotMatch(wf, /OWN="\$\(grep/);
+  assert.doesNotMatch(wf, /AUTOIMP="\$\(grep/);
+  // Values are read with sed, never eval'd (a path with a shell metacharacter must not execute).
+  assert.match(wf, /sed -n 's\/\^ACCEPT=\/\/p'/);
+});
