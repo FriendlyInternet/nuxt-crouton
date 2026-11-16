@@ -426,7 +426,7 @@ jobs:
           # No epic_branch on the issue → this is a top-level epic; resolve/create epic/<EPIC>-<slug>.
           if [ -z "$EPIC_BRANCH" ]; then
             git fetch origin main --quiet
-            EPIC_BRANCH="$(git ls-remote --heads origin "epic/${EPIC}-*" | sed 's#.*refs/heads/##' | head -n1)"
+            EPIC_BRANCH="$(git ls-remote --heads origin "refs/heads/epic/${EPIC}-*" | sed 's#.*refs/heads/##' | head -n1)"
             if [ -z "$EPIC_BRANCH" ]; then
               SLUG="$(gh issue view "$ISSUE" --repo "$REPO" --json title -q .title \
                 | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"

@@ -40,15 +40,22 @@ const { slide } = useSlideSwipe(swipeEl, {
   onPrev: () => showMonth(placeholder.value.subtract({ months: 1 })),
 })
 
-const panels = computed(() => [-1, 0, 1].map(offset => ({
-  offset,
-  placeholder: placeholder.value.add({ months: offset }),
-  // Reka moves a calendar's own month to its model-value's month, so only the
-  // panel that actually shows the selected month may receive it (#2651).
-  modelValue: selected.value && isSameMonth(selected.value, placeholder.value.add({ months: offset }))
-    ? selected.value
-    : undefined,
-})))
+// Panels are keyed by the month they show, not by position: after a step the
+// two staying panels keep their DOM (and UCalendar's month-keyed table) and
+// only one new panel is built (#3917). `offset` still drives inert/neighbour.
+const panels = computed(() => [-1, 0, 1].map((offset) => {
+  const p = placeholder.value.add({ months: offset })
+  return {
+    offset,
+    key: `${p.year}-${p.month}`,
+    placeholder: p,
+    // Reka moves a calendar's own month to its model-value's month, so only the
+    // panel that actually shows the selected month may receive it (#2651).
+    modelValue: selected.value && isSameMonth(selected.value, p)
+      ? selected.value
+      : undefined,
+  }
+}))
 
 const monthLabel = computed(() =>
   new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' })
@@ -121,7 +128,7 @@ function onActivate(value: any) {
       <div class="flex" ref="trackEl" style="transform: translateX(-100%)">
         <div
           v-for="panel in panels"
-          :key="panel.offset"
+          :key="panel.key"
           class="w-full shrink-0"
           :inert="panel.offset !== 0 || undefined"
           :aria-hidden="panel.offset !== 0 || undefined"

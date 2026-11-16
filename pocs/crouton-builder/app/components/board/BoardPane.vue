@@ -30,7 +30,7 @@ const canAccept = computed(() => {
   return !!d && !(d.kind === 'pane' && isWithin(props.path, d.path))
 })
 const hoverEdge = computed<DropEdge | null>(() =>
-  hover.value && samePath(hover.value.path, props.path) ? hover.value.edge : null,
+  hover.value && hover.value.scope === 'pane' && samePath(hover.value.path, props.path) ? hover.value.edge : null,
 )
 
 // Tapping the block selects it — but a control INSIDE the block (a row's edit
