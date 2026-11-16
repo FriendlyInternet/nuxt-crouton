@@ -18,7 +18,8 @@
  *   - a ticket's start depends only on the plan verdict, its own verdict and its own step's blockers;
  *   - a rolling epic is finished only when every step in its step list has a closed ticket.
  *
- *   node scripts/lib/epic-steps.mjs steps <comments.json>                       → the step list JSON (or nothing)
+ *   node scripts/lib/epic-steps.mjs steps <comments.json>                       → the step list JSON (or nothing);
+ *                                                     exit 3 + the reason on stderr when the step-list comment is unreadable
  *   node scripts/lib/epic-steps.mjs narrow <subject> <tickets.json> [steps.json] → the tickets this review reads
  * comments.json = `[{ body, user: { login, type } }]` (the GitHub API shape), oldest first.
  */
@@ -37,6 +38,8 @@ export const PLAN_WRONG_MARKER = '<!-- epic-plan-wrong -->'
 export const VERDICT_MARKER = '<!-- ticket-review-verdict:'
 export const PLAN_GO_MARKER = '<!-- ticket-review-plan:go -->'
 export const MAX_ROUNDS = 3
+/** `epic-steps.mjs steps` exit code for a step-list comment that is there but cannot be read. */
+export const STEPS_UNREADABLE_EXIT = 3
 export const subjectMarker = (s) => `<!-- ticket-review-subject:${s} -->`
 
 /** Thrown on a malformed plan / step list. apply-decompose-plan.mjs re-exports it. */
@@ -334,7 +337,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [mode, a, b, c] = process.argv.slice(2)
   const json = (f) => JSON.parse(readFileSync(f, 'utf8'))
   if (mode === 'steps' && a) {
-    const steps = parseSteps(json(a))
+    // exit 0 + JSON = a step list · exit 0 + nothing = no step list · exit 3 + stderr = a step-list
+    // comment that cannot be read (never confused with "no step list", #3846 review).
+    const { steps, error } = readSteps(json(a))
+    if (error) { console.error(`unreadable step list: ${error}`); process.exit(STEPS_UNREADABLE_EXIT) }
     if (steps) console.log(JSON.stringify(steps))
   } else if (mode === 'narrow' && b) {
     const steps = c && existsSync(c) && readFileSync(c, 'utf8').trim() ? json(c) : null

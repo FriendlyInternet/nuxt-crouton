@@ -4,8 +4,8 @@
 // workflow runs) as well as the pure function, and read the workflow files for their wiring.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, chmodSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { reviewActions } from './ticket-review-actions.mjs'
@@ -231,7 +231,11 @@ test('ticket-review.yml has the subject input and runs the scripted hand-offs', 
   assert.match(t, /node scripts\/ticket-review-actions\.mjs /)
   assert.match(t, /epic-steps\.mjs narrow "\$SUBJECT"/)
   assert.ok(!/case "\$VERDICT"/.test(t), 'the verdict branching moved to scripts/ticket-review-actions.mjs')
-  assert.match(t, /\{ \[ "\$SUBJECT" = plan \] && \[ -s "\$D\/steps\.json" \]; \} \|\| \[ "\$\(jq length "\$D\/tickets\.json"\)" -gt 0 \]/)
+  assert.match(t, /node scripts\/ticket-review-actions\.mjs gather "\$D\/comments\.json" "\$D\/epic\.json" "\$D\/tickets\.json" "\$D\/steps\.json" --subject "\$SUBJECT"/)
+  // a gather hold skips the reviewer and the verdict step (one comment, from the gather step)
+  assert.match(t, /- name: Gather the epic and its tickets\n\s+id: gather\n/)
+  assert.match(t, /- id: pi\n\s+if: \$\{\{ steps\.gather\.outputs\.held != 'true' \}\}/)
+  assert.match(t, /- name: Post the verdict and release\n\s+if: \$\{\{ !cancelled\(\) && steps\.gather\.outputs\.held != 'true' \}\}/)
 })
 
 test('ticket-revise.yml passes the subject on to the re-review', () => {
@@ -239,4 +243,68 @@ test('ticket-revise.yml passes the subject on to the re-review', () => {
   assert.match(t, /SUBJECT: \$\{\{ inputs\.subject \}\}/)
   assert.match(t, /sent-back "\$D\/comments\.json" --subject "\$SUBJECT"/)
   assert.match(t, /workflow:"ticket-review\.yml",inputs:\(\{epic:\(\$i\|tostring\)\} \+ \(if \$s == "" then \{\} else \{subject:\$s\} end\)\)/)
+})
+
+// ── subject=plan gather: the workflow's own commands, run in bash with a fake `gh` (#3846 review) ──
+// The lines are read out of ticket-review.yml, so the test runs exactly what the gather step runs.
+function runGather({ comments, subs, labels = ROLLING, subject = 'plan' }) {
+  const d = mkdtempSync(join(tmpdir(), 'trg-'))
+  const bin = join(d, 'bin'); mkdirSync(bin)
+  writeFileSync(join(bin, 'gh'), `#!/usr/bin/env bash\nprintf '%s\\0' "$@" >> "${join(d, 'gh.log')}"\nprintf '\\036' >> "${join(d, 'gh.log')}"\n`)
+  chmodSync(join(bin, 'gh'), 0o755)
+  writeFileSync(join(d, 'comments.json'), JSON.stringify(comments))
+  writeFileSync(join(d, 'subs.json'), JSON.stringify(subs))
+  writeFileSync(join(d, 'epic.json'), JSON.stringify({ number: 9, labels }))
+  const t = wf('ticket-review.yml')
+  const pick = (re) => { const l = t.split('\n').find((x) => re.test(x)); assert.ok(l, `workflow line ${re}`); return l.trim() }
+  const script = ['set -euo pipefail',
+    pick(/node scripts\/lib\/epic-steps\.mjs steps /), pick(/node scripts\/lib\/epic-steps\.mjs narrow /),
+    pick(/node scripts\/ticket-review-actions\.mjs gather /)].join('\n')
+  const out = join(d, 'out')
+  writeFileSync(out, '')
+  const r = spawnSync('bash', ['-c', script], { cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, D: d, SUBJECT: subject, EPIC: '9', GITHUB_OUTPUT: out } })
+  const log = existsSync(join(d, 'gh.log')) ? readFileSync(join(d, 'gh.log'), 'utf8') : ''
+  const calls = log.split('\x1e').filter(Boolean).map((l) => l.split('\0').filter(Boolean))
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr, calls, output: readFileSync(out, 'utf8'), steps: readFileSync(join(d, 'steps.json'), 'utf8') }
+}
+
+test('C. subject=plan: the reviewer\'s broken list ("ticket": "#11") holds the epic with the field that is wrong', () => {
+  const broken = renderSteps(normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])).replace('"ticket": 11', '"ticket": "#11"')
+  const r = runGather({ comments: [bot(broken)], subs: [sub(11, 0)], labels: [...ROLLING, 'steps:approved'] })
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  assert.equal(r.steps, '', 'no step list is passed on')
+  assert.match(r.stderr, /unreadable step list: step\[0\]\.ticket must be an issue number/)
+  assert.match(r.output, /^held=true$/m, 'the reviewer and verdict steps are skipped')
+  assert.deepEqual(r.calls.filter((c) => c[1] === 'edit'), [
+    ['issue', 'edit', '9', '--remove-label', 'steps:approved'], ['issue', 'edit', '9', '--add-label', 'status:blocked'],
+  ])
+  const comments = r.calls.filter((c) => c[1] === 'comment')
+  assert.equal(comments.length, 1, 'one comment')
+  assert.equal(comments[0][2], '9')
+  assert.match(comments[0][4], /cannot be read: step\[0\]\.ticket must be an issue number or null, got "#11"/)
+})
+
+test('C. subject=plan: a valid list goes on to the review, a missing list fails as before', () => {
+  const valid = runGather({ comments: [bot(renderSteps(normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])))], subs: [sub(11, 0)] })
+  assert.equal(valid.status, 0, valid.stderr + valid.stdout)
+  assert.equal(JSON.parse(valid.steps).length, 2)
+  assert.deepEqual(valid.calls, [])
+  assert.equal(valid.output, '')
+  const missing = runGather({ comments: [], subs: [sub(11, 0)] })
+  assert.equal(missing.status, 1)
+  assert.equal(missing.steps, '')
+  assert.match(missing.stdout, /::error::epic #9 has no open sub-issues to review/)
+  assert.deepEqual(missing.calls, [])
+  assert.equal(missing.output, '')
+})
+
+test('epic-steps.mjs steps: no step list (exit 0, nothing) is told apart from an unreadable one (exit 3)', () => {
+  const d = mkdtempSync(join(tmpdir(), 'es-'))
+  const cli = new URL('./lib/epic-steps.mjs', import.meta.url).pathname
+  const run = (comments) => { writeFileSync(join(d, 'c.json'), JSON.stringify(comments)); return spawnSync('node', [cli, 'steps', join(d, 'c.json')], { encoding: 'utf8' }) }
+  const none = run([])
+  assert.equal(none.status, 0); assert.equal(none.stdout, '')
+  const bad = run([bot(`${'<!-- epic-steps:v1 -->'}\n\`\`\`json\n[{"title":"t","goal":"g","proves":"p","ticket":"#11"}]\n\`\`\``)])
+  assert.equal(bad.status, 3); assert.equal(bad.stdout, ''); assert.match(bad.stderr, /step\[0\]\.ticket/)
 })

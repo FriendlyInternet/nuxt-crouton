@@ -116,6 +116,7 @@ jobs:
           fi
 
       - name: Gather the epic and its tickets
+        id: gather
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -133,14 +134,15 @@ jobs:
             --jq '[.[] | {number, title, body, state, labels: [.labels[].name]}]' | jq -s 'add // []' > "$D/subs.json"
           # #3846: the step list (rolling epics) + only the open tickets this subject reads; the epic
           # branch as a read-only second checkout (blank when it has none → the main checkout).
-          node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json"
+          node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json" || [ $? -eq 3 ]
           node scripts/lib/epic-steps.mjs narrow "$SUBJECT" "$D/subs.json" "$D/steps.json" > "$D/tickets.json"
           echo "EPIC_SRC=$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")" >> "$GITHUB_ENV"
           echo "tickets: $(jq length "$D/tickets.json") (subject: ${SUBJECT:-all})"
-          { [ "$SUBJECT" = plan ] && [ -s "$D/steps.json" ]; } || [ "$(jq length "$D/tickets.json")" -gt 0 ] || { echo "::error::epic #$EPIC has no open sub-issues to review"; exit 1; }
+          node scripts/ticket-review-actions.mjs gather "$D/comments.json" "$D/epic.json" "$D/tickets.json" "$D/steps.json" --subject "$SUBJECT"
 
       # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
       - id: pi
+        if: ${{ steps.gather.outputs.held != 'true' }}
         env:
           PI_MODEL: ${{ steps.model.outputs.model }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -155,7 +157,7 @@ jobs:
           exit "${PIPESTATUS[0]}"
 
       - name: Post the verdict and release
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gather.outputs.held != 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}

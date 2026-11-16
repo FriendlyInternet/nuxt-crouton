@@ -29,8 +29,11 @@
 //     orchestrator writes that ticket by hand (owner decision 2026-11-12 12:54).
 //
 //   node scripts/ticket-review-actions.mjs <decision.json> <comments.json> <epic.json> <subs.json> [steps.json] [--subject S]
+//   node scripts/ticket-review-actions.mjs gather <comments.json> <epic.json> <tickets.json> <steps.json> [--subject S]
+//     → before the reviewer: hold the epic for an unreadable step list (`held=true` output), or fail on nothing to review
 //   epic.json = { number, labels: [names] } · subs.json = every sub-issue { number, state, body, labels }
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, appendFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { releasable, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { countRounds as legacyRounds, route } from './ticket-revise.mjs'
@@ -165,10 +168,53 @@ function stepLines(a, { epic, steps }) {
   return [{ kind: 'note', text: `Step ${a.step} (${title}) is ready — write its ticket by hand with \`<!-- pipeline: epic=${epic} step=${a.step} -->\` in the body, then run ${reviewCmd(epic, '<ticket>')}.` }]
 }
 
+/**
+ * PURE. Before the reviewer runs (ticket-review.yml's gather step): may this review go ahead?
+ *   → { go: true } · { held: true, lines } (hold the epic, run no reviewer) · { error }
+ * `subject=plan` with a step-list comment that is there but cannot be read ends like the ticket path:
+ * the epic holds with the reason (readSteps → reviewActions), never "no open sub-issues" (#3846 review).
+ */
+export function gatherGate({ epic, subject = '', labels = [], comments = [], tickets = [], steps = null }) {
+  if (subject === 'plan' && !steps && readSteps(comments).error) {
+    // A bot step-list comment only exists on a rolling epic, so read the epic as one here.
+    const rolling = names(labels).includes(ROLLING_LABEL) ? names(labels) : [...names(labels), ROLLING_LABEL]
+    return { held: true, lines: reviewActions({ epic, subject, labels: rolling, decision: null, comments, tickets, subIssues: tickets, steps: null }) }
+  }
+  if ((subject === 'plan' && steps?.length) || tickets.length) return { go: true }
+  return { error: `epic #${epic} has no open sub-issues to review` }
+}
+
+/** PURE. The one hold comment for a gate hold: provenance + the notes (the field that is wrong). */
+export function gateComment(lines) {
+  const notes = lines.filter((l) => l.kind === 'note').map((l) => `- ${l.text}`).join('\n')
+  return `<!-- pipeline-note -->\n<!-- ticket-review-held:steps-unreadable -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review (#3846)_\n\n` +
+    `🔴 **The step list cannot be read** — the review did not run and no ticket started.\n**Needs:** action — fix the step-list comment.\n\n${notes}\n`
+}
+
+/** CLI `gather`: hold via gh (block / unlabel + one comment) and set `held=true`, or fail loud on nothing to review. */
+function runGather(argv, subject) {
+  const [commentsF, epicF, ticketsF, stepsF] = argv
+  const json = (f) => JSON.parse(readFileSync(f, 'utf8'))
+  const epic = json(epicF)
+  const steps = stepsF && existsSync(stepsF) && readFileSync(stepsF, 'utf8').trim() ? json(stepsF) : null
+  const g = gatherGate({ epic: epic.number, subject, labels: epic.labels, comments: json(commentsF), tickets: json(ticketsF), steps })
+  if (g.error) { console.log(`::error::${g.error}`); process.exit(1) }
+  if (!g.held) return
+  const gh = (...a) => execFileSync('gh', a, { stdio: ['ignore', 'inherit', 'inherit'] })
+  for (const l of g.lines) {
+    if (l.kind === 'unlabel') { try { gh('issue', 'edit', String(l.issue), '--remove-label', l.label) } catch { /* not carried: fine */ } }
+    if (l.kind === 'block') gh('issue', 'edit', String(l.issue), '--add-label', 'status:blocked')
+  }
+  gh('issue', 'comment', String(epic.number), '--body', gateComment(g.lines))
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'held=true\n')
+  console.log(`held epic #${epic.number}: the step list cannot be read`)
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
   const si = argv.indexOf('--subject')
   const subject = si >= 0 ? String(argv.splice(si, 2)[1] || '').trim() : ''
+  if (argv[0] === 'gather') { runGather(argv.slice(1), subject); process.exit(0) }
   const [decisionF, commentsF, epicF, subsF, stepsF] = argv
   if (!subsF) { console.error('usage: ticket-review-actions.mjs <decision.json> <comments.json> <epic.json> <subs.json> [steps.json] [--subject S]'); process.exit(2) }
   const json = (f) => JSON.parse(readFileSync(f, 'utf8'))
