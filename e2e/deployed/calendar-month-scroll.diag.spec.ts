@@ -784,12 +784,8 @@ function startFor(variant: Variant, m: Measure) {
   return want
 }
 
-async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
-  const variant = opts.variant ?? 'base'
-  const recorder = !!opts.recorder
-  const m = await install(page)
-  expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
-  const want = startFor(variant, m)
+// Test-only setup for the variants that change the page before the swipe (V-anchor, P3, P4).
+async function setupVariant(page: Page, variant: Variant, run: number, m: Measure, want: number) {
   // V-anchor: turn scroll anchoring off everywhere before the swipe.
   if (variant === 'anchor') await page.addStyleTag({ content: '* { overflow-anchor: none !important; }' })
   // P3: hold the swipe element at its current height (test-only style, no app code).
@@ -814,9 +810,10 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
     })
     console.log(`DIAG3813 VARIANT-SETUP ${variant} run=${run} spacer=200px max ${m.max}→${max} start=${want}`)
   }
-  const before = await scrollTo(page, want)
-  const from = await page.evaluate(() => (window as any).__diag.month() as string)
+}
 
+// Arm the recorders for this variant, swipe one month, and read back everything recorded.
+async function swipeAndCollect(page: Page, run: number, variant: Variant, recorder: boolean) {
   await arm(page, String(run), recorder, recorder && variant === 'base')
   if (variant === 'Q-A-replaced') await armReplaced(page)
   if (isHold(variant)) await armHold(page, variant)
@@ -824,7 +821,7 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   await swipeLeft(page)
   await page.waitForTimeout(1300)
 
-  const out = await page.evaluate(() => {
+  return page.evaluate(() => {
     const d = (window as any).__diag
     return {
       after: d.sc.scrollTop as number,
@@ -839,12 +836,35 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
       H: d.H ?? null,
     }
   })
+}
+
+function variantSuffix(variant: Variant, sep: string) {
+  return variant !== 'base' ? `${sep}${variant}` : ''
+}
+
+// PR #3925 measure: the strip's inline min-height at the frame the month changed and two frames later.
+function reportMinHeight(tag: string, frames: any[], from: string) {
+  const mi = frames.findIndex(f => f.month !== from)
+  console.log(`DIAG3813 MINH ${tag} ${mi >= 0 ? `month-change t=${frames[mi]!.t} minHeight=${frames[mi]!.minH} · +2 frames t=${frames[mi + 2]?.t ?? '?'} minHeight=${frames[mi + 2]?.minH ?? '?'}` : 'month never changed in the frames'}`)
+}
+
+async function runDiag(page: Page, app: string, run: number, opts: { recorder?: boolean, variant?: Variant } = {}) {
+  const variant = opts.variant ?? 'base'
+  const recorder = !!opts.recorder
+  const m = await install(page)
+  expect(m.max, `${app}: the scroller must scroll ≥100px (scroller ${m.scroller}, max ${m.max})`).toBeGreaterThanOrEqual(100)
+  const want = startFor(variant, m)
+  await setupVariant(page, variant, run, m, want)
+  const before = await scrollTo(page, want)
+  const from = await page.evaluate(() => (window as any).__diag.month() as string)
+
+  const out = await swipeAndCollect(page, run, variant, recorder)
   const t0 = out.touchendAt
   const rel = (ts: number) => Math.round(ts - t0)
   const frames = out.frames.map(f => ({ t: rel(f.ts), ...f }))
   const events = out.events.map(e => ({ t: rel(e.ts), ...e }))
   const drop = out.after < before - 2
-  const tag = `app=${app}${variant !== 'base' ? ` variant=${variant}` : ''} run=${run} engine=${ENGINE}`
+  const tag = `app=${app}${variantSuffix(variant, ' variant=')} run=${run} engine=${ENGINE}`
   console.log(`DIAG3813 ${tag} scroller=${m.scroller} before=${before} after=${out.after} month=${from}→${out.to} frames=${frames.length} events=${events.length} drop=${drop ? 'yes' : 'no'}`)
 
   const { di, dropInfo } = reportDrop(tag, frames, events, drop, before, out.after)
@@ -854,15 +874,13 @@ async function runDiag(page: Page, app: string, run: number, opts: { recorder?: 
   for (const e of events) console.log(`DIAG3813 EVENT ${tag} t=${e.t} ${e.kind} ${e.detail}`)
 
   reportQuestions(tag, frames, events, di, out)
-  // PR #3925 measure: the strip's inline min-height at the frame the month changed and two frames later.
-  const mi = frames.findIndex(f => f.month !== from)
-  console.log(`DIAG3813 MINH ${tag} ${mi >= 0 ? `month-change t=${frames[mi]!.t} minHeight=${frames[mi]!.minH} · +2 frames t=${frames[mi + 2]?.t ?? '?'} minHeight=${frames[mi + 2]?.minH ?? '?'}` : 'month never changed in the frames'}`)
+  reportMinHeight(tag, frames, from)
   const recorded = out.R ? reportRecorder(tag, variant, run, out.R, rel, before, out.after, drop) : null
   if (out.Q) reportReplaced(tag, out.Q, rel)
   if (isHold(variant)) reportHold(variant, run, out.H, rel, before, out.after, drop)
 
   mkdirSync(OUT_DIR, { recursive: true })
-  writeFileSync(join(OUT_DIR, `${app}${variant !== 'base' ? `-${variant}` : ''}-run${run}.json`), JSON.stringify({
+  writeFileSync(join(OUT_DIR, `${app}${variantSuffix(variant, '-')}-run${run}.json`), JSON.stringify({
     app, variant, run, engine: ENGINE, scroller: m.scroller, max: m.max, before, after: out.after,
     from, to: out.to, drop, dropInfo, frames, events, bodyKinds: out.bodyKinds, bodyStacks: out.bodyStacks,
     recorder: out.R ? { ...out.R, report: recorded } : null, replaced: out.Q, hold: out.H,
