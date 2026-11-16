@@ -55,6 +55,9 @@ exact word they reply.
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
    `status:blocked` for the owner; `needs-owner` → one yes/no question on the PR and `status:blocked`
    on the issue: **owner decides here (`ok` / `not ok: …`)**. A red build → `fix-ci-on-failure.yml`.
+   The reviewer is given the PR's `plan-checks` table (`scripts/lib/build-review-prompt.mjs`) as the
+   record of which plan tests ran and passed on that commit, and judges only whether each test aims
+   at the ticket's rule.
    The owner can also ask for changes at any time with a top-level `**Worker:** <what to change>`
    comment.
 6. **Merge into the epic branch.** `automerge-epic-subpr.yml` decides it with
