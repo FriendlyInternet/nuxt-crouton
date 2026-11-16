@@ -116,13 +116,13 @@ Complete verification code input flow with resend functionality.
 - `resend()` - Resend requested
 - `error(error: Error)` - Error occurred
 
-### MagicLinkSent
+### EmailMagicLinkSent
 
 "Check your email" message with resend option.
 
 ```vue
 <template>
-  <MagicLinkSent
+  <EmailMagicLinkSent
     :email="userEmail"
     @resend="handleResend"
     @change-email="handleChangeEmail"
