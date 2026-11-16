@@ -12,7 +12,7 @@ import { ghGetAll } from '../../utils/gh-paged'
 import {
   EPIC_SYNC_TEXT, PIPELINE_LABELS, SIGNOFF_PREVIEW_MARKER, cardKey, collectAsks, epicSyncBranch, epicSyncComment,
   goneCandidates, isPipelineBot, planSync, stuckCounts,
-  type Ask, type EpicSyncItem, type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhUser, type QuizItem, type SyncItem
+  type Ask, type EpicSyncItem, type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhFile, type GhUser, type QuizItem, type SyncItem
 } from '../../utils/cards-sync-core'
 
 const REPO = 'FriendlyInternet/nuxt-crouton'
@@ -37,6 +37,10 @@ const closesIssue = (body: string | null) => {
 const comments = (event: H3Event, n: number) => ghGetAll<GhComment>(event, `/repos/${REPO}/issues/${n}/comments?per_page=100`)
 const events = (event: H3Event, n: number) => ghGetAll<GhEvent>(event, `/repos/${REPO}/issues/${n}/events?per_page=100`)
 const commits = (event: H3Event, n: number) => ghGetAll<GhCommit>(event, `/repos/${REPO}/pulls/${n}/commits?per_page=100`)
+// A PR's files: GitHub lists up to 3000 (30 pages). Names the packages a review card warns about (#3785).
+const files = (event: H3Event, n: number) => ghGetAll<GhFile>(event, `/repos/${REPO}/pulls/${n}/files?per_page=100`, 30)
+const closedIssue = async (event: H3Event, n: number | null | undefined) =>
+  n ? ghFetch<GhIssue>(event, `/repos/${REPO}/issues/${n}`, { fresh: true }) : { data: null, error: null }
 
 /** Every list the sync reads. `complete` is false when any of them failed (then no card is staled). */
 async function readLists(event: H3Event, note: Note) {
@@ -79,10 +83,16 @@ async function readPr(event: H3Event, p: GhPull, note: Note): Promise<SyncItem> 
   const reviewed = item.comments.some(x => isPipelineBot(x) && /<!-- build-review-/.test(x.body ?? ''))
   const held = labels.includes('status:needs-merge') || labels.includes('status:blocked')
   if (!(signoff || reviewed || held)) return item
-  const [e, k] = await Promise.all([events(event, p.number), commits(event, p.number)])
-  if (e.error || k.error) { note(e.error); note(k.error); item.readError = true; return item }
+  const [e, k, f, ci] = await Promise.all([
+    events(event, p.number), commits(event, p.number), files(event, p.number), closedIssue(event, item.closesIssue)
+  ])
+  if (e.error || k.error || f.error || ci.error) {
+    note(e.error); note(k.error); note(f.error); note(ci.error); item.readError = true; return item
+  }
   item.events = e.data ?? []
   item.commits = k.data ?? []
+  item.files = f.data ?? []
+  item.closedIssueBody = ci.data?.body ?? null
   return item
 }
 

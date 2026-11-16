@@ -66,17 +66,30 @@ const answerFor = (cardId: string, send: SendAnswer = sendToServer) => async (ve
   return { error: res.error }
 }
 
+// A quiz card sends its `1B 2A 3C` line; on success the card leaves the list, on failure it stays.
+const quizFor = (cardId: string) => async (answer: string) => {
+  try {
+    await $fetch(`/api/cards/${cardId}/answer`, { method: 'POST', body: { answer } })
+    cards.value = cards.value.filter(x => x.id !== cardId)
+    return { error: null }
+  } catch (e) {
+    return { error: errorText(e, 'Could not send.') }
+  }
+}
+
 // One component per card view; answerable views also get their `send`.
 const cardComponents = {
   edit: resolveComponent('CardsEdit'),
   review: resolveComponent('CardsReview'),
   issue: resolveComponent('CardsIssue'),
   delivery: resolveComponent('CardsDelivery'),
+  quiz: resolveComponent('CardsQuizCard'),
   placeholder: resolveComponent('CardsPlaceholder')
 }
 const cardProps = (c: InboxCard) => {
   const view = cardView(c)
   if (view === 'delivery') return { card: c, send: answerFor(c.id, sendDeliveryToServer) }
+  if (view === 'quiz') return { card: c, send: quizFor(c.id) }
   if (view === 'edit' || view === 'review') return { card: c, send: answerFor(c.id) }
   return { card: c }
 }

@@ -457,3 +457,70 @@ describe('cards-sync-core — stuck rules (#3880)', () => {
     expect(stuckCounts(asks)).toEqual({ quiet: 1, draft: 1, epicSync: 1 })
   })
 })
+
+// #3785 — a review card names every shared package the PR changes.
+describe('review card → payload.packages', () => {
+  const ISSUE_BODY = [
+    'Packages-approved: owner yes in chat 2026-11-11 14:49 — `packages/crouton-layout` for epic #3770',
+    '',
+    '## Hypothesis',
+    'We think that...',
+    '',
+    '## 👤 For humans',
+    'Adds two optional fields to how a layout is saved.',
+    'Nothing else changes.',
+    '',
+    '## 🤖 For agents',
+    '- details'
+  ].join('\n')
+  const reviewAsk = (files: SyncItem['files'], closedIssueBody: string | null = ISSUE_BODY) => {
+    const { asks } = collectAsks({ items: [{ ...signoffPr(10, 11), files, closedIssueBody }] })
+    expect(asks).toHaveLength(1)
+    expect(asks[0]!.kind).toBe('review')
+    return asks[0]!
+  }
+  const WHY = 'Adds two optional fields to how a layout is saved.\nNothing else changes.'
+  const APPROVAL = 'owner yes in chat 2026-11-11 14:49 — `packages/crouton-layout` for epic #3770'
+
+  it('a package file and a poc file → one entry for the package, with why and approval', () => {
+    const a = reviewAsk([{ filename: 'packages/crouton-layout/app/x.ts' }, { filename: 'pocs/x/app.vue' }])
+    expect(a.payload.packages).toEqual([{ name: 'crouton-layout', why: WHY, approval: APPROVAL }])
+  })
+
+  it('only pocs/ files → no packages key at all', () => {
+    const a = reviewAsk([{ filename: 'pocs/x/app.vue' }, { filename: 'pocs/status/a.ts' }])
+    expect(a.payload).not.toHaveProperty('packages')
+  })
+
+  it('files not read → no packages key', () => {
+    expect(reviewAsk(undefined).payload).not.toHaveProperty('packages')
+  })
+
+  it('two packages → two entries, sorted', () => {
+    const a = reviewAsk([{ filename: 'packages/crouton-layout/a.ts' }, { filename: 'packages/crouton-core/b.ts' }, { filename: 'packages/crouton-layout/c.ts' }])
+    expect((a.payload.packages as any[]).map(p => p.name)).toEqual(['crouton-core', 'crouton-layout'])
+  })
+
+  it('closed issue has no 👤 section → why: null', () => {
+    const a = reviewAsk([{ filename: 'packages/crouton-layout/a.ts' }], '## Hypothesis\nsomething\n\nPackages-approved: yes')
+    expect(a.payload.packages).toEqual([{ name: 'crouton-layout', why: null, approval: 'yes' }])
+  })
+
+  it('the Packages-approved: line lands in approval; a fenced example does not count; PR body is the fallback', () => {
+    const fenced = '```\nPackages-approved: example only\n```\n## 👤 For humans\nWhy.'
+    const a = reviewAsk([{ filename: 'packages/crouton-core/a.ts' }], fenced)
+    expect((a.payload.packages as any[])[0].approval).toBeNull()
+    const { asks } = collectAsks({ items: [{ ...signoffPr(10, 11), body: `Closes #11\n\nPackages-approved: from the PR\n${SIGNOFF_PREVIEW_MARKER}`, files: [{ filename: 'packages/crouton-core/a.ts' }], closedIssueBody: null }] })
+    expect((asks[0]!.payload.packages as any[])[0]).toEqual({ name: 'crouton-core', why: null, approval: 'from the PR' })
+  })
+
+  it('a file moved out of packages/crouton-layout still names crouton-layout', () => {
+    const a = reviewAsk([{ filename: 'pocs/x.ts', previous_filename: 'packages/crouton-layout/x.ts' }])
+    expect((a.payload.packages as any[]).map(p => p.name)).toEqual(['crouton-layout'])
+  })
+
+  it('keeps the rest of the payload (build-review card keeps its review key)', () => {
+    const { asks } = collectAsks({ items: [{ ...buildOwnerPr(), files: [{ filename: 'packages/crouton-core/a.ts' }], closedIssueBody: null }] })
+    expect(asks[0]!.payload).toMatchObject({ review: 'needs-owner', packages: [{ name: 'crouton-core' }] })
+  })
+})

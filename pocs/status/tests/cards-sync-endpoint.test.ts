@@ -19,6 +19,8 @@ let epicBehind: number | null | undefined
 const EPIC_COMMENT_AT = '2026-11-10T12:00:00Z'
 const EPIC_BRANCH = 'epic/900-thing'
 const MAIN_SHA = 'mainsha900'
+/** PR number → its changed files (served 100 per page); unset → no files. */
+let prFiles: Record<number, Array<{ filename: string }>>
 
 const createInboxCard = vi.fn(async (c: unknown) => c)
 const updateInboxCard = vi.fn(async () => ({}))
@@ -61,6 +63,10 @@ function commentsRoute(n: number) {
   if (n === 900) return json([EPIC_CONFLICT])
   return n === failComments ? json({ message: 'boom' }, 500) : json([])
 }
+function prFilesRoute(url: URL, n: number) {
+  const page = Number(url.searchParams.get('page') ?? 1)
+  return json((prFiles[n] ?? []).slice((page - 1) * 100, page * 100))
+}
 const prCommitsRoute = (n: string) => json([{ sha: `sha${n}`, parents: [{}], commit: { message: 'feat', committer: { name: 'x', date: '2026-11-01T09:00:00Z' } } }])
 
 /** Path matcher → response; first match wins. */
@@ -72,7 +78,9 @@ const ROUTES: Array<[RegExp, (url: URL, m: RegExpExecArray) => Response]> = [
   [/\/compare\//, url => compareRoute(url)],
   [/\/issues\/(\d+)\/comments$/, (_u, m) => commentsRoute(Number(m[1]))],
   [/\/issues\/\d+\/events$/, () => json([])],
-  [/\/pulls\/(\d+)\/commits$/, (_u, m) => prCommitsRoute(m[1]!)]
+  [/\/pulls\/(\d+)\/commits$/, (_u, m) => prCommitsRoute(m[1]!)],
+  [/\/pulls\/(\d+)\/files$/, (url, m) => prFilesRoute(url, Number(m[1]))],
+  [/\/issues\/\d+$/, () => json({ body: '## 👤 For humans\nAdds a field to the core.\n\n## 🤖 For agents\n- x' })]
 ]
 
 /** Fake GitHub: two bot sign-off PRs (#10, #12), nothing else waiting (unless #3880's switches are on). */
@@ -104,6 +112,7 @@ beforeEach(() => {
   failComments = null
   pagedPulls = false
   epicBehind = undefined
+  prFiles = {}
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
   createInboxCard.mockClear()
@@ -170,5 +179,20 @@ describe('POST /api/cards/sync', () => {
       expect(out.body.error).toBeUndefined()
       expect(out.body.skipped).toBeUndefined()
     }
+  })
+
+  it('#3785: 150 files over two pages, the only packages/ file on page 2 → the card still names it', async () => {
+    prFiles[10] = [
+      ...Array.from({ length: 149 }, (_, i) => ({ filename: `pocs/status/f${i}.ts` })),
+      { filename: 'packages/crouton-core/app/x.ts' }
+    ]
+    const out = await run()
+    expect(out.body.created).toBe(2)
+    const calls = createInboxCard.mock.calls.map(c => (c as any[])[0])
+    const c10 = calls.find(c => c.sourceNumber === 10)
+    expect(c10.payload.packages).toEqual([{ name: 'crouton-core', why: 'Adds a field to the core.', approval: null }])
+    expect(calls.find(c => c.sourceNumber === 12).payload).not.toHaveProperty('packages')
+    const fileUrls = fetchSpy.mock.calls.map(c => String(c[0])).filter(u => u.includes('/pulls/10/files'))
+    expect(fileUrls.some(u => u.includes('page=2'))).toBe(true)
   })
 })

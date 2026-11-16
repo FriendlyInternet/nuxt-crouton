@@ -1,5 +1,6 @@
 // POST /api/cards/[cardId]/answer — answer an inbox card by posting the owner's reply on GitHub.
 // Body: { verdict: 'ok'|'not-ok', note? } (review) or { verdict: 'works'|'not-ok', note? } (delivery)
+//   or { answer: '1B 2A 3C' } (quiz)
 // → { data: { url, existing }, error }
 // The param is `cardId`, never `id` — crouton reads `id` as the team. Refused unless the app's
 // token posts as the owner (see GET /api/cards/token-account). On any error the card stays `waiting`.
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody(event).catch(() => ({}))) ?? {}
   const result = await answerCard({
     card,
-    input: { verdict: body.verdict, note: body.note },
+    input: { verdict: body.verdict, note: body.note, answer: body.answer },
     repo: REPO,
     token: githubToken(event),
     now: new Date()

@@ -14,6 +14,7 @@ defineProps<{ card: InboxCard, badge?: string }>()
         <UBadge v-if="badge" variant="subtle" color="neutral">{{ badge }}</UBadge>
       </div>
       <p class="text-sm">{{ card.ask }}</p>
+      <CardsPackages :card="card" />
       <p v-if="card.recommendation" class="text-sm text-muted">
         <span class="font-semibold">Recommended:</span> {{ card.recommendation }}
       </p>

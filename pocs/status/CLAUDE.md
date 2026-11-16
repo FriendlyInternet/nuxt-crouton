@@ -11,6 +11,9 @@ Cards are filled by `POST /api/cards/sync` (owner-only, run by the inbox page on
 upserts one card per waiting ask under the owner's team, never changes a card answered from the inbox, and leaves an
 item's cards untouched when its GitHub read fails. Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
 logic — keep in step).
+A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
+closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
+(`app/utils/package-lines.ts`, `app/components/cards/Packages.vue`).
 
 Stuck cards (#3880): also `issue` link cards (a `Stuck` badge, no buttons), `payload.stuck` =
 `quiet` (an open `work-this`/`delegate`/`delegate-pi` ticket — not an epic, not `status:blocked`/`traffic:waiting`,
@@ -26,6 +29,9 @@ Answering a card: `POST /api/cards/[cardId]/answer` posts the reply via `postRep
 and refuses every answer unless `GET /api/cards/token-account` reports `pmcp` (the pipeline acts only on the
 owner's own comments). The param is `cardId`, never `id` — crouton reads `id` as the team.
 It answers `review` cards (`ok`/`not-ok`) and `delivery` cards (`works` → posts `ok`, `not-ok` → `not ok: <note>`).
+A `quiz` card takes `{ answer: '1B 2A 3C' }` instead of a verdict: one A/B/C/? per statement, checked with a copy of
+`parseAnswers` from `scripts/owner-quiz.mjs` (`app/utils/quiz-core.ts`, keep in step); it never posts `ok`.
+The quiz card is `app/components/cards/QuizCard.vue`; a quiz with no readable `payload.questions` stays a placeholder.
 The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/delivery-core.ts`) opens the app
 signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 

@@ -12,6 +12,8 @@
 //   scripts/lib/signoff-route.mjs (isHoldComment/ownerQuestionKind)
 //   scripts/traffic-control.mjs (PIPELINE_LABELS, WAITING_LABEL)
 //   scripts/sync-epic-branch.sh (epic-sync conflict marker + comment text)
+//   scripts/lib/pr-merge-gate.mjs (changedPaths)
+//   scripts/packages-guard.mjs (collectApprovalLines → approvalLine)
 //
 // Read-failure rule: an item whose GitHub read failed (`readError`) makes no ask and its existing
 // cards are left exactly as they are; a failed list read (`listsComplete: false`) never marks a
@@ -80,6 +82,10 @@ export interface SyncItem {
   updatedAt?: string
   /** PR only: GitHub `draft`. */
   draft?: boolean
+  /** The PR's changed files (all pages); undefined = not read. */
+  files?: GhFile[]
+  /** Body of the issue the PR closes (`Closes #N`); null/undefined = none or not read. */
+  closedIssueBody?: string | null
   readError?: boolean
 }
 
@@ -93,6 +99,8 @@ export interface EpicSyncItem {
   behindBy: number | null
   readError?: boolean
 }
+
+export interface GhFile { filename?: string, previous_filename?: string }
 
 export interface QuizItem {
   number: number
@@ -366,6 +374,64 @@ function appFromLabels(labels: string[]): string | null {
   return null
 }
 
+// ---------------------------------------------------------------- packages a PR touches (#3785)
+
+export interface PackageEntry { name: string, why: string | null, approval: string | null }
+
+/** Every path a PR touches — a moved file counts under its new AND old name (copy of pr-merge-gate.mjs). */
+export function changedPaths(entries: GhFile[] = []): string[] {
+  return [...new Set(entries.flatMap(f => [f.filename, f.previous_filename]).filter((p): p is string => !!p))]
+}
+
+/** Distinct `packages/<name>/` folders, sorted so the payload is stable between syncs. */
+export function packageNames(paths: string[]): string[] {
+  const names = new Set<string>()
+  for (const p of paths) {
+    const m = /^packages\/([^/]+)\//.exec(p)
+    if (m) names.add(m[1]!)
+  }
+  return [...names].sort()
+}
+
+/** The text under the first `… For humans` heading, up to the next heading. Empty/missing → null. */
+export function forHumans(body: string | null | undefined): string | null {
+  const lines = String(body ?? '').split(/\r?\n/)
+  const start = lines.findIndex(l => /^#{1,6}\s+.*for humans/i.test(l.trim()))
+  if (start < 0) return null
+  const out: string[] = []
+  for (const l of lines.slice(start + 1)) {
+    if (/^#{1,6}\s/.test(l.trim())) break
+    out.push(l)
+  }
+  const text = out.join('\n').trim()
+  return text || null
+}
+
+/** The first `Packages-approved:` line outside fences and code spans, prefix removed (copy of collectApprovalLines). */
+export function approvalLine(...bodies: Array<string | null | undefined>): string | null {
+  for (const b of bodies) {
+    const prose = String(b || '').replace(/```[\s\S]*?```/g, '')
+    for (const l of prose.split('\n')) {
+      const t = l.trim()
+      if (/^Packages-approved:/i.test(t)) {
+        const rest = t.replace(/^Packages-approved:/i, '').trim()
+        if (rest) return rest
+      }
+    }
+  }
+  return null
+}
+
+/** One entry per package the PR changes; `why`/`approval` come from the issue it closes (approval falls back to the PR body). */
+export function packagesPayload(i: SyncItem): PackageEntry[] {
+  if (!i.files) return []
+  const names = packageNames(changedPaths(i.files))
+  if (!names.length) return []
+  const why = forHumans(i.closedIssueBody)
+  const approval = approvalLine(i.closedIssueBody, i.body)
+  return names.map(name => ({ name, why, approval }))
+}
+
 // ---------------------------------------------------------------- collectAsks
 
 export interface CollectInput {
@@ -424,6 +490,10 @@ function collectPr(i: SyncItem, sink: AskSink, closers: Set<number>): boolean {
   else {
     const hit = holdRules(i) ?? (isBlocked(i) ? { ask: linkAsk(i) } : null)
     if (!hit) return false
+    if (hit.ask?.kind === 'review') {
+      const packages = packagesPayload(i)
+      if (packages.length) hit.ask.payload = { ...hit.ask.payload, packages }
+    }
     sink.add(i.number, hit.ask)
   }
   if (i.closesIssue) closers.add(i.closesIssue)
