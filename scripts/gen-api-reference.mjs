@@ -101,6 +101,110 @@ export const componentName = (f) => {
   const base = f.replace(/\.vue$/, '').replace(/^stubs\//, '')
   return base.startsWith('Crouton') ? base : 'Crouton' + base
 }
+
+// ── registered component names (all packages) ──────────────────────────
+// The names an app that extends a package can really use: each package's nuxt.config.ts
+// `components` dirs (`prefix`, `pathPrefix`, `pattern`), named the way Nuxt names them
+// (nuxt/src/components/scan.ts + core/utils/names.ts), plus Nuxt UI's `U…` components.
+const splitByCase = s => String(s).split(/[-_/.\\]+/).flatMap(p => p.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z\d]+/g) ?? [])
+const pascal = parts => parts.map(p => p[0].toUpperCase() + p.slice(1)).join('')
+/** Nuxt's resolveComponentNameSegments: drop prefix parts the file name already repeats. */
+function nameSegments(fileName, prefixParts) {
+  const fileParts = splitByCase(fileName)
+  const fileContent = fileParts.join('/').toLowerCase()
+  const nameParts = prefixParts.flatMap(p => splitByCase(p))
+  const matched = []
+  for (let i = prefixParts.length - 1; i >= 0; i--) {
+    const part = prefixParts[i]
+    matched.unshift(...splitByCase(part).map(p => p.toLowerCase()))
+    const m = matched.join('/')
+    if (fileContent === m || fileContent.startsWith(m + '/') || (part.toLowerCase() === fileContent && prefixParts[i + 1] === part)) nameParts.length = i
+  }
+  return [...nameParts, ...fileParts]
+}
+/** A literal path expression in a nuxt config: `'x'`, `join(currentDir, 'x')`, `resolver.resolve('./x')`. */
+function pathOf(n, pkgDir, srcDir) {
+  if (!n) return null
+  if (ts.isStringLiteralLike(n)) return join(srcDir, n.text.replace(/^~\/?/, ''))
+  if (ts.isCallExpression(n)) {
+    const lits = n.arguments.filter(ts.isStringLiteralLike).map(a => a.text)
+    if (lits.length && lits.length >= n.arguments.length - 1) return join(pkgDir, ...lits)
+  }
+  return null
+}
+/** One components dir entry (`string` or `{ path, prefix, pathPrefix, pattern }`) → `{ path, prefix, pathPrefix, pattern }`. */
+function dirEntry(n, pkgDir, srcDir) {
+  if (ts.isStringLiteralLike(n)) return { path: pathOf(n, pkgDir, srcDir), prefix: '', pathPrefix: true }
+  if (!ts.isObjectLiteralExpression(n)) return null
+  const props = new Map(n.properties.filter(ts.isPropertyAssignment).map(p => [propKey(p), p.initializer]))
+  const path = pathOf(props.get('path'), pkgDir, srcDir)
+  if (!path) return null
+  return { path, prefix: evalLiteral(props.get('prefix')) ?? '', pathPrefix: evalLiteral(props.get('pathPrefix')) !== false, pattern: evalLiteral(props.get('pattern')) }
+}
+/** The components dirs one package declares in nuxt.config.ts (Nuxt's default dirs when it declares none). */
+function componentDirsOf(pkgDir) {
+  const srcDir = existsSync(join(pkgDir, 'app')) ? join(pkgDir, 'app') : pkgDir
+  const file = join(pkgDir, 'nuxt.config.ts')
+  if (!existsSync(file)) return []
+  const s = sf(file, readFileSync(file, 'utf8'))
+  let cfg
+  // the top-level `components` key of defineNuxtConfig({...}) — not one nested in another option
+  walk(s, (n) => {
+    if (cfg || !ts.isCallExpression(n) || n.expression.getText(s) !== 'defineNuxtConfig' || !ts.isObjectLiteralExpression(n.arguments[0] ?? s)) return
+    cfg = n.arguments[0].properties.find(p => ts.isPropertyAssignment(p) && propKey(p) === 'components')?.initializer
+  })
+  if (!cfg) return ['components/islands', 'components/global', 'components'].map(d => ({ path: join(srcDir, d), prefix: '', pathPrefix: true }))
+  let list = []
+  if (ts.isArrayLiteralExpression(cfg)) list = cfg.elements
+  else if (ts.isObjectLiteralExpression(cfg)) {
+    const dirs = cfg.properties.find(p => ts.isPropertyAssignment(p) && propKey(p) === 'dirs')
+    list = dirs && ts.isArrayLiteralExpression(dirs.initializer) ? dirs.initializer.elements : [cfg]
+  }
+  const depth = d => d.path.split(/[\\/]/).filter(Boolean).length
+  return list.map(n => dirEntry(n, pkgDir, srcDir)).filter(Boolean).sort((a, b) => depth(b) - depth(a))
+}
+const vueFiles = (dir, rel = '') => {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory()
+    ? (e.name === 'node_modules' ? [] : vueFiles(join(dir, e.name), rel ? `${rel}/${e.name}` : e.name))
+    : e.name.endsWith('.vue') ? [rel ? `${rel}/${e.name}` : e.name] : []))
+}
+const globRe = g => new RegExp('^' + g.split(/\*\*\/?/).map(p => p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')).join('(?:.*/)?') + '$')
+/** Names Nuxt registers for one package's component dirs, scanned the way Nuxt scans them (deepest dir first; a file belongs to the first dir that scans it). */
+export function packageComponentNames(pkgDir) {
+  const names = new Set()
+  const scanned = []
+  const seen = new Set()
+  for (const dir of componentDirsOf(pkgDir)) {
+    const patterns = [].concat(dir.pattern ?? []).map(globRe)
+    for (const rel of vueFiles(dir.path)) {
+      const full = join(dir.path, rel)
+      if (seen.has(full) || scanned.some(d => full.startsWith(d))) continue
+      if (patterns.length && !patterns.some(re => re.test(rel))) continue
+      seen.add(full)
+      const relDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
+      let fileName = rel.slice(rel.lastIndexOf('/') + 1).replace(/\.vue$/, '').replace(/\.(client|server)$/, '')
+      if (fileName.toLowerCase() === 'index') fileName = dir.pathPrefix ? '' : (relDir.split('/').pop() || dir.path.split(/[\\/]/).pop())
+      const prefixParts = [...(dir.prefix ? splitByCase(dir.prefix) : []), ...(dir.pathPrefix ? splitByCase(relDir) : [])]
+      const name = pascal(nameSegments(fileName, prefixParts).filter(Boolean))
+      if (name) names.add(name)
+    }
+    scanned.push(dir.path.replace(/[\\/]?$/, '/'))
+  }
+  return names
+}
+/** Nuxt UI's components (`U` prefix, no path prefix), read from crouton-core's installed @nuxt/ui (empty when not installed). */
+export function nuxtUiComponentNames() {
+  const dir = join(ROOT, 'packages/crouton-core/node_modules/@nuxt/ui/dist/runtime/components')
+  return new Set(vueFiles(dir).filter(f => !f.startsWith('prose/')).map(f => pascal(nameSegments(f.slice(f.lastIndexOf('/') + 1).replace(/\.vue$/, ''), ['U']))))
+}
+/** Every component name an app extending the packages can use: each package's registered names + Nuxt UI's. */
+export function registeredComponentsOf() {
+  const names = nuxtUiComponentNames()
+  for (const d of readdirSync(join(ROOT, 'packages')).sort()) for (const n of packageComponentNames(join(ROOT, 'packages', d))) names.add(n)
+  return names
+}
+
 function componentSection(name, r) {
   let out = `\n## ${name}\n\n`
   if (r.doc) out += oneLine(r.doc).slice(0, 400) + '\n\n'

@@ -2,7 +2,7 @@
 // "Build packages" job that installs packages, not in the bare-Node set.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,6 +77,30 @@ test('missing component / composable is reported with page and line; real ones p
   assert.match(r.stdout, /page\.md:3 .*CroutonDoesNotExistXyz/)
   assert.equal(run('Call useCroutonNopeXyz() now\n', '--strict').status, 1)
   assert.equal(run('Call useCrouton() or <CroutonFormLayout /> now\n', '--strict').status, 0)
+})
+
+test('a component named without its package prefix is reported with page and line; the prefixed name passes', () => {
+  // Button.vue exists in other packages' dirs, but no package registers it as CroutonButton
+  const bad = run('# T\n\nUse <CroutonButton label="x" />\n', '--strict')
+  assert.equal(bad.status, 1)
+  assert.match(bad.stdout, /page\.md:3 .*component `CroutonButton` is not a registered component name/)
+  for (const n of ['CroutonCard', 'CroutonMap', 'CroutonList']) assert.match(run(`<${n} />\n`).stdout, new RegExp(`component \`${n}\``))
+  const good = run('<CroutonMapsMap /> and <CroutonI18nDisplay /> and <UButton />\n', '--strict')
+  assert.equal(good.status, 0, good.stdout)
+})
+
+test('a Crouton… word only in a code comment of a package does not make a component name found', (t) => {
+  // A throwaway package next to the real ones: its nuxt.config registers Widget.vue as CroutonFixtureWidget,
+  // and Widget.vue mentions CroutonCommentOnlyXyz only in comments.
+  const pkg = join(here, '..', 'packages', `zz-doc-claims-fixture-${process.pid}`)
+  mkdirSync(join(pkg, 'app/components'), { recursive: true })
+  t.after(() => rmSync(pkg, { recursive: true, force: true }))
+  writeFileSync(join(pkg, 'nuxt.config.ts'), `import { join } from 'node:path'\nconst currentDir = '.'\nexport default defineNuxtConfig({ components: { dirs: [{ path: join(currentDir, 'app/components'), prefix: 'CroutonFixture' }] } })\n`)
+  writeFileSync(join(pkg, 'app/components/Widget.vue'), '<script setup lang="ts">\n// renders like <CroutonCommentOnlyXyz>\n/* CroutonCommentOnlyXyz */\n</script>\n<template><!-- CroutonCommentOnlyXyz --><div /></template>\n')
+  assert.equal(run('<CroutonFixtureWidget />\n', '--strict').status, 0)
+  const r = run('# T\n\n<CroutonCommentOnlyXyz />\n', '--strict')
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /page\.md:3 .*component `CroutonCommentOnlyXyz` is not a registered component name/)
 })
 
 test('made-up config key is reported with page and line; real keys and prefixes pass', () => {

@@ -12,9 +12,10 @@
  * that installs packages; without them the import fails and the run exits non-zero
  * ("could not run" is never a pass).
  *
- *   1. names     — `crouton <command>` and its `--flags` exist in the CLI; <CroutonX> components
- *                  and useCroutonX composables exist in packages/; props passed to a crouton-core
- *                  component exist on it; a package config key referenced as
+ *   1. names     — `crouton <command>` and its `--flags` exist in the CLI; <CroutonX>/<UX> components
+ *                  are names an app really registers (a package's own nuxt.config `components` prefix +
+ *                  file name, or Nuxt UI) and useCroutonX composables exist in packages/ (outside
+ *                  comments); props passed to a crouton-core component exist on it; a package config key referenced as
  *                  `features.<alias>.<key>` or `<runtimeConfigKey>.<key>` (also after
  *                  `runtimeConfig.` / `runtimeConfig.public.`) is one of that package's
  *                  manifest `configuration` keys (or a prefix of one, e.g. `croutonBookings.email`)
@@ -30,7 +31,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
-import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf, configManifestsOf } from './gen-api-reference.mjs'
+import { propsOf, componentFiles, componentName, COMPONENTS_DIR, cliCommandsOf, fieldTypesOf, configManifestsOf, registeredComponentsOf } from './gen-api-reference.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ts = createRequire(import.meta.url)('typescript')
@@ -69,27 +70,30 @@ export function extractBlocks(md) {
 const isFragment = (code) => /(^|\s)\.\.\.(\s|$)|\/\/\s*\.\.\./.test(code)
 const camel = s => s.replace(/-(\w)/g, (_, c) => c.toUpperCase())
 
-/** Every identifier-ish word in package sources (ts/vue/js/mjs) + Nuxt path-derived component names.
- *  Existence only, across ALL packages — the generator lists crouton-core alone. */
+/** Every `use…` composable word in package sources (ts/vue/js/mjs), outside comments.
+ *  Existence only, across ALL packages — the generator lists crouton-core composables alone.
+ *  Component names are NOT read here: they come from the generator's registeredComponentsOf(). */
 export function sourceWords(pkgDir) {
   const words = new Set()
-  const visit = (d, parts) => {
+  const visit = (d) => {
     for (const e of readdirSync(d)) {
       if (['node_modules', 'dist', '.nuxt', '.output', '.git'].includes(e)) continue
       const p = join(d, e)
-      if (statSync(p).isDirectory()) { visit(p, [...parts, e]); continue }
-      if (!/\.(ts|vue|js|mjs|json)$/.test(e)) continue
-      for (const m of readFileSync(p, 'utf8').matchAll(/\b(?:Crouton|use)[A-Za-z0-9]+/g)) words.add(m[0])
-      if (e.endsWith('.vue')) {
-        const i = parts.lastIndexOf('components')
-        const pas = (x) => x.replace(/(^|[-_.])(\w)/g, (_, __, c) => c.toUpperCase())
-        if (i >= 0) words.add(pas([...parts.slice(i + 1), e.replace('.vue', '')].join('-')))
-        words.add(pas(e.replace('.vue', '')))
-      }
+      if (statSync(p).isDirectory()) { visit(p); continue }
+      if (!/\.(ts|vue|js|mjs)$/.test(e)) continue
+      for (const m of stripComments(readFileSync(p, 'utf8')).matchAll(/\buse[A-Za-z0-9]+/g)) words.add(m[0])
     }
   }
-  visit(pkgDir, [])
+  visit(pkgDir)
   return words
+}
+
+/** Source text with block, line and `<!-- -->` comments blanked (a `//` inside a string or URL is kept). */
+export function stripComments(text) {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:'"`\\\w])\/\/.*/g, '$1')
 }
 
 /** Index of the first non-whitespace character at or after `j`. */
@@ -154,13 +158,14 @@ export function propOfAttr(attr) {
 
 const lineAt = (text, index) => text.slice(0, index).split('\n').length
 
-/** `<CroutonFoo` components and `useCroutonFoo()` composables named in a page must exist in package code. */
+/** `<CroutonFoo>` / `<UFoo>` components named in a page must be names an app really registers
+ *  (the package's own prefix + file name, or Nuxt UI); `useCroutonFoo()` composables must exist in package code. */
 export function checkSymbols(file, md, facts) {
   const hits = []
   md.split('\n').forEach((text, i) => {
-    for (const m of text.matchAll(/<(Crouton[A-Za-z0-9]+)|\b(useCrouton[A-Za-z0-9]*)\s*\(/g)) {
-      const n = m[1] ?? m[2]
-      if (!facts.words.has(n) && !facts.words.has(n.replace(/^Crouton/, ''))) hits.push({ file, line: i + 1, check: 'names', msg: `${m[1] ? 'component' : 'composable'} \`${n}\` not found in packages/` })
+    for (const m of text.matchAll(/<((?:Crouton|U(?=[A-Z]))[A-Za-z0-9]+)|\b(useCrouton[A-Za-z0-9]*)\s*\(/g)) {
+      if (m[1] && !facts.registered.has(m[1])) hits.push({ file, line: i + 1, check: 'names', msg: `component \`${m[1]}\` is not a registered component name (package prefix + file name, or Nuxt UI)` })
+      if (m[2] && !facts.words.has(m[2])) hits.push({ file, line: i + 1, check: 'names', msg: `composable \`${m[2]}\` not found in packages/` })
     }
   })
   return hits
@@ -275,7 +280,7 @@ export function checkCode(file, blocks) {
 
 // ---------- main ----------
 
-/** The code-side lists, all from the generator except the all-packages existence word list. */
+/** The code-side lists, all from the generator except the all-packages composable word list. */
 export function loadFacts() {
   const components = new Map()
   // stubs/ are placeholders the real package (maps, editor, ...) overrides: their props are not the real ones
@@ -292,7 +297,7 @@ export function loadFacts() {
     config.set(`features.${o.id.replace(/^crouton-/, '')}`, entry)
     if (o.runtimeConfigKey) config.set(o.runtimeConfigKey, entry)
   }
-  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, config, words: sourceWords(join(root, 'packages')) }
+  return { commands: new Map(cliCommandsOf().map(c => [c.name, c])), fieldTypes, components, config, registered: registeredComponentsOf(), words: sourceWords(join(root, 'packages')) }
 }
 
 export function run(docsDir, facts) {
@@ -316,8 +321,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const docsDir = args.find(a => !a.startsWith('--')) ?? join(root, 'docs/content')
   if (!existsSync(docsDir)) { console.error(`no such dir: ${docsDir}`); process.exit(2) }
   const facts = loadFacts()
-  if (!facts.commands.size || !facts.fieldTypes.size || !facts.components.size || !facts.config.size) {
-    console.error('could not read CLI commands / field types / components / config keys from code — refusing to report "all clear"')
+  if (!facts.commands.size || !facts.fieldTypes.size || !facts.components.size || !facts.config.size || ![...facts.registered].some(n => /^U[A-Z]/.test(n))) {
+    console.error('could not read CLI commands / field types / components / config keys / Nuxt UI components from code — refusing to report "all clear"')
     process.exit(2)
   }
   const per = run(docsDir, facts)
