@@ -16,6 +16,9 @@ Answering a card: `POST /api/cards/[cardId]/answer` posts the reply via `postRep
 and refuses every answer unless `GET /api/cards/token-account` reports `pmcp` (the pipeline acts only on the
 owner's own comments). The param is `cardId`, never `id` — crouton reads `id` as the team.
 
+Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
+`/apps` is the four-tab page (Apps, To test, Decisions, Changelog).
+
 ## Owner email
 
 The single email allowed to sign in is read from the Worker var `NUXT_STATUS_OWNER_EMAIL` only.
