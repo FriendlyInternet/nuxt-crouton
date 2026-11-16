@@ -16,7 +16,6 @@ import type { MediaTextBlockAttrs } from '../../../types/blocks'
 const props = defineProps<{
   node: { attrs: MediaTextBlockAttrs }
   selected: boolean
-  updateAttributes: (attrs: Partial<MediaTextBlockAttrs>) => void
   deleteNode: () => void
   getPos: () => number
 }>()

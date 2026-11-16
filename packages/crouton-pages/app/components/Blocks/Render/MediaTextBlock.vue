@@ -15,7 +15,6 @@ const props = defineProps<{
   attrs: MediaTextBlockAttrs & { sticky?: boolean | string, frame?: boolean | string }
   /** The block's child content (passed by BlockContent for this block type only) */
   blocks?: PageBlock[]
-  isFirst?: boolean
 }>()
 
 const isOn = (v: unknown, fallback: boolean) => (v === undefined || v === null ? fallback : v !== false && v !== 'false')
