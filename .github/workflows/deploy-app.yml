@@ -834,6 +834,7 @@ jobs:
       # Proves a real send. The package swallows every send error, so the verdict is read from the
       # auth_email_log row (pending → sent/failed). Mails Resend's test inbox only. Report-only here;
       # "Gate on email probe" at the end turns anything but a recorded send into a red check.
+      # The probe user is inserted directly (invite-only apps refuse its sign-up silently, #3972).
       - name: Probe email send
         id: email-probe
         if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.deploy.outputs.url != '' }}
@@ -849,8 +850,7 @@ jobs:
           PR_NUM="${{ github.event.pull_request.number }}"
           KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
           if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
-          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
-          else TARGET="--env staging"; fi
+          TARGET="--env staging"; if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"; fi
           START=$(date +%s)
           SECRETS=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
           if ! S=$(echo "$SECRETS" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" sender "$APP" .); then
@@ -858,6 +858,7 @@ jobs:
             echo "✗ email probe (${APP}): $S" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          npx wrangler d1 execute DB --remote $TARGET --command "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" ensure-user-sql "$PROBE_EMAIL")" >/dev/null 2>&1 || echo "::warning::email probe: could not ensure the probe user"
           if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
             echo "$OUT"
             echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"
