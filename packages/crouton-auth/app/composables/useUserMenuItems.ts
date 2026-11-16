@@ -10,12 +10,7 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 
-export interface UserMenuItemsOptions {
-  /** When true, Account Settings opens a modal instead of navigating to /account */
-  useModal?: boolean
-}
-
-export function useUserMenuItems(options?: UserMenuItemsOptions) {
+export function useUserMenuItems() {
   const { t } = useT()
   const { user, logout, loading } = useAuth()
   const { isAdmin } = useTeam()
@@ -23,7 +18,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
   const notify = useNotify()
   const { locale, setLocale, locales } = useI18n()
   const colorMode = useColorMode()
-  const accountModal = options?.useModal ? useAccountSettingsModal() : null
+  const accountModal = useAccountSettingsModal()
 
   const isDark = computed({
     get: () => colorMode.value === 'dark',
@@ -118,14 +113,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
         {
           label: t('navigation.accountSettings'),
           icon: 'i-lucide-user',
-          ...(accountModal
-            ? {
-                onSelect: () => accountModal.open('profile')
-              }
-            : {
-                to: '/account'
-              }
-          )
+          onSelect: () => accountModal.open('profile')
         }
       ],
       preferenceItems.value,

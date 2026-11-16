@@ -1,27 +1,34 @@
 /**
  * useAccountSettingsModal
  *
- * Shared state for the account settings modal.
- * Used by public pages nav to open settings in a modal
- * instead of navigating to /account.
+ * Opens the single account-settings overlay over the current page (bottom
+ * sheet on phone, centred modal on desktop) via Nuxt UI's useOverlay().
+ * Never changes the URL. Browser-only: call open() from a click or onMounted.
+ *
+ * The overlay handle holds a component + functions, so it lives in a module
+ * variable (not useState, which is serialised server -> browser).
  */
-export function useAccountSettingsModal() {
-  const isOpen = useState('account-settings-open', () => false)
-  const defaultTab = useState('account-settings-tab', () => 'profile')
+import { AccountSettingsModal } from '#components'
 
+type OverlayHandle = ReturnType<ReturnType<typeof useOverlay>['create']>
+
+let handle: OverlayHandle | null = null
+let openCount = 0
+
+export function useAccountSettingsModal() {
   function open(tab = 'profile') {
-    defaultTab.value = tab
-    isOpen.value = true
+    if (!import.meta.client) return
+    if (!handle) {
+      handle = useOverlay().create(AccountSettingsModal)
+    }
+    // Fresh key per open: UDrawer is never unmounted, and Settings reads its tab once
+    openCount++
+    handle.open({ defaultTab: tab, openKey: openCount } as any)
   }
 
   function close() {
-    isOpen.value = false
+    handle?.close()
   }
 
-  return {
-    isOpen,
-    defaultTab: readonly(defaultTab),
-    open,
-    close
-  }
+  return { open, close }
 }

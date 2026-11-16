@@ -50,7 +50,7 @@ function handleTeamCreated(team: { slug: string }) {
   <div class="min-h-screen flex items-center justify-center bg-(--ui-bg) p-4">
     <!-- Account / language / dark mode live in the bottom-left user pill -->
     <ClientOnly>
-      <CroutonUserPill placement="fixed" use-modal :show-status="false" />
+      <CroutonUserPill placement="fixed" :show-status="false" />
     </ClientOnly>
 
     <div class="max-w-2xl w-full space-y-8">
@@ -211,9 +211,6 @@ function handleTeamCreated(team: { slug: string }) {
         </a>
       </p>
     </div>
-
-    <!-- Account Settings Modal (opened via useUserMenuItems with useModal) -->
-    <AccountSettingsModal />
 
     <!-- Create Team Modal -->
     <UModal v-model:open="showCreateTeamModal">
