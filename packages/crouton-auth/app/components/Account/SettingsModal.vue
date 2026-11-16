@@ -33,6 +33,7 @@ function onUpdate(value: boolean) {
   >
     <template #content>
       <div class="p-6 max-h-[80vh] overflow-y-auto">
+        <!-- runtime-cost-ok: openKey bumps once per open() click so Settings re-reads defaultTab; one rebuild per open, not per item -->
         <AccountSettings :key="openKey" :default-tab="defaultTab" />
       </div>
     </template>
@@ -45,6 +46,7 @@ function onUpdate(value: boolean) {
   >
     <template #content>
       <div class="p-4 max-h-[85vh] overflow-y-auto">
+        <!-- runtime-cost-ok: openKey bumps once per open() click so Settings re-reads defaultTab; one rebuild per open, not per item -->
         <AccountSettings :key="openKey" :default-tab="defaultTab" />
       </div>
     </template>

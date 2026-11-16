@@ -7,7 +7,16 @@ Account settings wrapped in a modal, for public page navigation
 
 File: `app/components/Account/SettingsModal.vue`
 
-No props, events or slots.
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `open` | `boolean` | - | no |  |
+| `defaultTab` | `string` | - | no |  |
+| `openKey` | `number` | - | no |  |
+
+| Event | Payload |
+| --- | --- |
+| `update:open` | `[value: boolean]` |
+| `close` | `[value?: unknown]` |
 
 ## AdminEmailLogs
 
@@ -37,7 +46,6 @@ File: `app/components/Crouton/UserPill.vue`
 | `compact` | `"auto" \| "always" \| "never"` | `"auto"` | no | auto = avatar-only under `sm` |
 | `placement` | `"fixed" \| "inline"` | `"fixed"` | no | fixed = bottom-left overlay; inline = sits in the parent's flex row |
 | `extraItems` | `DropdownMenuItem[]` | `[]` | no | Extra menu items (e.g. "Manage site"), rendered above sign out |
-| `useModal` | `boolean` | `false` | no | Use the account-settings modal instead of navigating to /account |
 
 ## TeamCreateForm
 
@@ -69,8 +77,8 @@ File: `app/components/Team/DeleteConfirm.vue`
 
 | Event | Payload |
 | --- | --- |
-| `cancel` | `[]` |
 | `update:open` | `[value: boolean]` |
+| `cancel` | `[]` |
 | `deleted` | `[]` |
 
 ## TeamInvitations

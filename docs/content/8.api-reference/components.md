@@ -708,7 +708,6 @@ CroutonUserPill Stub Fallback when @fyit/crouton-auth is not installed. Renders 
 | `compact` | `"auto" \| "always" \| "never"` | no |  |
 | `placement` | `"fixed" \| "inline"` | no |  |
 | `extraItems` | `unknown[]` | no |  |
-| `useModal` | `boolean` | no |  |
 
 ## Components without props
 
