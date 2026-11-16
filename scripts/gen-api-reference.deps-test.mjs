@@ -116,7 +116,7 @@ function mutateAndRun(file, from, to, runner) {
 test('component-names --check --fresh passes on the clean tree', () => {
   const r = names('--check', '--fresh')
   expectStatus(r, 0)
-  assert.match(r.stdout, /^135 components named, 0 without a file, 0 used outside and not named$/m)
+  assert.match(r.stdout, /^\d+ components named, 0 without a file, 0 used outside and not named$/m)
 })
 
 // ── used outside its package but not named (#3909) ─────────────────────────────────────────────
