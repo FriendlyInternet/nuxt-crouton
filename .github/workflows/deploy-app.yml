@@ -709,9 +709,16 @@ jobs:
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
           fail=0
 
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-                    -X POST -H 'content-type: application/json' -d '{}' \
-                    "$URL/api/_feedback" || echo 000)"
+          # Retry: a Worker version uploaded seconds ago is not yet serving at every edge, so
+          # the first probe can 404 on a correct build (PR #3975: 404 at deploy+9s, 401 minutes
+          # later on the same URL). A build that really lacks the module still 404s every time.
+          for attempt in 1 2 3 4 5 6; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+                      -X POST -H 'content-type: application/json' -d '{}' \
+                      "$URL/api/_feedback" || echo 000)"
+            if [ "$code" != "404" ] && [ "$code" != "000" ]; then break; fi
+            if [ "$attempt" -lt 6 ]; then sleep 10; fi
+          done
           if [ "$code" = "404" ] || [ "$code" = "000" ]; then
             echo "::error::No feedback endpoint at $URL (POST /api/_feedback → $code)."
             echo "::error::The app does not install the overlay — add '@fyit/crouton-devtools'"
