@@ -12,6 +12,7 @@
 import { postmortemState, isPipelineAuthor } from './postmortem.mjs'
 import { CARD_MARKER } from './test-card.mjs'
 import { fileMatchesAny } from './deploy-detect.mjs'
+import { stepsPending } from './lib/epic-steps.mjs'
 
 /** Copy of `on.push.paths` in .github/workflows/deploy-apps.yml (drift-guarded by the test). */
 export const DEPLOY_PATHS = [
@@ -26,16 +27,19 @@ const labelNames = ls => (ls || []).map(l => (typeof l === 'string' ? l : l.name
 const epicPrs = (pulls, n) => (pulls || []).filter(p => String(p?.head?.ref || '').startsWith(`epic/${n}-`))
 
 /**
- * @param {{ state?: string, labels?: string[], subIssues?: object[], prs?: object[], comments?: object[], prFiles?: string[] }} input
+ * @param {{ state?: string, labels?: string[], subIssues?: object[], prs?: object[], comments?: object[], prFiles?: string[], pendingSteps?: number }} input
  *   prs: the epic's epic/<N>- → main PRs · prFiles: the files the merged ones changed
+ *   pendingSteps: steps of a `tickets:rolling` epic not finished yet (#3846; a second safety net —
+ *   the epic→main PR already waits for them)
  * @returns {{ action: 'none'|'wait'|'close', reason: string, waiting: string[] }}
  */
-export function decideAutoClose({ state = 'open', labels = [], subIssues = [], prs = [], comments = [], prFiles = [] } = {}) {
+export function decideAutoClose({ state = 'open', labels = [], subIssues = [], prs = [], comments = [], prFiles = [], pendingSteps = 0 } = {}) {
   if (state === 'closed') return { action: 'none', reason: 'epic already closed', waiting: [] }
   if (!labels.includes('epic')) return { action: 'none', reason: 'not an epic', waiting: [] }
   const merged = (prs || []).some(p => p.merged_at)
   const waiting = [
     ...waitOnSubIssues(subIssues),
+    ...(pendingSteps > 0 ? [`${pendingSteps} step(s) not finished (rolling epic)`] : []),
     ...waitOnMain(prs, merged),
     ...waitOnTestCard({ labels, comments, prFiles, merged }),
     ...waitOnPostmortem(comments)
@@ -99,7 +103,8 @@ export async function readAutoCloseInputs({ github, context }, n) {
     const files = await github.paginate(github.rest.pulls.listFiles, { ...repo, pull_number: p.number, per_page: 100 })
     prFiles.push(...files.map(f => f.filename))
   }
-  return { issue, input: { state: issue.state, labels: labelNames(issue.labels), subIssues, prs, comments, prFiles } }
+  const labels = labelNames(issue.labels)
+  return { issue, input: { state: issue.state, labels, subIssues, prs, comments, prFiles, pendingSteps: stepsPending({ labels, comments, subIssues }) } }
 }
 
 /** Decide, and on `close` close the epic as completed + strip its status:* labels + say so once. */
