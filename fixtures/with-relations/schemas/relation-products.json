@@ -1,0 +1,6 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } },
+  "categoryId": { "type": "string", "refTarget": "categories", "meta": { "label": "Category" } },
+  "price": { "type": "decimal", "meta": { "label": "Price" } },
+  "inStock": { "type": "boolean", "meta": { "default": true, "label": "In stock" } }
+}

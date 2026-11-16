@@ -9,8 +9,10 @@ export default {
   // collection) is generated and smoked end to end. The FK stays optional so the
   // text-field-only CRUD harness can create products without picking a category.
   collections: [
-    { name: 'categories', fieldsFile: './schemas/categories.json' },
-    { name: 'products', fieldsFile: './schemas/products.json' }
+    // Schema files carry a `relation-` prefix so they don't share a basename
+    // with crouton-sales' categories/products (check-schema-drift pairs by name).
+    { name: 'categories', fieldsFile: './schemas/relation-categories.json' },
+    { name: 'products', fieldsFile: './schemas/relation-products.json' }
   ],
 
   targets: [
