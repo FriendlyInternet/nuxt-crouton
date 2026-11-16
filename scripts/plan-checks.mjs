@@ -64,6 +64,8 @@ export function decidePlan({ headRef, comments }) {
   const plan = findApprovedPlan(comments)
   if (!plan) return { issue, items: [], summary: `issue #${issue} has no approved plan from ${BOT} — nothing to check` }
   const p = parsePlan(plan.body || '')
+  // main's parser returns `checklist`; older bases (the stale epic branch) return `tests`.
+  p.checklist ??= p.tests ?? []
   if (!p.checklist.length) {
     return { issue, items: [], planUrl: plan.html_url, error: `approved plan has no readable Test checklist: ${p.errors.join('; ')}` }
   }
