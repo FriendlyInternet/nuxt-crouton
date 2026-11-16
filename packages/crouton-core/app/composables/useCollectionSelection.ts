@@ -52,6 +52,10 @@ function createSelection(collection: string, opts: CollectionSelectionOptions): 
   const mode = ref<CollectionSelectionMode>('idle')
   const sessionKey = ref(0)
   const editors = ref(0)
+  // Counted in a plain variable so attachEditor() only WRITES the ref. Reading it
+  // (editors.value++) inside a caller's watchEffect made that effect track it, and
+  // two Form blocks on one collection re-triggered each other forever (#3754).
+  let editorCount = 0
 
   function show(next: CollectionSelectionMode, id: string | null) {
     itemId.value = id
@@ -69,12 +73,14 @@ function createSelection(collection: string, opts: CollectionSelectionOptions): 
   }
 
   function attachEditor() {
-    editors.value++
+    editorCount++
+    editors.value = editorCount
     let attached = true
     return () => {
       if (!attached) return
       attached = false
-      editors.value--
+      editorCount--
+      editors.value = editorCount
     }
   }
 

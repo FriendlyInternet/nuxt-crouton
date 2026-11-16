@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { runV1, v1OffSwitch } from './v1-merge-io.mjs'
 
 const mk = (over = {}) => {
-  const calls = { graphql: [], create: [], update: [], merge: [], comments: [], labels: [] }
+  const calls = { graphql: [], create: [], update: [], merge: [], comments: [], labels: [], info: [] }
   const github = {
     graphql: (async (q) => { calls.graphql.push(q); if (over.graphqlError) throw over.graphqlError }),
     paginate: (async () => over.files || [{ filename: 'apps/x/a.vue' }]),
@@ -13,7 +13,7 @@ const mk = (over = {}) => {
       issues: { createComment: (async (a) => { calls.comments.push(a) }), addLabels: (async (a) => { calls.labels.push(a) }) },
     },
   }
-  const core = { info: () => {}, warning: () => {} }
+  const core = { info: (msg) => { calls.info.push(msg) }, warning: () => {} }
   return { github, core, calls }
 }
 const pr = (o = {}) => ({ node_id: 'N', draft: false, user: { login: 'nuxt-harness[bot]' }, base: { ref: 'epic/1--v1-x' }, head: { ref: 'work-5', sha: 'abc' }, labels: [], auto_merge: null, html_url: 'u', body: '', ...o })
@@ -46,6 +46,43 @@ test('shared-code: announces the hold', async () => {
     assert.equal(a.code, 'shared-code')
     assert.deepEqual(m.calls.labels[0].labels, ['status:needs-merge'])
     assert.match(m.calls.comments[0].body, /Held for a human/)
+})
+
+// #3845: the real REST `auto_merge` shape (enabled_by + merge_method, no timestamp)
+const ARMED = { enabled_by: { login: 'nuxt-harness[bot]' }, merge_method: 'merge' }
+
+test('armed + merge answer: no graphql/merge call, logs auto-merge already armed', async () => {
+  const m = mk()
+  const a = await runV1(base(m, pr({ auto_merge: ARMED, labels: [{ name: 'build:approved' }] }), { reviewState: () => ({ kind: 'other' }) }))
+  assert.equal(a.code, 'merge')
+  assert.equal(m.calls.graphql.length, 0)
+  assert.equal(m.calls.merge.length, 0)
+  assert.ok(m.calls.info.some(s => /already armed \(by nuxt-harness\[bot\]\).*GitHub merges/.test(s)), m.calls.info.join('\n'))
+})
+
+test('armed + owner ok after final hold → merge answer, nothing extra', async () => {
+  const m = mk()
+  const a = await runV1(base(m, pr({ auto_merge: ARMED }), { go: { go: true, approvedAt: '2026-01-02' }, reviewState: () => ({ kind: 'final', at: '2026-01-01' }) }))
+  assert.equal(a.code, 'merge')
+  assert.equal(a.reason, 'owner ok after final hold')
+  assert.equal(m.calls.create[0].conclusion, 'success')
+  assert.equal(m.calls.graphql.length, 0)
+  assert.equal(m.calls.merge.length, 0)
+  assert.ok(m.calls.info.some(s => /already armed/.test(s)))
+})
+
+test('armed + hold (no-review): logs waiting, no graphql', async () => {
+  const m = mk()
+  const a = await runV1(base(m, pr({ auto_merge: ARMED })))
+  assert.equal(a.code, 'no-review')
+  assert.equal(m.calls.graphql.length, 0)
+  assert.ok(m.calls.info.some(s => /auto-merge armed; waits on Merge decision \(no-review\)/.test(s)), m.calls.info.join('\n'))
+})
+
+test('armed with no enabled_by: logs by ?', async () => {
+  const m = mk()
+  await runV1(base(m, pr({ auto_merge: { merge_method: 'merge' }, labels: [{ name: 'build:approved' }] }), { reviewState: () => ({ kind: 'other' }) }))
+  assert.ok(m.calls.info.some(s => /already armed \(by \?\)/.test(s)), m.calls.info.join('\n'))
 })
 
 test('disables auto-merge', async () => {

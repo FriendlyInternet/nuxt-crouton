@@ -2,7 +2,7 @@
 name: pi-reviser
 layer: method
 harness: pi
-model: sonnet
+model: opus
 description: Persona for the pi worker in REVISE mode (work-issue-pidev.yml, issue 2446): apply ONE owner comment to an open PR. Rendered by scripts/pipeline-prompt.mjs with --var-file feedback=<file>.
 appends: _worker-checks.md
 ---

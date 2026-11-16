@@ -41,7 +41,7 @@ schema.ts (app layer OR package)            ← Drizzle table definitions
 Measured on a cold scaffold (#1457): `crouton config` 0.8s, `pnpm db:generate` 1.8s,
 `pnpm dev` boots in ~6s. No `nuxt build`, so the build-first gotcha below cannot occur.
 
-**Legacy (bundled `.mjs`) — no app in this repo is on it any more (#1456 was the last).**
+**Legacy (bundled `.mjs`) — only `pocs/kvr` and `pocs/notes` still use it (#3590 moved the other four POCs off it; no launched app is on it).**
 Kept because an EXTERNAL consumer on an older scaffold still hits it. This is the
 world the build-first recipe further down exists for:
 
@@ -129,10 +129,13 @@ Mirror `packages/crouton-flow` exactly:
    across extended layers** to build the bundle, so this is what makes consuming
    apps auto-discover the table (confirm: `.nuxt/hub/db/schema.entry.ts` lists
    your package after a `nuxt prepare`).
-3. **`packages/<pkg>/server/database/migrations/NNNN_*.sql`** — hand-write the
-   `CREATE TABLE IF NOT EXISTS …` + indexes. This is the package's own copy
-   (for direct apply / docs); the consuming app still generates its own numbered
-   migration in step "Generate the migration".
+3. **Do NOT add SQL under the package** (no `server/database/migrations/*.sql`).
+   Nothing applies package SQL to an app, so a hand-written copy only makes the
+   table *look* shipped (#3076, the #2850 backfill). Each consuming app's
+   `db:generate` is the single migration source — run it for every app that
+   picks the table up. The Migration guard (`scripts/migration-guard.mjs`,
+   #3013) turns a PR red, naming the app, when a package schema changes
+   without that app's migration.
 4. Editing `packages/` is behind a **hard gate** — get user approval, then
    `echo '<pkg-name>' >> .claude/.package-edit-approved`, edit, and
    `rm .claude/.package-edit-approved` when done. (See root CLAUDE.md.)
@@ -146,8 +149,7 @@ names in package tables follow that table's own convention (flow uses snake_case
 add the table to the app's `crouton.config.js`. NuxtHub auto-discovers it from
 the package's `server/db/schema.ts` re-export; the app's only job is the normal
 migrate step below (`db:generate` auto-includes it, then `db:migrate`) — the same
-step any schema change needs. (A package may also ship its own `.sql` for direct
-apply via `wrangler d1 execute --file=node_modules/@fyit/<pkg>/server/database/migrations/<file>.sql`.)
+step any schema change needs.
 
 ## Generate the migration
 
@@ -160,13 +162,15 @@ pnpm --filter <app> db:generate   # → server/db/migrations/sqlite/NNNN_*.sql +
 pnpm --filter <app> db:migrate    # apply locally
 ```
 
-One behaviour worth knowing (#1457): on a **cold scaffold** `crouton config` does not
-produce the migration in the same run — it prints
+One behaviour worth knowing (#1457/#1742): in the monorepo `crouton config` produces
+the migration in the same run (import-only layers resolve since #1742). Only an app
+outside the monorepo with deps not installed soft-defers: it prints
 `↻ Migration deferred — resolve the app's layers first, then re-run: pnpm db:generate`
-and exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
+mid-log, repeats it as numbered step 1 in the closing `Next steps:` summary, and
+exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
 `packages/crouton-cli/CLAUDE.md`), not a failure. Run `db:generate` and carry on.
 
-### The build-first gotcha — LEGACY scaffolds only (no app in this repo, since #1456)
+### The build-first gotcha — LEGACY scaffolds only (`pocs/kvr`, `pocs/notes`; no launched app)
 
 Applies **only** where `drizzle.config.ts` still points at the bundled `.mjs`.
 `pnpm --filter <app> db:generate` reads `.nuxt/hub/db/schema.mjs`. On a freshly

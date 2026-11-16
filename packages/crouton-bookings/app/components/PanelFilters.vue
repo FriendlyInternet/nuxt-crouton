@@ -172,6 +172,7 @@ const settingsItems = computed(() => {
           :aria-expanded="showCalendar"
           @click="emit('update:showCalendar', !showCalendar)"
         />
+        <slot name="toolbar-end" />
       </div>
     </div>
 

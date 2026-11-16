@@ -6,7 +6,11 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree, v1LabelWarning } from './epic-scaffold.mjs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { parseScaffoldPlan, scaffoldActions, epicBranch, slugify, renderTree, v1LabelWarning, ensureBranch } from './epic-scaffold.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PlanError } from './apply-decompose-plan.mjs'
 
@@ -115,6 +119,46 @@ test('packagesApproved {why, packages} labels every child with one pkg:* per pac
 
 test('packagesApproved object without packages is refused', () => {
   assert.throws(() => parseScaffoldPlan(PLAN({ packagesApproved: { why: 'x', packages: [] } })), PlanError)
+})
+
+// A real bare repo: the fault is git's suffix matching of ls-remote patterns, which a fake can't show.
+const git = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+function bareWith(t, branches) {
+  const dir = mkdtempSync(join(tmpdir(), 'ensure-branch-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const work = join(dir, 'work')
+  const bare = join(dir, 'r.git')
+  git(dir, ['init', '-q', '--bare', bare])
+  git(dir, ['init', '-q', work])
+  git(work, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init'])
+  const sha = git(work, ['rev-parse', 'HEAD'])
+  for (const b of branches) git(work, ['push', '-q', bare, `${sha}:refs/heads/${b}`])
+  return { bare, sha }
+}
+/** Real git for ls-remote (against the bare repo); fetch/push are only recorded. */
+function recorder(bare) {
+  const calls = []
+  const run = (file, args) => {
+    calls.push(args)
+    if (args[0] === 'ls-remote') return git(process.cwd(), args.map(a => (a === 'origin' ? bare : a)))
+    return ''
+  }
+  return { run, calls }
+}
+
+test('ensureBranch archive guard (#3881): a remote holding only archive/epic/9-x still gets epic/9-x', (t) => {
+  const { bare, sha } = bareWith(t, ['archive/epic/9-x'])
+  const r = recorder(bare)
+  assert.equal(ensureBranch('epic/9-x', sha, r.run), true)
+  const pushes = r.calls.filter(a => a[0] === 'push')
+  assert.deepEqual(pushes, [['push', 'origin', `${sha}:refs/heads/epic/9-x`]])
+})
+
+test('ensureBranch: an existing epic/9-x is never duplicated (#3881)', (t) => {
+  const { bare, sha } = bareWith(t, ['archive/epic/9-x', 'epic/9-x'])
+  const r = recorder(bare)
+  assert.equal(ensureBranch('epic/9-x', sha, r.run), false)
+  assert.equal(r.calls.filter(a => a[0] === 'push').length, 0)
 })
 
 test('v1LabelWarning: warns on pipeline:v1, silent otherwise (#3501)', () => {

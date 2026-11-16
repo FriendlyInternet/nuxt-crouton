@@ -41,6 +41,16 @@ export interface UseCollabConnectionReturn {
 }
 
 /**
+ * Has this app opted into live sync? (#3810) — only when its built client carries a
+ * non-empty `runtimeConfig.public.collabWorkerUrl` (the `"collab": true` deploy flag
+ * bakes it in). Local dev is the one exception: it uses the same-host Nitro route.
+ * Not opted in → no socket, no token fetch, no presence, no console errors.
+ */
+export function isCollabEnabled(workerUrl: unknown, isDev: boolean): boolean {
+  return (typeof workerUrl === 'string' && workerUrl.length > 0) || isDev
+}
+
+/**
  * Low-level composable for managing WebSocket connections to CollabRoom
  *
  * Handles:
@@ -150,6 +160,9 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
    */
   async function connect(): Promise<void> {
     if (isServer || !roomId) return
+    const config = useRuntimeConfig()
+    // Not opted into live sync → behave as if collab isn't there (#3810)
+    if (!isCollabEnabled(config.public.collabWorkerUrl, import.meta.env.DEV)) return
     if (!requestedTeamId) {
       state.value = { ...state.value, error: new Error('No team to scope the collab room to') }
       return
@@ -164,7 +177,6 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
     intentionalDisconnect = false
 
     // For cross-origin connections, fetch a collab token first
-    const config = useRuntimeConfig()
     const workerUrl = config.public.collabWorkerUrl as string
     if (workerUrl && !collabToken) {
       collabToken = await fetchCollabToken()

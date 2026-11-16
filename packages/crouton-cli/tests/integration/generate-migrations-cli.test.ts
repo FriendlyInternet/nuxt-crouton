@@ -66,6 +66,17 @@ describe('generateMigrations — failure contract', () => {
     const res = await generateMigrations(app)
     expect(res).toMatchObject({ generated: false, reason: 'deferred' })
     expect((res as any).recipe.join('\n')).toMatch(/pnpm install|db:generate/)
+    // #1742: the deferral names what it could not resolve (for the closing summary)
+    expect((res as any).unresolved).toContain('@fyit/crouton-does-not-exist')
+    expect((res as any).cause).toBe('unresolved-layers')
+  })
+
+  it('DEFERS (not generate-failed) when the layers resolve but the app has no db:generate script', async () => {
+    const app = mkApp('app', { table: 'widgets' })
+    writeFileSync(join(app, 'package.json'), JSON.stringify({ name: 'no-script', scripts: { dev: 'nuxt dev' } }))
+    const res = await generateMigrations(app)
+    expect(res).toMatchObject({ generated: false, reason: 'deferred', cause: 'no-db-generate-script', unresolved: [] })
+    expect((res as any).recipe.join('\n')).toContain('db:generate')
   })
 
   it('propagates a DuplicateTableError (→ non-zero exit at the CLI layer)', async () => {

@@ -185,3 +185,76 @@ describe('#987 serializeLayoutDocument / parseLayoutDocument — the page-flow i
     expect(parseLayoutDocument('garbage')).toBeNull()
   })
 })
+
+describe('store wiring round-trips (#3650)', () => {
+  it('keeps a leaf `source` and a tree `sources` map through serialize → parse, nested too', () => {
+    const tree: LayoutTree = {
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'test' },
+          { type: 'nested', layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'b', source: 'test#2' }, sources: { 'test#2': { options: { start: 5 } } } } },
+        ],
+      },
+      sources: { test: { options: { start: 1 } }, spare: {} },
+    }
+    const text = serializeLayoutTree(tree)
+    expect(parseLayoutTree(text)).toEqual(tree)
+    expect(serializeLayoutTree(parseLayoutTree(text)!)).toBe(text)
+  })
+})
+
+describe('retired auto layout fields (#3919)', () => {
+  it('a tree still carrying auto: true and a leaf size serialises the same as without them', () => {
+    const plain: LayoutTree = {
+      renderer: 'panes',
+      root: { type: 'split', direction: 'vertical', children: [
+        { type: 'leaf', blockId: 'stats' },
+        { type: 'leaf', blockId: 'form', defaultSize: 40 },
+      ] },
+    }
+    const stale = {
+      renderer: 'panes',
+      auto: true,
+      root: { type: 'split', direction: 'vertical', children: [
+        { type: 'leaf', blockId: 'stats', size: 'fit' },
+        { type: 'leaf', blockId: 'form', defaultSize: 40 },
+      ] },
+    } as unknown as LayoutTree
+    const out = serializeLayoutTree(stale)
+    expect(out).toBe(serializeLayoutTree(plain))
+    expect(out).not.toContain('"auto"')
+    expect(out).not.toContain('"size"')
+  })
+
+  it('an existing tree serialises byte-identically to today, with no auto/size keys', () => {
+    // Captured from serializeLayoutTree(richTree) BEFORE the #3816 change.
+    const before = JSON.stringify({
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'artists-list', config: { variant: 'rows' } },
+          { type: 'split', direction: 'vertical', children: [
+            { type: 'leaf', blockId: 'bookings-stat' },
+            { type: 'leaf', blockId: 'revenue-stat' },
+          ] },
+          { type: 'nested', label: 'New artist', layout: {
+            renderer: 'panes',
+            root: { type: 'leaf', blockId: 'artists-form', collapse: { edge: 'right', affordance: 'tab' } },
+          } },
+        ],
+      },
+      breakpoints: [
+        { minWidth: 320, label: 'Mobile', collapsed: ['revenue-stat'], variants: { 'artists-list': 'cards' } },
+      ],
+    }, null, 2)
+    const out = serializeLayoutTree(richTree)
+    expect(out).toBe(before)
+    expect(out).not.toContain('"auto"')
+    expect(out).not.toContain('"size"')
+  })
+})
