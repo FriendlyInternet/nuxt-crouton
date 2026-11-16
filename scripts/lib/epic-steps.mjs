@@ -248,7 +248,7 @@ export function splitVerdict(decision, steps = null, subIssues = []) {
 /**
  * PURE. What does this epic need next? → a list of
  *   { type:'plan-review' } · { type:'write-ticket', step } (a REPORT — written by hand) ·
- *   { type:'review-ticket', n } · { type:'start', n, label } · { type:'revise', n } ·
+ *   { type:'review-ticket', n } · { type:'start', n, label } · { type:'park', n, waitingOn } · { type:'revise', n } ·
  *   { type:'hold', target: n|'plan', reason } · { type:'done' }
  * state = { rolling, plan: { verdict, round, wrong }, steps, tickets: { [n]: { state, verdict, round, started, label, step } } }
  */
@@ -257,7 +257,8 @@ export function nextAction({ rolling = false, plan = {}, steps = null, tickets =
   const entries = Object.entries(tickets || {}).map(([n, t]) => ({ n: Number(n), ...t }))
   const gate = planGate(plan, steps, entries)
   if (gate) return [gate]
-  const out = entries.map(ticketAction).filter(Boolean)
+  const waits = blockerWaits(steps, tickets, entries)
+  const out = entries.map((t) => ticketAction(t, waits)).filter(Boolean)
   if (!steps) return out
   const { done, write } = stepProgress(steps, tickets, entries)
   return done ? [{ type: 'done' }] : [...out, ...write]
@@ -272,11 +273,35 @@ function planGate(plan, steps, entries) {
   return { type: 'hold', target: 'plan', reason: (plan.round || 0) >= MAX_ROUNDS ? 'round-cap' : plan.verdict }
 }
 
-/** One open ticket's row, from its own verdict and round only (never a sibling's). */
-function ticketAction(t) {
+/**
+ * ticket → the tickets it still waits on: the tickets of the steps its step is blocked by that are
+ * not closed (a blocker step with no ticket yet counts as not closed: `0` stands for it). A
+ * hand-written ticket carries no `Blocked-by:` line, so this is read from the step list (#3846 review).
+ */
+function blockerWaits(steps, tickets, entries) {
+  const waits = new Map()
+  if (!steps) return waits
+  const byStep = ticketsByStep(steps, entries.map((t) => ({ number: t.n, step: t.step ?? null })))
+  const stepOfTicket = new Map(Object.entries(byStep).map(([k, n]) => [n, Number(k)]))
+  for (const t of entries) {
+    const k = t.step ?? stepOfTicket.get(t.n)
+    const blockers = steps[k]?.blockedBy || []
+    const open = blockers.map((b) => byStep[b] || 0).filter((n) => !n || tickets[n]?.state !== 'closed')
+    if (open.length) waits.set(t.n, open)
+  }
+  return waits
+}
+
+/** One open ticket's row, from its own verdict and round and its own step's blockers (never a sibling's verdict). */
+function ticketAction(t, waits = new Map()) {
   if (t.state === 'closed') return null
   if (!t.verdict) return { type: 'review-ticket', n: t.n }
-  if (t.verdict === 'go') return t.started ? null : { type: 'start', n: t.n, label: t.label || 'work-this' }
+  if (t.verdict === 'go') {
+    if (t.started) return null
+    // Parked: a go ticket starts only once every ticket of the steps its step is blocked by is closed.
+    if (waits.has(t.n)) return { type: 'park', n: t.n, waitingOn: waits.get(t.n) }
+    return { type: 'start', n: t.n, label: t.label || 'work-this' }
+  }
   if (t.verdict === 'needs-owner') return { type: 'hold', target: t.n, reason: 'needs-owner' }
   if ((t.round || 0) >= MAX_ROUNDS) return { type: 'hold', target: t.n, reason: 'round-cap' }
   return { type: 'revise', n: t.n }

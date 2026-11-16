@@ -89,7 +89,51 @@ test('5. plan-wrong → exactly unlabel steps:approved + block the epic; no deco
   const d2 = decide([subs[1]], verdictFile(ticketSection(12)), { subject: '12' })
   const base = { epic: 9, subject: '12', labels: [...ROLLING, 'steps:approved'], decision: d2, tickets: [subs[1]], subIssues: subs, steps }
   assert.deepEqual(kinds(reviewActions({ ...base, comments: [bot(PLAN_GO_MARKER), bot(PLAN_WRONG_MARKER)] })), [{ kind: 'unlabel', issue: 9, label: 'steps:approved' }, { kind: 'block', issue: 9 }])
-  assert.deepEqual(kinds(reviewActions({ ...base, comments: [bot(PLAN_GO_MARKER), { body: PLAN_WRONG_MARKER, user: { login: 'x', type: 'User' } }] })), [{ kind: 'label', issue: 12, label: 'work-this' }])
+  // (step 0's ticket #11 is closed here, so the step-1 ticket is not parked by its blocker — rule A)
+  const done0 = [{ ...subs[0], state: 'closed' }, subs[1]]
+  assert.deepEqual(kinds(reviewActions({ ...base, subIssues: done0, comments: [bot(PLAN_GO_MARKER), { body: PLAN_WRONG_MARKER, user: { login: 'x', type: 'User' } }] })), [{ kind: 'label', issue: 12, label: 'work-this' }])
+})
+
+test('A. a go hand-written step-1 ticket is parked while step 0\'s ticket is open, and starts once it closes', () => {
+  const steps = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])
+  const ticket12 = sub(12, 1) // hand-written: a step=1 marker, no Blocked-by: line
+  const d = decide([ticket12], verdictFile(ticketSection(12)), { subject: '12' })
+  assert.equal(d.ok, true)
+  const comments = [bot(renderSteps(steps)), bot(PLAN_GO_MARKER)]
+  const run = (state11) => reviewActions({ epic: 9, subject: '12', labels: [...ROLLING, 'steps:approved'], decision: d, comments,
+    tickets: [ticket12], subIssues: [sub(11, 0, { state: state11, labels: ['type:feat', 'work-this'] }), ticket12], steps })
+  const open = run('open')
+  assert.ok(!open.some((l) => l.kind === 'label' && l.issue === 12), 'step 1 must not start before step 0 is done')
+  assert.match(open.find((l) => l.kind === 'note' && /#12/.test(l.text)).text, /parked until #11/)
+  assert.deepEqual(kinds(run('closed')), [{ kind: 'label', issue: 12, label: 'work-this' }])
+})
+
+test('B. step list go → step list no-go → ticket go does not start; a new step-list go lets it start', () => {
+  const steps = normalizeSteps([STEP(0, { ticket: 11 })])
+  const subs = [sub(11, 0)]
+  const base = { epic: 9, tickets: subs, subIssues: subs, steps }
+  const planGo = decide([], verdictFile(planSection()), { subject: 'plan' })
+  const planNoGo = decide([], verdictFile(planSection('no-go', 'P2')), { subject: 'plan' })
+  assert.equal(planGo.ok && planNoGo.ok, true)
+  const ticketGo = decide(subs, verdictFile(ticketSection(11)), { subject: '11' })
+  const posted = (d) => bot(renderComment(d, { subject: d.plan ? 'plan' : '11' }))
+  const comments = [bot(renderSteps(steps))]
+  // 1. step list go → steps:approved
+  assert.deepEqual(kinds(reviewActions({ ...base, subject: 'plan', labels: ROLLING, decision: planGo, comments }))[0], { kind: 'label', issue: 9, label: 'steps:approved' })
+  comments.push(posted(planGo))
+  // 2. step list re-review no-go → steps:approved comes off, the epic holds, nothing starts
+  const nogo = reviewActions({ ...base, subject: 'plan', labels: [...ROLLING, 'steps:approved'], decision: planNoGo, comments })
+  assert.deepEqual(kinds(nogo), [{ kind: 'unlabel', issue: 9, label: 'steps:approved' }, { kind: 'block', issue: 9 }])
+  comments.push(posted(planNoGo))
+  // 3. ticket go → no work-this, with the label removed AND even if a stale label were still on
+  for (const labels of [ROLLING, [...ROLLING, 'steps:approved']]) {
+    const lines = reviewActions({ ...base, subject: '11', labels, decision: ticketGo, comments })
+    assert.ok(!lines.some((l) => l.kind === 'label' && l.label === 'work-this'), `no start with labels ${labels}`)
+  }
+  // 4. a new step-list go → the ticket starts
+  comments.push(posted(planGo))
+  const after = reviewActions({ ...base, subject: '11', labels: [...ROLLING, 'steps:approved'], decision: ticketGo, comments })
+  assert.deepEqual(kinds(after), [{ kind: 'label', issue: 11, label: 'work-this' }])
 })
 
 test('3. the next ready step is only a NOTE (written by hand), never a dispatch', () => {

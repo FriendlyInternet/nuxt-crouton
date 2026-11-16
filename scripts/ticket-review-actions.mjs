@@ -15,6 +15,10 @@
 //   rule: a ticket's start depends only on the plan verdict, its own verdict and its own step's
 //   blockers — never on a sibling's verdict.
 //   • plan go → `steps:approved` on the epic; a go ticket starts at once (once the plan is approved);
+//   • any other step-list verdict removes `steps:approved`; with a step list, a ticket never starts
+//     unless the label is on AND the newest bot step-list verdict is a go;
+//   • a go ticket whose step is blocked by steps with a still-open (or unwritten) ticket is PARKED
+//     (a note, no label) and starts on the review run once those tickets close;
 //   • a no-go ticket → ticket-revise.yml for THAT ticket (`subject=<n>`), 3 rounds per ticket, then hold;
 //   • needs-owner → hold; a plan no-go / needs-owner → hold (the step list is fixed by hand);
 //   • plan-wrong (a ticket verdict, or a newer bot `<!-- epic-plan-wrong -->` comment) → remove
@@ -31,7 +35,8 @@ import { countRounds as legacyRounds, route } from './ticket-revise.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PIPELINE_LABELS } from './traffic-control.mjs'
 import {
-  ROLLING_LABEL, STEPS_APPROVED_LABEL, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
+  ROLLING_LABEL, STEPS_APPROVED_LABEL, PLAN_GO_MARKER, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
+  verdictCommentsFor,
 } from './lib/epic-steps.mjs'
 
 const names = (ls) => (ls || []).map((l) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)
@@ -61,10 +66,15 @@ export function rollingState({ subject = '', labels = [], decision, comments = [
   return { rolling: true, plan, steps, tickets }
 }
 
-/** The plan's row: this review's plan verdict, else approved (or no step list) → go. */
+/**
+ * The plan's row: this review's plan verdict, else approved (or no step list) → go. "Approved" needs
+ * the `steps:approved` label AND the newest bot step-list verdict to be a go: a label left behind by
+ * a later no-go must never let a ticket start (#3846 review).
+ */
 function rollingPlanState({ subject, labels, decision, comments, steps }) {
   const planNow = subject === 'plan' ? decision?.plan?.verdict || null : null
-  const approved = names(labels).includes(STEPS_APPROVED_LABEL)
+  const lastPlan = verdictCommentsFor(comments, 'plan').at(-1)
+  const approved = names(labels).includes(STEPS_APPROVED_LABEL) && (lastPlan === undefined || lastPlan.includes(PLAN_GO_MARKER))
   return {
     verdict: planNow || (approved || !steps ? 'go' : null),
     round: countRounds(comments, 'plan'),
@@ -97,6 +107,7 @@ export function reviewActions({ epic, subject = '', labels = [], decision, comme
   if (subject === 'plan' && decision?.plan?.verdict === 'go') out.push({ kind: 'label', issue: epic, label: STEPS_APPROVED_LABEL })
   const ctx = {
     epic, steps, hold: splitVerdict(decision, steps, subs).hold,
+    approvedLabel: names(labels).includes(STEPS_APPROVED_LABEL),
     graded: new Set((decision?.tickets || []).map((t) => t.number)),
   }
   // A `hold` line becomes ONE status:blocked on the epic (the first time) plus a note.
@@ -112,14 +123,18 @@ export function reviewActions({ epic, subject = '', labels = [], decision, comme
 
 /** One nextAction() row → its handoff lines (`hold` = block the epic with this note). */
 function linesFor(a, ctx) {
-  if (a.type === 'plan-review' || a.target === 'plan') return planLines(a, ctx.epic)
+  if (a.type === 'plan-review' || a.target === 'plan') return planLines(a, ctx)
   if (a.type === 'write-ticket' || a.type === 'done') return stepLines(a, ctx)
   return ticketLines(a, ctx)
 }
 
-function planLines(a, epic) {
+function planLines(a, { epic, approvedLabel }) {
   if (a.type === 'plan-review') return [{ kind: 'note', text: `The step list has no approved review yet — run ${reviewCmd(epic, 'plan')} first.` }]
-  if (a.reason !== 'plan-wrong') return [{ kind: 'hold', text: `The step list was not approved (${a.reason}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.` }]
+  // Any step-list verdict other than go takes `steps:approved` off, so no ticket starts on a stale label.
+  if (a.reason !== 'plan-wrong') {
+    return [...(approvedLabel ? [{ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL }] : []),
+      { kind: 'hold', text: `The step list was not approved (${a.reason}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.` }]
+  }
   return [{ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL },
     { kind: 'hold', text: `The step list is wrong. Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}. Tickets already started keep running.` }]
 }
@@ -129,6 +144,10 @@ function ticketLines(a, { epic, graded, hold }) {
   const n = a.n ?? a.target
   if (!graded.has(n)) return []
   if (a.type === 'start') return hold.includes(n) ? [] : [{ kind: 'label', issue: n, label: a.label }]
+  if (a.type === 'park') {
+    const on = a.waitingOn.map((w) => (w ? `#${w}` : 'a step with no ticket yet')).join(', ')
+    return [{ kind: 'note', text: `#${n} is go but parked until ${on} closes — then run ${reviewCmd(epic, n)} to start it.` }]
+  }
   if (a.type === 'revise') return [{ kind: 'dispatch', issue: epic, workflow: 'ticket-revise.yml', inputs: { epic: String(epic), subject: String(n) } }]
   if (a.type === 'hold') return [{ kind: 'hold', text: `#${n} is held (${a.reason === 'round-cap' ? 'third review round' : 'needs your answer'}); tickets that are go are not affected.` }]
   return []
