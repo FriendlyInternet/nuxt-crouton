@@ -77,7 +77,7 @@ const height = computed(() => {
       class="rounded-xl border border-gray-200 dark:border-gray-700 w-full"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
       allowfullscreen
-      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
+      sandbox="allow-scripts allow-popups allow-forms"
     />
 
     <!-- Caption -->
