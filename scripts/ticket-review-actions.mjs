@@ -23,6 +23,8 @@
 //   • needs-owner → hold; a plan no-go / needs-owner → hold (the step list is fixed by hand);
 //   • plan-wrong (a ticket verdict, or a newer bot `<!-- epic-plan-wrong -->` comment) → remove
 //     `steps:approved` + hold. Nothing is dispatched to the decomposer; started tickets keep running.
+//   • a step-list comment that is there but cannot be read or validated → hold the epic with the
+//     reason (which field is wrong); no ticket starts and the epic never counts as finished;
 //   • a step whose blockers' tickets are closed and that has no ticket → a NOTE only: the
 //     orchestrator writes that ticket by hand (owner decision 2026-11-12 12:54).
 //
@@ -36,7 +38,7 @@ import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PIPELINE_LABELS } from './traffic-control.mjs'
 import {
   ROLLING_LABEL, STEPS_APPROVED_LABEL, PLAN_GO_MARKER, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
-  verdictCommentsFor,
+  verdictCommentsFor, readSteps,
 } from './lib/epic-steps.mjs'
 
 const names = (ls) => (ls || []).map((l) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)
@@ -75,7 +77,10 @@ function rollingPlanState({ subject, labels, decision, comments, steps }) {
   const planNow = subject === 'plan' ? decision?.plan?.verdict || null : null
   const lastPlan = verdictCommentsFor(comments, 'plan').at(-1)
   const approved = names(labels).includes(STEPS_APPROVED_LABEL) && (lastPlan === undefined || lastPlan.includes(PLAN_GO_MARKER))
+  // A step-list comment that is there but cannot be read holds the epic (never "no step list" → go).
+  const stepsError = steps ? null : readSteps(comments).error
   return {
+    stepsError,
     verdict: planNow || (approved || !steps ? 'go' : null),
     round: countRounds(comments, 'plan'),
     // A plan go in THIS review is newer than any plan-wrong comment already on the epic.
@@ -132,8 +137,9 @@ function planLines(a, { epic, approvedLabel }) {
   if (a.type === 'plan-review') return [{ kind: 'note', text: `The step list has no approved review yet — run ${reviewCmd(epic, 'plan')} first.` }]
   // Any step-list verdict other than go takes `steps:approved` off, so no ticket starts on a stale label.
   if (a.reason !== 'plan-wrong') {
+    const why = a.reason === 'unreadable' ? `the step-list comment cannot be read: ${a.detail}` : a.reason
     return [...(approvedLabel ? [{ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL }] : []),
-      { kind: 'hold', text: `The step list was not approved (${a.reason}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.` }]
+      { kind: 'hold', text: `The step list was not approved (${why}). Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}.` }]
   }
   return [{ kind: 'unlabel', issue: epic, label: STEPS_APPROVED_LABEL },
     { kind: 'hold', text: `The step list is wrong. Fix the step-list comment by hand, then run ${reviewCmd(epic, 'plan')}. Tickets already started keep running.` }]

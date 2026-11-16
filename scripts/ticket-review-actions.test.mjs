@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { reviewActions } from './ticket-review-actions.mjs'
 import { decide, renderComment } from './lib/ticket-verdict.mjs'
-import { normalizeSteps, renderSteps, HARNESS_BOT, PLAN_WRONG_MARKER, PLAN_GO_MARKER } from './lib/epic-steps.mjs'
+import { normalizeSteps, renderSteps, stepsPending, HARNESS_BOT, PLAN_WRONG_MARKER, PLAN_GO_MARKER } from './lib/epic-steps.mjs'
 
 const BOT = { login: HARNESS_BOT, type: 'Bot' }
 const bot = (body) => ({ body, user: BOT })
@@ -106,6 +106,36 @@ test('A. a go hand-written step-1 ticket is parked while step 0\'s ticket is ope
   assert.ok(!open.some((l) => l.kind === 'label' && l.issue === 12), 'step 1 must not start before step 0 is done')
   assert.match(open.find((l) => l.kind === 'note' && /#12/.test(l.text)).text, /parked until #11/)
   assert.deepEqual(kinds(run('closed')), [{ kind: 'label', issue: 12, label: 'work-this' }])
+})
+
+test('C. a step-list comment that is there but invalid ("ticket": "#11") holds the epic with the reason; no ticket starts', () => {
+  const steps = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])
+  const rendered = renderSteps(steps)
+  assert.match(rendered, /"ticket": 11/)
+  const broken = rendered.replace('"ticket": 11', '"ticket": "#11"')
+  const ticket12 = sub(12, 1)
+  const d = decide([ticket12], verdictFile(ticketSection(12)), { subject: '12' })
+  assert.equal(d.ok, true)
+  const comments = [bot(broken), bot(PLAN_GO_MARKER)]
+  const subIssues = [sub(11, 0, { labels: ['type:feat', 'work-this'] }), ticket12]
+  // the workflow passes no steps: `epic-steps.mjs steps` prints nothing for an unreadable list
+  const lines = reviewActions({ epic: 9, subject: '12', labels: [...ROLLING, 'steps:approved'], decision: d, comments,
+    tickets: [ticket12], subIssues, steps: null })
+  assert.ok(!lines.some((l) => l.kind === 'label' && l.label === 'work-this'), 'no ticket starts on an unreadable step list')
+  assert.ok(lines.some((l) => l.kind === 'block' && l.issue === 9), 'the epic gets status:blocked')
+  assert.equal(lines.filter((l) => l.kind === 'block').length, 1)
+  assert.match(lines.find((l) => l.kind === 'note').text, /cannot be read: step\[0\]\.ticket must be an issue number/)
+  assert.ok(!lines.some((l) => l.kind === 'note' && /finished/.test(l.text)), 'the epic never counts as finished')
+  assert.notEqual(stepsPending({ labels: ROLLING, comments, subIssues: subIssues.map((s) => ({ ...s, state: 'closed' })) }), 0)
+})
+
+test('C. an epic with no step-list comment behaves as before (a go ticket starts)', () => {
+  const ticket12 = sub(12, 1)
+  const d = decide([ticket12], verdictFile(ticketSection(12)), { subject: '12' })
+  const lines = reviewActions({ epic: 9, subject: '12', labels: ROLLING, decision: d, comments: [],
+    tickets: [ticket12], subIssues: [ticket12], steps: null })
+  assert.deepEqual(lines, [{ kind: 'label', issue: 12, label: 'work-this' }])
+  assert.equal(stepsPending({ labels: ROLLING, comments: [], subIssues: [{ ...ticket12, state: 'closed' }] }), 0)
 })
 
 test('B. step list go → step list no-go → ticket go does not start; a new step-list go lets it start', () => {

@@ -118,13 +118,24 @@ export function stepsComment(comments = []) {
   return (Array.isArray(comments) ? comments : []).filter((c) => isHarnessBot(c) && String(c.body || '').includes(STEPS_MARKER)).at(-1) || null
 }
 
+/**
+ * PURE. The epic's step list → `{ steps, error }`: no bot step-list comment → `{ steps: null, error: null }`;
+ * a step-list comment that is there but cannot be read or validated → `{ steps: null, error: '<what is wrong>' }`.
+ * An unreadable list must stop work, never pass for "no step list" (#3846 review).
+ */
+export function readSteps(comments = []) {
+  const c = stepsComment(comments)
+  if (!c) return { steps: null, error: null }
+  const m = String(c.body).match(/```json\s*\n([\s\S]*?)\n```/)
+  if (!m) return { steps: null, error: 'the machine-readable list (the ```json block) is missing' }
+  let raw
+  try { raw = JSON.parse(m[1]) } catch (e) { return { steps: null, error: `the machine-readable list is not valid JSON (${e.message})` } }
+  try { return { steps: normalizeSteps(raw), error: null } } catch (e) { return { steps: null, error: e.message } }
+}
+
 /** PURE. The step list on the epic (bot-authored only), or null when there is none or it is unreadable. */
 export function parseSteps(comments = []) {
-  const c = stepsComment(comments)
-  if (!c) return null
-  const m = String(c.body).match(/```json\s*\n([\s\S]*?)\n```/)
-  if (!m) return null
-  try { return normalizeSteps(JSON.parse(m[1])) } catch { return null }
+  return readSteps(comments).steps
 }
 
 /** PURE. The `step=<k>` key of a body's pipeline block, or null. */
@@ -156,7 +167,9 @@ export function stepsPending({ labels = [], comments = [], subIssues = [] } = {}
 
 export function pendingDetail({ labels = [], comments = [], subIssues = [] } = {}) {
   if (!isRolling(labels)) return { pending: 0, reason: 'not a rolling epic' }
-  const steps = parseSteps(comments)
+  const { steps, error } = readSteps(comments)
+  // An unreadable step list never counts as finished: no epic → main PR, no postmortem.
+  if (error) return { pending: 1, reason: `the step-list comment cannot be read: ${error}` }
   if (!steps) return { pending: 0, reason: 'rolling epic with no bot step list — every sub-issue closed is the finish line' }
   const byStep = ticketsByStep(steps, subIssues)
   const state = new Map((subIssues || []).map((i) => [i.number, i.state]))
@@ -250,10 +263,12 @@ export function splitVerdict(decision, steps = null, subIssues = []) {
  *   { type:'plan-review' } · { type:'write-ticket', step } (a REPORT — written by hand) ·
  *   { type:'review-ticket', n } · { type:'start', n, label } · { type:'park', n, waitingOn } · { type:'revise', n } ·
  *   { type:'hold', target: n|'plan', reason } · { type:'done' }
- * state = { rolling, plan: { verdict, round, wrong }, steps, tickets: { [n]: { state, verdict, round, started, label, step } } }
+ * state = { rolling, plan: { verdict, round, wrong, stepsError }, steps, tickets: { [n]: { state, verdict, round, started, label, step } } }
  */
 export function nextAction({ rolling = false, plan = {}, steps = null, tickets = {} } = {}) {
   if (!rolling) return []
+  // A step-list comment that is there but unreadable: no ticket starts, the epic is never done.
+  if (plan.stepsError) return [{ type: 'hold', target: 'plan', reason: 'unreadable', detail: plan.stepsError }]
   const entries = Object.entries(tickets || {}).map(([n, t]) => ({ n: Number(n), ...t }))
   const gate = planGate(plan, steps, entries)
   if (gate) return [gate]

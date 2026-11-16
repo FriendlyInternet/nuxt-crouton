@@ -27,7 +27,10 @@ exact word they reply.
      that ticket alone against the epic branch (`scripts/epic-checkout.mjs`); a no-go holds only that
      ticket and the steps after it (`scripts/ticket-review-actions.mjs`, `scripts/lib/epic-steps.mjs`).
      If a step list turns out wrong, the epic is held: fix the step-list comment by hand and run
-     `gh workflow run ticket-review.yml -f epic=<E> -f subject=plan`. To move an existing epic to
+     `gh workflow run ticket-review.yml -f epic=<E> -f subject=plan`. If that edit leaves the list
+     unreadable (bad JSON, or a field such as `"ticket": "#11"` instead of `11`), no ticket starts,
+     the epic never counts as finished, and the next review holds the epic (`status:blocked`) naming
+     the field that is wrong. To move an existing epic to
      per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
      epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
      For a design
