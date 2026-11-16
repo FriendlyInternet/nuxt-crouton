@@ -43,6 +43,13 @@
       "when": 1794486199200,
       "tag": "0005_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794846023938,
+      "tag": "0006_sturdy_rogue",
+      "breakpoints": true
     }
   ]
 }
