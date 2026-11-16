@@ -198,7 +198,9 @@
       "editingFullscreen": "Modification en plein écran…",
       "blockPlaceholder": "Tapez / pour insérer un bloc...",
       "item": "Élément",
-      "anonymous": "Anonyme"
+      "anonymous": "Anonyme",
+      "headerMedia": "Photo en bandeau",
+      "headerMediaDescription": "La première photo occupe toute la largeur en haut de la page, derrière le menu."
     },
     "sidebar": {
       "drafts": "Brouillons",
@@ -677,6 +679,10 @@
               "medium": "Moyenne (60%)",
               "small": "Petite (40%)"
             }
+          },
+          "frame": {
+            "label": "Cadre",
+            "description": "Bordure arrondie et ombre autour de l'image"
           }
         }
       },
@@ -1063,6 +1069,34 @@
           },
           "height": {
             "label": "Hauteur"
+          }
+        }
+      },
+      "mediaText": {
+        "name": "Image + texte",
+        "description": "Une photo à côté du texte ; la photo peut rester visible pendant que le texte défile",
+        "fields": {
+          "src": {
+            "label": "Image"
+          },
+          "alt": {
+            "label": "Texte alternatif",
+            "description": "Décrivez l'image pour les lecteurs d'écran"
+          },
+          "side": {
+            "label": "Côté de l'image",
+            "options": {
+              "left": "Gauche",
+              "right": "Droite"
+            }
+          },
+          "sticky": {
+            "label": "Garder l'image visible",
+            "description": "L'image reste en place pendant que le texte défile (grand écran)"
+          },
+          "frame": {
+            "label": "Cadre",
+            "description": "Bordure arrondie et ombre autour de l'image"
           }
         }
       }

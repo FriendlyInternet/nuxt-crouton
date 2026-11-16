@@ -26,8 +26,14 @@ interface ProcessedItem {
 }
 
 const processedItems = computed<ProcessedItem[]>(() => {
-  if (!props.attrs.items?.length) return []
-  return props.attrs.items
+  // items can arrive as a JSON string from the live editor (collab/HTML round
+  // trip) — accept that, and never crash on anything that isn't a list.
+  let items: unknown = props.attrs.items
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items) } catch { items = [] }
+  }
+  if (!Array.isArray(items) || !items.length) return []
+  return (items as LogoItem[])
     .filter((item: LogoItem) => item.value)
     .map((item: LogoItem) => ({
       value: item.value,
@@ -58,7 +64,7 @@ const alignClass = computed(() => {
     :title="attrs.title"
     :marquee="attrs.marquee || false"
     class=""
-    :ui="{ logos: `${alignClass} gap-8`, logo: '' }"
+    :ui="{ logos: `${alignClass} flex-wrap gap-x-8 gap-y-6`, logo: '' }"
   >
     <template v-for="item in processedItems" :key="item.value">
       <NuxtLink
@@ -66,7 +72,7 @@ const alignClass = computed(() => {
         :to="safeUrl(item.link)"
         :target="item.link.startsWith('http') ? '_blank' : undefined"
         :rel="item.link.startsWith('http') ? 'noopener noreferrer' : undefined"
-        class="shrink-0"
+        class="min-w-0 max-w-full"
       >
         <UIcon
           v-if="item.isIcon"
@@ -79,7 +85,7 @@ const alignClass = computed(() => {
           :src="item.value"
           :alt="item.alt"
           :style="{ height: `${sizePx}px` }"
-          class="shrink-0 object-contain"
+          class="max-w-full object-contain"
         >
       </NuxtLink>
       <template v-else>
@@ -94,7 +100,7 @@ const alignClass = computed(() => {
           :src="item.value"
           :alt="item.alt"
           :style="{ height: `${sizePx}px` }"
-          class="shrink-0 object-contain"
+          class="max-w-full object-contain"
         >
       </template>
     </template>

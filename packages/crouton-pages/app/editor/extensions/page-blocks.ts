@@ -17,6 +17,7 @@ import { SeparatorBlock } from './separator-block'
 import { CollectionBlock } from './collection-block'
 import { FaqBlock } from './faq-block'
 import { TwoColumnBlock } from './two-column-block'
+import { MediaTextBlock } from './media-text-block'
 import { EmbedBlock } from './embed-block'
 import { ImageBlock } from './image-block'
 import { LogoBlock } from './logo-block'
@@ -45,6 +46,7 @@ export interface PageBlocksOptions {
     collection?: boolean
     faq?: boolean
     twoColumn?: boolean
+    mediaText?: boolean
     embed?: boolean
     image?: boolean
     logo?: boolean
@@ -86,6 +88,7 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
         collection: true,
         faq: true,
         twoColumn: true,
+        mediaText: true,
         embed: true,
         image: true,
         logo: true,
@@ -109,7 +112,7 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     // All core block node types
     const coreBlockTypes = [
       'heroBlock', 'sectionBlock', 'ctaBlock', 'cardGridBlock',
-      'separatorBlock', 'collectionBlock', 'faqBlock', 'twoColumnBlock',
+      'separatorBlock', 'collectionBlock', 'faqBlock', 'twoColumnBlock', 'mediaTextBlock',
       'embedBlock', 'imageBlock', 'logoBlock', 'videoBlock',
       'fileBlock', 'buttonRowBlock', 'richTextBlock',
       'statsBlock', 'galleryBlock', 'contactBlock', 'mailingBlock',
@@ -158,6 +161,9 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     }
     if (blocks?.twoColumn !== false) {
       extensions.push(TwoColumnBlock)
+    }
+    if (blocks?.mediaText !== false) {
+      extensions.push(MediaTextBlock)
     }
     if (blocks?.embed !== false) {
       extensions.push(EmbedBlock)
@@ -223,6 +229,7 @@ export { SeparatorBlock } from './separator-block'
 export { CollectionBlock } from './collection-block'
 export { FaqBlock } from './faq-block'
 export { TwoColumnBlock } from './two-column-block'
+export { MediaTextBlock } from './media-text-block'
 export { EmbedBlock } from './embed-block'
 export { ImageBlock } from './image-block'
 export { LogoBlock } from './logo-block'
@@ -247,6 +254,7 @@ export type { SeparatorBlockOptions } from './separator-block'
 export type { CollectionBlockOptions } from './collection-block'
 export type { FaqBlockOptions } from './faq-block'
 export type { TwoColumnBlockOptions } from './two-column-block'
+export type { MediaTextBlockOptions } from './media-text-block'
 export type { EmbedBlockOptions } from './embed-block'
 export type { ImageBlockOptions } from './image-block'
 export type { LogoBlockOptions } from './logo-block'

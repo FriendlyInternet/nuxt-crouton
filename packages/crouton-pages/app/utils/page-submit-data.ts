@@ -48,7 +48,7 @@ export type PageSubmitResult =
   | { ok: false; reason: 'title-required' }
 
 /** Regular pages carry no type-specific config, but these page-level flags live there and must survive. */
-const PAGE_LEVEL_CONFIG_KEYS = ['hideNav', 'hideAuthControls', 'requiredScope'] as const
+const PAGE_LEVEL_CONFIG_KEYS = ['hideNav', 'hideAuthControls', 'requiredScope', 'headerMedia'] as const
 
 function regularPageConfig(config: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!config) return null

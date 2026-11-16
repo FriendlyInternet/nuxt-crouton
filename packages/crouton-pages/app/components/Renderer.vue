@@ -123,6 +123,7 @@ const contentFormat = computed(() => {
       <CroutonPagesBlockContent
         v-if="contentFormat === 'blocks'"
         :content="localizedContent"
+        :header-media="!!(page.config as Record<string, unknown> | undefined)?.headerMedia"
       />
 
       <!-- Legacy HTML content -->

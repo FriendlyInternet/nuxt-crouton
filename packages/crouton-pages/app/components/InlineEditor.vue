@@ -84,6 +84,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="h-full flex flex-col">
     <CroutonPagesWorkspaceEditor
+      :key="pageId ?? 'new'"
       ref="editorRef"
       :page-id="pageId"
       :default-parent-id="defaultParentId"

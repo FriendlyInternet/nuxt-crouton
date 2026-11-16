@@ -204,13 +204,17 @@ watch(
         () => collabLocalizedContent?.synced?.value,
         (synced) => {
           if (synced) {
+            // The saved page is the source of truth unless someone else is editing right
+            // now: a room that outlived its session (persisted, or open before an import)
+            // otherwise wins forever and its stale content gets saved back over the page.
+            const othersEditing = (collabLocalizedContent.users?.value?.length ?? 0) > 1
             for (const [loc, data] of Object.entries(translations)) {
               if (data?.content) {
                 try {
                   const contentJson = typeof data.content === 'string'
                     ? JSON.parse(data.content)
                     : data.content
-                  collabLocalizedContent.setContentJson(loc, contentJson)
+                  collabLocalizedContent.setContentJson(loc, contentJson, !othersEditing)
                 } catch {
                   // Failed to parse content
                 }

@@ -17,6 +17,7 @@ import type {
   CollectionBlockAttrs,
   FaqBlockAttrs,
   TwoColumnBlockAttrs,
+  MediaTextBlockAttrs,
   EmbedBlockAttrs,
   ImageBlockAttrs,
   LogoBlockAttrs,
@@ -470,6 +471,37 @@ export const twoColumnBlockDefinition: BlockDefinition<TwoColumnBlockAttrs> = {
   ]
 }
 
+export const mediaTextBlockDefinition: BlockDefinition<MediaTextBlockAttrs> = {
+  type: 'mediaTextBlock',
+  name: 'Image + text',
+  description: 'A photo beside text; the photo can stay in view while the text scrolls',
+  icon: 'i-lucide-panel-left',
+  category: 'layout',
+  defaultAttrs: {
+    src: '',
+    alt: '',
+    side: 'left',
+    sticky: true,
+    frame: true
+  },
+  schema: [
+    { name: 'src', type: 'image', label: 'Image' },
+    { name: 'alt', type: 'text', label: 'Alt text', description: 'Describe the image for screen readers' },
+    {
+      name: 'side',
+      type: 'select',
+      label: 'Image side',
+      options: [
+        { label: 'Left', value: 'left' },
+        { label: 'Right', value: 'right' }
+      ],
+      defaultValue: 'left'
+    },
+    { name: 'sticky', type: 'switch', label: 'Keep image in view', description: 'The image stays in place while the text scrolls (wide screens)' },
+    { name: 'frame', type: 'switch', label: 'Frame', description: 'Rounded border and shadow around the image' }
+  ]
+}
+
 // Chart, Map, and CollectionMap block definitions have been moved to their
 // respective addon packages (crouton-charts, crouton-maps) and are now
 // registered via croutonBlocks in app.config.ts.
@@ -484,7 +516,8 @@ export const imageBlockDefinition: BlockDefinition<ImageBlockAttrs> = {
     src: '',
     alt: '',
     caption: '',
-    width: 'full'
+    width: 'full',
+    frame: true
   },
   schema: [
     {
@@ -516,6 +549,12 @@ export const imageBlockDefinition: BlockDefinition<ImageBlockAttrs> = {
         { label: 'Small (40%)', value: 'small' }
       ],
       defaultValue: 'full'
+    },
+    {
+      name: 'frame',
+      type: 'switch',
+      label: 'Frame',
+      description: 'Rounded border and shadow around the image'
     }
   ]
 }
@@ -1109,6 +1148,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
   collectionBlock: collectionBlockDefinition,
   faqBlock: faqBlockDefinition,
   twoColumnBlock: twoColumnBlockDefinition,
+  mediaTextBlock: mediaTextBlockDefinition,
   embedBlock: embedBlockDefinition,
   imageBlock: imageBlockDefinition,
   logoBlock: logoBlockDefinition,
