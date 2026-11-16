@@ -1,13 +1,13 @@
 {
-  "as_of": "2026-11-15T17:52:44Z",
-  "data_commit": "7996f0933b546f803a96e44db745934356729dd7",
+  "as_of": "2026-11-16T02:53:15Z",
+  "data_commit": "e99e6351919685fea42997aebf7cb839439e81b5",
   "weeks": {
     "2026-W46": {
       "jobs": {
         "automerge-epic-subpr.yml/automerge": {
           "failed": 4,
           "rate": 0.0027,
-          "runs": 1461
+          "runs": 1462
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -332,7 +332,7 @@
         "handoff-sweep.yml/sweep": {
           "failed": 0,
           "rate": 0,
-          "runs": 545
+          "runs": 547
         },
         "housekeeping.yml/digest": {
           "failed": 0,
@@ -547,7 +547,7 @@
         "pipeline-metrics.yml/metrics": {
           "failed": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 20
         },
         "pipeline-pr-status.yml/status": {
           "failed": 0,
@@ -751,8 +751,8 @@
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 13996,
-        "runs_with_jobs": 13996
+        "eligible_runs": 14001,
+        "runs_with_jobs": 14001
       },
       "lines": {
         "building": {
@@ -775,8 +775,8 @@
         },
         "merging": {
           "failed": 32,
-          "runs": 5247,
-          "schedule_total": 275,
+          "runs": 5250,
+          "schedule_total": 287,
           "workflow_rate": 0.0061
         },
         "planning": {
@@ -787,9 +787,9 @@
         },
         "scheduled": {
           "failed": 5,
-          "runs": 117,
-          "schedule_total": 155,
-          "workflow_rate": 0.0427
+          "runs": 119,
+          "schedule_total": 161,
+          "workflow_rate": 0.042
         },
         "tickets": {
           "failed": 7,
@@ -807,9 +807,9 @@
       "schedules": {
         "automerge-epic-subpr.yml": {
           "failed_runs": 0,
-          "missed": 137,
-          "slots": 160,
-          "total": 137
+          "missed": 143,
+          "slots": 168,
+          "total": 143
         },
         "e2e.yml": {
           "failed_runs": 0,
@@ -825,9 +825,9 @@
         },
         "handoff-sweep.yml": {
           "failed_runs": 1,
-          "missed": 137,
-          "slots": 160,
-          "total": 138
+          "missed": 143,
+          "slots": 168,
+          "total": 144
         },
         "housekeeping.yml": {
           "failed_runs": 0,
@@ -849,9 +849,9 @@
         },
         "pipeline-metrics.yml": {
           "failed_runs": 0,
-          "missed": 118,
-          "slots": 136,
-          "total": 118
+          "missed": 124,
+          "slots": 144,
+          "total": 124
         },
         "quality-digest.yml": {
           "failed_runs": 0,
@@ -876,7 +876,7 @@
         "automerge-epic-subpr.yml": {
           "failed": 8,
           "rate": 0.0055,
-          "runs": 1465
+          "runs": 1466
         },
         "build-review.yml": {
           "failed": 8,
@@ -956,7 +956,7 @@
         "handoff-sweep.yml": {
           "failed": 5,
           "rate": 0.0091,
-          "runs": 550
+          "runs": 552
         },
         "housekeeping.yml": {
           "failed": 0,
@@ -1020,8 +1020,8 @@
         },
         "pipeline-metrics.yml": {
           "failed": 1,
-          "rate": 0.0526,
-          "runs": 19
+          "rate": 0.0476,
+          "runs": 21
         },
         "pipeline-pr-status.yml": {
           "failed": 0,
@@ -1132,6 +1132,90 @@
           "failed": 49,
           "rate": 0.0799,
           "runs": 613
+        }
+      }
+    },
+    "2026-W47": {
+      "jobs": {
+        "automerge-epic-subpr.yml/automerge": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        }
+      },
+      "jobs_coverage": {
+        "eligible_runs": 1,
+        "runs_with_jobs": 1
+      },
+      "lines": {
+        "building": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "deploys": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "fixing": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "merging": {
+          "failed": 0,
+          "runs": 1,
+          "schedule_total": 2,
+          "workflow_rate": 0
+        },
+        "planning": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "scheduled": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 1,
+          "workflow_rate": null
+        },
+        "tickets": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        }
+      },
+      "schedules": {
+        "automerge-epic-subpr.yml": {
+          "failed_runs": 0,
+          "missed": 1,
+          "slots": 1,
+          "total": 1
+        },
+        "handoff-sweep.yml": {
+          "failed_runs": 0,
+          "missed": 1,
+          "slots": 1,
+          "total": 1
+        },
+        "pipeline-metrics.yml": {
+          "failed_runs": 0,
+          "missed": 1,
+          "slots": 1,
+          "total": 1
+        }
+      },
+      "workflows": {
+        "automerge-epic-subpr.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
         }
       }
     }
