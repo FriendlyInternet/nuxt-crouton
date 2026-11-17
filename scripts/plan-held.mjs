@@ -8,11 +8,10 @@
 // The build reads the reason back from that bot comment only: the same words from a person,
 // another bot, or from before the newest plan are ignored.
 //
-// CLI (the build step in work-issue-pidev.yml):
-//   node scripts/plan-held.mjs --approved-prompt --plan-id <id> --plan-file <path> --issue <n>
-//     → the whole approved-plan section of the build prompt on stdout, written once at the end.
-//       It reads the issue's comments itself; a failed or partial read means NO override and a
-//       ::warning:: on stderr (exit 0). An unreadable plan file exits 1 and writes nothing.
+// The build prompt's approved-plan section comes from approvedPromptSection(), which
+// scripts/pi-run.mjs calls directly (#3620).
+//
+// CLI:
 //   gh api --paginate .../comments --jq '.[] | @json' | node scripts/plan-held.mjs --decision
 //     → the override reason (or nothing); for tests and manual use.
 
@@ -136,24 +135,10 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
   core.info(`#${issue_number}: plan approved by owner override`)
 }
 
-function argValue(argv, name) {
-  const i = argv.indexOf(name)
-  return i >= 0 ? argv[i + 1] : undefined
-}
-
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const { readFileSync } = await import('node:fs')
   const argv = process.argv.slice(2)
-  if (argv.includes('--approved-prompt')) {
-    let planText
-    try {
-      planText = readFileSync(argValue(argv, '--plan-file'), 'utf8')
-    } catch (e) {
-      process.stderr.write(`plan-held: cannot read the plan file: ${e.message}\n`)
-      process.exit(1)
-    }
-    process.stdout.write(approvedPromptSection({ planId: argValue(argv, '--plan-id'), planText, issue: argValue(argv, '--issue') }))
-  } else if (argv.includes('--decision')) {
+  if (argv.includes('--decision')) {
     const out = currentOverrideDecision(parseCommentLines(readFileSync(0, 'utf8')))
     if (out) console.log(out)
   }
