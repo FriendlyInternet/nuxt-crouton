@@ -146,11 +146,17 @@ export function noteLine(body = '') {
   return NOTE_RE.test(line) ? line : ''
 }
 
-/** Strip heading/✅/bold, defang mentions, cut to 140 chars. Anything with `password=` is dropped. */
+/**
+ * Strip heading/✅/bold, cut to 140 chars, then defang mentions. Anything with `password=` is
+ * dropped. The cut comes BEFORE the defang (and never leaves an unclosed code span), so a
+ * handle near the cut can't lose its closing backtick and ping — and a second pass is safe.
+ */
 export function cleanNote(line = '') {
   const s = String(line || '').replace(/^\s*#{1,6}\s+/, '').replace(/^\s*✅\s*/, '').replace(/\*\*/g, '').trim()
   if (/password=/i.test(s)) return ''
-  return defangMentions(s).slice(0, 140)
+  let cut = s.slice(0, 140)
+  if ((cut.match(/`/g) || []).length % 2) cut = cut.slice(0, cut.lastIndexOf('`'))
+  return defangMentions(cut.trimEnd())
 }
 
 /**

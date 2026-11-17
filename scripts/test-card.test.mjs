@@ -164,7 +164,7 @@ test('T10: one fresh card per fix — a card newer than the fix close stops a re
 })
 
 // ── Evidence: what the pipeline already checked (#3882) ──────────────────────────────
-import { buildEvidence, closingNote, defangMentions, EVIDENCE_HEADING } from './test-card.mjs'
+import { buildEvidence, closingNote, cleanNote, defangMentions, EVIDENCE_HEADING } from './test-card.mjs'
 
 const appCard = { epicNumber: 1, title: 'X', app: 'velo', stagingUrl: 'https://velo.pmcp.dev', reviewAccount: 'r@x', checks: ['a', 'b'] }
 const noAppCard = { epicNumber: 2, title: 'Y', checks: ['c'] }
@@ -280,6 +280,28 @@ test('evidence T11: a handle right after a closing backtick is still backticked'
   assert.equal(defangMentions('`x`@alice'), '`x``@alice`')
   const ev = [{ title: 'A', url: 'https://a', note: '`x`@alice' }]
   assert.ok(buildCard({ ...appCard, evidence: ev }).includes('— `x``@alice`'))
+})
+
+// covers: PR #4067 build review — a long note cut near a handle must still never ping
+test('evidence T13: a long note with a handle near the 140-char cut never leaves a bare handle', () => {
+  const body = `✅ Done ${'x'.repeat(120)} cc @alice-longhandle`
+  const note = closingNote([{ login: 'pmcp', body, created_at: '2026-01-01T00:00:00Z' }])
+  const bare = /(?<![\w`])@[A-Za-z0-9-]/
+  const ticks = s => (s.match(/`/g) || []).length
+  assert.ok(!bare.test(note), note)
+  assert.equal(ticks(note) % 2, 0)
+  const twice = cleanNote(note)
+  assert.ok(!bare.test(twice) && ticks(twice) % 2 === 0, twice)
+  const ev = [{ title: 'A', url: 'https://a', note }]
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    const line = out.split('\n').find(l => l.includes('x'.repeat(120)))
+    assert.ok(line && !bare.test(line), line)
+    assert.equal(ticks(line) % 2, 0)
+  }
+  // a caller passing an already-defanged note that is longer than 140 must not break the span either
+  const long = `${'y'.repeat(130)} cc \`@alice-longhandle\``
+  const again = cleanNote(long)
+  assert.ok(!bare.test(again) && ticks(again) % 2 === 0, again)
 })
 
 test('evidence T12: an already backticked handle is left alone', () => {
