@@ -344,3 +344,6 @@
 - name: "no-plan"
   color: "c5def5"
   description: "Skip the plan step — build directly, even for a bug or a packages/ change (#2757)"
+- name: "pipeline-review"
+  color: "006b75"
+  description: "The pipeline review opened every 10 closed epics (#3254)"

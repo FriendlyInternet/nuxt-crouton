@@ -178,6 +178,7 @@ The table below is generated from the workflow files and the grouping in
 | [loop-station-refresh.yml](../../.github/workflows/loop-station-refresh.yml) | Loop-station refresh | `push`, `workflow_dispatch` |
 | [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `schedule`, `workflow_dispatch` |
 | [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `schedule`, `workflow_dispatch` |
+| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `schedule`, `workflow_dispatch` |
 | [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `schedule`, `workflow_dispatch` |
 | [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `schedule`, `workflow_dispatch` |
 | [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `schedule`, `workflow_dispatch` |
