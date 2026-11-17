@@ -393,8 +393,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 ### Add a new component
 1. Create file in `app/components/{Name}.vue`
-2. Use `<script setup lang="ts">`
-3. Auto-imports as `Crouton{Name}`
+2. Auto-imports as `Crouton{Name}`
 
 ### Modify team-auth logic
 1. Team auth is now in `@crouton/auth` package
@@ -482,6 +481,6 @@ Delete actions always use modal overlay regardless of container type.
 ## Testing
 
 ```bash
-pnpm typecheck  # MANDATORY after changes (checks this package only)
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 pnpm build          # Verify build works
 ```
