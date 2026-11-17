@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/bookings-locations
  * - Form component: BookingsLocationsForm (the package's own form; the generated _Form.vue was removed in #2278 — it depended on crouton-maps composables)
  * - List component: BookingsLocationsList
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, products, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -37,6 +37,7 @@ export const bookingsLocationSchema = z.object({
   location: z.string().optional(),
   allowedMemberIds: z.array(z.string()).nullish(),
   slots: z.array(bookingsLocationsSlotItemSchema).optional(),
+  products: z.array(z.object({ product: z.string().min(1), stock: z.number().int().min(1) })).nullish(),
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
@@ -98,6 +99,7 @@ const _bookingsLocationsConfig = {
     content: '',
     allowedMemberIds: [],
     slots: [],
+    products: null,
     openDays: [],
     slotSchedule: {},
     blockedDates: [],

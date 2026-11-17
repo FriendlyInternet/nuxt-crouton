@@ -73,6 +73,8 @@ CroutonBooking
    - UI shows "X left" / "Full" badges when capacity > 1
 2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
 
+**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). The counting does not use either field yet; it still uses the slot capacity / `quantity` above.
+
 **Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
 `all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
 offer it *next to* them. The full day is exclusive: it can't share a date with any other slot —
@@ -194,7 +196,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574)
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574), `@fyit/crouton-catalog` (extended by this layer; owns the shared team product list)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 

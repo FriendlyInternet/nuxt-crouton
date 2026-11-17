@@ -89,6 +89,19 @@
       }
     }
   },
+  "products": {
+    "type": "repeater",
+    "meta": {
+      "label": "Products",
+      "area": "main",
+      "group": "scheduling",
+      "help": "Products this location offers, each with its own stock.",
+      "properties": {
+        "product": { "type": "string", "required": true, "label": "Product" },
+        "stock": { "type": "number", "required": true, "label": "Stock", "default": 1 }
+      }
+    }
+  },
   "openDays": {
     "type": "array",
     "meta": {

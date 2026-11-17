@@ -3,6 +3,7 @@ import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import * as locationsSchema from '../../../locations/server/database/schema'
+import { catalogProducts } from '@fyit/crouton-catalog/collections/products/server/database/schema'
 import { user } from '~~/server/db/schema'
 
 // Non-admins pass { ownerId } to see only their own rows, with no user emails (#3135)
@@ -130,5 +131,6 @@ export async function deleteBookingsBooking(
 export async function assertBookingsBookingReferences(teamId: string, data: Record<string, any>) {
   await assertRefsInTeam(useDB(), teamId, [
     { field: 'location', table: locationsSchema.bookingsLocations, value: data.location },
+    { field: 'product', table: catalogProducts, value: data.product },
   ])
 }

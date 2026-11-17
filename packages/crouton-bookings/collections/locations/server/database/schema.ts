@@ -39,6 +39,7 @@ export const bookingsLocations = sqliteTable('bookings_locations', {
   content: text('content'),
   allowedMemberIds: jsonColumn('allowedMemberIds').$default(() => (null)),
   slots: jsonColumn('slots').$default(() => (null)),
+  products: jsonColumn('products').$default(() => (null)),
   openDays: jsonColumn('openDays').$default(() => (null)),
   slotSchedule: jsonColumn('slotSchedule').$default(() => ({})),
   blockedDates: jsonColumn('blockedDates').$default(() => (null)),

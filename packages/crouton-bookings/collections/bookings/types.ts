@@ -9,7 +9,7 @@
  * - Form data type: BookingsBookingFormData
  * - New item type: NewBookingsBooking
  * - Form props: BookingsBookingFormProps
- * - Fields: location, date, slot, group, quantity, status
+ * - Fields: location, product, date, slot, group, quantity, status
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -28,6 +28,7 @@ export interface BookingsBooking {
   teamId: string
   owner: string
   location: string
+  product?: string | null
   date: Date | null
   slot: string[] | null
   group?: string

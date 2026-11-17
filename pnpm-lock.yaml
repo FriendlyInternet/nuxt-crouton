@@ -896,8 +896,8 @@ importers:
         specifier: workspace:*
         version: link:../crouton-core
       nuxt:
-        specifier: ^4.6.2
-        version: 4.6.3(c4cc59da17ced58df43407aa99b185f6)
+        specifier: ^4.6.4
+        version: 4.6.4(8ba89bd9026b41b679257952968cc0a1)
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -31298,7 +31298,7 @@ snapshots:
   h3@2.0.2(crossws@0.4.17(srvx@1.0.8)):
     dependencies:
       rou3: 1.0.0
-      srvx: 1.0.5
+      srvx: 1.0.8
     optionalDependencies:
       crossws: 0.4.17(srvx@1.0.8)
 

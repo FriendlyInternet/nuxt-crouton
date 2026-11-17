@@ -1,8 +1,14 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The requireTeamAdmin utility handles team resolution and auth
 import { z } from 'zod'
-import { createBookingsLocation } from '../../../../database/queries'
+import { assertBookingsLocationReferences, createBookingsLocation } from '../../../../database/queries'
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+
+// A location lists each team product once, with a whole-number stock of at least 1 (#3967)
+const productsSchema = z.array(z.object({
+  product: z.string().min(1),
+  stock: z.number().int().min(1)
+})).refine(list => new Set(list.map(p => p.product)).size === list.length, { message: 'Each product may be listed once' }).nullish()
 
 // Hand-added body validation (#3377): wrong types -> 400, unknown/system keys are stripped.
 const bodySchema = z.object({
@@ -19,6 +25,7 @@ const bodySchema = z.object({
     label: z.string(),
     capacity: z.number().optional()
   })).nullish(),
+  products: productsSchema,
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
@@ -39,9 +46,11 @@ export default defineEventHandler(async (event) => {
   const { team, user } = await requireTeamAdmin(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
+  await assertBookingsLocationReferences(team.id, body)
 
   return await createBookingsLocation({
     ...body,
+    products: body.products,
     teamId: team.id,
     owner: user.id,
     createdBy: user.id,
