@@ -32,6 +32,7 @@
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
+    "@vue/compiler-sfc": "^3.5.0",
     "drizzle-kit": "^0.31.0",
     "vitest": "catalog:",
     "wrangler": "^4.64.0"

@@ -2169,6 +2169,9 @@ importers:
       '@fyit/crouton-devtools':
         specifier: workspace:*
         version: link:../../packages/crouton-devtools
+      '@vue/compiler-sfc':
+        specifier: ^3.5.0
+        version: 3.5.44
       drizzle-kit:
         specifier: ^0.31.0
         version: 0.31.11
