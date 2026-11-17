@@ -12,61 +12,86 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: FilterState]
-  refresh: []
 }>()
 
-// Local state synced with v-model
-const filters = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
-})
+const { t } = useI18n()
+const appConfig = useAppConfig()
 
-// Operation options
-const operationOptions = [
-  { label: 'All Operations', value: '' },
-  { label: 'Create', value: 'create' },
-  { label: 'Update', value: 'update' },
-  { label: 'Delete', value: 'delete' }
-]
+function update(patch: Partial<FilterState>) {
+  emit('update:modelValue', { ...props.modelValue, ...patch })
+}
 
-// Collection options
-const collectionOptions = computed(() => [
-  { label: 'All Collections', value: '' },
-  ...props.collections.map(c => ({ label: c, value: c }))
+const collectionItems = computed(() => [
+  { label: t('events.filters.allCollections'), value: '' },
+  ...props.collections.map(name => ({
+    label: eventCollectionLabel(name, appConfig.croutonCollections as Record<string, any> | undefined, t),
+    value: name
+  }))
 ])
 
-// User options
-const userOptions = computed(() => [
-  { label: 'All Users', value: '' },
+const operationItems = computed(() => [
+  { label: t('events.filters.allActions'), value: '' },
+  { label: t('events.operation.create'), value: 'create' },
+  { label: t('events.operation.update'), value: 'update' },
+  { label: t('events.operation.delete'), value: 'delete' }
+])
+
+const userItems = computed(() => [
+  { label: t('events.filters.everyone'), value: '' },
   ...props.users.map(u => ({ label: u.name, value: u.id }))
 ])
 
-// Date range presets
-const datePresets = [
-  { label: 'All Time', value: null },
-  { label: 'Today', value: 0 },
-  { label: 'Last 7 Days', value: 7 },
-  { label: 'Last 30 Days', value: 30 },
-  { label: 'Last 90 Days', value: 90 }
-]
+const collectionName = computed({
+  get: () => props.modelValue.collectionName || '',
+  set: (value: string) => update({ collectionName: value || undefined })
+})
 
-const selectedDatePreset = ref<number | null>(null)
+const operation = computed({
+  get: () => props.modelValue.operation || '',
+  set: (value: string) => update({ operation: (value || undefined) as FilterState['operation'] })
+})
 
-function applyDatePreset(days: number | null) {
-  selectedDatePreset.value = days
-  if (days === null) {
-    filters.value = { ...filters.value, dateFrom: undefined, dateTo: undefined }
-  } else {
-    const now = new Date()
-    const from = new Date()
-    from.setDate(now.getDate() - days)
-    from.setHours(0, 0, 0, 0)
-    filters.value = { ...filters.value, dateFrom: from, dateTo: now }
+const userId = computed({
+  get: () => props.modelValue.userId || '',
+  set: (value: string) => update({ userId: value || undefined })
+})
+
+// Period: 'all' or a number of days back (0 = today). Set through the tab's update event,
+// not a watcher, so clearing filters can't re-emit a stale copy of the other filters.
+const periodItems = computed(() => [
+  { label: t('events.period.all'), value: 'all' },
+  { label: t('events.period.today'), value: '0' },
+  { label: t('events.period.last7'), value: '7' },
+  { label: t('events.period.last30'), value: '30' },
+  { label: t('events.period.last90'), value: '90' }
+])
+
+const period = ref<string>('all')
+
+function setPeriod(next: string | number) {
+  const value = String(next)
+  period.value = value
+  if (value === 'all') {
+    update({ dateFrom: undefined, dateTo: undefined })
+    return
   }
+  const now = new Date()
+  const from = new Date()
+  from.setDate(now.getDate() - Number(value))
+  from.setHours(0, 0, 0, 0)
+  update({ dateFrom: from, dateTo: now })
 }
 
-// Clear all filters
+const hasActiveFilters = computed(() => !!(
+  props.modelValue.collectionName
+  || props.modelValue.operation
+  || props.modelValue.userId
+  || props.modelValue.dateFrom
+  || props.modelValue.dateTo
+))
+
 function clearFilters() {
+  period.value = 'all'
   emit('update:modelValue', {
     collectionName: undefined,
     operation: undefined,
@@ -74,119 +99,60 @@ function clearFilters() {
     dateFrom: undefined,
     dateTo: undefined
   })
-  selectedDatePreset.value = null
 }
-
-// Check if any filters are active
-const hasActiveFilters = computed(() => {
-  return !!(
-    props.modelValue.collectionName ||
-    props.modelValue.operation ||
-    props.modelValue.userId ||
-    props.modelValue.dateFrom ||
-    props.modelValue.dateTo
-  )
-})
 </script>
 
 <template>
-  <div class="crouton-activity-filters space-y-4">
-    <!-- Main filters row -->
-    <div class="flex flex-wrap items-center gap-3">
-      <!-- Collection filter -->
+  <div class="crouton-activity-filters flex flex-col gap-3">
+    <div class="flex flex-wrap items-center gap-2">
       <USelectMenu
-        v-model="filters.collectionName"
-        :items="collectionOptions"
+        v-model="collectionName"
+        :items="collectionItems"
         value-key="value"
-        placeholder="Collection"
-        class="w-40"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-database"
-            class="size-4 text-muted"
-          />
-        </template>
-      </USelectMenu>
-
-      <!-- Operation filter -->
+        :search-input="false"
+        icon="i-lucide-database"
+        :aria-label="t('events.filters.collection')"
+        class="w-52"
+      />
       <USelectMenu
-        v-model="filters.operation"
-        :items="operationOptions"
+        v-model="operation"
+        :items="operationItems"
         value-key="value"
-        placeholder="Operation"
-        class="w-36"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-zap"
-            class="size-4 text-muted"
-          />
-        </template>
-      </USelectMenu>
-
-      <!-- User filter (if users provided) -->
+        :search-input="false"
+        icon="i-lucide-zap"
+        :aria-label="t('events.filters.action')"
+        class="w-44"
+      />
       <USelectMenu
         v-if="users.length"
-        v-model="filters.userId"
-        :items="userOptions"
+        v-model="userId"
+        :items="userItems"
         value-key="value"
-        placeholder="User"
-        class="w-40"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-user"
-            class="size-4 text-muted"
-          />
-        </template>
-      </USelectMenu>
+        :search-input="false"
+        icon="i-lucide-user"
+        :aria-label="t('events.filters.person')"
+        class="w-48"
+      />
+    </div>
 
-      <!-- Date preset buttons -->
-      <div class="flex items-center gap-1 border rounded-lg p-1">
-        <UButton
-          v-for="preset in datePresets"
-          :key="preset.value ?? 'all'"
-          :color="selectedDatePreset === preset.value ? 'primary' : 'neutral'"
-          :variant="selectedDatePreset === preset.value ? 'solid' : 'ghost'"
-          size="xs"
-          @click="applyDatePreset(preset.value)"
-        >
-          {{ preset.label }}
-        </UButton>
-      </div>
-
-      <!-- Spacer -->
-      <div class="flex-1" />
-
-      <!-- Clear filters -->
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <UTabs
+        :model-value="period"
+        :items="periodItems"
+        :content="false"
+        size="xs"
+        :aria-label="t('events.filters.period')"
+        @update:model-value="setPeriod"
+      />
       <UButton
         v-if="hasActiveFilters"
         color="neutral"
         variant="ghost"
         size="sm"
+        icon="i-lucide-x"
+        :label="t('events.filters.clear')"
         @click="clearFilters"
-      >
-        <UIcon
-          name="i-lucide-x"
-          class="size-4 mr-1"
-        />
-        Clear
-      </UButton>
-
-      <!-- Refresh -->
-      <UButton
-        color="neutral"
-        variant="outline"
-        size="sm"
-        @click="emit('refresh')"
-      >
-        <UIcon
-          name="i-lucide-refresh-cw"
-          class="size-4 mr-1"
-        />
-        Refresh
-      </UButton>
+      />
     </div>
   </div>
 </template>
