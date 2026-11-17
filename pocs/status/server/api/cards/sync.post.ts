@@ -188,23 +188,33 @@ export default defineEventHandler(async (event) => {
   if (Date.now() - last < THROTTLE_MS) return { created: 0, updated: 0, stale: 0, answered: 0, stuck: { ...NO_STUCK }, throttled: true }
   await store.setItem(throttleKey, Date.now())
 
+  // The sync must finish even when the browser leaves (a reload, a closed tab). On Workers a
+  // dropped request cancels its unfinished work, and the throttle stamp above holds off the
+  // retry for 60 s — so a page reloaded within the ~18 s GitHub read never stored a card and
+  // stayed on "Checking GitHub…" (the PR #3991 preview screenshot, #3880).
+  const work = syncTeam(event, team.id, user.id)
+  event.waitUntil?.(work.catch(() => {}))
+  return await work
+})
+
+async function syncTeam(event: H3Event, teamId: string, userId: string) {
   const errors: string[] = []
   const note: Note = (e) => { if (e) errors.push(e) }
 
   const { asks, unreadable, complete: listsComplete } = await collectFromGitHub(event, note)
-  const existing = (await getAllInboxCards(team.id)) as unknown as ExistingCard[]
+  const existing = (await getAllInboxCards(teamId)) as unknown as ExistingCard[]
   const gone = await readGone(event, goneCandidates({ asks, unreadable, existing, listsComplete }), note)
 
   const plan = planSync({ asks, unreadable, existing, gone, listsComplete })
   for (const c of plan.create) {
-    await createInboxCard({ ...c, teamId: team.id, owner: user.id, createdBy: user.id, updatedBy: user.id } as unknown as Parameters<typeof createInboxCard>[0])
+    await createInboxCard({ ...c, teamId, owner: userId, createdBy: userId, updatedBy: userId } as unknown as Parameters<typeof createInboxCard>[0])
   }
   for (const u of plan.update) {
-    await updateInboxCard(u.id, team.id, user.id, u.patch as unknown as Parameters<typeof updateInboxCard>[3], { role: 'owner' })
+    await updateInboxCard(u.id, teamId, userId, u.patch as unknown as Parameters<typeof updateInboxCard>[3], { role: 'owner' })
   }
 
   const out: Record<string, unknown> = { ...plan.counts, stuck: stuckCounts(asks) }
   if (errors.length) out.error = [...new Set(errors)].join('; ')
   if (unreadable.length) out.skipped = unreadable
   return out
-})
+}

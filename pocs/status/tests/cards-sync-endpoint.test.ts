@@ -93,7 +93,11 @@ const fetchSpy = vi.fn(async (input: string | URL | Request) => {
   return json({ message: 'not found' }, 404)
 })
 
-async function run() {
+/** Promises the handler handed to event.waitUntil (work that must outlive the request). */
+let waited: Promise<unknown>[]
+
+/** Call the handler; returns its response promise unawaited (a browser that leaves never reads it). */
+async function start() {
   vi.resetModules()
   vi.stubGlobal('defineEventHandler', (h: unknown) => h)
   vi.stubGlobal('defineCachedFunction', (fn: unknown) => fn)
@@ -103,8 +107,16 @@ async function run() {
   vi.stubGlobal('useStorage', () => kv)
   vi.stubGlobal('fetch', fetchSpy)
   const handler = (await import('../server/api/cards/sync.post')).default as unknown as (e: unknown) => Promise<any>
-  const event = { headers: new Headers(), context: { cloudflare: { env: { GITHUB_TOKEN: 't' } } } }
-  return handler(event).then(body => ({ status: 200, body }), (e: any) => ({ status: e.statusCode as number, body: null }))
+  const event = {
+    headers: new Headers(),
+    context: { cloudflare: { env: { GITHUB_TOKEN: 't' } } },
+    waitUntil: (p: Promise<unknown>) => { waited.push(p) }
+  }
+  return { response: handler(event) }
+}
+
+async function run() {
+  return (await start()).response.then(body => ({ status: 200, body }), (e: any) => ({ status: e.statusCode as number, body: null }))
 }
 
 beforeEach(() => {
@@ -113,6 +125,7 @@ beforeEach(() => {
   pagedPulls = false
   epicBehind = undefined
   prFiles = {}
+  waited = []
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
   createInboxCard.mockClear()
@@ -121,6 +134,20 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('POST /api/cards/sync', () => {
+  it('#3880: the browser leaves mid-sync (reload, closed tab) → the sync still runs to the end and stores the cards', async () => {
+    // On Workers a dropped request cancels its unfinished work unless it was handed to
+    // waitUntil; the throttle stamp is already set, so a lost sync stores nothing for 60 s.
+    const { response } = await start()
+    response.catch(() => {}) // nobody reads the response: the page was reloaded
+    await vi.waitFor(() => expect(waited).toHaveLength(1))
+    await Promise.all(waited)
+    expect(createInboxCard).toHaveBeenCalledTimes(2)
+    // The reloaded page's sync is throttled, and the cards are already stored for it to list.
+    fetchSpy.mockClear()
+    expect((await run()).body).toMatchObject({ throttled: true })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('not the owner → 401, no GitHub call, no write', async () => {
     sessionEmail = 'someone@example.test'
     expect((await run()).status).toBe(401)
