@@ -16,6 +16,7 @@
 import { eq, and, inArray } from 'drizzle-orm'
 import { scopedAccessGrant } from '@fyit/crouton-auth/server/database/schema/auth'
 import {
+  mintPairingCode,
   redeemPairingCode,
   TILL_DEVICE_RESOURCE_TYPE
 } from '@fyit/crouton-auth/server/utils/pairing-code'
@@ -83,6 +84,40 @@ async function findCurrentEventId(organizationId: string): Promise<string | null
     .where(and(eq(salesEvents.teamId, organizationId), eq(salesEvents.isCurrent, true)))
     .limit(1)
   return row?.id ?? null
+}
+
+export type MintTeamPairingCodeResult
+  = | { ok: true, code: string, expiresAt: Date }
+    | { ok: false, status: 404 }
+
+/**
+ * Mint a till pairing code for a team (#1662), optionally tied to an event.
+ *
+ * When an event id is given it must be one of THIS team's events (#3992) —
+ * otherwise a member could stamp another team's event id onto a grant. A
+ * foreign or unknown id is `{ ok: false, status: 404 }` (the same refusal
+ * `requireTeamEvent` gives, so it doesn't reveal whether the id exists).
+ * No event id → minted unchanged, without touching the database.
+ */
+export async function mintTeamPairingCode(options: {
+  organizationId: string
+  eventId?: string
+}): Promise<MintTeamPairingCodeResult> {
+  const { organizationId } = options
+  const eventId = options.eventId?.trim() || undefined
+
+  if (eventId) {
+    const db = useDB()
+    const [row] = await db
+      .select({ id: salesEvents.id })
+      .from(salesEvents)
+      .where(and(eq(salesEvents.id, eventId), eq(salesEvents.teamId, organizationId)))
+      .limit(1)
+    if (!row) return { ok: false, status: 404 }
+  }
+
+  const { code, expiresAt } = await mintPairingCode({ organizationId, eventId })
+  return { ok: true, code, expiresAt }
 }
 
 /**

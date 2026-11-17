@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isAlreadyGone, isUserTable, wranglerError } from './wrangler-d1.mjs'
+import { isAlreadyGone, isUserTable, wranglerError, queryD1Args, dropTablesSql } from './wrangler-d1.mjs'
 
 test('Worker already gone — the real CF phrasing (#1056)', () => {
   assert.equal(isAlreadyGone('This Worker does not exist on your account. [code: 10007]'), true)
@@ -41,6 +41,15 @@ test('isUserTable skips SQLite/Cloudflare internals, keeps app tables (#3416)', 
 test('wranglerError surfaces stdout JSON errors (stderr empty)', () => {
   const m = wranglerError({ status: 1, stderr: '', stdout: '{"error":{"text":"D1_ERROR: boom"}}' }, ['wrangler', 'd1'])
   assert.match(m, /D1_ERROR: boom/)
+})
+
+test('T7 — queryD1Args adds --config only when given (#4004)', () => {
+  assert.deepEqual(queryD1Args('db', 'SELECT 1'), ['d1', 'execute', 'db', '--remote', '--json', '--command', 'SELECT 1'])
+  assert.deepEqual(queryD1Args('db', 'SELECT 1', { config: 'w.json' }), ['d1', 'execute', 'db', '--remote', '--json', '--command', 'SELECT 1', '--config', 'w.json'])
+})
+
+test('dropTablesSql defers foreign keys and drops each table (#4004)', () => {
+  assert.equal(dropTablesSql(['a', 'b']), 'PRAGMA defer_foreign_keys = TRUE;\nDROP TABLE IF EXISTS "a";\nDROP TABLE IF EXISTS "b";\n')
 })
 
 test('wranglerError keeps both streams; null on success', () => {

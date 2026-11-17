@@ -24,6 +24,7 @@ Real-time collaboration infrastructure for Nuxt Crouton using Yjs CRDTs. This pa
 | `app/composables/useCollabPresence.ts` | Cursor/selection presence tracking |
 | `app/composables/useCollabEditor.ts` | TipTap editor integration |
 | `app/composables/useCollectionSyncSignal.ts` | Real-time collection cache sync across clients |
+| `app/composables/useCollabLocalizedContent.ts` | Per-locale Yjs content; `setContentJson` fills an empty room once (identical concurrent fills merge into one copy) |
 | `app/plugins/collection-sync.client.ts` | Auto-hooks mutations for cross-client refresh |
 | `app/components/CollabStatus.vue` | Connection status indicator (dot + label) |
 | `app/components/CollabPresence.vue` | Stacked user avatars with overflow |
@@ -119,6 +120,7 @@ The `type` query parameter differentiates room types:
 - **`NUXT_PUBLIC_COLLAB_WORKER_URL` is build-time** — It's baked into the client bundle. Changing it requires a rebuild. An empty value in a production build means live sync is off.
 - **Token expiry is 60 seconds** — Enough for initial connection. Reconnections auto-fetch a fresh token.
 - **`COLLAB_TOKEN_SECRET` must match** — Both the Nuxt app and collab worker use the same secret for HMAC signing/verification.
+- **Localized content is filled once, never replaced on load** — `useCollabLocalizedContent.setContentJson` returns early when the room already has content, and builds the initial fill in a doc whose client ID is a hash of the content, so two windows filling the same empty room at once merge into one copy instead of duplicating blocks (#3983). Only an explicit `force=true` replaces content.
 
 ## Real-Time Collection Sync
 
@@ -301,7 +303,8 @@ const {
   connect,      // () => void
   disconnect,   // () => void
   send,         // (data) => void
-  sendAwareness // (state) => void
+  sendAwareness, // (state) => void
+  awareness     // y-protocols-style Awareness for TipTap carets (getStates/setLocalStateField/on/off/setEditorSelection) — #3984
 } = useCollabConnection({
   roomId: 'room-123',
   roomType: 'page',
@@ -384,7 +387,7 @@ const {
   user, users, otherUsers,
 
   // For TipTap Collaboration extension
-  provider,       // { awareness: { setLocalStateField, ... } }
+  provider,       // { awareness } — the connection's awareness; works with y-tiptap yCursorPlugin
 
   // Actions
   connect, disconnect,
@@ -398,20 +401,19 @@ const {
 
 // Use with TipTap
 import { Collaboration } from '@tiptap/extension-collaboration'
-import { CollaborationCursor } from '@tiptap/extension-collaboration-cursor'
+import { yCursorPlugin } from '@tiptap/y-tiptap'
 
+provider.awareness.setLocalStateField('user', { name: 'Alice' })
 const editor = useEditor({
   extensions: [
-    Collaboration.configure({
-      document: ydoc,
-      field: 'content'
-    }),
-    CollaborationCursor.configure({
-      provider,
-      user: { name: 'Alice', color: '#ff0000' }
+    Collaboration.configure({ fragment: yxmlFragment }),
+    Extension.create({
+      name: 'collabCaret',
+      addProseMirrorPlugins: () => [yCursorPlugin(provider.awareness)]
     })
   ]
 })
+// CroutonEditorBlocks does this for you when given `collab-provider` (any connection).
 ```
 
 ## UI Components Reference
@@ -582,6 +584,25 @@ Raw Uint8Array containing Yjs update data.
   }
 }
 
+// Rich-text editor awareness (#3984) — sent by the connection's `awareness` adapter.
+// Only the FOCUSED editor writes fragment/selection/block/text, so a second editor on
+// the same connection (i18n side-by-side) never overwrites them. States without
+// `clientId` (crouton-flow, scripts) are not drawn as carets.
+{
+  type: 'awareness',
+  userId: 'user-123',
+  state: {
+    user: { id: 'user-123', name: 'Alice', color: '#28bd28' }, // colour always #rrggbb
+    clientId: 123456,                        // Y.Doc clientID
+    cursor: null,                            // mouse cursor unused by editors
+    caret: { anchor: {...}, head: {...} },   // Yjs relative-position JSON
+    fragment: 'content-fr',                  // which language field
+    selection: { anchor: 14, head: 19 },     // absolute ProseMirror positions
+    block: { index: 1, type: 'paragraph' },  // top-level block of the anchor
+    text: 'world'                            // selected text, ≤500 chars, null if empty
+  }
+}
+
 // Ping/Pong for connection health
 { type: 'ping' }
 { type: 'pong' }
@@ -631,6 +652,12 @@ interface CollabAwarenessState {
   selection?: { anchor: number; head: number } | null
   selectedNodeId?: string | null
   ghostNode?: { id: string; position: { x: number; y: number } } | null
+  // Rich-text editor fields (#3984)
+  clientId?: number
+  caret?: { anchor: unknown; head: unknown } | null
+  fragment?: string | null
+  block?: { index: number; type: string } | null
+  text?: string | null
   [key: string]: unknown  // Extensible
 }
 

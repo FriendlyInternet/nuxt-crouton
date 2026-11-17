@@ -16,22 +16,45 @@
 // "who wrote this" — the first question is the more urgent one, so the type leads and
 // provenance sits directly under it. "Unmistakable source" is satisfied either way; "on line
 // 1 exactly" was never the point.
+//
+// #3996 — all interactive chats post as the same account, so an `interactive` header must also
+// name WHICH chat wrote it: `chat <id>` (the first 6 hex chars of the session id, printed at
+// session start). Only enforced when the hook input carries a `session_id`; pipeline headers
+// are untouched.
+import { shortChatId } from '../../scripts/lib/chat-claim.mjs'
 
 let raw = ''
 process.stdin.on('data', c => { raw += c })
 process.stdin.on('end', () => {
   let body = ''
-  try { body = ((JSON.parse(raw).tool_input) || {}).body || '' } catch { /* fall through → block */ }
+  let sessionId = ''
+  try {
+    const parsed = JSON.parse(raw)
+    body = ((parsed.tool_input) || {}).body || ''
+    sessionId = parsed.session_id || ''
+  } catch { /* fall through → block */ }
 
   // The first THREE non-empty lines: enough for `<type> **headline**` + an optional blank +
   // the provenance line, and still tight enough that the header can't be buried mid-comment.
   const head = body.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, 3)
-  if (head.some(l => l.includes('🤖'))) process.exit(0) // has a provenance header → allow
+  const line = head.find(l => l.includes('🤖'))
+  if (line) {
+    const chat = shortChatId(sessionId)
+    if (chat && /interactive/i.test(line) && !new RegExp(`chat ${chat}\\b`, 'i').test(line)) {
+      process.stderr.write(
+        `Blocked: an interactive 🤖 header must name this chat — add \`chat ${chat}\` to it, e.g.:\n\n` +
+        `> 🤖 **Claude Code** · interactive agent · chat ${chat} · posted from \`@pmcp\`’s account (not Maarten) · _<one-line context>_\n\n` +
+        'Then re-send the comment.\n'
+      )
+      process.exit(2)
+    }
+    process.exit(0) // has a provenance header → allow
+  }
 
   process.stderr.write(
     'Blocked: agent GitHub comments must LEAD with a 🤖 provenance header (they post under ' +
     '@pmcp and must not be mistaken for the human). Prepend a first line, e.g.:\n\n' +
-    '> 🤖 **Claude Code** · interactive agent, posted from `@pmcp`’s account (not Maarten) · _<one-line context>_\n\n' +
+    '> 🤖 **Claude Code** · interactive agent · chat <id> · posted from `@pmcp`’s account (not Maarten) · _<one-line context>_\n\n' +
     'Then re-send the comment.\n'
   )
   process.exit(2)

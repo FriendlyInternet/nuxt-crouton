@@ -281,17 +281,14 @@ defineExpose({
         size="sm"
         class="flex-1"
       />
-      <!-- Toggle pills (#1407): the ACTIVE state is variant-less so the
+      <UCheckbox
+        v-model="showDrafts"
+        :label="t('pages.sidebar.drafts')"
+        size="sm"
+        class="shrink-0"
+      />
+      <!-- Reorder toggle (#1407): the ACTIVE state is variant-less so the
            theme's defaultVariants reach it; inactive stays quiet ghost. -->
-      <UButton
-        size="xs"
-        :color="showDrafts ? undefined : 'neutral'"
-        :variant="showDrafts ? undefined : 'ghost'"
-        icon="i-lucide-file-pen-line"
-        @click="showDrafts = !showDrafts"
-      >
-        {{ t('pages.sidebar.drafts') }}
-      </UButton>
       <UButton
         size="xs"
         :color="reorderMode.isActive.value ? undefined : 'neutral'"

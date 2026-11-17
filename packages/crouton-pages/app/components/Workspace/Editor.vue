@@ -70,6 +70,8 @@ const getCurrentUser = () => {
       if (sessionUser?.value) {
         const u = sessionUser.value as unknown as Record<string, unknown>
         return {
+          // The real user id rides along so the collab room names who is here (#3984)
+          ...(u.id != null ? { id: String(u.id) } : {}),
           name: String(u.name || u.email || t('pages.editor.anonymous')),
           color: undefined
         }
@@ -200,10 +202,15 @@ watch(
     if (collabLocalizedContent && pageData.translations) {
       const translations = pageData.translations as Record<string, { content?: string }>
 
-      watch(
+      // Fill once per load and never force: a reconnect must not refill or
+      // replace the room, or two open windows double the page (#3983).
+      let filled = false
+      let stopFill: (() => void) | undefined
+      stopFill = watch(
         () => collabLocalizedContent?.synced?.value,
         (synced) => {
-          if (synced) {
+          if (synced && !filled) {
+            filled = true
             for (const [loc, data] of Object.entries(translations)) {
               if (data?.content) {
                 try {
@@ -217,10 +224,12 @@ watch(
               }
             }
             contentReady.value = true
+            stopFill?.()
           }
         },
         { immediate: true }
       )
+      if (filled) stopFill()
     } else {
       contentReady.value = true
     }
