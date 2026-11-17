@@ -68,7 +68,6 @@ Add Crouton modules or features to your project
 
 | Argument | Type | Alias | Default | Description |
 | --- | --- | --- | --- | --- |
-| `--skipMigrations` | boolean |  |  | Skip migration generation and application |
 | `--skipInstall` | boolean |  |  | Skip package installation (assume already installed) |
 | `--dryRun` | boolean |  |  | Preview what will be done without making changes |
 | `--force` | boolean |  |  | Force reinstall even if already installed |
