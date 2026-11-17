@@ -13,9 +13,10 @@ export default defineCroutonManifest({
     components: [
       {
         name: 'CroutonChartsWidget',
-        description: 'Collection-driven chart component (bar, line, area, donut)',
-        props: ['collection', 'type', 'xField', 'yFields', 'title', 'height', 'stacked']
+        description: 'Collection-driven chart component (bar, line, area, donut)'
       },
+      { name: 'CroutonChartsBlocksChartBlockRender', description: 'Read-only public renderer for a chart editor block' },
+      { name: 'CroutonChartsBlocksChartBlockView', description: 'Editor node view for a chart block' },
     ],
     composables: [
       { name: 'useCollectionChart', description: 'Fetch and transform collection data for charting' },

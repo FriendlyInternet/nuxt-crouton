@@ -18,8 +18,22 @@ exact word they reply.
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
      `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the
      failed tickets to `ticket-revise.yml`, which rewrites them from the review's findings
-     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds; a needs-owner verdict
-     or round 3 holds for the owner. For a design
+     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds per ticket (per epic
+     for epics without `tickets:rolling`), and 3 for the step list; a needs-owner verdict or round 3
+     holds for the owner. For a new epic (label `tickets:rolling`, #3846) the splitter writes the
+     step list plus only the first ticket; `ticket-review.yml -f subject=plan` reviews the step list
+     once, and the orchestrator writes each later ticket by hand (with `step=<k>` in its pipeline
+     block) and runs `gh workflow run ticket-review.yml -f epic=<E> -f subject=<n>`, which reviews
+     that ticket alone against the epic branch (`scripts/epic-checkout.mjs`); a no-go holds only that
+     ticket and the steps after it (`scripts/ticket-review-actions.mjs`, `scripts/lib/epic-steps.mjs`).
+     If a step list turns out wrong, the epic is held: fix the step-list comment by hand and run
+     `gh workflow run ticket-review.yml -f epic=<E> -f subject=plan`. If that edit leaves the list
+     unreadable (bad JSON, or a field such as `"ticket": "#11"` instead of `11`), no ticket starts,
+     the epic never counts as finished, and the next review holds the epic (`status:blocked`) naming
+     the field that is wrong. To move an existing epic to
+     per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
+     epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
+     For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
    - c. `scripts/lib/plan-route.mjs` says `plan` → `work-issue-pidev.yml` in plan mode (step 2).
@@ -41,6 +55,9 @@ exact word they reply.
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
    `status:blocked` for the owner; `needs-owner` → one yes/no question on the PR and `status:blocked`
    on the issue: **owner decides here (`ok` / `not ok: …`)**. A red build → `fix-ci-on-failure.yml`.
+   The reviewer is given the PR's `plan-checks` table (`scripts/lib/build-review-prompt.mjs`) as the
+   record of which plan tests ran and passed on that commit, and judges only whether each test aims
+   at the ticket's rule.
    The owner can also ask for changes at any time with a top-level `**Worker:** <what to change>`
    comment.
 6. **Merge into the epic branch.** `automerge-epic-subpr.yml` decides it with
