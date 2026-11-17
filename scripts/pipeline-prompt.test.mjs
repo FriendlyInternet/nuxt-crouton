@@ -77,6 +77,24 @@ test('the decomposer workflow passes epic_src and has no step input (#3846: late
   assert.ok(!/replan/i.test(wf))
 })
 
+// covers: T1
+test('plain test-step rule is in the skill and every step-writing prompt, same wording (#3301)', () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
+  const shared = 'PLAIN TEST STEPS (#3301, github-tasks § How to test → Plain steps): each step is one action + `→ what you should see` on the next line; start from the preview URL and name any login or data; only needs what the preview has (the change seeds it, or the step says how to make it in the app); no repo jargon (file/script names, CLI commands, internal terms) unless explained in ≤3 plain words; no owner homework off the phone (scripts, Mac, terminal) — if it can\'t be tested on the preview, say so in one line.'
+  const agents = {
+    'pi-decomposer (rendered)': renderPrompt('pi-decomposer', { issue: '1', epic_src: '' }),
+    'task-decomposer.md': read('../.claude/agents/task-decomposer.md'),
+    'task-worker.md': read('../.claude/agents/task-worker.md'),
+  }
+  const texts = { 'github-tasks SKILL.md': read('../.claude/skills/github-tasks/SKILL.md'), ...agents }
+  const phrases = ['one action', 'what you should see', 'preview url', 'only needs what the preview has', 'no repo jargon', '≤3 plain words', 'no owner homework off the phone']
+  for (const [name, text] of Object.entries(texts)) {
+    const lower = text.toLowerCase()
+    for (const p of phrases) assert.ok(lower.includes(p), `${name} is missing "${p}"`)
+  }
+  for (const [name, text] of Object.entries(agents)) assert.ok(text.includes(shared), `${name} carries the exact shared line`)
+})
+
 test('pi-planner (plan mode, #2755)', () => {
   assertGolden(renderPrompt('pi-planner', { issue: '1932' }), 'pi-planner')
 })

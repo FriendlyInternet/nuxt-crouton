@@ -34,7 +34,7 @@ function sourceMigrationsDir(source, binding) {
 
 const [file, app, pr] = process.argv.slice(2)
 if (!file || !app || !pr) {
-  console.error('usage: pr-preview-wrangler.mjs <built-wrangler.json> <app> <pr>')
+  console.error('::error::pr-preview-wrangler: usage: pr-preview-wrangler.mjs <built-wrangler.json> <app> <pr>')
   process.exit(2)
 }
 
@@ -48,7 +48,7 @@ writeFileSync(file, JSON.stringify(config, null, 2) + '\n')
 // staging, which is the exact failure #2020 is about.
 for (const c of changed) console.error(`  ${c}`)
 if (!changed.length) {
-  console.error('pr-preview-wrangler: NOTHING CHANGED — refusing to pretend this is isolated')
+  console.error('::error::pr-preview-wrangler: NOTHING CHANGED — refusing to pretend this is isolated')
   process.exit(1)
 }
 
@@ -74,12 +74,12 @@ if (dbs.length) {
       }
     }
     if (!b.migrations_dir) {
-      console.error(`pr-preview-wrangler: d1 binding ${b.binding} has NO migrations_dir, in the built config`)
+      console.error(`::error::pr-preview-wrangler: d1 binding ${b.binding} has NO migrations_dir, in the built config`)
       console.error('  or in wrangler.jsonc. The preview would deploy an unmigrated database (#2078).')
       process.exit(1)
     }
     if (!existsSync(b.migrations_dir)) {
-      console.error(`pr-preview-wrangler: migrations_dir does not exist: ${b.migrations_dir}`)
+      console.error(`::error::pr-preview-wrangler: migrations_dir does not exist: ${b.migrations_dir}`)
       console.error('  The preview would migrate nothing while reporting success (#138/#2078).')
       process.exit(1)
     }
