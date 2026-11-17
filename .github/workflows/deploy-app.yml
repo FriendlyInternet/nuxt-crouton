@@ -694,17 +694,8 @@ jobs:
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
           fail=0
 
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-                    -X POST -H 'content-type: application/json' -d '{}' \
-                    "$URL/api/_feedback" || echo 000)"
-          if [ "$code" = "404" ] || [ "$code" = "000" ]; then
-            echo "::error::No feedback endpoint at $URL (POST /api/_feedback → $code)."
-            echo "::error::The app does not install the overlay — add '@fyit/crouton-devtools'"
-            echo "::error::to its nuxt.config modules + dependencies (#2073)."
-            fail=1
-          else
-            echo "✓ feedback endpoint live (POST /api/_feedback → $code)"
-          fi
+          # retries a 404/no answer: the Worker version published by secret bulk may not serve yet (#4062)
+          node scripts/review-endpoint-check.mjs "$URL" || fail=1
 
           # -L FOLLOWS REDIRECTS (#2178). An auth-gated app answers `/` with a 302 to its
           # login route (kassa: `/` → `/auth/login`); without -L, curl returns the ~97-byte
