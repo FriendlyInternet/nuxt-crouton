@@ -19,8 +19,8 @@ File: `app/components/Blocks.vue`
 | `showBubbleToolbar` | `boolean` | `true` | no | Show bubble toolbar on selection |
 | `suggestionItems` | `BlockSuggestionItem[]` | `[]` | no | Block items for slash command menu |
 | `yxmlFragment` | `YXmlFragment` | - | no | Y.XmlFragment for real-time collaboration. When provided, editor syncs to Yjs instead of using modelValue. Content is stored in the Y.XmlFragment and synced via WebSocket. |
-| `collabProvider` | `{ awareness: any; }` | - | no | Collab provider for cursor awareness (optional). Used by CollaborationCursor extension to show other users' cursors. |
-| `collabUser` | `{ name: string; color?: string \| undefined; }` | - | no | User info for collaboration cursors. |
+| `collabProvider` | `{ awareness?: any; }` | - | no | Collab provider for cursor awareness (optional). Pass a crouton-collab connection (it carries `awareness`). Shows other people's carets/selections via y-tiptap and shares this editor's selection while focused. |
+| `collabUser` | `{ id?: string \| undefined; name: string; color?: string \| undefined; }` | - | no | User info for collaboration cursors. |
 
 | Event | Payload |
 | --- | --- |

@@ -86,27 +86,28 @@ test('production: key check runs before deploy; staging steps and send stay non-
   assert.ok(wfText.indexOf(`- name: ${check}`) < wfText.indexOf(`- name: ${deploy}`), 'check must precede deploy')
   const blk = stepBlock(check)
   assert.ok(blk.includes("inputs.environment == 'production'"))
-  assert.ok(blk.includes('has-key') && blk.includes('exit 1'))
+  assert.ok(blk.includes('email-key-check.mjs" before deploy.config.json'), 'calls the tested check (#3441)')
   assert.ok(!blk.includes('secret put NUXT') || !/\|\s*npx wrangler secret put/.test(blk), 'never pushes a key')
   assert.ok(stepBlock('Ensure email key on the Worker').includes("inputs.environment != 'production'"))
   assert.ok(stepBlock('Probe email send').includes("inputs.environment != 'production'"))
 })
 
 test('bundleHasEmailKey: key only in WORKER_SECRETS_JSON → deploy proceeds', async () => {
+  // helper unit cases; the bundle-vs-Worker decision itself is tested in email-key-check.test.mjs (#3441)
   const { bundleHasEmailKey, hasEmailKey } = await import('./email-probe.mjs')
   assert.equal(bundleHasEmailKey('{"NUXT_EMAIL_RESEND_API_KEY":"x"}'), true)
-  assert.equal(bundleHasEmailKey('{"OTHER":"x"}'), false) // key nowhere (+ none on Worker) → stops
+  assert.equal(bundleHasEmailKey('{"OTHER":"x"}'), false)
   assert.equal(bundleHasEmailKey(''), false)
   assert.equal(bundleHasEmailKey('[1]'), false)
-  assert.equal(hasEmailKey('[{"name":"NUXT_EMAIL_RESEND_API_KEY"}]'), true) // Worker only → proceeds
+  assert.equal(hasEmailKey('[{"name":"NUXT_EMAIL_RESEND_API_KEY"}]'), true)
   assert.equal(hasEmailKey('[]'), false)
 })
 
 test('production: pre-deploy accepts bundle or Worker, post-sync confirms Worker', () => {
   const pre = stepBlock('Require email key for production (before deploy)')
-  assert.ok(pre.includes('bundle-has-key') && pre.includes('has-key') && pre.includes('WORKER_SECRETS_JSON') && pre.includes('exit 1'))
+  assert.ok(pre.includes('email-key-check.mjs" before') && pre.includes('WORKER_SECRETS_JSON'))
   const post = stepBlock('Confirm email key on the production Worker')
-  assert.ok(post.includes("inputs.environment == 'production'") && post.includes('has-key') && post.includes('exit 1'))
+  assert.ok(post.includes("inputs.environment == 'production'") && post.includes('email-key-check.mjs" after'))
   assert.ok(wfText.indexOf('- name: Sync explicit Worker secrets') < wfText.indexOf('- name: Confirm email key on the production Worker'))
 })
 
