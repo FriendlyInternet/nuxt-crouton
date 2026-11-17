@@ -204,7 +204,7 @@ test('work-issue-pidev.yml builds the approved section through plan-held.mjs', (
   // renders the section with plan-held.mjs's approvedPromptSection (no inline header text anywhere).
   // Byte-equality with the old bash: scripts/pi-run.test.mjs [worker-approved].
   const piRun = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
-  assert.match(build, /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  assert.match(build, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
   assert.match(piRun, /const \{ approvedPromptSection \} = await import\('\.\/plan-held\.mjs'\)/)
   assert.match(piRun, /join\(tmp, 'approved-plan\.txt'\)/)
   assert.match(piRun, /issues\/comments\/\$\{planId\}`, '--jq', '\.body'\]/)

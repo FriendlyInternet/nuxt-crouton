@@ -134,7 +134,7 @@ test("pi-request runs the owner's request only after the conflict merge is commi
   assert.match(run, /tee -a "decompose-pidev-exec-/)
   // and the resolver itself is no longer handed the comment. The pi step builds its prompt in
   // scripts/pi-run.mjs (#3620), so check the vars buildPrompt hands the resolver persona.
-  assert.match(block('- id: pi', 'run'), /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  assert.match(block('- id: pi', 'run'), /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
 })
 
 test('the conflict resolver prompt (scripts/pi-run.mjs buildPrompt) gets only pr/issue/branch/task, never feedback', async () => {

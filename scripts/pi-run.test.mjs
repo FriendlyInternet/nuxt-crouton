@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -271,10 +271,9 @@ test('work-issue-pidev.yml: the pi step calls pi-run.mjs; the hand-off reader is
     assert.ok(!wf.includes(`$RUNNER_TEMP/${dropped}`), `${dropped} is read in the workflow but pi-run.mjs keeps it in memory`)
   }
   assert.match(wf, /signoff-surface\.mjs[^\n]*--plan "\$RUNNER_TEMP\/approved-plan\.txt"/)
-  assert.match(wf, /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
-  assert.match(wf, /cp scripts\/pi-run\.mjs "\$RUNNER_TEMP\/pi-run\.mjs"/)
-  assert.match(wf, /node "\$RUNNER_TEMP\/pi-run\.mjs" heal "\$HEAL_ERRS" > "\$HEAL_PROMPT"/)
-  assert.match(wf, /node "\$RUNNER_TEMP\/pi-run\.mjs" outputs --rc "\$RC" --start "\$START" --end "\$END" --log "\$LOG" >> "\$GITHUB_OUTPUT"/)
+  assert.match(wf, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+  assert.match(wf, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" heal "\$HEAL_ERRS" > "\$HEAL_PROMPT"/)
+  assert.match(wf, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" outputs --rc "\$RC" --start "\$START" --end "\$END" --log "\$LOG" >> "\$GITHUB_OUTPUT"/)
   // FINISH_CHECK is read by .pi/extensions/finish-check.ts from pi's env — it stays in the step env
   assert.match(wf, /FINISH_CHECK: \$\{\{ inputs\.mode != 'plan' && '1' \|\| '' \}\}/)
 })
@@ -287,4 +286,54 @@ test(`the pi › run block is within the ${LIMIT}-line inline limit, and keeps p
   const run = readFileSync(join(ROOT, WF), 'utf8').split('\n').slice(pi.line, pi.line + pi.lines).join('\n')
   assert.match(run, /set \+e\n\s+pi --print[^\n]*\\\n\s+< "\$PROMPT_FILE" 2>&1 \| tee "\$LOG"\n\s+RC=\$\{PIPESTATUS\[0\]\}\n\s+set -e/)
   assert.doesNotMatch(run, /tee "\$LOG" \|\| true/)
+})
+
+// Rule: a revise round works on a branch that has no scripts/pi-run.mjs. The revise step checks out
+// the PR branch BEFORE the pi step, so the pi step may only run code the baseline step copied aside.
+const piRunBlock = () => {
+  const wf = readFileSync(join(ROOT, WF), 'utf8')
+  const pi = inlineBlocks(wf, WF).find((b) => b.key === `${WF} › work-pi › pi › run`)
+  return wf.split('\n').slice(pi.line, pi.line + pi.lines).join('\n')
+}
+const COPY_LINE = () => readFileSync(join(ROOT, WF), 'utf8').split('\n').find((l) => l.includes('cp -r scripts "$RUNNER_TEMP/pi-run/scripts"'))
+
+test('work-issue-pidev.yml pin: the pi step runs no working-tree scripts/pi-run.mjs; all three calls use the copy', () => {
+  const run = piRunBlock()
+  assert.doesNotMatch(run, /node scripts\/pi-run\.mjs/)
+  const calls = [...run.matchAll(/node (\S*pi-run\.mjs"?) (\w+)/g)].map(([, path, mode]) => [path, mode])
+  assert.deepEqual(calls, [['"$RUNNER_TEMP/pi-run/scripts/pi-run.mjs"', 'prompt'], ['"$RUNNER_TEMP/pi-run/scripts/pi-run.mjs"', 'heal'], ['"$RUNNER_TEMP/pi-run/scripts/pi-run.mjs"', 'outputs']])
+  // the copy is made in the baseline step, which runs before the revise step's checkout
+  const wf = readFileSync(join(ROOT, WF), 'utf8')
+  assert.ok(COPY_LINE(), 'the baseline step copies scripts/ to $RUNNER_TEMP/pi-run')
+  assert.ok(wf.indexOf(COPY_LINE()) < wf.indexOf('git checkout -f -B "${REV_BRANCH}"'), 'the copy is taken before the revise checkout')
+})
+
+test('a revise round works on a branch with no scripts/pi-run.mjs: the copy, run from a tree without scripts/, gives the golden prompts', () => {
+  // A workspace as the baseline step sees it (scripts/ + .claude), copied aside with the workflow's own line…
+  const ws = mkdtempSync(join(tmpdir(), 'pi-run-ws-'))
+  const rt = mkdtempSync(join(tmpdir(), 'pi-run-rtc-'))
+  spawnSync('cp', ['-r', join(ROOT, 'scripts'), join(ws, 'scripts')])
+  symlinkSync(join(ROOT, '.claude'), join(ws, '.claude'))
+  const copy = spawnSync('bash', ['-euo', 'pipefail', '-c', COPY_LINE().trim()], { cwd: ws, env: { ...process.env, RUNNER_TEMP: rt }, encoding: 'utf8' })
+  assert.equal(copy.status, 0, copy.stderr)
+  // …then the "old PR branch" checkout: no scripts/pi-run.mjs, no neighbours.
+  rmSync(join(ws, 'scripts'), { recursive: true, force: true })
+  assert.equal(existsSync(join(ws, 'scripts/pi-run.mjs')), false)
+  const copied = join(rt, 'pi-run/scripts/pi-run.mjs')
+  for (const [name, c] of Object.entries(cases)) {
+    if (c.throws) continue
+    const crt = runnerTemp(c)
+    const r = spawnSync(process.execPath, [copied, 'prompt'], { cwd: ws, env: procEnv(c, crt), encoding: 'utf8' })
+    assert.equal(r.status, 0, `${name}: ${r.stderr}`)
+    assert.equal(r.stdout, expectedPrompt(golden[name]), name)
+    assert.deepEqual(handoff(filesIn(crt), golden[name].agent), golden[name].files, name)
+  }
+})
+
+test('the optional plan-feedback reads log one stderr line when they fall back (no behaviour change)', () => {
+  const c = cases['fail-decisions']
+  const r = runCli(['prompt'], procEnv(c, runnerTemp(c)))
+  assert.equal(r.status, 0, r.stderr)
+  assert.equal(r.stdout, expectedPrompt(golden['fail-decisions']))
+  assert.match(r.stderr, /^pi-run: ticket Decisions read failed, using empty: .+$/m)
 })

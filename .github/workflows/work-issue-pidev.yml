@@ -405,7 +405,10 @@ jobs:
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
           cp scripts/preexisting-type-tickets.mjs "$RUNNER_TEMP/"  # imports ./pi-finish.mjs beside it (#3249)
-          cp scripts/pi-run.mjs "$RUNNER_TEMP/pi-run.mjs"  # the pi step's heal/outputs run from this copy (#3620)
+          # The pi step runs pi-run.mjs (all modes) from this copy (#3620): a revise round checks out a PR
+          # branch that may predate it. scripts/ keeps the layout its relative imports need; .claude links
+          # to the working tree so the personas are read from there, exactly as before.
+          rm -rf "$RUNNER_TEMP/pi-run" && mkdir -p "$RUNNER_TEMP/pi-run" && cp -r scripts "$RUNNER_TEMP/pi-run/scripts" && ln -s "$PWD/.claude" "$RUNNER_TEMP/pi-run/.claude"
           # Push retry (#3306): one GitHub server error must not throw away a finished build.
           cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
@@ -557,7 +560,7 @@ jobs:
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
           START=$(date +%s)
-          node scripts/pi-run.mjs prompt > "$PROMPT_FILE"
+          node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" prompt > "$PROMPT_FILE"
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"; mkdir -p "$PI_SESSION_DIR"
           # bash -e would abort on a failing `pi | tee` before RC is recorded, and `|| true` would
           # clobber PIPESTATUS[0] (#1299) — so errexit is off around just the pipeline.
@@ -573,7 +576,7 @@ jobs:
             echo "::warning::touched .vue do not compile — re-driving pi once to fix (#2182)"
             cat "$HEAL_ERRS" || true
             HEAL_PROMPT="$RUNNER_TEMP/heal-prompt.txt"
-            node "$RUNNER_TEMP/pi-run.mjs" heal "$HEAL_ERRS" > "$HEAL_PROMPT"
+            node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" heal "$HEAL_ERRS" > "$HEAL_PROMPT"
             set +e
             pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
               < "$HEAL_PROMPT" 2>&1 | tee -a "$LOG"
@@ -586,7 +589,7 @@ jobs:
             fi
           fi
           END=$(date +%s)
-          node "$RUNNER_TEMP/pi-run.mjs" outputs --rc "$RC" --start "$START" --end "$END" --log "$LOG" >> "$GITHUB_OUTPUT"
+          node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" outputs --rc "$RC" --start "$START" --end "$END" --log "$LOG" >> "$GITHUB_OUTPUT"
 
       # ── CONFLICT CONCLUSION (#2848) — assert pi's resolution, then commit it as ONE merge ──
       # Runs only when the revise base-merge conflicted. Three outcomes, each visible on the PR:

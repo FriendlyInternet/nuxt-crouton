@@ -134,7 +134,7 @@ test('owner screen: the if: emoji set and app slug match scripts/lib/owner-scree
 test('owner screen: the plan-mode "who wrote this" decision (scripts/pi-run.mjs, #3620) asks the module', async () => {
   // The pi step builds its prompt with scripts/pi-run.mjs; the Bot check lives in its feedbackWho.
   const pi = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-  assert.match(pi, /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  assert.match(pi, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
   const src = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
   assert.match(src, /import\('\.\/lib\/owner-screens\.mjs'\)/)
   assert.match(src, /userType !== 'Bot' \|\| [^\n]*isOwnerScreenSource\(\{ comment: \{ body, appSlug: appSlug \|\| null \} \}\)/)

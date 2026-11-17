@@ -5,9 +5,9 @@
  * PIPESTATUS. Pure refactor: the prompt, the step outputs and the hand-off files are unchanged
  * (scripts/pi-run.test.mjs runs a frozen copy of the old bash, fixtures/pi-run/old-step.sh, side by side).
  *
- *   node scripts/pi-run.mjs prompt > "$PROMPT_FILE"        build pi's prompt from the step env
- *   node "$RUNNER_TEMP/pi-run.mjs" heal <errfile>           the compile self-heal prompt (#2182)
- *   node "$RUNNER_TEMP/pi-run.mjs" outputs --rc N --start S --end E --log L   → $GITHUB_OUTPUT
+ *   node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" prompt > "$PROMPT_FILE"   build pi's prompt from the step env
+ *   node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" heal <errfile>            the compile self-heal prompt (#2182)
+ *   node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" outputs --rc N --start S --end E --log L   → $GITHUB_OUTPUT
  *
  * Why the parts are where they are (the rationale that used to sit in the workflow):
  * - The prompt front-loads the CANONICAL operating contract (#1022) so pi does not stall-and-ask
@@ -32,9 +32,11 @@
  *   render error or a plan-held error THROWS (exit 1 → the step fails under bash -e). The previous-plan,
  *   Decisions, `user.type`, app-slug and PR-number reads fall back to empty. An empty `user.type` gives
  *   the OWNER wording, exactly as `!= "Bot"` did.
- * - `heal` and `outputs` run from the $RUNNER_TEMP copy (the baseline step copies it): pi may have
- *   switched to a branch that does not carry scripts/. So this file imports nothing but node builtins
- *   at the top; `prompt` loads its sibling modules with a dynamic import() only.
+ * - All three modes run from the $RUNNER_TEMP/pi-run copy (the baseline step copies scripts/ there and
+ *   links $RUNNER_TEMP/pi-run/.claude to the working tree's .claude): the revise step has already
+ *   checked out the PR branch, which may predate this file, and pi may switch branches mid-run. The
+ *   personas are still read from the working tree, as before. `prompt` loads its sibling modules with
+ *   a dynamic import() only, so `heal`/`outputs` also work from a lone copy of this file.
  * - The step keeps `set +e` / `pi … | tee` / `RC=${PIPESTATUS[0]}` in bash: GHA runs `run:` with bash
  *   -e, so a failing pipeline aborts before RC is written and the artifact-gate posts a generic "no
  *   deliverable" (#1299); a trailing `|| true` clobbers PIPESTATUS[0] to 0. Do not wrap `pi` in a
@@ -74,6 +76,13 @@ export function promptMode({ plan, revise, conflict } = {}) {
 }
 
 const tryOr = (fn, fallback = '') => { try { return fn() } catch { return fallback } }
+/** tryOr for the optional plan-feedback reads: same fallback, plus one stderr line saying which read failed. */
+const tryOrLog = (what, fn, fallback = '') => {
+  try { return fn() } catch (e) {
+    process.stderr.write(`pi-run: ${what} failed, using empty: ${String(e?.message ?? e).split('\n')[0]}\n`)
+    return fallback
+  }
+}
 const stripNl = (s) => String(s).replace(/\n+$/, '')
 
 /**
@@ -153,10 +162,10 @@ async function planFeedback({ io, repo, issue, tmp }, fb) {
   const comment = (jq) => io.gh(['api', `repos/${repo}/issues/comments/${fb}`, '--jq', jq])
   const feedback = comment('.body')
   io.writeFile(join(tmp, 'feedback.txt'), feedback)
-  const userType = stripNl(tryOr(() => comment('.user.type')))
-  const who = await whoFor(userType, feedback, () => stripNl(tryOr(() => comment('.performed_via_github_app.slug // ""'))))
-  const prevPlan = tryOr(() => io.jqBestPlan(io.gh(['api', `repos/${repo}/issues/${issue}/comments`, '--paginate']), fb))
-  const decisions = tryOr(() => extractDecisions(io.gh(['issue', 'view', issue, '--json', 'body', '-q', '.body'])))
+  const userType = stripNl(tryOrLog('feedback user.type read', () => comment('.user.type')))
+  const who = await whoFor(userType, feedback, () => stripNl(tryOrLog('feedback app-slug read', () => comment('.performed_via_github_app.slug // ""'))))
+  const prevPlan = tryOrLog('previous-plan read', () => io.jqBestPlan(io.gh(['api', `repos/${repo}/issues/${issue}/comments`, '--paginate']), fb))
+  const decisions = tryOrLog('ticket Decisions read', () => extractDecisions(io.gh(['issue', 'view', issue, '--json', 'body', '-q', '.body'])))
   return planFeedbackAppendix({ who, feedback, fresh: isFresh(feedback, decisions), prevPlan, decisions })
 }
 
