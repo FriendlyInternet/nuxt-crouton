@@ -48,7 +48,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 |---|---|---|
 | `review.yml` › red-team (epic → main) | `**/server/**`, `**/app/**`, `**/nuxt.config.ts`, plus all of `packages/**`, `apps/**`, `pocs/**` — i.e. effectively every code PR (skips docs/config-only PRs; drafts and bot-authored PRs are skipped by the job `if`) | high/critical security finding |
 | `review.yml` › a11y (epic → main) | `**/*.vue` | axe critical/serious |
-| `review.yml` › frontend-review (all PRs incl. drafts; blocks on epic → main) | `**/*.vue` | 🔴 critical incl. hand-rolled UI (e.g. Nuxt UI v3 component names) |
+| `review.yml` › frontend-review (all PRs incl. drafts; blocks on epic → main) | `**/*.vue` | lint hit (plain form tag on an added line, `eslint.frontend-gate.config.mjs`) or a quoted 🔴 on an added line (e.g. Nuxt UI v3 component names) — `scripts/frontend-gate.mjs` |
 
 ### Deploys
 
