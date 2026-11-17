@@ -95,9 +95,25 @@ export function isUserTable(name) {
   return !n.startsWith('sqlite_') && !n.startsWith('_cf_')
 }
 
+/** Lists a D1 database's tables (filter the result with isUserTable). Shared by db-clone + pr-preview-migrate. */
+export const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+
+/** SQL that drops every listed table in one batch; foreign keys are deferred so order does not matter. */
+export function dropTablesSql(tables) {
+  return 'PRAGMA defer_foreign_keys = TRUE;\n'
+    + tables.map(t => `DROP TABLE IF EXISTS "${t}";`).join('\n') + '\n'
+}
+
+/** The `wrangler d1 execute` args for a remote JSON query; `config` adds `--config <path>`. */
+export function queryD1Args(dbName, sql, { config } = {}) {
+  const args = ['d1', 'execute', dbName, '--remote', '--json', '--command', sql]
+  if (config) args.push('--config', config)
+  return args
+}
+
 /** Run a remote SELECT and return the first result set's rows (wrangler --json shape). */
-export function queryD1Json(dbName, sql, { cwd } = {}) {
-  const out = runWrangler(['d1', 'execute', dbName, '--remote', '--json', '--command', sql], { cwd, capture: true })
+export function queryD1Json(dbName, sql, { cwd, config } = {}) {
+  const out = runWrangler(queryD1Args(dbName, sql, { config }), { cwd, capture: true })
   const parsed = JSON.parse(out)
   return Array.isArray(parsed) ? (parsed[0]?.results ?? []) : (parsed.results ?? [])
 }

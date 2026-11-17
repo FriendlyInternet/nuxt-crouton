@@ -16,7 +16,8 @@
     "server",
     "i18n",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt"
   ],
   "keywords": [
     "nuxt",
@@ -48,6 +49,7 @@
     "@fyit/crouton-core": "workspace:*"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run"
   }
 }

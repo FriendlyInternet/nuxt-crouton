@@ -10,7 +10,9 @@
   "files": [
     "app",
     "nuxt.config.ts",
-    "crouton.manifest.ts"
+    "crouton.manifest.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
     "typecheck": "npx nuxt typecheck",
@@ -19,7 +21,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "nuxt-charts": "^2.1.2"
+    "nuxt-charts": "^2.2.3"
   },
   "peerDependencies": {
     "@fyit/crouton-core": "workspace:*",

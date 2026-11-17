@@ -46,6 +46,8 @@ below lists **how** to get it and how **precise** it is — be honest about the 
 | **Re-work / commit churn** | `list_commits` on the PR branch → many "fix"/"oops" rounds = friction | available now |
 | **Fix-bot attempts** | the `claude/issue-*` retry count (from #336 watch-to-merge) | only when #336 is live → say "n/a" otherwise |
 | **Reopens** | `issue_read get` per child → reopened-after-close | approx |
+| **Run records** (`pipeline-data`) | runs, silent runs, rounds, time to main, owner touches beyond `ok` — `node scripts/epic-numbers-run.mjs <epic> <outDir> --records-dir <dir>` (from `git archive origin/pipeline-data records`), computed by `scripts/lib/epic-numbers.mjs` (#3253) | exact; **no records before 2026-11-04** — say so, never write zeros |
+| **Ticket steps vs diff** | per child: the ticket's numbered/bulleted steps (`steps.md` from the same CLI) against `gh pr diff <pr>` | judgment — list only the steps **not** done |
 
 Aggregate into **3–5 "what was hard" lines**, each tied to a specific child + its signal.
 Prefer a few true signals over a complete-looking guess; where a signal is unavailable,
@@ -58,7 +60,12 @@ sections:
 - **✅ What went well** — what was smooth / worth keeping. Name it concretely.
 - **⚠️ What was hard** — the friction, each line tied to a signal or a specific
   issue (e.g. *"#NN sat blocked 3 days waiting on a sibling; the schema gate took
-  2 revision rounds"*).
+  2 revision rounds"*). Cite silent runs and high round counts from the run records by link.
+- **🧾 Ticket steps vs diff** — per child, only the steps the merged diff did **not** do, each
+  as `not done` / `dropped with reason (link to the note)` / `dropped without a note`; end with
+  one line `all other N steps done` (#3253).
+- **📊 Numbers** — the run-record numbers block. In CI a trusted step appends it — do not
+  write it yourself there; by hand, paste `numbers.md` from the CLI above.
 - **🔧 Proposals (1–3)** — concrete, actionable changes to a **skill / agent /
   flow** that would remove that friction next time. Each proposal = a candidate
   `workflow` task with a one-line "why".
@@ -79,17 +86,20 @@ The "ready to close vs needs postmortem" labeller (#763, `label-ready-epics.mjs`
 greps the epic's comments for `postmortem:done`: present ⇒ `status:ready-to-close`,
 absent ⇒ `status:needs-postmortem`. Use the real epic number for `#NN`.
 
+In CI (`postmortem.yml`, #3425) the model only writes the body; the trusted post step adds the marker, posts, flips the labels; the `auto-close` job then closes the epic if it is on main and its test card is ok'd (or it has none) (#3012). It also appends the `📊 Numbers` block (or a "Numbers didn't run" line) and stores `epics/<N>.json` on `pipeline-data`; neither ever blocks the post or the close (#3253). The model adds the `🧾 Ticket steps vs diff` section. To try it on an epic that already has a postmortem, dispatch `postmortem.yml` with `dry_run` (posts nothing; the body lands in the job summary). A failed run posts `<!-- postmortem:skipped epic=#NN -->` instead. Markers only count from the pipeline bots or an owner/member/collaborator.
+
 Post it with `add_issue_comment` on the epic.
 
 **Flip the labels immediately (don't wait for the daily cron).** Right after posting,
 add `status:ready-to-close` and remove `status:needs-postmortem` on the epic
 (`issue_write` / label tools) so the review queue updates *now* — `label-ready-epics`
-stays as the daily safety net. The epic is then closeable by the owner simply commenting
-**`/close-epic`** on it (`close-epic-on-comment.yml` closes it, gated on the
-`status:ready-to-close` label, #856) — surface that in the `🔭 Next` handoff so they know
-the one-gesture close is available.
+stays as the daily safety net. The epic then closes by itself once it is on main and its test card is ok'd (or it has
+none) (#3012); `/close-epic` (the `close-epic` job in `on-comment.yml`, #856) is the
+fallback — mention it in `🔭 Next` only when the epic is stuck.
 
 ## Step 4 — Dedup against existing follow-ups, then offer to turn proposals into work
+
+(pipeline run: list where each proposal is tracked or mark it `new — not minted`; never create issues)
 
 **First, dedup — don't mint duplicates.** Before proposing anything new, search for an
 existing home for each proposal: an open follow-up / "harden X" **epic** or issues that

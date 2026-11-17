@@ -11,7 +11,8 @@
     "app",
     "types",
     "nuxt.config.ts",
-    "crouton.manifest.ts"
+    "crouton.manifest.ts",
+    "docs/llms.txt"
   ],
   "scripts": {
     "typecheck": "npx nuxt typecheck",

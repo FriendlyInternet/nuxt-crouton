@@ -62,7 +62,9 @@ export interface UseCollabLocalizedContentReturn {
 
   /**
    * Set content for a locale from JSON
-   * Only sets content if the fragment is empty (no existing collaborative edits)
+   * Only sets content if the fragment is empty (no existing collaborative edits);
+   * fills an empty fragment idempotently — concurrent fills with the same content
+   * merge into one copy (#3983)
    * Use force=true to overwrite even if content exists (e.g., for AI translation)
    */
   setContentJson: (locale: string, content: unknown, force?: boolean) => void
@@ -198,25 +200,48 @@ export function useCollabLocalizedContent(
 
   /**
    * Set content for a locale from JSON
-   * Only sets content if the fragment is empty (no existing collaborative edits)
+   * Only sets content if the fragment is empty (no existing collaborative edits);
+   * fills an empty fragment idempotently — concurrent fills with the same content
+   * merge into one copy (#3983)
    * Use force=true to overwrite even if content exists (e.g., for AI translation)
    */
   function setContentJson(locale: string, content: unknown, force = false): void {
     const fragment = getXmlFragment(locale)
 
-    // Skip if fragment already has content from other collaborators
-    // unless force=true (used for AI translation which should overwrite)
-    if (!force && hasContent(locale)) {
+    if (force) {
+      // Explicit overwrite (AI translation, locale copy): replace with this
+      // doc's own client ID.
+      fragment.delete(0, fragment.length)
+      if (content && typeof content === 'object') {
+        jsonToYXmlFragment(content, fragment)
+      }
       return
     }
 
-    // Clear existing content
-    fragment.delete(0, fragment.length)
-
-    // Convert JSON to Y.XmlFragment content
-    if (content && typeof content === 'object') {
-      jsonToYXmlFragment(content, fragment)
+    // Skip if fragment already has content from other collaborators
+    if (hasContent(locale)) {
+      return
     }
+
+    // Drop TipTap's empty default paragraph, if any
+    if (fragment.length > 0) {
+      fragment.delete(0, fragment.length)
+    }
+
+    if (!content || typeof content !== 'object') return
+
+    // Build the seed in a throwaway doc whose clientID is derived from the
+    // content. Two windows filling an empty room with the same page then
+    // produce identical Yjs structs (same client + clock), which Yjs merges
+    // into one copy instead of keeping both (#3983). Different content gives
+    // different IDs, so the docs still converge.
+    const fragmentName = `${fieldPrefix}-${locale}`
+    const seedDoc = new Y.Doc()
+    seedDoc.clientID = seedClientId(fragmentName + JSON.stringify(content))
+    jsonToYXmlFragment(content, seedDoc.getXmlFragment(fragmentName))
+    // Origin 'seed' (not 'remote') so the connection still sends it upstream
+    Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(seedDoc), 'seed')
+    seedDoc.destroy()
   }
 
   return {
@@ -245,6 +270,18 @@ export function useCollabLocalizedContent(
     connect,
     disconnect
   }
+}
+
+/**
+ * Stable 32-bit FNV-1a hash used as a deterministic Yjs clientID (≥ 1)
+ */
+function seedClientId(input: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0) || 1
 }
 
 /**

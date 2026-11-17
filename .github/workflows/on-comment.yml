@@ -15,6 +15,7 @@ name: On comment
 #   automerge-go    automerge-go             automerge-epic-subpr.yml (issue_comment trigger only;
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
+#   fresh-branch    fresh-branch             NEW (#3881): owner /fresh-branch on an epic (archive the branch)
 #   dispatch        dispatch                 comment-dispatch.yml
 #   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
 #   plan-needs-reason plan-needs-reason      NEW (#3272): a bare `ok` on a plan rejected twice (asks why)
@@ -28,7 +29,8 @@ name: On comment
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
 # The bot filter is on `route` and `rl-start` (kept identical, test-enforced, #3388): a bot's comment starts no
-# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment.
+# runner — except `plan-review`, whose own `if:` matches only the harness bot's `pipeline-plan:v1` comment,
+# and owner-screen comments (scripts/lib/owner-screens.mjs, #3691): a 🎯/📐 from the Nuxt Harness app on a status:blocked item.
 
 on:
   issue_comment:
@@ -40,9 +42,13 @@ jobs:
     name: Read API allowance at start
     # Same bot filter as `route` (#3388): a bot comment must not start a runner just to read the allowance.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
@@ -73,12 +79,19 @@ jobs:
     # `performed_via_github_app` also catches an App acting under a user-typed identity, except the
     # Claude app: the interactive agent posts `**Worker:**` change requests through it as the owner
     # (user.type == User), and dropping those silently ignored them (#3029). No flow
-    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
-    # and consumed by reading the thread (revise), not by this trigger.
+    # needs a bot comment to trigger a workflow — with ONE exception (#3691): an owner-screen comment
+    # (first line 🎯/📐/🚶/🗳, from the Nuxt Harness app, on a status:blocked item) is the owner
+    # answering from our screens. On a PR the hold label sits on its SOURCE issue (`Closes #N`), not
+    # the PR, so a PR passes here and comment-route.mjs checks that issue (owner-screens sourceIssueFor). The emoji set + slug are pinned to scripts/lib/owner-screens.mjs
+    # by scripts/on-comment-bot-filter.test.mjs; scripts/comment-route.mjs decides what it means.
     if: >-
-      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.user.type != 'Bot' &&
       (github.event.comment.performed_via_github_app == null ||
-       github.event.comment.performed_via_github_app.name == 'Claude')
+       github.event.comment.performed_via_github_app.name == 'Claude')) ||
+      (github.event.comment.performed_via_github_app.slug == 'nuxt-harness' &&
+       (contains(github.event.issue.labels.*.name, 'status:blocked') || github.event.issue.pull_request) &&
+       (startsWith(github.event.comment.body, '🎯') || startsWith(github.event.comment.body, '📐') ||
+        startsWith(github.event.comment.body, '🚶') || startsWith(github.event.comment.body, '🗳')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -98,17 +111,20 @@ jobs:
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const { planHeldFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             let pr
             if (isPr) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
-              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
+              pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, sourceIssue: await sourceIssueFor({ comment, prBody: p.body, getIssue }) }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              comment,
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
                 planHeld: await planHeldFor({ github, repo: context.repo, issue: i }) },
               pr,
@@ -294,7 +310,10 @@ jobs:
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
+      contents: read
       issues: write
+      # (#3425) a done epic with no postmortem starts postmortem.yml instead of being refused.
+      actions: write
     steps:
       # Close with the Harness App token (NOT GITHUB_TOKEN): GitHub suppresses workflow
       # triggers for GITHUB_TOKEN-initiated events, so a GITHUB_TOKEN close's
@@ -307,66 +326,55 @@ jobs:
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      # Logic in scripts/close-epic.mjs (#3425): push-access check, the two gating labels, and the
+      # postmortem start (through handoffGuard) when only `status:ready-to-close` is missing.
       - name: Close the epic
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const issue_number = context.payload.issue.number
-            const actor = context.payload.comment.user.login
-            const body = context.payload.comment.body || ''
+            const { runCloseEpic } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/close-epic.mjs`)
+            await runCloseEpic({ github, context, core })
 
-            // Whole-word /close-epic (the `if:` substring test would also match e.g.
-            // "/close-epically"; tighten here).
-            if (!/(^|\s)\/close-epic(\s|$)/i.test(body)) {
-              core.info('Comment does not invoke /close-epic as a command — ignoring.'); return
-            }
+  fresh-branch:
+    needs: route
+    if: needs.route.outputs.kind == 'fresh-branch'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      # The Harness App token: a branch rename needs contents write, which GITHUB_TOKEN is not given here.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
 
-            // Re-check server-side: state + the two gating labels.
-            const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
-            if (issue.state === 'closed') { core.info('Epic already closed — nothing to do.'); return }
-            // Only a maintainer (push access) may close. getCollaboratorPermissionLevel
-            // collapses to admin/write/read/none.
-            let perm = 'none'
-            try {
-              perm = (await github.rest.repos.getCollaboratorPermissionLevel({
-                ...context.repo, username: actor })).data.permission
-            } catch (e) { core.info(`Permission check failed for @${actor}: ${e.message}`); return }
-            if (!['admin', 'write'].includes(perm)) {
-              core.info(`@${actor} lacks push access (perm=${perm}) — ignoring.`); return
-            }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: scripts
+          persist-credentials: false
 
-            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
-            const missing = ['epic', 'status:ready-to-close'].filter(l => !labels.includes(l))
-            if (missing.length) {
-              // Say why, on the issue (#2501). Plain-language owner brief: what to do, then the depth.
-              const fixes = []
-              if (missing.includes('epic')) fixes.push('add the `epic` label (the pipeline now adds it when it splits an issue, #2501)')
-              if (missing.includes('status:ready-to-close')) fixes.push('run the postmortem first — it stamps `status:ready-to-close` (#856)')
-              await github.rest.issues.createComment({
-                ...context.repo, issue_number,
-                body: '<!-- pipeline-note -->\n' + `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
-                  + `🔴 **Not closed — this issue is missing ${missing.map(l => `\`${l}\``).join(' and ')}.**\n\n`
-                  + `**You:** ${fixes.join('; then ')}, and comment \`/close-epic\` again.\n`
-                  + `**Depth:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              })
-              core.info(`Not closing #${issue_number}: missing ${missing.join(', ')} — replied.`); return
-            }
-
-            // Close as completed + strip the managed status labels directly (idempotent;
-            // strip-status-on-close also handles this, but don't rely on the cascade).
-            await github.rest.issues.update({
-              ...context.repo, issue_number, state: 'closed', state_reason: 'completed',
-            })
-            for (const name of ['status:ready-to-close', 'status:needs-postmortem']) {
-              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch (e) {}
-            }
-            await github.rest.issues.createComment({
-              ...context.repo, issue_number,
-              body: '<!-- pipeline-note -->\n' + `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
-                + '<sub>🤖 agent pipeline (CI) · close-epic on comment (#856) · was status:ready-to-close</sub>',
-            })
-            core.info(`Closed epic #${issue_number} (requested by @${actor}).`)
+      # Logic in scripts/fresh-epic-branch.mjs (#3881): push-access check, one branch across the
+      # tree, no open PRs on it, rename to archive/<branch>, confirm, reply. Creates nothing.
+      - name: Set the epic branch aside
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { runFreshBranch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/fresh-epic-branch.mjs`)
+            await runFreshBranch({ github, context, core })
 
   dispatch:
     needs: route
@@ -593,7 +601,7 @@ jobs:
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
@@ -756,14 +764,17 @@ jobs:
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
+          allowed_bots: "nuxt-harness[bot]"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
             question came in — this run collected it across every surface into `.resume-answer.md`
             (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
-            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
-            treat it as their answer; if it flags an edited diagram, run
-            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            and a 📐 line if a diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it names an edited diagram, its scene at the saved sha
+            (fetched from the editor's branch) is in `.resume-diagram.excalidraw` — read that file
+            and treat the quoted note as the owner's words.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
@@ -815,97 +826,17 @@ jobs:
               core.info('Comment is not an approval — nothing to merge.'); return
             }
 
-            // ── Which PR is "the gate PR" for this issue? (#1663) ────────────────────
-            // This used to grep the body for the literal `Closes #NN`. That string was
-            // load-bearing, NOT semantic: a PR into `epic/*` never auto-closes anything
-            // (GitHub honours closing keywords only on merges to the default branch). So
-            // the whole gate hung on one wording — and when an agent wrote `Sub-issue: #NN`
-            // instead (equally correct, arguably more so) the result was a SILENT no-op:
-            // approval seen, block cleared, PR left open, wave chain stalled, and the
-            // artifact-gate told the owner to retry, which reproduced it.
-            // Now: ask GitHub for the STRUCTURED link first, fall back to prose second —
-            // and anchor the prose to line start so a passing mention deep in a body can't
-            // hijack the merge. Keep the `epic/*` base guard: that, not the wording, is
-            // what stops an unrelated PR being merged.
-            const LINK_RE = new RegExp(
-              String.raw`^[\s>*_-]*(closes?d?|fix(e[sd])?|resolves?d?|sub-?issue|refs?)\b[\s:*_-]*#${issue_number}\b`,
-              'im')
-
-            async function linkReason(pr) {
-              // (1) GitHub's own linked-issue relation — populated by a closing keyword OR
-              //     by hand via the PR's Development sidebar. Structured; wording-proof.
-              try {
-                const q = await github.graphql(
-                  `query($owner:String!,$repo:String!,$n:Int!){
-                     repository(owner:$owner,name:$repo){
-                       pullRequest(number:$n){
-                         closingIssuesReferences(first:20){ nodes{ number } } } } }`,
-                  { owner: context.repo.owner, repo: context.repo.repo, n: pr.number })
-                const linked = (q.repository.pullRequest.closingIssuesReferences.nodes || []).map(x => x.number)
-                if (linked.includes(issue_number)) return 'linked-issue relation'
-              } catch (e) { core.warning(`closingIssuesReferences #${pr.number}: ${e.message}`) }
-              // (2) Prose fallback — Closes/Fixes/Resolves/Sub-issue/Refs at line start.
-              if (LINK_RE.test(pr.body || '')) return 'body reference'
-              return null
-            }
-
-            // Candidate PRs = everything cross-referenced from this issue's timeline.
-            const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
-              ...context.repo, issue_number,
-            })
-            const prNums = [...new Set(timeline
-              .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
-              .map(e => e.source.issue.number))]
-
-            let merged = false
-            // Why each candidate was passed over — surfaced to the artifact-gate so a
-            // failure names the PR and the reason instead of saying "retry" (#1663).
-            const skipped = []
-            for (const n of prNums) {
-              let pr
-              try { pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data } catch { continue }
-              if (pr.state !== 'open' || pr.merged) continue
-              const how = await linkReason(pr)
-              if (!how) {
-                skipped.push(`#${n} — no link to this issue (no linked-issue relation, and no \`Closes/Fixes/Resolves/Sub-issue/Refs #${issue_number}\` line)`)
-                continue
-              }
-              if (!/^epic\//.test(pr.base.ref)) {
-                skipped.push(`#${n} — base \`${pr.base.ref}\` is not an \`epic/*\` branch`)
-                core.info(`PR #${n} base ${pr.base.ref} is not an epic branch — skipping.`); continue
-              }
-              // Mark ready (REST can't flip draft→ready; GraphQL can), then merge.
-              if (pr.draft) {
-                try {
-                  await github.graphql(
-                    `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
-                    { id: pr.node_id })
-                } catch (e) { core.warning(`markReady #${n}: ${e.message}`) }
-              }
-              try {
-                await github.rest.pulls.merge({ ...context.repo, pull_number: n, merge_method: 'merge' })
-                merged = true
-                core.info(`Merged gate PR #${n} into ${pr.base.ref} (matched via ${how}).`)
-              } catch (e) {
-                skipped.push(`#${n} — matched via ${how}, but the merge failed: ${e.message}`)
-                core.warning(`merge #${n} failed: ${e.message}`)
-              }
-            }
+            // The gate PR = a cross-referenced open PR linked to this issue (linked-issue relation
+            // first, line-start Closes/Fixes/Resolves/Sub-issue/Refs second — #1663) whose base is
+            // `epic/*`. It merges ONLY when CI Gate is green and no check is red (#4038: the App
+            // token bypasses the ruleset, and an `ok` merged #3942 red). A check hold comments and
+            // keeps status:blocked; a miss never clears the label (#1665). All of it lives in
+            // scripts/lib/pr-merge-gate-io.mjs (runGateMerge) + pr-merge-gate.mjs (gateMergeDecision).
+            const { runGateMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate-io.mjs`)
+            const { merged, skipped } = await runGateMerge({ github, context, core })
+            // `skipped` feeds the artifact-gate below (MERGE_SKIPPED) so a miss names its reason.
             core.setOutput('merged', String(merged))
             core.setOutput('skipped', skipped.join('\n'))
-            // Clear the block ONLY on a real merge, so the issue can close cleanly (#1665).
-            // This used to be unconditional ("defensively"), which made a failed resume a
-            // ONE-WAY DOOR: the job guard above requires `status:blocked`, so stripping it
-            // after a miss meant every later reply was SILENTLY SKIPPED — no run, hence no
-            // artifact-gate, hence no explanation. #1655 needed the label restored by hand
-            // before the owner's approval could execute at all. If nothing merged, the issue
-            // genuinely IS still blocked; say so by leaving the label on.
-            if (merged) {
-              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
-              core.info('Gate PR merged — schedule-waves will advance the chain.')
-            } else {
-              core.info('No gate PR merged (none matched / already merged) — leaving status:blocked ON so a re-approval can still trigger.')
-            }
 
       # ── Artifact-gate (#603 P0) ────────────────────────────────────────────────
       # A resume must PRODUCE something — otherwise a no-op silently exits green and the
@@ -1115,34 +1046,10 @@ jobs:
             const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
             if (!isApproval(body)) return
 
-            // Is there really a gate waiting? Only then is silence a bug worth explaining.
-            let gatePR = null
-            try {
-              const tl = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number })
-              const prNums = [...new Set(tl
-                .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
-                .map(e => e.source.issue.number))]
-              for (const n of prNums) {
-                const pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data
-                if (pr.state === 'open' && !pr.merged && /^epic\//.test(pr.base.ref)) { gatePR = pr; break }
-              }
-            } catch (e) { core.warning(`gate-PR probe failed: ${e.message}`); return }
-            if (!gatePR) { core.info('No pending epic/* gate PR — an approval word here is not a gate reply.'); return }
-
-            // Don't re-explain the same thing on every reply.
-            const recent = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
-            const already = recent.slice(-3).some(c => (c.body || '').includes('<!-- skipped-approval-notice -->'))
-            if (already) { core.info('Already explained recently — staying quiet.'); return }
-
-            await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '<!-- pipeline-note -->\n' + '<!-- skipped-approval-notice -->\n'
-                + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
-                + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
-                + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
-                + 'The resume workflow only runs while this issue carries `status:blocked`, and the label is gone. '
-                + 'Add `status:blocked` back and reply again, and it will run.\n\n'
-                + '<sub>Root cause of the label going missing: #1665.</sub>' })
-            core.info(`Explained the skipped approval (pending gate PR #${gatePR.number}).`)
+            // An approval that starts nothing always gets one answer saying what the issue
+            // waits on (#4038) — not only when an epic/* gate PR is open (#1665).
+            const { runSkippedApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/skipped-approval.mjs`)
+            await runSkippedApproval({ github, context, core })
 
   revise:
     needs: route
@@ -1166,12 +1073,15 @@ jobs:
         with:
           script: |
             const { routePrComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
             const pull_number = context.payload.issue.number
             const pr = (await github.rest.pulls.get({ ...context.repo, pull_number })).data
             const c = context.payload.comment
+            const comment = { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login }
+            const getIssue = n => github.rest.issues.get({ ...context.repo, issue_number: n }).then(r => r.data)
             const route = routePrComment({
-              pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
+              pr: { headRef: pr.head.ref, state: pr.state, sourceIssue: await sourceIssueFor({ comment, prBody: pr.body, getIssue }) },
+              comment,
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {
@@ -1209,6 +1119,9 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # (#3425) a verified epic with no postmortem starts postmortem.yml (workflow_dispatch is the
+      # one event a GITHUB_TOKEN may still trigger).
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1219,6 +1132,7 @@ jobs:
       - name: Handle test reply
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}

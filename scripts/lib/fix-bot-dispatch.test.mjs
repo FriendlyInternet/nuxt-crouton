@@ -143,6 +143,32 @@ test('willTry: first red → bot in fix mode; ci-fix-attempts:3 → still gave-u
   assert.equal(w().mode, 'fix')
   const g = w({ labels: ['ci-fix-attempts:3'] }); assert.equal(g.who, 'gave-up'); assert.equal(g.mode, 'fix')
 })
+// ── #3277: the counter only stands while the head is the fix-bot's own commit
+const workerHead = { commit: { message: 'feat(velo): worker revision', committer: { name: 'nuxt-harness[bot]' } } }
+const fixBotHead = { commit: { message: 'fix(velo): x\n\nCI-Fix: true', committer: { name: 'claude[bot]' } } }
+test('#3277 replay of #3192 head 983ffca: ci-fix-attempts:3 + a worker head → bot, fix mode, attempts 0', () => {
+  const r = w({ labels: ['ci-fix-attempts:3'], headCommit: workerHead })
+  assert.equal(r.who, 'bot'); assert.equal(r.mode, 'fix'); assert.equal(r.attempts, 0)
+  assert.equal(r.attemptLabel, 'ci-fix-attempts:3', 'the stale label is still named so the bump replaces it')
+})
+test('#3277: ci-fix-attempts:3 + a fix-bot head → gave-up', () => {
+  assert.equal(w({ labels: ['ci-fix-attempts:3'], headCommit: fixBotHead }).who, 'gave-up')
+})
+test('#3277: ci-fix-attempts:1 + fix-bot head → diagnose; same label + worker head → fix', () => {
+  assert.equal(w({ labels: ['ci-fix-attempts:1'], headCommit: fixBotHead }).mode, 'diagnose')
+  assert.equal(w({ labels: ['ci-fix-attempts:1'], headCommit: workerHead }).mode, 'fix')
+  assert.equal(fixOrDiagnose({ labels: ['ci-fix-attempts:1'], failures: [F('CI')], headCommit: workerHead }), 'fix')
+})
+test('#3277: no headCommit given → the label alone counts, as before', () => {
+  assert.equal(w({ labels: ['ci-fix-attempts:3'] }).who, 'gave-up')
+  assert.equal(w({ labels: ['ci-fix-attempts:1'] }).mode, 'diagnose')
+})
+test('#3277: the status red ping passes the head commit too', () => assert.ok(statusSrc.includes('headCommit')))
+test('#3668: the diagnose ping says a second agent checks it, not "send it on with Worker"', () => {
+  const dg = redPingHeading({ who: 'bot', mode: 'diagnose', attempts: 1, count: 1, list: '`x`' })
+  assert.match(dg.needed, /second agent checks it/); assert.ok(!dg.needed.includes('Worker:'))
+})
+
 test('redPingHeading: diagnose mode says diagnosis, no mention; fix mode keeps "attempt N of 3"', () => {
   const dg = redPingHeading({ who: 'bot', mode: 'diagnose', attempts: 1, count: 1, list: '`x`' })
   assert.match(dg.needed, /diagnosis/); assert.ok(!(dg.heading + dg.needed).includes('@'))
@@ -163,9 +189,10 @@ const ifOf = (name) => (/\n\s+if: (.*)/.exec(stepText(name)) || [])[1] || ''
 test('lockstep (#3667): the gate computes and outputs the mode', () => {
   assert.ok(fixYml.includes('d.mode')); assert.ok(fixYml.includes("setOutput('mode'"))
 })
+// #3668: the fix steps moved to job `fix` and run on the ONE decision `fixgo` (fix mode, or an
+// approved diagnosis) — fix-ci-workflow-shape.test.mjs holds the full rule.
 test('lockstep (#3667): commit and push run in fix mode only', () => {
-  for (const s of ['Commit the staged fix', 'Guard and push the fix']) assert.match(ifOf(s), /mode == 'fix'/, s)
-  assert.match(ifOf('Fix attempt'), /mode == 'fix'/)
+  for (const s of ['Commit the staged fix', 'Guard and push the fix', 'Fix attempt']) assert.match(ifOf(s), /steps\.fixgo\.outputs\.go == 'true'/, s)
 })
 test('lockstep (#3667): the diagnose step uses the hard tier and keeps git commit/push disallowed', () => {
   const dg = stepText('Diagnose the repeat red')

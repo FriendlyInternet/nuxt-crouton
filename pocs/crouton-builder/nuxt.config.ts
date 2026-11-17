@@ -14,9 +14,11 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  // crouton-flow (Site level) rides Vue Flow; extended here (not default-on). No
-  // flowId/sync used → no collab Durable Object binding needed (mirrors the demo POC).
-  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', './layers/builder'],
+  // crouton-flow (Site level) rides Vue Flow; extended here (not default-on).
+  // crouton-flow pulls in crouton-collab; live sync stays off because this app doesn't opt in (no "collab": true, #3810).
+  // crouton-bookings (#2559): its atomic layout blocks (calendar / filters / locations /
+  // list) join the block row, the same package booking-demo extends.
+  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', '@fyit/crouton-bookings', './layers/builder'],
 
   // View Transitions API — the graduated Page⇄Site morph (Replace: page-site-transition).
   // Matching `view-transition-name` on the flow card + the board makes the card grow
@@ -49,12 +51,12 @@ export default defineNuxtConfig({
       passkeys: false
     },
     // /builder is a root route (no [team] param), so team context comes entirely from the
-    // session's active org. Give every new signup a personal workspace so they always have a
-    // team — without it a fresh user has zero orgs and the app has no teamId (verified on the
-    // deployed build). The ensure-team.client plugin covers already-accountless sessions too.
-    teams: {
-      autoCreateOnSignup: true
-    }
+    // session's active org. No `autoCreateOnSignup` (#2559): with it, every new session is
+    // pointed at the user's personal workspace first (crouton-auth session-org.ts), so the
+    // review login never lands in the seeded team `test1` and the bookings blocks show no
+    // data. A user with a membership lands in that team; a fresh user with zero orgs gets a
+    // personal workspace from the ensure-team.client plugin instead.
+    teams: {}
   },
 
   // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is

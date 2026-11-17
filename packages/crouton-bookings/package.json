@@ -15,7 +15,9 @@
     "nuxt.config.ts",
     "crouton.manifest.ts",
     "README.md",
-    "SCHEMAS.md"
+    "SCHEMAS.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",
@@ -37,6 +39,7 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core --extends @fyit/crouton-maps && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "test": "vitest run",

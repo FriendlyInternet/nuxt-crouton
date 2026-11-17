@@ -2,17 +2,52 @@
 /**
  * Check Documentation
  *
- * Verifies all packages have CLAUDE.md files.
+ * Verifies all packages have CLAUDE.md files, and reports (without failing)
+ * backticked file paths in those CLAUDE.md files that no longer exist (#3570).
  * Used in CI to ensure AI documentation stays complete.
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildPathIndex, findStaleDocPaths } from './lib/doc-paths.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const projectRoot = join(__dirname, '..')
+const rootArg = process.argv.indexOf('--root')
+const projectRoot = rootArg !== -1 && process.argv[rootArg + 1]
+  ? resolve(process.argv[rootArg + 1])
+  : join(__dirname, '..')
 const packagesDir = join(projectRoot, 'packages')
+const allowPath = join(__dirname, 'doc-paths.allow.json')
+
+function reportStalePaths(packages) {
+  let files
+  try {
+    files = execFileSync('git', ['ls-files'], { cwd: projectRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+      .split('\n').filter(Boolean)
+  } catch {
+    console.log('⚠️ stale doc paths: skipped (git ls-files failed)\n')
+    return
+  }
+  let allow = []
+  try {
+    allow = JSON.parse(readFileSync(allowPath, 'utf8'))
+  } catch {}
+  const index = buildPathIndex(files)
+  const hits = []
+  for (const pkg of packages) {
+    const text = readFileSync(join(packagesDir, pkg, 'CLAUDE.md'), 'utf8')
+    hits.push(...findStaleDocPaths({ pkg, text, index, allow }))
+  }
+  if (hits.length === 0) {
+    console.log('📎 0 stale doc paths\n')
+    return
+  }
+  console.log('📎 Stale paths in package CLAUDE.md (report only):')
+  for (const h of hits) console.log(`   ${h.pkg} · packages/${h.pkg}/CLAUDE.md:${h.line} · ${h.name}`)
+  console.log(`📎 ${hits.length} stale doc path(s)\n`)
+}
 
 function getPackageDirectories() {
   try {
@@ -42,11 +77,17 @@ Usage:
   node scripts/check-docs.mjs [options]
 
 Options:
+  --root <dir> Repo root to scan (default: this repo); packages are read
+               from <dir>/packages and tracked files from git ls-files in <dir>
   -h, --help   Show this help message and exit
 
 Behavior:
   - Scans packages/ for directories containing a package.json
   - Reports which of those packages have/are missing a CLAUDE.md
+  - Reports (never fails on) backticked paths in each CLAUDE.md that start
+    with packages/, app/, server/ or lib/ and exist nowhere in the repo —
+    one line per hit (package · file:line · name) plus a total. Intentional
+    exceptions live in scripts/doc-paths.allow.json
   - Exits 1 if any package is missing CLAUDE.md, or if no packages are found
   - Exits 0 if every package has CLAUDE.md
 
@@ -92,6 +133,8 @@ function main() {
     }
     console.log('')
   }
+
+  reportStalePaths(present)
 
   if (missing.length > 0) {
     console.log(`❌ ${missing.length} packages MISSING CLAUDE.md:`)

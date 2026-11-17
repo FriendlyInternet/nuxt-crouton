@@ -9,6 +9,7 @@ name: On issue close
 #   epic-ready-pr    epic-ready-pr.yml             (#1815)
 #   cleanup-epic-branch  cleanup-epic-branches.yml (issue path, #2788)
 #   release          schedule-waves.yml (issue path) + traffic-release.yml (#2786)
+#   postmortem       NEW (#3425) → postmortem.yml (reusable; also dispatchable by hand)
 #
 # `release` is the ONE place that lifts a wait: `Blocked-by:` lines (scripts/wave-release.mjs) and
 # the scope-label traffic check (scripts/traffic-control.mjs) are evaluated together. Together with
@@ -224,3 +225,17 @@ jobs:
             }
             const released = await releaseWaiting({ github, context })
             core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+
+  postmortem:
+    # (#3425) A sub-issue closed: if it was its epic's last open one, the pipeline writes the
+    # epic's postmortem (postmortem.yml resolves the parent; most closes stop there in seconds).
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/postmortem.yml
+    with:
+      closed_issue: ${{ format('{0}', github.event.issue.number) }}
+    secrets: inherit

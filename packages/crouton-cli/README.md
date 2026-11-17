@@ -26,6 +26,17 @@ npm install -g @fyit/crouton-cli
 npx @fyit/crouton-cli <command>
 ```
 
+### Standalone quick start
+
+Outside the crouton monorepo, `init` creates `./<name>` with `^<cli version>` for every
+`@fyit/*` package and local SQLite (add `--cf` for Cloudflare Workers config):
+
+```bash
+npx @fyit/crouton-cli init my-app && cd my-app && pnpm install && pnpm dev
+```
+
+> Needs the next release (0.2.0): 0.1.0 has no `crouton-cli` bin, so `npx` can't find it.
+
 ## Quick Start
 
 ### 1. Create a Schema

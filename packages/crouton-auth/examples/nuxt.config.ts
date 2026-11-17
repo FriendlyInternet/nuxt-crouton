@@ -82,7 +82,7 @@ export const multiTenantConfig = {
 
 // =============================================================================
 // Pattern 2: Single-Tenant Team App
-// One default organization, all users join on signup
+// One default organization, all users join on sign-up and sign-in
 // =============================================================================
 export const singleTenantConfig = {
   croutonAuth: {
@@ -91,7 +91,7 @@ export const singleTenantConfig = {
 
     // Team configuration - everyone joins the default team
     teams: {
-      defaultTeamSlug: 'acme-corp', // All users join this team on signup
+      defaultTeamSlug: 'acme-corp', // All users join this team on sign-up and sign-in
       allowCreate: false, // Users cannot create new teams
       showSwitcher: false, // Hide team switcher (only one team)
       showManagement: true, // Still show team settings for admins
@@ -196,7 +196,7 @@ export const personalConfig = {
  * | Flag | Purpose | Default |
  * |------|---------|---------|
  * | autoCreateOnSignup | Auto-create personal workspace on signup | false |
- * | defaultTeamSlug | Everyone joins this team on signup | undefined |
+ * | defaultTeamSlug | Everyone joins this team on sign-up and sign-in | undefined |
  * | allowCreate | Can users create additional teams | true |
  * | showSwitcher | Show team switcher UI | true |
  * | showManagement | Show team management UI | true |

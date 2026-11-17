@@ -7,7 +7,7 @@
 
 import { fileMatchesAny } from './deploy-detect.mjs'
 
-/** Hidden marker that makes the card idempotent — one card per epic, ever. */
+/** Hidden marker that makes the card idempotent — one card per epic, plus one re-test card per landed `not ok` fix (#4039). */
 export const CARD_MARKER = '<!-- test-card -->'
 
 /**
@@ -17,13 +17,24 @@ export const CARD_MARKER = '<!-- test-card -->'
  *   labels:     string[]      the epic's labels
  *   comments:   [{ body }]    the epic's comments (looked at for the marker)
  *   deployed:   boolean       the epic's merged result is contained in a successful staging deploy
+ *   fixDeployed: boolean      (status:failed only) the latest `not ok` fix's merge commit is in the
+ *                             deployed staging sha (#4039)
+ *   fixClosedAt: string|null  (status:failed only) ISO close time of that fix issue; a card newer
+ *                             than it means the re-test card was already posted
  */
-export function decideTestCard({ subIssues = [], labels = [], comments = [], deployed = false } = {}) {
-  if (comments.some(c => (c.body || '').includes(CARD_MARKER))) return { post: false, reason: 'card already posted' }
+export function decideTestCard({ subIssues = [], labels = [], comments = [], deployed = false, fixDeployed = false, fixClosedAt = null } = {}) {
   if (labels.includes('status:to-test')) return { post: false, reason: 'already status:to-test' }
-  if (labels.includes('status:verified') || labels.includes('status:failed')) {
-    return { post: false, reason: 'already answered' }
+  if (labels.includes('status:failed')) {
+    const openKids = subIssues.filter(s => s.state !== 'closed').length
+    if (openKids > 0) return { post: false, reason: `not ok fix still open — ${openKids} child issue(s) open` }
+    if (fixClosedAt && comments.some(c => (c.body || '').includes(CARD_MARKER) && Date.parse(c.created_at) > Date.parse(fixClosedAt))) {
+      return { post: false, reason: 'fresh card already posted for this fix' }
+    }
+    if (!fixDeployed) return { post: false, reason: 'not ok fix not on staging yet' }
+    return { post: true, reason: 'fix landed after a not ok — fresh card', retest: true }
   }
+  if (comments.some(c => (c.body || '').includes(CARD_MARKER))) return { post: false, reason: 'card already posted' }
+  if (labels.includes('status:verified')) return { post: false, reason: 'already answered' }
   if (subIssues.length === 0) return { post: false, reason: 'epic has no sub-issues' }
   const open = subIssues.filter(s => s.state !== 'closed').length
   if (open > 0) return { post: false, reason: `${open} child issue(s) still open` }
@@ -110,7 +121,7 @@ export function decideAppNotice({ kind, comments = [] } = {}) {
 export const NOT_CHECKED_LINE = 'Saving was not checked automatically for this app.'
 
 /** Build the card comment. No password is ever included — only the account to log in as. */
-export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [], crudChecked } = {}) {
+export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [], crudChecked, fixIssue } = {}) {
   const list = checks.length ? checks : [app ? `Open the app and try what "${title}" changed` : `Read the epic and check "${title}" did what it says`]
   const where = !app
     ? [NO_APP_LINE]
@@ -124,6 +135,7 @@ export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', r
   return [
     CARD_MARKER,
     `## 🧪 Test card — ${title || `epic #${epicNumber}`}`,
+    ...(fixIssue ? ['', `Re-test after the fix in #${fixIssue}.`] : []),
     '',
     ...where,
     '',
