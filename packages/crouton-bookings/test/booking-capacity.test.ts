@@ -75,6 +75,7 @@ async function left(loc: string, slotId: string, product = 'P'): Promise<number>
 }
 
 describe('SQL guard counts stock per product, per slot (#4061)', () => {
+  // covers: T3
   it('reproduction: stock 3 takes a 2nd am booking; product Q fits where P is full', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 3 }])
     mkLoc('pq', ['am', 'pm'], [{ product: 'P', stock: 1 }, { product: 'Q', stock: 1 }])
@@ -86,12 +87,14 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(rows().filter((r: any) => r.location === 'c')).toHaveLength(2)
   })
 
+  // covers: T3
   it('C1 stock 3, 2 booked in am → am 1, pm 3, full day 1', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 3 }])
     book('a', { location: 'c', product: 'P' }); book('b', { location: 'c', product: 'P' })
     expect([await left('c', 'am'), await left('c', 'pm'), await left('c', 'all-day')]).toEqual([1, 3, 1])
   })
 
+  // covers: T3
   it('C2 stock 5, 1 full-day booking → am 4, pm 4, full day 4 (all-day, [] and null slot)', async () => {
     for (const [i, slot] of ['["all-day"]', '[]', 'null'].entries()) {
       mkLoc(`c${i}`, ['am', 'pm'], [{ product: 'P', stock: 5 }])
@@ -100,6 +103,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     }
   })
 
+  // covers: T3
   it('C3 stock 3, 2 in am then 1 full day → am 0, pm 2, full day 0', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 3 }])
     book('a', { location: 'c', product: 'P' }); book('b', { location: 'c', product: 'P' })
@@ -107,6 +111,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect([await left('c', 'am'), await left('c', 'pm'), await left('c', 'all-day')]).toEqual([0, 2, 0])
   })
 
+  // covers: T3
   it('C4 no slots, stock 8, 2 booked → 6 (inventory and plain slotless; old quantity 1 ignored)', async () => {
     mkLoc('inv', [], [{ product: 'P', stock: 8 }], { inventoryMode: 1, offerFullDay: 0 })
     mkLoc('day', [], [{ product: 'P', stock: 8 }], { offerFullDay: 0 })
@@ -116,18 +121,21 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(await left('day', '')).toBe(6)
   })
 
+  // covers: T3
   it('C5 stock 1, three slots, the first booked → first 0, others 1, full day 0', async () => {
     mkLoc('c', ['s1', 's2', 's3'], [{ product: 'P', stock: 1 }])
     book('a', { location: 'c', product: 'P', slot: '["s1"]' })
     expect([await left('c', 's1'), await left('c', 's2'), await left('c', 's3'), await left('c', 'all-day')]).toEqual([0, 1, 1, 0])
   })
 
+  // covers: T3
   it('C6 one booking holding am and pm counts once in each', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 2 }])
     book('a', { location: 'c', product: 'P', slot: '["am","pm"]' })
     expect([await left('c', 'am'), await left('c', 'pm')]).toEqual([1, 1])
   })
 
+  // covers: T3
   it('C7 cancelled, other-product and other-day bookings do not count', async () => {
     mkLoc('c', ['am'], [{ product: 'P', stock: 1 }, { product: 'Q', stock: 1 }])
     book('x', { location: 'c', product: 'P', status: 'cancelled' })
@@ -137,6 +145,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(await left('c', 'am', 'Q')).toBe(0)
   })
 
+  // covers: T3
   it('C10b full-day request at stock 1 with the morning booked → 409', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 1 }])
     book('a', { location: 'c', product: 'P' })
@@ -144,6 +153,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(rows()).toHaveLength(1)
   })
 
+  // covers: T3
   it('C13 full-day request at stock 2 with one am booked → stored', async () => {
     mkLoc('c', ['am', 'pm'], [{ product: 'P', stock: 2 }])
     book('a', { location: 'c', product: 'P' })
@@ -153,6 +163,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(await left('c', 'pm')).toBe(1)
   })
 
+  // covers: T3
   it('C10c a booking with product NULL counts against every product', async () => {
     mkLoc('c', ['am'], [{ product: 'P', stock: 1 }, { product: 'Q', stock: 2 }])
     book('n', { location: 'c', product: null })
@@ -160,6 +171,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(await left('c', 'am', 'Q')).toBe(1)
   })
 
+  // covers: T3
   it('C11 product unlisted between validation and insert → 409, no row', async () => {
     mkLoc('c', ['am'], [{ product: 'P', stock: 5 }])
     const { LOCATION_COLS, validateSelection, guardSql, guardedInsert, runAtomic, dayRange } = await import('../server/utils/booking-capacity')
@@ -174,6 +186,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     expect(rows()).toHaveLength(0)
   })
 
+  // covers: T3
   it('C12 generic POST at a slot location with the admin form default (quantity 1) → stored; quantity 0 → 400', async () => {
     mkLoc('c', ['am'], [{ product: 'P', stock: 1 }])
     const r = await send('post', { location: 'c', date: '2026-11-10', slot: ['am'], quantity: 1, status: 'active', group: '' })
@@ -181,6 +194,7 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     await expect(send('post', { location: 'c', date: '2026-11-10', slot: ['am'], quantity: 0, status: 'active' })).rejects.toMatchObject({ status: 400 })
   })
 
+  // covers: T3
   it('moving an old quantity-0 row works and stores quantity 1', async () => {
     book('b1', { slot: '["pm"]', quantity: 0 })
     const r = await send('patchA', { slot: ['am'] })

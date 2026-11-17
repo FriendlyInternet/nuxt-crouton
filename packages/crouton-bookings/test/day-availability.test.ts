@@ -63,6 +63,7 @@ describe('isDayFullyBooked', () => {
     expect(isDayFullyBooked(DAY, locs, [booking(), booking({ location: 'other' })])).toBe(true)
   })
 
+  // covers: T2
   it('C10 full only when every product is 0 in every slot', () => {
     const loc = [{ id: 'loc', slots: [{ id: 'am' }, { id: 'pm' }], products: [{ product: 'P', stock: 1 }, { product: 'Q', stock: 1 }] }] as any
     const full = [booking({ slot: ['all-day'] })]
@@ -71,12 +72,14 @@ describe('isDayFullyBooked', () => {
     expect(isDayFullyBooked(DAY, loc, [...full, booking({ slot: ['am'], product: 'Q' }), booking({ slot: ['pm'], product: 'Q' })])).toBe(true)
   })
 
+  // covers: T2
   it('C10 a location with no products is left out; none with products → not full', () => {
     const locs = [{ id: 'loc', products: P(1) }, { id: 'empty' }] as any
     expect(isDayFullyBooked(DAY, locs, [booking()])).toBe(true)
     expect(isDayFullyBooked(DAY, [{ id: 'empty' }, { id: 'none', products: [] }] as any, [])).toBe(false)
   })
 
+  // covers: T2
   it('C7 other product, cancelled and other-day bookings do not count', () => {
     const loc = [{ id: 'loc', products: [{ product: 'P', stock: 1 }, { product: 'Q', stock: 1 }] }] as any
     const other = [

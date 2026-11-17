@@ -15,6 +15,9 @@
         "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
         "path": "/api/teams/{teamId}/catalog-products",
         "expectIncludes": "\"id\""
       }

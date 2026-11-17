@@ -109,6 +109,7 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()[0].slot).toBe('null')
   })
 
+  // covers: T4
   it('race: two threads, own connections, last place — exactly one booking stored', async () => {
     // C9 (#4061): the location lists P and Q (stock 1 each); both race for the last P
     loc('inv', { inventoryMode: 1, quantity: 5, products: PQ })
@@ -150,6 +151,7 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()).toHaveLength(2)
   })
 
+  // covers: T4
   it('race: different times of day on the same day — exactly one stored', async () => {
     // C9 (#4061): P and Q listed (stock 1 each); exactly one P wins
     loc('inv', { inventoryMode: 1, quantity: 5, products: PQ })
@@ -225,6 +227,7 @@ describe('customer-bookings-batch (#3139)', () => {
       expect(rows()).toHaveLength(0)
     })
 
+    // covers: T4
     it('a 20-slot full day stays under 100 bound params', async () => {
       loc('s', { slots: slots(1, 20), offerFullDay: 1 }, 3)
       const counts: number[] = []
@@ -247,6 +250,7 @@ describe('customer-bookings-batch (#3139)', () => {
   describe('stock per product, per slot (#4061)', () => {
     const twoSlots = JSON.stringify([{ id: 'am', capacity: 1 }, { id: 'pm', capacity: 1 }])
 
+    // covers: T4
     it('C8 asking for more than is left is 409 and earlier rows of the same cart are rolled back', async () => {
       loc('s', { slots: twoSlots }, 3)
       await call([item('s', { slotIds: ['am'], quantity: 2 })])
@@ -256,6 +260,7 @@ describe('customer-bookings-batch (#3139)', () => {
       expect(rows()).toHaveLength(2)
     })
 
+    // covers: T4
     it('stores quantity 2 at a slot location (stock 3, old slot capacity 1)', async () => {
       loc('s', { slots: twoSlots }, 3)
       await call([item('s', { slotIds: ['am'], quantity: 2 })])
@@ -263,6 +268,7 @@ describe('customer-bookings-batch (#3139)', () => {
       expect(JSON.parse(rows()[0].slot)).toEqual(['am'])
     })
 
+    // covers: T4
     it('products count apart: Q still fits in a slot P filled', async () => {
       loc('s', { slots: twoSlots, products: PQ })
       await call([item('s', { slotIds: ['am'], productId: 'P' })])
@@ -271,6 +277,7 @@ describe('customer-bookings-batch (#3139)', () => {
       expect(rows().map((r: any) => r.product).sort()).toEqual(['P', 'Q'])
     })
 
+    // covers: T4
     it('quantity 0 is refused at a slot location too', async () => {
       loc('s', { slots: twoSlots }, 3)
       await expect(call([item('s', { slotIds: ['am'], quantity: 0 })])).rejects.toMatchObject({ status: 400 })
