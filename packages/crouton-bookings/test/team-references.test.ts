@@ -25,6 +25,8 @@ vi.mock('../collections/locations/server/database/queries', async (orig) => ({
   createBookingsLocation: (d: any) => h.createLoc(d),
   updateBookingsLocation: (...a: any[]) => h.updateLoc(...a),
 }))
+// create/update are stubbed here, so there is no stored row; the own-product path runs for real in location-own-product.test.ts (#4044)
+vi.mock('../server/utils/location-products', () => ({ ensureLocationProducts: async () => undefined }))
 vi.mock('../server/utils/booking-capacity', async (orig) => ({ ...(await orig() as object), patchBookingGuarded: (...a: any[]) => h.update(...a) }))
 vi.mock('../collections/emaillogs/server/database/queries', async (orig) => ({
   ...(await orig() as object),
@@ -43,7 +45,7 @@ INSERT INTO catalog_products VALUES ('prod-t1','t1'), ('prod-t2','t2');
 const makeDb = (withLocation: boolean) => {
   const client = new Database(':memory:')
   client.exec(DDL)
-  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode) values ('l1','t1','s',?,0)`).run(JSON.stringify([{ id: 'a' }]))
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('l1','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'prod-t1', stock: 1 }]))
   client.exec(`insert into bookings_bookings (id,teamId,owner,"order",location,date,slot,quantity,status,createdAt,updatedAt,createdBy,updatedBy) values ('b-other','t2','u',0,'l1',0,'a',1,'x',0,0,'u','u')`)
   return drizzle(client) as any
 }

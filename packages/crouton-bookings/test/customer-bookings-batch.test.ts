@@ -28,8 +28,9 @@ function call(bookings: any[]) {
 }
 const rows = () => db.$client.prepare('select * from bookings_bookings').all()
 const loc = (id: string, over: Record<string, unknown> = {}) => {
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, ...over }
-  db.$client.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay)').run(l)
+  // every location lists one product (#4044)
+  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock: 1 }]), ...over }
+  db.$client.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay,products) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay,@products)').run(l)
 }
 const item = (locationId: string, over: Record<string, unknown> = {}) => ({ id: 'c', locationId, locationTitle: locationId, date: DATE, ...over })
 
@@ -212,9 +213,9 @@ describe('customer-bookings-batch (#3139)', () => {
     it('the SQL guard alone aborts the whole batch (pre-check bypassed)', async () => {
       loc('inv', { inventoryMode: 1, quantity: 1 })
       const { guardSql, guardedInsert, runAtomic, dayRange, validateSelection } = await import('../server/utils/booking-capacity')
-      const sel = validateSelection({ inventoryMode: 1, quantity: 1 }, [], 1)
+      const sel = validateSelection({ inventoryMode: 1, quantity: 1, products: [{ product: 'loc-inv', stock: 1 }] }, [], 1)
       const range = dayRange(DATE, 'Europe/Brussels')!
-      const mk = (id: string) => guardedInsert({ id, teamId: 't1', owner: 'u', location: 'inv', storedTs: range.storedTs, slot: null, group: null, quantity: 1, status: 'active', by: 'u', nowTs: 1 }, guardSql({ teamId: 't1', locationId: 'inv', range, selection: sel }))
+      const mk = (id: string) => guardedInsert({ id, teamId: 't1', owner: 'u', location: 'inv', storedTs: range.storedTs, slot: null, group: null, quantity: 1, status: 'active', product: sel.product, by: 'u', nowTs: 1 }, guardSql({ teamId: 't1', locationId: 'inv', range, selection: sel }))
       await expect(runAtomic(db, [mk('a'), mk('b')])).rejects.toMatchObject({ status: 409 })
       expect(rows()).toHaveLength(0)
     })

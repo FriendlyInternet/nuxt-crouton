@@ -81,11 +81,14 @@ export default defineNitroPlugin((nitroApp) => {
         translations: { en: { title: l.title, city: l.city }, nl: { title: l.title, city: l.city } },
         ...base,
       }))).onConflictDoNothing()
+      // Every location lists a product: its own `loc-<id>` (#4044, crouton-bookings layer util)
+      for (const l of LOCATIONS) await ensureLocationProducts(db, teamId, locId(l.key))
 
       await db.insert(bookingsBookings).values(BOOKINGS.map((b, i) => ({
         id: `seed-${teamId}-bk-${i}`, location: locId(b.loc),
         date: new Date(now.getTime() + b.inDays * DAY_MS),
         slot: b.slot, group: b.group, quantity: b.quantity, status: b.status,
+        product: 'loc-' + locId(b.loc),
         ...base,
       }))).onConflictDoNothing()
 

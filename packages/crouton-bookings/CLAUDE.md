@@ -73,7 +73,7 @@ CroutonBooking
    - UI shows "X left" / "Full" badges when capacity > 1
 2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
 
-**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). The counting does not use either field yet; it still uses the slot capacity / `quantity` above.
+**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). A location saved without products gets the same own product (`ensureLocationProducts` in `server/utils/location-products.ts`, #4044; the location POST/PATCH routes and the velo/booking-demo seeds call it). A booking always carries a product of its own location (`resolveProduct` in `server/utils/booking-capacity.ts`, on every write): a named product must be listed (else 400 "Unknown product"), none named → the location's only product, two or more listed → 400 "Pick a product", none listed → 400. The counting does not use either field yet; it still uses the slot capacity / `quantity` above (`quantity`/`inventoryMode`/slot `capacity` drive counting until step 3b).
 
 **Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
 `all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
