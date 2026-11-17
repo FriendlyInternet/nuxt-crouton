@@ -121,3 +121,44 @@ test("howToTestPointer points at the issue's steps, or says there are none", () 
   assert.equal(howToTestPointer(2829, '## Done when\n- it works\n'), 'How to test: #2829 has no 🧪 steps')
   assert.equal(howToTestPointer(2829, ''), 'How to test: #2829 has no 🧪 steps')
 })
+
+// #4039 — a fresh card after a `not ok` fix lands on staging (#2804 replay).
+const oldCard = { body: `${CARD_MARKER}\n## 🧪 Test card`, created_at: '2026-10-29T09:49:02Z' }
+const failed = { subIssues: [C, C, C, C], labels: ['epic', 'status:failed'], comments: [oldCard], deployed: false, fixClosedAt: '2026-11-12T12:18:13Z' }
+
+test('T1: #2804 replay — fix deployed after not ok → fresh card', () => {
+  const d = decideTestCard({ ...failed, fixDeployed: true })
+  assert.equal(d.post, true)
+  assert.equal(d.retest, true)
+  assert.match(d.reason, /fresh card/)
+})
+test('T2: fix closed but not on staging yet → no card', () => {
+  const d = decideTestCard({ ...failed, fixDeployed: false })
+  assert.equal(d.post, false)
+  assert.match(d.reason, /not on staging/)
+})
+test('T3: not ok fix child still open → no card', () => {
+  const d = decideTestCard({ subIssues: [C, { state: 'open' }], labels: ['epic', 'status:failed'], comments: [], fixDeployed: true })
+  assert.equal(d.post, false)
+  assert.match(d.reason, /open/)
+})
+test('T4: verified stays answered, first card still posts, re-test line names the fix', () => {
+  const v = decideTestCard({ ...base, labels: ['epic', 'status:verified'] })
+  assert.equal(v.post, false)
+  assert.equal(v.reason, 'already answered')
+  assert.equal(decideTestCard({ subIssues: [C], labels: ['epic'], comments: [], deployed: true }).post, true)
+  const card = buildCard({ epicNumber: 2804, title: 'T', fixIssue: 3046 })
+  assert.ok(card.startsWith(CARD_MARKER))
+  assert.match(card, /Re-test after the fix in #3046/)
+  assert.doesNotMatch(buildCard({ epicNumber: 2804, title: 'T' }), /Re-test/)
+})
+test('T9: one fresh card per fix — status:to-test beats status:failed', () => {
+  const d = decideTestCard({ ...failed, labels: ['epic', 'status:failed', 'status:to-test'], fixDeployed: true })
+  assert.equal(d.post, false)
+  assert.equal(d.reason, 'already status:to-test')
+})
+test('T10: one fresh card per fix — a card newer than the fix close stops a repeat', () => {
+  const d = decideTestCard({ ...failed, comments: [oldCard, { body: CARD_MARKER, created_at: '2026-11-13T08:00:00Z' }], fixDeployed: true })
+  assert.equal(d.post, false)
+  assert.match(d.reason, /already posted for this fix/)
+})
