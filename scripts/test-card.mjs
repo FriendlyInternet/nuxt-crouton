@@ -130,9 +130,14 @@ const NOTE_RE = /^\s*(?:#{1,6}\s+)?✅\s*/
 const BOILERPLATE_RE = /^Built to the plan\b/i
 const PLAN_REVIEW_MARKER = '<!-- plan-review:v1 -->'
 
-/** Wrap every `@handle` in backticks so a note can never ping anyone. */
+/** Wrap every `@handle` not already inside a code span in backticks, so a note can never ping anyone. */
 export function defangMentions(s = '') {
-  return String(s).replace(/(?<![\w`])@([A-Za-z0-9-]+(?:\[bot\])?)/g, '`@$1`')
+  return String(s).replace(/(`[^`]*`)|(?<!\w)@([A-Za-z0-9-]+(?:\[bot\])?)/g, (m, code, handle) => code || `\`@${handle}\``)
+}
+
+/** Escape the Markdown link-label characters (`\`, `[`, `]`) so a title can't break `[title](url)`. */
+export function escapeLinkLabel(s = '') {
+  return String(s).replace(/[\\[\]]/g, '\\$&')
 }
 
 /** The first real line of a comment (skips blanks, `<!--` markers, `>` quotes) if it is a ✅ note, else ''. */
@@ -189,7 +194,7 @@ export function buildEvidence({ subIssues = [], mergedPrs = [], commentsByIssue 
 export function evidenceLines(evidence = [], fmt) {
   const lines = evidence.slice(0, EVIDENCE_MAX).map(e => {
     const note = e.note ? cleanNote(e.note) : ''
-    return fmt({ title: e.title, url: e.url, note })
+    return fmt({ title: defangMentions(e.title || ''), url: e.url, note })
   })
   if (evidence.length > EVIDENCE_MAX) lines.push(`- and ${evidence.length - EVIDENCE_MAX} more`)
   return lines
@@ -215,7 +220,7 @@ export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', r
     ...where,
     '',
     ...(evidence.length
-      ? [EVIDENCE_HEADING, '', ...evidenceLines(evidence, e => `- [${e.title}](${e.url})${e.note ? ` — ${e.note}` : ''}`), '']
+      ? [EVIDENCE_HEADING, '', ...evidenceLines(evidence, e => `- [${escapeLinkLabel(e.title)}](${e.url})${e.note ? ` — ${e.note}` : ''}`), '']
       : []),
     ...list.map(c => `- Check: ${c}`),
     ...(app && crudChecked === false ? ['', NOT_CHECKED_LINE] : []),

@@ -256,3 +256,33 @@ test('evidence T8: a note with password= never reaches the card or mail', () => 
   assert.ok(!buildCard({ ...appCard, evidence: ev }).includes('password='))
   assert.ok(!buildTestMail({ ...appCard, evidence: ev }).text.includes('password='))
 })
+
+// covers: PR #4067 review — titles and code-span mentions
+test('evidence T9: a title with a link breaker gives exactly one link, to the entry URL', () => {
+  const ev = [{ title: 'x](https://example.org)', url: 'https://github.com/o/r/pull/1', note: '' }]
+  const line = buildCard({ ...appCard, evidence: ev }).split('\n').find(l => l.startsWith('- ['))
+  const links = [...line.matchAll(/(?<!\\)\]\(([^)]*)\)/g)].map(m => m[1])
+  assert.deepEqual(links, ['https://github.com/o/r/pull/1'])
+  assert.equal(line, '- [x\\](https://example.org)](https://github.com/o/r/pull/1)')
+  const mail = buildTestMail({ ...appCard, evidence: ev }).text
+  assert.ok(mail.includes('- x](https://example.org): https://github.com/o/r/pull/1'))
+})
+
+test('evidence T10: an @handle in a title is backticked in card and mail', () => {
+  const ev = [{ title: 'Fix for @someone', url: 'https://a', note: '' }]
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    assert.ok(out.includes('Fix for `@someone`'))
+    assert.ok(!/(?<![\w`])@someone/.test(out))
+  }
+})
+
+test('evidence T11: a handle right after a closing backtick is still backticked', () => {
+  assert.equal(defangMentions('`x`@alice'), '`x``@alice`')
+  const ev = [{ title: 'A', url: 'https://a', note: '`x`@alice' }]
+  assert.ok(buildCard({ ...appCard, evidence: ev }).includes('— `x``@alice`'))
+})
+
+test('evidence T12: an already backticked handle is left alone', () => {
+  assert.equal(defangMentions('ask `@alice` and `cc @bob` please'), 'ask `@alice` and `cc @bob` please')
+  assert.equal(defangMentions(defangMentions('hi @alice')), 'hi `@alice`')
+})
