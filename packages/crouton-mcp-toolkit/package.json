@@ -20,6 +20,7 @@
     "dist",
     "server",
     "types",
+    "module.ts",
     "nuxt.config.ts",
     "CHANGELOG.md",
     "LICENSE"
@@ -28,7 +29,7 @@
     "build": "unbuild",
     "dev:prepare": "nuxi prepare",
     "typecheck": "nuxt typecheck",
-    "prepublishOnly": "pnpm run build",
+    "prepack": "pnpm run build",
     "release": "pnpm run build && npm publish --access public"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "zod": "^3.24.0"
   },
   "peerDependencies": {
+    "@fyit/crouton-auth": "workspace:*",
     "@nuxtjs/mcp-toolkit": "^0.24.2",
     "nuxt": "^3.14.0 || ^4.0.0"
   },

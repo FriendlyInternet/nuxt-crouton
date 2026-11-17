@@ -17,6 +17,7 @@
     "app",
     "server",
     "types",
+    "i18n",
     "nuxt.config.ts"
   ],
   "scripts": {
@@ -37,6 +38,7 @@
     "vue": "catalog:"
   },
   "peerDependencies": {
+    "@fyit/crouton-auth": "workspace:*",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^3.14.0 || ^4.0.0"
   },

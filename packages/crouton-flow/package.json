@@ -14,6 +14,7 @@
   "files": [
     "app",
     "server",
+    "i18n",
     "nuxt.config.ts"
   ],
   "scripts": {
@@ -25,6 +26,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "peerDependencies": {
+    "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-collab": "workspace:*",
     "nuxt": "^3.0.0 || ^4.0.0"

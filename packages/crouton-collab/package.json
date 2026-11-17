@@ -26,6 +26,7 @@
     "@vueuse/core": "^12.0.0"
   },
   "peerDependencies": {
+    "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "nuxt": "^3.0.0 || ^4.0.0"
   },

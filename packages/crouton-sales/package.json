@@ -8,6 +8,7 @@
     "app",
     "collections",
     "server",
+    "shared",
     "schemas",
     "seed",
     "i18n",
