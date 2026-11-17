@@ -121,6 +121,9 @@ importers:
       '@playwright/test':
         specifier: ^1.64.0
         version: 1.64.0
+      '@typescript-eslint/parser':
+        specifier: 8.53.0
+        version: 8.53.0(eslint@9.39.2(jiti@2.7.0))(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.12(vitest@4.1.12)
@@ -139,6 +142,9 @@ importers:
       eslint:
         specifier: ^9.17.0
         version: 9.39.2(jiti@2.7.0)
+      eslint-plugin-vue:
+        specifier: 10.7.0
+        version: 10.7.0(@stylistic/eslint-plugin@5.7.0(eslint@9.39.2(jiti@2.7.0)))(@typescript-eslint/parser@8.53.0(eslint@9.39.2(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.2(jiti@2.7.0))(vue-eslint-parser@10.2.0(eslint@9.39.2(jiti@2.7.0)))
       eslint-plugin-vuejs-accessibility:
         specifier: 2.5.0
         version: 2.5.0(eslint@9.39.2(jiti@2.7.0))(globals@16.5.0)
