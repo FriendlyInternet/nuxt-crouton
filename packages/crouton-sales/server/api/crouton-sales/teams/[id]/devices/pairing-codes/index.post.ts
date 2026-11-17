@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!result.ok) {
-    throw createError({ status: 404, statusText: 'Event not found' })
+    throw createError({ status: result.status, statusText: 'Event not found' })
   }
 
   // The plaintext code exists only in this response — it is stored hashed.
