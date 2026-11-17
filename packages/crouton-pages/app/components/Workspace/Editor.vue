@@ -70,6 +70,8 @@ const getCurrentUser = () => {
       if (sessionUser?.value) {
         const u = sessionUser.value as unknown as Record<string, unknown>
         return {
+          // The real user id rides along so the collab room names who is here (#3984)
+          ...(u.id != null ? { id: String(u.id) } : {}),
           name: String(u.name || u.email || t('pages.editor.anonymous')),
           color: undefined
         }
