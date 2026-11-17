@@ -137,13 +137,13 @@ crouton add --list
 | `editor` | `@fyit/crouton-editor` | ○ | Rich text editor |
 | `assets` | `@fyit/crouton-assets` | ● | Asset management |
 | `events` | `@fyit/crouton-events` | ○ | Event tracking/audit trail |
-| `flow` | `@fyit/crouton-flow` | ○ | Vue Flow graphs |
+| `flow` | `@fyit/crouton-flow` | ● | Vue Flow graphs |
 | `email` | `@fyit/crouton-email` | ○ | Email integration |
 | `maps` | `@fyit/crouton-maps` | ○ | Map integration |
 | `ai` | `@fyit/crouton-ai` | ○ | AI integration |
 | `devtools` | `@fyit/crouton-devtools` | ○ | Nuxt Devtools |
 
-● = Manifest lists collections. `crouton add` prints the migration command for these **and** for any package that ships a schema folder (e.g. `layout`)
+● = Has tables (`packageHasTables()`): the manifest lists collections **or** the package ships schema files — a schema folder (`server/database/schema/` or `server/db/schema/`) or a single `server/db/schema.ts` file (`shipsSchemaFiles()`). `crouton add` prints the migration steps for these (e.g. `flow`, which ships a single `server/db/schema.ts`, and `layout`, which has a schema folder — neither lists collections)
 ○ = No database tables
 **bundled in core** = Automatically included when using `@fyit/crouton-core`
 
@@ -157,7 +157,7 @@ and SSR errors like `$setup.t is not a function`.
 1. **Validates** module exists and dependencies are installed
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
-4. **Prints** the migration steps (`manualMigrationSteps()`) if the package has tables — it does not touch `server/db/schema.ts` or run migrations (#3998). "Has tables" (`packageHasTables()`) = the manifest lists collections, **or** the package ships a `.ts` file in `server/database/schema/` or `server/db/schema/` (tests and `__tests__` not counted) — e.g. `layout` has a schema folder but no collections
+4. **Prints** the migration steps (`manualMigrationSteps()`) if the package has tables — it does not touch `server/db/schema.ts` or run migrations (#3998). "Has tables" (`packageHasTables()`) = the manifest lists collections, **or** the package ships schema files (`shipsSchemaFiles()`): either a schema folder — a `.ts` file in `server/database/schema/` or `server/db/schema/` (tests and `__tests__` not counted) — or a single `server/db/schema.ts` file. E.g. `layout` has a schema folder but no collections
 
 #### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
