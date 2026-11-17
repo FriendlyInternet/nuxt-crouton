@@ -16,7 +16,24 @@ exact word they reply.
      design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
      splitter, `decompose-on-issue-pidev.yml`. For an epic it writes sub-issues to
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
-     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). For a design
+     `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the
+     failed tickets to `ticket-revise.yml`, which rewrites them from the review's findings
+     (`scripts/ticket-revise.mjs`) and runs the review again, up to 3 rounds per ticket (per epic
+     for epics without `tickets:rolling`), and 3 for the step list; a needs-owner verdict or round 3
+     holds for the owner. For a new epic (label `tickets:rolling`, #3846) the splitter writes the
+     step list plus only the first ticket; `ticket-review.yml -f subject=plan` reviews the step list
+     once, and the orchestrator writes each later ticket by hand (with `step=<k>` in its pipeline
+     block) and runs `gh workflow run ticket-review.yml -f epic=<E> -f subject=<n>`, which reviews
+     that ticket alone against the epic branch (`scripts/epic-checkout.mjs`); a no-go holds only that
+     ticket and the steps after it (`scripts/ticket-review-actions.mjs`, `scripts/lib/epic-steps.mjs`).
+     If a step list turns out wrong, the epic is held: fix the step-list comment by hand and run
+     `gh workflow run ticket-review.yml -f epic=<E> -f subject=plan`. If that edit leaves the list
+     unreadable (bad JSON, or a field such as `"ticket": "#11"` instead of `11`), no ticket starts,
+     the epic never counts as finished, and the next review holds the epic (`status:blocked`) naming
+     the field that is wrong. To move an existing epic to
+     per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
+     epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
+     For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
    - c. `scripts/lib/plan-route.mjs` says `plan` → `work-issue-pidev.yml` in plan mode (step 2).
@@ -38,6 +55,9 @@ exact word they reply.
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
    `status:blocked` for the owner; `needs-owner` → one yes/no question on the PR and `status:blocked`
    on the issue: **owner decides here (`ok` / `not ok: …`)**. A red build → `fix-ci-on-failure.yml`.
+   The reviewer is given the PR's `plan-checks` table (`scripts/lib/build-review-prompt.mjs`) as the
+   record of which plan tests ran and passed on that commit, and judges only whether each test aims
+   at the ticket's rule.
    The owner can also ask for changes at any time with a top-level `**Worker:** <what to change>`
    comment.
 6. **Merge into the epic branch.** `automerge-epic-subpr.yml` decides it with
@@ -49,7 +69,9 @@ exact word they reply.
    never merges by itself), a PR the build review held after two rejected rounds, and a PR where the
    build review asked a `needs-owner` question (step 5). On a v1 epic branch the workflow only
    writes the `Merge decision` check, and GitHub merges once `CI Gate` + `Merge decision` are green —
-   see [the pipeline v1 guide](./README.md).
+   see [the pipeline v1 guide](./README.md). A `work-*` PR straight into `main` merges on the
+   owner's `ok`, or by itself when every changed file is in the incubator stage and the build review
+   said go on its current commit (#3757); the merge check logs the reason.
 7. **Epic → `main`.** The epic PR merges only on **the owner's `ok`**, and only when both `CI Gate`
    and `E2E Gate` have passed (the `approve-epic` job in `on-comment.yml`, decided by
    `scripts/epic-merge-decision.mjs`).
@@ -57,6 +79,8 @@ exact word they reply.
    deploys the changed apps to staging.
 
 A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
+
+**Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`). It refuses a branch whose name does not start with `epic/<N>-` (a child epic is pointed to its parent) and refuses when it cannot list what the branch holds.
 
 ## Every workflow, by line
 
@@ -77,6 +101,7 @@ The table below is generated from the workflow files and the grouping in
 | [on-issue-close.yml](../../.github/workflows/on-issue-close.yml) | On issue close | `issues`, `workflow_dispatch` |
 | [routing-registry.yml](../../.github/workflows/routing-registry.yml) | routing-registry | `pull_request`, `push` |
 | [ticket-review.yml](../../.github/workflows/ticket-review.yml) | Ticket review (independent reviewer — pi.dev) | `workflow_dispatch` |
+| [ticket-revise.yml](../../.github/workflows/ticket-revise.yml) | Ticket revise (rewrite sent-back tickets — pi.dev) | `workflow_dispatch` |
 | [warn-closes-blocked.yml](../../.github/workflows/warn-closes-blocked.yml) | Warn on a risky Closes | `pull_request` |
 
 #### planning
@@ -122,6 +147,7 @@ The table below is generated from the workflow files and the grouping in
 | [handoff-sweep.yml](../../.github/workflows/handoff-sweep.yml) | Hand-off sweep (replay saved pipeline hand-offs) | `schedule`, `workflow_run`, `workflow_dispatch` |
 | [on-pr-close.yml](../../.github/workflows/on-pr-close.yml) | On PR close | `pull_request` |
 | [owner-quiz.yml](../../.github/workflows/owner-quiz.yml) | Owner quiz | `workflow_call`, `workflow_dispatch` |
+| [postmortem.yml](../../.github/workflows/postmortem.yml) | Epic postmortem | `workflow_call`, `workflow_dispatch` |
 | [status.yml](../../.github/workflows/status.yml) | Status | `workflow_run`, `check_suite`, `status`, `pull_request`, `issues` |
 
 #### deploys
@@ -152,6 +178,7 @@ The table below is generated from the workflow files and the grouping in
 | [loop-station-refresh.yml](../../.github/workflows/loop-station-refresh.yml) | Loop-station refresh | `push`, `workflow_dispatch` |
 | [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `schedule`, `workflow_dispatch` |
 | [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `schedule`, `workflow_dispatch` |
+| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `schedule`, `workflow_dispatch` |
 | [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `schedule`, `workflow_dispatch` |
 | [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `schedule`, `workflow_dispatch` |
 | [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `schedule`, `workflow_dispatch` |

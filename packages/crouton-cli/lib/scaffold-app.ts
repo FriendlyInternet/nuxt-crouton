@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
+import { findPackagesDir } from './utils/manifest-loader.ts'
 
 // crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
 const CROUTON_CLI_VERSION = (() => {
@@ -13,6 +14,15 @@ const CROUTON_CLI_VERSION = (() => {
     return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version
   } catch { return 'unknown' }
 })()
+
+/** True when cwd is inside the crouton monorepo: a pnpm-workspace packages/ dir that holds @fyit/crouton-core. */
+export async function isCroutonMonorepo(cwd: string): Promise<boolean> {
+  const packagesDir = await findPackagesDir(cwd)
+  if (!packagesDir) return false
+  try {
+    return JSON.parse(readFileSync(join(packagesDir, 'crouton-core', 'package.json'), 'utf8')).name === '@fyit/crouton-core'
+  } catch { return false }
+}
 
 // Wrangler helper scripts are shipped as raw templates (they're app-name-agnostic —
 // they read the app's own wrangler.jsonc at runtime) and copied verbatim into the
@@ -63,10 +73,10 @@ function resolveFeatures(featureNames: string[], modules: Record<string, any>): 
  * Build workspace dependencies for package.json based on resolved features.
  * Bundled modules (auth, i18n, admin) are included via @fyit/crouton-core.
  */
-function buildDependencies(features: string[], modules: Record<string, any>): Record<string, string> {
+function buildDependencies(features: string[], modules: Record<string, any>, depVersion: string): Record<string, string> {
   const deps: Record<string, string> = {
-    '@fyit/crouton-core': 'workspace:*',
-    '@fyit/crouton-i18n': 'workspace:*',
+    '@fyit/crouton-core': depVersion,
+    '@fyit/crouton-i18n': depVersion,
     '@libsql/client': '^0.17.0',
     'drizzle-orm': '^0.45.1',
     'nuxt': '^4.2.2',
@@ -77,7 +87,7 @@ function buildDependencies(features: string[], modules: Record<string, any>): Re
   for (const name of features) {
     const mod = modules[name]
     if (mod && !mod.bundled) {
-      deps[mod.package] = 'workspace:*'
+      deps[mod.package] = depVersion
     }
   }
 
@@ -93,6 +103,8 @@ interface ScaffoldVars {
   theme?: string
   dialect: string
   cf: boolean
+  /** Version range for every `@fyit/*` dep: `workspace:*` in the monorepo, `^<cli version>` standalone. */
+  depVersion: string
   /** Optional CF zone — emits <name>.<domain> / <name>-staging.<domain> routes. */
   domain?: string
   modules: Record<string, any>
@@ -106,10 +118,10 @@ interface ScaffoldFile {
 // ─── File templates ───────────────────────────────────────────────
 
 function tmplPackageJson(vars: ScaffoldVars): string {
-  const deps = buildDependencies(vars.features, vars.modules)
+  const deps = buildDependencies(vars.features, vars.modules, vars.depVersion)
   const devDeps = {
-    '@fyit/crouton-cli': 'workspace:*',
-    '@fyit/crouton-devtools': 'workspace:*',
+    '@fyit/crouton-cli': vars.depVersion,
+    '@fyit/crouton-devtools': vars.depVersion,
     'drizzle-kit': '^0.31.0',
     // Runs the schema-smoke tests the generator emits next to each collection
     // (#785). Not cataloged by design (#141); matches @fyit/crouton-cli.
@@ -554,21 +566,26 @@ export const passkeyClient = () => ({
 
 export async function scaffoldApp(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, dryRun?: boolean, outDir?: string } = {}
-): Promise<{ files: ScaffoldFile[], appDir: string }> {
-  const { cf = true, dryRun = false, outDir } = options
-  const ctx = await resolveScaffoldContext(name, options)
+  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, dryRun?: boolean, outDir?: string, cwd?: string } = {}
+): Promise<{ files: ScaffoldFile[], appDir: string, cf: boolean, standalone: boolean }> {
+  const { dryRun = false, outDir, cwd = process.cwd() } = options
+  // Outside the crouton monorepo the app installs from npm (#3392): `./<name>`,
+  // `^<cli version>` for every @fyit/* dep, and Cloudflare only on --cf.
+  const standalone = !(await isCroutonMonorepo(cwd))
+  const cf = options.cf ?? !standalone
+  const depVersion = standalone ? `^${CROUTON_CLI_VERSION}` : 'workspace:*'
+  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion })
   const files = await buildScaffoldFiles(ctx, outDir, cf)
-  const appDir = outDir || join('apps', name)
+  const appDir = outDir || (standalone ? name : join('apps', name))
 
   if (dryRun) {
     printScaffoldDryRun(name, appDir, ctx, files)
-    return { files, appDir }
+    return { files, appDir, cf, standalone }
   }
 
   await writeScaffoldFiles(appDir, files)
   printScaffoldNextSteps(appDir, files.length, cf)
-  return { files, appDir }
+  return { files, appDir, cf, standalone }
 }
 
 interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], features: string[], authSecret: string }
@@ -577,9 +594,9 @@ interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], fea
 // fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
 async function resolveScaffoldContext(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string }
+  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string }
 ): Promise<ScaffoldContext> {
-  const { features: featureNames = [], theme, dialect = 'sqlite', cf = true, domain } = options
+  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
@@ -597,7 +614,7 @@ async function resolveScaffoldContext(
   if (!frameworkPackages.includes('@fyit/crouton-i18n')) {
     frameworkPackages.splice(frameworkPackages.indexOf('@fyit/crouton-core') + 1, 0, '@fyit/crouton-i18n')
   }
-  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, domain, modules }
+  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, modules }
   return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
 }
 

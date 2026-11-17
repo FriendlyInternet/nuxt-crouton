@@ -7,8 +7,8 @@
 // nothing could exercise it before merge. This module ports the DECISION logic (not the git/`gh`
 // side effects, which stay in the workflow) into pure, unit-testable functions.
 //
-// Deliberately NOT wired into work-issue-pidev.yml yet (#1893 scope) — the pi worker cannot touch
-// .github/workflows/** (contract clause 4, policy #1076). The workflow rewiring is a follow-up.
+// `session`/`plan`/`typecheck` are wired via the CLI (#1904, #3249); ticketing the pre-existing
+// errors `typecheck` finds lives in preexisting-type-tickets.mjs (it has the `gh` side effects).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +66,111 @@ export function verdict({ acceptance, testsMissing }) {
   return { draft: false, reason: null };
 }
 
+// ── Type errors: in-diff vs pre-existing (#3248) ───────────────────────────────────────────
+// The acceptance gate used to fail on EVERY app-local `error TS` line, so a PR was held for an
+// error in a file it never touched (#3245: signin-link.post.ts, already broken on the base). The
+// rule now: only errors in files the PR changed — judged over the WHOLE PR, every round — fail.
+// Errors elsewhere pass and come back grouped, to be ticketed. A typecheck that never ran is
+// still 'neutral', never 'pass' (#1849). Pure functions: no fs, no shell, no gh.
+
+// `path(12,3): error TS2345: msg` or `path:12:3 - error TS2345: msg`, anywhere on the line (so a
+// `##[error]` or pnpm prefix doesn't break it). The path is one whitespace-free token and MAY
+// contain `[` `]` `(` `)` — Nuxt route files (`[app].get.ts`, `(auth)/login.vue`) do; a leading
+// GitHub `##[error]` annotation is stripped, not taken as part of the path.
+const TS_ERR_RE = /(?:^|\s)(?:##\[[a-z]+\])?(\S+?)(?:\((\d+),(\d+)\):|:(\d+):(\d+)\s+-)\s*error\s+(TS\d+):\s*(.*)$/;
+const ANY_TS_RE = /error TS[0-9]/;
+
+// → { errors: [{ file, line, col, code, text }], anyCount, unreadable }. `errors` drops `../` paths
+// (outside the app — the shell's OWN rule); `anyCount` counts every `error TS` line (the shell's
+// ANY); `unreadable` holds the `error TS` lines the path pattern can't read (TS18003 "No inputs
+// were found", TS5083 "Cannot read file" — no file:line at all). A trailing `\r` is stripped first.
+export function parseTsErrors(logText) {
+  const errors = [];
+  const unreadable = [];
+  let anyCount = 0;
+  for (const raw of String(logText || '').split('\n').map((l) => l.replace(/\r+$/, ''))) {
+    if (!ANY_TS_RE.test(raw)) continue;
+    anyCount += 1;
+    const m = TS_ERR_RE.exec(raw);
+    if (!m) { unreadable.push(raw); continue; }
+    const file = m[1];
+    if (file.startsWith('../')) continue;
+    errors.push({
+      file,
+      line: Number(m[2] ?? m[4]),
+      col: Number(m[3] ?? m[5]),
+      code: m[6],
+      text: m[7].trim(),
+    });
+  }
+  return { errors, anyCount, unreadable };
+}
+
+function toRepoPath(file, appDir) {
+  const f = String(file).replace(/^(\.\/)+/, '');
+  return appDir ? `${String(appDir).replace(/\/+$/, '')}/${f}` : f;
+}
+
+// → { acceptance: 'pass'|'fail'|'neutral', inDiff, notInDiff, message }. Same order as the shell:
+// auto-import misses (TS2304 Cannot find name) → neutral; any in-diff error → fail; only
+// not-in-diff → pass; none app-local → pass if it ran (exit 0 or any TS line), else neutral.
+// The diff is the union of `committedFiles` (this run) and `prFiles` (the whole PR), like
+// planTestsGate. Every error's `file` is returned in repo-root form.
+export function classifyTypeErrors({ logText, tcExit, committedFiles, prFiles, appDir } = {}) {
+  const diff = new Set([...(committedFiles || []), ...(prFiles || [])]
+    .map((f) => String(f).trim().replace(/^(\.\/)+/, '')).filter(Boolean));
+  const { errors, anyCount, unreadable } = parseTsErrors(logText);
+  const own = errors.map((e) => ({ ...e, file: toRepoPath(e.file, appDir) }));
+  const inDiff = own.filter((e) => diff.has(e.file));
+  const notInDiff = own.filter((e) => !diff.has(e.file));
+  const where = appDir || 'the app';
+  const autoImp = own.some((e) => e.code === 'TS2304' && e.text.startsWith('Cannot find name'));
+  if (own.length && autoImp) {
+    return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck env not prepared for ${where} (auto-imports unresolved) — not verified` };
+  }
+  if (inDiff.length) {
+    return { acceptance: 'fail', inDiff, notInDiff, message: `${inDiff.length} type error(s) in files this PR changed in ${where}` };
+  }
+  // A line we can't place in a file (TS18003/TS5083: the typecheck never really ran) is never a
+  // pass — it's 'neutral', not verified (#1849).
+  if (unreadable.length) {
+    return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck output for ${where} has ${unreadable.length} unreadable error line(s) — not verified` };
+  }
+  if (notInDiff.length) {
+    return { acceptance: 'pass', inDiff, notInDiff, message: `${notInDiff.length} error(s) in files this PR didn't touch` };
+  }
+  if (Number(tcExit) === 0 || anyCount > 0) {
+    return { acceptance: 'pass', inDiff, notInDiff, message: `${where} typechecks clean${anyCount > 0 ? ' (ignored pre-existing error(s) elsewhere)' : ''}` };
+  }
+  return { acceptance: 'neutral', inDiff, notInDiff, message: `typecheck could not run for ${where} — not verified` };
+}
+
+// Group not-in-diff errors by file + TS code, each with a stable dedup marker for its ticket.
+// Sorted count desc, then file, then code. → { toOpen: first maxTickets, rest }.
+export function groupPreexisting(notInDiff, { maxTickets = 3 } = {}) {
+  const map = new Map();
+  for (const e of notInDiff || []) {
+    const key = `${e.file}\u0000${e.code}`;
+    if (!map.has(key)) {
+      map.set(key, { file: e.file, code: e.code, count: 0, errors: [], marker: `<!-- preexisting-type-error:${e.file}:${e.code} -->` });
+    }
+    const g = map.get(key);
+    g.count += 1;
+    g.errors.push(e);
+  }
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const groups = [...map.values()].sort((a, b) => b.count - a.count || cmp(a.file, b.file) || cmp(a.code, b.code));
+  return { toOpen: groups.slice(0, maxTickets), rest: groups.slice(maxTickets) };
+}
+
+// The run-record line: `acceptance: pass — N error(s) in files this PR didn't touch → #A, #B`.
+export function formatAcceptanceLine({ count, issueNumbers = [], rest = [] } = {}) {
+  let line = `acceptance: pass — ${count} error(s) in files this PR didn't touch`;
+  if (issueNumbers.length) line += ` → ${issueNumbers.map((n) => `#${n}`).join(', ')}`;
+  if (rest.length) line += `; not ticketed: ${rest.map((g) => `${g.file}:${g.code}`).join(', ')}`;
+  return line;
+}
+
 // Read a newline-separated file list. Tolerates a missing file and an UNTERMINATED last line —
 // the finish step's buckets are written by pi-commit-plan.mjs, and a bare `.join('\n')` there is
 // exactly what silently dropped the last path in #1876. Splitting can't repeat that bug, but the
@@ -85,8 +190,11 @@ export function readFileList(p) {
 //
 //   pi-finish.mjs session <dir>              → the newest *.jsonl path, or nothing
 //   pi-finish.mjs plan <committed-files.txt> → APP_DIR= / PKG_LOGIC= / TEST_FILES= / TESTS_MISSING=
+//   pi-finish.mjs typecheck <acc.log> <tc-exit> <app-dir> <committed.txt> <pr-files.txt> <groups.json>
+//     → ACCEPT= / ACCEPT_MSG= / IN_DIFF= / NOT_IN_DIFF=, and writes every not-in-diff group (uncapped,
+//       sorted) to <groups.json> — the 3-ticket cap applies later, to NEW tickets only (#3249).
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [cmd, arg, arg2] = process.argv.slice(2);
+  const [cmd, arg, arg2, arg3, arg4, arg5, arg6] = process.argv.slice(2);
   try {
     if (cmd === 'session') {
       process.stdout.write(`${resolveSession(arg) || ''}\n`);
@@ -101,14 +209,34 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         + `TESTS_MISSING=${missing ? 1 : 0}\n`
         + `PKG_LOGIC_FILES=${pkgLogic.join(',')}\n`
       );
+    } else if (cmd === 'typecheck') {
+      // A missing log is a fault (the typecheck was said to have run), never a silent pass.
+      if (!arg || !fs.existsSync(arg)) throw new Error(`typecheck log not found: ${arg || '<none>'}`);
+      const r = classifyTypeErrors({
+        logText: fs.readFileSync(arg, 'utf8'),
+        tcExit: arg2 === '' || arg2 === undefined ? undefined : Number(arg2),
+        appDir: arg3 || '',
+        committedFiles: readFileList(arg4),
+        prFiles: readFileList(arg5),
+      });
+      const { toOpen } = groupPreexisting(r.notInDiff, { maxTickets: Infinity });
+      if (arg6) fs.writeFileSync(arg6, `${JSON.stringify(toOpen, null, 2)}\n`);
+      process.stdout.write(
+        `ACCEPT=${r.acceptance}\n`
+        + `ACCEPT_MSG=${String(r.message).replace(/\n/g, ' ')}\n`
+        + `IN_DIFF=${r.inDiff.length}\n`
+        + `NOT_IN_DIFF=${r.notInDiff.length}\n`
+      );
+      for (const e of r.inDiff.slice(0, 15)) console.error(`${e.file}(${e.line},${e.col}): error ${e.code}: ${e.text}`);
     } else {
-      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt> [<pr-files.txt>]');
+      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt> [<pr-files.txt>] | typecheck <acc.log> <tc-exit> <app-dir> <committed.txt> <pr-files.txt> <groups.json>');
       process.exit(2);
     }
   } catch (e) {
     // Even an unexpected fault must not take the step down: warn, emit the safe defaults, exit 0.
     console.error(`::warning::pi-finish ${cmd}: ${e.message}`);
     if (cmd === 'plan') process.stdout.write('APP_DIR=\nPKG_LOGIC=0\nTEST_FILES=0\nTESTS_MISSING=0\n');
+    else if (cmd === 'typecheck') process.stdout.write('ACCEPT=neutral\nACCEPT_MSG=typecheck verdict unavailable — not verified\nIN_DIFF=0\nNOT_IN_DIFF=0\n');
     else process.stdout.write('\n');
   }
 }

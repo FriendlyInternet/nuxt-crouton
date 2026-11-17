@@ -112,12 +112,14 @@ export function piecePath(pieces: ComposePiece[], pieceId: string): NodePath | n
  * unchanged (nothing to bind). One piece → its node is the whole root. Many pieces →
  * a split: the axis is inferred from how the pieces are laid out (wider spread in x ⇒
  * horizontal), ordered along that axis, with `defaultSize` apportioned by extent so
- * the recomposed split keeps the visual proportions. `renderer` / `breakpoints` come
- * from `base` (compose restructures `root` only).
+ * the recomposed split keeps the visual proportions. `renderer` / `breakpoints` come from
+ * `base` (compose restructures `root` only).
  */
 export function piecesToTree(pieces: ComposePiece[], base?: LayoutTree): LayoutTree {
   const renderer = base?.renderer ?? 'panes'
-  const carry = base?.breakpoints ? { breakpoints: base.breakpoints } : {}
+  const carry = {
+    ...(base?.breakpoints ? { breakpoints: base.breakpoints } : {}),
+  }
   if (pieces.length === 0) {
     return base ?? { renderer, root: { type: 'split', direction: 'horizontal', children: [] } }
   }

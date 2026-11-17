@@ -5,6 +5,7 @@
 // Functions take the github-script `{ github, context, core }` (same shape as wave-release.mjs).
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers, collectApprovalLines, buildEpicMainPr } from './epic-ready.mjs'
+import { stepsPending } from './lib/epic-steps.mjs'
 
 /**
  * Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
@@ -47,13 +48,16 @@ export async function resolveEpicAndBranch({ github, context, core }, { dispatch
 
 /**
  * Gather every merged sub-PR into the epic branch with its files/comments/reviews (#2494).
- * Any lookup failure warns and returns what was collected so far.
+ * Returns { subPrs, complete, unchecked }. Any lookup failure warns and returns what was
+ * collected so far with complete=false and `unchecked` = the merged PRs not gathered (#3659),
+ * so the caller can withhold the declaration instead of approving a partial list.
  */
 export async function gatherCarryInput({ github, core, context }, epicBranch) {
   const { owner, repo } = context.repo
   const carryInput = []
+  let merged = []
   try {
-    const merged = (await github.paginate(github.rest.pulls.list,
+    merged = (await github.paginate(github.rest.pulls.list,
       { owner, repo, state: 'closed', base: epicBranch, per_page: 100 })).filter(p => p.merged_at)
     for (const p of merged) {
       const files = (await github.paginate(github.rest.pulls.listFiles,
@@ -72,8 +76,12 @@ export async function gatherCarryInput({ github, core, context }, epicBranch) {
         { owner, repo, pull_number: p.number, per_page: 100 })).map(r => ({ login: r.user?.login, state: r.state }))
       carryInput.push({ number: p.number, files, comments, reviews })
     }
-  } catch (e) { core.warning(`sub-PR approval gather for ${epicBranch}: ${e.message} — the shared-code check will ask`) }
-  return carryInput
+  } catch (e) {
+    core.warning(`sub-PR approval gather for ${epicBranch}: ${e.message} — the shared-code check will ask`)
+    const got = new Set(carryInput.map(p => p.number))
+    return { subPrs: carryInput, complete: false, unchecked: merged.map(p => p.number).filter(n => !got.has(n)) }
+  }
+  return { subPrs: carryInput, complete: true, unchecked: [] }
 }
 
 function adjustForSoloLeaf({ core, epicNumber, closedIssueNumber, blockEpicNumber, subIssues }) {
@@ -91,6 +99,14 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
   const r = await resolveEpicAndBranch({ github, context, core }, { dispatchBranch })
   if (r.skip) return
   const { epicNumber, epicBranch, closedIssueNumber, blockEpicNumber } = r
+
+  // 0) the epic itself (labels) + its comments: a `tickets:rolling` epic is finished only when its
+  //    step list is (#3846). Fetched once, reused for the PR body below.
+  let epic, epicComments = []
+  try {
+    epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data
+    epicComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: epicNumber, per_page: 100 })
+  } catch (e) { core.warning(`epic #${epicNumber}: ${e.message}`); return }
 
   // 1) the epic's DIRECT sub-issues
   let subIssues = []
@@ -121,7 +137,8 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
     aheadCount = cmp.ahead_by || 0
   } catch (e) { core.warning(`compare main...${epicBranch}: ${e.message}`); return }
 
-  const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, aheadCount })
+  const pendingSteps = stepsPending({ labels: (epic.labels || []).map(l => (typeof l === 'string' ? l : l.name)), comments: epicComments, subIssues })
+  const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, aheadCount, pendingSteps })
   core.info(`epic #${epicNumber} (${epicBranch}): ${open ? 'OPEN' : 'skip'} — ${reason}`)
   if (!open) return
 
@@ -133,17 +150,17 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
   // issue. The decision is the pure, unit-tested packagesApprovalCarry(); only the
   // fetching lives here. Any lookup failure degrades to "not approved" (the guard then
   // asks, as before) — never to a false declaration.
-  // NOTE: a mid-loop throw keeps earlier approved PRs — see #3619 test
-  const epicBody = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data.body || ''
-  const carryInput = await gatherCarryInput({ github, context, core }, epicBranch)
-  const carry = packagesApprovalCarry({ subPrs: carryInput, owner: OWNER })
-  core.info(`packages sign-off carry: touched=${JSON.stringify(carry.packagesPrs)} approved=${JSON.stringify(carry.approved)} unapproved=${JSON.stringify(carry.unapproved)}`)
+  const epicBody = epic.body || ''
+  const { subPrs: carryInput, complete, unchecked } = await gatherCarryInput({ github, context, core }, epicBranch)
+  let carry = packagesApprovalCarry({ subPrs: carryInput, owner: OWNER })
+  // #3659: a partial gather never declares — the unchecked PRs are listed as not signed off.
+  if (!complete) carry = { ...carry, line: null, unapproved: [...carry.unapproved, ...unchecked] }
+  core.info(`packages sign-off carry: touched=${JSON.stringify(carry.packagesPrs)} approved=${JSON.stringify(carry.approved)} unapproved=${JSON.stringify(carry.unapproved)} incomplete=${!complete}`)
   // #2748: approvals already written as `Packages-approved:` lines on the epic or its
   // children are copied too (de-duplicated), so a hand-approved epic passes the guard.
   const declared = collectApprovalLines([epicBody, ...subIssues.map(s => s.body)])
 
   // Reference the epic WITHOUT closing it (postmortem gate, #856).
-  const epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data
   const { title, body } = buildEpicMainPr({ epicNumber, epicBranch, epicTitle: epic.title, subIssues, carry, declared, owner: OWNER })
 
   let pr

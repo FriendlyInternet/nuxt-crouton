@@ -212,17 +212,34 @@ crouton init my-app --features bookings,pages,editor --theme ko
 crouton init my-app --dry-run
 ```
 
+### Standalone vs monorepo
+
+`init` / `scaffold-app` detect where they run (#3392): `isCroutonMonorepo(cwd)` in
+`lib/scaffold-app.ts` uses `findPackagesDir` (walk up to a `pnpm-workspace.yaml` with a
+`packages/` dir) and checks `packages/crouton-core` is `@fyit/crouton-core`.
+
+| | Inside the crouton monorepo | Anywhere else (standalone) |
+|---|---|---|
+| Target dir | `apps/<name>` | `./<name>` |
+| `@fyit/*` deps + devDeps | `workspace:*` | `^<cli version>` |
+| Cloudflare (`wrangler.jsonc`, CF stubs) | on (`--no-cf` to skip) | off (`--cf` to add) |
+| Database | `hub.db: 'sqlite'` | `hub.db: 'sqlite'` (local SQLite via NuxtHub) |
+
+`--out` wins in both modes. Standalone: `npx @fyit/crouton-cli init my-app && cd my-app && pnpm install && pnpm dev`.
+`--noCf` is kept as a deprecated alias for `--no-cf`.
+
 ### Init Options
 
 | Option | Description |
 |--------|-------------|
 | `--features <list>` | Comma-separated features (e.g., `bookings,pages,editor`) |
+| `--no-layout` | Leave out `@fyit/crouton-layout` (added by default, #3956) |
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
 | `-d, --dialect <type>` | `sqlite` (default; the only supported value — others exit non-zero) |
-| `--no-cf` | Skip Cloudflare-specific config |
+| `--cf` / `--no-cf` | Force Cloudflare Workers config on/off. Default: on inside the crouton monorepo, off in a standalone app |
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
-| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` |
+| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -742,7 +759,8 @@ instead of a blank canvas — editable in `CroutonLayout` (the layout is **data*
 not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
 The seed only does this for an app that **extends `@fyit/crouton-layout`** — both halves
 are opt-in: the generator writes `crouton.layout.json` only for such an app (otherwise it prints
-`Skipped default layout (layout not enabled)`), and the seed skips any leftover file (#2249, #2282).
+`Skipped default layout (layout not enabled)`), and the seed skips any leftover file (#2249, #2282). `crouton init` extends crouton-layout by
+default (`--no-layout` opts out, #3956), so a new app gets both halves.
 
 ## Output Location
 

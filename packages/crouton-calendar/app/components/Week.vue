@@ -67,7 +67,9 @@ function daysFor(offset: number) {
 }
 
 // prev · current · next — the neighbours peek in while dragging (#2515)
-const panels = computed(() => [-1, 0, 1].map(offset => ({ offset, days: daysFor(offset) })))
+// Keyed by week start, not position, so a step keeps the two staying weeks'
+// day cells and builds only one new week (#3917).
+const panels = computed(() => [-1, 0, 1].map(offset => ({ offset, key: weekStartFor(offset).toString(), days: daysFor(offset) })))
 
 // Format week label for header (like "December 2025")
 const weekLabel = computed(() => {
@@ -199,7 +201,7 @@ const sizeClasses = computed(() => {
     <div class="flex" ref="trackEl" style="transform: translateX(-100%)">
     <div
       v-for="panel in panels"
-      :key="panel.offset"
+      :key="panel.key"
       class="grid grid-cols-7 gap-2 min-w-full shrink-0"
       :inert="panel.offset !== 0 || undefined"
       :aria-hidden="panel.offset !== 0 || undefined"

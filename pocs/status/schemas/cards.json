@@ -1,0 +1,103 @@
+{
+  "kind": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Kind",
+      "displayAs": "optionsSelect",
+      "options": [
+        { "value": "review", "label": "Review" },
+        { "value": "edit", "label": "Edit" },
+        { "value": "delivery", "label": "Delivery" },
+        { "value": "quiz", "label": "Quiz" },
+        { "value": "choice", "label": "Choice" },
+        { "value": "issue", "label": "Issue" }
+      ]
+    }
+  },
+  "sourceType": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Source type",
+      "displayAs": "optionsSelect",
+      "options": [
+        { "value": "issue", "label": "Issue" },
+        { "value": "pr", "label": "Pull request" }
+      ]
+    }
+  },
+  "sourceNumber": {
+    "type": "number",
+    "meta": { "required": true, "label": "Source number" }
+  },
+  "sourceCommentId": {
+    "type": "string",
+    "meta": { "label": "Source comment id" }
+  },
+  "title": {
+    "type": "string",
+    "meta": { "required": true, "label": "Title" }
+  },
+  "ask": {
+    "type": "text",
+    "meta": { "required": true, "label": "Ask" }
+  },
+  "recommendation": {
+    "type": "text",
+    "meta": { "label": "Recommendation" }
+  },
+  "link": {
+    "type": "string",
+    "meta": { "required": true, "label": "Link" }
+  },
+  "payload": {
+    "type": "json",
+    "meta": { "label": "Payload" }
+  },
+  "state": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "default": "waiting",
+      "label": "State",
+      "displayAs": "optionsSelect",
+      "options": [
+        { "value": "waiting", "label": "Waiting" },
+        { "value": "answered", "label": "Answered" },
+        { "value": "stale", "label": "Stale" }
+      ]
+    }
+  },
+  "answer": {
+    "type": "string",
+    "meta": { "label": "Answer" }
+  },
+  "answerNote": {
+    "type": "text",
+    "meta": { "label": "Answer note" }
+  },
+  "answeredVia": {
+    "type": "string",
+    "meta": {
+      "label": "Answered via",
+      "displayAs": "optionsSelect",
+      "options": [
+        { "value": "inbox", "label": "Inbox" },
+        { "value": "github", "label": "GitHub" }
+      ]
+    }
+  },
+  "answerUrl": {
+    "type": "string",
+    "meta": { "label": "Answer URL" }
+  },
+  "askedAt": {
+    "type": "date",
+    "meta": { "required": true, "label": "Asked at" }
+  },
+  "answeredAt": {
+    "type": "date",
+    "meta": { "label": "Answered at" }
+  }
+}

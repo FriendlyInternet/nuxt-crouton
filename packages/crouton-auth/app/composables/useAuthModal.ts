@@ -4,6 +4,7 @@
  * Shared reactive state for the auth route modal.
  * Used by the router plugin (to open) and AuthRouteModal component (to render).
  */
+import { sanitizeRedirectUrl } from '../utils/security'
 
 export type AuthModalMode = 'login' | 'register' | 'forgot-password'
 
@@ -49,7 +50,8 @@ export function useAuthModal() {
    * use this for throwaway demo credentials — never a real account's password.
    */
   function open(mode: AuthModalMode, redirectTo: string, previousPath: string, prefillEmail?: string, dismissible = false, prefillPassword?: string) {
-    state.value = { open: true, mode, redirectTo, previousPath, prefillEmail, prefillPassword, dismissible }
+    // redirectTo comes from `?redirect` — keep it on this site (#3143).
+    state.value = { open: true, mode, redirectTo: sanitizeRedirectUrl(redirectTo || '/'), previousPath, prefillEmail, prefillPassword, dismissible }
   }
 
   /**

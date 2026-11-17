@@ -34,7 +34,8 @@
     "brand",
     "nuxt.config.ts",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/llms.txt"
   ],
   "scripts": {
     "dev": "nuxi dev playground",

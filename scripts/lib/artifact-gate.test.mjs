@@ -70,6 +70,15 @@ test('merge refused: OK without touching GitHub (#3704)', async () => {
   assert.equal(calls.created.length, 0)
 })
 
+test('owner-request worker failed: red, names the exit code, no GitHub calls (#3775)', async () => {
+  const boom = () => { throw new Error('called GitHub') }
+  const calls = { failed: [], info: [] }
+  const github = { paginate: boom, rest: { issues: { listComments: boom, createComment: boom } } }
+  await artifactGate({ github, core: { setFailed: (m) => calls.failed.push(m), info: (m) => calls.info.push(m) }, context: { repo: {} }, env: { ...BASE, REQUEST_FAILED: '137' } })
+  assert.equal(calls.failed.length, 1)
+  assert.match(calls.failed[0], /exit 137/)
+})
+
 test('decompose resume: a sub-issue closed after t0', async () => {
   const h = harness({ subs: [{ number: 11, state: 'closed', closed_at: AFTER, created_at: '2025-12-31T00:00:00Z', labels: [] }] })
   await h.run({})

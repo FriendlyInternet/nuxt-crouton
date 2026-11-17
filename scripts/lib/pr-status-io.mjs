@@ -150,7 +150,10 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
       const runs = st.wfRuns ?? await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
         { owner, repo, head_sha: pr.head.sha, per_page: 100 })
       const failures = fixBotFailures(causes, runs)
-      dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels: labelNames(pr), failures })
+      // #3277: the head commit decides whether the try counter still stands (same input as the gate).
+      let headCommit
+      try { headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data } catch { headCommit = undefined }
+      dec = fixBotWillTry({ head: pr.head.ref, base: pr.base.ref, state: pr.state, labels: labelNames(pr), failures, headCommit })
     } catch (e) {
       core.warning(`fix-bot decision unavailable: ${e.message}`)
       dec = { who: 'owner', code: 'unknown', reason: "couldn't tell whether the auto-fix will try", attempts: 0 }

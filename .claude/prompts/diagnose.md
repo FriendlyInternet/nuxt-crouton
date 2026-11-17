@@ -28,11 +28,12 @@ the prompt that pointed you here.
 ## The comment
 
 The first line is exactly `🩺 **Diagnosis**`. The next line is the hidden marker, with the head
-sha and the URL-encoded check name (e.g. `Deploy%20Apps%20(Cloudflare%20Workers)`):
+sha, the URL-encoded check name (e.g. `Deploy%20Apps%20(Cloudflare%20Workers)`) and the round
+your prompt gives (`1`, or `2` on a redo):
 
 ```
 🩺 **Diagnosis**
-<!-- diagnosis:v1 sha=<head sha> check=<url-encoded check> -->
+<!-- diagnosis:v1 sha=<head sha> check=<url-encoded check> round=<n> -->
 ```
 
 Then these five sections, in this order, each a `####` heading:
@@ -66,4 +67,11 @@ as not planned (`gh issue list --state all --search "<key words of the failing l
 - For a matching CLOSED ticket, say why its fix didn't hold and propose reopening it.
 - Nothing found → "No earlier report found" plus the searches you ran.
 
-End with: `<sub>🤖 fix-bot · diagnose mode (#3667) — the PR waits here; send it on with a **Worker:** comment.</sub>`
+## Redo (round 2)
+
+When your prompt says round 2, a reviewer rejected your round-1 diagnosis and a reviewer's points
+file is given. Address EACH point: re-check the claim it names against the log and the code, and
+change the section it belongs to. Do not edit the round-1 comment — post a NEW comment whose marker
+carries `round=2`. Keep the same five sections.
+
+End with: `<sub>🤖 fix-bot · diagnose mode (#3667, #3668) — a second agent reviews this before any fix.</sub>`

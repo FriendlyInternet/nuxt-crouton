@@ -22,9 +22,12 @@
     "seed",
     "i18n",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run"
   },
   "keywords": [

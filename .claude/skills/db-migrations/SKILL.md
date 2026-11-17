@@ -129,10 +129,13 @@ Mirror `packages/crouton-flow` exactly:
    across extended layers** to build the bundle, so this is what makes consuming
    apps auto-discover the table (confirm: `.nuxt/hub/db/schema.entry.ts` lists
    your package after a `nuxt prepare`).
-3. **`packages/<pkg>/server/database/migrations/NNNN_*.sql`** — hand-write the
-   `CREATE TABLE IF NOT EXISTS …` + indexes. This is the package's own copy
-   (for direct apply / docs); the consuming app still generates its own numbered
-   migration in step "Generate the migration".
+3. **Do NOT add SQL under the package** (no `server/database/migrations/*.sql`).
+   Nothing applies package SQL to an app, so a hand-written copy only makes the
+   table *look* shipped (#3076, the #2850 backfill). Each consuming app's
+   `db:generate` is the single migration source — run it for every app that
+   picks the table up. The Migration guard (`scripts/migration-guard.mjs`,
+   #3013) turns a PR red, naming the app, when a package schema changes
+   without that app's migration.
 4. Editing `packages/` is behind a **hard gate** — get user approval, then
    `echo '<pkg-name>' >> .claude/.package-edit-approved`, edit, and
    `rm .claude/.package-edit-approved` when done. (See root CLAUDE.md.)
@@ -146,8 +149,7 @@ names in package tables follow that table's own convention (flow uses snake_case
 add the table to the app's `crouton.config.js`. NuxtHub auto-discovers it from
 the package's `server/db/schema.ts` re-export; the app's only job is the normal
 migrate step below (`db:generate` auto-includes it, then `db:migrate`) — the same
-step any schema change needs. (A package may also ship its own `.sql` for direct
-apply via `wrangler d1 execute --file=node_modules/@fyit/<pkg>/server/database/migrations/<file>.sql`.)
+step any schema change needs.
 
 ## Generate the migration
 

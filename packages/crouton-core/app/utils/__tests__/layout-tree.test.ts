@@ -255,3 +255,78 @@ describe('sanitizeLayoutTree — authored breakpoints (WS5 #874)', () => {
     expect(clean?.breakpoints?.[1]).toEqual({ minWidth: 1280 })
   })
 })
+
+describe('sanitizeLayoutTree — keeps store wiring (#3650)', () => {
+  it('keeps a string leaf `source` and a tree `sources` map, nested too', () => {
+    const input = {
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'bookings' },
+          { type: 'nested', layout: { root: { type: 'leaf', blockId: 'b', source: 'bookings#mine' }, sources: { 'bookings#mine': { options: { mine: true } } } } },
+        ],
+      },
+      sources: { bookings: { options: { range: 'week' } }, spare: {} },
+    }
+    expect(sanitizeLayoutTree(input)).toEqual({
+      renderer: 'panes',
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', source: 'bookings' },
+          { type: 'nested', layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'b', source: 'bookings#mine' }, sources: { 'bookings#mine': { options: { mine: true } } } } },
+        ],
+      },
+      sources: { bookings: { options: { range: 'week' } }, spare: {} },
+    })
+  })
+
+  it('drops a non-string `source` and non-object `sources` entries', () => {
+    const clean = sanitizeLayoutTree({
+      renderer: 'panes',
+      root: { type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a', source: 42 }, { type: 'leaf', blockId: 'b', source: '' }] },
+      sources: { ok: { options: { x: 1 } }, bad: 'nope', list: [1], badOptions: { options: 'x' } },
+    })
+    expect(clean?.root).toEqual({ type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a' }, { type: 'leaf', blockId: 'b' }] })
+    expect(clean?.sources).toEqual({ ok: { options: { x: 1 } }, badOptions: {} })
+    expect(sanitizeLayoutTree({ root: { type: 'leaf', blockId: 'a' }, sources: ['x'] })).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'a' } })
+  })
+})
+
+describe('sanitizeLayoutTree — retired auto layout fields (#3919)', () => {
+  it('drops auto and every size (leaf, split, nested, breakpoint root) but keeps defaultSize', () => {
+    const clean = sanitizeLayoutTree({
+      renderer: 'panes',
+      auto: true,
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { type: 'leaf', blockId: 'a', size: 'fit' },
+          { type: 'split', direction: 'vertical', size: 'fill', children: [{ type: 'leaf', blockId: 'b' }] },
+          { type: 'nested', size: 'fixed', defaultSize: 40, layout: { renderer: 'panes', auto: true, root: { type: 'leaf', blockId: 'c', size: 'fit' } } },
+        ],
+      },
+      breakpoints: [{ minWidth: 0, root: { type: 'split', direction: 'vertical', children: [{ type: 'leaf', blockId: 'a', size: 'fit' }] } }],
+    })
+    expect(clean).not.toBeNull()
+    const json = JSON.stringify(clean)
+    expect(json).not.toContain('"auto"')
+    expect(json).not.toContain('"size"')
+    const nested = clean!.root.type === 'split' ? clean!.root.children[2] : undefined
+    expect(nested?.defaultSize).toBe(40)
+  })
+
+  it('an existing tree without the new fields comes out unchanged, with no auto/size keys', () => {
+    const clean = sanitizeLayoutTree(validTree)
+    expect(clean).toEqual(validTree)
+    expect(Object.keys(clean!)).not.toContain('auto')
+    expect(Object.keys(clean!.root)).not.toContain('size')
+    const children = clean!.root.type === 'split' ? clean!.root.children : []
+    expect(children).toHaveLength(2)
+    for (const child of children) expect(Object.keys(child)).not.toContain('size')
+  })
+})

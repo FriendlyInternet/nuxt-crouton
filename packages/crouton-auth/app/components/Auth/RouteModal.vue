@@ -25,6 +25,13 @@ const { state } = authModal
 const authConfig = useAuthConfig()
 const showGoHome = computed(() => !state.value.dismissible && authConfig?.ui?.showGoHome !== false)
 
+// Invite-only apps (#3340): hide the "Create account" links, and show a notice
+// instead of the register form — unless the visitor came from an invitation
+// (accept-invitation sends /auth/register?email=<invited>, so prefillEmail is set).
+// The server refuses uninvited sign-ups regardless; this is just the UI half.
+const inviteOnly = authConfig?.signup === 'invite'
+const inviteOnlyAppName = computed(() => authConfig?.appName || t('auth.inviteOnly.thisApp'))
+
 // Bind UModal open state — setter restores URL when user dismisses
 const isOpen = computed({
   get: () => state.value.open,
@@ -72,6 +79,8 @@ watch(() => state.value.mode, () => {
   magicLinkEmail.value = ''
   emailSent.value = false
   sentEmail.value = ''
+  verificationSent.value = false
+  verificationEmail.value = ''
 })
 
 // Screen reader title mapped from current mode
@@ -308,7 +317,20 @@ async function onRegisterSubmit(event: FormSubmitEvent<{ name: string, email: st
   formError.value = null
   submitting.value = true
   try {
-    await register({ name: event.data.name, email: event.data.email, password: event.data.password })
+    const { requiresVerification } = await register({
+      name: event.data.name,
+      email: event.data.email,
+      password: event.data.password,
+      // The verify link lands back here (e.g. the invite page), signed in (#3141)
+      callbackURL: state.value.redirectTo
+    })
+    if (requiresVerification) {
+      // Not signed in yet: show "check your email" instead of the welcome (#3141)
+      verificationEmail.value = event.data.email
+      verificationSent.value = true
+      submitting.value = false
+      return
+    }
     notify.success(t('auth.accountCreated'), { description: t('auth.accountCreatedDescription') })
     await handleSuccess()
   } catch (e: unknown) {
@@ -320,6 +342,10 @@ async function onRegisterSubmit(event: FormSubmitEvent<{ name: string, email: st
 }
 
 // ── Forgot password ───────────────────────────────────────────────────────────
+
+// Sign-up that needs a verified e-mail first (crouton-email installed, #3141)
+const verificationSent = ref(false)
+const verificationEmail = ref('')
 
 const emailSent = ref(false)
 const sentEmail = ref('')
@@ -431,7 +457,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 <template v-if="showMagicLink">
                   {{ t('auth.magicLinkDescription') }}
                 </template>
-                <template v-else>
+                <template v-else-if="!inviteOnly">
                   {{ t('auth.dontHaveAccount') }}
                   <UButton
                     variant="link"
@@ -500,7 +526,10 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 <h2 class="mt-4 text-xl font-semibold text-highlighted">
                   {{ t('auth.welcomeBack') }}
                 </h2>
-                <p class="mt-2 text-muted">
+                <p
+                  v-if="!inviteOnly"
+                  class="mt-2 text-muted"
+                >
                   {{ t('auth.dontHaveAccount') }}
                   <UButton
                     variant="link"
@@ -537,8 +566,62 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
           v-else-if="state.mode === 'register'"
           key="register"
         >
+          <!-- Verification e-mail sent: not signed in until the link is clicked (#3141).
+               First in the chain: an invited sign-up has prefillEmail set and must still see this. -->
+          <div
+            v-if="verificationSent"
+            class="space-y-6"
+          >
+            <div class="text-center">
+              <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <UIcon
+                  name="i-lucide-mail-check"
+                  class="h-6 w-6 text-primary"
+                />
+              </div>
+              <h2 class="mt-4 text-xl font-semibold text-highlighted">
+                {{ t('auth.verifyEmail.verifyYourEmail') }}
+              </h2>
+              <p class="mt-2 text-muted">
+                {{ t('auth.verifyEmail.emailSentTo', { email: verificationEmail }) }}
+              </p>
+              <p class="mt-2 text-muted">
+                {{ t('auth.verifyEmail.clickLink') }}
+              </p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="outline"
+              block
+              @click="authModal.setMode('login')"
+            >
+              {{ t('auth.backToSignIn') }}
+            </UButton>
+          </div>
+
+          <!-- Invite-only app, no invitation in hand (#3340) -->
+          <div
+            v-else-if="inviteOnly && !state.prefillEmail"
+            class="space-y-6"
+          >
+            <UAlert
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-mail-plus"
+              :title="t('auth.inviteOnly.title', { app: inviteOnlyAppName })"
+              :description="t('auth.inviteOnly.description')"
+            />
+            <UButton
+              block
+              color="primary"
+              @click="authModal.setMode('login')"
+            >
+              {{ t('auth.signIn') }}
+            </UButton>
+          </div>
+
           <UAuthForm
-            v-if="hasPassword"
+            v-else-if="hasPassword"
             ref="registerForm"
             :fields="registerFields"
             :providers="oauthButtons"
