@@ -250,6 +250,25 @@ export class CollabRoom implements DurableObject {
       })
     }
 
+    if (url.pathname === '/update') {
+      // App-server edit (#3982, the MCP pages tools): a raw Yjs update. The room
+      // token checked above proves the caller may write this exact room — a WS
+      // client with the same token can already send updates. Origin 'server' is
+      // not a socket, so the update listener broadcasts to EVERY session and
+      // schedules the save.
+      if (request.method !== 'POST') {
+        return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } })
+      }
+      const update = new Uint8Array(await request.arrayBuffer())
+      if (update.byteLength === 0) return new Response('Empty update', { status: 400 })
+      try {
+        Y.applyUpdate(this.ydoc, update, 'server')
+      } catch {
+        return new Response('Invalid update', { status: 400 })
+      }
+      return new Response('ok', { status: 200 })
+    }
+
     if (url.pathname === '/users') {
       // HTTP endpoint to get current users (for Phase 6 global presence)
       const users = Array.from(this.sessions.values())

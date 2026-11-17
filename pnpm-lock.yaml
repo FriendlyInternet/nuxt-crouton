@@ -263,6 +263,9 @@ importers:
       '@fyit/crouton-maps':
         specifier: workspace:*
         version: link:../../packages/crouton-maps
+      '@fyit/crouton-mcp-toolkit':
+        specifier: workspace:*
+        version: link:../../packages/crouton-mcp-toolkit
       '@fyit/crouton-pages':
         specifier: workspace:*
         version: link:../../packages/crouton-pages
@@ -1375,6 +1378,15 @@ importers:
 
   packages/crouton-mcp-toolkit:
     dependencies:
+      '@fyit/crouton-collab':
+        specifier: workspace:*
+        version: link:../crouton-collab
+      '@fyit/crouton-layout':
+        specifier: workspace:*
+        version: link:../crouton-layout
+      '@fyit/crouton-pages':
+        specifier: workspace:*
+        version: link:../crouton-pages
       defu:
         specifier: ^6.1.4
         version: 6.1.7
@@ -1400,6 +1412,9 @@ importers:
       vue:
         specifier: ^3.5.44
         version: 3.5.44(typescript@5.9.3)
+      yjs:
+        specifier: ^13.6.0
+        version: 13.6.29
       zod:
         specifier: 4.6.7
         version: 4.6.7

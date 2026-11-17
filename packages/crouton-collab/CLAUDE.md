@@ -33,6 +33,8 @@ Real-time collaboration infrastructure for Nuxt Crouton using Yjs CRDTs. This pa
 | `app/composables/useCollabRoomUsers.ts` | Poll room users via HTTP (Phase 6) |
 | `app/components/CollabEditingBadge.vue` | "X editing" badge for list items (Phase 6) |
 | `server/utils/collabRoomStore.ts` | Shared in-memory room storage for local dev |
+| `server/utils/collabServerDoc.ts` | `readCollabRoomDoc` / `updateCollabRoomDoc` (#3982) — read or edit a live room from the app server. Worker mode signs a 60 s room token, `GET /state`, runs the edit, `POST /update` with only the diff; local mode edits the in-process room and pushes to its peers; production with no worker URL returns `{ error }` (never writes the record). Exported as `@fyit/crouton-collab/server/utils/collabServerDoc` |
+| `shared/tiptap-yjs.ts` | TipTap JSON ⇄ `Y.XmlFragment` converter in y-prosemirror's encoding (attributes kept raw, marks as text formatting), `seedYFragment` (the deterministic seed, #3983), `hasFragmentContent`, `editYFragment` (insert / replace / delete blocks at an index). Used by `useCollabLocalizedContent` and the server; exported as `@fyit/crouton-collab/shared/tiptap-yjs` |
 | `server/routes/api/collab/[roomId]/users.get.ts` | HTTP endpoint for room users |
 | `wrangler.example.toml` | Cloudflare configuration template |
 
@@ -97,7 +99,7 @@ NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-collab-worker.workers.dev
 
 1. **Connection**: Client connects via WebSocket with `type` and `roomId` params
 2. **Initial Sync**: CollabRoom sends full Y.Doc state to new client
-3. **Updates**: Clients send Yjs binary updates, CollabRoom applies and broadcasts
+3. **Updates**: Clients send Yjs binary updates, CollabRoom applies and broadcasts; the app server can also push one through `updateCollabRoomDoc` (worker `/update` in production, the in-process room locally)
 4. **Awareness**: JSON messages track cursor positions, selections, presence
 5. **Persistence**: Debounced (1s) save to both DO storage and D1
 
@@ -621,6 +623,7 @@ Raw Uint8Array containing Yjs update data.
 | `/api/collab/[roomId]/ws?type=X` | GET | WebSocket upgrade |
 | `/api/collab/[roomId]/users?type=X` | GET | Get current users (Phase 6) |
 | `/state` (via DO) | GET | Get current Yjs state as binary |
+| `/update` (via DO) | POST | Apply a raw Yjs update from the app server (room token); broadcast to everyone + persist |
 | `/users` (via DO) | GET | Get current users JSON |
 
 ### Users Endpoint Response
