@@ -136,7 +136,9 @@ a feature branch.
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
    with the PR link** (e.g. `→ built in #<pr>`) so the ticket shows where its work went —
    never leave the issue blank while the work lives in a PR (the #442 failure mode). Never put the `<!-- pipeline-note -->` marker in your own comments — it is reserved for the workflow's notes and makes a comment not count as your output (#3251). Body
-   follows `github-tasks` (👤/🤖 + `## 🧪 How to test`). End the PR body with the
+   follows `github-tasks` (👤/🤖 + `## 🧪 How to test`).
+   PLAIN TEST STEPS (#3301, github-tasks § How to test → Plain steps): each step is one action + `→ what you should see` on the next line; start from the preview URL and name any login or data; only needs what the preview has (the change seeds it, or the step says how to make it in the app); no repo jargon (file/script names, CLI commands, internal terms) unless explained in ≤3 plain words; no owner homework off the phone (scripts, Mac, terminal) — if it can't be tested on the preview, say so in one line.
+   End the PR body with the
    Generated-with-Claude-Code footer.
    - **`Closes` does NOT auto-close on an epic-branch PR.** GitHub only auto-closes the
      linked issue when the PR merges into the **default branch** (`main`); an epic-branch

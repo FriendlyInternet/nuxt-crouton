@@ -120,6 +120,7 @@ the run (`continue-on-error` + the script always exits 0).
 - **Storage:** orphan branch `pipeline-data`, one file per run: `records/<yyyy-mm-dd>/<run_id>-<attempt>.json`
   (contents API; distinct paths cannot conflict, 409/422 retried 3×). Nothing lands on main or epic branches.
 - **Also on `pipeline-data`:** `metrics/` — raw run/job history and `metrics/latest.json`, written hourly by `pipeline-metrics.yml` (#3679, see `scripts/metrics/README.md`).
+- **Also on `pipeline-data`:** `epics/<N>.json` — one numbers record per epic (runs, silent runs, rounds per child, time to main, owner touches), written by `postmortem.yml` `post` (#3253, `scripts/lib/epic-numbers.mjs`; overwritten on a hand retry via `writeRecord({ overwrite: true })`), read by the 10-epic review (#3254).
 - **What counts as output:** an agent-written comment, a review verdict, or a commit on the work branch
   inside the run's window. None → `produced: ["nothing"]` (never skipped).
 - **What does not:** the workflow's own notes. Every one carries the hidden marker

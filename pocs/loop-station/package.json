@@ -21,7 +21,7 @@
     "@nuxt/ui": "catalog:",
     "@vue-flow/core": "^1.41.2",
     "nuxt": "catalog:",
-    "nuxt-charts": "^2.1.2",
+    "nuxt-charts": "^2.2.3",
     "vue": "catalog:",
     "vue-router": "catalog:"
   },
