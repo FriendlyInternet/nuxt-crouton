@@ -29,7 +29,8 @@
     "products-schema.json",
     "crouton.manifest.ts",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt"
   ],
   "keywords": [
     "nuxt",
