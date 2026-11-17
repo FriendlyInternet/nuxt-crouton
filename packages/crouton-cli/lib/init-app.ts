@@ -15,7 +15,7 @@ interface InitAppOptions {
   cf?: boolean
   domain?: string
   dryRun?: boolean
-  /** Target directory for the app. Defaults to `apps/<name>`; pass `pocs/<name>` for a POC. */
+  /** Target directory for the app. Defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere; pass `pocs/<name>` for a POC. */
   out?: string
 }
 
@@ -31,13 +31,14 @@ export function initFeatures(features: string[] = [], layout = true): string[] {
  * Run the full init pipeline: scaffold -> generate -> doctor -> summary.
  */
 export async function initApp(name: string, options: InitAppOptions = {}): Promise<void> {
-  const { features = [], layout = true, theme, dialect = 'sqlite', cf = true, domain, dryRun = false, out } = options
+  const { features = [], layout = true, theme, dialect = 'sqlite', cf, domain, dryRun = false, out } = options
 
   console.log(`\n  crouton init — creating ${name}${out ? ` in ${out}` : ''}\n`)
 
   // ── Step 1: scaffold-app ──────────────────────────────────────────────
   console.log('  Step 1/3 — Scaffolding app...\n')
   let appDir
+  let resolvedCf = true
   try {
     const { scaffoldApp } = await import('./scaffold-app.ts')
     // The default layout is only added when the module registry can see crouton-layout —
@@ -53,6 +54,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
     }
     const result = await scaffoldApp(name, { features: initFeatures(features, addLayout), theme, dialect, cf, domain, dryRun, outDir: out })
     appDir = result.appDir
+    resolvedCf = result.cf
   } catch (error) {
     consola.error('Step 1/3 — Scaffold failed')
     throw error
@@ -128,7 +130,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   }
 
   // ── Summary ───────────────────────────────────────────────────────────
-  printSummary(name, appDir, cf, needsManualMigrations)
+  printSummary(name, appDir, resolvedCf, needsManualMigrations)
 }
 
 function printSummary(name: string, appDir: string, cf: boolean, needsManualMigrations = false): void {
