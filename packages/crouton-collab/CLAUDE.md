@@ -24,6 +24,7 @@ Real-time collaboration infrastructure for Nuxt Crouton using Yjs CRDTs. This pa
 | `app/composables/useCollabPresence.ts` | Cursor/selection presence tracking |
 | `app/composables/useCollabEditor.ts` | TipTap editor integration |
 | `app/composables/useCollectionSyncSignal.ts` | Real-time collection cache sync across clients |
+| `app/composables/useCollabLocalizedContent.ts` | Per-locale Yjs content; `setContentJson` fills an empty room once (identical concurrent fills merge into one copy) |
 | `app/plugins/collection-sync.client.ts` | Auto-hooks mutations for cross-client refresh |
 | `app/components/CollabStatus.vue` | Connection status indicator (dot + label) |
 | `app/components/CollabPresence.vue` | Stacked user avatars with overflow |
@@ -119,6 +120,7 @@ The `type` query parameter differentiates room types:
 - **`NUXT_PUBLIC_COLLAB_WORKER_URL` is build-time** — It's baked into the client bundle. Changing it requires a rebuild. An empty value in a production build means live sync is off.
 - **Token expiry is 60 seconds** — Enough for initial connection. Reconnections auto-fetch a fresh token.
 - **`COLLAB_TOKEN_SECRET` must match** — Both the Nuxt app and collab worker use the same secret for HMAC signing/verification.
+- **Localized content is filled once, never replaced on load** — `useCollabLocalizedContent.setContentJson` returns early when the room already has content, and builds the initial fill in a doc whose client ID is a hash of the content, so two windows filling the same empty room at once merge into one copy instead of duplicating blocks (#3983). Only an explicit `force=true` replaces content.
 
 ## Real-Time Collection Sync
 

@@ -91,7 +91,7 @@ its sub-issues is one coherent PR with the commits kept separate.
 
 ### Issue Status Updates
 - Move the issue through its states: open → in-progress → closed (via the PR's `Closes #NN` on merge)
-- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856); an epic whose branch has drifted from main gets a fresh one with `/fresh-branch` (#3881).
+- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425) and adds the epic's run numbers plus the ticket steps the diff dropped (#3253); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856); an epic whose branch has drifted from main gets a fresh one with `/fresh-branch` (#3881).
 - `writeups/PROGRESS_TRACKER.md` is an **optional** phase-level rollup, not the per-task tracker — update it only when keeping a phase summary current.
 
 ### Multi-Agent Continuity
@@ -213,11 +213,18 @@ session catches what the PR would, not after:
    CI's `Type Check Packages` job runs the same script on every PR that touches a package.
    Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces
    thousands of false positives. Fix errors immediately. Never skip.
-2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
-   structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
-   dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
-   check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
-   dead-code` for a wider look.)
+2. **Fallow audit (always, it's fast + diff-scoped).** `git fetch origin <base> && npx fallow
+   audit --base origin/<base>`, where `<base>` is the branch your PR targets (`main` or its
+   `epic/*` branch). This is the same structural gate CI runs (`fallow-audit` in `ci.yml`, via
+   `scripts/fallow-audit.mjs`): dead code, duplication, complexity and dependency hygiene,
+   judged on **just your diff**. Always pass `--base`: without it fallow compares against your
+   branch's *upstream*, so a pushed branch is judged against itself and prints *No issues*
+   while CI fails. CI also feeds it test coverage (`--coverage coverage/coverage-final.json`,
+   from `pnpm test:coverage`), which changes the complexity (CRAP) scores. Read the *above
+   threshold* and *clone groups* sections, not only the summary line. Splitting a big file
+   creates **new** files, and everything in a new file counts as yours, so a split can fail on
+   complexity the old file was excused for. CI runs it only on app/package/infra PRs.
+   (`npx fallow health --score` / `npx fallow dead-code` for a wider look.)
 3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
    fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
    library's async state instead of deriving from the source event, an over-engineered

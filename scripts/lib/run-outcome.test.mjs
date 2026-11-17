@@ -122,6 +122,53 @@ test('write: 409 is retried; an unreachable API throws (caller exits 0)', async 
   await assert.rejects(writeRecord({ repo: 'o/r', token: 't', fetchImpl: async () => { throw new Error('down') }, record: { run_id: '1', attempt: '1', started_at: '2026-11-03' } }))
 })
 
+// T7 (#3253): `epics/<n>.json` is rewritten on a hand retry. GitHub needs the file's sha to update it.
+function contentsApi({ existingSha = null, rejectShaless = false } = {}) {
+  const puts = []
+  const fetchImpl = async (url, init) => {
+    const method = init?.method || 'GET'
+    if (method === 'GET' && url.includes('/contents/')) {
+      return existingSha ? { status: 200, json: async () => ({ sha: existingSha }) } : { status: 404, json: async () => ({}) }
+    }
+    if (method === 'PUT') {
+      const body = JSON.parse(init.body)
+      puts.push(body)
+      if (rejectShaless && !body.sha) return { status: 422, json: async () => ({ message: 'sha wasn\'t supplied' }) }
+      return { status: 200, json: async () => ({}) }
+    }
+    return { status: 200, json: async () => ({}) } // branch exists
+  }
+  return { puts, fetchImpl }
+}
+const epicRecord = { epic: 7, runs: 8 }
+test('T7. overwrite: an existing file\'s sha is sent on the PUT; a new file (404) gets none', async () => {
+  const a = contentsApi({ existingSha: 'abc' })
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: a.fetchImpl, sleep: async () => {} })
+  assert.equal(a.puts.at(-1).sha, 'abc')
+  const b = contentsApi()
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: b.fetchImpl, sleep: async () => {} })
+  assert.equal('sha' in b.puts.at(-1), false)
+})
+test('T7. a file that already exists (422 without sha) fails without overwrite and is updated with it', async () => {
+  const a = contentsApi({ existingSha: 'abc', rejectShaless: true })
+  await assert.rejects(writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', fetchImpl: a.fetchImpl, sleep: async () => {} }), /HTTP 422/)
+  assert.equal(a.puts.length, 3)
+  const b = contentsApi({ existingSha: 'abc', rejectShaless: true })
+  assert.equal(await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: b.fetchImpl, sleep: async () => {} }), 'epics/7.json')
+  assert.equal(b.puts.length, 1)
+})
+test('T7. overwrite re-reads the sha on a 409 retry, so a parallel writer\'s update is picked up', async () => {
+  let sha = 'one'; let n = 0; const puts = []
+  const fetchImpl = async (url, init) => {
+    const method = init?.method || 'GET'
+    if (method === 'GET' && url.includes('/contents/')) return { status: 200, json: async () => ({ sha }) }
+    if (method === 'PUT') { puts.push(JSON.parse(init.body).sha); if (++n === 1) { sha = 'two'; return { status: 409, json: async () => ({}) } } return { status: 200, json: async () => ({}) } }
+    return { status: 200, json: async () => ({}) }
+  }
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl, sleep: async () => {} })
+  assert.deepEqual(puts, ['one', 'two'])
+})
+
 test('record-run CLI exits 0 even when the API is unreachable', async () => {
   const { spawnSync } = await import('node:child_process')
   const r = spawnSync(process.execPath, ['scripts/eval-ledger/record-run.mjs'], {
