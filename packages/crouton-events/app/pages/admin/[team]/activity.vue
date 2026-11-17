@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useMediaQuery } from '@vueuse/core'
-
 definePageMeta({
   layout: 'admin',
   middleware: ['auth', 'team-admin']
@@ -8,11 +6,14 @@ definePageMeta({
 
 const { t } = useI18n()
 
-// Below `sm` the header actions are icon-only so the title keeps its room
-const isPhone = useMediaQuery('(max-width: 639px)')
-
-// The log exposes refresh()/exportAs() so its actions can live in the navbar
-const log = ref<{ refresh: () => unknown, exportAs: (format: 'csv' | 'json') => Promise<void>, exporting: boolean } | null>(null)
+// The log exposes refresh()/exportAs()/openFilters() so its actions can live in the navbar
+const log = ref<{
+  refresh: () => unknown
+  exportAs: (format: 'csv' | 'json') => Promise<void>
+  exporting: boolean
+  openFilters: () => void
+  activeFilterCount: number
+} | null>(null)
 
 const exportItems = computed(() => [[
   { label: t('events.log.exportCsv'), icon: 'i-lucide-file-spreadsheet', onSelect: () => log.value?.exportAs('csv') },
@@ -28,25 +29,34 @@ const exportItems = computed(() => [[
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            icon="i-lucide-refresh-cw"
-            :label="isPhone ? undefined : t('events.log.refresh')"
-            :aria-label="t('events.log.refresh')"
-            @click="log?.refresh()"
+          <!-- Phone (below sm): one icon-only button group; CSS picks the branch so hydration matches -->
+          <CroutonActivityHeaderActions
+            class="sm:hidden"
+            :filter-count="log?.activeFilterCount ?? 0"
+            :exporting="log?.exporting"
+            @refresh="log?.refresh()"
+            @filters="log?.openFilters()"
+            @export="format => log?.exportAs(format)"
           />
-          <UDropdownMenu :items="exportItems">
+          <div class="hidden sm:flex items-center gap-1.5">
             <UButton
               color="neutral"
-              variant="outline"
-              icon="i-lucide-download"
-              :trailing-icon="isPhone ? undefined : 'i-lucide-chevron-down'"
-              :label="isPhone ? undefined : t('events.log.export')"
-              :aria-label="t('events.log.export')"
-              :loading="log?.exporting"
+              variant="ghost"
+              icon="i-lucide-refresh-cw"
+              :label="t('events.log.refresh')"
+              @click="log?.refresh()"
             />
-          </UDropdownMenu>
+            <UDropdownMenu :items="exportItems">
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-download"
+                trailing-icon="i-lucide-chevron-down"
+                :label="t('events.log.export')"
+                :loading="log?.exporting"
+              />
+            </UDropdownMenu>
+          </div>
         </template>
       </UDashboardNavbar>
     </template>

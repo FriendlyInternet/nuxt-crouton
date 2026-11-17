@@ -12,7 +12,8 @@ Automatic event tracking and audit trail for Nuxt Crouton collections. Hooks int
 | `app/composables/useCroutonEventsExport.ts` | Export events as CSV/JSON |
 | `app/components/CroutonActivityLog.vue` | Activity log (filters, UTimeline, pagination, export via the page navbar) |
 | `app/components/CroutonActivityTimeline.vue` | UTimeline list, one item per event (label · title, who, relative time) |
-| `app/components/CroutonActivityFilters.vue` | Filter controls (collection, operation, person: USelectMenu; period: UTabs) |
+| `app/components/CroutonActivityFilters.vue` | Filter controls (collection, operation, person: USelectMenu; period: UTabs). Below `sm` the selects live in a bottom drawer (exposed `openDrawer()`, `activeFilterCount`) |
+| `app/components/CroutonActivityHeaderActions.vue` | Phone header button group for the Activité page: Actualiser · Filtres (count badge) · Exporter |
 | `app/utils/event-display.ts` | Display helpers: record title, collection label, relative time, event query |
 | `app/components/CroutonEventDetail.vue` | Event detail modal |
 | `app/components/CroutonEventChangesTable.vue` | Before/after diff table |

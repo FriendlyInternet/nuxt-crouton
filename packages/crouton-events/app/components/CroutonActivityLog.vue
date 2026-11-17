@@ -106,13 +106,22 @@ async function exportAs(format: 'csv' | 'json') {
   }
 }
 
-defineExpose({ refresh, exportAs, exporting })
+// Phone: the page header's "Filtres" button opens the filters drawer and shows its count
+const filtersRef = ref<{ openDrawer: () => void, activeFilterCount: number } | null>(null)
+const activeFilterCount = computed(() => filtersRef.value?.activeFilterCount ?? 0)
+
+function openFilters() {
+  filtersRef.value?.openDrawer()
+}
+
+defineExpose({ refresh, exportAs, exporting, openFilters, activeFilterCount })
 </script>
 
 <template>
   <div class="crouton-activity-log flex flex-col gap-6">
     <CroutonActivityFilters
       v-if="showFilters"
+      ref="filtersRef"
       v-model="filters"
       :collections="seenCollections"
       :users="seenUsers"

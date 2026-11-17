@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
 /**
- * #4036 phone layout — below `sm` the collection/action/user selects fold into one
- * "Filtres" button (opens a bottom drawer) with a badge counting the active filters.
- * Mounts the real CroutonActivityFilters at a real 390px happy-dom viewport, so the
- * real `useMediaQuery` decides the layout. Nuxt UI parts are stubbed (there is no Nuxt
- * app in a unit test); the stubs only render and emit what the component wires to them.
+ * #4036 phone layout — below `sm` the page header carries one button group (Actualiser ·
+ * Filtres · Exporter). "Filtres" opens a bottom drawer holding the collection/action/person
+ * selects and shows a badge counting the active filters; no select sits inline.
+ * Mounts the real CroutonActivityFilters + CroutonActivityHeaderActions, wired the way the
+ * page wires them, at a real 390px happy-dom viewport so the real `useMediaQuery` decides
+ * the layout. Nuxt UI parts are stubbed (there is no Nuxt app in a unit test); the stubs only
+ * render and emit what the components wire to them — except the select menu stub, which on
+ * open applies the same guard reka-ui's ComboboxItem applies (it throws on an empty-string
+ * item value: the "Erreur 500" crash).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -12,6 +16,7 @@ import { computed, createSSRApp, defineComponent, h, nextTick, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import fr from '../../../i18n/locales/fr.json'
 import CroutonActivityFilters from '../CroutonActivityFilters.vue'
+import CroutonActivityHeaderActions from '../CroutonActivityHeaderActions.vue'
 import { eventCollectionLabel } from '../../utils/event-display'
 import type { FilterState } from '../../types/events'
 
@@ -39,32 +44,58 @@ const UBadge = defineComponent({
     return () => h('span', { ...attrs, 'data-badge': '' }, String(p.label))
   }
 })
+// Opening the menu renders its items; like reka-ui's ComboboxItem, an empty-string value throws
 const USelectMenu = defineComponent({
   name: 'USelectMenu',
-  props: { modelValue: { type: String, default: '' } },
+  props: {
+    modelValue: { type: String, default: undefined },
+    items: { type: Array as () => Array<{ label: string, value: string }>, default: () => [] }
+  },
   emits: ['update:modelValue'],
-  setup(_p, { attrs }) {
-    return () => h('div', { ...attrs, 'data-select': '' })
+  setup(p, { attrs }) {
+    const open = ref(false)
+    return () => h('div', { ...attrs, 'data-select': '', 'data-value': p.modelValue }, [
+      h('span', { 'data-select-trigger': '', 'onClick': () => { open.value = true } }),
+      open.value
+        ? p.items.map((item) => {
+            if (item.value === '') throw new Error('A <ComboboxItem /> must have a value prop that is not an empty string.')
+            return h('span', { 'data-item': item.value }, item.label)
+          })
+        : null
+    ])
   }
 })
-// Like the real drawer: clicking the trigger opens it, the body renders only while open
+// Like the real drawer: the body renders only while open
 const UDrawer = defineComponent({
   name: 'UDrawer',
   props: { open: { type: Boolean, default: false } },
   emits: ['update:open'],
-  setup(p, { slots, emit }) {
+  setup(p, { slots }) {
     return () => h('div', { 'data-drawer': '' }, [
-      h('div', { 'data-trigger': '', 'onClick': () => emit('update:open', true) }, slots.default?.()),
       p.open ? h('div', { 'data-drawer-body': '' }, slots.body?.()) : null
     ])
   }
 })
 const UTabs = defineComponent({
   name: 'UTabs',
-  setup() {
-    return () => h('div', { 'data-tabs': '' })
+  setup(_p, { attrs }) {
+    return () => h('div', { ...attrs, 'data-tabs': '' })
   }
 })
+const UFieldGroup = defineComponent({
+  name: 'UFieldGroup',
+  setup(_p, { slots, attrs }) {
+    return () => h('div', { ...attrs, 'data-field-group': '' }, slots.default?.())
+  }
+})
+const UDropdownMenu = defineComponent({
+  name: 'UDropdownMenu',
+  setup(_p, { slots }) {
+    return () => h('div', { 'data-dropdown': '' }, slots.default?.())
+  }
+})
+
+const components = { UButton, UBadge, USelectMenu, UDrawer, UTabs, UFieldGroup, UDropdownMenu }
 
 beforeEach(() => {
   vi.stubGlobal('computed', computed)
@@ -74,17 +105,33 @@ beforeEach(() => {
   vi.stubGlobal('eventCollectionLabel', eventCollectionLabel)
 })
 
-async function mountAt(width: number) {
+// Wired like pages/admin/[team]/activity.vue + CroutonActivityLog: the header's "Filtres"
+// opens the filters' drawer and shows the filters' exposed count.
+const ActivityHarness = defineComponent({
+  setup() {
+    const filters = ref<FilterState>({})
+    const filtersRef = ref<{ openDrawer: () => void, activeFilterCount: number } | null>(null)
+    return () => h('div', [
+      h('header', [
+        h(CroutonActivityHeaderActions, {
+          filterCount: filtersRef.value?.activeFilterCount ?? 0,
+          onFilters: () => filtersRef.value?.openDrawer()
+        })
+      ]),
+      h(CroutonActivityFilters, {
+        'ref': filtersRef,
+        'modelValue': filters.value,
+        'collections': ['pages'],
+        'users': [{ id: 'u1', name: 'Anna' }],
+        'onUpdate:modelValue': (value: FilterState) => { filters.value = value }
+      })
+    ])
+  }
+})
+
+async function mountAt(width: number, component: any = ActivityHarness, props: Record<string, unknown> = {}) {
   ;(window as any).happyDOM.setViewport({ width, height: 800 })
-  const wrapper = mount(CroutonActivityFilters, {
-    props: {
-      'modelValue': {} as FilterState,
-      'collections': ['pages'],
-      'users': [{ id: 'u1', name: 'Anna' }],
-      'onUpdate:modelValue': (value: FilterState) => wrapper.setProps({ modelValue: value })
-    },
-    global: { components: { UButton, UBadge, USelectMenu, UDrawer, UTabs } }
-  })
+  const wrapper = mount(component, { props, global: { components } })
   await nextTick()
   return wrapper
 }
@@ -103,24 +150,35 @@ describe('activity filters at phone width (#4036)', () => {
   it('at 390px shows one "Filtres" button and no inline selects; the badge shows 1 after one filter is set', async () => {
     const wrapper = await mountAt(390)
 
-    const toggle = wrapper.find('.crouton-activity-filters-toggle')
-    expect(toggle.exists()).toBe(true)
-    expect(toggle.text()).toContain('Filtres')
-    expect(toggle.attributes('data-icon')).toBe('i-lucide-sliders-horizontal')
+    // The header group: exactly Actualiser · Filtres · Exporter, icon-only, each with an aria-label
+    const group = wrapper.find('header [data-field-group]')
+    expect(group.exists()).toBe(true)
+    const buttons = group.findAll('button')
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Actualiser', 'Filtres', 'Exporter'])
+    expect(buttons.map(b => b.attributes('data-icon'))).toEqual(['i-lucide-refresh-cw', 'i-lucide-sliders-horizontal', 'i-lucide-download'])
+    for (const b of buttons) expect(b.text()).toBe('')
+
+    // No filter control inline: no select, no "Filtres" text button outside the header, no badge at 0
     expect(wrapper.findAll('[data-select]')).toHaveLength(0)
+    expect(wrapper.findAll('.crouton-activity-filters-toggle')).toHaveLength(1)
+    expect(wrapper.find('.crouton-activity-filters [data-icon="i-lucide-sliders-horizontal"]').exists()).toBe(false)
     expect(wrapper.find('[data-badge]').exists()).toBe(false)
 
-    // Open the drawer: the same three selects, plus no "clear" while nothing is set
-    await toggle.trigger('click')
+    // The period bar is full width
+    expect(wrapper.find('[data-tabs]').classes()).toContain('w-full')
+
+    // Filtres opens the drawer: the three selects, full width, no "clear" while nothing is set
+    await wrapper.find('.crouton-activity-filters-toggle').trigger('click')
     const selects = wrapper.findAllComponents(USelectMenu)
     expect(selects.map(s => s.attributes('aria-label'))).toEqual(['Collection', 'Action', 'Personne'])
+    for (const s of selects) expect(s.classes()).toContain('w-full')
     expect(wrapper.find('[data-drawer-body]').text()).not.toContain('Effacer les filtres')
 
     // Pick an action in the drawer
     selects[1]!.vm.$emit('update:modelValue', 'update')
     await nextTick()
 
-    const badge = wrapper.find('[data-badge]')
+    const badge = wrapper.find('header [data-badge]')
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('1')
     expect(wrapper.find('[data-drawer-body]').text()).toContain('Effacer les filtres')
@@ -132,7 +190,7 @@ describe('activity filters at phone width (#4036)', () => {
     const props = { modelValue: {} as FilterState, collections: ['pages'], users: [{ id: 'u1', name: 'Anna' }] }
     const makeApp = () => {
       const app = createSSRApp(CroutonActivityFilters, props)
-      for (const [name, c] of Object.entries({ UButton, UBadge, USelectMenu, UDrawer, UTabs })) app.component(name, c)
+      for (const [name, c] of Object.entries(components)) app.component(name, c)
       return app
     }
 
@@ -148,18 +206,17 @@ describe('activity filters at phone width (#4036)', () => {
     expect(root.querySelectorAll('[data-select]').length).toBeGreaterThan(0)
     expect([...root.querySelectorAll('[data-select]')].filter(visibleAtPhone)).toHaveLength(0)
 
-    // 2. The phone hydrates that markup, then settles: only the "Filtres" button, no inline select
+    // 2. The phone hydrates that markup, then settles: no inline select at all
     const app = makeApp()
     app.config.warnHandler = () => {}
-    app.mount(root)
+    const vm = app.mount(root) as unknown as { openDrawer: () => void }
     await nextTick()
     await nextTick()
-    expect(root.querySelector('.crouton-activity-filters-toggle')).not.toBeNull()
     expect(root.querySelectorAll('[aria-label="Collection"]')).toHaveLength(0)
     expect(root.querySelectorAll('[data-select]')).toHaveLength(0)
 
-    // 3. Opening the drawer: the collection select lives only inside it
-    ;(root.querySelector('[data-trigger]') as HTMLElement).click()
+    // 3. Opening the drawer (what the header's "Filtres" calls): the collection select lives only inside it
+    vm.openDrawer()
     await nextTick()
     const collection = [...root.querySelectorAll('[aria-label="Collection"]')]
     expect(collection).toHaveLength(1)
@@ -170,8 +227,42 @@ describe('activity filters at phone width (#4036)', () => {
   })
 
   it('at desktop width keeps the three inline selects and no "Filtres" button', async () => {
-    const wrapper = await mountAt(1280)
+    const wrapper = await mountAt(1280, CroutonActivityFilters, { modelValue: {}, collections: ['pages'], users: [{ id: 'u1', name: 'Anna' }] })
     expect(wrapper.findAll('[data-select]')).toHaveLength(3)
     expect(wrapper.find('.crouton-activity-filters-toggle').exists()).toBe(false)
+  })
+})
+
+describe('activity filter menus open without crashing (#4036 "Erreur 500")', () => {
+  it('each of the three menus opens without an error, and choosing "all" clears that filter', async () => {
+    const updates: FilterState[] = []
+    const wrapper = await mountAt(1280, CroutonActivityFilters, {
+      'modelValue': { collectionName: 'pages', operation: 'update', userId: 'u1' } as FilterState,
+      'collections': ['pages'],
+      'users': [{ id: 'u1', name: 'Anna' }],
+      'onUpdate:modelValue': (value: FilterState) => { updates.push(value) }
+    })
+
+    const selects = wrapper.findAllComponents(USelectMenu)
+    expect(selects).toHaveLength(3)
+    for (const select of selects) {
+      // Opening renders the items — it threw on the old `value: ''` "all" items
+      await select.find('[data-select-trigger]').trigger('click')
+      expect(select.find('[data-item="all"]').exists()).toBe(true)
+      expect(select.findAll('[data-item=""]')).toHaveLength(0)
+    }
+
+    // Choosing "all" in each menu clears just that filter (back to `undefined`)
+    selects[0]!.vm.$emit('update:modelValue', 'all')
+    selects[1]!.vm.$emit('update:modelValue', 'all')
+    selects[2]!.vm.$emit('update:modelValue', 'all')
+    expect(updates[0]).toMatchObject({ collectionName: undefined, operation: 'update', userId: 'u1' })
+    expect(updates[1]).toMatchObject({ collectionName: 'pages', operation: undefined, userId: 'u1' })
+    expect(updates[2]).toMatchObject({ collectionName: 'pages', operation: 'update', userId: undefined })
+  })
+
+  it('with no filter set, each menu shows its "all" item as the selected value', async () => {
+    const wrapper = await mountAt(1280, CroutonActivityFilters, { modelValue: {}, collections: ['pages'], users: [{ id: 'u1', name: 'Anna' }] })
+    expect(wrapper.findAll('[data-select]').map(s => s.attributes('data-value'))).toEqual(['all', 'all', 'all'])
   })
 })
