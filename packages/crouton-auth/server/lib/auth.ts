@@ -133,19 +133,7 @@ export function createAuth(options: CreateAuthOptions) {
 
     // Email verification (changeEmail; and, with crouton-email, sign-up — #3141)
     emailVerification: {
-      sendVerificationEmail: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Verification email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'verification',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      },
+      sendVerificationEmail: (args: AuthEmailArgs) => sendAuthEmail(config, 'verification', args),
       // Must follow the signal: better-auth uses `sendOnSignUp ?? requireEmailVerification`,
       // so a hard-coded `false` would require verification but never send the e-mail.
       sendOnSignUp: requireEmailVerification,
@@ -258,19 +246,7 @@ function buildEmailPasswordConfig(
       requireEmailVerification,
       // A reset signs out every session, everywhere (#3141).
       revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      }
+      sendResetPassword: (args: AuthEmailArgs) => sendAuthEmail(config, 'password-reset', args)
     }
   }
 
@@ -285,21 +261,33 @@ function buildEmailPasswordConfig(
     revokeSessionsOnPasswordReset: true,
     // Password reset
     sendResetPassword: customConfig.resetEnabled !== false
-      ? async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      }
+      ? (args: AuthEmailArgs) => sendAuthEmail(config, 'password-reset', args)
       : undefined
   }
+}
+
+interface AuthEmailArgs { user: { email: string, name?: string }, url: string }
+
+/**
+ * Hand a verification / password-reset e-mail to the `crouton:auth:email` hook (crouton-email
+ * sends it). Logs the link in debug mode; a failed send never fails the auth flow.
+ */
+async function sendAuthEmail(
+  config: CroutonAuthConfig,
+  type: 'verification' | 'password-reset',
+  { user, url }: AuthEmailArgs
+): Promise<void> {
+  if (config.debug) {
+    console.log(`[crouton/auth] ${type === 'verification' ? 'Verification' : 'Password reset'} email for ${user.email}: ${url}`)
+  }
+  let _event: any; try { _event = useEvent() } catch {}
+  await useNitroApp().hooks.callHook('crouton:auth:email', {
+    _event,
+    type,
+    to: user.email,
+    url,
+    userName: user.name
+  }).catch(() => {})
 }
 
 /**
