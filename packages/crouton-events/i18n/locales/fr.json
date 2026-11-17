@@ -29,7 +29,10 @@
       "allCollections": "Toutes les collections",
       "allActions": "Toutes les actions",
       "everyone": "Tout le monde",
-      "clear": "Effacer"
+      "clear": "Effacer",
+      "open": "Filtres",
+      "clearAll": "Effacer les filtres",
+      "activeCount": "{n} filtre actif | {n} filtres actifs"
     },
     "period": {
       "all": "Tout",

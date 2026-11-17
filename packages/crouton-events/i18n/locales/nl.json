@@ -29,7 +29,10 @@
       "allCollections": "Alle collecties",
       "allActions": "Alle acties",
       "everyone": "Iedereen",
-      "clear": "Wissen"
+      "clear": "Wissen",
+      "open": "Filters",
+      "clearAll": "Filters wissen",
+      "activeCount": "{n} actieve filter | {n} actieve filters"
     },
     "period": {
       "all": "Alles",

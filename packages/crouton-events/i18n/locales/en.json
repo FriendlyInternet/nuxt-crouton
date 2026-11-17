@@ -29,7 +29,10 @@
       "allCollections": "All collections",
       "allActions": "All actions",
       "everyone": "Everyone",
-      "clear": "Clear"
+      "clear": "Clear",
+      "open": "Filters",
+      "clearAll": "Clear filters",
+      "activeCount": "{n} active filter | {n} active filters"
     },
     "period": {
       "all": "All",

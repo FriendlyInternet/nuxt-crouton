@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core'
 import type { FilterState } from '../types/events'
 
 const props = withDefaults(defineProps<{
@@ -90,6 +91,20 @@ const hasActiveFilters = computed(() => !!(
   || props.modelValue.dateTo
 ))
 
+// Below `sm` (640px) the three selects fold into a "Filtres" button that opens a bottom drawer.
+const isPhone = useMediaQuery('(max-width: 639px)')
+const drawerOpen = ref(false)
+
+const activeFilterCount = computed(() => [
+  props.modelValue.collectionName,
+  props.modelValue.operation,
+  props.modelValue.userId
+].filter(Boolean).length)
+
+function clearSelectFilters() {
+  update({ collectionName: undefined, operation: undefined, userId: undefined })
+}
+
 function clearFilters() {
   period.value = 'all'
   emit('update:modelValue', {
@@ -104,7 +119,85 @@ function clearFilters() {
 
 <template>
   <div class="crouton-activity-filters flex flex-col gap-3">
-    <div class="flex flex-wrap items-center gap-2">
+    <div
+      v-if="isPhone"
+      class="flex items-center"
+    >
+      <UDrawer
+        v-model:open="drawerOpen"
+        direction="bottom"
+        :title="t('events.filters.open')"
+      >
+        <UButton
+          color="neutral"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-sliders-horizontal"
+          :label="t('events.filters.open')"
+          class="crouton-activity-filters-toggle"
+        >
+          <template
+            v-if="activeFilterCount"
+            #trailing
+          >
+            <UBadge
+              :label="activeFilterCount"
+              :aria-label="t('events.filters.activeCount', { n: activeFilterCount }, activeFilterCount)"
+              size="sm"
+              variant="solid"
+              class="crouton-activity-filters-count"
+            />
+          </template>
+        </UButton>
+
+        <template #body>
+          <div class="flex flex-col gap-3">
+            <USelectMenu
+              v-model="collectionName"
+              :items="collectionItems"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-database"
+              :aria-label="t('events.filters.collection')"
+              class="w-full"
+            />
+            <USelectMenu
+              v-model="operation"
+              :items="operationItems"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-zap"
+              :aria-label="t('events.filters.action')"
+              class="w-full"
+            />
+            <USelectMenu
+              v-if="users.length"
+              v-model="userId"
+              :items="userItems"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-user"
+              :aria-label="t('events.filters.person')"
+              class="w-full"
+            />
+            <UButton
+              v-if="activeFilterCount"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :label="t('events.filters.clearAll')"
+              block
+              @click="clearSelectFilters"
+            />
+          </div>
+        </template>
+      </UDrawer>
+    </div>
+
+    <div
+      v-else
+      class="flex flex-wrap items-center gap-2"
+    >
       <USelectMenu
         v-model="collectionName"
         :items="collectionItems"
@@ -145,7 +238,7 @@ function clearFilters() {
         @update:model-value="setPeriod"
       />
       <UButton
-        v-if="hasActiveFilters"
+        v-if="hasActiveFilters && !isPhone"
         color="neutral"
         variant="ghost"
         size="sm"

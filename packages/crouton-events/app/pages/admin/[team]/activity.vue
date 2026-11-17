@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core'
+
 definePageMeta({
   layout: 'admin',
   middleware: ['auth', 'team-admin']
 })
 
 const { t } = useI18n()
+
+// Below `sm` the header actions are icon-only so the title keeps its room
+const isPhone = useMediaQuery('(max-width: 639px)')
 
 // The log exposes refresh()/exportAs() so its actions can live in the navbar
 const log = ref<{ refresh: () => unknown, exportAs: (format: 'csv' | 'json') => Promise<void>, exporting: boolean } | null>(null)
@@ -27,7 +32,8 @@ const exportItems = computed(() => [[
             color="neutral"
             variant="ghost"
             icon="i-lucide-refresh-cw"
-            :label="t('events.log.refresh')"
+            :label="isPhone ? undefined : t('events.log.refresh')"
+            :aria-label="t('events.log.refresh')"
             @click="log?.refresh()"
           />
           <UDropdownMenu :items="exportItems">
@@ -35,8 +41,9 @@ const exportItems = computed(() => [[
               color="neutral"
               variant="outline"
               icon="i-lucide-download"
-              trailing-icon="i-lucide-chevron-down"
-              :label="t('events.log.export')"
+              :trailing-icon="isPhone ? undefined : 'i-lucide-chevron-down'"
+              :label="isPhone ? undefined : t('events.log.export')"
+              :aria-label="t('events.log.export')"
               :loading="log?.exporting"
             />
           </UDropdownMenu>
