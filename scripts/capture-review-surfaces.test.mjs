@@ -230,6 +230,16 @@ test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
 })
 
+test('deriveSurfaces: a fixtures/ or e2e/ page gives no surface for any app (#4084)', () => {
+  const changedFiles = [
+    'fixtures/with-relations/app/pages/admin/[team]/relations-check.vue',
+    'e2e/x/app/pages/foo.vue'
+  ]
+  for (const app of ['pins', 'velo', 'gallery']) {
+    assert.deepEqual(deriveSurfaces({ app, changedFiles }), [])
+  }
+})
+
 test('deriveSurfaces: a [slug] segment is not the team (#3886)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles: ['pocs/crouton-builder/app/pages/site/[slug].vue'] }), [])
 })
