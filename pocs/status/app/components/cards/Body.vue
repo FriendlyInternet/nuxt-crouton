@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// Shared frame for every inbox card: title (+ optional badge), the ask, the recommendation.
-// Each card kind puts its own actions in the default slot.
+// Shared frame for every inbox card: title (+ optional badge, + the chat-claim badge), the ask,
+// the recommendation. Each card kind puts its own actions in the default slot.
 import type { InboxCard } from '~/utils/inbox-core'
+import { claimBadge } from '~/utils/claim-badge'
 
-defineProps<{ card: InboxCard, badge?: string }>()
+const props = defineProps<{ card: InboxCard, badge?: string }>()
+const claim = computed(() => claimBadge(props.card))
 </script>
 
 <template>
@@ -12,6 +14,7 @@ defineProps<{ card: InboxCard, badge?: string }>()
       <div class="flex items-start gap-2">
         <h3 class="flex-1 font-medium">{{ card.title }}</h3>
         <UBadge v-if="badge" variant="subtle" color="neutral">{{ badge }}</UBadge>
+        <UBadge v-if="claim" variant="outline" color="neutral" icon="i-lucide-bot">{{ claim }}</UBadge>
       </div>
       <p class="text-sm">{{ card.ask }}</p>
       <CardsPackages :card="card" />
