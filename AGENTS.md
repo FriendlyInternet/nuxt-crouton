@@ -70,6 +70,9 @@ not merge.** Every change is built by the pipeline, so traffic control sees all 
 - **Hand off** — open or mark the ticket for the pipeline, then report the PR and preview it produces.
 - **Follow up** — review the pipeline's PR; request changes by commenting on it, not by pushing.
 - **Never** commit to a feature branch, push, or merge from an interactive session.
+- **One driver per ticket** — a chat claims the epics/tickets it drives; never start, unblock or
+  rework a ticket another chat claimed — ask the owner. Don't start a ticket whose `Blocked-by:` is
+  still open.
 
 The check: after a week, the history shows only pipeline authors, no interactive-session commits.
 

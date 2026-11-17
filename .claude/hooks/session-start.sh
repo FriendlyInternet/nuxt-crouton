@@ -40,6 +40,24 @@ if [ -n "$_chromium" ]; then
 BROWSER
 fi
 
+# Chat id (#3996) — every interactive chat posts as the same account, so each one names
+# itself by the first 6 hex chars of its session id. Read from the hook's stdin JSON, exported
+# as CROUTON_CHAT_ID for later Bash calls (scripts/claim.mjs), and printed so the agent puts
+# "chat <id>" in its 🤖 header. Runs for local chats too; never fails the hook.
+_chat_id=""
+if [ ! -t 0 ]; then
+  _hook_input="$(cat 2>/dev/null || true)" # no stdin JSON → no chat id; the session must still start
+  # A missing/broken claim.mjs leaves the id empty (nothing printed) instead of failing the hook.
+  _chat_id="$(printf '%s' "$_hook_input" | node "$(dirname "$0")/../../scripts/claim.mjs" chat-id 2>/dev/null || true)"
+fi
+if [ -n "$_chat_id" ]; then
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    # An unwritable env file only loses the export (claim.mjs then needs --chat); never fail the hook.
+    echo "export CROUTON_CHAT_ID=$_chat_id" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true
+  fi
+  echo "[session-start] 🪪 chat id: $_chat_id — put \"chat $_chat_id\" in your 🤖 header; claim what you drive: node scripts/claim.mjs claim <epic> --name <nick>"
+fi
+
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
