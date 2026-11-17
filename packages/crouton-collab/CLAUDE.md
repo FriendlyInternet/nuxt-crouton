@@ -256,7 +256,7 @@ NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-app-collab.workers.dev
 
 ```bash
 npx wrangler d1 execute <DB_NAME> --remote \
-  --file=./packages/nuxt-crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
+  --file=./packages/crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
 ```
 
 ### 5. Deploy Order
