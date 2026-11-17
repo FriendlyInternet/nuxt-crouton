@@ -21,7 +21,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "nuxt-charts": "^2.1.2"
+    "nuxt-charts": "^2.2.3"
   },
   "peerDependencies": {
     "@fyit/crouton-core": "workspace:*",

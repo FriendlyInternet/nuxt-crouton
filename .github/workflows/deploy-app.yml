@@ -386,7 +386,7 @@ jobs:
               echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
               sleep 15
             done
-            # Fresh DB every time, so migrations are the whole schema — not incremental.
+            # The preview DB is kept between deploys (#2608); pr-preview-migrate.mjs empties it only when its recorded migrations no longer match the files (#4004).
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
             # <app>-staging-db and structurally cannot know about <app>-pr<n>-db. Without it
@@ -414,8 +414,7 @@ jobs:
               # (#2020). Remote D1 operations need the id, so resolve it by name now that it
               # exists. Without this the migrate fails "missing a database_id" (#2085).
               node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
-              npx wrangler d1 migrations apply "$PREVIEW_DB" \
-                --config .output/server/wrangler.json --remote
+              node "$GITHUB_WORKSPACE/scripts/pr-preview-migrate.mjs" "${{ inputs.app }}" "$PR_NUM" .output/server/wrangler.json
             fi
           else
             pnpm run cf:staging | tee deploy.log
