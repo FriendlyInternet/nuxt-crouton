@@ -3,6 +3,7 @@ import { computed, type Ref, type ComputedRef } from 'vue'
 import { useCollabSync } from './useCollabSync'
 import { useCollabPresence } from './useCollabPresence'
 import type { CollabAwarenessState, CollabUser } from '../types/collab'
+import type { CollabAwarenessAdapter } from '../utils/collabAwareness'
 
 export interface UseCollabEditorOptions {
   /** Unique room identifier */
@@ -16,14 +17,10 @@ export interface UseCollabEditorOptions {
 }
 
 /**
- * Awareness-like interface compatible with TipTap Collaboration extension
+ * Awareness compatible with TipTap's collaboration caret (`yCursorPlugin`).
+ * It is the connection's adapter — see `createCollabAwareness`.
  */
-export interface CollabAwareness {
-  setLocalStateField: (field: string, value: unknown) => void
-  getLocalState: () => Record<string, unknown> | null
-  on: (event: 'change', callback: () => void) => void
-  off: (event: 'change', callback: () => void) => void
-}
+export type CollabAwareness = CollabAwarenessAdapter
 
 /**
  * Provider interface compatible with TipTap Collaboration extension
@@ -78,17 +75,15 @@ export interface UseCollabEditorReturn {
  *
  * // Use with TipTap
  * import { Collaboration } from '@tiptap/extension-collaboration'
- * import { CollaborationCursor } from '@tiptap/extension-collaboration-cursor'
+ * import { yCursorPlugin } from '@tiptap/y-tiptap'
  *
+ * provider.awareness.setLocalStateField('user', { name: 'Alice' })
  * const editor = useEditor({
  *   extensions: [
- *     Collaboration.configure({
- *       document: ydoc,
- *       field: 'content'
- *     }),
- *     CollaborationCursor.configure({
- *       provider,
- *       user: { name: 'Alice', color: '#ff0000' }
+ *     Collaboration.configure({ fragment: yxmlFragment }),
+ *     Extension.create({
+ *       name: 'collabCaret',
+ *       addProseMirrorPlugins: () => [yCursorPlugin(provider.awareness)]
  *     })
  *   ]
  * })
@@ -124,65 +119,11 @@ export function useCollabEditor(options: UseCollabEditorOptions): UseCollabEdito
 
   const { user, otherUsers, updateCursor, updateSelection } = presence
 
-  // Local state for awareness (TipTap compatibility)
-  const localState: Record<string, unknown> = {}
-  const changeCallbacks: (() => void)[] = []
-
   /**
-   * Create a TipTap-compatible provider with awareness interface
+   * TipTap-compatible provider: the connection's own awareness adapter (#3984), which
+   * y-tiptap's `yCursorPlugin` can read (getStates / on('change') / setLocalStateField).
    */
-  const provider: CollabProvider = {
-    awareness: {
-      /**
-       * Set a local state field (called by TipTap CollaborationCursor)
-       */
-      setLocalStateField(stateField: string, value: unknown): void {
-        localState[stateField] = value
-
-        // If setting cursor/selection, update presence
-        if (stateField === 'cursor' && value && typeof value === 'object') {
-          const cursor = value as { anchor?: number; head?: number }
-          if (typeof cursor.anchor === 'number' && typeof cursor.head === 'number') {
-            updateSelection({ anchor: cursor.anchor, head: cursor.head })
-          }
-        }
-
-        // Notify listeners
-        for (const callback of changeCallbacks) {
-          callback()
-        }
-      },
-
-      /**
-       * Get current local state
-       */
-      getLocalState(): Record<string, unknown> | null {
-        if (Object.keys(localState).length === 0) return null
-        return { ...localState }
-      },
-
-      /**
-       * Subscribe to state changes
-       */
-      on(event: 'change', callback: () => void): void {
-        if (event === 'change') {
-          changeCallbacks.push(callback)
-        }
-      },
-
-      /**
-       * Unsubscribe from state changes
-       */
-      off(event: 'change', callback: () => void): void {
-        if (event === 'change') {
-          const index = changeCallbacks.indexOf(callback)
-          if (index !== -1) {
-            changeCallbacks.splice(index, 1)
-          }
-        }
-      }
-    }
-  }
+  const provider: CollabProvider = { awareness: connection.awareness }
 
   return {
     // Connection state
