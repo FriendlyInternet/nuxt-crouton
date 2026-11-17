@@ -70,6 +70,7 @@ beforeEach(() => {
   h.created = []
 })
 
+// covers: T7
 describe('resolvePagesAccess', () => {
   it('an admin mcp-pages token gives its own team and token id', async () => {
     expect(await resolvePagesAccess('pages')).toEqual({ teamId: 'team_A', tokenId: 'tok_p' })
@@ -89,6 +90,7 @@ describe('resolvePagesAccess', () => {
   })
 })
 
+// covers: T7
 describe('requireMcpAuth (generic tools)', () => {
   const event = (token: string) => ({ headers: { authorization: `Bearer ${token}` } }) as any
   it('refuses a pages token with 403', async () => {
@@ -100,6 +102,7 @@ describe('requireMcpAuth (generic tools)', () => {
   })
 })
 
+// covers: T7
 describe('POST /api/teams/:id/mcp-tokens', () => {
   const post = (body: any) => (mintHandler as any)({ __body: body })
 

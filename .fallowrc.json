@@ -52,8 +52,6 @@
     "**/app/stubs/**",
     // @nuxtjs/mcp-toolkit auto-discovers server/mcp/{tools,resources,prompts} from all layers
     "**/server/mcp/**",
-    // ...and the opt-in pages handler folder crouton-mcp-toolkit adds via mcp:definitions:paths (#3982)
-    "packages/crouton-mcp-toolkit/server/mcp-pages/handlers/**",
     // Drizzle schemas + seeds: consumed by migration tooling and dynamic seed endpoints
     "**/server/db/**",
     "**/server/database/**",

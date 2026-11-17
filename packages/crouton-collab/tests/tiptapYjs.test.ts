@@ -31,6 +31,7 @@ function fragmentOf(doc: unknown, name = 'content-fr') {
 
 const heading = (text: string) => ({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text }] })
 
+// covers: T1
 describe('tiptapToYFragment / yFragmentToTiptap', () => {
   it('keeps object and number attributes raw (a layout block survives)', () => {
     const page = { type: 'doc', content: [
@@ -72,6 +73,7 @@ describe('tiptapToYFragment / yFragmentToTiptap', () => {
   })
 })
 
+// covers: T1
 describe('editYFragment', () => {
   const base = () => fragmentOf({ type: 'doc', content: [heading('A'), heading('B'), heading('C')] })
   const titles = (f: Y.XmlFragment) => yFragmentToTiptap(f).content.map(n => n.content?.[0]?.text)
@@ -110,6 +112,7 @@ describe('editYFragment', () => {
   })
 })
 
+// covers: T1
 describe('seedYFragment', () => {
   const page = { type: 'doc', content: [heading('Welcome'), { type: 'paneBlock', attrs: { layout, height: 480 } }] }
 

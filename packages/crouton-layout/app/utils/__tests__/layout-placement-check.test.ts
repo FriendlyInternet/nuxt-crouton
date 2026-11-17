@@ -22,6 +22,7 @@ const side = (a: string, b: string) => ({
   ] }
 })
 
+// covers: T4
 describe('checkLayoutForPlacement', () => {
   it('rejects input that is not a layout (bad JSON string, wrong shape)', () => {
     expect(checkLayoutForPlacement('{not json', registry)).toMatchObject({ ok: false, errors: ['not a valid layout'] })

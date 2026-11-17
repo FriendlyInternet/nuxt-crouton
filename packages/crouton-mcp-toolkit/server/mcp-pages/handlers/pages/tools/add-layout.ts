@@ -9,7 +9,7 @@ export default defineMcpTool({
     pageId: z.string().describe('Page id from list_pages'),
     locale: z.string().describe('Locale, e.g. "fr"'),
     index: z.number().int().min(0).describe('Block index to insert before (block count appends)'),
-    layout: z.union([z.string(), z.record(z.any())])
+    layout: z.union([z.string(), z.record(z.string(), z.any())])
       .describe('Layout tree, e.g. { "renderer": "panes", "root": { "type": "split", "direction": "horizontal", "children": [{ "type": "leaf", "blockId": "calendar" }, { "type": "leaf", "blockId": "bookings-list" }] } }'),
     height: z.number().int().min(120).max(4000).optional().describe('Block height in px (default 480)')
   },

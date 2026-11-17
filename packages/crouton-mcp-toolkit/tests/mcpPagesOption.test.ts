@@ -10,6 +10,7 @@ import { PAGES_MCP_DIR, layerPackageNames, resolvePagesHandler, resolveToolkitSe
 
 const both = ['@fyit/crouton-core', '@fyit/crouton-pages', '@fyit/crouton-collab']
 
+// covers: T11
 describe('resolvePagesHandler', () => {
   it('is off when pages is unset or false, even with pages + collab present', () => {
     expect(resolvePagesHandler({ layerPackages: both })).toEqual({ enabled: false })
@@ -34,6 +35,7 @@ describe('resolvePagesHandler', () => {
   })
 })
 
+// covers: T11
 describe('resolveToolkitSetup (what module.ts installs)', () => {
   it('is off in production unless enabled, and then never scans layers', () => {
     let scanned = false
@@ -53,6 +55,7 @@ describe('resolveToolkitSetup (what module.ts installs)', () => {
   })
 })
 
+// covers: T11
 describe('layerPackageNames', () => {
   const base = mkdtempSync(join(tmpdir(), 'mcp-layers-'))
   afterAll(() => rmSync(base, { recursive: true, force: true }))

@@ -36,6 +36,7 @@ function fakeWorker() {
   return { roomDoc, posted, fetchMock }
 }
 
+// covers: T3
 describe('updateCollabRoomDoc — worker mode', () => {
   it('GETs /state, POSTs only the diff to /update, and fetches nothing else', async () => {
     const { roomDoc, posted, fetchMock } = fakeWorker()
@@ -85,6 +86,7 @@ describe('updateCollabRoomDoc — worker mode', () => {
   })
 })
 
+// covers: T3
 describe('updateCollabRoomDoc — local mode', () => {
   beforeEach(() => clearRoom('pagesPages', 'team_A:pagesPages-p1'))
 

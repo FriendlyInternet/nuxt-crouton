@@ -37,6 +37,7 @@ const importsOf = (file: string, pkgs: string[]) => {
 
 const THREE = ['@fyit/crouton-pages', '@fyit/crouton-collab', '@fyit/crouton-layout']
 
+// covers: T12
 describe('pages handler boundary (#3982)', () => {
   it('the handler index and the five tools exist under server/mcp-pages/handlers/pages/', () => {
     const dir = join(pkgDir, 'server/mcp-pages/handlers/pages')

@@ -39,9 +39,6 @@ export default defineNuxtConfig({
     genericTools: false,
     pages: true
   },
-  // nuxt-ai-ready (via @nuxtjs/seo) turns on its MCP site tools once @nuxtjs/mcp-toolkit is
-  // installed and then requires drizzle-orm ^1; velo only needs the crouton pages tools.
-  aiReady: { database: false },
   hub: {
     blob: true,
     db: 'sqlite'

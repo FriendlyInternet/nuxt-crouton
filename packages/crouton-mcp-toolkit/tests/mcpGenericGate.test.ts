@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { createApp, eventHandler, toWebHandler } from 'h3'
 import gate, { isBlockedGenericMcpPath } from '../server/handlers/mcp-generic-gate'
 
+// covers: T9
 describe('isBlockedGenericMcpPath', () => {
   it('blocks /mcp, /mcp/, /mcp/deeplink, /mcp/badge.svg and other handlers', () => {
     for (const p of ['/mcp', '/mcp/', '/mcp/deeplink', '/mcp/badge.svg', '/mcp/other']) {
@@ -20,6 +21,7 @@ describe('isBlockedGenericMcpPath', () => {
   })
 })
 
+// covers: T9
 describe('mcp-generic-gate middleware', () => {
   const app = createApp()
   app.use(gate)

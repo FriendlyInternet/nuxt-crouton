@@ -43,6 +43,7 @@ function headingUpdate(text: string): Uint8Array {
   return Y.encodeStateAsUpdate(doc)
 }
 
+// covers: T2
 describe('CollabRoom POST /update (#3982)', () => {
   beforeEach(() => {
     vi.useFakeTimers()

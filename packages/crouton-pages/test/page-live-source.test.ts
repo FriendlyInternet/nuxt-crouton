@@ -54,6 +54,7 @@ const contains = (cond: any, wanted: any): boolean =>
   JSON.stringify(cond) === JSON.stringify(wanted)
   || (cond?.op === 'and' && cond.a.some((c: any) => contains(c, wanted)))
 
+// covers: T10
 describe('page-live-source (#3982)', () => {
   beforeEach(() => {
     h.wheres = []

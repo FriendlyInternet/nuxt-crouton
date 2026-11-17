@@ -96,6 +96,7 @@ function expectNoRecordWrites() {
   expect(writes.delete).not.toHaveBeenCalled()
 }
 
+// covers: T8
 describe('Rule A — team isolation', () => {
   it('another team\'s page is "page not found" and no room is touched', async () => {
     const { deps, room } = makeDeps()
@@ -140,6 +141,7 @@ describe('Rule A — team isolation', () => {
   })
 })
 
+// covers: T8
 describe('Rule B — edits go into the live room only', () => {
   it('edit_page seeds an empty room from the stored page, inserts, and writes no record', async () => {
     const { deps, room, rooms } = makeDeps()
