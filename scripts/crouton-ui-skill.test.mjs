@@ -15,6 +15,7 @@ const read = () => {
   return readFileSync(skillPath, 'utf8')
 }
 
+// covers: T1
 test('frontmatter names the skill and its layer', () => {
   const text = read()
   const fm = text.match(/^---\n([\s\S]*?)\n---/)
@@ -24,6 +25,7 @@ test('frontmatter names the skill and its layer', () => {
   assert.ok(lines.includes('layer: stack'), 'frontmatter has layer: stack')
 })
 
+// covers: T1
 test('every `node scripts/…` command the skill names points at a script that exists', () => {
   const text = read()
   const tokens = [...text.matchAll(/`([^`]+)`/g)].map(m => m[1]).filter(t => t.startsWith('node scripts/'))
@@ -34,12 +36,14 @@ test('every `node scripts/…` command the skill names points at a script that e
   }
 })
 
+// covers: T1
 test('the block-authoring skill it points to exists', () => {
   const text = read()
   assert.ok(text.includes('`block-authoring`'), 'names the `block-authoring` skill')
   assert.ok(existsSync(join(root, '.claude/skills/block-authoring/SKILL.md')), 'block-authoring skill exists')
 })
 
+// covers: T1
 test('the package docs path it names exists for a real package', () => {
   const text = read()
   assert.ok(text.includes('packages/<package>/docs/'), 'names packages/<package>/docs/')
