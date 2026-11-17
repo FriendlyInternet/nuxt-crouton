@@ -3,7 +3,6 @@
 
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
-import { existsSync, readdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import consola from 'consola'
 
@@ -11,7 +10,6 @@ import { getModule, listModules } from './module-registry.ts'
 import { detectPackageManager, getInstallCommand } from './utils/detect-package-manager.ts'
 import { addToNuxtConfigExtends, isInNuxtConfigExtends } from './utils/update-nuxt-config.ts'
 import { manualMigrationSteps } from './utils/generate-migrations.ts'
-import { findPackagesDir } from './utils/manifest-loader.ts'
 
 interface AddModuleOptions {
   skipInstall?: boolean
@@ -54,48 +52,6 @@ async function checkDependencies(dependencies: string[], cwd: string = process.c
   }
 
   return { missing, installed }
-}
-
-const SCHEMA_DIRS = ['server/database/schema', 'server/db/schema']
-const SCHEMA_FILE = 'server/db/schema.ts'
-
-/**
- * True when a package directory ships at least one Drizzle schema file —
- * the single file `server/db/schema.ts` (which NuxtHub picks up on its own,
- * e.g. crouton-flow / crouton-printing), or a `.ts` file in
- * `server/database/schema/` or `server/db/schema/` (test files and
- * `__tests__` folders not counted).
- */
-export function shipsSchemaFiles(packageDir: string): boolean {
-  const hasTs = (dir: string): boolean => {
-    if (!existsSync(dir)) return false
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        if (entry.name !== '__tests__' && hasTs(join(dir, entry.name))) return true
-      } else if (entry.name.endsWith('.ts') && !/\.(test|spec)\.ts$/.test(entry.name)) {
-        return true
-      }
-    }
-    return false
-  }
-  if (existsSync(join(packageDir, SCHEMA_FILE))) return true
-  return SCHEMA_DIRS.some(d => hasTs(join(packageDir, d)))
-}
-
-/**
- * Does this package bring database tables? Yes when its manifest lists
- * collections (`hasSchema`) or it ships a schema folder (e.g. crouton-layout
- * has `layoutConfigs.ts` but no collections). The package is looked up where
- * manifest discovery looks: `node_modules/<pkg>` in the app, then the
- * monorepo `packages/` dir.
- */
-export async function packageHasTables(module: Record<string, any>, cwd: string = process.cwd()): Promise<boolean> {
-  if (module.hasSchema) return true
-  const packageName: string = module.package
-  const candidates = [join(cwd, 'node_modules', packageName)]
-  const packagesDir = await findPackagesDir(cwd)
-  if (packagesDir) candidates.push(join(packagesDir, packageName.split('/').pop()!))
-  return candidates.some(dir => existsSync(dir) && shipsSchemaFiles(dir))
 }
 
 /**
@@ -190,13 +146,10 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
     }
   }
 
-  // Step 3: Tell the user how to create the package's tables (#3998).
-  // `crouton add` does not create them itself — it prints the commands.
-  // "Has tables" = manifest collections OR a shipped schema folder.
-  if (await packageHasTables(module, cwd)) {
-    console.log('   • This package has database tables — crouton add does not create them. Run next:')
-    for (const step of manualMigrationSteps()) console.log(`     ${step}`)
-  }
+  // Step 3: Say plainly what `crouton add` does NOT do (#3998). Printed for
+  // every package — no guessing which packages bring tables.
+  console.log('   • crouton add does not create database tables. If this package brings tables, run next:')
+  for (const step of manualMigrationSteps()) console.log(`     ${step}`)
 
   // Success message
   console.log()

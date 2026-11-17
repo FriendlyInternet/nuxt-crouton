@@ -1,10 +1,9 @@
-// #3998 — `crouton add` does not create a package's tables. For a package
-// with tables it prints the migration commands to run next; the old
-// schema-export / migrate steps (dead since 42cbdda59) are gone, not just
-// unreachable.
+// #3998 — `crouton add` does not create a package's tables. It does not try
+// to detect which packages have tables either: for EVERY package it prints
+// one fixed block saying so, followed by the manual migration commands. The
+// old schema-export / migrate steps (dead since 42cbdda59) are gone.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import consola from 'consola'
@@ -21,23 +20,21 @@ vi.mock('../../lib/module-registry.ts', async (importOriginal) => {
   }
 })
 
-const { addModule, shipsSchemaFiles } = await import('../../lib/add-module.ts')
+const { addModule } = await import('../../lib/add-module.ts')
 const { manualMigrationSteps } = await import('../../lib/utils/generate-migrations.ts')
 
-// A tmp app dir INSIDE the monorepo, so manifest discovery and the
-// package lookup find the real packages/ (the monorepo-dev path).
+// A tmp app dir INSIDE the monorepo, so manifest discovery finds the real
+// packages/ (the monorepo-dev path).
 const cliDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const inRepoApp = async () => mkdtemp(join(cliDir, 'tests', '.tmp-add-'))
 
 let dir: string
 let cwdSpy: ReturnType<typeof vi.spyOn>
 let lines: string[]
-let useRepoDir = false
 
-beforeEach(async (ctx) => {
-  useRepoDir = ctx.task.name.startsWith('REAL')
-  dir = useRepoDir ? await inRepoApp() : await mkdtemp(join(tmpdir(), 'crouton-add-'))
-  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: {} }))
+beforeEach(async () => {
+  dir = await mkdtemp(join(cliDir, 'tests', '.tmp-add-'))
+  // core + auth installed, so packages that depend on them (bookings) get past the dependency check.
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: { '@fyit/crouton-core': '*', '@fyit/crouton-auth': '*' } }))
   await writeFile(join(dir, 'nuxt.config.ts'), "export default defineNuxtConfig({ extends: ['@fyit/crouton-core'] })\n")
   cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(dir)
   lines = []
@@ -54,17 +51,30 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-const deadStep = /schema export|applied migrations|Would run: npx nuxt db:migrate|Tables:/i
+const BLOCK_HEAD = 'crouton add does not create database tables. If this package brings tables, run next:'
 
-describe('crouton add — packages with tables (#3998)', () => {
-  it('T1: prints every manual migration step for a package with tables, and no dead step', async () => {
-    registry.widgets = { package: '@fyit/crouton-widgets', description: 'Widgets', hasSchema: true }
-    const result = await addModule('widgets', { dryRun: true })
-    expect(result.success).toBe(true)
-    const out = lines.join('\n')
-    for (const step of manualMigrationSteps()) expect(out).toContain(step)
-    expect(lines.filter(l => deadStep.test(l))).toEqual([])
-  })
+// Asserts the fixed block appears exactly once (head line, then each
+// manualMigrationSteps() command in order), and that NO other line says or
+// implies tables, a schema export or migrations were handled.
+function expectFixedBlockOnce(out: string[]) {
+  const heads = out.map((l, i) => (l.includes(BLOCK_HEAD) ? i : -1)).filter(i => i >= 0)
+  expect(heads).toHaveLength(1)
+  const steps = manualMigrationSteps()
+  const at = heads[0]!
+  steps.forEach((step, k) => expect(out[at + 1 + k]?.trim()).toBe(step))
+  const blockIdx = new Set([at, ...steps.map((_, k) => at + 1 + k)])
+  const rest = out.filter((_, i) => !blockIdx.has(i))
+  expect(rest.filter(l => /table|schema|migrat|db:generate|db:migrate/i.test(l))).toEqual([])
+}
+
+describe('crouton add — fixed "no tables created" block (#3998)', () => {
+  for (const name of ['events', 'layout', 'bookings', 'maps']) {
+    it(`REAL: add ${name} --dry-run prints the fixed block once and claims nothing about tables`, async () => {
+      const result = await addModule(name, { dryRun: true })
+      expect(result.success).toBe(true)
+      expectFixedBlockOnce(lines)
+    })
+  }
 
   it('T2: a stale entry with schemaExport + tables triggers no schema-export, migrate or Tables line', async () => {
     registry.widgets = {
@@ -74,83 +84,8 @@ describe('crouton add — packages with tables (#3998)', () => {
       schemaExport: './x',
       tables: ['widgets']
     }
-    await addModule('widgets', { dryRun: true })
-    expect(lines.filter(l => deadStep.test(l) || /Would add schema export/i.test(l))).toEqual([])
-  })
-
-  it('T3: a package without tables prints nothing about tables or migrations', async () => {
-    registry.plain = { package: '@fyit/crouton-plain', description: 'Plain', hasSchema: false }
-    const result = await addModule('plain', { dryRun: true })
+    const result = await addModule('widgets', { dryRun: true })
     expect(result.success).toBe(true)
-    expect(lines.filter(l => /table|migrat|db:generate/i.test(l))).toEqual([])
-  })
-
-  it('REAL: add layout --dry-run prints the migration steps (schema folder, no collections)', async () => {
-    const result = await addModule('layout', { dryRun: true })
-    expect(result.success).toBe(true)
-    const out = lines.join('\n')
-    expect(out).toContain('has database tables')
-    for (const step of manualMigrationSteps()) expect(out).toContain(step)
-  })
-
-  it('REAL: a package with collections (assets) still prints the migration steps', async () => {
-    const result = await addModule('assets', { dryRun: true })
-    expect(result.success).toBe(true)
-    const out = lines.join('\n')
-    expect(out).toContain('has database tables')
-    for (const step of manualMigrationSteps()) expect(out).toContain(step)
-  })
-
-  it('REAL: add flow and add printing --dry-run print the migration steps (only server/db/schema.ts)', async () => {
-    for (const name of ['flow', 'printing']) {
-      lines.length = 0
-      const result = await addModule(name, { dryRun: true })
-      expect(result.success).toBe(true)
-      const out = lines.join('\n')
-      expect(out).toContain('has database tables')
-      for (const step of manualMigrationSteps()) expect(out).toContain(step)
-    }
-  })
-
-  it('REAL: add maps --dry-run (no database tables) prints no table or migration line', async () => {
-    const result = await addModule('maps', { dryRun: true })
-    expect(result.success).toBe(true)
-    expect(lines.filter(l => /table|migrat|db:generate/i.test(l))).toEqual([])
-  })
-})
-
-describe('shipsSchemaFiles (#3998)', () => {
-  let pkg: string
-  beforeEach(async () => { pkg = await mkdtemp(join(tmpdir(), 'crouton-pkg-')) })
-  afterEach(async () => { await rm(pkg, { recursive: true, force: true }) })
-
-  it('is false with no schema folder', () => {
-    expect(shipsSchemaFiles(pkg)).toBe(false)
-  })
-
-  it('is true for a .ts file in server/database/schema/ or server/db/schema/', async () => {
-    await mkdir(join(pkg, 'server/db/schema'), { recursive: true })
-    await writeFile(join(pkg, 'server/db/schema/things.ts'), '')
-    expect(shipsSchemaFiles(pkg)).toBe(true)
-    const other = await mkdtemp(join(tmpdir(), 'crouton-pkg-'))
-    await mkdir(join(other, 'server/database/schema'), { recursive: true })
-    await writeFile(join(other, 'server/database/schema/things.ts'), '')
-    expect(shipsSchemaFiles(other)).toBe(true)
-    await rm(other, { recursive: true, force: true })
-  })
-
-  it('is true for a single server/db/schema.ts file', async () => {
-    await mkdir(join(pkg, 'server/db'), { recursive: true })
-    await writeFile(join(pkg, 'server/db/schema.ts'), 'export {}')
-    expect(shipsSchemaFiles(pkg)).toBe(true)
-  })
-
-  it('does not count test files or __tests__ folders', async () => {
-    const schema = join(pkg, 'server/database/schema')
-    await mkdir(join(schema, '__tests__'), { recursive: true })
-    await writeFile(join(schema, '__tests__/things.ts'), '')
-    await writeFile(join(schema, 'things.test.ts'), '')
-    await writeFile(join(schema, 'README.md'), '')
-    expect(shipsSchemaFiles(pkg)).toBe(false)
+    expectFixedBlockOnce(lines)
   })
 })
