@@ -168,3 +168,12 @@ test('a plan with no ### Docs fails item 1 as malformed', () => {
   assert.match(r.evidence, /malformed.*Docs/)
   assert.equal(decide(plan, fx('pass.verdict.md')).verdict, 'no-go')
 })
+
+// covers: T5
+test('#4082 an answered design sign-off ends the hold: Needs owner opening `no` ⇒ pendingSignoff false', async () => {
+  const { pendingSignoff } = await import('./plan-verdict.mjs')
+  const answered = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nno — the owner answered yes to the design sign-off (see ## Decisions)')
+  assert.equal(pendingSignoff(answered), false)
+  const open = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off')
+  assert.equal(pendingSignoff(open), true)
+})

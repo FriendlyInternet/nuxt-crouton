@@ -45,7 +45,7 @@ exact word they reply.
    by `scripts/lib/plan-shape.mjs`.
 3. **Plan review.** The `plan-review` job in `on-comment.yml` (`scripts/lib/plan-verdict.mjs`)
    judges the plan. `go` → the bot adds `plan:approved` and the build starts. `needs-owner` →
-   `status:blocked` plus one yes/no question: **owner decides here (`ok` / `not ok: …`)**. `no-go` →
+   `status:blocked` plus one yes/no question: **owner answers here — any reply re-plans; the owner's bare `ok` is recorded in the ticket's `## Decisions` as "yes" and re-plans from it**. `no-go` →
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
