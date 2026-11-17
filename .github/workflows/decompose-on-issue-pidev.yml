@@ -264,9 +264,15 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # --ignore-scripts (#3199): skip the workspace postinstalls (`nuxt prepare`), which were
+      # ~155 s of a ~171 s install. It also skips dependency build scripts, so rebuild the only
+      # one we allow to build (package.json pnpm.onlyBuiltDependencies) — same deps as before.
       - name: Install
         if: ${{ steps.resume.outputs.resume != '1' }}
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild native deps skipped by --ignore-scripts
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        run: pnpm rebuild better-sqlite3
 
       # A design sign-off hold renders its UI mockup / schema table to PNG with Playwright
       # (.claude/skills/ui-proposal/render.mjs). Without a browser every render failed with
