@@ -25,6 +25,13 @@ export type { User, NewUser } from './user'
 export { userProfile, userProfileRelations } from './user-profile'
 export type { UserProfileRecord, NewUserProfileRecord } from './user-profile'
 
+// createdAt (set on insert) + updatedAt (set on every update) — the pair most tables below carry.
+// A function, not a shared object: each table needs its own column builders.
+const timestamps = () => ({
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+})
+
 // ============================================================================
 // Core Tables
 // ============================================================================
@@ -42,8 +49,7 @@ export const session = sqliteTable('session', {
   expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
   ipAddress: text('ipAddress'),
   userAgent: text('userAgent'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),
+  ...timestamps(),
   // Organization extension - tracks active team context
   activeOrganizationId: text('activeOrganizationId'),
   // Impersonation extension (crouton-admin package)
@@ -74,8 +80,7 @@ export const account = sqliteTable('account', {
   scope: text('scope'),
   idToken: text('idToken'),
   password: text('password'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('account_user_idx').on(table.userId),
   index('account_provider_idx').on(table.providerId, table.accountId)
@@ -91,8 +96,7 @@ export const verification = sqliteTable('verification', {
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
   expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('verification_identifier_idx').on(table.identifier)
 ])
@@ -119,7 +123,7 @@ export const rateLimit = sqliteTable('rateLimit', {
  *
  * Stores organization (team) data. Configuration flags control behavior:
  * - teams.allowCreate=true: Users can create multiple organizations
- * - teams.defaultTeamSlug: All users join this org on signup (isDefault = true)
+ * - teams.defaultTeamSlug: All users join this org on sign-up and sign-in (isDefault = true)
  * - teams.autoCreateOnSignup: Auto-create personal workspace (personal = true)
  */
 export const organization = sqliteTable('organization', {
@@ -227,8 +231,7 @@ export const twoFactor = sqliteTable('twoFactor', {
   secret: text('secret').notNull(),
   backupCodes: text('backupCodes'), // JSON array of { code, used } objects
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('two_factor_user_idx').on(table.userId)
 ])
@@ -256,8 +259,7 @@ export const subscription = sqliteTable('subscription', {
   seats: integer('seats'),
   trialStart: integer('trialStart', { mode: 'timestamp' }),
   trialEnd: integer('trialEnd', { mode: 'timestamp' }),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('subscription_reference_idx').on(table.referenceId),
   index('subscription_stripe_idx').on(table.stripeSubscriptionId),
@@ -282,8 +284,7 @@ export const domain = sqliteTable('domain', {
   verificationToken: text('verificationToken').notNull(),
   verifiedAt: integer('verifiedAt', { mode: 'timestamp' }),
   isPrimary: integer('isPrimary', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('domain_org_idx').on(table.organizationId),
   index('domain_domain_idx').on(table.domain),
@@ -334,8 +335,7 @@ export const scopedAccessToken = sqliteTable('scopedAccessToken', {
   lastActiveAt: integer('lastActiveAt', { mode: 'timestamp' }),
   /** Additional metadata (JSON) */
   metadata: text('metadata'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('scoped_access_token_idx').on(table.token),
   index('scoped_access_org_idx').on(table.organizationId),
@@ -389,8 +389,7 @@ export const scopedAccessGrant = sqliteTable('scopedAccessGrant', {
   tokenTtl: integer('tokenTtl').notNull().default(8 * 60 * 60 * 1000),
   /** Additional metadata (JSON) */
   metadata: text('metadata'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('scoped_grant_resource_idx').on(table.resourceType, table.resourceId),
   index('scoped_grant_org_idx').on(table.organizationId),
