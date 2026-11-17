@@ -162,3 +162,97 @@ test('T10: one fresh card per fix — a card newer than the fix close stops a re
   assert.equal(d.post, false)
   assert.match(d.reason, /already posted for this fix/)
 })
+
+// ── Evidence: what the pipeline already checked (#3882) ──────────────────────────────
+import { buildEvidence, closingNote, defangMentions, EVIDENCE_HEADING } from './test-card.mjs'
+
+const appCard = { epicNumber: 1, title: 'X', app: 'velo', stagingUrl: 'https://velo.pmcp.dev', reviewAccount: 'r@x', checks: ['a', 'b'] }
+const noAppCard = { epicNumber: 2, title: 'Y', checks: ['c'] }
+const twoEntries = [{ title: 'A', url: 'https://a', note: 'note a' }, { title: 'B', url: 'https://b' }]
+
+// covers: T1
+test('evidence T1: no or empty evidence leaves the card byte-identical', () => {
+  for (const input of [appCard, noAppCard]) {
+    const before = buildCard(input)
+    assert.equal(buildCard({ ...input, evidence: [] }), before)
+    assert.ok(!before.includes('Already checked'))
+  }
+})
+
+// covers: T2
+test('evidence T2: two entries sit above the first Check line, in order', () => {
+  const lines = buildCard({ ...appCard, evidence: twoEntries }).split('\n')
+  const h = lines.indexOf(EVIDENCE_HEADING)
+  const a = lines.indexOf('- [A](https://a) — note a')
+  const b = lines.indexOf('- [B](https://b)')
+  const check = lines.findIndex(l => l.startsWith('- Check:'))
+  assert.ok(h >= 0 && h < a && a < b && b < check, lines.join('\n'))
+})
+
+// covers: T3
+test('evidence T3: ten entries render 8 lines then "and 2 more"', () => {
+  const ev = Array.from({ length: 10 }, (_, i) => ({ title: `t${i}`, url: `https://u/${i}` }))
+  const lines = buildCard({ ...appCard, evidence: ev }).split('\n')
+  assert.equal(lines.filter(l => l.startsWith('- [t')).length, 8)
+  assert.ok(lines.includes('- and 2 more'))
+})
+
+// covers: T4
+test('evidence T4: an @handle in a note is backticked in card and mail', () => {
+  const ev = [{ title: 'A', url: 'https://a', note: 'thanks @someone' }]
+  assert.equal(defangMentions('thanks @someone'), 'thanks `@someone`')
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    assert.ok(out.includes('thanks `@someone`'))
+    assert.ok(!/(?<![\w`])@someone/.test(out))
+  }
+})
+
+// covers: T5
+test('evidence T5: the mail lists evidence as plain text before "What to test:"', () => {
+  const lines = buildTestMail({ ...appCard, evidence: twoEntries }).text.split('\n')
+  const h = lines.indexOf('Already checked by the pipeline:')
+  assert.equal(lines[h + 1], '- A: https://a — note a')
+  assert.equal(lines[h + 2], '- B: https://b')
+  assert.ok(h >= 0 && h < lines.indexOf('What to test:'))
+  assert.ok(!lines.join('\n').includes(']('))
+})
+
+// covers: T6
+test('evidence T6: buildEvidence maps completed children to their merged PR + note', () => {
+  const child10 = { number: 10, title: 'child10', html_url: 'https://gh/issues/10', state: 'closed', state_reason: 'completed' }
+  const child11 = { number: 11, title: 'child11', html_url: 'https://gh/issues/11', state: 'closed', state_reason: 'not_planned' }
+  const child12 = { number: 12, title: 'child12', html_url: 'https://gh/issues/12', state: 'closed', state_reason: 'completed' }
+  const pr20 = { number: 20, body: 'Closes #10', html_url: 'https://gh/pull/20', merged_at: '2026-11-01T00:00:00Z' }
+  const commentsByIssue = {
+    10: [
+      { login: 'nuxt-harness[bot]', body: '<!-- pipeline-note -->\n> 🤖 …\n✅ **Built to the plan** — x', created_at: '2026-11-01T01:00:00Z' },
+      { login: 'github-actions[bot]', body: '✅ **Resumed from your reply**', created_at: '2026-11-01T02:00:00Z' },
+      { login: 'nuxt-harness[bot]', body: '<!-- plan-review:v1 -->\n✅ **Plan approved** — y', created_at: '2026-11-01T03:00:00Z' }
+    ]
+  }
+  assert.deepEqual(buildEvidence({ subIssues: [child10, child11, child12], mergedPrs: [pr20], commentsByIssue }), [
+    { title: 'child10', url: 'https://gh/pull/20', note: 'Built to the plan — x' },
+    { title: 'child12', url: 'https://gh/issues/12', note: '' }
+  ])
+})
+
+// covers: T7
+test('evidence T7: closingNote reads real-shaped notes', () => {
+  const bot = (body, at) => ({ login: 'nuxt-harness[bot]', body, created_at: at })
+  assert.equal(closingNote([bot('> 🤖 x\n## ✅ Done — the loop is fixed\nmore', '2026-01-01T00:00:00Z')]), 'Done — the loop is fixed')
+  assert.equal(closingNote([{ login: 'pmcp', body: '✅ **Closing as passed.** All rows passed', created_at: '2026-01-01T00:00:00Z' }]), 'Closing as passed. All rows passed')
+  assert.equal(closingNote([
+    bot('## ✅ Done — real', '2026-01-01T00:00:00Z'),
+    bot('✅ **Built to the plan** — no action needed', '2026-01-02T00:00:00Z')
+  ]), 'Done — real')
+  assert.equal(closingNote([bot('<!-- plan-review:v1 -->\n✅ **Plan approved**', '2026-01-01T00:00:00Z')]), '')
+})
+
+// covers: T8
+test('evidence T8: a note with password= never reaches the card or mail', () => {
+  const leak = '✅ **Done** — sign in at https://x.pmcp.dev/login?email=a&password=abc'
+  assert.equal(closingNote([{ login: 'pmcp', body: leak, created_at: '2026-01-01T00:00:00Z' }]), '')
+  const ev = [{ title: 'A', url: 'https://a', note: 'see https://x/login?password=abc' }]
+  assert.ok(!buildCard({ ...appCard, evidence: ev }).includes('password='))
+  assert.ok(!buildTestMail({ ...appCard, evidence: ev }).text.includes('password='))
+})
