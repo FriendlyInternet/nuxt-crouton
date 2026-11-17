@@ -78,6 +78,9 @@
         "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
         "path": "/api/teams/{teamId}/bookings-emaillogs"
       },
       {
