@@ -1,0 +1,50 @@
+{
+  "epic": 3567,
+  "runs": 27,
+  "epicRuns": 3,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/42393295691",
+      "workflow": "fix-ci-on-failure.yml",
+      "stage": "fix-ci",
+      "child": 3568
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 3568,
+      "runs": 8,
+      "planRounds": 2,
+      "buildRounds": 1,
+      "revises": 1,
+      "silent": 1
+    },
+    {
+      "issue": 3569,
+      "runs": 8,
+      "planRounds": 2,
+      "buildRounds": 2,
+      "revises": 1,
+      "silent": 0
+    },
+    {
+      "issue": 3570,
+      "runs": 8,
+      "planRounds": 2,
+      "buildRounds": 2,
+      "revises": 1,
+      "silent": 0
+    }
+  ],
+  "timeToMainHours": 237.1,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 2,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3570#issuecomment-6709333713",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3570#issuecomment-6929703842"
+    ]
+  },
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44076221335",
+  "stored_at": "2026-11-17T12:02:02.095Z"
+}
