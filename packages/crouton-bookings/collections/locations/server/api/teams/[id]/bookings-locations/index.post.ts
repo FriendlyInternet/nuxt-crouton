@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { assertBookingsLocationReferences, createBookingsLocation } from '../../../../database/queries'
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { ensureLocationProducts } from '../../../../../../../server/utils/location-products'
 
 // A location lists each team product once, with a whole-number stock of at least 1 (#3967)
 const productsSchema = z.array(z.object({
@@ -48,7 +49,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)
   await assertBookingsLocationReferences(team.id, body)
 
-  return await createBookingsLocation({
+  const location = await createBookingsLocation({
     ...body,
     products: body.products,
     teamId: team.id,
@@ -56,4 +57,7 @@ export default defineEventHandler(async (event) => {
     createdBy: user.id,
     updatedBy: user.id
   } as Parameters<typeof createBookingsLocation>[0])
+
+  // Saved without products → the location gets one product of its own (#4044)
+  return (await ensureLocationProducts(useDB(), team.id, location.id)) ?? location
 })

@@ -45,6 +45,8 @@ interface CartItem {
   groupLabel?: string | null
   quantity?: number // For inventory mode
   isInventoryMode?: boolean
+  /** Catalog product; the location's only product when absent (#4044) */
+  productId?: string
 }
 
 interface BatchRequestBody {
@@ -113,6 +115,7 @@ export default defineEventHandler(async (event) => {
           quantity: bookingsLocations.quantity,
           offerFullDay: bookingsLocations.offerFullDay,
           inventoryMode: bookingsLocations.inventoryMode,
+          products: bookingsLocations.products,
         })
         .from(bookingsLocations)
         .where(
@@ -130,7 +133,11 @@ export default defineEventHandler(async (event) => {
     if (!dbLocation) {
       throw createError({ status: 404, statusText: 'Location not found' })
     }
-    const sel = validateSelection(dbLocation, item.slotIds, item.quantity)
+    // The body is untyped: a productId that is sent must be a non-empty string (#4044)
+    if (item.productId != null && (typeof item.productId !== 'string' || item.productId === '')) {
+      throw createError({ status: 400, statusText: 'Invalid product' })
+    }
+    const sel = validateSelection(dbLocation, item.slotIds, item.quantity, item.productId)
     selections.set(item, sel)
     item.quantity = sel.quantity
     item.isInventoryMode = sel.inventory
@@ -307,7 +314,7 @@ export default defineEventHandler(async (event) => {
     const guard = guardSql({ teamId: team.id, locationId: item.locationId, range: ranges.get(item)!, selection: sel })
     return guardedInsert({
       id, teamId: team.id, owner: user.id, location: row.location, storedTs: ranges.get(item)!.storedTs,
-      slot: sel.slot, group: row.group, quantity: row.quantity, status: row.status, by: user.id, nowTs,
+      slot: sel.slot, group: row.group, quantity: row.quantity, status: row.status, product: sel.product, by: user.id, nowTs,
     }, guard)
   })
   await runAtomic(db, statements, 'No room left for one of the bookings; nothing was booked')

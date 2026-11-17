@@ -30,7 +30,7 @@ beforeEach(async () => {
   const client = new Database(':memory:')
   client.exec(DDL)
   db = drizzle(client)
-  client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode) values ('s','t1','s',?,0)`).run(JSON.stringify([{ id: 'am' }, { id: 'pm' }]))
+  client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('s','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'am' }, { id: 'pm' }]), JSON.stringify([{ product: 'loc-s', stock: 1 }]))
   hoisted.role = 'admin'
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)
   vi.stubGlobal('createError', (e: any) => Object.assign(new Error(e.statusText), e, { statusCode: e.status }))

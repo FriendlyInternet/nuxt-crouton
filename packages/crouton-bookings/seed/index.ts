@@ -60,6 +60,9 @@ interface SeedLocation {
   inventoryMode: boolean
   quantity?: number
   slots: SeedSlot[]
+  /** The catalog seed's product this location offers (#4044) */
+  product: 'court' | 'kayak'
+  stock: number
 }
 
 const LOCATIONS: SeedLocation[] = [
@@ -74,7 +77,9 @@ const LOCATIONS: SeedLocation[] = [
       { id: 'slot-0900', label: '09:00 – 10:00', capacity: 1 },
       { id: 'slot-1000', label: '10:00 – 11:00', capacity: 1 },
       { id: 'slot-1100', label: '11:00 – 12:00', capacity: 2 }
-    ]
+    ],
+    product: 'court',
+    stock: 2
   },
   {
     key: 'park-court',
@@ -86,7 +91,9 @@ const LOCATIONS: SeedLocation[] = [
     slots: [
       { id: 'slot-1400', label: '14:00 – 15:00', capacity: 1 },
       { id: 'slot-1500', label: '15:00 – 16:00', capacity: 1 }
-    ]
+    ],
+    product: 'court',
+    stock: 1
   },
   {
     key: 'kayak-rental',
@@ -96,7 +103,9 @@ const LOCATIONS: SeedLocation[] = [
     city: 'Brugge',
     inventoryMode: true,
     quantity: 8,
-    slots: []
+    slots: [],
+    product: 'kayak',
+    stock: 8
   }
 ]
 
@@ -122,9 +131,19 @@ function locationId(ctx: SeedContext, key: string): string {
   return seedId('bookings-location', ctx.teamSlug, key)
 }
 
+/** Same id the catalog seed gives its products (`packages/crouton-catalog/seed`). */
+function productId(ctx: SeedContext, key: string): string {
+  return seedId('catalog-product', ctx.teamSlug, key)
+}
+
+function locationProduct(ctx: SeedContext, key: string): string {
+  return productId(ctx, LOCATIONS.find(l => l.key === key)!.product)
+}
+
 export const provider: SeedProvider = {
   id: 'bookings',
-  dependsOn: ['auth'],
+  // catalog first: locations and bookings point at its products (#4044)
+  dependsOn: ['auth', 'catalog'],
   seed(ctx) {
     // Settings — one row per team (status + group option lists).
     ctx.upsert('bookings_settings', { id: seedId('bookings-settings', ctx.teamSlug) }, {
@@ -150,6 +169,7 @@ export const provider: SeedProvider = {
         city: loc.city,
         content: null,
         slots: loc.inventoryMode ? null : loc.slots,
+        products: [{ product: productId(ctx, loc.product), stock: loc.stock }],
         openDays: null,
         slotSchedule: null,
         blockedDates: null,
@@ -183,6 +203,7 @@ export const provider: SeedProvider = {
           group: booking.group,
           quantity: booking.quantity,
           status: booking.status,
+          product: locationProduct(ctx, booking.locationKey),
           createdAt: ctx.now,
           updatedAt: ctx.now,
           createdBy: 'seed',

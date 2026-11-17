@@ -61,10 +61,11 @@ function fakeD1(sqlite: Database.Database) {
 let sqlite: Database.Database
 let db: any
 const rows = () => sqlite.prepare('select * from bookings_bookings').all() as any[]
-const row = (id: string, ts: number) => ({ id, teamId: 't1', owner: 'u1', location: 'L', storedTs: ts, slot: null, group: null, quantity: 1, status: 'pending', by: 'u1', nowTs: 1 })
+const row = (id: string, ts: number) => ({ id, teamId: 't1', owner: 'u1', location: 'L', storedTs: ts, slot: null, group: null, quantity: 1, status: 'pending', product: 'loc-L', by: 'u1', nowTs: 1 })
 const loc = (id: string, over: Record<string, unknown> = {}) => {
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, ...over }
-  sqlite.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay)').run(l)
+  // every location lists one product (#4044)
+  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock: 1 }]), ...over }
+  sqlite.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay,products) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay,@products)').run(l)
 }
 
 beforeEach(() => {

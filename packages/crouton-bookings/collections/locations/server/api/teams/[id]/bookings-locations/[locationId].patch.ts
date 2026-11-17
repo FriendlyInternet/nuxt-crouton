@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { assertBookingsLocationReferences, updateBookingsLocation, getBookingsLocationsByIds } from '../../../../database/queries'
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { ensureLocationProducts } from '../../../../../../../server/utils/location-products'
 
 // A location lists each team product once, with a whole-number stock of at least 1 (#3967)
 const productsSchema = z.array(z.object({
@@ -66,7 +67,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return await updateBookingsLocation(locationId, team.id, user.id, {
+  const location = await updateBookingsLocation(locationId, team.id, user.id, {
     title: body.title,
     color: body.color,
     street: body.street,
@@ -85,4 +86,7 @@ export default defineEventHandler(async (event) => {
     maxBookingsPerMonth: body.maxBookingsPerMonth,
     translations: body.translations
   } as Parameters<typeof updateBookingsLocation>[3], { role: membership.role })
+
+  // A PATCH that leaves products NULL (e.g. sends `products: null`) gets the own product back (#4044)
+  return (await ensureLocationProducts(useDB(), team.id, location.id)) ?? location
 })

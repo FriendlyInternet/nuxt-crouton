@@ -16,6 +16,8 @@ vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookin
 // The bookings write path is the capacity-guarded one (#3379); its own cases live in booking-capacity.test.ts
 vi.mock('../server/utils/booking-capacity', async (orig) => ({ ...(await orig() as object), patchBookingGuarded: hoisted.guarded }))
 vi.mock('../collections/locations/server/database/queries', () => ({ updateBookingsLocation: hoisted.update, getBookingsLocationsByIds: hoisted.existing, createBookingsLocation: hoisted.create, assertBookingsLocationReferences: hoisted.assertRef }))
+// The location's own product (#4044) runs on the real DB in location-own-product.test.ts; the queries here are stubs
+vi.mock('../server/utils/location-products', () => ({ ensureLocationProducts: async () => undefined }))
 vi.mock('../collections/settings/server/database/queries', () => ({ createBookingsSetting: hoisted.create, updateBookingsSetting: hoisted.update }))
 vi.mock('../collections/emailtemplates/server/database/queries', () => ({ assertBookingsEmailtemplateReferences: hoisted.assertRef, createBookingsEmailtemplate: hoisted.create, updateBookingsEmailtemplate: hoisted.update, getBookingsEmailtemplatesByIds: hoisted.existing }))
 vi.mock('../collections/emaillogs/server/database/queries', () => ({ assertBookingsEmaillogReferences: hoisted.assertRef, createBookingsEmaillog: hoisted.create, updateBookingsEmaillog: hoisted.update }))
@@ -28,7 +30,7 @@ CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner
 const makeDb = (withLocation: boolean) => {
   const client = new Database(':memory:')
   client.exec(DDL)
-  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode) values ('l1','t1','s',?,0)`).run(JSON.stringify([{ id: 'a' }]))
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('l1','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'p1', stock: 1 }]))
   return drizzle(client) as any
 }
 const bookingRows = (db: any) => db.$client.prepare('select * from bookings_bookings').all()

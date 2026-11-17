@@ -14,6 +14,8 @@ const updateSchema = z.object({
   slot: z.union([z.string(), z.array(z.string())]).optional(),
   group: z.string().nullable().optional(),
   status: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
+  // Must be one the booking's location lists (#4044)
+  product: z.string().min(1).nullish(),
 })
 
 export default defineEventHandler(async (event) => {
