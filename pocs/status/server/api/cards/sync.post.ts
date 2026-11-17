@@ -3,7 +3,7 @@
 // Owner-only. Run by the inbox page on load (no cron: a cron has no session and no team). Skips the
 // GitHub read when the last sync of this team was < 60 s ago. Rules: server/utils/cards-sync-core.ts.
 // A failed GitHub read never changes a card: the item is skipped (listed in `skipped`) and the next
-// sync tries again.
+// sync tries again. A card whose ticket a chat claimed carries `payload.claim` (#4019, server/utils/claim-core.ts).
 import type { H3Event } from 'h3'
 import { createInboxCard, getAllInboxCards, updateInboxCard } from '../../../layers/inbox/collections/cards/server/database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
@@ -14,6 +14,7 @@ import {
   goneCandidates, isPipelineBot, planSync, stuckCounts,
   type Ask, type EpicSyncItem, type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhFile, type GhUser, type QuizItem, type SyncItem
 } from '../../utils/cards-sync-core'
+import { MAX_HOPS, activeClaim, applyClaims, claimsByTicket, type CardClaim } from '../../utils/claim-core'
 
 const REPO = 'FriendlyInternet/nuxt-crouton'
 const THROTTLE_MS = 60_000
@@ -162,8 +163,39 @@ async function readGone(event: H3Event, cards: ExistingCard[], note: Note) {
   return gone
 }
 
+/**
+ * Which ticket each live chat claim covers (#4019): open `claimed`-labelled issues, their live
+ * claim (`activeClaim`), then their sub-issues down to MAX_HOPS. Any failed read → null (each
+ * card then keeps the claim it already shows).
+ */
+async function readClaims(event: H3Event, note: Note): Promise<Record<number, CardClaim> | null> {
+  const list = await ghGetAll<GhIssue>(event, `/repos/${REPO}/issues?labels=claimed&state=open&per_page=100`)
+  if (list.error) { note(list.error); return null }
+  const issues = (list.data ?? []).filter(i => !i.pull_request)
+  const reads = await Promise.all(issues.map(async i => ({ i, c: await comments(event, i.number) })))
+  const failed = reads.find(r => r.c.error)
+  if (failed) { note(failed.c.error); return null }
+  const live = reads
+    .map(({ i, c }) => ({ issue: i.number, claim: activeClaim({ state: i.state, comments: c.data ?? [] }) }))
+    .filter((x): x is { issue: number, claim: NonNullable<typeof x.claim> } => !!x.claim)
+  const children: Record<number, number[]> = {}
+  let frontier = live.map(x => x.issue)
+  for (let hop = 0; hop < MAX_HOPS && frontier.length; hop++) {
+    const todo = [...new Set(frontier)].filter(n => !(n in children))
+    const subs = await Promise.all(todo.map(async n => ({ n, r: await ghGetAll<GhIssue>(event, `/repos/${REPO}/issues/${n}/sub_issues?per_page=100`) })))
+    const bad = subs.find(s => s.r.error)
+    if (bad) { note(bad.r.error); return null }
+    frontier = []
+    for (const { n, r } of subs) {
+      children[n] = (r.data ?? []).map(x => x.number)
+      frontier.push(...children[n]!)
+    }
+  }
+  return claimsByTicket({ live, children })
+}
+
 /** Read GitHub and collect every waiting ask. */
-async function collectFromGitHub(event: H3Event, note: Note): Promise<{ asks: Ask[], unreadable: number[], complete: boolean }> {
+async function collectFromGitHub(event: H3Event, note: Note): Promise<{ asks: Ask[], unreadable: number[], complete: boolean, prTicket: Record<number, number | null | undefined> }> {
   const lists = await readLists(event, note)
   const prItems = await Promise.all(lists.pulls.map(p => readPr(event, p, note)))
   const seen = new Set(prItems.map(i => i.number))
@@ -175,7 +207,8 @@ async function collectFromGitHub(event: H3Event, note: Note): Promise<{ asks: As
     Promise.all(lists.epics.map(i => readEpic(event, i, note)))
   ])
   const { asks, unreadable } = collectAsks({ items: [...prItems, ...issueItems, ...quietItems], quizItems, epicItems, now: Date.now() })
-  return { asks, unreadable, complete: lists.complete }
+  const prTicket = Object.fromEntries(prItems.map(p => [p.number, p.closesIssue]))
+  return { asks, unreadable, complete: lists.complete, prTicket }
 }
 
 export default defineEventHandler(async (event) => {
@@ -201,8 +234,11 @@ async function syncTeam(event: H3Event, teamId: string, userId: string) {
   const errors: string[] = []
   const note: Note = (e) => { if (e) errors.push(e) }
 
-  const { asks, unreadable, complete: listsComplete } = await collectFromGitHub(event, note)
+  const [collected, byTicket] = await Promise.all([collectFromGitHub(event, note), readClaims(event, note)])
+  const { unreadable, complete: listsComplete, prTicket } = collected
   const existing = (await getAllInboxCards(teamId)) as unknown as ExistingCard[]
+  // Chat-claim badge (#4019): `payload.claim` on every ask whose ticket (or parent epic) is claimed.
+  const asks = applyClaims(collected.asks, byTicket, existing, prTicket)
   const gone = await readGone(event, goneCandidates({ asks, unreadable, existing, listsComplete }), note)
 
   const plan = planSync({ asks, unreadable, existing, gone, listsComplete })
