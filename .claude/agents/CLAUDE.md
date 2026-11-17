@@ -108,11 +108,13 @@ deterministic set (v3→v4 renames, redundant-overlay-`UCard` unwraps) under `fi
 
 | Agent | File | Recurses? | Writes code? | Model |
 |-------|------|-----------|--------------|-------|
-| `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `sonnet` |
+| `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `opus` |
 
 It's steered by the **`/frontend-review` skill** (on demand) and run by
-`.github/workflows/review.yml` (per-PR `quick`, fails the check on a 🔴
-critical convention break, diff-scoped so never the backlog). Its lens is conventions
+`.github/workflows/review.yml` (per-PR `quick`, on the `review` tier). The check fails on a
+lint hit (a plain `<button>`/`<input>`/`<select>`/`<textarea>` on an added line,
+`eslint.frontend-gate.config.mjs`) or a 🔴 whose `quote` matches an added line
+(`scripts/frontend-gate.mjs`, #4071), so never on the backlog. Its lens is conventions
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
 
