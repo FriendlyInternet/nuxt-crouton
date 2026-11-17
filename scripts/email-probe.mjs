@@ -211,9 +211,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === 'has-key') {
     process.exit(hasEmailKey(readStdin()) ? 0 : 1)
   }
-  else if (cmd === 'bundle-has-key') {
-    process.exit(bundleHasEmailKey(readStdin()) ? 0 : 1)
-  }
   else if (cmd === 'outcome') {
     console.log(probeOutcome({ kind: arg, reason: process.argv[4] }))
   }
@@ -240,7 +237,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(await requests(arg, process.argv[4], process.argv[5]))
   }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | outcome <kind> [reason] | sender <app> <appDir> | send <url> <json> | ensure-user-sql <email> | requests <mode> <base> <email>')
+    console.error('usage: email-probe.mjs detect <config> | has-key | verdict | outcome <kind> [reason] | sender <app> <appDir> | send <url> <json> | ensure-user-sql <email> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }
