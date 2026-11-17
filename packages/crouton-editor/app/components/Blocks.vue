@@ -626,17 +626,18 @@ defineExpose({
 }
 
 /* Remote changes (collab): added blocks slide in + glow, removed ones fade out */
-.crouton-remote-new { animation: crouton-remote-in .5s cubic-bezier(.2,.8,.2,1) both, crouton-remote-glow 2.4s ease-out both; border-radius: 6px; }
+.crouton-remote-new { animation: crouton-remote-in .5s cubic-bezier(.2,.8,.2,1) both, crouton-remote-glow 1.5s ease-out both; border-radius: 6px; }
 @keyframes crouton-remote-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 @keyframes crouton-remote-glow {
-  0%, 30% { background-color: color-mix(in oklab, var(--ui-primary) 30%, transparent); box-shadow: 0 0 0 6px color-mix(in oklab, var(--ui-primary) 30%, transparent) }
-  100% { background-color: transparent; box-shadow: 0 0 0 6px transparent }
+  /* Subtle tint (max 8% of the theme colour, no ring) so it stays readable in dark mode too */
+  from { background-color: color-mix(in oklab, var(--ui-primary) 8%, transparent) }
+  to { background-color: transparent }
 }
 .crouton-remote-gone { animation: crouton-remote-out .4s ease-in both; overflow: hidden; pointer-events: none }
 @keyframes crouton-remote-out { from { opacity: 1; max-height: 40rem } to { opacity: 0; max-height: 0; margin: 0 } }
 @keyframes crouton-remote-fade { from { opacity: 1 } to { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) {
-  .crouton-remote-new { animation: crouton-remote-glow 2.4s ease-out both }
+  .crouton-remote-new { animation: crouton-remote-glow 1.5s ease-out both }
   .crouton-remote-gone { animation: crouton-remote-fade .4s ease-in both }
 }
 </style>
