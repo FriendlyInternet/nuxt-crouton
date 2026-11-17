@@ -9,7 +9,7 @@
 // re-plan (the router asks for a reason). On a `needs-owner` hold every reply re-plans, and the
 // owner's bare `ok` is first recorded in `## Decisions` as the answer "yes" (#4082).
 
-import { isApproval } from './approval.mjs'
+import { isApproval, isBareApproval } from './approval.mjs'
 import { markerValue } from './lib/marker.mjs'
 import { OWNERS, decisionLine } from './lib/decision-line.mjs'
 
@@ -74,7 +74,7 @@ export function needsOwnerQuestion(comments) {
 export function answerDecision({ comments, replyBody = '', date, url, authorAssociation, userType } = {}) {
   if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
   if (verdicts(comments).at(-1) !== 'needs-owner') return null
-  if (!isApproval(replyBody) || OK_REASON.test(replyBody)) return null
+  if (!isBareApproval(replyBody) || OK_REASON.test(replyBody)) return null
   const q = needsOwnerQuestion(comments)
   return decisionLine({ text: `owner answered yes (\`ok\`) to the plan review's question: "${q}"`, date, url })
 }

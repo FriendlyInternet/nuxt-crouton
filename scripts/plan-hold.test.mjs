@@ -203,6 +203,14 @@ test('#4082 answerDecision: not the owner, a reason, a sentence or a twice-rejec
   assert.equal(ans({ comments: heldThread() }), null)
 })
 
+test('#4082 answerDecision: an approval plus other text ⇒ null; ok, ✅ or lgtm alone ⇒ the line', () => {
+  assert.equal(ans({ replyBody: '✅\nNo, keep the existing schema' }), null)
+  assert.equal(ans({ replyBody: 'approved, but keep the column' }), null)
+  for (const replyBody of ['ok', '✅', 'lgtm']) {
+    assert.match(String(ans({ replyBody })), /^- 2026-11-17 · owner answered yes/, replyBody)
+  }
+})
+
 // covers: T5
 test('#4082 appendDecision with the same line and url twice changes the body once', () => {
   const line = ans()
