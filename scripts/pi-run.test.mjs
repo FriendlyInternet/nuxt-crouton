@@ -7,10 +7,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   branchInstr, promptMode, feedbackWho, OWNER_WHO, REVIEWER_WHO, extractDecisions, isFresh,
   planFeedbackAppendix, buildPrompt, healPrompt, stepOutputs,
@@ -51,6 +51,19 @@ function procEnv(c, rt, extra = {}) {
   return { PATH: `${BIN}:${process.env.PATH}`, HOME: process.env.HOME || '/tmp', RUNNER_TEMP: rt, GITHUB_REPOSITORY: REPO, FAKE_GH_DATA: join(FX, 'gh-data.json'), ...(c.fail ? { FAKE_GH_FAIL: c.fail } : {}), ...c.env, ...extra }
 }
 const runCli = (args, env) => spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, env, encoding: 'utf8' })
+
+// The frozen bash calls two CLI modes the real scripts no longer have (`owner-screens.mjs --is-source`,
+// `plan-held.mjs --approved-prompt` — pi-run.mjs calls their functions directly). So it runs in a
+// scratch tree: the removed CLI code from fixtures/pi-run/old-cli/ at those two paths, a copy of
+// pipeline-prompt.mjs and best-plan.jq, and .claude linked to the real one.
+const OLD_ROOT = mkdtempSync(join(tmpdir(), 'pi-run-old-'))
+mkdirSync(join(OLD_ROOT, 'scripts/lib'), { recursive: true })
+symlinkSync(join(ROOT, '.claude'), join(OLD_ROOT, '.claude'))
+copyFileSync(join(ROOT, 'scripts/pipeline-prompt.mjs'), join(OLD_ROOT, 'scripts/pipeline-prompt.mjs'))
+copyFileSync(join(ROOT, 'scripts/lib/best-plan.jq'), join(OLD_ROOT, 'scripts/lib/best-plan.jq'))
+copyFileSync(join(FX, 'old-cli/plan-held.mjs'), join(OLD_ROOT, 'scripts/plan-held.mjs'))
+copyFileSync(join(FX, 'old-cli/owner-screens.mjs'), join(OLD_ROOT, 'scripts/lib/owner-screens.mjs'))
+const REAL_SCRIPTS = pathToFileURL(join(ROOT, 'scripts/')).href
 
 test('branchInstr: main by default, the integration branch when set', () => {
   assert.equal(branchInstr(''), 'branch off main and target the PR at main')
@@ -236,7 +249,7 @@ test('CLI hand-off: no APPROVED_PLAN_ID → approved-plan.txt is not created', (
 for (const [name, c] of Object.entries(cases)) {
   test(`CLI [${name}] matches a live run of the frozen old bash (prompt, hand-off files, exit)`, () => {
     const rtOld = runnerTemp(c)
-    const old = spawnSync('bash', ['-euo', 'pipefail', join(FX, 'old-step.sh')], { cwd: ROOT, env: procEnv(c, rtOld, { PROMPT_FILE: join(rtOld, 'PROMPT') }), encoding: 'utf8' })
+    const old = spawnSync('bash', ['-euo', 'pipefail', join(FX, 'old-step.sh')], { cwd: OLD_ROOT, env: procEnv(c, rtOld, { PROMPT_FILE: join(rtOld, 'PROMPT'), REAL_SCRIPTS }), encoding: 'utf8' })
     const rtNew = runnerTemp(c)
     const neu = runCli(['prompt'], procEnv(c, rtNew))
     if (c.throws) {

@@ -1,9 +1,7 @@
 // node --test scripts/plan-held.test.mjs — the owner override of a twice-rejected plan (#3272).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
@@ -93,22 +91,6 @@ test('approvedPromptSection: truncated last line ⇒ no override (even if an ear
 test('approvedPromptSection: an override older than a newer plan ⇒ no OVERRIDE block', () => {
   const { text } = section(() => asGhLines([[plan(), dec(BOT), plan()]]))
   assert.equal(text.includes('OWNER OVERRIDE'), false)
-})
-
-test('CLI --approved-prompt: an unreadable plan file exits 1 and writes nothing', () => {
-  const r = runCli(['--approved-prompt', '--plan-id', '1', '--plan-file', '/nonexistent/plan.txt', '--issue', '7'], '')
-  assert.equal(r.status, 1)
-  assert.equal(r.stdout, '')
-})
-test('CLI --approved-prompt: gh unavailable ⇒ header + plan, warning on stderr, exit 0', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'plan-held-'))
-  const file = join(dir, 'approved-plan.txt')
-  writeFileSync(file, PLAN_TEXT)
-  const r = spawnSync(process.execPath, [CLI, '--approved-prompt', '--plan-id', '9', '--plan-file', file, '--issue', '7'],
-    { encoding: 'utf8', env: { ...process.env, PATH: dir, GITHUB_REPOSITORY: 'o/r' } })
-  assert.equal(r.status, 0, r.stderr)
-  assert.equal(r.stdout, approvedHeader('9') + PLAN_TEXT)
-  assert.match(r.stderr, /::warning::could not read the owner override for #7/)
 })
 
 // ── planHeldFor: the route step's fact ──────────────────────────────────────────────────────
