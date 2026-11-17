@@ -162,3 +162,149 @@ test('T10: one fresh card per fix — a card newer than the fix close stops a re
   assert.equal(d.post, false)
   assert.match(d.reason, /already posted for this fix/)
 })
+
+// ── Evidence: what the pipeline already checked (#3882) ──────────────────────────────
+import { buildEvidence, closingNote, cleanNote, defangMentions, EVIDENCE_HEADING } from './test-card.mjs'
+
+const appCard = { epicNumber: 1, title: 'X', app: 'velo', stagingUrl: 'https://velo.pmcp.dev', reviewAccount: 'r@x', checks: ['a', 'b'] }
+const noAppCard = { epicNumber: 2, title: 'Y', checks: ['c'] }
+const twoEntries = [{ title: 'A', url: 'https://a', note: 'note a' }, { title: 'B', url: 'https://b' }]
+
+// covers: T1
+test('evidence T1: no or empty evidence leaves the card byte-identical', () => {
+  for (const input of [appCard, noAppCard]) {
+    const before = buildCard(input)
+    assert.equal(buildCard({ ...input, evidence: [] }), before)
+    assert.ok(!before.includes('Already checked'))
+  }
+})
+
+// covers: T2
+test('evidence T2: two entries sit above the first Check line, in order', () => {
+  const lines = buildCard({ ...appCard, evidence: twoEntries }).split('\n')
+  const h = lines.indexOf(EVIDENCE_HEADING)
+  const a = lines.indexOf('- [A](https://a) — note a')
+  const b = lines.indexOf('- [B](https://b)')
+  const check = lines.findIndex(l => l.startsWith('- Check:'))
+  assert.ok(h >= 0 && h < a && a < b && b < check, lines.join('\n'))
+})
+
+// covers: T3
+test('evidence T3: ten entries render 8 lines then "and 2 more"', () => {
+  const ev = Array.from({ length: 10 }, (_, i) => ({ title: `t${i}`, url: `https://u/${i}` }))
+  const lines = buildCard({ ...appCard, evidence: ev }).split('\n')
+  assert.equal(lines.filter(l => l.startsWith('- [t')).length, 8)
+  assert.ok(lines.includes('- and 2 more'))
+})
+
+// covers: T4
+test('evidence T4: an @handle in a note is backticked in card and mail', () => {
+  const ev = [{ title: 'A', url: 'https://a', note: 'thanks @someone' }]
+  assert.equal(defangMentions('thanks @someone'), 'thanks `@someone`')
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    assert.ok(out.includes('thanks `@someone`'))
+    assert.ok(!/(?<![\w`])@someone/.test(out))
+  }
+})
+
+// covers: T5
+test('evidence T5: the mail lists evidence as plain text before "What to test:"', () => {
+  const lines = buildTestMail({ ...appCard, evidence: twoEntries }).text.split('\n')
+  const h = lines.indexOf('Already checked by the pipeline:')
+  assert.equal(lines[h + 1], '- A: https://a — note a')
+  assert.equal(lines[h + 2], '- B: https://b')
+  assert.ok(h >= 0 && h < lines.indexOf('What to test:'))
+  assert.ok(!lines.join('\n').includes(']('))
+})
+
+// covers: T6
+test('evidence T6: buildEvidence maps completed children to their merged PR + note', () => {
+  const child10 = { number: 10, title: 'child10', html_url: 'https://gh/issues/10', state: 'closed', state_reason: 'completed' }
+  const child11 = { number: 11, title: 'child11', html_url: 'https://gh/issues/11', state: 'closed', state_reason: 'not_planned' }
+  const child12 = { number: 12, title: 'child12', html_url: 'https://gh/issues/12', state: 'closed', state_reason: 'completed' }
+  const pr20 = { number: 20, body: 'Closes #10', html_url: 'https://gh/pull/20', merged_at: '2026-11-01T00:00:00Z' }
+  const commentsByIssue = {
+    10: [
+      { login: 'nuxt-harness[bot]', body: '<!-- pipeline-note -->\n> 🤖 …\n✅ **Built to the plan** — x', created_at: '2026-11-01T01:00:00Z' },
+      { login: 'github-actions[bot]', body: '✅ **Resumed from your reply**', created_at: '2026-11-01T02:00:00Z' },
+      { login: 'nuxt-harness[bot]', body: '<!-- plan-review:v1 -->\n✅ **Plan approved** — y', created_at: '2026-11-01T03:00:00Z' }
+    ]
+  }
+  assert.deepEqual(buildEvidence({ subIssues: [child10, child11, child12], mergedPrs: [pr20], commentsByIssue }), [
+    { title: 'child10', url: 'https://gh/pull/20', note: 'Built to the plan — x' },
+    { title: 'child12', url: 'https://gh/issues/12', note: '' }
+  ])
+})
+
+// covers: T7
+test('evidence T7: closingNote reads real-shaped notes', () => {
+  const bot = (body, at) => ({ login: 'nuxt-harness[bot]', body, created_at: at })
+  assert.equal(closingNote([bot('> 🤖 x\n## ✅ Done — the loop is fixed\nmore', '2026-01-01T00:00:00Z')]), 'Done — the loop is fixed')
+  assert.equal(closingNote([{ login: 'pmcp', body: '✅ **Closing as passed.** All rows passed', created_at: '2026-01-01T00:00:00Z' }]), 'Closing as passed. All rows passed')
+  assert.equal(closingNote([
+    bot('## ✅ Done — real', '2026-01-01T00:00:00Z'),
+    bot('✅ **Built to the plan** — no action needed', '2026-01-02T00:00:00Z')
+  ]), 'Done — real')
+  assert.equal(closingNote([bot('<!-- plan-review:v1 -->\n✅ **Plan approved**', '2026-01-01T00:00:00Z')]), '')
+})
+
+// covers: T8
+test('evidence T8: a note with password= never reaches the card or mail', () => {
+  const leak = '✅ **Done** — sign in at https://x.pmcp.dev/login?email=a&password=abc'
+  assert.equal(closingNote([{ login: 'pmcp', body: leak, created_at: '2026-01-01T00:00:00Z' }]), '')
+  const ev = [{ title: 'A', url: 'https://a', note: 'see https://x/login?password=abc' }]
+  assert.ok(!buildCard({ ...appCard, evidence: ev }).includes('password='))
+  assert.ok(!buildTestMail({ ...appCard, evidence: ev }).text.includes('password='))
+})
+
+// covers: PR #4067 review — titles and code-span mentions
+test('evidence T9: a title with a link breaker gives exactly one link, to the entry URL', () => {
+  const ev = [{ title: 'x](https://example.org)', url: 'https://github.com/o/r/pull/1', note: '' }]
+  const line = buildCard({ ...appCard, evidence: ev }).split('\n').find(l => l.startsWith('- ['))
+  const links = [...line.matchAll(/(?<!\\)\]\(([^)]*)\)/g)].map(m => m[1])
+  assert.deepEqual(links, ['https://github.com/o/r/pull/1'])
+  assert.equal(line, '- [x\\](https://example.org)](https://github.com/o/r/pull/1)')
+  const mail = buildTestMail({ ...appCard, evidence: ev }).text
+  assert.ok(mail.includes('- x](https://example.org): https://github.com/o/r/pull/1'))
+})
+
+test('evidence T10: an @handle in a title is backticked in card and mail', () => {
+  const ev = [{ title: 'Fix for @someone', url: 'https://a', note: '' }]
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    assert.ok(out.includes('Fix for `@someone`'))
+    assert.ok(!/(?<![\w`])@someone/.test(out))
+  }
+})
+
+test('evidence T11: a handle right after a closing backtick is still backticked', () => {
+  assert.equal(defangMentions('`x`@alice'), '`x``@alice`')
+  const ev = [{ title: 'A', url: 'https://a', note: '`x`@alice' }]
+  assert.ok(buildCard({ ...appCard, evidence: ev }).includes('— `x``@alice`'))
+})
+
+// covers: PR #4067 build review — a long note cut near a handle must still never ping
+test('evidence T13: a long note with a handle near the 140-char cut never leaves a bare handle', () => {
+  const body = `✅ Done ${'x'.repeat(120)} cc @alice-longhandle`
+  const note = closingNote([{ login: 'pmcp', body, created_at: '2026-01-01T00:00:00Z' }])
+  const bare = /(?<![\w`])@[A-Za-z0-9-]/
+  const ticks = s => (s.match(/`/g) || []).length
+  assert.ok(!bare.test(note), note)
+  assert.equal(ticks(note) % 2, 0)
+  const twice = cleanNote(note)
+  assert.ok(!bare.test(twice) && ticks(twice) % 2 === 0, twice)
+  const ev = [{ title: 'A', url: 'https://a', note }]
+  for (const out of [buildCard({ ...appCard, evidence: ev }), buildTestMail({ ...appCard, evidence: ev }).text]) {
+    const line = out.split('\n').find(l => l.includes('x'.repeat(120)))
+    assert.ok(line && !bare.test(line), line)
+    assert.equal(ticks(line) % 2, 0)
+  }
+  // a caller passing an already-defanged note that is longer than 140 must not break the span either
+  const long = `${'y'.repeat(130)} cc \`@alice-longhandle\``
+  const again = cleanNote(long)
+  assert.ok(!bare.test(again) && ticks(again) % 2 === 0, again)
+})
+
+test('evidence T12: an already backticked handle is left alone', () => {
+  assert.equal(defangMentions('ask `@alice` and `cc @bob` please'), 'ask `@alice` and `cc @bob` please')
+  assert.equal(defangMentions(defangMentions('hi @alice')), 'hi `@alice`')
+})
