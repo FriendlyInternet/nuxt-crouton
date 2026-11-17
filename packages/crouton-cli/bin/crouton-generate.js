@@ -206,7 +206,6 @@ const initCmd = defineCommand({
 const addCmd = defineCommand({
   meta: { name: 'add', description: 'Add Crouton modules or features to your project' },
   args: {
-    skipMigrations: { type: 'boolean', description: 'Skip migration generation and application' },
     skipInstall: { type: 'boolean', description: 'Skip package installation (assume already installed)' },
     dryRun: { type: 'boolean', description: 'Preview what will be done without making changes' },
     force: { type: 'boolean', description: 'Force reinstall even if already installed' },
@@ -232,7 +231,6 @@ const addCmd = defineCommand({
 
       const result = await addModules(modules, {
         skipInstall: args.skipInstall,
-        skipMigrations: args.skipMigrations,
         dryRun: args.dryRun,
         force: args.force,
       })
