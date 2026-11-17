@@ -61,25 +61,32 @@ CroutonBooking
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
-| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status) |
+| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status/product) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (owner or team admin; others get 403) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]/resend-email` | POST | Resend email (if enabled) |
 
-### Booking Modes
+### Counting (#4061)
 
-1. **Slot Mode** (default): Named time slots with optional per-slot capacity
-   - Each slot has `{ id, label, capacity? }` — capacity defaults to 1
-   - `capacity: 4` means 4 people can book the same slot on the same date
-   - UI shows "X left" / "Full" badges when capacity > 1
-2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
+Free places are counted per product, per day, per slot:
 
-**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). A location saved without products gets the same own product (`ensureLocationProducts` in `server/utils/location-products.ts`, #4044; the location POST/PATCH routes and the velo/booking-demo seeds call it). A booking always carries a product of its own location (`resolveProduct` in `server/utils/booking-capacity.ts`, on every write): a named product must be listed (else 400 "Unknown product"), none named → the location's only product, two or more listed → 400 "Pick a product", none listed → 400. The counting does not use either field yet; it still uses the slot capacity / `quantity` above (`quantity`/`inventoryMode`/slot `capacity` drive counting until step 3b).
+`left(product, day, slot) = stock − summed quantity of that product's non-cancelled bookings that day holding that slot or the full day`
+
+- A location with no named slots has one implicit full-day slot.
+- A full-day booking holds every slot; a full-day request needs room in every slot.
+- A booking with no `product` (old rows) counts against every product of its location; a stored quantity below 1 counts as 1.
+- A location is fully booked on a day only when every product it lists is at 0 in every slot; a location listing no products is left out of the day check.
+- Slot `capacity`, location `quantity` and `inventoryMode` no longer count. `inventoryMode` only keeps the stored slot as JSON `null` (and the location is counted as slotless).
+- The pure rule is `app/utils/capacity.ts` (`leftFor`, `fitsCapacity`, `isLocationFull`, `parseLocationProducts`); the calendar's `isDayFullyBooked` (`app/utils/day-availability.ts`) and the cart pre-check use it; `guardSql` is the same rule in SQL.
+
+**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). A location saved without products gets the same own product (`ensureLocationProducts` in `server/utils/location-products.ts`, #4044; the location POST/PATCH routes and the velo/booking-demo seeds call it). A booking always carries a product of its own location (`resolveProduct` in `server/utils/booking-capacity.ts`, on every write): a named product must be listed (else 400 "Unknown product"), none named → the location's only product, two or more listed → 400 "Pick a product", none listed → 400. Counting uses `stock` per product (see Counting); stock is read from `bookings_locations.products` inside the guarded statement, so a product unlisted after validation is refused (409).
 
 **Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
 `all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
-offer it *next to* them. The full day is exclusive: it can't share a date with any other slot —
-booked, in the cart, or ticked in the same booking. The rules are pure and shared by the form
-and the create endpoint: `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
+offer it *next to* them. In one booking the full day can't be combined with another slot (400).
+Across bookings it takes one unit from every slot (see Counting), so at stock 1 it can't share a
+date with another booking; at stock ≥ 2 it can. Until step 5 the form still blocks it
+(`isBlockedByFullDay`); the create endpoint follows the stock rule. The pure helpers:
+`app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
 `fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
 (booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
 
@@ -293,4 +300,4 @@ Type: [Domain][Entity] (e.g., BookingWithRelations)
 Table: bookings[Collection] (e.g., bookingsBookings)
 ```
 
-**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`) (D1: one raw `$client.batch` of bound statements — drizzle's `db.batch` can't batch `db.run()` there, #3968; tested in `test/run-atomic-d1.test.ts`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.
+**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement (quantity is a whole number ≥ 1 at every location, default 1; the guard sums quantity of the same product, or product NULL, per requested slot against that product's stock, #4061); the batch is all-or-nothing (`runAtomic`) (D1: one raw `$client.batch` of bound statements — drizzle's `db.batch` can't batch `db.run()` there, #3968; tested in `test/run-atomic-d1.test.ts`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.

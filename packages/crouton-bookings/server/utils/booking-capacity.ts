@@ -3,7 +3,8 @@
  * write (cart checkout, generic POST, both PATCH routes) checks that a slot
  * or day still has room.
  *
- * Built on the pure rules in `app/utils/capacity` and `app/utils/full-day`.
+ * Built on the pure rules in `app/utils/capacity` and `app/utils/full-day`;
+ * since #4061 it counts free stock per product, per day, per slot.
  * The guard is a single SQL boolean with a FIXED number of bound parameters
  * (D1 allows 100), evaluated inside the same statement that writes the row, so
  * two requests racing for the last place cannot both win.
@@ -15,14 +16,13 @@ import { sql, eq, and, type SQL } from 'drizzle-orm'
 import { bookingsBookings } from '../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../collections/locations/server/database/schema'
 import { FULL_DAY_ID, fullDayConflict } from '../../app/utils/full-day'
-import { capacityPlan, type CapacityPlan } from '../../app/utils/capacity'
+import { parseLocationProducts } from '../../app/utils/capacity'
 
 /** Columns the guard needs from a location row */
-export const LOCATION_COLS = { id: bookingsLocations.id, teamId: bookingsLocations.teamId, inventoryMode: bookingsLocations.inventoryMode, quantity: bookingsLocations.quantity, slots: bookingsLocations.slots, offerFullDay: bookingsLocations.offerFullDay, products: bookingsLocations.products }
+export const LOCATION_COLS = { id: bookingsLocations.id, teamId: bookingsLocations.teamId, inventoryMode: bookingsLocations.inventoryMode, slots: bookingsLocations.slots, offerFullDay: bookingsLocations.offerFullDay, products: bookingsLocations.products }
 
 export interface GuardLocation {
   inventoryMode?: boolean | number | null
-  quantity?: number | null
   slots?: unknown
   offerFullDay?: boolean | number | null
   products?: unknown
@@ -31,11 +31,12 @@ export interface GuardLocation {
 export interface Selection {
   /** Slot ids to store; `null` for inventory (stored as JSON null) */
   slot: string[] | null
+  /** How many units of the product — a whole number ≥ 1 (#4061) */
   quantity: number
-  /** What the capacity plan must check */
+  /** Slot ids the booking holds; `[all-day]` at a slotless or inventory location */
   slotIds: string[]
-  plan: CapacityPlan
-  inventory: boolean
+  /** Slot ids the guard checks: a full-day request at a slot location expands to every slot */
+  guardIds: string[]
   /** The product this booking is for — always one the location lists (#4044) */
   product: string
 }
@@ -52,15 +53,8 @@ function bad(status: number, statusText: string): never {
   throw createError({ status, statusText })
 }
 
-/** A location's `products` list (array, or the JSON string the raw column holds) */
-export function parseProducts(products: unknown): { product: string, stock?: number | null }[] {
-  let list: unknown = products
-  if (typeof list === 'string') {
-    try { list = JSON.parse(list) } catch { return [] }
-  }
-  if (!Array.isArray(list)) return []
-  return list.filter(p => p && typeof p === 'object' && typeof (p as any).product === 'string')
-}
+/** A location's `products` list — the one parser, shared with the client (#4061) */
+export const parseProducts = parseLocationProducts
 
 /**
  * The product a booking at `location` is for (#4044): a named product must be
@@ -104,27 +98,22 @@ function normaliseSlotIds(location: GuardLocation, slots: { id: string }[], slot
 /** Normalise + validate what is being booked at `location`; throws 400. */
 export function validateSelection(location: GuardLocation, slotIdsIn: unknown, quantityIn?: unknown, productIn?: unknown): Selection {
   const product = resolveProduct(location, productIn)
+  const quantity = quantityIn ?? 1
+  if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) {
+    bad(400, 'Quantity must be a whole number of at least 1')
+  }
+
+  // An inventory location counts as slotless: its stored slot is JSON null (= full day)
+  if (location.inventoryMode) {
+    return { slot: null, quantity, slotIds: [FULL_DAY_ID], guardIds: [FULL_DAY_ID], product }
+  }
+
   const slots = parseSlots(location.slots)
-  const inventory = !!location.inventoryMode
-  const plan = capacityPlan({ inventoryMode: inventory, quantity: location.quantity, slots }, [])
-
-  if (inventory) {
-    const q = quantityIn ?? 1
-    if (typeof q !== 'number' || !Number.isInteger(q) || q < 1) {
-      bad(400, 'Quantity must be a whole number of at least 1')
-    }
-    return { slot: null, quantity: q, slotIds: [], plan, inventory: true, product }
-  }
-
   const ids = normaliseSlotIds(location, slots, slotIdsIn)
-  return {
-    slot: ids,
-    quantity: 1,
-    slotIds: ids,
-    plan: capacityPlan({ inventoryMode: false, quantity: location.quantity, slots }, ids),
-    inventory: false,
-    product,
-  }
+  const guardIds = slots.length === 0
+    ? [FULL_DAY_ID]
+    : ids.includes(FULL_DAY_ID) ? slots.map(s => s.id) : ids
+  return { slot: ids, quantity, slotIds: ids, guardIds, product }
 }
 
 // --- timezone-aware day maths ---
@@ -170,8 +159,12 @@ export function dayRange(input: string | Date | number, tz: string): DayRange | 
 }
 
 /**
- * One SQL boolean: does the requested selection still fit on that day?
- * Fixed parameter count regardless of how many slots the location has.
+ * One SQL boolean: does the requested selection still fit on that day? (#4061)
+ * For every slot in `guardIds`: the summed quantity of the same product (or
+ * product NULL) held in that slot or the full day, plus the requested
+ * quantity, must not exceed the product's stock — read from the location row
+ * inside this statement, so a product unlisted meanwhile has stock 0 and is
+ * refused. Fixed parameter count regardless of how many slots the location has.
  */
 export function guardSql(o: {
   teamId: string
@@ -182,29 +175,15 @@ export function guardSql(o: {
 }): SQL {
   const { teamId, locationId, range, selection, excludeId } = o
   const day = sql`b.teamId = ${teamId} AND b.location = ${locationId} AND b.date >= ${range.dayStartTs} AND b.date < ${range.dayEndTs} AND b.status <> 'cancelled'${excludeId ? sql` AND b.id <> ${excludeId}` : sql``}`
-  const { plan } = selection
-  const guards: SQL[] = []
-
-  if (plan.kind === 'inventory') {
-    guards.push(sql`(SELECT coalesce(sum(b.quantity), 0) FROM bookings_bookings b WHERE ${day}) + ${selection.quantity} <= ${plan.cap}`)
-    return sql.join(guards, sql` AND `)
-  }
-
-  const named = plan.checks.filter(c => c.slotId !== null)
-  for (const c of plan.checks.filter(c => c.slotId === null)) {
-    guards.push(sql`(SELECT count(*) FROM bookings_bookings b WHERE ${day}) < ${c.cap}`)
-  }
-  if (named.length > 0) {
-    guards.push(sql`NOT EXISTS (SELECT 1 FROM json_each(${JSON.stringify(named)}) c WHERE (SELECT count(*) FROM bookings_bookings b WHERE ${day} AND EXISTS (SELECT 1 FROM json_each(b.slot) s WHERE s.value IN (json_extract(c.value, '$.slotId'), ${FULL_DAY_ID}))) >= json_extract(c.value, '$.cap'))`)
-  }
-  // full-day is exclusive (#2261), also under concurrent requests
-  if (selection.slotIds.includes(FULL_DAY_ID)) {
-    guards.push(sql`NOT EXISTS (SELECT 1 FROM bookings_bookings b WHERE ${day})`)
-  }
-  else if (selection.slotIds.length > 0) {
-    guards.push(sql`NOT EXISTS (SELECT 1 FROM bookings_bookings b WHERE ${day} AND EXISTS (SELECT 1 FROM json_each(b.slot) s WHERE s.value = ${FULL_DAY_ID}))`)
-  }
-  return sql.join(guards, sql` AND `)
+  // coalesce(stock, 0) is load-bearing: `x > NULL` is NULL, which would let an unlisted product through
+  return sql`NOT EXISTS (SELECT 1 FROM json_each(${JSON.stringify(selection.guardIds)}) c WHERE
+    coalesce((SELECT sum(max(coalesce(b.quantity, 1), 1)) FROM bookings_bookings b
+              WHERE ${day} AND (b.product = ${selection.product} OR b.product IS NULL)
+                AND (json_type(b.slot) = 'null' OR json_array_length(b.slot) = 0
+                     OR EXISTS (SELECT 1 FROM json_each(b.slot) s WHERE s.value IN (c.value, ${FULL_DAY_ID})))), 0)
+    + ${selection.quantity}
+    > coalesce((SELECT json_extract(p.value, '$.stock') FROM bookings_locations l, json_each(l.products) p
+                WHERE l.id = ${locationId} AND l.teamId = ${teamId} AND json_extract(p.value, '$.product') = ${selection.product}), 0))`
 }
 
 /** The slot column is NOT NULL JSON; a guarded row is written as NULL when refused. */
@@ -397,7 +376,10 @@ async function patchMoved(db: any, o: PatchArgs, s: PatchState): Promise<any> {
   const range = dayRange(new Date(merged.storedTs * 1000), o.tz)!
   // The sent product; else the stored one, unless the location changes (#4044)
   const productIn = s.patch.product ?? (changesLocation(s.patch, s.current) ? undefined : s.current.product)
-  const selection = validateSelection(location, merged.slot, merged.quantity, productIn)
+  // An old row stored with quantity < 1 moves as 1 unless the patch sends a different one (#4061)
+  const keepsQty = s.patch.quantity === undefined || Number(s.patch.quantity) === Number(s.current.quantity)
+  const quantity = keepsQty && !(Number(merged.quantity) >= 1) ? 1 : merged.quantity
+  const selection = validateSelection(location, merged.slot, quantity, productIn)
   const guard = guardSql({ teamId, locationId: merged.location, range, selection, excludeId: bookingId })
   const ownerCond = ownerId ? sql` AND owner = ${ownerId}` : sql``
   const changed = await db.all(sql`UPDATE bookings_bookings SET location = ${merged.location}, date = ${merged.storedTs}, slot = ${JSON.stringify(selection.slot ?? null)}, quantity = ${selection.quantity}, status = ${merged.status}, "group" = ${merged.group}, product = ${selection.product}, updatedBy = ${userId}, updatedAt = ${s.nowTs}

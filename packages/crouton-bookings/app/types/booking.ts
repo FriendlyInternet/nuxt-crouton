@@ -80,6 +80,8 @@ export interface LocationData {
   // Inventory mode fields
   inventoryMode?: boolean
   quantity?: number
+  /** Products on offer with their stock — what the counting uses (#4061) */
+  products?: { product: string, stock: number }[] | string | null
   // Monthly booking limit
   maxBookingsPerMonth?: number | null
   // Translations for i18n support
@@ -164,6 +166,8 @@ export interface Booking {
   date: string | Date
   slot: string // JSON-encoded array: '["slot-1"]'
   quantity?: number
+  /** The product booked (#4044); null on old rows (counts against every product) */
+  product?: string | null
   group?: string | null
   status: string
   owner?: string | null

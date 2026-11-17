@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
       date: bookingsBookings.date,
       slot: bookingsBookings.slot,
       quantity: bookingsBookings.quantity,
+      product: bookingsBookings.product,
       group: bookingsBookings.group,
       status: bookingsBookings.status,
       createdAt: bookingsBookings.createdAt,

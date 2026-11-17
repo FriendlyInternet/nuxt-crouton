@@ -143,7 +143,8 @@ describe('calendar-bookings (member-safe)', () => {
   it('member gets every booking but only the six calendar fields', async () => {
     const rows = await (await route(`${S}/calendar-bookings.get`))({})
     expect(rows).toHaveLength(2)
-    expect(Object.keys(rows[0]).sort()).toEqual(['date', 'id', 'location', 'quantity', 'slot', 'status'])
+    // + `product` since #4061: the calendar counts free stock per product (still no owner/email fields)
+    expect(Object.keys(rows[0]).sort()).toEqual(['date', 'id', 'location', 'product', 'quantity', 'slot', 'status'])
   })
 })
 

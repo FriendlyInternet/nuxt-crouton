@@ -49,7 +49,7 @@ const BOOKINGS = [
   { loc: 'center-court', slot: ['slot-1100'], inDays: 1, quantity: 1, status: 'confirmed', group: 'youth' },
   { loc: 'center-court', slot: ['slot-1000'], inDays: 4, quantity: 1, status: 'pending', group: 'adults' },
   { loc: 'park-court', slot: ['slot-1400'], inDays: 2, quantity: 1, status: 'pending', group: 'adults' },
-  { loc: 'park-court', slot: ['slot-1500'], inDays: 6, quantity: 2, status: 'confirmed', group: 'youth' },
+  { loc: 'park-court', slot: ['slot-1500'], inDays: 6, quantity: 1, status: 'confirmed', group: 'youth' },
   // Inventory (slotless) bookings: an empty slot array, NOT null — `slot` is
   // NOT NULL, and drizzle binds JS null as SQL NULL (skipping the json column's
   // serializer), which would violate the constraint. `[]` = "no named slots".

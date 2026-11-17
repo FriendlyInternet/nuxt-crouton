@@ -25,10 +25,10 @@ Individual booking records.
 |-------|------|----------|-------------|
 | `owner` | relation (users) | Yes | User who made the booking |
 | `location` | relation (locations) | Yes | Location/resource being booked |
-| `product` | reference (catalog products) | No | The product this booking is for; always set by the server (the location's only product when none is sent); not used by the counting yet |
+| `product` | reference (catalog products) | No | The product this booking is for; always set by the server (the location's only product when none is sent); counted against that product's stock (#4061) |
 | `date` | date | Yes | Booking date |
 | `slot` | text/array | No | Time slot(s) for slot-based bookings |
-| `quantity` | number | No | Quantity for inventory-based bookings |
+| `quantity` | number | No | How many units of the booking's product (whole number ≥ 1, default 1), at every location |
 | `status` | select | Yes | Booking status (active, cancelled) |
 | `notes` | textarea | No | Optional notes |
 
@@ -44,10 +44,10 @@ Venues, resources, or bookable items.
 | `description` | textarea | No | Description |
 | `address` | text | No | Physical address (for venues) |
 | `inventoryMode` | boolean | No | True for inventory-based, false for slot-based |
-| `quantity` | number | No | Total quantity (inventory mode only) |
+| `quantity` | number | No | Total quantity (inventory mode only) — no longer counted (#4061); the product's `stock` is; field goes in step 4 |
 | `maxBookingsPerMonth` | number | No | Max bookings per user per calendar month (null = unlimited) |
 | `slots` | json/array | No | Available time slots (slot mode only) |
-| `products` | repeater | No | Products this location offers, each with its own stock (`[{ product, stock }]`); saved without products → the server gives it one product of its own (`loc-<id>`); not used by the counting yet |
+| `products` | repeater | No | Products this location offers, each with its own stock (`[{ product, stock }]`); saved without products → the server gives it one product of its own (`loc-<id>`); each product's `stock` is what the counting uses, per day and per slot |
 | `slotGroups` | json | No | Grouped time slots with colors |
 | `accessControl` | select | No | Who can book (public, members, team) |
 | `isActive` | boolean | Yes | Whether location is bookable |
