@@ -76,7 +76,10 @@ exact word they reply.
    and `E2E Gate` have passed (the `approve-epic` job in `on-comment.yml`, decided by
    `scripts/epic-merge-decision.mjs`).
 8. **Staging deploy.** `deploy-apps.yml` (`scripts/deploy-detect.mjs`, `scripts/await-staging.mjs`)
-   deploys the changed apps to staging.
+   deploys the changed apps to staging. Once every child of an epic is closed and its merge is on
+   staging, `post-test-card.yml` (`scripts/post-test-card.mjs`) posts one test card on the epic and
+   sets `status:to-test`. Above the checks left for the owner, the card lists what the pipeline
+   already checked: each finished child's merged PR and the first line of its last ✅ closing note.
 
 A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
 
