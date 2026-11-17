@@ -57,11 +57,14 @@ async function checkDependencies(dependencies: string[], cwd: string = process.c
 }
 
 const SCHEMA_DIRS = ['server/database/schema', 'server/db/schema']
+const SCHEMA_FILE = 'server/db/schema.ts'
 
 /**
  * True when a package directory ships at least one Drizzle schema file —
- * a `.ts` file in `server/database/schema/` or `server/db/schema/`
- * (test files and `__tests__` folders not counted).
+ * the single file `server/db/schema.ts` (which NuxtHub picks up on its own,
+ * e.g. crouton-flow / crouton-printing), or a `.ts` file in
+ * `server/database/schema/` or `server/db/schema/` (test files and
+ * `__tests__` folders not counted).
  */
 export function shipsSchemaFiles(packageDir: string): boolean {
   const hasTs = (dir: string): boolean => {
@@ -75,6 +78,7 @@ export function shipsSchemaFiles(packageDir: string): boolean {
     }
     return false
   }
+  if (existsSync(join(packageDir, SCHEMA_FILE))) return true
   return SCHEMA_DIRS.some(d => hasTs(join(packageDir, d)))
 }
 

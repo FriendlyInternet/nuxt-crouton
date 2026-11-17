@@ -101,6 +101,17 @@ describe('crouton add — packages with tables (#3998)', () => {
     for (const step of manualMigrationSteps()) expect(out).toContain(step)
   })
 
+  it('REAL: add flow and add printing --dry-run print the migration steps (only server/db/schema.ts)', async () => {
+    for (const name of ['flow', 'printing']) {
+      lines.length = 0
+      const result = await addModule(name, { dryRun: true })
+      expect(result.success).toBe(true)
+      const out = lines.join('\n')
+      expect(out).toContain('has database tables')
+      for (const step of manualMigrationSteps()) expect(out).toContain(step)
+    }
+  })
+
   it('REAL: add maps --dry-run (no database tables) prints no table or migration line', async () => {
     const result = await addModule('maps', { dryRun: true })
     expect(result.success).toBe(true)
@@ -126,6 +137,12 @@ describe('shipsSchemaFiles (#3998)', () => {
     await writeFile(join(other, 'server/database/schema/things.ts'), '')
     expect(shipsSchemaFiles(other)).toBe(true)
     await rm(other, { recursive: true, force: true })
+  })
+
+  it('is true for a single server/db/schema.ts file', async () => {
+    await mkdir(join(pkg, 'server/db'), { recursive: true })
+    await writeFile(join(pkg, 'server/db/schema.ts'), 'export {}')
+    expect(shipsSchemaFiles(pkg)).toBe(true)
   })
 
   it('does not count test files or __tests__ folders', async () => {
