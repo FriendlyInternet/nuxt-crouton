@@ -143,7 +143,7 @@ crouton add --list
 | `ai` | `@fyit/crouton-ai` | ○ | AI integration |
 | `devtools` | `@fyit/crouton-devtools` | ○ | Nuxt Devtools |
 
-● = Has database tables (`crouton add` prints the migration command to run)
+● = Manifest lists collections. `crouton add` prints the migration command for these **and** for any package that ships a schema folder (e.g. `layout`)
 ○ = No database tables
 **bundled in core** = Automatically included when using `@fyit/crouton-core`
 
@@ -157,7 +157,7 @@ and SSR errors like `$setup.t is not a function`.
 1. **Validates** module exists and dependencies are installed
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
-4. **Prints** the migration steps (`manualMigrationSteps()`) if the package has tables — it does not touch `server/db/schema.ts` or run migrations (#3998)
+4. **Prints** the migration steps (`manualMigrationSteps()`) if the package has tables — it does not touch `server/db/schema.ts` or run migrations (#3998). "Has tables" (`packageHasTables()`) = the manifest lists collections, **or** the package ships a `.ts` file in `server/database/schema/` or `server/db/schema/` (tests and `__tests__` not counted) — e.g. `layout` has a schema folder but no collections
 
 #### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
