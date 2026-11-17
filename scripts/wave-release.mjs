@@ -6,6 +6,7 @@
 import * as gate from './wave-gate.mjs'
 import { handoffGuard } from './handoff-exec.mjs'
 import { ownerMergeGo } from './lib/owner-merge-go.mjs'
+import { parsePipelineBlock } from './pipeline-context.mjs'
 
 /** Collapse an epic branch's CI into success | failure | pending | unknown. */
 async function branchStatus({ github, context, core }, ref) {
@@ -50,6 +51,12 @@ async function postHoldOnce({ github, context }, it, ref, doneNumber) {
 async function releaseOne(ctx, it, blockers, { onlyBlockedBy, branch }) {
   const { github, context, core } = ctx
   const { owner, repo } = context.repo
+  if (branch) {
+    // Retry path only. #3879: a CI-green on one epic only re-checks that epic's tickets — never a ticket that
+    // belongs to another epic (that released parked #2886 off epic/2561's green CI).
+    const own = parsePipelineBlock(it.body).epic_branch || await epicBranchOf(ctx, blockers[blockers.length - 1])
+    if (own !== branch) { core.info(`#${it.number}: other-epic (${own || 'no epic branch'})`); return }
+  }
   const blockerStates = []
   for (const b of blockers) {
     const bi = await github.rest.issues.get({ owner, repo, issue_number: b })
