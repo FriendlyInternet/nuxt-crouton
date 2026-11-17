@@ -8,7 +8,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { computed, defineComponent, h, nextTick, ref } from 'vue'
+import { computed, createSSRApp, defineComponent, h, nextTick, ref } from 'vue'
+import { renderToString } from 'vue/server-renderer'
 import fr from '../../../i18n/locales/fr.json'
 import CroutonActivityFilters from '../CroutonActivityFilters.vue'
 import { eventCollectionLabel } from '../../utils/event-display'
@@ -88,6 +89,16 @@ async function mountAt(width: number) {
   return wrapper
 }
 
+// A select is "shown at phone width" unless it sits in the drawer body or inside an
+// ancestor that Tailwind hides below `sm` (`hidden` without a narrower override).
+function visibleAtPhone(el: Element): boolean {
+  for (let node: Element | null = el; node; node = node.parentElement) {
+    if (node.hasAttribute('data-drawer-body')) return false
+    if (node.classList.contains('hidden')) return false
+  }
+  return true
+}
+
 describe('activity filters at phone width (#4036)', () => {
   it('at 390px shows one "Filtres" button and no inline selects; the badge shows 1 after one filter is set', async () => {
     const wrapper = await mountAt(390)
@@ -114,6 +125,48 @@ describe('activity filters at phone width (#4036)', () => {
     expect(badge.text()).toBe('1')
     expect(wrapper.find('[data-drawer-body]').text()).toContain('Effacer les filtres')
     expect(wrapper.find('[data-drawer-body]').findAll('[data-select]')).toHaveLength(3)
+  })
+
+  it('at 390px no collection select is shown outside the drawer — through the real server render and hydration', async () => {
+    ;(window as any).happyDOM.setViewport({ width: 390, height: 800 })
+    const props = { modelValue: {} as FilterState, collections: ['pages'], users: [{ id: 'u1', name: 'Anna' }] }
+    const makeApp = () => {
+      const app = createSSRApp(CroutonActivityFilters, props)
+      for (const [name, c] of Object.entries({ UButton, UBadge, USelectMenu, UDrawer, UTabs })) app.component(name, c)
+      return app
+    }
+
+    // 1. Server render: the server has no matchMedia, so it renders the desktop branch.
+    //    Even that markup must not show a select at phone width (CSS-hidden below `sm`).
+    const matchMedia = window.matchMedia
+    ;(window as any).matchMedia = undefined
+    const html = await renderToString(makeApp())
+    ;(window as any).matchMedia = matchMedia
+    const root = document.createElement('div')
+    root.innerHTML = html
+    document.body.appendChild(root)
+    expect(root.querySelectorAll('[data-select]').length).toBeGreaterThan(0)
+    expect([...root.querySelectorAll('[data-select]')].filter(visibleAtPhone)).toHaveLength(0)
+
+    // 2. The phone hydrates that markup, then settles: only the "Filtres" button, no inline select
+    const app = makeApp()
+    app.config.warnHandler = () => {}
+    app.mount(root)
+    await nextTick()
+    await nextTick()
+    expect(root.querySelector('.crouton-activity-filters-toggle')).not.toBeNull()
+    expect(root.querySelectorAll('[aria-label="Collection"]')).toHaveLength(0)
+    expect(root.querySelectorAll('[data-select]')).toHaveLength(0)
+
+    // 3. Opening the drawer: the collection select lives only inside it
+    ;(root.querySelector('[data-trigger]') as HTMLElement).click()
+    await nextTick()
+    const collection = [...root.querySelectorAll('[aria-label="Collection"]')]
+    expect(collection).toHaveLength(1)
+    expect(collection[0]!.closest('[data-drawer-body]')).not.toBeNull()
+    expect([...root.querySelectorAll('[data-select]')].filter(visibleAtPhone)).toHaveLength(0)
+    app.unmount()
+    root.remove()
   })
 
   it('at desktop width keeps the three inline selects and no "Filtres" button', async () => {

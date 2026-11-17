@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useMediaQuery } from '@vueuse/core'
+import { useMediaQuery, useMounted } from '@vueuse/core'
 import type { FilterState } from '../types/events'
 
 const props = withDefaults(defineProps<{
@@ -92,7 +92,13 @@ const hasActiveFilters = computed(() => !!(
 ))
 
 // Below `sm` (640px) the three selects fold into a "Filtres" button that opens a bottom drawer.
-const isPhone = useMediaQuery('(max-width: 639px)')
+// The server can't know the width and renders the desktop branch; `useMediaQuery` already matches
+// on the client's first (hydrating) render, so Vue would hydrate the phone branch onto the
+// server's desktop <div> and keep its inline selects. Hold `isPhone` false until mounted so
+// hydration matches, then switch; meanwhile `hidden sm:flex` keeps the inline selects off phones.
+const phoneQuery = useMediaQuery('(max-width: 639px)')
+const mounted = useMounted()
+const isPhone = computed(() => mounted.value && phoneQuery.value)
 const drawerOpen = ref(false)
 
 const activeFilterCount = computed(() => [
@@ -121,7 +127,7 @@ function clearFilters() {
   <div class="crouton-activity-filters flex flex-col gap-3">
     <div
       v-if="isPhone"
-      class="flex items-center"
+      class="flex items-center sm:hidden"
     >
       <UDrawer
         v-model:open="drawerOpen"
@@ -196,7 +202,7 @@ function clearFilters() {
 
     <div
       v-else
-      class="flex flex-wrap items-center gap-2"
+      class="crouton-activity-filters-inline hidden sm:flex flex-wrap items-center gap-2"
     >
       <USelectMenu
         v-model="collectionName"
