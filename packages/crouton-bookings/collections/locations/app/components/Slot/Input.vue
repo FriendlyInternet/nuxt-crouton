@@ -4,7 +4,6 @@ import { nanoid } from 'nanoid'
 interface BookingsLocationsSlotItem {
   id: string
   label: string
-  capacity?: number
 }
 
 const model = defineModel<BookingsLocationsSlotItem>()
@@ -23,12 +22,6 @@ if (model.value && !model.value.id) {
           class="w-full"
           size="xl"
           placeholder="Enter slot name"
-        />
-      </UFormField>
-      <UFormField class="w-24">
-        <UInputNumber
-          v-model="model!.capacity"
-          size="xl" placeholder="1"
         />
       </UFormField>
   </div>
