@@ -135,6 +135,32 @@ export const shouldEnableAuto = ({ answer, autoMergeOn }) => answer?.code !== 'n
 export const canMergeNow = ({ answer, ciGate, red }) =>
   answer?.merge === true && answer.code !== 'not-pipeline' && ciGate === 'success' && !red
 
+// #4038: the merge-on-approval answer for one candidate gate PR (on-comment.yml `mergegate`, via
+// pr-merge-gate-io.mjs runGateMerge). The App token bypasses the ruleset, so an owner `ok` used to
+// merge a PR with CI Gate red (#3942). Merge only on the same rule as canMergeNow: CI Gate success, no red.
+// `red` = [{ name, conclusion }] of finished red check-runs/statuses. A skip with `checks: true` is a check hold.
+export function gateMergeDecision({ pr, linkReason, ciGate, red = [], issue = '<issue>' } = {}) {
+  if (!pr || pr.state !== 'open' || pr.merged) return { merge: false }
+  const n = pr.number
+  if (!linkReason) return { merge: false, skip: `#${n} — no link to this issue (no linked-issue relation, and no \`Closes/Fixes/Resolves/Sub-issue/Refs #${issue}\` line)` }
+  const base = String(pr.base?.ref || '')
+  if (!/^epic\//.test(base)) return { merge: false, skip: `#${n} — base \`${base}\` is not an \`epic/*\` branch` }
+  if (red.length) return { merge: false, checks: true, skip: `#${n} — ${red.map((r) => `${r.name} is ${r.conclusion}`).join(', ')}` }
+  if (ciGate === 'pending') return { merge: false, checks: true, skip: `#${n} — CI Gate is still running` }
+  if (ciGate === 'missing') return { merge: false, checks: true, skip: `#${n} — CI Gate has not reported` }
+  if (ciGate !== 'success') return { merge: false, checks: true, skip: `#${n} — CI Gate is ${ciGate}` }
+  return { merge: true }
+}
+
+// #4038: the issue note when the owner's `ok` merged nothing because a check is red or still running.
+export function checksHeldNote(issue_number, skips = []) {
+  return '<!-- pipeline-note -->\n'
+    + '> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge on approval held by checks_\n\n'
+    + `⏸️ **Not merged yet — your \`ok\` is kept.** The gate PR for #${issue_number} has checks that are not green:\n\n`
+    + skips.map((s) => `- ${s}`).join('\n') + '\n\n'
+    + '`status:blocked` stays on — reply `ok` again once the checks are green.'
+}
+
 export function mergeDecisionCheck(answer) {
   if (answer?.merge === true) {
     return { name: MERGE_DECISION, status: 'completed', conclusion: 'success', output: { title: 'approved', summary: String(answer.reason || answer.code || 'approved') } }

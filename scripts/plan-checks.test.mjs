@@ -1,5 +1,6 @@
 /**
  * #3195 — CI runs the approved plan's Test checklist (plan-checks.mjs) and the ci.yml wiring.
+ * #4037 — any Run: line gets the dependency install (needsInstall), not only pnpm/npx/vitest/nuxi/tsc.
  *   node --test scripts/plan-checks.test.mjs
  */
 import { test } from 'node:test'
@@ -39,6 +40,34 @@ test('non-zero exit → ❌ and the job fails; Manual: → 🖐 and not run', as
   assert.deepEqual(ran, ['true', 'echo boom; false'])
   assert.deepEqual(r.results.map((x) => [x.id, x.status, x.exit]), [['T1', 'pass', 0], ['T2', 'fail', 1], ['T3', 'manual', null]])
   assert.match(r.results[1].tail, /boom/)
+})
+
+async function fetchPlan(comments) {
+  const d = mkdtempSync(join(tmpdir(), 'plan-checks-'))
+  const env = { HEAD_REF: 'work-4037', PR_NUMBER: '', HEAD_SHA: 'abcdef1234', GITHUB_REPOSITORY: 'o/r' }
+  await main(['fetch', '--out', join(d, 'plan.json')], { env, comments, log: quiet })
+  return JSON.parse(readFileSync(join(d, 'plan.json'), 'utf8'))
+}
+
+// covers: T1
+test('#4037: a deps-test Run line (node --test …) sets needsInstall true', async () => {
+  const p = await fetchPlan([c(1, planWith(['- [ ] T1 — x — Run: `node --test scripts/gen-api-reference.deps-test.mjs`'])), c(2, GO)])
+  assert.equal(p.items.length, 1)
+  assert.equal(p.needsInstall, true)
+})
+
+// covers: T1
+test('#4037: a plain node scripts/… Run line sets needsInstall true', async () => {
+  const p = await fetchPlan([c(1, planWith(['- [ ] T1 — x — Run: `node scripts/component-names.mjs --check --fresh`'])), c(2, GO)])
+  assert.equal(p.items.length, 1)
+  assert.equal(p.needsInstall, true)
+})
+
+// covers: T2
+test('#4037: a plan with only Manual lines sets needsInstall false', async () => {
+  const p = await fetchPlan([c(1, planWith(['- [ ] T1 — x — Manual: no device in CI'])), c(2, GO)])
+  assert.equal(p.items.length, 1)
+  assert.equal(p.needsInstall, false)
 })
 
 test('every Run line passing → exit 0', async () => {

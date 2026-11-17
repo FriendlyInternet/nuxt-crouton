@@ -304,27 +304,18 @@ jobs:
           printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
           node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
 
-      # Production email key (#3437): CHECK ONLY. Before the deploy it passes if the key is in the
-      # WORKER_SECRETS_JSON bundle (synced after deploy) or already on the Worker; "Confirm email key
-      # on the production Worker" re-checks after the sync. Presence only (names, never values).
+      # Production email key (#3437): CHECK ONLY. The decision lives in scripts/email-key-check.mjs
+      # (#3441): before the deploy it passes if the key is in WORKER_SECRETS_JSON or already on the
+      # Worker; "Confirm email key on the production Worker" re-checks after the sync. Names only.
       - name: Require email key for production (before deploy)
         if: ${{ inputs.environment == 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
+          APP: ${{ inputs.app }}
         run: |
-          IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
-          if [ "$IS" = "true" ]; then
-            if printf '%s' "$SECRETS_JSON" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" bundle-has-key; then
-              echo "✓ email key is in WORKER_SECRETS_JSON (will be synced)"
-            else
-              LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
-              if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-                echo "::error::email key missing for PRODUCTION — ${{ inputs.app }} uses @fyit/crouton-email but NUXT_EMAIL_RESEND_API_KEY is neither in WORKER_SECRETS_JSON nor on its production Worker. Add the key to WORKER_SECRETS_JSON. Deploy stopped."
-                exit 1
-              fi
-            fi
-          fi
+          LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+          echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-key-check.mjs" before deploy.config.json
 
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
@@ -386,7 +377,7 @@ jobs:
               echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
               sleep 15
             done
-            # Fresh DB every time, so migrations are the whole schema — not incremental.
+            # The preview DB is kept between deploys (#2608); pr-preview-migrate.mjs empties it only when its recorded migrations no longer match the files (#4004).
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
             # <app>-staging-db and structurally cannot know about <app>-pr<n>-db. Without it
@@ -414,8 +405,7 @@ jobs:
               # (#2020). Remote D1 operations need the id, so resolve it by name now that it
               # exists. Without this the migrate fails "missing a database_id" (#2085).
               node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
-              npx wrangler d1 migrations apply "$PREVIEW_DB" \
-                --config .output/server/wrangler.json --remote
+              node "$GITHUB_WORKSPACE/scripts/pr-preview-migrate.mjs" "${{ inputs.app }}" "$PR_NUM" .output/server/wrangler.json
             fi
           else
             pnpm run cf:staging | tee deploy.log
@@ -510,16 +500,11 @@ jobs:
       - name: Confirm email key on the production Worker
         if: ${{ inputs.environment == 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          APP: ${{ inputs.app }}
         run: |
-          IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
-          if [ "$IS" = "true" ]; then
-            LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
-            if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-              echo "::error::email key missing on PRODUCTION after secrets sync — ${{ inputs.app }} has no NUXT_EMAIL_RESEND_API_KEY. Add it to WORKER_SECRETS_JSON."
-              exit 1
-            fi
-            echo "✓ email key present on the production Worker"
-          fi
+          LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+          echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-key-check.mjs" after deploy.config.json
 
       # The status app (pocs/status) derives every app's review-login password to offer one-tap
       # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
@@ -834,6 +819,7 @@ jobs:
       # Proves a real send. The package swallows every send error, so the verdict is read from the
       # auth_email_log row (pending → sent/failed). Mails Resend's test inbox only. Report-only here;
       # "Gate on email probe" at the end turns anything but a recorded send into a red check.
+      # The probe user is inserted directly (invite-only apps refuse its sign-up silently, #3972).
       - name: Probe email send
         id: email-probe
         if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.deploy.outputs.url != '' }}
@@ -849,8 +835,7 @@ jobs:
           PR_NUM="${{ github.event.pull_request.number }}"
           KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
           if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
-          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
-          else TARGET="--env staging"; fi
+          TARGET="--env staging"; if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"; fi
           START=$(date +%s)
           SECRETS=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
           if ! S=$(echo "$SECRETS" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" sender "$APP" .); then
@@ -858,6 +843,7 @@ jobs:
             echo "✗ email probe (${APP}): $S" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          npx wrangler d1 execute DB --remote $TARGET --command "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" ensure-user-sql "$PROBE_EMAIL")" >/dev/null 2>&1 || echo "::warning::email probe: could not ensure the probe user"
           if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
             echo "$OUT"
             echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"

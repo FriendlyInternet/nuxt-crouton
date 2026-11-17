@@ -10,7 +10,7 @@ Nuxt Crouton is a code generator and composable library that generates working C
 
 - Getting Started: /getting-started
 - Installation: /getting-started/installation
-- Basic Usage: /getting-started/usage
+- Your First Collection: /getting-started/first-collection
 
 ## Core Concepts
 
