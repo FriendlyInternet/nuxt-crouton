@@ -1,6 +1,6 @@
 // #3620 — the `pi` step's decisions, moved out of work-issue-pidev.yml into scripts/pi-run.mjs.
 // Pure refactor, so the contract is "same as before": (R1) the prompt is byte-equal to what the old
-// bash built (fixtures/pi-run/old-step.sh, frozen at 1f901a0e; goldens captured from it); (R2) the
+// bash built (fixtures/pi-run/old-step.sh, frozen at 1f901a0e, refreshed from main 7121574d2; goldens captured from it); (R2) the
 // $GITHUB_OUTPUT lines are unchanged and a missing pi exit is a failure; (R3) the files the step
 // leaves for later steps are unchanged.
 import { test } from 'node:test'
@@ -67,6 +67,9 @@ test('feedbackWho: only Bot gets the reviewer wording; User and a failed read ("
   assert.equal(feedbackWho('Bot'), REVIEWER_WHO)
   assert.equal(feedbackWho('User'), OWNER_WHO)
   assert.equal(feedbackWho(''), OWNER_WHO)
+  // #3691: a Bot comment that is the owner answering from one of our screens counts as the owner.
+  assert.equal(feedbackWho('Bot', true), OWNER_WHO)
+  assert.equal(feedbackWho('Bot', false), REVIEWER_WHO)
 })
 
 // 4

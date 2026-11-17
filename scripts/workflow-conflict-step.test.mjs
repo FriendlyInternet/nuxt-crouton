@@ -132,9 +132,11 @@ test("pi-request runs the owner's request only after the conflict merge is commi
   assert.match(run, /pipeline-prompt\.mjs pi-reviser [^\n]*--var-file "feedback=/)
   assert.match(run, /--session-dir "\$RUNNER_TEMP\/pi-session"/)
   assert.match(run, /tee -a "decompose-pidev-exec-/)
-  // and the resolver itself is no longer handed the comment
-  const pi = block('- id: pi', 'run')
-  const resolver = pi.split('\n').findIndex((l) => l.includes('pipeline-prompt.mjs pi-conflict-resolver'))
-  assert.ok(resolver >= 0)
-  assert.doesNotMatch(pi.split('\n').slice(resolver, resolver + 2).join('\n'), /feedback=/)
+  // and the resolver itself is no longer handed the comment. The pi step builds its prompt in
+  // scripts/pi-run.mjs (#3620), so check the resolver branch there.
+  assert.match(block('- id: pi', 'run'), /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  const src = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8').split('\n')
+  const resolver = src.findIndex((l) => l.includes("if (mode === 'pi-conflict-resolver')"))
+  assert.ok(resolver >= 0, 'pi-run.mjs resolver branch not found')
+  assert.doesNotMatch(src.slice(resolver, resolver + 3).join('\n'), /feedback/)
 })

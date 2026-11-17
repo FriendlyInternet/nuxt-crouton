@@ -4,6 +4,7 @@
     "101": { "id": 101, "body": "<!-- plan-review-verdict:v1 -->\n✅ ✅ ❌ check 3 failed: the Test section misses the failure case", "user": { "type": "Bot" } },
     "102": { "id": 102, "body": "Please also cover the revise mode.\n", "user": { "type": "User" } },
     "103": { "id": 103, "body": "This went the wrong way. Let's START FRESH with a smaller scope.", "user": { "type": "User" } },
+    "104": { "id": 104, "body": "🎯 preview feedback: the button sits off-screen on a phone\n", "user": { "type": "Bot" }, "performed_via_github_app": { "slug": "nuxt-harness" } },
     "200": { "id": 200, "body": "<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test", "user": { "type": "Bot" } }
   },
   "issues": {

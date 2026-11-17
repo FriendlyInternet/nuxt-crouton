@@ -11,7 +11,11 @@ const after = (args, flag) => { const i = args.indexOf(flag); return i >= 0 ? ar
 
 // One small handler per gh call shape (kept apart so no single function grows past the
 // fallow complexity gate). Each returns stdout, or undefined when the call isn't its shape.
-const COMMENT_FIELDS = { '.body': (c) => c.body, '.user.type': (c) => c.user.type }
+const COMMENT_FIELDS = {
+  '.body': (c) => c.body,
+  '.user.type': (c) => c.user.type,
+  '.performed_via_github_app.slug // ""': (c) => c.performed_via_github_app?.slug ?? '',
+}
 
 function apiComment(data, id, jq) {
   const c = data.comments[id]

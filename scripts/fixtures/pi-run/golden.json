@@ -53,8 +53,7 @@
    "pr": "77",
    "issue": "1",
    "branch": "epic/1--x",
-   "task": "@conflict-task.txt",
-   "feedback": "@feedback.txt"
+   "task": "@conflict-task.txt"
   },
   "tail": "",
   "files": {},
@@ -95,6 +94,21 @@
   "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (the OWNER replied with guidance on a held plan - treat their comment as authoritative direction). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\nPlease also cover the revise mode.\n\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n",
   "files": {
    "feedback.txt": "Please also cover the revise mode.\n\n"
+  },
+  "leftover": [
+   "decisions.txt",
+   "feedback.txt",
+   "prev-plan.txt"
+  ]
+ },
+ "plan-owner-screen": {
+  "agent": "pi-planner",
+  "vars": {
+   "issue": "2"
+  },
+  "tail": "\n\nYOUR PREVIOUS PLAN WAS SENT BACK (the OWNER replied with guidance on a held plan - treat their comment as authoritative direction). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n🎯 preview feedback: the button sits off-screen on a phone\n\n\n\nPREVIOUS PLAN (revise this):\n\n<!-- pipeline-plan:v1 -->\n### Fix\nplan one\n\n\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n## Decisions  \n- 2026-11-01 keep the jq file → why\n- 2026-11-02 no new deps\n### Decisions (sub)\nstill inside\n",
+  "files": {
+   "feedback.txt": "🎯 preview feedback: the button sits off-screen on a phone\n\n"
   },
   "leftover": [
    "decisions.txt",

@@ -131,11 +131,14 @@ test('owner screen: the if: emoji set and app slug match scripts/lib/owner-scree
   assert.deepEqual(slugs, OWNER_SCREEN_APPS)
 })
 
-test('owner screen: the plan-mode "who wrote this" line in work-issue-pidev.yml asks the module', () => {
+test('owner screen: the plan-mode "who wrote this" decision (scripts/pi-run.mjs, #3620) asks the module', () => {
+  // The pi step builds its prompt with scripts/pi-run.mjs; the Bot check lives there now.
   const pi = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-  const line = pi.split('\n').find(l => l.includes('--jq .user.type)" != "Bot" ]'))
-  assert.ok(line, 'plan-mode Bot check not found')
-  assert.match(line, /\|\| node scripts\/lib\/owner-screens\.mjs --is-source "\$RUNNER_TEMP\/feedback\.txt"/)
+  assert.match(pi, /node scripts\/pi-run\.mjs prompt > "\$PROMPT_FILE"/)
+  const src = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
+  assert.match(src, /import\('\.\/lib\/owner-screens\.mjs'\)/)
+  assert.match(src, /isOwnerScreenSource\(\{ comment: \{ body: feedback, appSlug/)
+  // end to end through the real prompt builder: scripts/pi-run.test.mjs [plan-owner-screen]
 })
 
 test('record-outcome still tolerates a skipped rl-start', () => {

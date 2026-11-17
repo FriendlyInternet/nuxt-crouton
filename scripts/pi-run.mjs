@@ -14,8 +14,9 @@
  *   which prepends the ONE operating contract (#1022) verbatim — the same file
  *   decompose-on-issue-pidev.yml `cat`s, so the two flows cannot drift.
  * - Modes: plan (#2755, planner persona; a plan review / owner reply sent it back → #2756 appendix with
- *   the best earlier plan and the ticket's Decisions, #3341) · revise (#2446) · conflict (#3002, the base
- *   merge conflicted) · worker (optionally building from an approved plan, #2757).
+ *   the best earlier plan and the ticket's Decisions, #3341; an owner-screen Bot comment counts as the
+ *   owner, #3691) · revise (#2446) · conflict (#3002, the base merge conflicted; no feedback — the owner's
+ *   request runs in its own pass after the merge, #3775) · worker (optionally building from an approved plan, #2757).
  * - HAND-OFF FILE: in approved-plan mode `$RUNNER_TEMP/approved-plan.txt` is written byte-equal to
  *   today's `gh api … --jq .body >` output. The finish step's sign-off decision reads it again
  *   (work-issue-pidev.yml, `signoff-surface.mjs --plan`) to find the plan's "👁 What to look at" line —
@@ -62,9 +63,15 @@ export function promptMode({ plan, revise, conflict } = {}) {
 export const OWNER_WHO = 'the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
 export const REVIEWER_WHO = 'by the plan reviewer'
 
-/** `'Bot'` → the reviewer wording; anything else (incl. '' from a failed read) → the OWNER wording. */
-export function feedbackWho(userType) {
-  return userType !== 'Bot' ? OWNER_WHO : REVIEWER_WHO
+/**
+ * `'Bot'` → the reviewer wording; anything else (incl. '' from a failed read) → the OWNER wording.
+ * A Bot comment that is the owner answering from one of our screens (#3691 — 📐 diagram save,
+ * 🎯 preview feedback, posted through the Harness App) also gets the OWNER wording.
+ * @param {string} userType
+ * @param {boolean} [ownerScreen] the comment passed `owner-screens.mjs --is-source`
+ */
+export function feedbackWho(userType, ownerScreen = false) {
+  return userType !== 'Bot' || ownerScreen ? OWNER_WHO : REVIEWER_WHO
 }
 
 /** Port of `awk '/^## Decisions[ \t]*$/{f=1;print;next} /^## /{f=0} f'` — input is the body as gh prints it. */
@@ -139,7 +146,15 @@ export async function buildPrompt(env, { gh = defaultGh, readFile = (p) => readF
     if (!fb) return out
     const feedback = gh(['api', `repos/${repo}/issues/comments/${fb}`, '--jq', '.body'])
     writeFile(join(tmp, 'feedback.txt'), feedback)
-    const who = feedbackWho(stripNl(tryOr(() => gh(['api', `repos/${repo}/issues/comments/${fb}`, '--jq', '.user.type']))))
+    const userType = stripNl(tryOr(() => gh(['api', `repos/${repo}/issues/comments/${fb}`, '--jq', '.user.type'])))
+    // Like the bash `A || B` (#3691): the app slug is only read when the author is a Bot; a failed read = ''.
+    let ownerScreen = false
+    if (userType === 'Bot') {
+      const { isOwnerScreenSource } = await import('./lib/owner-screens.mjs')
+      const appSlug = stripNl(tryOr(() => gh(['api', `repos/${repo}/issues/comments/${fb}`, '--jq', '.performed_via_github_app.slug // ""'])))
+      ownerScreen = isOwnerScreenSource({ comment: { body: feedback, appSlug: appSlug || null } })
+    }
+    const who = feedbackWho(userType, ownerScreen)
     const prevPlan = tryOr(() => jqBestPlan(gh(['api', `repos/${repo}/issues/${issue}/comments`, '--paginate']), fb))
     const decisions = tryOr(() => extractDecisions(gh(['issue', 'view', issue, '--json', 'body', '-q', '.body'])))
     out += planFeedbackAppendix({ who, feedback, fresh: isFresh(feedback, decisions), prevPlan, decisions })
@@ -149,11 +164,11 @@ export async function buildPrompt(env, { gh = defaultGh, readFile = (p) => readF
   if (mode !== 'pi-worker') {
     const branch = env.REV_BRANCH || `work-${issue}`
     const pr = stripNl(tryOr(() => gh(['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '-q', '.[0].number'])))
-    const feedback = readFile(join(tmp, 'feedback.txt'))
+    // The resolver never sees the owner's comment (#3775): a separate pass runs the request after the merge.
     if (mode === 'pi-conflict-resolver') {
-      return renderPrompt(mode, { pr, issue, branch, task: readFile(join(tmp, 'conflict-task.txt')), feedback })
+      return renderPrompt(mode, { pr, issue, branch, task: readFile(join(tmp, 'conflict-task.txt')) })
     }
-    return renderPrompt(mode, { pr, issue, feedback })
+    return renderPrompt(mode, { pr, issue, feedback: readFile(join(tmp, 'feedback.txt')) })
   }
 
   let out = renderPrompt(mode, { issue, branch_instr: branchInstr(env.EPIC_BRANCH) })

@@ -7,6 +7,7 @@
   "plan": { "env": { "ISSUE": "1", "PLAN": "1" } },
   "plan-bot": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "101" } },
   "plan-owner": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "102" } },
+  "plan-owner-screen": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "104" } },
   "plan-fresh": { "env": { "ISSUE": "1", "PLAN": "1", "FEEDBACK_ID": "103" } },
   "plan-decisions": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" } },
   "fail-user-type": { "env": { "ISSUE": "2", "PLAN": "1", "FEEDBACK_ID": "101" }, "fail": "user\\.type" },

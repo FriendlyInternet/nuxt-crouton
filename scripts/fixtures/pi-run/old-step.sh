@@ -2,6 +2,9 @@
 # 1f901a0e (L565-L612), before #3620 moved it into scripts/pi-run.mjs. Do not edit: it is the
 # reference scripts/pi-run.test.mjs compares buildPrompt against, byte for byte. Run from the repo
 # root with `bash -e` (the GHA default) and PROMPT_FILE / RUNNER_TEMP / the step env set.
+# Refreshed from the `pi` step on main (7121574d2, 17 Nov) when main was merged in: main added the
+# owner-screen check on plan feedback (#3691) and stopped handing the conflict resolver the
+# feedback file (#3775). This copy is that final bash (FINISH_CHECK, #3762, is a step env line).
 set -uo pipefail
 BRANCH_INSTR="branch off main and target the PR at main"
 if [ -n "${EPIC_BRANCH:-}" ]; then
@@ -13,7 +16,7 @@ if [ -n "${PLAN:-}" ]; then
   # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
   if [ -n "${FEEDBACK_ID:-}" ]; then
     gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-    if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ]; then
+    if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ] || node scripts/lib/owner-screens.mjs --is-source "$RUNNER_TEMP/feedback.txt" "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq '.performed_via_github_app.slug // ""')"; then
       WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
     else
       WHO='by the plan reviewer'
@@ -37,7 +40,7 @@ elif [ -n "${REVISE:-}" ]; then
     # #3002: the base merge conflicted — the task is the merge, with its own persona (the
     # reviser's "work-<issue>" / "owner comment" framing made pi stop on epic PRs).
     node scripts/pipeline-prompt.mjs pi-conflict-resolver --var "pr=$PRN" --var "issue=$ISSUE" --var "branch=${REV_BRANCH:-work-${ISSUE}}" \
-      --var-file "task=$RUNNER_TEMP/conflict-task.txt" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+      --var-file "task=$RUNNER_TEMP/conflict-task.txt" > "$PROMPT_FILE"
   else
     node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
       --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
