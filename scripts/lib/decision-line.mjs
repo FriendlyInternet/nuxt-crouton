@@ -8,7 +8,7 @@
 
 import { stripGeneratedTrailer } from '../comment-command.mjs'
 
-const OWNERS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
+export const OWNERS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 const DECISION = /^\s*decision:\s*/i
 const OK_REASON = /^\s*ok:\s*(?=\S)/i
 const NOT_OK = /^\s*not\s+ok:\s*(?=\S)/i
