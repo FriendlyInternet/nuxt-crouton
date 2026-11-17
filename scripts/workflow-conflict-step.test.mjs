@@ -132,9 +132,20 @@ test("pi-request runs the owner's request only after the conflict merge is commi
   assert.match(run, /pipeline-prompt\.mjs pi-reviser [^\n]*--var-file "feedback=/)
   assert.match(run, /--session-dir "\$RUNNER_TEMP\/pi-session"/)
   assert.match(run, /tee -a "decompose-pidev-exec-/)
-  // and the resolver itself is no longer handed the comment
-  const pi = block('- id: pi', 'run')
-  const resolver = pi.split('\n').findIndex((l) => l.includes('pipeline-prompt.mjs pi-conflict-resolver'))
-  assert.ok(resolver >= 0)
-  assert.doesNotMatch(pi.split('\n').slice(resolver, resolver + 2).join('\n'), /feedback=/)
+  // and the resolver itself is no longer handed the comment. The pi step builds its prompt in
+  // scripts/pi-run.mjs (#3620), so check the vars buildPrompt hands the resolver persona.
+  assert.match(block('- id: pi', 'run'), /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+})
+
+test('the conflict resolver prompt (scripts/pi-run.mjs buildPrompt) gets only pr/issue/branch/task, never feedback', async () => {
+  const { buildPrompt } = await import('./pi-run.mjs')
+  const rt = mkdtempSync(join(tmpdir(), 'conflict-prompt-'))
+  writeFileSync(join(rt, 'feedback.txt'), 'OWNER-COMMENT-MARKER\n')
+  writeFileSync(join(rt, 'conflict-task.txt'), 'merge conflicted in a.mjs\n')
+  const calls = []
+  const renderPrompt = (agent, vars) => { calls.push({ agent, vars }); return `${agent}:${JSON.stringify(vars)}` }
+  const gh = () => '77\n'
+  const out = await buildPrompt({ ISSUE: '1', REVISE: '1', REV_CONFLICT: '1', REV_BRANCH: 'epic/1--x', RUNNER_TEMP: rt, GITHUB_REPOSITORY: 'o/r' }, { gh, renderPrompt })
+  assert.deepEqual(calls, [{ agent: 'pi-conflict-resolver', vars: { pr: '77', issue: '1', branch: 'epic/1--x', task: 'merge conflicted in a.mjs\n' } }])
+  assert.doesNotMatch(out, /OWNER-COMMENT-MARKER/)
 })

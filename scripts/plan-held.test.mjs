@@ -1,9 +1,7 @@
 // node --test scripts/plan-held.test.mjs — the owner override of a twice-rejected plan (#3272).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
@@ -93,22 +91,6 @@ test('approvedPromptSection: truncated last line ⇒ no override (even if an ear
 test('approvedPromptSection: an override older than a newer plan ⇒ no OVERRIDE block', () => {
   const { text } = section(() => asGhLines([[plan(), dec(BOT), plan()]]))
   assert.equal(text.includes('OWNER OVERRIDE'), false)
-})
-
-test('CLI --approved-prompt: an unreadable plan file exits 1 and writes nothing', () => {
-  const r = runCli(['--approved-prompt', '--plan-id', '1', '--plan-file', '/nonexistent/plan.txt', '--issue', '7'], '')
-  assert.equal(r.status, 1)
-  assert.equal(r.stdout, '')
-})
-test('CLI --approved-prompt: gh unavailable ⇒ header + plan, warning on stderr, exit 0', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'plan-held-'))
-  const file = join(dir, 'approved-plan.txt')
-  writeFileSync(file, PLAN_TEXT)
-  const r = spawnSync(process.execPath, [CLI, '--approved-prompt', '--plan-id', '9', '--plan-file', file, '--issue', '7'],
-    { encoding: 'utf8', env: { ...process.env, PATH: dir, GITHUB_REPOSITORY: 'o/r' } })
-  assert.equal(r.status, 0, r.stderr)
-  assert.equal(r.stdout, approvedHeader('9') + PLAN_TEXT)
-  assert.match(r.stderr, /::warning::could not read the owner override for #7/)
 })
 
 // ── planHeldFor: the route step's fact ──────────────────────────────────────────────────────
@@ -218,8 +200,14 @@ test('on-comment.yml has a job per new router choice and passes planHeld from pl
   assert.match(onComment, /NEEDS_REASON/)
 })
 test('work-issue-pidev.yml builds the approved section through plan-held.mjs', () => {
-  assert.match(build, /node scripts\/plan-held\.mjs --approved-prompt --plan-id "\$APPROVED_PLAN_ID" --plan-file "\$RUNNER_TEMP\/approved-plan\.txt" --issue "\$ISSUE" > "\$RUNNER_TEMP\/approved-section\.txt"/)
-  assert.match(build, /cat "\$RUNNER_TEMP\/approved-section\.txt" >> "\$PROMPT_FILE"/)
-  assert.match(build, /--jq \.body > "\$RUNNER_TEMP\/approved-plan\.txt"/)
+  // #3620: the step calls scripts/pi-run.mjs, which fetches the plan into approved-plan.txt and
+  // renders the section with plan-held.mjs's approvedPromptSection (no inline header text anywhere).
+  // Byte-equality with the old bash: scripts/pi-run.test.mjs [worker-approved].
+  const piRun = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
+  assert.match(build, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+  assert.match(piRun, /const \{ approvedPromptSection \} = await import\('\.\/plan-held\.mjs'\)/)
+  assert.match(piRun, /join\(tmp, 'approved-plan\.txt'\)/)
+  assert.match(piRun, /issues\/comments\/\$\{planId\}`, '--jq', '\.body'\]/)
   assert.equal(build.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
+  assert.equal(piRun.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
 })
