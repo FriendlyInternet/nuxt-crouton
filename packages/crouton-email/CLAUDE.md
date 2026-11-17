@@ -116,13 +116,13 @@ Complete verification code input flow with resend functionality.
 - `resend()` - Resend requested
 - `error(error: Error)` - Error occurred
 
-### MagicLinkSent
+### EmailMagicLinkSent
 
 "Check your email" message with resend option.
 
 ```vue
 <template>
-  <MagicLinkSent
+  <EmailMagicLinkSent
     :email="userEmail"
     @resend="handleResend"
     @change-email="handleChangeEmail"
@@ -138,13 +138,13 @@ Complete verification code input flow with resend functionality.
 - `resend()` - Resend requested
 - `change-email()` - Change email requested
 
-### ResendButton
+### EmailResendButton
 
 Timer-based resend button with cooldown.
 
 ```vue
 <template>
-  <ResendButton
+  <EmailResendButton
     :cooldown="60"
     :loading="isResending"
     @resend="handleResend"
@@ -347,7 +347,7 @@ RESEND_API_KEY=re_test_xxx
 ## Naming Conventions
 
 ```
-Component: EmailVerificationFlow, EmailInput, ResendButton
+Component: EmailVerificationFlow, EmailMagicLinkSent, EmailResendButton, EmailInput
 Server util: useEmailService, sendVerificationEmail, sendMagicLink
 Template: Verification.vue, MagicLink.vue, TeamInvite.vue
 Type: SendEmailOptions, VerificationEmailOptions
