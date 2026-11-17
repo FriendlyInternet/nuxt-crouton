@@ -36,7 +36,12 @@ async function loadPage() {
   tmp = mkdtempSync(join(here, '.ssr-'))
   const file = join(tmp, 'index.page.ts')
   // Every `~/utils/<name>` import the page makes points at the real util file.
-  const src = out.content.replace(/(['"])~\/utils\/([\w-]+)\1/g, (_m, _q, name: string) => JSON.stringify(resolve(dirname(corePath), `${name}.ts`)))
+  // Every `~/components/cards/<name>.vue` import points at a stub card that prints the card title.
+  const stub = join(tmp, 'card-stub.ts')
+  writeFileSync(stub, `import { defineComponent, h } from 'vue'\nexport default defineComponent({ props: ['card', 'send'], setup: p => () => h('article', p.card?.title ?? '') })\n`)
+  const src = out.content
+    .replace(/(['"])~\/utils\/([\w-]+)\1/g, (_m, _q, name: string) => JSON.stringify(resolve(dirname(corePath), `${name}.ts`)))
+    .replace(/(['"])~\/components\/cards\/[\w-]+\.vue\1/g, () => JSON.stringify(stub))
   writeFileSync(file, src)
   return (await import(/* @vite-ignore */ file)).default
 }
