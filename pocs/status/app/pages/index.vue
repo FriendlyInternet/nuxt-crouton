@@ -3,7 +3,12 @@
 // cards (no GitHub call), then the browser syncs from GitHub (POST /api/cards/sync) in the
 // background and lists again. Load/list/answer rules: utils/inbox-core.ts.
 import { sendDelivery } from '~/utils/delivery-core'
-import { resolveComponent } from 'vue'
+import CardsEdit from '~/components/cards/Edit.vue'
+import CardsReview from '~/components/cards/Review.vue'
+import CardsIssue from '~/components/cards/Issue.vue'
+import CardsDelivery from '~/components/cards/Delivery.vue'
+import CardsQuizCard from '~/components/cards/QuizCard.vue'
+import CardsPlaceholder from '~/components/cards/Placeholder.vue'
 import { cardView, errorText, nothingWaits, refreshInbox, submitAnswer, waitingCards, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
 
 definePageMeta({ middleware: 'auth' })
@@ -79,12 +84,12 @@ const quizFor = (cardId: string) => async (answer: string) => {
 
 // One component per card view; answerable views also get their `send`.
 const cardComponents = {
-  edit: resolveComponent('CardsEdit'),
-  review: resolveComponent('CardsReview'),
-  issue: resolveComponent('CardsIssue'),
-  delivery: resolveComponent('CardsDelivery'),
-  quiz: resolveComponent('CardsQuizCard'),
-  placeholder: resolveComponent('CardsPlaceholder')
+  edit: CardsEdit,
+  review: CardsReview,
+  issue: CardsIssue,
+  delivery: CardsDelivery,
+  quiz: CardsQuizCard,
+  placeholder: CardsPlaceholder
 }
 const cardProps = (c: InboxCard) => {
   const view = cardView(c)
