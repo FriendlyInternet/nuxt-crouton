@@ -7,11 +7,13 @@ definePageMeta({
 
 <template>
   <UDashboardPanel id="events-activity">
-    <UDashboardNavbar :title="$t('events.admin.activity')">
-      <template #leading>
-        <UDashboardSidebarCollapse />
-      </template>
-    </UDashboardNavbar>
+    <template #header>
+      <UDashboardNavbar :title="$t('events.admin.activity')">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+      </UDashboardNavbar>
+    </template>
 
     <template #body>
       <CroutonActivityLog />
