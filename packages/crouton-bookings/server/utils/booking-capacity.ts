@@ -376,8 +376,9 @@ async function patchMoved(db: any, o: PatchArgs, s: PatchState): Promise<any> {
   const range = dayRange(new Date(merged.storedTs * 1000), o.tz)!
   // The sent product; else the stored one, unless the location changes (#4044)
   const productIn = s.patch.product ?? (changesLocation(s.patch, s.current) ? undefined : s.current.product)
-  // An old row stored with quantity < 1 moves as 1 unless the patch sends one (#4061)
-  const quantity = s.patch.quantity === undefined && !(Number(merged.quantity) >= 1) ? 1 : merged.quantity
+  // An old row stored with quantity < 1 moves as 1 unless the patch sends a different one (#4061)
+  const keepsQty = s.patch.quantity === undefined || Number(s.patch.quantity) === Number(s.current.quantity)
+  const quantity = keepsQty && !(Number(merged.quantity) >= 1) ? 1 : merged.quantity
   const selection = validateSelection(location, merged.slot, quantity, productIn)
   const guard = guardSql({ teamId, locationId: merged.location, range, selection, excludeId: bookingId })
   const ownerCond = ownerId ? sql` AND owner = ${ownerId}` : sql``

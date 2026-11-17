@@ -200,6 +200,14 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     const r = await send('patchA', { slot: ['am'] })
     expect(r).toMatchObject({ slot: ['am'], quantity: 1 })
   })
+
+  // covers: T3
+  it('moving an old quantity-0 row while sending its stored quantity 0 back (admin form) works and stores quantity 1', async () => {
+    book('b1', { slot: '["pm"]', quantity: 0 })
+    const r = await send('patchA', { location: 's', date: '2026-11-10', slot: ['am'], quantity: 0, status: 'active' })
+    expect(r).toMatchObject({ slot: ['am'], quantity: 1 })
+    expect(rows().find((x: any) => x.id === 'b1').quantity).toBe(1)
+  })
 })
 
 describe('generic booking writes respect capacity (#3379)', () => {
