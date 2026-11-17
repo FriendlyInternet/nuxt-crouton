@@ -21,7 +21,6 @@ import { nanoid } from 'nanoid'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
-import { fullDayConflict } from '../../../../../app/utils/full-day'
 import { fitsCapacity } from '../../../../../app/utils/capacity'
 import { dayRange, validateSelection, guardSql, guardedInsert, runAtomic, parseSlots, type Selection } from '../../../../utils/booking-capacity'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
@@ -140,7 +139,6 @@ export default defineEventHandler(async (event) => {
     const sel = validateSelection(dbLocation, item.slotIds, item.quantity, item.productId)
     selections.set(item, sel)
     item.quantity = sel.quantity
-    item.isInventoryMode = sel.inventory
     item.slotIds = sel.slot ?? []
   }
 
@@ -271,7 +269,7 @@ export default defineEventHandler(async (event) => {
     location: item.locationId,
     date: new Date(item.date),
     slot: item.slotIds?.length && !item.slotIds.includes('inventory') ? item.slotIds : null, // Array for JSON column
-    quantity: item.isInventoryMode ? (item.quantity ?? 1) : 1,
+    quantity: selections.get(item)!.quantity, // validated: a whole number ≥ 1 at every location (#4061)
     group: item.groupId || null,
     status: 'active',
     createdAt: now,
@@ -283,22 +281,23 @@ export default defineEventHandler(async (event) => {
   try {
   // Read-only pre-check so the 409 can name the location and date. It counts the
   // cart's own earlier items too. The SQL guard below is what holds under races.
-  const dayCache = new Map<string, { quantity: number, slotIds: string[] }[]>()
+  const dayCache = new Map<string, { product: string | null, quantity: number, slotIds: string[] }[]>()
   for (const item of body.bookings) {
     const r = ranges.get(item)!
     const sel = selections.get(item)!
     const dbLocation = dbLocationMap.get(item.locationId) as any
     const key = `${item.locationId}|${r.dayStartTs}`
     if (!dayCache.has(key)) {
-      const found = await db.all(sql`SELECT quantity, slot FROM bookings_bookings WHERE teamId = ${team.id} AND location = ${item.locationId} AND date >= ${r.dayStartTs} AND date < ${r.dayEndTs} AND status <> 'cancelled'`) as { quantity: number, slot: string }[]
-      dayCache.set(key, found.map(f => ({ quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
+      const found = await db.all(sql`SELECT product, quantity, slot FROM bookings_bookings WHERE teamId = ${team.id} AND location = ${item.locationId} AND date >= ${r.dayStartTs} AND date < ${r.dayEndTs} AND status <> 'cancelled'`) as { product: string | null, quantity: number, slot: string }[]
+      dayCache.set(key, found.map(f => ({ product: f.product, quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
     }
     const taken = dayCache.get(key)!
-    const clash = !sel.inventory && fullDayConflict(sel.slotIds, taken.flatMap(t => t.slotIds ?? []).filter(Boolean))
-    if (clash || !fitsCapacity(sel.plan, taken, sel.quantity)) {
+    // Per product, per slot, against its stock (#4061); an inventory location counts as slotless
+    const capLocation = { slots: dbLocation.inventoryMode ? [] : parseSlots(dbLocation.slots), products: dbLocation.products }
+    if (!fitsCapacity(capLocation, sel.product, sel.slotIds, taken, sel.quantity)) {
       throw createError({ status: 409, statusText: `No room left at "${dbLocation.title}" on ${item.day || item.date}` })
     }
-    taken.push({ quantity: sel.quantity, slotIds: sel.slotIds })
+    taken.push({ product: sel.product, quantity: sel.quantity, slotIds: sel.slotIds })
   }
 
   // One atomic batch: every row goes in through a statement that checks capacity

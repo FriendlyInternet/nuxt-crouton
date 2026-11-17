@@ -62,9 +62,9 @@ let sqlite: Database.Database
 let db: any
 const rows = () => sqlite.prepare('select * from bookings_bookings').all() as any[]
 const row = (id: string, ts: number) => ({ id, teamId: 't1', owner: 'u1', location: 'L', storedTs: ts, slot: null, group: null, quantity: 1, status: 'pending', product: 'loc-L', by: 'u1', nowTs: 1 })
-const loc = (id: string, over: Record<string, unknown> = {}) => {
-  // every location lists one product (#4044)
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock: 1 }]), ...over }
+const loc = (id: string, over: Record<string, unknown> = {}, stock = 1) => {
+  // every location lists one product (#4044); its stock is what counts (#4061)
+  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock }]), ...over }
   sqlite.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay,products) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay,@products)').run(l)
 }
 
@@ -93,7 +93,7 @@ describe('runAtomic on D1 (#3968)', () => {
     vi.stubGlobal('useDB', () => db)
     vi.stubGlobal('useRuntimeConfig', () => ({}))
     const handler = (await import('../server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post')).default as any
-    loc('inv', { inventoryMode: 1, quantity: 5 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
     const bookings = ['2026-11-10T00:00:00.000Z', '2026-11-11T00:00:00.000Z']
       .map(date => ({ id: 'c', locationId: 'inv', locationTitle: 'inv', date }))
     vi.stubGlobal('readBody', async () => ({ bookings }))

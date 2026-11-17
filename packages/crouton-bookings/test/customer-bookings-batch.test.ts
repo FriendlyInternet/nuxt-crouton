@@ -27,11 +27,12 @@ function call(bookings: any[]) {
   return handler({})
 }
 const rows = () => db.$client.prepare('select * from bookings_bookings').all()
-const loc = (id: string, over: Record<string, unknown> = {}) => {
-  // every location lists one product (#4044)
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock: 1 }]), ...over }
+const loc = (id: string, over: Record<string, unknown> = {}, stock = 1) => {
+  // every location lists one product (#4044); its stock is what counts (#4061)
+  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock }]), ...over }
   db.$client.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay,products) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay,@products)').run(l)
 }
+const PQ = JSON.stringify([{ product: 'P', stock: 1 }, { product: 'Q', stock: 1 }])
 const item = (locationId: string, over: Record<string, unknown> = {}) => ({ id: 'c', locationId, locationTitle: locationId, date: DATE, ...over })
 
 beforeEach(async () => {
@@ -50,14 +51,14 @@ afterEach(() => { db.$client.close(); rmSync(dir, { recursive: true, force: true
 
 describe('customer-bookings-batch (#3139)', () => {
   it('refuses negative and fractional quantity', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 5 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
     await expect(call([item('inv', { quantity: -1 })])).rejects.toMatchObject({ status: 400 })
     await expect(call([item('inv', { quantity: 1.5 })])).rejects.toMatchObject({ status: 400 })
     expect(rows()).toHaveLength(0)
   })
 
   it('refuses over-limit incl. [+5,-5]', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 9, maxBookingsPerMonth: 3 })
+    loc('inv', { inventoryMode: 1, quantity: 1, maxBookingsPerMonth: 3 }, 9)
     db.$client.prepare('update bookings_locations set maxBookingsPerMonth = 3').run()
     await expect(call([item('inv', { quantity: 5 }), item('inv', { quantity: -5 })])).rejects.toMatchObject({ status: 400 })
     await expect(call([item('inv', { quantity: 5 })])).rejects.toMatchObject({ status: 400 })
@@ -71,14 +72,14 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('day location with empty quantity: 1 ok, 2nd refused', async () => {
-    loc('inv', { inventoryMode: 1 })
+    loc('inv', { inventoryMode: 1, quantity: 5 }, 1)
     await call([item('inv')])
     await expect(call([item('inv')])).rejects.toMatchObject({ status: 409 })
     expect(rows()).toHaveLength(1)
   })
 
   it('slot location with empty capacity: 1 per slot', async () => {
-    loc('s', { slots: JSON.stringify([{ id: 'am' }, { id: 'pm' }]) })
+    loc('s', { slots: JSON.stringify([{ id: 'am' }, { id: 'pm' }]), quantity: 9 }, 1)
     await call([item('s', { slotIds: ['am'] })])
     await expect(call([item('s', { slotIds: ['am'] })])).rejects.toMatchObject({ status: 409 })
     await call([item('s', { slotIds: ['pm'] })])
@@ -86,7 +87,7 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('normal multi-item batch succeeds', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 5 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
     loc('s', { slots: JSON.stringify([{ id: 'am' }]) })
     const res = await call([item('inv', { quantity: 3 }), item('s', { slotIds: ['am'] })])
     expect(res.count).toBe(2)
@@ -95,7 +96,7 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('a failing item rolls back earlier rows of the request', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 2 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 2)
     loc('s', { slots: JSON.stringify([{ id: 'am' }]) })
     await call([item('s', { slotIds: ['am'] })])
     await expect(call([item('inv', { quantity: 2 }), item('s', { slotIds: ['am'] })])).rejects.toMatchObject({ status: 409 })
@@ -103,18 +104,19 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('stock booking stores JSON text null in the NOT NULL slot column', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 5 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
     await call([item('inv', { quantity: 2 })])
     expect(rows()[0].slot).toBe('null')
   })
 
   it('race: two threads, own connections, last place — exactly one booking stored', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 1 })
+    // C9 (#4061): the location lists P and Q (stock 1 each); both race for the last P
+    loc('inv', { inventoryMode: 1, quantity: 5, products: PQ })
     const barrier = new SharedArrayBuffer(8) // [0]=release flag, [1]=threads ready
     const flag = new Int32Array(barrier)
     const spawn = () => new Promise<{ ok: boolean, status?: number }>((resolve, reject) => {
       const w = new Worker(new URL('./race-worker.mjs', import.meta.url), {
-        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv')] } },
+        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv', { productId: 'P' })] } },
       })
       w.once('message', resolve)
       w.once('error', reject)
@@ -127,10 +129,11 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(res.filter(r => r.ok)).toHaveLength(1)
     expect(res.filter(r => !r.ok).map(r => r.status)).toEqual([409])
     expect(rows()).toHaveLength(1)
+    expect(rows()[0].product).toBe('P')
   }, 30000)
 
   it('Brussels pick of 10 Nov is stored as sent and blocks only 10 Nov', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 1 })
+    loc('inv', { inventoryMode: 1, quantity: 4 }, 1)
     await call([item('inv', { date: '2026-11-09T23:00:00Z' })])
     expect(rows()[0].date).toBe(Date.parse('2026-11-09T23:00:00Z') / 1000)
     await expect(call([item('inv', { date: '2026-11-10T10:00:00Z' })])).rejects.toMatchObject({ status: 409 })
@@ -140,7 +143,7 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('DST day (29 Mar 2026, 23h long) counts as one day', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 1 })
+    loc('inv', { inventoryMode: 1, quantity: 4 }, 1)
     await call([item('inv', { date: '2026-03-28T23:00:00Z' })]) // 29 Mar 00:00 CET
     await expect(call([item('inv', { date: '2026-03-29T21:30:00Z' })])).rejects.toMatchObject({ status: 409 }) // 23:30 CEST
     await call([item('inv', { date: '2026-03-29T22:00:00Z' })]) // 30 Mar 00:00 CEST
@@ -148,12 +151,13 @@ describe('customer-bookings-batch (#3139)', () => {
   })
 
   it('race: different times of day on the same day — exactly one stored', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 1 })
+    // C9 (#4061): P and Q listed (stock 1 each); exactly one P wins
+    loc('inv', { inventoryMode: 1, quantity: 5, products: PQ })
     const barrier = new SharedArrayBuffer(8)
     const flag = new Int32Array(barrier)
     const spawn = (date: string) => new Promise<{ ok: boolean, status?: number }>((resolve, reject) => {
       const w = new Worker(new URL('./race-worker.mjs', import.meta.url), {
-        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv', { date })] } },
+        workerData: { dbPath: join(dir, 'db.sqlite'), barrier, body: { bookings: [item('inv', { date, productId: 'P' })] } },
       })
       w.once('message', resolve)
       w.once('error', reject)
@@ -165,10 +169,11 @@ describe('customer-bookings-batch (#3139)', () => {
     const res = await both
     expect(res.filter(r => r.ok)).toHaveLength(1)
     expect(rows()).toHaveLength(1)
+    expect(rows()[0].product).toBe('P')
   }, 30000)
 
   it('500 body carries no DB error text', async () => {
-    loc('inv', { inventoryMode: 1, quantity: 2 })
+    loc('inv', { inventoryMode: 1, quantity: 1 }, 2)
     db.$client.exec('drop table bookings_bookings')
     const err: any = await call([item('inv')]).catch(e => e)
     expect(err.status).toBe(500)
@@ -202,7 +207,7 @@ describe('customer-bookings-batch (#3139)', () => {
 
     it('all or nothing: a refused 3rd item leaves no rows; same slot twice over capacity too', async () => {
       loc('s', { slots: slots() })
-      loc('inv', { inventoryMode: 1, quantity: 5 })
+      loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
       await call([item('s', { slotIds: ['am'] })])
       await expect(call([item('inv', { quantity: 1 }), item('inv', { quantity: 1 }), item('s', { slotIds: ['am'] })])).rejects.toMatchObject({ status: 409 })
       expect(rows()).toHaveLength(1)
@@ -211,9 +216,9 @@ describe('customer-bookings-batch (#3139)', () => {
     })
 
     it('the SQL guard alone aborts the whole batch (pre-check bypassed)', async () => {
-      loc('inv', { inventoryMode: 1, quantity: 1 })
+      loc('inv', { inventoryMode: 1, quantity: 3 }, 1)
       const { guardSql, guardedInsert, runAtomic, dayRange, validateSelection } = await import('../server/utils/booking-capacity')
-      const sel = validateSelection({ inventoryMode: 1, quantity: 1, products: [{ product: 'loc-inv', stock: 1 }] }, [], 1)
+      const sel = validateSelection({ inventoryMode: 1, products: [{ product: 'loc-inv', stock: 1 }] }, [], 1)
       const range = dayRange(DATE, 'Europe/Brussels')!
       const mk = (id: string) => guardedInsert({ id, teamId: 't1', owner: 'u', location: 'inv', storedTs: range.storedTs, slot: null, group: null, quantity: 1, status: 'active', product: sel.product, by: 'u', nowTs: 1 }, guardSql({ teamId: 't1', locationId: 'inv', range, selection: sel }))
       await expect(runAtomic(db, [mk('a'), mk('b')])).rejects.toMatchObject({ status: 409 })
@@ -221,7 +226,7 @@ describe('customer-bookings-batch (#3139)', () => {
     })
 
     it('a 20-slot full day stays under 100 bound params', async () => {
-      loc('s', { slots: slots(1, 20), offerFullDay: 1 })
+      loc('s', { slots: slots(1, 20), offerFullDay: 1 }, 3)
       const counts: number[] = []
       db = drizzle(db.$client, { logger: { logQuery: (_q: string, p: unknown[]) => { counts.push(p.length) } } })
       await call([item('s', { slotIds: ['all-day'] })])
@@ -230,12 +235,46 @@ describe('customer-bookings-batch (#3139)', () => {
     })
 
     it('a plain day is stored as Brussels midnight and blocks only that day', async () => {
-      loc('inv', { inventoryMode: 1, quantity: 1 })
+      loc('inv', { inventoryMode: 1, quantity: 4 }, 1)
       await call([item('inv', { date: '2026-11-09T15:00:00.000Z', day: '2026-11-10' })])
       expect(rows()[0].date).toBe(Date.parse('2026-11-09T23:00:00Z') / 1000)
       await expect(call([item('inv', { date: '2026-11-10T10:00:00Z' })])).rejects.toMatchObject({ status: 409 })
       await call([item('inv', { day: '2026-11-11' })])
       expect(rows()).toHaveLength(2)
+    })
+  })
+
+  describe('stock per product, per slot (#4061)', () => {
+    const twoSlots = JSON.stringify([{ id: 'am', capacity: 1 }, { id: 'pm', capacity: 1 }])
+
+    it('C8 asking for more than is left is 409 and earlier rows of the same cart are rolled back', async () => {
+      loc('s', { slots: twoSlots }, 3)
+      await call([item('s', { slotIds: ['am'], quantity: 2 })])
+      await expect(call([item('s', { slotIds: ['pm'] }), item('s', { slotIds: ['am'], quantity: 2 })])).rejects.toMatchObject({ status: 409 })
+      expect(rows()).toHaveLength(1)
+      await call([item('s', { slotIds: ['am'] })])
+      expect(rows()).toHaveLength(2)
+    })
+
+    it('stores quantity 2 at a slot location (stock 3, old slot capacity 1)', async () => {
+      loc('s', { slots: twoSlots }, 3)
+      await call([item('s', { slotIds: ['am'], quantity: 2 })])
+      expect(rows()[0].quantity).toBe(2)
+      expect(JSON.parse(rows()[0].slot)).toEqual(['am'])
+    })
+
+    it('products count apart: Q still fits in a slot P filled', async () => {
+      loc('s', { slots: twoSlots, products: PQ })
+      await call([item('s', { slotIds: ['am'], productId: 'P' })])
+      await expect(call([item('s', { slotIds: ['am'], productId: 'P' })])).rejects.toMatchObject({ status: 409 })
+      await call([item('s', { slotIds: ['am'], productId: 'Q' })])
+      expect(rows().map((r: any) => r.product).sort()).toEqual(['P', 'Q'])
+    })
+
+    it('quantity 0 is refused at a slot location too', async () => {
+      loc('s', { slots: twoSlots }, 3)
+      await expect(call([item('s', { slotIds: ['am'], quantity: 0 })])).rejects.toMatchObject({ status: 400 })
+      expect(rows()).toHaveLength(0)
     })
   })
 })
