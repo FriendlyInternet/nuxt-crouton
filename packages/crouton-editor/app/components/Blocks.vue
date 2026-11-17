@@ -124,7 +124,7 @@ watch(() => props.yxmlFragment, async (fragment) => {
     try {
       // Dynamically import TipTap Collaboration extension
       const { Collaboration } = await import('@tiptap/extension-collaboration')
-      // Blocks a collaborator adds slide in + glow; blocks they remove fade out
+      // Blocks a collaborator adds get a short-lived line on their left
       const { RemoteChangeHighlight } = await import('../utils/remote-change-highlight')
       const extensions: any[] = [
         Collaboration.configure({
@@ -625,20 +625,12 @@ defineExpose({
   transition: opacity 0.2s;
 }
 
-/* Remote changes (collab): added blocks slide in + glow, removed ones fade out */
-.crouton-remote-new { animation: crouton-remote-in .5s cubic-bezier(.2,.8,.2,1) both, crouton-remote-glow 1.5s ease-out both; border-radius: 6px; }
-@keyframes crouton-remote-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-@keyframes crouton-remote-glow {
-  /* Subtle tint (max 8% of the theme colour, no ring) so it stays readable in dark mode too */
-  from { background-color: color-mix(in oklab, var(--ui-primary) 8%, transparent) }
-  to { background-color: transparent }
-}
-/* The removed-block ghost: created once, one browser-run fade, removed on animationend */
-.crouton-remote-gone { animation: crouton-remote-out .3s ease-out both; will-change: opacity; pointer-events: none; overflow: hidden; z-index: 1 }
-@keyframes crouton-remote-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-4px) } }
+/* Remote changes (collab): a block someone else added gets a thin primary line on its left for ~2s, then the line fades */
+.crouton-remote-new { position: relative }
+.crouton-remote-new::before { content: ''; position: absolute; top: 0; bottom: 0; left: -0.75rem; width: 2px; border-radius: 1px; background: var(--ui-primary); opacity: 1; transition: opacity .6s ease-out; pointer-events: none }
+.crouton-remote-fading::before { opacity: 0 }
+/* Reduced motion: the line still shows, it just goes without the fade */
 @media (prefers-reduced-motion: reduce) {
-  .crouton-remote-new { animation: crouton-remote-glow 1.5s ease-out both }
-  /* No ghost is created under reduced motion; this only guards a stray one */
-  .crouton-remote-gone { display: none }
+  .crouton-remote-new::before { transition: none }
 }
 </style>

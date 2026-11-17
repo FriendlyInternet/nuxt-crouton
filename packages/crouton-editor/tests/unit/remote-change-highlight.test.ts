@@ -66,23 +66,9 @@ async function pair(): Promise<[Window, Window]> {
 
 const count = (w: Window, cls: string) => w.view.dom.querySelectorAll(`.${cls}`).length
 const glows = (w: Window) => count(w, 'crouton-remote-new')
-// Ghosts live next to the editor (outside its contenteditable), not inside it.
-const ghostEls = (w: Window) => [...w.view.dom.parentElement!.querySelectorAll<HTMLElement>('.crouton-remote-gone')]
-const ghosts = (w: Window) => ghostEls(w).length
-
-function setReducedMotion(on: boolean) {
-  window.matchMedia = ((q: string) => ({
-    matches: on && q.includes('prefers-reduced-motion: reduce'),
-    media: q,
-    onchange: null,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent: () => false
-  })) as unknown as typeof window.matchMedia
-}
-const realMatchMedia = window.matchMedia
+const fading = (w: Window) => count(w, 'crouton-remote-fading')
+// Anything the plugin could leave behind for a removed block, inside or next to the editor.
+const leftovers = (w: Window) => w.view.dom.parentElement!.querySelectorAll('[class*="crouton-remote-"]').length
 
 function typeAtEnd(w: Window, text: string, childIndex = 0) {
   const { doc } = w.view.state
@@ -105,7 +91,6 @@ function deleteChild(w: Window, childIndex: number) {
 
 afterEach(() => {
   vi.useRealTimers()
-  window.matchMedia = realMatchMedia
   while (windows.length) windows.pop()!.view.destroy()
   document.body.innerHTML = ''
 })
@@ -126,9 +111,9 @@ describe('classifyRemoteChange', () => {
   })
 
   // covers: T1
-  it('reports elements added and removed by a remote change', () => {
-    expect(classifyRemoteChange({ isChangeOrigin: true }, [x, y], [x, z])).toEqual({ skip: false, added: [z], removed: [y] })
-    expect(classifyRemoteChange({ isChangeOrigin: true }, new Set([x]), [x])).toEqual({ skip: false, added: [], removed: [] })
+  it('reports elements added by a remote change', () => {
+    expect(classifyRemoteChange({ isChangeOrigin: true }, [x, y], [x, z])).toEqual({ skip: false, added: [z] })
+    expect(classifyRemoteChange({ isChangeOrigin: true }, new Set([x]), [x])).toEqual({ skip: false, added: [] })
   })
 
   // covers: T4
@@ -165,7 +150,7 @@ describe('createRemoteChangePlugin with two synced editors', () => {
   })
 
   // covers: T3
-  it('local typing, a local insert and a local undo never add a class or ghost in that window', async () => {
+  it('local typing, a local insert, a local delete and a local undo never add a class in that window', async () => {
     const [a] = await pair()
     typeAtEnd(a, 'hello')
     addParagraph(a, 'second')
@@ -173,13 +158,11 @@ describe('createRemoteChangePlugin with two synced editors', () => {
     yUndoPluginKey.getState(a.view.state).undoManager.stopCapturing()
     deleteChild(a, 1)
     expect(a.view.state.doc.childCount).toBe(1)
-    expect(glows(a)).toBe(0)
-    expect(ghosts(a)).toBe(0)
+    expect(leftovers(a)).toBe(0)
     // Undo the local delete — y-sync applies it as isChangeOrigin + isUndoRedoOperation.
     expect(undo(a.view.state)).toBe(true)
     expect(a.view.state.doc.childCount).toBe(2)
-    expect(glows(a)).toBe(0)
-    expect(ghosts(a)).toBe(0)
+    expect(leftovers(a)).toBe(0)
   })
 
   // covers: T4
@@ -195,72 +178,43 @@ describe('createRemoteChangePlugin with two synced editors', () => {
     const b = mount(db)
     await settle()
     expect(b.view.state.doc.childCount).toBe(3)
-    expect(glows(b)).toBe(0)
-    expect(ghosts(b)).toBe(0)
+    expect(leftovers(b)).toBe(0)
   })
 
   // covers: T5
-  it('a block deleted in A leaves one ghost in B, created once outside the editor and removed on animationend; a local delete leaves none', async () => {
-    setReducedMotion(false)
+  it('a block deleted in A just goes in B — no ghost, no class, nothing left behind', async () => {
     const [a, b] = await pair()
+    vi.useFakeTimers()
     typeAtEnd(a, 'one')
     addParagraph(a, 'two')
     addParagraph(a, 'three')
+    // Let the incoming-block lines run out first.
+    vi.advanceTimersByTime(5000)
+    expect(leftovers(b)).toBe(0)
     deleteChild(a, 1)
     expect(b.view.state.doc.childCount).toBe(2)
-    expect(ghosts(a)).toBe(0)
-    expect(ghosts(b)).toBe(1)
-    const ghost = ghostEls(b)[0]!
-    expect(ghost.textContent).toBe('two')
-    // Outside ProseMirror's DOM, so editor re-renders can never re-insert it.
-    expect(b.view.dom.contains(ghost)).toBe(false)
-    expect(ghost.style.position).toBe('absolute')
-    expect(ghost.getAttribute('aria-hidden')).toBe('true')
-
-    // Further remote edits leave the very same ghost element in place.
-    typeAtEnd(a, ' more', 0)
-    addParagraph(a, 'four')
-    expect(ghostEls(b)).toEqual([ghost])
-    expect(ghost.isConnected).toBe(true)
-
-    // The browser's animation ends → the ghost goes.
-    ghost.dispatchEvent(new Event('animationend'))
-    expect(ghosts(b)).toBe(0)
-    expect(ghost.isConnected).toBe(false)
-  })
-
-  // covers: T5
-  it('with reduced motion a remotely deleted block just disappears — no ghost', async () => {
-    setReducedMotion(true)
-    const [a, b] = await pair()
-    typeAtEnd(a, 'one')
-    addParagraph(a, 'two')
-    deleteChild(a, 1)
-    expect(b.view.state.doc.childCount).toBe(1)
-    expect(ghosts(b)).toBe(0)
-  })
-
-  // covers: T5
-  it('a ghost whose animationend never fires is still cleaned up by the safety net', async () => {
-    setReducedMotion(false)
-    const [a, b] = await pair()
-    typeAtEnd(a, 'one')
-    addParagraph(a, 'two')
-    vi.useFakeTimers()
-    deleteChild(a, 1)
-    expect(ghosts(b)).toBe(1)
-    vi.advanceTimersByTime(1500)
-    expect(ghosts(b)).toBe(0)
+    expect(b.view.dom.textContent).toBe('onethree')
+    expect(leftovers(b)).toBe(0)
+    expect(leftovers(a)).toBe(0)
   })
 
   // covers: T1
-  it('the glow class is dropped after the glow ends', async () => {
+  it('the line stays for 2 s, then switches to fading, then the class is dropped', async () => {
     const [a, b] = await pair()
     typeAtEnd(a, 'hello')
     vi.useFakeTimers()
     addParagraph(a, 'second')
     expect(glows(b)).toBe(1)
-    vi.advanceTimersByTime(2400)
+    expect(fading(b)).toBe(0)
+    vi.advanceTimersByTime(1999)
+    expect(fading(b)).toBe(0)
+    vi.advanceTimersByTime(1)
+    // Same block, now fading: the CSS transition on the line's opacity runs.
+    expect(glows(b)).toBe(1)
+    expect(fading(b)).toBe(1)
+    expect(b.view.dom.querySelector('.crouton-remote-fading')!.textContent).toBe('second')
+    vi.advanceTimersByTime(600)
     expect(glows(b)).toBe(0)
+    expect(fading(b)).toBe(0)
   })
 })
