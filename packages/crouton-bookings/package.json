@@ -37,6 +37,7 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core --extends @fyit/crouton-maps && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "test": "vitest run",

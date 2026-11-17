@@ -92,6 +92,14 @@ describe('piecesToTree — recompose the authoritative tree', () => {
     const out = piecesToTree([{ id: 'p', node: { type: 'leaf', blockId: 'x' }, x: 0, y: 0, width: 1, height: 1 }], base)
     expect(out.breakpoints).toEqual(base.breakpoints)
   })
+
+  it('does not carry a stale auto key for the 1-piece or the many-piece branch (#3919)', () => {
+    const base = { ...hsplit, auto: true } as unknown as LayoutTree
+    const one = piecesToTree([{ id: 'p', node: { type: 'leaf', blockId: 'x' }, x: 0, y: 0, width: 1, height: 1 }], base)
+    expect('auto' in one).toBe(false)
+    const many = piecesToTree(treeToPieces(hsplit), base)
+    expect('auto' in many).toBe(false)
+  })
 })
 
 describe('piecePath — map a clicked card to its zoom target path', () => {

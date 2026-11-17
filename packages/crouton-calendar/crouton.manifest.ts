@@ -13,8 +13,11 @@ export default defineCroutonManifest({
     components: [
       {
         name: 'CroutonCalendarWeek',
-        description: 'Swipeable week strip (prev · current · next) with a #day slot and a #day-action slot',
-        props: ['modelValue', 'weekStartsOn', 'size', 'selectedDate', 'activeDate', 'isDateDisabled']
+        description: 'Swipeable week strip (prev · current · next) with a #day slot and a #day-action slot'
+      },
+      {
+        name: 'CroutonCalendarMonth',
+        description: 'Swipeable month grid with a fixed header and weekday row'
       }
     ],
   },

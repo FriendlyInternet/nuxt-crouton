@@ -18,7 +18,11 @@
  *   wrangler secret put GITHUB_APP_PRIVATE_KEY   (the App's PEM private key — the only secret)
  *   GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID    (not sensitive — set as vars or secrets)
  */
+import { branchAllowed, issueAllowed, verifyOwnerToken } from './guard.ts'
+import { addedSceneText, saveCommentBody } from './note.ts'
+
 interface Env {
+  OWNER_TOKEN_SECRET: string // derived in CI from REVIEW_SEED_SECRET; empty → every save is refused
   GITHUB_APP_ID: string
   GITHUB_APP_PRIVATE_KEY: string // PEM; the one durable secret
   GITHUB_APP_INSTALLATION_ID: string
@@ -110,8 +114,11 @@ async function installationToken(env: Env): Promise<string> {
 
 // Returns the created commit's sha + its parent's sha, so callers can build immutable
 // raw URLs (`raw.githubusercontent.com/<repo>/<sha>/<path>`) that never drift — the basis
-// for a stable before/after comparison.
-async function putFile(token: string, env: Env, branch: string, path: string, contentB64: string, message: string): Promise<{ commitSha: string; parentSha?: string }> {
+// for a stable before/after comparison. Also returns the previous file from the GET it already
+// makes for the blob sha (`prevContentB64`, null on a 404 = new file) so the owner's note can be
+// worked out without an extra request (#3691).
+interface PutResult { commitSha: string; parentSha?: string; prevContentB64: string | null }
+async function putFile(token: string, env: Env, branch: string, path: string, contentB64: string, message: string): Promise<PutResult> {
   const api = 'https://api.github.com/repos/' + env.REPO + '/contents/' + path
   const headers = {
     authorization: 'Bearer ' + token,
@@ -120,8 +127,13 @@ async function putFile(token: string, env: Env, branch: string, path: string, co
     'content-type': 'application/json',
   }
   let sha: string | undefined
+  let prevContentB64: string | null = null
   const getRes = await fetch(api + '?ref=' + encodeURIComponent(branch), { headers })
-  if (getRes.ok) sha = ((await getRes.json()) as { sha?: string }).sha
+  if (getRes.ok) {
+    const prev = (await getRes.json()) as { sha?: string; content?: string }
+    sha = prev.sha
+    prevContentB64 = typeof prev.content === 'string' ? prev.content : ''
+  }
   const putRes = await fetch(api, {
     method: 'PUT',
     headers,
@@ -129,14 +141,37 @@ async function putFile(token: string, env: Env, branch: string, path: string, co
   })
   if (!putRes.ok) throw new Error('PUT ' + path + ' → ' + putRes.status + ' ' + (await putRes.text()))
   const data = (await putRes.json()) as { commit?: { sha?: string; parents?: Array<{ sha?: string }> } }
-  return { commitSha: data.commit?.sha || '', parentSha: data.commit?.parents?.[0]?.sha }
+  return { commitSha: data.commit?.sha || '', parentSha: data.commit?.parents?.[0]?.sha, prevContentB64 }
+}
+
+// UTF-8 safe base64 decode (the Contents API wraps its base64 in newlines).
+function fromB64(b64: string): string {
+  const bin = atob(b64.replace(/\s+/g, ''))
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
+}
+
+// The owner's note: text added since the previous scene. undefined = could not compare
+// (unreadable or >1 MB file, which the Contents API returns with empty content).
+function noteFrom(prevContentB64: string | null, scene: unknown): string[] | undefined {
+  if (prevContentB64 === null) return addedSceneText(null, scene as never)
+  if (!prevContentB64) return undefined
+  try {
+    return addedSceneText(JSON.parse(fromB64(prevContentB64)), scene as never)
+  } catch {
+    return undefined
+  }
 }
 
 // Post a NEW comment on the linked issue for each Save, with the diagram pinned to the commit it
 // was saved at — `raw.githubusercontent.com/<repo>/<sha>/<path>` is immutable, so every comment
 // keeps its own version forever. The result is a timeline of frozen diagrams (the original/proposal
 // comment stays the original; each edit is its own comment). (#583)
-async function postSaveComment(token: string, env: Env, issue: number, slug: string, branch: string, origin: string, commitSha?: string): Promise<void> {
+// The comment opens with 📐 and quotes the owner's note, so on a status:blocked issue it resumes
+// the pipeline as the owner's answer (#3691, scripts/lib/owner-screens.mjs).
+interface SaveInfo { sha: string; imgSha?: string; note?: string[] }
+async function postSaveComment(token: string, env: Env, issue: number, slug: string, branch: string, origin: string, info: SaveInfo): Promise<void> {
   const headers = {
     authorization: 'Bearer ' + token,
     accept: 'application/vnd.github+json',
@@ -145,23 +180,50 @@ async function postSaveComment(token: string, env: Env, issue: number, slug: str
   }
   const dir = env.DIAGRAMS_DIR || 'writeups/diagrams'
   const path = dir + '/' + slug + '.png'
-  const img = commitSha
-    ? 'https://raw.githubusercontent.com/' + env.REPO + '/' + commitSha + '/' + path // immutable
+  const img = info.imgSha
+    ? 'https://raw.githubusercontent.com/' + env.REPO + '/' + info.imgSha + '/' + path // immutable
     : 'https://raw.githubusercontent.com/' + env.REPO + '/' + branch + '/' + path + '?v=' + Date.now()
   const editUrl = origin + '/?slug=' + encodeURIComponent(slug) + '&branch=' + encodeURIComponent(branch) + '&issue=' + issue
-  const body =
-    '✏️ **`' + slug + '`** edited via the [ticket-editor](' + editUrl + ') — committed to `' + branch + '`.\n\n' +
-    '![' + slug + '](' + img + ')\n\n' +
-    'Reply **`approve`** / **`lgtm`** to sign off — nothing continues automatically.\n\n' +
-    '_' + new Date().toISOString() + '_'
+  const body = saveCommentBody({
+    slug, branch, sha: info.sha, path: dir + '/' + slug + '.excalidraw', img, editUrl, at: new Date().toISOString(), note: info.note,
+  })
   const post = await fetch('https://api.github.com/repos/' + env.REPO + '/issues/' + issue + '/comments', {
     method: 'POST', headers, body: JSON.stringify({ body }),
   })
   if (!post.ok) throw new Error('POST comment → ' + post.status + ' ' + (await post.text()))
 }
 
+// Branch + issue guards (#3261): returns the 403 to send, or null when the target is allowed.
+async function refuseTarget(token: string, repo: string, branch: string, issue: number | string | undefined): Promise<Response | null> {
+  if (!(await branchAllowed(fetch, token, repo, branch))) {
+    return json({ error: 'branch refused: the default and protected branches cannot be saved to' }, 403)
+  }
+  if (issue != null && issue !== '') {
+    const n = /^[0-9]+$/.test(String(issue)) ? Number(issue) : NaN
+    if (!(await issueAllowed(fetch, token, repo, n))) return json({ error: 'issue refused: not an issue in this repo' }, 403)
+  }
+  return null
+}
+
+async function maybeComment(token: string, env: Env, issue: number | string | undefined, slug: string, branch: string, origin: string, info: SaveInfo): Promise<string | undefined> {
+  const issueNum = issue != null && /^[0-9]+$/.test(String(issue)) ? Number(issue) : undefined
+  if (!issueNum) return undefined
+  try {
+    await postSaveComment(token, env, issueNum, slug, branch, origin, info)
+    return 'commented on #' + issueNum
+  } catch (e) {
+    return 'comment failed: ' + String((e as Error)?.message || e)
+  }
+}
+
 async function save(req: Request, env: Env): Promise<Response> {
   try {
+    // Owner only (#3261): no valid token → 401 before any GitHub call is made.
+    const auth = req.headers.get('authorization') || ''
+    const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!(await verifyOwnerToken(bearer, env.OWNER_TOKEN_SECRET || '', Date.now()))) {
+      return json({ error: 'owner sign-in required' }, 401)
+    }
     const { slug, branch, scene, png, issue } = (await req.json()) as {
       slug?: string
       branch?: string
@@ -174,24 +236,21 @@ async function save(req: Request, env: Env): Promise<Response> {
     const dir = env.DIAGRAMS_DIR || 'writeups/diagrams'
     const msg = 'chore(diagrams): edit ' + slug + ' via ticket-editor'
     const token = await installationToken(env) // one fresh ~1h token for the commits + comment
-    await putFile(token, env, branch, dir + '/' + slug + '.excalidraw', toB64(JSON.stringify(scene, null, 2) + '\n'), msg)
-    let pngCommit: { commitSha: string; parentSha?: string } | undefined
+    const refused = await refuseTarget(token, env.REPO, branch, issue)
+    if (refused) return refused
+    const sceneCommit = await putFile(token, env, branch, dir + '/' + slug + '.excalidraw', toB64(JSON.stringify(scene, null, 2) + '\n'), msg)
+    const note = noteFrom(sceneCommit.prevContentB64, scene)
+    let pngCommit: PutResult | undefined
     if (png) {
       const b64 = png.includes(',') ? png.split(',')[1] : png
       pngCommit = await putFile(token, env, branch, dir + '/' + slug + '.png', b64, msg + ' (png)')
     }
     // Optional handoff comment: the commit is the source of truth, so a comment failure is non-fatal.
     // Each save posts its OWN comment, with the diagram pinned to this commit (immutable → frozen).
-    let comment: string | undefined
-    const issueNum = issue != null && /^[0-9]+$/.test(String(issue)) ? Number(issue) : undefined
-    if (issueNum) {
-      try {
-        await postSaveComment(token, env, issueNum, slug, branch, new URL(req.url).origin, pngCommit?.commitSha)
-        comment = 'commented on #' + issueNum
-      } catch (e) {
-        comment = 'comment failed: ' + String((e as Error)?.message || e)
-      }
-    }
+    // The PNG commit's tree holds the same scene, so it is the sha to name when there is one.
+    const comment = await maybeComment(token, env, issue, slug, branch, new URL(req.url).origin, {
+      sha: pngCommit?.commitSha || sceneCommit.commitSha, imgSha: pngCommit?.commitSha, note,
+    })
     return json({ ok: true, comment })
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500)
@@ -292,6 +351,16 @@ const PAGE = `<!DOCTYPE html>
   var slug = params.get('slug') || '';
   var branch = params.get('branch') || 'main';
   var issue = params.get('issue') || '';
+  // Owner token arrives in the URL fragment after the status sign-in round trip (#3261).
+  var fragTok = (location.hash.match(/owner=([A-Za-z0-9_.-]+)/) || [])[1];
+  if (fragTok) {
+    try { sessionStorage.setItem('ownerToken', fragTok); } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  function ownerToken(){ try { return sessionStorage.getItem('ownerToken') || ''; } catch (e) { return ''; } }
+  function goSignIn(){
+    location.href = 'https://status.pmcp.dev/api/editor/token?return=' + encodeURIComponent(location.origin + location.pathname + location.search);
+  }
   var RAW = 'https://raw.githubusercontent.com/__REPO__/' + branch + '/writeups/diagrams/' + slug + '.excalidraw';
   var statusEl = document.getElementById('status');
   var saveEl = document.getElementById('save');
@@ -354,9 +423,17 @@ const PAGE = `<!DOCTYPE html>
             for (var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
             var pngB64 = btoa(bin);
             var scene = { type:'excalidraw', version:2, source:location.origin, elements: elements, appState:{ viewBackgroundColor:'#ffffff' }, files: files };
-            return fetch('/api/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ slug: slug, branch: branch, scene: scene, png: pngB64, issue: issue }) });
+            return fetch('/api/save', { method:'POST', headers:{'content-type':'application/json','authorization':'Bearer ' + ownerToken()}, body: JSON.stringify({ slug: slug, branch: branch, scene: scene, png: pngB64, issue: issue }) });
           })
-          .then(function(r){ return r.json(); })
+          .then(function(r){
+            if (r.status === 401) {
+              try { sessionStorage.removeItem('ownerToken'); } catch (e) {}
+              setStatus('owner sign-in required — redirecting…');
+              goSignIn();
+              return { error: 'owner sign-in required' };
+            }
+            return r.json();
+          })
           .then(function(res){ setStatus(res.ok ? ('saved ✓ committed to ' + branch + (res.comment ? ' · ' + res.comment : '')) : 'error: ' + (res.error||'?')); saveEl.disabled = false; })
           .catch(function(e){ setStatus('error: ' + e); saveEl.disabled = false; });
       };

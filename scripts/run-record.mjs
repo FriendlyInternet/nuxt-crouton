@@ -7,7 +7,11 @@
 //   run-record.mjs last-message <session-dir> [max]  → pi's last assistant text (≤max chars)
 //   run-record.mjs annotate <log> <title>            → one ::error:: with the last 40 lines
 //   run-record.mjs record <log> <issue> <step> <exit> → run-record JSON on stdout
+//   run-record.mjs finish-check-line <outcome.json>     → "finish check: …" line (never throws)
+//   run-record.mjs append-finish-check <outcome.json> <branch> → append that line to the PR's
+//     run-record comment (best effort: no PR / no comment / API error → exit 0, no change)
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,6 +64,41 @@ export function lastAssistantMessage(jsonlPath, max = 500) {
   return '';
 }
 
+// #3762: the run-record line for the finish-check outcome the pi extension writes.
+export function finishCheckLine(outcome) {
+  if (!outcome || typeof outcome !== 'object' || outcome.ran !== true) return 'finish check: not run';
+  const n = Number(outcome.rounds) || 0;
+  return `finish check: ran, ${n} ${n === 1 ? 'round' : 'rounds'}, ${outcome.last ?? 'not-run'}`;
+}
+
+export function readFinishCheckLine(p) {
+  try { return finishCheckLine(JSON.parse(fs.readFileSync(p, 'utf8'))); } catch { return 'finish check: not run'; }
+}
+
+const RUN_RECORD_MARK = 'pi worker — run record';
+
+// #3762: find the open PR for <branch>, its newest run-record comment, and append the
+// finish-check line. `gh(args)` returns stdout; every failure is swallowed — it must never
+// fail the job. Returns what it did, for the test and the log.
+export function appendFinishCheck({ outcomePath, branch, repo, gh }) {
+  const run = (args) => { try { return String(gh(args) ?? '').trim(); } catch { return ''; } };
+  if (!branch || !repo) return { done: false, why: 'no branch/repo' };
+  const pr = run(['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '-q', '.[0].number']);
+  if (!pr) return { done: false, why: 'no PR' };
+  const ids = run(['api', `repos/${repo}/issues/${pr}/comments`, '--paginate', '-q',
+    `.[] | select(.body | contains("${RUN_RECORD_MARK}")) | .id`]);
+  const cid = ids.split('\n').map((s) => s.trim()).filter(Boolean).pop();
+  if (!cid) return { done: false, why: 'no run-record comment', pr };
+  const body = run(['api', `repos/${repo}/issues/comments/${cid}`, '-q', '.body']);
+  if (!body) return { done: false, why: 'empty comment body', pr, cid };
+  const line = readFinishCheckLine(outcomePath);
+  const next = `${body}\n\n🔁 ${line}`;
+  try {
+    gh(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${cid}`, '-f', `body=${next}`]);
+  } catch { return { done: false, why: 'patch failed', pr, cid }; }
+  return { done: true, pr, cid, line };
+}
+
 export function newestSessionFile(dir) {
   try {
     return fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
@@ -78,8 +117,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(errorAnnotation(b || 'failing step', readLog(a)));
   } else if (cmd === 'record') {
     console.log(JSON.stringify(buildRecord({ issue: b, step: c, exit: d, text: readLog(a) }), null, 2));
+  } else if (cmd === 'finish-check-line') {
+    console.log(readFinishCheckLine(a));
+  } else if (cmd === 'append-finish-check') {
+    const gh = (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const r = appendFinishCheck({ outcomePath: a, branch: b, repo: process.env.GITHUB_REPOSITORY, gh });
+    console.log(r.done ? `run record: ${r.line}` : `run record: finish-check line skipped (${r.why})`);
   } else {
-    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit>');
+    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit> | finish-check-line <outcome.json> | append-finish-check <outcome.json> <branch>');
     process.exit(2);
   }
 }

@@ -255,7 +255,7 @@ describe('team reference checks (#3378)', () => {
     expect(a).toBeGreaterThan(-1)
     expect(code).toContain('(team.id, body)')
     expect(code.indexOf('await create')).toBeGreaterThan(a)
-    expect(code).toMatch(/import \{ create\w+, assert\w+References \}/)
+    expect(code).toMatch(/import \{ create\w+, assert\w+References, assert\w+TeamMembers \}/)
   })
 
   it('PATCH asserts references before update', () => {

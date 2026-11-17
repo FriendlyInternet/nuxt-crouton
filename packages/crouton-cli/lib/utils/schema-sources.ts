@@ -12,10 +12,10 @@
 //   - `.nuxtrc`-contributed extends (no in-repo usage)
 // The identity-aware duplicate-table gate over this path list is WS1b (#1447).
 
-import { createRequire } from 'node:module'
 import { existsSync, realpathSync, readFileSync, readdirSync } from 'node:fs'
 import { join, dirname, resolve, isAbsolute } from 'node:path'
 import { parseModule } from 'magicast'
+import { resolveModulePath } from 'exsolve'
 
 export interface ResolveSchemaSourcesOptions {
   /** Dialect for the schema.<dialect>.ts glob + filter. Defaults to sqlite. */
@@ -87,9 +87,17 @@ export function resolveLayerDir(spec: string, fromDir: string): string | null {
   // Bare package or package subpath — node-resolve from the extending layer's
   // dir (pnpm strict isolation), then walk up to the layer root. A subpath that
   // doesn't resolve (e.g. a theme with no resolvable entry) must NOT crash.
+  // ESM conditions matter: layers like @fyit/crouton-admin export `.` with
+  // `import` only, which CJS require.resolve rejects (ERR_PACKAGE_PATH_NOT_EXPORTED)
+  // — that made every app soft-defer its migration (#1742). exsolve is sync,
+  // which the generated drizzle.config.ts needs (no top-level await).
   try {
-    const req = createRequire(join(fromDir, '_schema-sources-resolver_.js'))
-    return findLayerRoot(dirname(req.resolve(spec)))
+    const resolved = resolveModulePath(spec, {
+      from: fromDir.endsWith('/') ? fromDir : `${fromDir}/`,
+      conditions: ['import', 'require', 'default'],
+      try: true
+    })
+    return resolved ? findLayerRoot(dirname(resolved)) : null
   } catch {
     return null
   }

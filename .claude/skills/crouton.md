@@ -235,7 +235,7 @@ crouton init <name> --poc --dry-run            # preview, writes nothing
 ```
 
 Flags: `--poc` (→ `pocs/<name>`) · `--out <dir>` · `--features a,b,c` · `--theme <t>` · `-d sqlite|pg`
-· `--no-cf` · `--domain <zone>` · `--dry-run`. If a `crouton.config.js` already exists in the target,
+· `--no-cf` · `--domain <zone>` · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
 init also generates its collections. **This is the command a POC-scaffold task runs — it is not
 undocumented; don't read `init-app.ts`/`scaffold-app.ts` to figure it out (that's the #1213/#1223
 30-min timeout).** Adding a collection to an *existing* app is the separate `crouton config` /
@@ -341,7 +341,7 @@ crouton {layer} {collection} --fields-file=./schemas/{collection}.json --dialect
 
 ### Step 6: Default Layout (generate → POC, #709)
 
-The generator's final step runs the **deterministic layout pass** and writes
+For an app that extends `@fyit/crouton-layout` only (on by default — `crouton init` adds it; opt out with `--no-layout`, #3956; apps without it get a one-line skip and no file), the generator's final step runs the **deterministic layout pass** and writes
 **`crouton.layout.json`** at the app root — a `layout_configs`-format tree that
 arranges the just-generated collections into a good default (no LLM):
 

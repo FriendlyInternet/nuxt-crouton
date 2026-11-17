@@ -46,7 +46,9 @@
       "cancelled": "Geannuleerd"
     },
     "admin": {
-      "openFullScreen": "Open op volledig scherm",
+      "openBookingsHint": "Tik om reserveringen te bekijken en te beheren",
+      "openBookingsTool": "Open reserveringstool",
+      "closeFullScreen": "Volledig scherm sluiten",
       "title": "Boekingen",
       "sectionTitle": "Boekingen",
       "overview": "Overzicht",

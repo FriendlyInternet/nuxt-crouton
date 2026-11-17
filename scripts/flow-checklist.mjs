@@ -26,7 +26,7 @@ export const REVIEWS = [['plan', 'Plan review'], ['build', 'Build review']]
 export const VERDICTS = ['go', 'no-go', 'needs-owner']
 
 /** True when this verdict hands the ticket to the owner. Mirrors build-review.yml (`[ "$ROUND" -ge 2 ]`)
- *  and plan-review.yml (`ROUTE = hold`). */
+ *  and on-comment.yml's plan-review job (`ROUTE = hold`). */
 export function sentToOwner(kind, verdict, round, route) {
   if (verdict === 'needs-owner') return true
   if (kind === 'build' && verdict === 'no-go' && Number(round) >= 2) return true

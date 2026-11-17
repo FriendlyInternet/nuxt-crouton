@@ -34,6 +34,24 @@ function world(o = {}) {
 const run = (w, extra) => runEpicReadyPr(w, { ownerLogin: 'pmcp', ...extra })
 const child = { number: 1, body: BLOCK(7, 'epic/7-x') }
 
+// #3846 rule: a rolling epic is finished only when every step has a closed ticket — after step 0
+// merges, every sub-issue written so far is closed, but the epic→main PR must not open.
+const STEP_LIST = (tickets) => ({ body: '<!-- epic-steps:v1 -->\n```json\n' + JSON.stringify(tickets.map((t, i) => ({ title: `s${i}`, goal: 'g', proves: 'p', blockedBy: i ? [i - 1] : [], ticket: t }))) + '\n```', user: { login: 'nuxt-harness[bot]', type: 'Bot' } })
+const rollingEpic = (w) => { w.github.rest.issues.get = async () => ({ data: { title: 'Epic: T', body: '', labels: [{ name: 'epic' }, { name: 'tickets:rolling' }] } }) }
+test('10. a rolling epic with a step still missing its ticket never opens the epic→main PR', async () => {
+  const w = world({ issue: child, subIssues: [{ number: 1, state: 'closed', title: 'a' }], comments: { 7: [STEP_LIST([1, null])] } })
+  rollingEpic(w)
+  await run(w)
+  assert.equal(w.calls.create.length, 0)
+  assert.ok(w.log.some(m => /1 step\(s\) of the step list not finished/.test(m)))
+})
+test('10. a rolling epic whose every step has a closed ticket opens it as today', async () => {
+  const w = world({ issue: child, subIssues: [{ number: 1, state: 'closed', title: 'a' }, { number: 2, state: 'closed', title: 'b' }], comments: { 7: [STEP_LIST([1, 2])] } })
+  rollingEpic(w)
+  await run(w)
+  assert.equal(w.calls.create.length, 1)
+})
+
 test('dispatch with no epic number → skip', async () => {
   const w = world({ event: 'workflow_dispatch' })
   await run(w, { dispatchBranch: 'feature/x' })
@@ -99,8 +117,8 @@ test('requestReviewers throws → warning only', async () => {
   assert.equal(w.failed.length, 0)
   assert.ok(w.warns.some(m => m.startsWith('requestReviewers @pmcp')))
 })
-test('approved-then-throw keeps the earlier approval', async () => {
-  // quirk preserved — see #3619: a mid-loop failure still declares the PRs gathered so far.
+test('approved-then-throw withholds the approval (partial gather)', async () => {
+  // #3659: a partial gather never declares
   const w = world({
     issue: child,
     merged: [{ number: 11, merged_at: 'x', body: '' }, { number: 12, merged_at: 'x', body: '' }],
@@ -110,6 +128,22 @@ test('approved-then-throw keeps the earlier approval', async () => {
   await run(w)
   assert.ok(w.warns.some(m => m.includes('sub-PR approval gather for epic/7-x')))
   const body = w.calls.create[0].body
-  assert.ok(body.includes('Packages-approved: owner approved #11 (sub-PR sign-off carried by epic-ready-pr, #2494)'))
+  // the 🔒 section itself mentions "a `Packages-approved:` line", so match the declaration form
+  assert.ok(!body.includes('Packages-approved: owner approved'))
+  assert.ok(body.includes('🔒 Shared code not yet signed off'))
+  assert.ok(body.includes('#12'))
+  assert.ok(w.log.some(m => m.includes('incomplete=true')))
+})
+test('full gather with all packages PRs approved → declares', async () => {
+  const w = world({
+    issue: child,
+    merged: [{ number: 11, merged_at: 'x', body: '' }, { number: 12, merged_at: 'x', body: '' }],
+    files: { 11: ['packages/x/a.ts'], 12: ['packages/y/b.ts'] },
+    comments: { 11: [{ user: { login: 'pmcp' }, body: 'ok' }], 12: [{ user: { login: 'pmcp' }, body: 'ok' }] },
+  })
+  await run(w)
+  assert.equal(w.warns.length, 0)
+  const body = w.calls.create[0].body
+  assert.ok(body.includes('Packages-approved: owner approved #11, #12'))
   assert.ok(!body.includes('🔒'))
 })

@@ -4,7 +4,12 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDiff, precheck, decide, renderComment, parseVerdict } from './build-verdict.mjs'
+import { parseDiff, precheck, decide, renderComment, parseVerdict, stopLine } from './build-verdict.mjs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const TICKET = 'Move the events routes under [id]. Rule: a team-B row is never reachable by id from team A.'
 
@@ -206,6 +211,34 @@ test('#3550 skip text: it.skip inside a string literal in a test file passes ite
   assert.equal(precheck(addTest(`const src = "${SK('skip')}('x', () => {})"`), TICKET)['3'], undefined)
   assert.equal(precheck(addTest(`const a = ["${['test', 'skip'].join('.')}('s', () => {})", '${SK('only')}']`), TICKET)['3'], undefined)
 })
+// #3696 — "produced no verdict" names the line pi stopped at.
+const VERDICT_CLI = fileURLToPath(new URL('./build-verdict.mjs', import.meta.url))
+const stopCli = (file) => execFileSync(process.execPath, [VERDICT_CLI, 'stop-line', file], { encoding: 'utf8' })
+
+test('#3696 stopLine: pi\'s own Error line wins over the runner\'s later ##[error] line', () => {
+  const log = 'starting pi\nError: Unknown provider "claude-bridge". Use --list-models to see available providers/models.\n##[error]Process completed with exit code 1.\n'
+  assert.equal(stopLine(log), 'Error: Unknown provider "claude-bridge". Use --list-models to see available providers/models.')
+})
+
+test('#3696 stopLine: no error word → the last non-empty line', () => {
+  assert.equal(stopLine('one\ntwo finished early\n\n  \n'), 'two finished early')
+})
+
+test('#3696 stopLine: empty log → \'\'; the CLI on a missing file says pi printed nothing and exits 0', () => {
+  assert.equal(stopLine(''), '')
+  assert.equal(stopCli(join(tmpdir(), 'no-such-pi-log-3696.log')), ' — pi printed nothing')
+})
+
+test('#3696 stopLine: ANSI codes and backticks stripped, long lines capped at 300', (t) => {
+  const esc = String.fromCharCode(27)
+  assert.equal(stopLine(`${esc}[31mError: bad \`thing\`${esc}[0m`), "Error: bad 'thing'")
+  assert.equal(stopLine('x'.repeat(1000)).length, 300)
+  const dir = mkdtempSync(join(tmpdir(), 'stop-line-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  writeFileSync(join(dir, 'pi.log'), 'Error: boom\n')
+  assert.equal(stopCli(join(dir, 'pi.log')), ' — it stopped at: `Error: boom`')
+})
+
 test('#3550 skip text: a real it.skip / describe.skip / xit call still fails item 3', () => {
   for (const l of [`${SK('skip')}('x', () => {})`, `${['describe', 'skip'].join('.')}('x', () => {})`, `${'x' + 'it'}('x', () => {})`]) {
     assert.match(precheck(addTest(l), TICKET)['3'].evidence, /skipped/)

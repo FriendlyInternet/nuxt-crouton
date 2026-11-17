@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   tallyCi, stamp, failureList, failureExcerpts, logTailBlock, fixBotFailures, stageBar, epicCard,
   prSourceSha, epicFromIssue, signoffPingBody, withheldBody,
@@ -53,6 +54,32 @@ test('logTailBlock: neutralises triple backticks, honours the byte budget, skips
   let budget = 20000, total = 0
   for (const n of ['a', 'b', 'c']) { const t = logTailBlock({ name: n, raw: 'x'.repeat(30000).replace(/(.{100})/g, '$1\n'), budget }); if (t) { budget -= t.used; total += t.used } }
   assert.ok(total <= 20000)
+})
+
+test('logTailBlock: a test failure is quoted first as Stopped at: (#3666)', () => {
+  const raw = readFileSync(new URL('./__fixtures__/ci-logs/pr3522-node-checks.txt', import.meta.url), 'utf8')
+  const r = logTailBlock({ name: 'Node checks', raw, budget: 20000 })
+  const cause = "not ok 567 - every label description fits GitHub's 100-character limit"
+  const stop = r.block.indexOf('Stopped at:')
+  const body = r.block.slice(stop)
+  assert.ok(stop > -1 && body.startsWith(`Stopped at:\n\`\`\`\n`) && body.indexOf(cause) < body.indexOf('```\n```\n'))
+  assert.ok(r.block.includes(`<summary>log tail — Node checks — stopped at: not ok 567 - every label description fits GitHub's 100-character limit</summary>`), r.block.slice(0, 300))
+  // the Stopped-at fence closes before the tail's fence opens
+  assert.ok(r.block.includes('```\n```\n'))
+  assert.ok(r.used <= 4096)
+})
+
+test('logTailBlock: no cause line → byte-identical to the plain tail', () => {
+  const r = logTailBlock({ name: 'x', raw: 'line\n'.repeat(50), budget: 20000 })
+  assert.deepEqual(r, { used: 249, block: `\n\n<details><summary>log tail — x</summary>\n\n\`\`\`\n${'line\n'.repeat(49)}line\n\`\`\`\n</details>` })
+  assert.doesNotMatch(r.block, /Stopped at:/)
+})
+
+test('logTailBlock: the summary cause is HTML-escaped', () => {
+  const r = logTailBlock({ name: 'T', raw: '##[error]x.ts(1,1): error TS2322: Ref<string> & y\n', budget: 20000 })
+  const summary = r.block.match(/<summary>(.*)<\/summary>/)[1]
+  assert.ok(summary.includes('Ref&lt;string&gt; &amp; y'), summary)
+  assert.ok(!summary.includes('<string>'))
 })
 
 test('fixBotFailures maps a check to its workflow run by suite id', () => {

@@ -1,0 +1,12 @@
+{
+  "changedFiles": ["packages/crouton-sales/server/database/schema.ts"],
+  "results": {
+    "apps/kassa": {
+      "statements": [
+        "ALTER TABLE `sales_sync_status` ADD `last_pull_at` integer;",
+        "CREATE TABLE `sales_sync_conflicts` (`id` text PRIMARY KEY NOT NULL, `team_id` text NOT NULL);"
+      ]
+    }
+  },
+  "names": { "apps/kassa": "kassa" }
+}

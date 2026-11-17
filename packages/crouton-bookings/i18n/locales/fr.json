@@ -46,7 +46,9 @@
       "cancelled": "Annulée"
     },
     "admin": {
-      "openFullScreen": "Ouvrir en plein écran",
+      "openBookingsHint": "Touchez pour voir et gérer les réservations",
+      "openBookingsTool": "Ouvrir l'outil réservations",
+      "closeFullScreen": "Quitter le plein écran",
       "title": "Réservations",
       "sectionTitle": "Réservations",
       "overview": "Aperçu",
