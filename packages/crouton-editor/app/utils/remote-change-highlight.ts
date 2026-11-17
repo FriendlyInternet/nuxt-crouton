@@ -85,7 +85,7 @@ interface PluginMeta {
   dropGlow?: unknown[]
 }
 
-export const remoteChangeHighlightKey = new PluginKey<DecorationSet>('crouton-remote-change')
+const remoteChangeHighlightKey = new PluginKey<DecorationSet>('crouton-remote-change')
 
 function getBinding(state: EditorState): Binding | null {
   const sync = ySyncPluginKey.getState(state) as { binding?: Binding } | undefined
@@ -103,6 +103,25 @@ function nodeFor(binding: Binding, yEl: unknown): PMNode | null {
   const n = binding.mapping.get(yEl)
   if (!n) return null
   return Array.isArray(n) ? (n[0] ?? null) : n
+}
+
+/** First block after `idx` that survived the change (null = end of doc). */
+function nextSurvivor(prev: readonly unknown[], idx: number, removedSet: ReadonlySet<unknown>, nowSet: ReadonlySet<unknown>): unknown | null {
+  for (let j = idx + 1; j < prev.length; j++) {
+    const cand = prev[j]
+    if (!removedSet.has(cand) && nowSet.has(cand)) return cand
+  }
+  return null
+}
+
+/** A non-editable copy of a removed block's last DOM, faded out by CSS. */
+function ghostDom(src: HTMLElement): HTMLElement {
+  const dom = document.createElement('div')
+  dom.className = 'crouton-remote-gone'
+  dom.setAttribute('contenteditable', 'false')
+  dom.setAttribute('aria-hidden', 'true')
+  dom.appendChild(src.cloneNode(true))
+  return dom
 }
 
 export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): Plugin<DecorationSet> {
@@ -161,19 +180,64 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     for (const k of [...lastDom.keys()]) if (!seen.has(k)) lastDom.delete(k)
   }
 
+  /** A timer fired: forget the ghosts / glows it was scheduled for. */
+  function applyDrop(own: PluginMeta, tr: Transaction, decos: DecorationSet, oldState: EditorState, newState: EditorState): DecorationSet {
+    const dropKeys = new Set(own.dropGhosts ?? [])
+    ghosts = ghosts.filter(g => !dropKeys.has(g.key))
+    for (const yEl of own.dropGlow ?? []) glowing.delete(yEl)
+    const binding = getBinding(newState) ?? getBinding(oldState)
+    return binding ? rebuild(tr.doc, binding) : decos.map(tr.mapping, tr.doc)
+  }
+
+  function markAdded(added: readonly unknown[]) {
+    for (const yEl of added) {
+      glowing.add(yEl)
+      pendingGlow.push(yEl)
+    }
+  }
+
+  function addGhosts(removed: readonly unknown[], prev: readonly unknown[], nowTypes: readonly unknown[]) {
+    if (!removed.length) return
+    const removedSet = new Set(removed)
+    const nowSet = new Set(nowTypes)
+    for (const yEl of removed) {
+      const src = lastDom.get(yEl)
+      if (!src) continue
+      const anchor = nextSurvivor(prev, prev.indexOf(yEl), removedSet, nowSet)
+      const key = `ghost-${++ghostSeq}`
+      ghosts.push({ key, dom: ghostDom(src), anchor })
+      pendingGhostKeys.push(key)
+    }
+  }
+
+  /** A y-sync transaction that changed the doc: record what a remote change added/removed. */
+  function applySync(meta: YSyncMeta, binding: Binding, doc: PMNode): DecorationSet {
+    if (meta.binding) {
+      // First fill / re-bind: start fresh, animate nothing.
+      glowing.clear()
+      ghosts = []
+      prevTypes = (meta.binding as Binding).type.toArray()
+      return DecorationSet.empty
+    }
+
+    const nowTypes = binding.type.toArray()
+    const decision = classifyRemoteChange(meta, prevTypes, nowTypes)
+    if (!decision.skip) {
+      markAdded(decision.added)
+      addGhosts(decision.removed, prevTypes ?? [], nowTypes)
+    }
+    prevTypes = nowTypes
+    // y-sync replaces the whole doc range, so mapping would drop everything — rebuild.
+    return rebuild(doc, binding)
+  }
+
   return new Plugin<DecorationSet>({
     key: remoteChangeHighlightKey,
     state: {
       init: () => DecorationSet.empty,
       apply(tr: Transaction, decos: DecorationSet, oldState: EditorState, newState: EditorState) {
         const own = tr.getMeta(remoteChangeHighlightKey) as PluginMeta | undefined
-        if (own?.dropGhosts || own?.dropGlow) {
-          const dropKeys = new Set(own.dropGhosts ?? [])
-          ghosts = ghosts.filter(g => !dropKeys.has(g.key))
-          for (const yEl of own.dropGlow ?? []) glowing.delete(yEl)
-          const binding = getBinding(newState) ?? getBinding(oldState)
-          return binding ? rebuild(tr.doc, binding) : decos.map(tr.mapping, tr.doc)
-        }
+        if (own?.dropGhosts || own?.dropGlow) return applyDrop(own, tr, decos, oldState, newState)
 
         const meta = tr.getMeta(ySyncPluginKey) as YSyncMeta | undefined
         if (!meta || !meta.isChangeOrigin) return decos.map(tr.mapping, tr.doc)
@@ -181,48 +245,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
         const binding = getBinding(newState) ?? getBinding(oldState)
         if (!binding) return decos.map(tr.mapping, tr.doc)
 
-        if (meta.binding) {
-          // First fill / re-bind: start fresh, animate nothing.
-          glowing.clear()
-          ghosts = []
-          prevTypes = (meta.binding as Binding).type.toArray()
-          return DecorationSet.empty
-        }
-
-        const nowTypes = binding.type.toArray()
-        const decision = classifyRemoteChange(meta, prevTypes, nowTypes)
-        if (!decision.skip) {
-          for (const yEl of decision.added) {
-            glowing.add(yEl)
-            pendingGlow.push(yEl)
-          }
-          if (decision.removed.length) {
-            const removedSet = new Set(decision.removed)
-            const nowSet = new Set(nowTypes)
-            const prev = prevTypes ?? []
-            for (const yEl of decision.removed) {
-              const src = lastDom.get(yEl)
-              if (!src) continue
-              const idx = prev.indexOf(yEl)
-              let anchor: unknown | null = null
-              for (let j = idx + 1; j < prev.length; j++) {
-                const cand = prev[j]
-                if (!removedSet.has(cand) && nowSet.has(cand)) { anchor = cand; break }
-              }
-              const dom = document.createElement('div')
-              dom.className = 'crouton-remote-gone'
-              dom.setAttribute('contenteditable', 'false')
-              dom.setAttribute('aria-hidden', 'true')
-              dom.appendChild(src.cloneNode(true))
-              const key = `ghost-${++ghostSeq}`
-              ghosts.push({ key, dom, anchor })
-              pendingGhostKeys.push(key)
-            }
-          }
-        }
-        prevTypes = nowTypes
-        // y-sync replaces the whole doc range, so mapping would drop everything — rebuild.
-        return rebuild(tr.doc, binding)
+        return applySync(meta, binding, tr.doc)
       }
     },
     props: {

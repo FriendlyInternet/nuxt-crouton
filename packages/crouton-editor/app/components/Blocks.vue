@@ -217,11 +217,8 @@ const content = computed({
     return '' // For html and markdown
   },
   set: (value) => {
-    if (props.contentType === 'json' && typeof value === 'object') {
-      emit('update:modelValue', JSON.stringify(value))
-    } else {
-      emit('update:modelValue', value)
-    }
+    const isJsonObject = props.contentType === 'json' && typeof value === 'object'
+    emit('update:modelValue', isJsonObject ? JSON.stringify(value) : value)
   }
 })
 
