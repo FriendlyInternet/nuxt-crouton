@@ -1,0 +1,59 @@
+{
+  "epic": 3197,
+  "runs": 4,
+  "epicRuns": 1,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/43960625638",
+      "workflow": "work-issue-pidev.yml",
+      "stage": "work",
+      "child": 3199
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 3199,
+      "runs": 3,
+      "planRounds": 0,
+      "buildRounds": 1,
+      "revises": 0,
+      "silent": 1
+    },
+    {
+      "issue": 3200,
+      "runs": 0,
+      "planRounds": 0,
+      "buildRounds": 0,
+      "revises": 0,
+      "silent": 0
+    },
+    {
+      "issue": 3201,
+      "runs": 0,
+      "planRounds": 0,
+      "buildRounds": 0,
+      "revises": 0,
+      "silent": 0
+    }
+  ],
+  "timeToMainHours": null,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 11,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3197#issuecomment-6589888976",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3197#issuecomment-6769395104",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3199#issuecomment-6747580052",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3199#issuecomment-6920354176",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3199#issuecomment-6930117814",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3199#issuecomment-6937868235",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3200#issuecomment-6588737007",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3201#issuecomment-6588737777",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/3206#issuecomment-6589884476",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/3628#issuecomment-6766601217",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/3628#issuecomment-6769394084"
+    ]
+  },
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44071358928",
+  "stored_at": "2026-11-17T11:20:47.331Z"
+}
