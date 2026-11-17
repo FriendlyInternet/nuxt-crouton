@@ -39,6 +39,19 @@ vi.mock('@fyit/crouton-auth/server/utils/pairing-code', () => ({
   TILL_DEVICE_RESOURCE_TYPE: 'till-device'
 }))
 
+// The auth schema resolves to crouton-auth's built `dist/`, which isn't present
+// where only the sales tests run. Sentinel columns are all the fake db needs.
+vi.mock('@fyit/crouton-auth/server/database/schema/auth', () => ({
+  scopedAccessGrant: {
+    id: 'grant.id',
+    organizationId: 'grant.organizationId',
+    resourceType: 'grant.resourceType',
+    resourceId: 'grant.resourceId',
+    createdAt: 'grant.createdAt',
+    isActive: 'grant.isActive'
+  }
+}))
+
 // The app-owned collection schema is reached through the consuming app's `~~`
 // alias, which only resolves inside a Nuxt build. Sentinel columns are all the
 // fake db needs — identity, not behaviour.
