@@ -103,10 +103,10 @@ function readBare(s, i) {
   return [s[i + 1] === '\n' ? '' : s[i + 1], i + 2]
 }
 
-const SEPARATORS = new Set(['\n', ';', '|', '&'])
+const SEPARATORS = new Set(['\n', ';', '|', '&', '(', ')', '`'])
 const QUOTE_READERS = { "'": readSingle, '"': readDouble }
 
-/** Minimal shell tokenizer: words (quotes honoured) and separator tokens (; && || | newline). */
+/** Minimal shell tokenizer: words (quotes honoured) and separator tokens (; && || | newline ( ) `). */
 export function shellTokens(cmd) {
   const s = String(cmd || '')
   const out = []
@@ -171,6 +171,16 @@ function firstNumber(words) {
   return words.filter(w => !w.startsWith('-')).map(numberOf).find(Boolean) || null
 }
 
+/**
+ * A guarded command whose ticket is not a literal number — `$n` in a loop, `{}` under xargs, or
+ * no number at all (xargs appends it). The hook can't check claims or Blocked-by for a ticket it
+ * can't see, so it refuses: a sweep must name each ticket (review of #4021).
+ */
+function unresolved(kind, words) {
+  const target = words.find(w => /\$|\{\}/.test(w)) || '(no number)'
+  return { kind, number: null, unresolved: target }
+}
+
 /** True when the body has a line starting `**Worker:**` (the 🤖 header comes first). */
 export function hasWorkerLine(body) {
   return /^\s*\*\*Worker:\*\*/m.test(String(body || ''))
@@ -180,35 +190,38 @@ const decodeLabel = (s) => { try { return decodeURIComponent(s) } catch { return
 
 // `gh issue edit N --add-label …work-this…` / `--remove-label …status:blocked…`
 function detectIssueEdit(rest) {
+  const kind = flagHasLabel(rest, '--add-label', 'work-this') ? 'add-work-this'
+    : flagHasLabel(rest, '--remove-label', 'status:blocked') ? 'unblock' : null
+  if (!kind) return null
   const number = firstNumber(rest)
-  if (!number) return null
-  if (flagHasLabel(rest, '--add-label', 'work-this')) return { kind: 'add-work-this', number }
-  if (flagHasLabel(rest, '--remove-label', 'status:blocked')) return { kind: 'unblock', number }
-  return null
+  return number ? { kind, number } : unresolved(kind, rest)
 }
 
 /** `gh pr|issue comment N --body "**Worker:** …"` or `--body-file f` (the hook reads f). */
 function detectComment(rest) {
   const number = firstNumber(rest)
-  if (!number) return null
   const bodyFile = flagValues(rest, ['--body-file', '-F'])[0]
-  if (bodyFile) return { kind: 'worker-comment', number, needsPrMap: true, bodyFile }
   const body = flagValues(rest, ['--body', '-b']).join('\n')
-  return hasWorkerLine(body) ? { kind: 'worker-comment', number, needsPrMap: true } : null
+  if (!bodyFile && !hasWorkerLine(body)) return null
+  if (!number) return { ...unresolved('worker-comment', rest), ...(bodyFile ? { bodyFile } : {}) }
+  return { kind: 'worker-comment', number, needsPrMap: true, ...(bodyFile ? { bodyFile } : {}) }
 }
 
 /** `gh api …/issues/N/labels … work-this` and `gh api -X DELETE …/issues/N/labels/status:blocked`. */
 function detectApi(all) {
-  const path = all.find(w => /(?:^|\/)issues\/\d+\/labels/.test(w))
+  const path = all.find(w => /(?:^|\/)issues\/[^/\s]+\/labels/.test(w))
   if (!path) return null
-  const number = Number(path.match(/issues\/(\d+)\/labels/)[1])
+  const num = path.match(/issues\/([^/\s]+)\/labels/)[1]
   const method = (flagValues(all, ['-X', '--method'])[0] || '').toUpperCase()
+  let kind = null
   if (method === 'DELETE') {
-    const tail = decodeLabel(path.split(/issues\/\d+\/labels\/?/)[1] || '')
-    return tail === 'status:blocked' ? { kind: 'unblock', number } : null
+    const tail = decodeLabel(path.split(/issues\/[^/\s]+\/labels\/?/)[1] || '')
+    if (tail === 'status:blocked') kind = 'unblock'
+  } else if (all.some(w => /(^|[=,\s"[])work-this($|[,\s"\]])/.test(w))) {
+    kind = 'add-work-this'
   }
-  const addsWorkThis = all.some(w => /(^|[=,\s"[])work-this($|[,\s"\]])/.test(w))
-  return addsWorkThis ? { kind: 'add-work-this', number } : null
+  if (!kind) return null
+  return /^\d+$/.test(num) ? { kind, number: Number(num) } : unresolved(kind, [num])
 }
 
 const GH_DETECTORS = {
@@ -217,19 +230,46 @@ const GH_DETECTORS = {
   'pr comment': (words) => detectComment(words.slice(3)),
 }
 
-function detectGh(words) {
-  if (words[0] !== 'gh') return null
-  if (words[1] === 'api') return detectApi(words.slice(2))
-  const detector = GH_DETECTORS[`${words[1]} ${words[2]}`]
-  return detector ? detector(words) : null
+// Words that can stand in front of the real command in a segment: loop/if keywords, grouping,
+// `time`/`!`, wrappers (`env`, `command`, `exec`, `nohup`, `sudo`), and `VAR=value` prefixes.
+const PREFIX_WORDS = new Set(['do', 'then', 'else', 'elif', 'while', 'until', 'if', 'time', '!', '{', '(', 'env', 'command', 'exec', 'nohup', 'sudo'])
+const isAssignment = (w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)
+
+/** `xargs [-I{} -n1 -P4 …] gh …` → the words from `gh` on; else null. */
+function afterXargs(words) {
+  if (words[0] !== 'xargs') return null
+  const at = words.findIndex(w => w.split('/').pop() === 'gh')
+  return at === -1 ? null : words.slice(at)
+}
+
+/** Strip prefixes so a segment like `do GH_REPO=o/r gh issue edit …` reads as `gh issue edit …`. */
+function commandWords(words) {
+  let w = words
+  while (w.length && (PREFIX_WORDS.has(w[0]) || isAssignment(w[0]))) w = w.slice(1)
+  const viaXargs = afterXargs(w)
+  // Under xargs the ticket number is filled in at run time — refuse rather than guess.
+  return viaXargs ? { words: viaXargs, xargs: true } : { words: w, xargs: false }
+}
+
+function detectGh(segment) {
+  const { words, xargs } = commandWords(segment)
+  // `bash -c "gh issue edit …"` / `sh -c '…'` — judge the inner command.
+  if (['bash', 'sh', 'zsh'].includes(words[0]) && words[1] === '-c') return detectBashCommand(words[2])
+  if (words[0]?.split('/').pop() !== 'gh') return null
+  const detector = words[1] === 'api' ? (w) => detectApi(w.slice(2)) : GH_DETECTORS[`${words[1]} ${words[2]}`]
+  const action = detector ? detector(words) : null
+  return action && xargs && !action.unresolved ? { ...action, number: null, unresolved: 'xargs' } : action
 }
 
 const BASH_HINT = /work-this|status:blocked|status%3Ablocked|Worker:|--body-file|-F\b/i
 
-function detectBash(input) {
-  const cmd = String(input.command || '')
-  if (!BASH_HINT.test(cmd)) return null
+function detectBashCommand(cmd) {
+  if (!BASH_HINT.test(String(cmd || ''))) return null
   return segments(cmd).map(detectGh).find(Boolean) || null
+}
+
+function detectBash(input) {
+  return detectBashCommand(input.command)
 }
 
 function detectIssueWrite(input) {
@@ -255,7 +295,10 @@ const TOOL_DETECTORS = {
 
 /**
  * Which guarded action (if any) a tool call performs.
- * → { kind: 'add-work-this'|'unblock'|'worker-comment', number, needsPrMap?, bodyFile?, labelsAfter? } | null
+ * → { kind: 'add-work-this'|'unblock'|'worker-comment', number, needsPrMap?, bodyFile?, labelsAfter?, unresolved? } | null
+ *
+ * `unresolved` (number null) means the ticket isn't a literal number — `$n`, `{}`, xargs — and
+ * `decideClaimGuard` refuses it without a lookup.
  *
  * `labelsAfter` (MCP issue_write) means "confirm against the issue's current labels" — see
  * `confirmLabelChange`. `bodyFile` means "confirm the file has a **Worker:** line".
@@ -295,6 +338,9 @@ const who = (c) => `${c.chat}${c.name ? ` (${c.name})` : ''}`
  */
 export function decideClaimGuard({ action, myChat = '', claims = [], openBlockers = [] } = {}) {
   if (!action) return { allow: true, reason: '' }
+  if (action.unresolved) {
+    return { allow: false, reason: `Blocked: can't tell which ticket this targets (${action.unresolved}) — run one command per ticket with its number written out, so each is checked against claims and Blocked-by` }
+  }
   const ticket = action.ticket ?? action.number
   if (action.kind === 'add-work-this' && openBlockers.length) {
     const list = openBlockers.map(n => `#${n}`).join(', ')

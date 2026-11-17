@@ -34,6 +34,12 @@ process.stdin.on('end', () => {
     if (!hasWorkerLine(body)) process.exit(0)
   }
 
+  // `$n` / `{}` / xargs: no ticket to look up, so refuse before any network.
+  if (action.unresolved) {
+    process.stderr.write(decideClaimGuard({ action }).reason + '\n')
+    process.exit(2)
+  }
+
   let verdict
   try {
     const facts = loadFacts()

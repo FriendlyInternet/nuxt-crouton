@@ -121,6 +121,22 @@ test('T3 detectGuardedAction ignores unrelated calls', () => {
   assert.equal(detectGuardedAction('mcp__github__add_issue_comment', { issue_number: 12, body: 'no worker line' }), null)
 })
 
+test('T3 detectGuardedAction sees through loops, xargs and env prefixes (a sweep is a loop)', () => {
+  const g = (command) => detectGuardedAction('Bash', { command })
+  assert.deepEqual(g('for n in 1; do gh issue edit 3988 --add-label work-this; done'), { kind: 'add-work-this', number: 3988 })
+  assert.deepEqual(g('GH_REPO=o/r gh issue edit 3988 --add-label work-this'), { kind: 'add-work-this', number: 3988 })
+  assert.deepEqual(g('bash -c "gh issue edit 3988 --remove-label status:blocked"'), { kind: 'unblock', number: 3988 })
+  assert.deepEqual(g('(gh issue edit 3988 --add-label work-this)'), { kind: 'add-work-this', number: 3988 })
+  // A ticket the hook can't see is refused, never let through.
+  assert.equal(g('for n in 3988 3953; do gh issue edit $n --add-label work-this; done').unresolved, '$n')
+  assert.equal(g('echo 3988 | xargs -I{} gh issue edit {} --add-label work-this').unresolved, '{}')
+  assert.equal(g('ls | xargs -n1 gh issue edit --add-label work-this').unresolved, '(no number)')
+  assert.equal(g('gh api repos/o/r/issues/$n/labels -f labels[]=work-this').unresolved, '$n')
+  assert.equal(decideClaimGuard({ action: g('for n in 3988; do gh issue edit $n --add-label work-this; done') }).allow, false)
+  // Still quiet on unrelated loops.
+  assert.equal(g('for n in 1 2; do gh issue edit $n --add-label type:feat; done'), null)
+})
+
 test('ticketFromPr maps a PR to its ticket by Closes #N, else work-<n> branch', () => {
   assert.equal(ticketFromPr({ body: 'Closes #3988\n\nmore' }), 3988)
   assert.equal(ticketFromPr({ body: 'nothing', headRefName: 'pi/work-3988-x' }), 3988)
@@ -199,6 +215,21 @@ test('T6 hook refuses a **Worker:** PR comment (mapped via Closes #N) and an ope
     { CLAIM_FACTS_FILE: blocked.file })
   assert.equal(b.status, 2, b.stderr)
   assert.match(b.stderr, /waits on #3980 \(open\)/)
+})
+
+test('T6 hook refuses a loop sweep: a literal ticket is checked, a $n ticket is refused with no lookup', () => {
+  const { file } = fixture()
+  const loop = runHook(HOOK, { session_id: B_SESSION, tool_name: 'Bash', tool_input: { command: 'for n in 1; do gh issue edit 3988 --add-label work-this; done' } },
+    { CLAIM_FACTS_FILE: file })
+  assert.equal(loop.status, 2, loop.stderr)
+  assert.match(loop.stderr, /#3988 is claimed by c7f3a1/)
+  const sweep = runHook(HOOK, { session_id: B_SESSION, tool_name: 'Bash', tool_input: { command: 'for n in 3988 3953; do gh issue edit $n --add-label work-this; done' } },
+    { CLAIM_FACTS_FILE: '/nonexistent/facts.json' })
+  assert.equal(sweep.status, 2, sweep.stderr)
+  assert.match(sweep.stderr, /can't tell which ticket this targets \(\$n\)/)
+  const xargs = runHook(HOOK, { session_id: A_SESSION, tool_name: 'Bash', tool_input: { command: 'echo 3988 | xargs -I{} gh issue edit {} --add-label work-this' } },
+    { CLAIM_FACTS_FILE: file })
+  assert.equal(xargs.status, 2, xargs.stderr)
 })
 
 test('T6 hook passes an unrelated command with no lookup', () => {
