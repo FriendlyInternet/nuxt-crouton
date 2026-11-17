@@ -33,8 +33,9 @@ Real-time collaboration infrastructure for Nuxt Crouton using Yjs CRDTs. This pa
 | `app/composables/useCollabRoomUsers.ts` | Poll room users via HTTP (Phase 6) |
 | `app/components/CollabEditingBadge.vue` | "X editing" badge for list items (Phase 6) |
 | `server/utils/collabRoomStore.ts` | Shared in-memory room storage for local dev |
-| `server/utils/collabServerDoc.ts` | `readCollabRoomDoc` / `updateCollabRoomDoc` (#3982) — read or edit a live room from the app server. Worker mode signs a 60 s room token, `GET /state`, runs the edit, `POST /update` with only the diff; local mode edits the in-process room and pushes to its peers; production with no worker URL returns `{ error }` (never writes the record). Exported as `@fyit/crouton-collab/server/utils/collabServerDoc` |
-| `shared/tiptap-yjs.ts` | TipTap JSON ⇄ `Y.XmlFragment` converter in y-prosemirror's encoding (attributes kept raw, marks as text formatting), `seedYFragment` (the deterministic seed, #3983), `hasFragmentContent`, `editYFragment` (insert / replace / delete blocks at an index). Used by `useCollabLocalizedContent` and the server; exported as `@fyit/crouton-collab/shared/tiptap-yjs` |
+| `server/utils/collabServerDoc.ts` | `readCollabRoomDoc` / `updateCollabRoomDoc` (#3982) — read or edit a live room from the app server. Worker mode signs a 60 s room token, `GET /state`, runs the edit, `POST /update` with only the diff; local mode edits the in-process room and pushes to its peers; production with no worker URL returns `{ error }` (never writes the record). Option `presence(doc)` (#4094, worker mode only) sends the editor's short-lived presence with the diff. Exported as `@fyit/crouton-collab/server/utils/collabServerDoc` |
+| `server/utils/collabServerPresence.ts` | Server-editor presence (#4094): `parseServerPresence` (whitelists the `X-Collab-Presence` header into the awareness wire shape, marked `server: true`), `encodeServerPresence`, `createServerPresenceStore` (per-clientId expiry, `SERVER_PRESENCE_TTL_MS` = 5 s). Never a session: not counted in join/leave/userCount |
+| `shared/tiptap-yjs.ts` | TipTap JSON ⇄ `Y.XmlFragment` converter in y-prosemirror's encoding (attributes kept raw, marks as text formatting), `seedYFragment` (the deterministic seed, #3983), `hasFragmentContent`, `editYFragment` (insert / replace / delete blocks at an index), `caretForFragmentEdit` (caret JSON + block for a server editor after an edit, #4094). Used by `useCollabLocalizedContent` and the server; exported as `@fyit/crouton-collab/shared/tiptap-yjs` |
 | `server/routes/api/collab/[roomId]/users.get.ts` | HTTP endpoint for room users |
 | `wrangler.example.toml` | Cloudflare configuration template |
 
@@ -623,7 +624,7 @@ Raw Uint8Array containing Yjs update data.
 | `/api/collab/[roomId]/ws?type=X` | GET | WebSocket upgrade |
 | `/api/collab/[roomId]/users?type=X` | GET | Get current users (Phase 6) |
 | `/state` (via DO) | GET | Get current Yjs state as binary |
-| `/update` (via DO) | POST | Apply a raw Yjs update from the app server (room token); broadcast to everyone + persist |
+| `/update` (via DO) | POST | Apply a raw Yjs update from the app server (room token); broadcast to everyone + persist. Optional `X-Collab-Presence` header (URI-encoded JSON `{ clientId, user: { id?, name, color }, caret?, fragment?, block? }`) shows that editor in awareness + `/users` for 5 s after its last update; an empty body with a presence is allowed and changes no document (#4094) |
 | `/users` (via DO) | GET | Get current users JSON |
 
 ### Users Endpoint Response

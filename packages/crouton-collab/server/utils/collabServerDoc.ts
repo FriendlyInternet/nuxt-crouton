@@ -17,6 +17,7 @@
 import * as Y from 'yjs'
 import { signCollabToken } from './collabToken'
 import { getOrCreateRoom } from './collabRoomStore'
+import { COLLAB_PRESENCE_HEADER, encodeServerPresence, type CollabServerPresence } from './collabServerPresence'
 
 export interface CollabRoomRef {
   /** Canonical team id (the room is team-scoped). */
@@ -36,6 +37,12 @@ export interface CollabServerDocOptions {
   allowLocal?: boolean
   /** fetch implementation (default: global fetch). */
   fetch?: typeof fetch
+  /**
+   * The editor's short-lived presence (#4094), computed from the post-edit doc and
+   * sent with the update so open editors show who changed it and where. Worker
+   * mode only; the room drops it a few seconds after the last edit.
+   */
+  presence?: (doc: Y.Doc) => CollabServerPresence | null
 }
 
 export const COLLAB_NOT_LIVE_ERROR = 'live editing needs collab ("collab": true)'
@@ -169,14 +176,27 @@ async function updateViaWorker<T>(
 
   // Only the diff since the fetched state — the room merges it with any
   // concurrent edit instead of being overwritten.
+  const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' }
+  const presence = safePresence(doc, options.presence)
+  if (presence) headers[COLLAB_PRESENCE_HEADER] = encodeServerPresence(presence)
   const res = await doFetch(updateUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
+    headers,
     // Yjs types it as Uint8Array<ArrayBufferLike>; it is a fresh ArrayBuffer-backed array
     body: Y.encodeStateAsUpdate(doc, before) as Uint8Array<ArrayBuffer>
   })
   if (!res.ok) return { doc: null, error: `collab worker /update answered ${res.status}` }
   return { doc, result, error: null }
+}
+
+/** A failing presence callback never blocks the edit. */
+function safePresence(doc: Y.Doc, build: CollabServerDocOptions['presence']): CollabServerPresence | null {
+  if (!build) return null
+  try {
+    return build(doc)
+  } catch {
+    return null
+  }
 }
 
 function updateLocalRoom<T>(
