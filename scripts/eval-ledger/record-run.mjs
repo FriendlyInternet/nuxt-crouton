@@ -36,6 +36,36 @@ export function conclusionOf(needsJson) {
 }
 
 /**
+ * Is an in-flight workflow run about the same ticket as ours? Agent runs all run on `main` with an
+ * empty `pull_requests`, so branch/PR matching alone never fires (#3364). Match on:
+ *  1. a non-comment run whose title names one of our subjects as `#N` (every dispatch run-name);
+ *     comment runs are skipped here — their title is the issue's free text, which can cite others;
+ *  2. a comment-triggered run whose title equals the subject issue's title;
+ *  3. fallback: its head branch is our work branch, or it lists our PR.
+ */
+export function runMatchesSubject(run, { subjects = [], title = null, branch = null, pr = null } = {}) {
+  if (!run) return false
+  const display = String(run.display_title ?? '')
+  const byTitle = run.event === 'issue_comment' ? Boolean(title) && display === title : titleNamesSubject(display, subjects)
+  return byTitle || onWorkBranchOrPr(run, branch, pr)
+}
+
+const titleNamesSubject = (display, subjects) =>
+  [...display.matchAll(/#(\d+)\b/g)].some((m) => subjects.includes(Number(m[1])))
+
+const onWorkBranchOrPr = (run, branch, pr) =>
+  Boolean(branch && run.head_branch === branch) || Boolean(pr && (run.pull_requests || []).some((p) => p.number === pr))
+
+/** The subject issue/PR title (comment-triggered runs carry it as their run title); null if unreadable. */
+export async function subjectTitle(api, repo, n) {
+  if (!n) return null
+  try {
+    const t = (await api(`/repos/${repo}/issues/${n}`))?.title
+    return typeof t === 'string' && t ? t : null
+  } catch { return null }
+}
+
+/**
  * Build the record. `api(path)` → parsed JSON (GET); `listRecords(date)` → sibling records.
  * Everything is injectable so the tests never touch the network.
  */
@@ -88,12 +118,12 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
   } catch { /* ignore */ }
   // Runs still in flight have no record yet, so also list the workflow's runs: each of two
   // overlapping runs sees the other here, so BOTH rows are flagged (not only the later one).
+  const title = await subjectTitle(api, repo, issue || pr)
   try {
     const wf = await api(`/repos/${repo}/actions/workflows/${env.WORKFLOW_FILE}/runs?created=%3E%3D${encodeURIComponent(start.slice(0, 10))}&per_page=100`)
     for (const r of wf?.workflow_runs || []) {
-      // Same subject only: the run's head branch is the work branch, or it lists our PR.
-      const sameSubject = (branch && r.head_branch === branch) || (pr && (r.pull_requests || []).some((p) => p.number === pr))
-      if (!sameSubject || String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
+      // Same subject only (title `#N`, comment-run issue title, or branch/PR fallback).
+      if (!runMatchesSubject(r, { subjects, title, branch, pr }) || String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
       siblings.push({ run_id: r.id, start: r.run_started_at || r.created_at, end: r.updated_at || end })
     }
   } catch { /* ignore */ }
