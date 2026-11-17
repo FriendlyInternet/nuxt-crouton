@@ -119,6 +119,31 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     return DecorationSet.create(doc, decos)
   }
 
+  // Our own timer meta: advance phases (new → fading → gone).
+  function applyOwnMeta(own: PluginMeta) {
+    for (const yEl of own.fade ?? []) if (marked.has(yEl)) marked.set(yEl, 'fading')
+    for (const yEl of own.drop ?? []) marked.delete(yEl)
+  }
+
+  // First fill / re-bind: start fresh, mark nothing.
+  function resetForBinding(newBinding: Binding) {
+    marked.clear()
+    pendingNew = []
+    prevTypes = newBinding.type.toArray()
+  }
+
+  function markRemoteAdditions(meta: YSyncMeta, binding: Binding) {
+    const nowTypes = binding.type.toArray()
+    const decision = classifyRemoteChange(meta, prevTypes, nowTypes)
+    if (!decision.skip) {
+      for (const yEl of decision.added) {
+        marked.set(yEl, 'new')
+        pendingNew.push(yEl)
+      }
+    }
+    prevTypes = nowTypes
+  }
+
   return new Plugin<DecorationSet>({
     key: remoteChangeHighlightKey,
     state: {
@@ -127,8 +152,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
         const binding = getBinding(newState) ?? getBinding(oldState)
         const own = tr.getMeta(remoteChangeHighlightKey) as PluginMeta | undefined
         if (own) {
-          for (const yEl of own.fade ?? []) if (marked.has(yEl)) marked.set(yEl, 'fading')
-          for (const yEl of own.drop ?? []) marked.delete(yEl)
+          applyOwnMeta(own)
           return binding ? rebuild(tr.doc, binding) : decos.map(tr.mapping, tr.doc)
         }
 
@@ -136,22 +160,11 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
         if (!meta || !meta.isChangeOrigin || !binding) return decos.map(tr.mapping, tr.doc)
 
         if (meta.binding) {
-          // First fill / re-bind: start fresh, mark nothing.
-          marked.clear()
-          pendingNew = []
-          prevTypes = (meta.binding as Binding).type.toArray()
+          resetForBinding(meta.binding as Binding)
           return DecorationSet.empty
         }
 
-        const nowTypes = binding.type.toArray()
-        const decision = classifyRemoteChange(meta, prevTypes, nowTypes)
-        if (!decision.skip) {
-          for (const yEl of decision.added) {
-            marked.set(yEl, 'new')
-            pendingNew.push(yEl)
-          }
-        }
-        prevTypes = nowTypes
+        markRemoteAdditions(meta, binding)
         // y-sync replaces the whole doc range, so mapping would drop everything — rebuild.
         return rebuild(tr.doc, binding)
       }
