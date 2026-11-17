@@ -194,7 +194,8 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   as a **top-level** comment · idempotent `epic/<NN>-*` reuse · `.github/workflows/**` → embed-a-patch ·
   every PR body opens with `Closes #N` · the **decide-vs-ask carve-out**, below) lives in
   **`.claude/agents/pi-operating-contract.md`** and is
-  `cat` verbatim into the pi prompt by both `decompose-on-issue-pidev.yml` and `work-issue-pidev.yml`.
+  `cat` verbatim into the pi prompt by `decompose-on-issue-pidev.yml`, and prepended verbatim by
+  `scripts/pipeline-prompt.mjs` (called from `scripts/pi-run.mjs`) for `work-issue-pidev.yml`.
   Edit the contract **there** (one place, so the two flows can't drift — they were byte-identical hand-
   maintained copies before). Keep that file **pure prose**: it is injected raw, so no frontmatter/headers.
 - **A directly-dispatched child resolves to its parent's epic branch — never a new epic off
