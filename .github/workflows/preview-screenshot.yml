@@ -83,8 +83,7 @@ jobs:
           fi
           # Union the triggering run with both deploy runs for the head commit (it stays even if the
           # listing lags behind the event); one id per line, blanks dropped, de-duplicated.
-          # shellcheck disable=SC2086,SC2046 # word-splitting the id lists is intended
-          RUN_ID=$(printf '%s\n' $RUN_ID $(deploy_runs "$HEAD_SHA") | sed '/^$/d' | sort -u | paste -sd' ' -)
+          RUN_ID=$({ if [ -n "$RUN_ID" ]; then echo "$RUN_ID"; fi; deploy_runs "$HEAD_SHA"; } | sed '/^$/d' | sort -u | paste -sd' ' -)
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
           { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
