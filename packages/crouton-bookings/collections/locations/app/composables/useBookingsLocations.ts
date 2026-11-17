@@ -34,22 +34,23 @@ export const bookingsLocationsSlotItemSchema = z.object({
 // Keep schema outside of objects that might be serialized/cloned during SSR
 export const bookingsLocationSchema = z.object({
   color: z.string().optional(),
-  location: z.string().optional(),
+  location: z.string().nullish(),
   allowedMemberIds: z.array(z.string()).nullish(),
   slots: z.array(bookingsLocationsSlotItemSchema).optional(),
   products: z.array(z.object({ product: z.string().min(1), stock: z.number().int().min(1) })).nullish(),
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
-  offerFullDay: z.boolean().optional(),
-  inventoryMode: z.boolean().optional(),
-  quantity: z.number().optional(),
-  maxBookingsPerMonth: z.number().optional(),
+  // .nullish(): stored rows (seed, migration, API) hold null here; the server accepts it too (#4087)
+  offerFullDay: z.boolean().nullish(),
+  inventoryMode: z.boolean().nullish(),
+  quantity: z.number().nullish(),
+  maxBookingsPerMonth: z.number().nullish(),
   title: z.string().optional(),
-  street: z.string().optional(),
-  zip: z.string().optional(),
+  street: z.string().nullish(),
+  zip: z.string().nullish(),
   city: z.string().optional(),
-  content: z.string().optional(),
+  content: z.string().nullish(),
   translations: z.record(
     z.string(),
     z.object({
