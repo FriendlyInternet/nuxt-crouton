@@ -63,7 +63,7 @@ Both can combine with any scope/depth.
 
 | Level | Meaning | Sources |
 |-------|---------|---------|
-| 🔴 **Critical** | A hard, documented convention break — **blocks** the CI gate | v3 component name (`UDropdown`/`UDivider`/`UToggle`/`UNotification`); `UCard` inside `UModal`/`USlideover`/`UDrawer`; Options API in a `.vue`; overlay clearly missing the `#content="{ close }"` pattern |
+| 🔴 **Critical** | A hard, documented convention break — **blocks** the CI gate (in CI: only when its quote matches an added line; plain form tags are decided by lint) | v3 component name (`UDropdown`/`UDivider`/`UToggle`/`UNotification`); `UCard` inside `UModal`/`USlideover`/`UDrawer`; Options API in a `.vue`; overlay clearly missing the `#content="{ close }"` pattern |
 | 🟡 **Warning** | Likely off-convention; advisory | raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>` where a Nuxt UI / crouton component applies; hand-rolled overlay markup; hardcoded brand/semantic color |
 | 🔵 **Note** | Polish | bare `export default {}` nit; one-off hardcoded color; minor drift |
 
@@ -195,7 +195,8 @@ needs prop/slot judgment").
 - **CI runs the same engine automatically** (mirroring the red-team/a11y workflows):
   `.github/workflows/review.yml` runs the subagent at `depth=quick` on a PR
   diff — posts a sticky `<!-- frontend-review -->` comment and **fails the check on a
-  🔴 finding** (diff-scoped, so never on the pre-existing backlog). `/frontend-review`
+  lint hit on an added line, or a 🔴 whose quote matches an added line**
+  (`scripts/frontend-gate.mjs`, #4071 — so never on the pre-existing backlog). `/frontend-review`
   is the **on-demand** brain and human entry point for the same machinery. The workflow
   MUST follow the **Claude-action workflow standard** in `.claude/agents/CLAUDE.md` —
   notably the `--allowedTools` grant, without which the gate fails open (#834/#1036).
