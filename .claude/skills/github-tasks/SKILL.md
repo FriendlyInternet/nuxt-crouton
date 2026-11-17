@@ -90,6 +90,13 @@ Write it as:
 - **Steps** — a short numbered walk-through, each step an action + the expected result. Include the **before/after contrast** where it matters ("previously the kassa still showed; now you land on the access-code screen").
 - **Test data** — any PINs, logins, or seed URLs needed to reproduce (e.g. `/test1/nl/vlaamsekermis`, helper PIN `1234`).
 
+**Plain steps (#3301)** — write each step like instructions to a friend holding your phone:
+1. **One action + what you should see** — the action on one line, `→ <what you should see>` on the next.
+2. **Start from the preview URL** — name the link, and any login or data the step needs.
+3. **Only needs what the preview has** — if the step needs data, the change seeds it, or the step says exactly how to make it in the app (e.g. "tap ⬆ and upload two songs").
+4. **No repo jargon** — no file names, script names, CLI commands or internal terms, unless explained in ≤3 plain words.
+5. **No owner homework off the phone** — no scripts, Mac or terminal. If something truly can't be tested on the preview, say so in one line instead of writing a step for it.
+
 Keep it tight and skimmable. A `mermaid` flow is welcome when the steps branch or the state change is the point — never for decoration.
 
 ### Epic acceptance rollup (the epic is the verification unit)
