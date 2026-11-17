@@ -89,3 +89,17 @@ test('T5: persona item 1 carries {{plan_checks}}; workflow renders via trusted d
   assert.doesNotMatch(pi, /\bawk\b/)
   assert.match(WORKFLOW, /issues\/\$\{PR\}\/comments\?per_page=100" > "\$D\/pr-comments\.json"/)
 })
+
+// covers: T2
+test('doc-mentions (#4064) T2: item 7 (c) fails a missing fixed line and passes Debt, none, could not run and no comment', () => {
+  const out = render([])
+  const line = out.split('\n').find((l) => l.startsWith('7. Docs:'))
+  assert.ok(line, 'rendered prompt has item 7')
+  assert.ok(line.includes('(c)'), 'item 7 has a part (c)')
+  const c = line.slice(line.indexOf('(c)'))
+  assert.ok(c.includes('<!-- doc-mentions -->'))
+  assert.match(c, /Each line marked `fixed` must be edited in the diff, or FAIL/)
+  assert.match(c, /A `Debt:` line, `none` or `could not run` passes/)
+  assert.match(c, /No such comment → this part passes/)
+  assert.doesNotMatch(c, /Debt:[^.]*FAIL/)
+})
