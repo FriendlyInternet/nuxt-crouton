@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch, needsOwnerQuestion, answerDecision } from './plan-hold.mjs'
 import { appendDecision } from './lib/decision-line.mjs'
-import { renderComment, SIGNOFF_QUESTION } from './lib/plan-verdict.mjs'
+import { renderComment, RUBRIC, SIGNOFF_QUESTION } from './lib/plan-verdict.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const person = (body) => ({ body, userType: 'User' })
@@ -168,9 +168,8 @@ test('#4082 needsOwnerQuestion: the #4036 question as one line', () => {
 
 // covers: T4
 test('#4082 needsOwnerQuestion: SIGNOFF_QUESTION verdict, and no needs-owner ⇒ empty', () => {
-  const items = Object.fromEntries(['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((id) => [id, { pass: true, evidence: 'x' }]))
-  let body
-  try { body = renderComment({ verdict: 'needs-owner', question: SIGNOFF_QUESTION, items, failed: [] }) } catch { body = `<!-- plan-review-verdict:needs-owner -->\n🔀 **Needs your call** — ${SIGNOFF_QUESTION}\n**Needs:** answer` }
+  const items = Object.fromEntries(RUBRIC.map((r) => [r.id, { pass: true, evidence: 'x' }]))
+  const body = renderComment({ verdict: 'needs-owner', question: SIGNOFF_QUESTION, items, failed: [] })
   assert.equal(needsOwnerQuestion([bot(PLAN), bot(body)]), SIGNOFF_QUESTION)
   assert.equal(needsOwnerQuestion([bot(PLAN), bot(NOGO)]), '')
   assert.equal(needsOwnerQuestion([bot(PLAN), bot(V4036), bot(PLAN), bot(GO)]), '')
