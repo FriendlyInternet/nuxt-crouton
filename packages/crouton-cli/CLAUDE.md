@@ -110,9 +110,6 @@ crouton add bookings i18n
 # Preview what would be done
 crouton add auth --dry-run
 
-# Skip migration generation
-crouton add auth --skip-migrations
-
 # Force reinstall
 crouton add auth --force
 
@@ -124,7 +121,6 @@ crouton add --list
 
 | Option | Description |
 |--------|-------------|
-| `--skip-migrations` | Skip running `npx nuxt db:generate` and `db:migrate` |
 | `--skip-install` | Skip `pnpm add` (assume already installed) |
 | `--dry-run` | Preview what would be done without making changes |
 | `--force` | Force reinstall even if already installed |
@@ -137,9 +133,9 @@ crouton add --list
 | `auth` | `@fyit/crouton-auth` | ● | Authentication with Better Auth (**bundled in core**) |
 | `i18n` | `@fyit/crouton-i18n` | ● | Multi-language support (**bundled in core**) |
 | `admin` | `@fyit/crouton-admin` | ○ | Admin dashboard (**bundled in core**) |
-| `bookings` | `@fyit/crouton-bookings` | ○ | Booking system |
+| `bookings` | `@fyit/crouton-bookings` | ● | Booking system |
 | `editor` | `@fyit/crouton-editor` | ○ | Rich text editor |
-| `assets` | `@fyit/crouton-assets` | ○ | Asset management |
+| `assets` | `@fyit/crouton-assets` | ● | Asset management |
 | `events` | `@fyit/crouton-events` | ○ | Event tracking/audit trail |
 | `flow` | `@fyit/crouton-flow` | ○ | Vue Flow graphs |
 | `email` | `@fyit/crouton-email` | ○ | Email integration |
@@ -147,7 +143,7 @@ crouton add --list
 | `ai` | `@fyit/crouton-ai` | ○ | AI integration |
 | `devtools` | `@fyit/crouton-devtools` | ○ | Nuxt Devtools |
 
-● = Has database schema (will update `server/db/schema.ts`)
+● = Has database tables (`crouton add` prints the migration command to run)
 ○ = No database tables
 **bundled in core** = Automatically included when using `@fyit/crouton-core`
 
@@ -161,9 +157,7 @@ and SSR errors like `$setup.t is not a function`.
 1. **Validates** module exists and dependencies are installed
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
-4. **Updates** `server/db/schema.ts` - adds schema export (if applicable)
-5. **Generates** migrations **directly** — drizzle-kit, no Nuxt build (see below)
-6. **Applies** migrations with `npx nuxt db:migrate` (if applicable)
+4. **Prints** the migration steps (`manualMigrationSteps()`) if the package has tables — it does not touch `server/db/schema.ts` or run migrations (#3998)
 
 #### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
@@ -173,8 +167,8 @@ same set NuxtHub globs), gates it for duplicate tables (`findDuplicateTables`,
 `duplicate-tables.ts`), then runs the app's own `db:generate` (drizzle-kit reads
 the runtime-resolving `drizzle.config.ts` and is resolved from the app dir). **No
 `nuxt build`, no `nuxt db generate`** — the old build-first dance (build →
-poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config`,
-`crouton add` (step 5), and `crouton init` (step 3).
+poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config` and
+`crouton init` (step 3).
 
 Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
 - **Duplicate table** (two DISTINCT defs share a name) → throws `DuplicateTableError`
