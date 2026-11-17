@@ -37,7 +37,7 @@ function mount(doc: Y.Doc): Window {
       plugins: [
         ySyncPlugin(doc.getXmlFragment('p')),
         yUndoPlugin(),
-        createRemoteChangePlugin({ ghostMs: 400 })
+        createRemoteChangePlugin()
       ]
     })
   })
@@ -66,7 +66,23 @@ async function pair(): Promise<[Window, Window]> {
 
 const count = (w: Window, cls: string) => w.view.dom.querySelectorAll(`.${cls}`).length
 const glows = (w: Window) => count(w, 'crouton-remote-new')
-const ghosts = (w: Window) => count(w, 'crouton-remote-gone')
+// Ghosts live next to the editor (outside its contenteditable), not inside it.
+const ghostEls = (w: Window) => [...w.view.dom.parentElement!.querySelectorAll<HTMLElement>('.crouton-remote-gone')]
+const ghosts = (w: Window) => ghostEls(w).length
+
+function setReducedMotion(on: boolean) {
+  window.matchMedia = ((q: string) => ({
+    matches: on && q.includes('prefers-reduced-motion: reduce'),
+    media: q,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => false
+  })) as unknown as typeof window.matchMedia
+}
+const realMatchMedia = window.matchMedia
 
 function typeAtEnd(w: Window, text: string, childIndex = 0) {
   const { doc } = w.view.state
@@ -89,6 +105,7 @@ function deleteChild(w: Window, childIndex: number) {
 
 afterEach(() => {
   vi.useRealTimers()
+  window.matchMedia = realMatchMedia
   while (windows.length) windows.pop()!.view.destroy()
   document.body.innerHTML = ''
 })
@@ -183,23 +200,56 @@ describe('createRemoteChangePlugin with two synced editors', () => {
   })
 
   // covers: T5
-  it('a block deleted in A leaves one fading ghost in B that is gone after 400 ms; a local delete leaves none', async () => {
+  it('a block deleted in A leaves one ghost in B, created once outside the editor and removed on animationend; a local delete leaves none', async () => {
+    setReducedMotion(false)
     const [a, b] = await pair()
     typeAtEnd(a, 'one')
     addParagraph(a, 'two')
     addParagraph(a, 'three')
-    vi.useFakeTimers()
     deleteChild(a, 1)
     expect(b.view.state.doc.childCount).toBe(2)
     expect(ghosts(a)).toBe(0)
     expect(ghosts(b)).toBe(1)
-    const ghost = b.view.dom.querySelector('.crouton-remote-gone')!
+    const ghost = ghostEls(b)[0]!
     expect(ghost.textContent).toBe('two')
-    // Sits at the old position: right before the next surviving block.
-    expect(ghost.nextElementSibling?.textContent).toBe('three')
-    vi.advanceTimersByTime(399)
+    // Outside ProseMirror's DOM, so editor re-renders can never re-insert it.
+    expect(b.view.dom.contains(ghost)).toBe(false)
+    expect(ghost.style.position).toBe('absolute')
+    expect(ghost.getAttribute('aria-hidden')).toBe('true')
+
+    // Further remote edits leave the very same ghost element in place.
+    typeAtEnd(a, ' more', 0)
+    addParagraph(a, 'four')
+    expect(ghostEls(b)).toEqual([ghost])
+    expect(ghost.isConnected).toBe(true)
+
+    // The browser's animation ends → the ghost goes.
+    ghost.dispatchEvent(new Event('animationend'))
+    expect(ghosts(b)).toBe(0)
+    expect(ghost.isConnected).toBe(false)
+  })
+
+  // covers: T5
+  it('with reduced motion a remotely deleted block just disappears — no ghost', async () => {
+    setReducedMotion(true)
+    const [a, b] = await pair()
+    typeAtEnd(a, 'one')
+    addParagraph(a, 'two')
+    deleteChild(a, 1)
+    expect(b.view.state.doc.childCount).toBe(1)
+    expect(ghosts(b)).toBe(0)
+  })
+
+  // covers: T5
+  it('a ghost whose animationend never fires is still cleaned up by the safety net', async () => {
+    setReducedMotion(false)
+    const [a, b] = await pair()
+    typeAtEnd(a, 'one')
+    addParagraph(a, 'two')
+    vi.useFakeTimers()
+    deleteChild(a, 1)
     expect(ghosts(b)).toBe(1)
-    vi.advanceTimersByTime(1)
+    vi.advanceTimersByTime(1500)
     expect(ghosts(b)).toBe(0)
   })
 

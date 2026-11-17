@@ -5,6 +5,14 @@
  * shared document, the blocks they ADD slide in and glow briefly, and the
  * blocks they REMOVE fade out as a short-lived "ghost" instead of vanishing.
  *
+ * The ghost is created ONCE, outside ProseMirror's DOM (an absolutely
+ * positioned copy laid over the spot the block occupied), and then left alone:
+ * one CSS opacity animation run by the browser, removed on `animationend`.
+ * It is deliberately not a widget decoration — y-sync rewrites the doc on every
+ * remote transaction, and re-placing a widget re-inserts its DOM, which
+ * restarts the animation and makes the fade go in visible steps.
+ * With `prefers-reduced-motion: reduce` there is no ghost: the block just goes.
+ *
  * Local typing, local inserts/deletes, local undo/redo and the first fill of
  * the editor never animate.
  *
@@ -62,17 +70,19 @@ export function classifyRemoteChange<T>(
 }
 
 export interface RemoteChangePluginOptions {
-  /** How long a removed block's ghost stays (ms). Default 400. */
-  ghostMs?: number
   /** How long the "new" class stays on an added block (ms). Default 2400. */
   glowMs?: number
+  /**
+   * Safety net only (ms): remove a ghost whose `animationend` never fires
+   * (CSS not loaded, tab hidden). Never drives the fade. Default 1500.
+   */
+  ghostFallbackMs?: number
 }
 
-interface Ghost {
-  key: string
-  dom: HTMLElement
-  /** Next surviving sibling — the ghost sits right before it (null = end of doc). */
-  anchor: unknown | null
+/** A removed block's copy + where it was on screen, captured before the DOM changed. */
+interface PendingGhost {
+  clone: HTMLElement
+  rect: { top: number, left: number, width: number, height: number }
 }
 
 interface Binding {
@@ -81,7 +91,6 @@ interface Binding {
 }
 
 interface PluginMeta {
-  dropGhosts?: string[]
   dropGlow?: unknown[]
 }
 
@@ -105,37 +114,80 @@ function nodeFor(binding: Binding, yEl: unknown): PMNode | null {
   return Array.isArray(n) ? (n[0] ?? null) : n
 }
 
-/** First block after `idx` that survived the change (null = end of doc). */
-function nextSurvivor(prev: readonly unknown[], idx: number, removedSet: ReadonlySet<unknown>, nowSet: ReadonlySet<unknown>): unknown | null {
-  for (let j = idx + 1; j < prev.length; j++) {
-    const cand = prev[j]
-    if (!removedSet.has(cand) && nowSet.has(cand)) return cand
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/** Nearest positioned ancestor (the containing block of an absolute child), or null for the page. */
+function positionedAncestor(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    if (getComputedStyle(p).position !== 'static') return p
   }
   return null
 }
 
-/** A non-editable copy of a removed block's last DOM, faded out by CSS. */
-function ghostDom(src: HTMLElement): HTMLElement {
-  const dom = document.createElement('div')
-  dom.className = 'crouton-remote-gone'
-  dom.setAttribute('contenteditable', 'false')
-  dom.setAttribute('aria-hidden', 'true')
-  dom.appendChild(src.cloneNode(true))
-  return dom
+/**
+ * Lay the ghost over the spot the removed block occupied and let CSS fade it.
+ * Appended next to the editor (outside its contenteditable), so ProseMirror
+ * never sees, moves or re-renders it.
+ */
+function mountGhost(view: EditorView, g: PendingGhost, fallbackMs: number, live: Set<HTMLElement>) {
+  const editorDom = view.dom as HTMLElement
+  const host = positionedAncestor(editorDom)
+  const parent = editorDom.parentElement ?? document.body
+  let top = g.rect.top + window.scrollY
+  let left = g.rect.left + window.scrollX
+  if (host) {
+    const h = host.getBoundingClientRect()
+    top = g.rect.top - h.top + host.scrollTop - host.clientTop
+    left = g.rect.left - h.left + host.scrollLeft - host.clientLeft
+  }
+
+  // The wrapper carries the editor's classes so the copy keeps its typography.
+  const ghost = document.createElement('div')
+  ghost.className = `${editorDom.className} crouton-remote-gone`.trim()
+  ghost.setAttribute('aria-hidden', 'true')
+  ghost.setAttribute('contenteditable', 'false')
+  Object.assign(ghost.style, {
+    position: 'absolute',
+    top: `${top}px`,
+    left: `${left}px`,
+    width: `${g.rect.width}px`,
+    height: `${g.rect.height}px`,
+    margin: '0',
+    padding: '0',
+    border: '0',
+    minHeight: '0',
+    outline: 'none'
+  })
+  g.clone.style.margin = '0'
+  ghost.appendChild(g.clone)
+
+  let fallback: ReturnType<typeof setTimeout> | undefined
+  const remove = () => {
+    if (fallback !== undefined) clearTimeout(fallback)
+    live.delete(ghost)
+    ghost.remove()
+  }
+  ghost.addEventListener('animationend', remove, { once: true })
+  ghost.addEventListener('animationcancel', remove, { once: true })
+  fallback = setTimeout(remove, fallbackMs)
+  live.add(ghost)
+  parent.appendChild(ghost)
 }
 
 export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): Plugin<DecorationSet> {
-  const ghostMs = opts.ghostMs ?? 400
   const glowMs = opts.glowMs ?? 2400
+  const ghostFallbackMs = opts.ghostFallbackMs ?? 1500
 
   // Shared between apply() and the plugin view (one plugin instance per editor).
   let prevTypes: unknown[] | null = null
   const lastDom = new Map<unknown, HTMLElement>()
   const glowing = new Set<unknown>()
-  let ghosts: Ghost[] = []
-  let ghostSeq = 0
-  // Filled in apply(), scheduled in view.update() (apply can't dispatch).
-  let pendingGhostKeys: string[] = []
+  // Filled in apply() — while the removed block is still on screen — mounted in view.update().
+  let pendingGhosts: PendingGhost[] = []
   let pendingGlow: unknown[] = []
 
   function rebuild(doc: PMNode, binding: Binding): DecorationSet {
@@ -153,11 +205,6 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
       const node = doc.nodeAt(pos)
       if (!node) continue
       decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'crouton-remote-new' }, { remoteNew: true }))
-    }
-    for (const g of ghosts) {
-      const pos = g.anchor === null ? doc.content.size : (posOf(g.anchor) ?? doc.content.size)
-      const dom = g.dom
-      decos.push(Decoration.widget(pos, () => dom, { key: g.key, side: -1, ignoreSelection: true }))
     }
     return DecorationSet.create(doc, decos)
   }
@@ -180,10 +227,8 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     for (const k of [...lastDom.keys()]) if (!seen.has(k)) lastDom.delete(k)
   }
 
-  /** A timer fired: forget the ghosts / glows it was scheduled for. */
+  /** A timer fired: forget the glows it was scheduled for. */
   function applyDrop(own: PluginMeta, tr: Transaction, decos: DecorationSet, oldState: EditorState, newState: EditorState): DecorationSet {
-    const dropKeys = new Set(own.dropGhosts ?? [])
-    ghosts = ghosts.filter(g => !dropKeys.has(g.key))
     for (const yEl of own.dropGlow ?? []) glowing.delete(yEl)
     const binding = getBinding(newState) ?? getBinding(oldState)
     return binding ? rebuild(tr.doc, binding) : decos.map(tr.mapping, tr.doc)
@@ -196,17 +241,17 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     }
   }
 
-  function addGhosts(removed: readonly unknown[], prev: readonly unknown[], nowTypes: readonly unknown[]) {
-    if (!removed.length) return
-    const removedSet = new Set(removed)
-    const nowSet = new Set(nowTypes)
+  /** Runs in apply(), before the view drops the block — so its DOM can still be measured. */
+  function addGhosts(removed: readonly unknown[]) {
+    if (!removed.length || prefersReducedMotion()) return
     for (const yEl of removed) {
       const src = lastDom.get(yEl)
-      if (!src) continue
-      const anchor = nextSurvivor(prev, prev.indexOf(yEl), removedSet, nowSet)
-      const key = `ghost-${++ghostSeq}`
-      ghosts.push({ key, dom: ghostDom(src), anchor })
-      pendingGhostKeys.push(key)
+      if (!src || !src.isConnected) continue
+      const r = src.getBoundingClientRect()
+      pendingGhosts.push({
+        clone: src.cloneNode(true) as HTMLElement,
+        rect: { top: r.top, left: r.left, width: r.width, height: r.height }
+      })
     }
   }
 
@@ -215,7 +260,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     if (meta.binding) {
       // First fill / re-bind: start fresh, animate nothing.
       glowing.clear()
-      ghosts = []
+      pendingGhosts = []
       prevTypes = (meta.binding as Binding).type.toArray()
       return DecorationSet.empty
     }
@@ -224,7 +269,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     const decision = classifyRemoteChange(meta, prevTypes, nowTypes)
     if (!decision.skip) {
       markAdded(decision.added)
-      addGhosts(decision.removed, prevTypes ?? [], nowTypes)
+      addGhosts(decision.removed)
     }
     prevTypes = nowTypes
     // y-sync replaces the whole doc range, so mapping would drop everything — rebuild.
@@ -237,7 +282,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
       init: () => DecorationSet.empty,
       apply(tr: Transaction, decos: DecorationSet, oldState: EditorState, newState: EditorState) {
         const own = tr.getMeta(remoteChangeHighlightKey) as PluginMeta | undefined
-        if (own?.dropGhosts || own?.dropGlow) return applyDrop(own, tr, decos, oldState, newState)
+        if (own?.dropGlow) return applyDrop(own, tr, decos, oldState, newState)
 
         const meta = tr.getMeta(ySyncPluginKey) as YSyncMeta | undefined
         if (!meta || !meta.isChangeOrigin) return decos.map(tr.mapping, tr.doc)
@@ -255,6 +300,7 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
     },
     view(view) {
       const timers = new Set<ReturnType<typeof setTimeout>>()
+      const liveGhosts = new Set<HTMLElement>()
       const schedule = (ms: number, meta: PluginMeta) => {
         const t = setTimeout(() => {
           timers.delete(t)
@@ -264,9 +310,9 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
         timers.add(t)
       }
       const flush = () => {
-        if (pendingGhostKeys.length) {
-          schedule(ghostMs, { dropGhosts: pendingGhostKeys })
-          pendingGhostKeys = []
+        if (pendingGhosts.length) {
+          for (const g of pendingGhosts) mountGhost(view, g, ghostFallbackMs, liveGhosts)
+          pendingGhosts = []
         }
         if (pendingGlow.length) {
           schedule(glowMs, { dropGlow: pendingGlow })
@@ -286,6 +332,8 @@ export function createRemoteChangePlugin(opts: RemoteChangePluginOptions = {}): 
         destroy() {
           for (const t of timers) clearTimeout(t)
           timers.clear()
+          for (const g of [...liveGhosts]) g.dispatchEvent(new Event('animationcancel'))
+          liveGhosts.clear()
         }
       }
     }

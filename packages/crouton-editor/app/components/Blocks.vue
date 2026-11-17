@@ -633,11 +633,12 @@ defineExpose({
   from { background-color: color-mix(in oklab, var(--ui-primary) 8%, transparent) }
   to { background-color: transparent }
 }
-.crouton-remote-gone { animation: crouton-remote-out .4s ease-in both; overflow: hidden; pointer-events: none }
-@keyframes crouton-remote-out { from { opacity: 1; max-height: 40rem } to { opacity: 0; max-height: 0; margin: 0 } }
-@keyframes crouton-remote-fade { from { opacity: 1 } to { opacity: 0 } }
+/* The removed-block ghost: created once, one browser-run fade, removed on animationend */
+.crouton-remote-gone { animation: crouton-remote-out .3s ease-out both; will-change: opacity; pointer-events: none; overflow: hidden; z-index: 1 }
+@keyframes crouton-remote-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-4px) } }
 @media (prefers-reduced-motion: reduce) {
   .crouton-remote-new { animation: crouton-remote-glow 1.5s ease-out both }
-  .crouton-remote-gone { animation: crouton-remote-fade .4s ease-in both }
+  /* No ghost is created under reduced motion; this only guards a stray one */
+  .crouton-remote-gone { display: none }
 }
 </style>
