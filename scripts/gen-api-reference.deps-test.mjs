@@ -229,3 +229,94 @@ test('every package with a manifest ships docs/llms.txt and its components.md', 
     assert.equal(files.includes('docs/components.md'), existsSync(`packages/${p}/docs/components.md`), `${p}: files and docs/components.md disagree`)
   }
 })
+
+// ---------- doc-mentions (#4053) — these tests edit no tracked file ----------
+const docMentions = () => import('./doc-mentions.mjs')
+const mentionsCli = (...args) => spawnSync('node', ['scripts/doc-mentions.mjs', ...args], { encoding: 'utf8' })
+
+// covers: T1
+test('doc-mentions namesOf reads component/composable headings and dotted or capitalised config keys', async () => {
+  const { namesOf } = await docMentions()
+  const names = namesOf({
+    'components.md': '# Components\n\n## CroutonTable\n\n| Prop | Type |\n| --- | --- |\n| `page` | `number` |\n\n## Components without props\n\n- `CroutonForm`\n- `CroutonLoading`\n',
+    'composables.md': '# Composables\n\n## useCollectionExport\n\n## Something else\n',
+    'config-keys.md': '## crouton-sales\n\n| Key | Type |\n| --- | --- |\n| `print.enabled` | `boolean` |\n| `bookingModes` | `string[]` |\n| `style` | `string` |\n'
+  })
+  for (const n of ['CroutonTable', 'CroutonForm', 'CroutonLoading', 'useCollectionExport', 'print.enabled', 'bookingModes']) assert.ok(names.has(n), `missing ${n}`)
+  for (const n of ['page', 'style', 'Components without props', 'Components', 'Something else', 'crouton-sales', 'Key']) assert.ok(!names.has(n), `should not include ${n}`)
+})
+
+// covers: T1
+test('doc-mentions goneNames: a moved name and a name still registered elsewhere are not gone', async () => {
+  const { namesOf, goneNames } = await docMentions()
+  const { registeredComponentsOf } = await import('./gen-api-reference.mjs')
+  const existing = registeredComponentsOf()
+  assert.ok(existing.has('CroutonEditorSimple'))
+  const base = namesOf({ 'components.md': '## CroutonEditorSimple\n\n## CroutonReallyGone\n\n## Components without props\n\n- `CroutonShift`\n' })
+  // CroutonShift moved from components.md to composables.md (a heading there, under one name set across pages)
+  const now = namesOf({ 'components.md': '## CroutonOther\n', 'composables.md': '## useX\n' })
+  now.add('CroutonShift')
+  assert.deepEqual(goneNames(base, now, existing), ['CroutonReallyGone'])
+  const movedBase = namesOf({ 'components.md': '## Components without props\n\n- `useMovedThing`\n' })
+  const movedNow = namesOf({ 'composables.md': '## useMovedThing\n' })
+  assert.ok(movedBase.has('useMovedThing') && movedNow.has('useMovedThing'))
+  assert.deepEqual(goneNames(movedBase, movedNow, new Set()), [])
+})
+
+// covers: T1
+test('doc-mentions mentions matches whole names only, on the real crouton-core notes too', async () => {
+  const { mentions } = await docMentions()
+  const file = 'packages/crouton-core/CLAUDE.md'
+  const hits = mentions(new Set(['useCollectionExport']), [{ file, text: readFileSync(file, 'utf8') }])
+  assert.ok(hits.length >= 1, 'expected a hit in crouton-core notes')
+  for (const h of hits) { assert.equal(h.file, file); assert.ok(h.text.includes('useCollectionExport')); assert.ok(h.line >= 1) }
+  const doc = [{ file: 'x.md', text: 'useCollectionExport()\nuse useCollection-x here\n```\nconst a = useCollection()\n```\ncroutonSales.print.enabled: true\nprintXenabled\n' }]
+  assert.deepEqual(mentions(new Set(['useCollection']), doc).map(h => h.line), [4])
+  assert.deepEqual(mentions(new Set(['print.enabled']), doc).map(h => h.line), [6])
+})
+
+// covers: T2
+test('doc-mentions CLI reports a name gone since a throwaway base commit', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const git = (args, opts = {}) => {
+    const r = spawnSync('git', args, { encoding: 'utf8', ...opts })
+    assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`)
+    return r.stdout.trim()
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'doc-mentions-'))
+  try {
+    const page = 'docs/content/8.api-reference/composables.md'
+    const blob = git(['hash-object', '-w', '--stdin'], { input: readFileSync(page, 'utf8').trimEnd() + '\n\n## useNoSuchComposableXyz\n' })
+    const env = { ...process.env, GIT_INDEX_FILE: join(dir, 'index') }
+    git(['read-tree', 'HEAD'], { env })
+    git(['update-index', '--cacheinfo', `100644,${blob},${page}`], { env })
+    const tree = git(['write-tree'], { env })
+    const sha = git(['commit-tree', tree, '-p', 'HEAD', '-m', 'throwaway doc-mentions base'], {
+      env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
+    })
+    const r = mentionsCli('--base', sha)
+    expectStatus(r, 0)
+    assert.match(r.stdout, /doc-mentions: gone: useNoSuchComposableXyz/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// covers: T2
+test('doc-mentions CLI --base HEAD prints none', () => {
+  const r = mentionsCli('--base', 'HEAD')
+  expectStatus(r, 0)
+  assert.match(r.stdout, /doc-mentions: none/)
+})
+
+// covers: T2
+test('doc-mentions CLI exits 2 on a bad base without printing none', () => {
+  const r = mentionsCli('--base', 'no-such-ref-xyz')
+  expectStatus(r, 2)
+  assert.doesNotMatch(r.stdout + r.stderr, /none/)
+  const noFlag = mentionsCli()
+  expectStatus(noFlag, 2)
+  assert.doesNotMatch(noFlag.stdout + noFlag.stderr, /none/)
+})
