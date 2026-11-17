@@ -57,6 +57,15 @@ export default defineNuxtModule<CroutonMcpToolkitConfig>({
     )
     if (!plan.enabled) return
 
+    // nuxt-ai-ready (every crouton app has it via @nuxtjs/seo) adds its own site tools
+    // to @nuxtjs/mcp-toolkit once it is installed, and those need its database
+    // (drizzle-orm ^1). Default them off so turning the toolkit on never needs that
+    // database; an app that wants them sets `aiReady.mcp` itself (#3982).
+    const options = nuxt.options as unknown as { aiReady?: false | Record<string, unknown> }
+    if (options.aiReady !== false) {
+      options.aiReady = defu(options.aiReady, { mcp: { tools: false, resources: false } })
+    }
+
     // Install @nuxtjs/mcp-toolkit
     // The toolkit auto-discovers tools/resources/prompts from ALL Nuxt layers
     // via getLayerDirectories(). Since our files are at server/mcp/{tools,resources,prompts}/,

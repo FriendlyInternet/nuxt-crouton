@@ -172,7 +172,8 @@ async function updateViaWorker<T>(
   const res = await doFetch(updateUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
-    body: Y.encodeStateAsUpdate(doc, before)
+    // Yjs types it as Uint8Array<ArrayBufferLike>; it is a fresh ArrayBuffer-backed array
+    body: Y.encodeStateAsUpdate(doc, before) as Uint8Array<ArrayBuffer>
   })
   if (!res.ok) return { doc: null, error: `collab worker /update answered ${res.status}` }
   return { doc, result, error: null }
