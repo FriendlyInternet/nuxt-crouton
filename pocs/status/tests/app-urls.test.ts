@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { discoverApps, outFile } from '../scripts/gen-app-urls.mjs'
 import { stagingUrlFor } from '../server/utils/app-urls'
 
+// covers: T2
 describe('app-urls discovery', () => {
   it('resolves gallery to its staging URL', () => {
     expect(stagingUrlFor('gallery')).toBe('https://gallery-staging.pmcp.dev')

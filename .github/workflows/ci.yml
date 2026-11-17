@@ -846,6 +846,9 @@ jobs:
       - name: Build better-sqlite3's native binding
         if: steps.plan.outputs.needs_install == 'true'
         run: pnpm rebuild better-sqlite3
+      # A plan Test line that starts a Nuxt app (nuxt prepare in a POC) needs every @fyit/* dist (#4074).
+      - uses: ./.github/actions/warm-packages
+        if: steps.plan.outputs.needs_install == 'true'
       - name: Run the plan's Test lines (no token)
         if: steps.plan.outputs.has_plan == 'true'
         run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"

@@ -203,9 +203,10 @@ export interface TeamsConfig {
   autoCreateOnSignup?: boolean
 
   /**
-   * Default team slug that all users join on signup
+   * Default team slug that every user joins — on sign-up and on every sign-in
    *
-   * When set, all new users are automatically added to this team.
+   * When set, users are added to this team when they sign up and whenever they
+   * sign in (accounts made before the setting included).
    * The team is auto-created on first boot if it doesn't exist.
    *
    * Use case: Company apps where everyone belongs to one team.
