@@ -37,7 +37,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -424,11 +424,10 @@ async function isLoading(page) {
 }
 
 /** Wait (≤30s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699, #4134). Returns early on Nuxt's loader. Best-effort: a miss falls through to the rejection checks. */
-async function waitForHydration(page) {
-  // Nuxt's dev loader markers: give up early on these so a real loader is reloaded after ~3s
-  // as before (#2526), instead of first waiting out the 30s bound (#4134). Kept inside the
-  // function: main() runs at module top level, before a module-level const would initialise.
-  const loaderMarkers = ['__nuxt_loading__', 'nuxt is loading', 'nuxt dev server is starting', 'generating types']
+export async function waitForHydration(page, { timeout = 30000 } = {}) {
+  // Gives up early on Nuxt's loader markers (the same list looksLikeLoadingScreen uses) so a
+  // real loader is reloaded after ~3s as before (#2526), not after the 30s bound (#4134).
+  // An imported binding is initialised before main() runs, so there is no TDZ issue.
   await page.waitForFunction((markers) => {
     const html = (document.documentElement?.outerHTML || '').toLowerCase()
     if (markers.some(m => html.includes(m))) return true
@@ -436,7 +435,7 @@ async function waitForHydration(page) {
     if (!root || (root.innerText || '').trim().length <= 50) return false
     const nuxt = window.useNuxtApp?.()
     return nuxt ? !nuxt.isHydrating : true
-  }, loaderMarkers, { timeout: 30000 }).catch(() => {})
+  }, LOADING_MARKERS, { timeout }).catch(() => {})
 }
 
 /**

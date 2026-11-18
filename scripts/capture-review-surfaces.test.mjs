@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration } from './capture-review-surfaces.mjs'
+import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -363,6 +364,7 @@ const SHELL = { html: '<div id="__nuxt">RT Pages Workspace Drafts</div>', text: 
 const LOADER = { html: '<div id="__nuxt_loading__">loading</div>', text: 'Loading' }
 const FULL = { html: '<div id="__nuxt">…</div>', text: 'x'.repeat(400) }
 
+// covers: T1
 test('settlePage: a 25-char SSR shell that draws 5s later settles with no reload (#4134)', async () => {
   const f = fakeSettle({ states: [SHELL], drawAfterMs: 5000 })
   const r = await settlePage(f.page, f.opts)
@@ -371,6 +373,7 @@ test('settlePage: a 25-char SSR shell that draws 5s later settles with no reload
   assert.equal(f.clock.t, 5000)
 })
 
+// covers: T2
 test('settlePage: a page stuck on Nuxt\'s loader is still loading at the deadline, within budget (#4134)', async () => {
   const f = fakeSettle({ states: [LOADER] })
   const r = await settlePage(f.page, f.opts)
@@ -380,6 +383,7 @@ test('settlePage: a page stuck on Nuxt\'s loader is still loading at the deadlin
   assert.ok(f.clock.t <= f.opts.deadline + 3000, `clock ${f.clock.t} past deadline + one iteration`)
 })
 
+// covers: T3
 test('settlePage: a cold-start loader then real content is captured after one reload (#2526)', async () => {
   const f = fakeSettle({ states: [LOADER, FULL] })
   const r = await settlePage(f.page, f.opts)
@@ -388,6 +392,7 @@ test('settlePage: a cold-start loader then real content is captured after one re
   assert.equal(r.status, 201) // taken from the reload response
 })
 
+// covers: T4
 test('settlePage: a server-rendered 400-char page settles at once with no sleep', async () => {
   const f = fakeSettle({ states: [FULL] })
   const r = await settlePage(f.page, f.opts)
@@ -395,4 +400,44 @@ test('settlePage: a server-rendered 400-char page settles at once with no sleep'
   assert.equal(r.reloads, 0)
   assert.equal(r.status, 200)
   assert.deepEqual(f.sleeps, [])
+})
+
+// The REAL waitForHydration predicate, run once by a fake page.waitForFunction against a
+// stubbed globalThis.document/window (the predicate is self-contained, as Playwright needs).
+async function runHydrationPredicate({ outerHTML, rootText, nuxtApp }) {
+  const saved = { document: globalThis.document, window: globalThis.window }
+  const call = {}
+  globalThis.document = {
+    documentElement: { outerHTML },
+    querySelector: sel => (sel === '#__nuxt' && rootText != null ? { innerText: rootText } : null)
+  }
+  globalThis.window = nuxtApp ? { useNuxtApp: () => nuxtApp } : {}
+  try {
+    const page = {
+      waitForFunction: async (fn, arg, opts) => {
+        call.arg = arg
+        call.opts = opts
+        call.result = fn(arg)
+      }
+    }
+    await waitForHydration(page)
+  } finally {
+    globalThis.document = saved.document
+    globalThis.window = saved.window
+  }
+  return call
+}
+
+// covers: T5
+test('waitForHydration: real predicate exits early on a loader, waits on a short shell, passes drawn hydrated content; 30s bound (#4134)', async () => {
+  const loader = await runHydrationPredicate({ outerHTML: '<html><body><div id="__nuxt_loading__"></div></body></html>', rootText: null })
+  assert.ok(loader.result, 'a loader marker stops the wait at once')
+  assert.deepEqual(loader.arg, LOADING_MARKERS, 'the shared marker list is passed in, not a copy')
+  assert.equal(loader.opts.timeout, 30000)
+
+  const shell = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'RT\nPages Workspace\nDrafts', nuxtApp: { isHydrating: true } })
+  assert.equal(shell.result, false, 'a 25-char #__nuxt keeps waiting')
+
+  const drawn = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'x'.repeat(60), nuxtApp: { isHydrating: false } })
+  assert.equal(drawn.result, true, 'a 60-char hydrated #__nuxt is done')
 })
