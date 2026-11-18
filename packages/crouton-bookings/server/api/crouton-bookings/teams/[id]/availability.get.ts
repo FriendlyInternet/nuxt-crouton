@@ -11,14 +11,23 @@
  *
  * Response format:
  * {
- *   "2024-01-15": { bookedSlots: ["slot-1", "slot-2"], bookedCount: 2 },
- *   "2024-01-16": { bookedSlots: ["all-day"], bookedCount: 1 }
+ *   "2024-01-15": {
+ *     bookedSlots: ["slot-1", "slot-2"], bookedCount: 2,
+ *     bookings: [{ product: "p1", quantity: 1, slotIds: ["slot-1"] }, { product: "p1", quantity: 1, slotIds: ["slot-2"] }]
+ *   },
+ *   "2024-01-16": { bookedSlots: ["all-day"], bookedCount: 1, bookings: [{ product: null, quantity: 1, slotIds: ["all-day"] }] }
  * }
+ *
+ * `bookings` (#4109): one row per non-cancelled booking — `product` (null = old
+ * row, counts against every product), `quantity` (min 1) and `slotIds` (a full
+ * day is `["all-day"]`). Feed it to `leftFor` / `productLeft` / `slotStatuses`.
  */
 import { eq, and, gte, lte, ne } from 'drizzle-orm'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
+import { FULL_DAY_ID } from '../../../../../app/utils/full-day'
+import type { AvailabilityBooking } from '../../../../../app/types/booking'
 
 export default defineEventHandler(async (event) => {
   // Public endpoint — availability data is not sensitive and must be visible
@@ -88,6 +97,7 @@ export default defineEventHandler(async (event) => {
       date: bookingsBookings.date,
       slot: bookingsBookings.slot,
       quantity: bookingsBookings.quantity,
+      product: bookingsBookings.product,
       group: bookingsBookings.group,
     })
     .from(bookingsBookings)
@@ -98,6 +108,7 @@ export default defineEventHandler(async (event) => {
     bookedSlots: string[]
     bookedCount: number
     bookedGroupSlots?: Record<string, string[]>
+    bookings: AvailabilityBooking[]
   }> = {}
 
   for (const booking of bookings) {
@@ -107,7 +118,7 @@ export default defineEventHandler(async (event) => {
     const dateKey = toDateKey(bookingDate)
 
     if (!availabilityData[dateKey]) {
-      availabilityData[dateKey] = { bookedSlots: [], bookedCount: 0 }
+      availabilityData[dateKey] = { bookedSlots: [], bookedCount: 0, bookings: [] }
     }
 
     // Parse slot (can be JSON string or array)
@@ -125,6 +136,14 @@ export default defineEventHandler(async (event) => {
     }
 
     availabilityData[dateKey].bookedSlots.push(...slotIds)
+    // Per-booking rows for the per-product rule; bookedSlots above keeps its old shape
+    availabilityData[dateKey].bookings.push({
+      product: (booking.product as string | null | undefined) ?? null,
+      quantity: Math.max(1, booking.quantity ?? 1),
+      slotIds: !Array.isArray(slotIds) || slotIds.length === 0 || slotIds.includes(FULL_DAY_ID)
+        ? [FULL_DAY_ID]
+        : slotIds.map(String),
+    })
     availabilityData[dateKey].bookedCount += (booking.quantity ?? 1)
 
     // Track which groups booked which slots (for group uniqueness checks)
