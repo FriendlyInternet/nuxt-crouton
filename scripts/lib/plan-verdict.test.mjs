@@ -4,7 +4,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { holdOrRetry, parseVerdict, precheck, planNotes, decide, renderComment } from './plan-verdict.mjs'
+import { holdOrRetry, parseVerdict, precheck, planNotes, decide, renderComment, QUESTION_RECORD, REJECTED_RECORD, SIGNOFF_QUESTION } from './plan-verdict.mjs'
+import { readRecord } from './reply-record.mjs'
+import { needsOwnerQuestion } from '../plan-hold.mjs'
 
 const fx = (n) => readFileSync(new URL(`../fixtures/plan-review/${n}`, import.meta.url), 'utf8')
 
@@ -176,4 +178,60 @@ test('#4082 an answered design sign-off ends the hold: Needs owner opening `no` 
   assert.equal(pendingSignoff(answered), false)
   const open = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off')
   assert.equal(pendingSignoff(open), true)
+})
+
+const RECORD_LINE = /^<!-- reply-record:v1 .*-->$/
+const withoutRecord = (c) => c.split('\n').filter((l) => !RECORD_LINE.test(l)).join('\n')
+const countRecords = (c) => c.split('reply-record:v1').length - 1
+
+// covers: T5 (#4113)
+test('#4113 a needs-owner hold carries one plan-question record on line 3; needsOwnerQuestion still reads it', () => {
+  const d = decide(fx('clean.plan.md'), fx('owner.verdict.md'))
+  const body = renderComment(d)
+  assert.deepEqual(readRecord(body), QUESTION_RECORD(d.question))
+  assert.equal(readRecord(body).kind, 'plan-question')
+  assert.equal(countRecords(body), 1)
+  assert.match(body.split('\n')[2], RECORD_LINE)
+  assert.match(body.split('\n')[3], /^> 🤖 \*\*pi\.dev harness\*\*/)
+  assert.ok(needsOwnerQuestion([{ userType: 'Bot', body }]).startsWith('Drop the legacy'))
+})
+
+// covers: T6 (#4113)
+test('#4113 only the final no-go carries a plan-rejected record; round-1 no-go and go carry none, visible text unchanged', () => {
+  const j = decide(fx('contradicts-record.plan.md'), fx('contradicts-record.verdict.md'))
+  const final = renderComment(j, { round: 2 })
+  assert.match(final, /Held for you/)
+  assert.deepEqual(readRecord(final), REJECTED_RECORD)
+  assert.deepEqual(readRecord(final), {
+    kind: 'plan-rejected',
+    question: 'override the plan review?',
+    accepts: ['ok: <reason>', 'approval', 'other'],
+    starts: { 'ok: <reason>': 'approve-plan', approval: 'plan-needs-reason', other: 'replan-with-feedback' },
+  })
+  assert.equal(countRecords(final), 1)
+  assert.match(final.split('\n')[2], RECORD_LINE)
+  const lines = withoutRecord(final).split('\n')
+  assert.deepEqual(lines.slice(0, 2), ['<!-- plan-review:v1 -->', '<!-- plan-review-verdict:no-go -->'])
+  assert.match(lines[2], /^> 🤖 /)
+  const r1 = renderComment(j, { round: 1 })
+  assert.match(r1, /Plan sent back/)
+  assert.equal(countRecords(r1), 0)
+  assert.equal(readRecord(r1), null)
+  const go = renderComment(decide(fx('clean.plan.md'), fx('pass.verdict.md')), { model: 'x' })
+  assert.equal(countRecords(go), 0)
+  assert.equal(readRecord(go), null)
+  assert.equal(withoutRecord(r1), r1)
+})
+
+// covers: T7 (#4113)
+test('#4113 a pending design sign-off hold carries the plan-question record with SIGNOFF_QUESTION', () => {
+  const plan = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off by ticket instruction, still open')
+  const d = decide(plan, fx('pass.verdict.md'))
+  assert.equal(d.question, SIGNOFF_QUESTION)
+  const body = renderComment(d, { round: 2 })
+  const rec = readRecord(body)
+  assert.equal(rec.kind, 'plan-question')
+  assert.equal(rec.question, SIGNOFF_QUESTION)
+  assert.deepEqual(rec, QUESTION_RECORD(SIGNOFF_QUESTION))
+  assert.equal(countRecords(body), 1)
 })

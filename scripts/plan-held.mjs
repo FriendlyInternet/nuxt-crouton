@@ -18,6 +18,7 @@
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { isRejectedTwice } from './plan-hold.mjs'
+import { openRecord } from './lib/reply-record.mjs'
 import { parseOverride, decisionLine, appendDecision } from './lib/decision-line.mjs'
 import { handoffGuard as defaultHandoffGuard } from './handoff-exec.mjs'
 
@@ -83,14 +84,17 @@ export function approvedPromptSection({ planId, planText, issue, repo = process.
 const labelNames = (labels = []) => labels.map((l) => (typeof l === 'string' ? l : l?.name))
 
 /**
- * The route step's `planHeld` fact: is this issue held after two reviewer rejections?
+ * The route step's facts from one comments read (#4145): `planHeld` — held after two reviewer
+ * rejections? — and `record` — the open reply record (reply-record.mjs openRecord), or null.
  * No API call unless the issue is a plain issue carrying `status:blocked`.
+ * @returns {Promise<{planHeld: boolean, record: object|null}>}
  */
-export async function planHeldFor({ github, repo, issue }) {
+export async function holdFacts({ github, repo, issue }) {
   const labels = labelNames(issue?.labels)
-  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return false
-  const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
-  return isRejectedTwice({ comments: comments.map((c) => ({ body: c.body, userType: c.user && c.user.type })), labels })
+  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return { planHeld: false, record: null }
+  const raw = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
+  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type }))
+  return { planHeld: isRejectedTwice({ comments, labels }), record: openRecord({ comments, labels }) }
 }
 
 /** The parent epic of a ticket: `epic=N` in the hidden marker, else the GitHub sub-issue parent (0 = none). */
