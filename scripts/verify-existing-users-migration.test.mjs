@@ -19,7 +19,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FOLDERS = [
   'apps/kassa', 'apps/velo',
   'pocs/alexdeforce', 'pocs/booking-demo', 'pocs/crate', 'pocs/crouton-builder', 'pocs/gallery',
-  'pocs/kvr', 'pocs/notes', 'pocs/pins', 'pocs/sintlukas', 'pocs/snippets', 'pocs/status',
+  'pocs/kdm', 'pocs/kvr', 'pocs/notes', 'pocs/pins', 'pocs/sintlukas', 'pocs/snippets', 'pocs/status',
   'fixtures/minimal', 'fixtures/with-assets', 'fixtures/with-bookings', 'fixtures/with-collab',
   'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-pages', 'fixtures/with-sales'
 ]
