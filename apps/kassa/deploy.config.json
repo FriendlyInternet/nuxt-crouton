@@ -63,6 +63,9 @@
         "path": "/admin/test1/sales/devices"
       },
       {
+        "path": "/api/teams/{teamId}/domains"
+      },
+      {
         "path": "/api/webhooks/resend",
         "expectStatus": 405
       },
