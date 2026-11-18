@@ -12,7 +12,7 @@
 import { isApproval, isBareApproval } from './approval.mjs'
 import { markerValue } from './lib/marker.mjs'
 import { OWNERS, decisionLine } from './lib/decision-line.mjs'
-import { VERDICT, openRecord } from './lib/reply-record.mjs'
+import { VERDICT, openRecord, readReply } from './lib/reply-record.mjs'
 
 // `ok: <reason>` is an approval with a reason (the #3041 override), never a re-plan.
 const OK_REASON = /^[ \t\r\n]*ok[ \t]*:/i
@@ -96,8 +96,10 @@ export function recordDecision({ record, starts, date, url, authorAssociation, u
 
 /**
  * The re-plan step's decision (#4145). With the router's `starts` set it follows it (no second
- * reading of the reply); with none it is today's `isPlanHold` / `answerDecision`. `line` only
- * matters when `replan` is true.
+ * reading of the reply) — but only while the record is still open and still reads the reply the
+ * same way: the resume job can run minutes after the router, and in between the plan may be
+ * approved or a newer verdict posted. Otherwise (and with no `starts`) it is today's
+ * `isPlanHold` / `answerDecision`. `line` only matters when `replan` is true.
  * @param {{starts?: string, comments?: object[], labels?: string[], comment?: {body?: string, date?: string, url?: string, authorAssociation?: string, userType?: string}}} input
  * @returns {{replan: boolean, line: string|null, followed: boolean}}
  */
@@ -105,7 +107,9 @@ export function replanFromReply({ starts, comments, labels = [], comment = {} } 
   const { body = '', date, url, authorAssociation, userType } = comment
   if (starts === 'replan-with-yes' || starts === 'replan-with-feedback') {
     const record = openRecord({ comments, labels })
-    return { replan: true, line: recordDecision({ record, starts, date, url, authorAssociation, userType }), followed: true }
+    if (record && readReply(record, { body, authorAssociation, userType }).starts === starts) {
+      return { replan: true, line: recordDecision({ record, starts, date, url, authorAssociation, userType }), followed: true }
+    }
   }
   return {
     replan: isPlanHold({ comments, labels, replyBody: body }),

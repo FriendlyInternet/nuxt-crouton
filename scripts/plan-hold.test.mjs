@@ -251,8 +251,38 @@ test('#4145 replanFromReply: with starts it re-plans without re-reading the repl
   assert.deepEqual(replanFromReply({ starts: 'replan-with-feedback', comments: T4036R(), labels: BLOCKED, comment: reply('ok — build it') }), { replan: true, line: null, followed: true })
   // `ok:` on a needs-owner question reads as `other` → replan-with-feedback: no yes line (record-decision owns `ok: <reason>`).
   assert.deepEqual(replanFromReply({ starts: 'replan-with-feedback', comments: T4036R(), labels: BLOCKED, comment: reply('ok:') }), { replan: true, line: null, followed: true })
-  // isPlanHold would say no here (twice-rejected + approval); the router's starts wins.
-  assert.equal(replanFromReply({ starts: 'replan-with-feedback', comments: heldThread(), labels: BLOCKED, comment: reply('ok') }).replan, true)
+  // No record on the newest verdict ⇒ starts is not followed: today's isPlanHold (twice-rejected + approval ⇒ no).
+  assert.deepEqual(replanFromReply({ starts: 'replan-with-feedback', comments: heldThread(), labels: BLOCKED, comment: reply('ok') }), { replan: false, line: null, followed: false })
+})
+
+const today = (comments, labels, body) => ({
+  replan: isPlanHold({ comments, labels, replyBody: body }),
+  line: answerDecision({ comments, replyBody: body, ...reply(body) }),
+  followed: false,
+})
+
+// covers: T3
+test('#4145 replanFromReply: plan approved since the router read the reply ⇒ same as today', () => {
+  const labels = ['status:blocked', 'plan:approved']
+  const r = replanFromReply({ starts: 'replan-with-yes', comments: T4036R(), labels, comment: reply('ok') })
+  assert.deepEqual(r, today(T4036R(), labels, 'ok'))
+  assert.deepEqual(r, { replan: false, line: ans(), followed: false })
+})
+
+// covers: T3
+test('#4145 replanFromReply: newest verdict carries no record ⇒ today\'s result', () => {
+  const comments = [...T4036R(), bot(PLAN), bot(NOGO)]
+  const r = replanFromReply({ starts: 'replan-with-yes', comments, labels: BLOCKED, comment: reply('ok') })
+  assert.deepEqual(r, today(comments, BLOCKED, 'ok'))
+  assert.equal(r.followed, false)
+})
+
+// covers: T3
+test('#4145 replanFromReply: the record reads the reply as replan-with-feedback ⇒ today\'s result', () => {
+  const body = 'No — keep the existing schema'
+  const r = replanFromReply({ starts: 'replan-with-yes', comments: T4036R(), labels: BLOCKED, comment: reply(body) })
+  assert.deepEqual(r, today(T4036R(), BLOCKED, body))
+  assert.deepEqual(r, { replan: true, line: null, followed: false })
 })
 
 // covers: T3
