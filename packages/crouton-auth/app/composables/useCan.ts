@@ -23,21 +23,12 @@
  * Do NOT use this inside route middleware: it reads `false` while loading, so a
  * guard would refuse everyone on the first pass. Use the `can` middleware.
  */
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef } from 'vue'
+import { useCanAnswers } from './useCanAnswers'
 
 export interface UseCanOptions {
   /** false → only fetch in the browser (for cached public pages). Default true. */
   server?: boolean
-}
-
-/**
- * Every answer any `useCan` on the page has received, keyed by the team id it
- * asked for, then action (#4105). `useTeam()` reads `team:manage` from here so
- * its legacy flags follow the real answer without calling `useCan` (which would
- * loop: useCan → useTeamContext → useTeam).
- */
-export function useCanAnswers(): Ref<Record<string, Record<string, boolean>>> {
-  return useState<Record<string, Record<string, boolean>>>('crouton-can-answers', () => ({}))
 }
 
 export function useCan(action: string | string[], options: UseCanOptions = {}): ComputedRef<boolean> {

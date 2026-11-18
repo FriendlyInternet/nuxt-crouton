@@ -11,7 +11,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, computed, isRef, watch, type Ref, type WatchSource } from 'vue'
 
-import { useCan, useCanAnswers } from '../../../app/composables/useCan'
+import { useCanAnswers } from '../../../app/composables/useCanAnswers'
+import { useCan } from '../../../app/composables/useCan'
 
 const requestFetch = vi.fn()
 const plainFetch = vi.fn()

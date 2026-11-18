@@ -23,7 +23,7 @@ import type { Team, MemberRole, Member, MemberWithUser } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { mapOrganizationToTeam, isSuperAdminUser } from '../../shared/utils/auth'
 import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
-import { useCanAnswers } from './useCan'
+import { useCanAnswers } from './useCanAnswers'
 
 export interface CreateTeamData {
   name: string

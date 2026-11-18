@@ -13,6 +13,7 @@
  * NOT use `useCan()`: that computed reads `false` while loading, so a guard
  * built on it would refuse everyone on the first pass.
  */
+import type { Ref } from 'vue'
 import type { RouteLocationNormalized } from 'vue-router'
 
 interface RouteLike {
@@ -39,6 +40,49 @@ function statusOf(e: unknown): number | undefined {
   return err?.statusCode ?? err?.status ?? err?.response?.status
 }
 
+/** Wait for the session to load if pending. */
+async function waitForSession(isPending: Ref<boolean>) {
+  if (!isPending.value) return
+  await new Promise<void>((resolve) => {
+    const stop = watch(isPending, (val) => {
+      if (!val) {
+        stop()
+        resolve()
+      }
+    })
+  })
+}
+
+/**
+ * Switch to the team (client only — setActive is a session mutation). For a
+ * super admin any failure is harmless (they may not be a member — the page sets
+ * context via API calls); for everyone else only a 404 (team not in the active
+ * session) is, anything else propagates.
+ */
+async function switchTeamOnClient(switchTeamBySlug: (slug: string) => Promise<unknown>, teamSlug: string, superAdmin: boolean) {
+  if (!import.meta.client) return
+  try {
+    await switchTeamBySlug(teamSlug)
+  } catch (e) {
+    if (!superAdmin && statusOf(e) !== 404) throw e
+  }
+}
+
+/** Ask the can endpoint; 403 → not a member, any other failure → 401. */
+async function fetchAllowed(teamSlug: string, actions: string[]): Promise<Record<string, boolean>> {
+  try {
+    return await useRequestFetch()<Record<string, boolean>>(`/api/teams/${teamSlug}/can`, {
+      query: { actions: actions.join(',') }
+    })
+  } catch (e) {
+    if (statusOf(e) === 403) {
+      throw createError({ status: 403, statusText: 'Forbidden', message: 'You are not a member of this team' })
+    }
+    console.error('[@crouton/auth] can middleware: could not verify access', e)
+    throw createError({ status: 401, statusText: 'Unauthorized', message: 'Could not verify access' })
+  }
+}
+
 /**
  * Allow the navigation only when every action is allowed in the route's team.
  * Signed out → login redirect; super-admins skip the check; refused → 403.
@@ -47,17 +91,7 @@ export async function checkRouteCan(to: RouteLike | RouteLocationNormalized, act
   const { data: sessionData, isPending, isAuthenticated } = useSession()
   const { switchTeamBySlug } = useTeam()
 
-  // Wait for the session to load if pending
-  if (isPending.value) {
-    await new Promise<void>((resolve) => {
-      const stop = watch(isPending, (val) => {
-        if (!val) {
-          stop()
-          resolve()
-        }
-      })
-    })
-  }
+  await waitForSession(isPending)
 
   if (!isAuthenticated.value) {
     return navigateTo({ path: '/auth/login', query: { redirect: to.fullPath } })
@@ -70,26 +104,9 @@ export async function checkRouteCan(to: RouteLike | RouteLocationNormalized, act
 
   // Super admins bypass the team checks (kept from team-admin)
   const user = sessionData.value?.user as { superAdmin?: boolean } | undefined
-  if (user?.superAdmin) {
-    if (import.meta.client) {
-      try {
-        await switchTeamBySlug(teamSlug)
-      } catch {
-        // A super admin may not be a member — the page sets context via API calls
-      }
-    }
-    return
-  }
-
-  // Switch to the team (client only — setActive is a session mutation). Only a
-  // 404 (team not in the active session) is harmless; anything else propagates.
-  if (import.meta.client) {
-    try {
-      await switchTeamBySlug(teamSlug)
-    } catch (e) {
-      if (statusOf(e) !== 404) throw e
-    }
-  }
+  const superAdmin = user?.superAdmin === true
+  await switchTeamOnClient(switchTeamBySlug, teamSlug, superAdmin)
+  if (superAdmin) return
 
   // A page that names no action is a mistake: refuse it rather than let it through.
   if (actions.length === 0) {
@@ -97,18 +114,7 @@ export async function checkRouteCan(to: RouteLike | RouteLocationNormalized, act
     throw createError({ status: 403, statusText: 'Forbidden', message: 'Not allowed: no action declared' })
   }
 
-  let allowed: Record<string, boolean>
-  try {
-    allowed = await useRequestFetch()<Record<string, boolean>>(`/api/teams/${teamSlug}/can`, {
-      query: { actions: actions.join(',') }
-    })
-  } catch (e) {
-    if (statusOf(e) === 403) {
-      throw createError({ status: 403, statusText: 'Forbidden', message: 'You are not a member of this team' })
-    }
-    console.error('[@crouton/auth] can middleware: could not verify access', e)
-    throw createError({ status: 401, statusText: 'Unauthorized', message: 'Could not verify access' })
-  }
+  const allowed = await fetchAllowed(teamSlug, actions)
 
   const refused = actions.find(a => allowed?.[a] !== true)
   if (refused) {
