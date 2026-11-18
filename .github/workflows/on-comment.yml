@@ -768,7 +768,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
+      # Pinned to the same SHA as every other claude-code-action step (scripts/workflow-action-pins.test.mjs checks it) — keep in sync when bumping.
       # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
       # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
       # on the owner's instruction that Anthropic now permits subscription auth for
@@ -778,11 +778,14 @@ jobs:
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
         if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true' && steps.replan.outputs.replan != 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
           allowed_bots: "nuxt-harness[bot]"
+          # v1.0.282+ denies node/npx/pnpm when the comment is on a [bot]-authored PR; the resume
+          # runs /task-decompose (node scripts/…), so keep today's behaviour (#4169).
+          restrict_untrusted_prs: "false"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
