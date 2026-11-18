@@ -6,8 +6,10 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
   currentOverrideDecision, overrideComment, parseCommentLines, approvedPromptSection, approvedHeader,
-  planHeldFor, approvePlan, NEEDS_REASON, BOT,
+  holdFacts, approvePlan, NEEDS_REASON, BOT,
 } from './plan-held.mjs'
+import { recordMarker } from './lib/reply-record.mjs'
+import { REJECTED_RECORD } from './lib/plan-verdict.mjs'
 
 const plan = (login = BOT) => ({ body: '<!-- pipeline-plan:v1 -->\nplan', user: { login } })
 const dec = (login, reason = 'cosmetic') => ({ body: overrideComment({ reason, date: '2026-11-10', url: 'u' }), user: { login } })
@@ -93,7 +95,7 @@ test('approvedPromptSection: an override older than a newer plan ⇒ no OVERRIDE
   assert.equal(text.includes('OWNER OVERRIDE'), false)
 })
 
-// ── planHeldFor: the route step's fact ──────────────────────────────────────────────────────
+// ── holdFacts: the route step's facts (#4145) ─────────────────────────────────────────────
 const NOGO = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n🔴 **Plan rejected**'
 const PLAN = '<!-- pipeline-plan:v1 -->\nplan'
 const fakeGithub = (comments = []) => {
@@ -107,21 +109,29 @@ const fakeGithub = (comments = []) => {
 }
 const thread = [PLAN, NOGO, PLAN, NOGO].map((body) => ({ body, user: { type: 'Bot' } }))
 
-test('planHeldFor: twice-rejected blocked issue ⇒ true', async () => {
+test('holdFacts: twice-rejected blocked issue ⇒ planHeld true, no record, one paginate', async () => {
   const github = fakeGithub(thread)
   const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
-  assert.equal(await planHeldFor({ github, repo: { owner: 'o', repo: 'r' }, issue }), true)
+  assert.deepEqual(await holdFacts({ github, repo: { owner: 'o', repo: 'r' }, issue }), { planHeld: true, record: null })
   assert.deepEqual(github.calls, [['paginate', true, { owner: 'o', repo: 'r', issue_number: 7, per_page: 100 }]])
 })
-test('planHeldFor: no status:blocked, or a PR ⇒ false, no API call', async () => {
+test('holdFacts: the final no-go carries its record ⇒ planHeld true and the record, still one paginate', async () => {
+  const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
+  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body) => ({ body, user: { type: 'Bot' } })))
+  const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue }), { planHeld: true, record: REJECTED_RECORD })
+  assert.equal(github.calls.length, 1)
+})
+test('holdFacts: no status:blocked, or a PR ⇒ nothing, no API call', async () => {
   const github = fakeGithub(thread)
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, labels: [] } }), false)
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), false)
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: [] } }), { planHeld: false, record: null })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), { planHeld: false, record: null })
   assert.deepEqual(github.calls, [])
 })
-test('planHeldFor: human-pasted verdicts ⇒ false', async () => {
-  const github = fakeGithub(thread.map((c) => ({ ...c, user: { type: 'User' } })))
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), false)
+test('holdFacts: human-pasted verdicts (even with a record) ⇒ nothing', async () => {
+  const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
+  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body) => ({ body, user: { type: 'User' } })))
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), { planHeld: false, record: null })
 })
 
 // ── approvePlan: the approve-plan job ───────────────────────────────────────────────────────
@@ -192,10 +202,14 @@ test('NEEDS_REASON asks for `ok: <why>` and carries the note marker + provenance
 // ── Wiring: the real workflow files call these, not inline logic ────────────────────────────
 const onComment = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
 const build = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-test('on-comment.yml has a job per new router choice and passes planHeld from planHeldFor', () => {
+test('on-comment.yml has a job per new router choice and passes planHeld + record from holdFacts', () => {
   assert.match(onComment, /needs\.route\.outputs\.kind == 'approve-plan'/)
   assert.match(onComment, /needs\.route\.outputs\.kind == 'plan-needs-reason'/)
-  assert.match(onComment, /planHeld: await planHeldFor\(/)
+  assert.match(onComment, /await holdFacts\(/)
+  assert.match(onComment, /planHeld: facts\.planHeld/)
+  assert.match(onComment, /record: facts\.record/)
+  assert.match(onComment, /starts: \$\{\{ steps\.route\.outputs\.starts \}\}/)
+  assert.match(onComment, /core\.setOutput\('starts', d\.starts \|\| ''\)/)
   assert.match(onComment, /approvePlan\(\{ github, context, core \}\)/)
   assert.match(onComment, /NEEDS_REASON/)
 })

@@ -19,6 +19,10 @@
 //          (`1B 2A 3C`, `2 code`) → quiz-reply (before test-card/resume, so a quiz answer never
 //          resumes, approves or re-plans anything; #3715) · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
+//          a reply on a held question that carries a reply record (#4145): readReply() decides once —
+//          owner `ok: <reason>` / approval on a twice-rejected plan → approve-plan / plan-needs-reason,
+//          anything else it accepts → resume carrying `starts` (the re-plan step follows it); no record,
+//          or nothing it accepts → the record-less routes below ·
 //          owner reply on a plan rejected twice → approve-plan (`ok: <reason>`) /
 //          plan-needs-reason (bare approval) (#3272; other replies fall through to the re-plan) ·
 //          status:blocked → resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
@@ -37,6 +41,7 @@ import { routePrComment } from './revise-route.mjs'
 import { isQuizReply } from './owner-quiz.mjs'
 import { isOwnerScreenComment } from './lib/owner-screens.mjs'
 import { parseOverride } from './lib/decision-line.mjs'
+import { readReply } from './lib/reply-record.mjs'
 
 export const KINDS = [
   'approve-draft', 'approve-epic', 'approve-plan', 'automerge-go', 'close-epic',
@@ -62,12 +67,27 @@ export function isPipelineOwned({ body = '', labels = [] } = {}) {
 
 /**
  * Owner override on a plan held by two no-go verdicts (#3272; `issue.planHeld` from plan-held.mjs
- * planHeldFor): `ok: <reason>` approves; a bare approval asks for the reason; anything else → null.
+ * holdFacts): `ok: <reason>` approves; a bare approval asks for the reason; anything else → null.
  */
 function routeHeldPlan({ body, assoc, issue, out, userType }) {
   if (!(out.blocked && issue.planHeld && OWNERS.has(assoc))) return null
   if (parseOverride({ body, authorAssociation: assoc, userType })) return out('approve-plan', 'owner ok: <reason> on a twice-rejected plan')
   if (isApproval(body)) return out('plan-needs-reason', 'bare approval on a twice-rejected plan')
+  return null
+}
+
+/**
+ * A reply read against the issue's open reply record (#4145), or null (no record, nothing it
+ * accepts, a non-owner on approve-plan / plan-needs-reason, or the resume gate fails) → today's routes.
+ */
+function routeRecord({ body, assoc, issue, labels, out, userType, record }) {
+  if (!record || !out.blocked) return null
+  const { starts } = readReply(record, { body, authorAssociation: assoc, userType })
+  if (!starts) return null
+  if (starts === 'approve-plan' || starts === 'plan-needs-reason') {
+    return OWNERS.has(assoc) ? out(starts, `record: ${starts === 'approve-plan' ? 'ok: <reason>' : 'bare approval'} on a twice-rejected plan`) : null
+  }
+  if (isPipelineOwned({ body: issue.body, labels }) || isApproval(body)) return { ...out('resume', 'record: a reply on a status:blocked issue'), starts }
   return null
 }
 
@@ -81,7 +101,7 @@ function routeIssueCommand({ body, assoc, collab, labels, out }) {
 }
 
 /** Routing for a comment on a plain issue. */
-function routeIssue({ body, assoc, collab, issue, out, userType }) {
+function routeIssue({ body, assoc, collab, issue, out, userType, record }) {
   const labels = issue.labels || []
   const command = routeIssueCommand({ body, assoc, collab, labels, out })
   if (command) return command
@@ -92,6 +112,8 @@ function routeIssue({ body, assoc, collab, issue, out, userType }) {
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
+  const recorded = routeRecord({ body, assoc, issue, labels, out, userType, record })
+  if (recorded) return recorded
   const held = routeHeldPlan({ body, assoc, issue, out, userType })
   if (held) return held
   // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
@@ -118,7 +140,8 @@ function routePrApproval({ assoc, collab, pr, out }) {
  * @param {{body:string, authorAssociation?:string, userType?:string, performedViaGithubApp?:string|null, appSlug?:string|null, userLogin?:string}} input.comment
  * @param {{number:number, isPr:boolean, labels?:string[]}} input.issue
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string, sourceIssue?:{number:number, labels:string[]}|null}} [input.pr]  required when issue.isPr
- * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
+ * @param {object|null} [input.record]  the issue's open reply record (reply-record.mjs openRecord), or null
+ * @returns {{kind:string, number:number, reason:string, blocked:boolean, starts?:string}}
  */
 export function routeComment(input = {}) {
   const d = routeBase(input)
@@ -157,7 +180,7 @@ function routeOwnerScreen({ comment, issue, pr, out }) {
   return r.revise ? out('revise', r.reason) : out('none', r.reason)
 }
 
-function routeBase({ comment = {}, issue = {}, pr } = {}) {
+function routeBase({ comment = {}, issue = {}, pr, record = null } = {}) {
   const number = issue.number ?? 0
   const blocked = (issue.labels || []).includes('status:blocked')
   const out = (kind, reason) => ({ kind, number, reason, blocked })
@@ -174,7 +197,7 @@ function routeBase({ comment = {}, issue = {}, pr } = {}) {
   if (comment.performedViaGithubApp && comment.performedViaGithubApp !== 'Claude') return out('none', 'posted via a GitHub App')
   if (!body.trim()) return out('none', 'empty comment')
 
-  if (!issue.isPr) return routeIssue({ body, assoc, collab, issue, out, userType: comment.userType })
+  if (!issue.isPr) return routeIssue({ body, assoc, collab, issue, out, userType: comment.userType, record })
 
   if (!pr) return out('none', 'PR facts missing')
   if (isApproval(body)) return routePrApproval({ assoc, collab, pr, out })
