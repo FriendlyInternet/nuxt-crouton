@@ -580,8 +580,7 @@ describe('useTeam', () => {
   })
 
   describe('deleteTeam', () => {
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should call organization.delete for owner', async () => {
+    it('should call organization.delete for owner', async () => {
       mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
       mockActiveOrgData.value = {
         id: 'org-1',
@@ -600,8 +599,7 @@ describe('useTeam', () => {
       })
     })
 
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should throw when not owner', async () => {
+    it('should throw when not owner', async () => {
       mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
       mockActiveOrgData.value = {
         id: 'org-1',
@@ -656,8 +654,7 @@ describe('useTeam', () => {
     })
 
     describe('inviteMember', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.inviteMember', async () => {
+      it('should call organization.inviteMember', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -678,8 +675,7 @@ describe('useTeam', () => {
         })
       })
 
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should throw when not authorized', async () => {
+      it('should throw when not authorized', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'member@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -695,11 +691,36 @@ describe('useTeam', () => {
           .rejects.toThrow('permission')
         expect(error.value).toContain('permission')
       })
+
+      // The Better Auth error shapes the catch turns into a readable message
+      it.each([
+        ['an Error', new Error('boom'), 'boom'],
+        ['an Error with no message', new Error(''), 'Failed to invite member'],
+        ['a { message } object', { code: 'X', message: 'direct' }, 'direct'],
+        ['a nested { error: { message } }', { error: { message: 'nested' } }, 'nested'],
+        ['a { body: { message } } fetch error', { body: { message: 'from body' } }, 'from body'],
+        ['an object with no message', { error: {}, body: {} }, 'Failed to invite member'],
+        ['a non-object', 'nope', 'Failed to invite member']
+      ])('reports %s as a readable message', async (_label, thrown, expected) => {
+        mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
+        mockActiveOrgData.value = {
+          id: 'org-1',
+          name: 'Test',
+          slug: 'test',
+          createdAt: '2024-01-01T00:00:00Z',
+          members: [{ userId: 'user-1', role: 'owner' }]
+        }
+        mockAuthClient.organization.inviteMember.mockRejectedValueOnce(thrown)
+
+        const { inviteMember, error } = useTeam()
+
+        await expect(inviteMember({ email: 'new@example.com' })).rejects.toThrow(expected)
+        expect(error.value).toBe(expected)
+      })
     })
 
     describe('removeMember', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.removeMember', async () => {
+      it('should call organization.removeMember', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -722,8 +743,7 @@ describe('useTeam', () => {
     })
 
     describe('updateMemberRole', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.updateMemberRole', async () => {
+      it('should call organization.updateMemberRole', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -747,8 +767,7 @@ describe('useTeam', () => {
     })
 
     describe('leaveTeam', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should allow member to leave', async () => {
+      it('should allow member to leave', async () => {
         mockSessionUser.value = { id: 'user-2', email: 'member@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -771,8 +790,7 @@ describe('useTeam', () => {
         })
       })
 
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should prevent owner from leaving', async () => {
+      it('should prevent owner from leaving', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -792,8 +810,8 @@ describe('useTeam', () => {
 
   describe('invitation methods', () => {
     describe('getPendingInvitations', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should return invitations list', async () => {
+      // Better Auth 1.4.x returns the invitations array directly (see useTeam.ts)
+      it('should return invitations list', async () => {
         mockActiveOrgData.value = {
           id: 'org-1',
           name: 'Test',
@@ -801,11 +819,9 @@ describe('useTeam', () => {
           createdAt: '2024-01-01T00:00:00Z'
         }
         mockAuthClient.organization.listInvitations.mockResolvedValue({
-          data: {
-            invitations: [
-              { id: 'inv-1', email: 'pending@example.com', role: 'member' }
-            ]
-          },
+          data: [
+            { id: 'inv-1', email: 'pending@example.com', role: 'member' }
+          ],
           error: null
         })
 
