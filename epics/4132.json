@@ -1,0 +1,27 @@
+{
+  "epic": 4132,
+  "runs": 9,
+  "epicRuns": 0,
+  "silent": [],
+  "perChild": [
+    {
+      "issue": 4133,
+      "runs": 9,
+      "planRounds": 2,
+      "buildRounds": 2,
+      "revises": 2,
+      "silent": 0
+    }
+  ],
+  "timeToMainHours": 1.9,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 2,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4132#issuecomment-6984482545",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4135#issuecomment-6986747986"
+    ]
+  },
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44367696421",
+  "stored_at": "2026-11-18T18:18:33.148Z"
+}
