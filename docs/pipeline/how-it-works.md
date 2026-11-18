@@ -146,8 +146,8 @@ The table below is generated from the workflow files and the grouping in
 
 | File | Name | Starts on |
 | --- | --- | --- |
-| [automerge-epic-subpr.yml](../../.github/workflows/automerge-epic-subpr.yml) | Auto-merge epic sub-PRs | `schedule`, `pull_request`, `check_suite`, `workflow_run`, `workflow_call`, `workflow_dispatch` |
-| [handoff-sweep.yml](../../.github/workflows/handoff-sweep.yml) | Hand-off sweep (replay saved pipeline hand-offs) | `schedule`, `workflow_run`, `workflow_dispatch` |
+| [automerge-epic-subpr.yml](../../.github/workflows/automerge-epic-subpr.yml) | Auto-merge epic sub-PRs | `pull_request`, `check_suite`, `workflow_run`, `workflow_call`, `workflow_dispatch` |
+| [handoff-sweep.yml](../../.github/workflows/handoff-sweep.yml) | Hand-off sweep (replay saved pipeline hand-offs) | `workflow_run`, `workflow_dispatch` |
 | [on-pr-close.yml](../../.github/workflows/on-pr-close.yml) | On PR close | `pull_request` |
 | [owner-quiz.yml](../../.github/workflows/owner-quiz.yml) | Owner quiz | `workflow_call`, `workflow_dispatch` |
 | [postmortem.yml](../../.github/workflows/postmortem.yml) | Epic postmortem | `workflow_call`, `workflow_dispatch` |
@@ -180,7 +180,7 @@ The table below is generated from the workflow files and the grouping in
 | [loop-station-inventory.yml](../../.github/workflows/loop-station-inventory.yml) | loop-station-inventory | `push`, `workflow_dispatch` |
 | [loop-station-refresh.yml](../../.github/workflows/loop-station-refresh.yml) | Loop-station refresh | `push`, `workflow_dispatch` |
 | [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `schedule`, `workflow_dispatch` |
-| [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `schedule`, `workflow_dispatch` |
+| [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `workflow_dispatch` |
 | [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `schedule`, `workflow_dispatch` |
 | [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `schedule`, `workflow_dispatch` |
 | [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `schedule`, `workflow_dispatch` |
