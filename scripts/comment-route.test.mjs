@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { routeComment, KINDS } from './comment-route.mjs'
 import { sourceIssueFor } from './lib/owner-screens.mjs'
 import { isRejectedTwice } from './plan-hold.mjs'
+import { QUESTION_RECORD, REJECTED_RECORD } from './lib/plan-verdict.mjs'
 
 const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
@@ -237,6 +238,61 @@ test('#3272 planHeld worked out from a real thread (plan, no-go, plan, no-go)', 
   const held = { ...issue(labels), planHeld }
   assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic'), issue: held }), 'approve-plan')
   assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
+})
+
+// ── #4145: the router reads the reply against the open reply record ─────────────────────────────────────────────────
+const QREC = QUESTION_RECORD('Keep the legacy path?')
+const asked = { ...issue(['status:blocked', 'work-this']), planHeld: false }
+const rejected = { ...issue(['status:blocked', 'work-this']), planHeld: true }
+const pick = (d) => ({ kind: d.kind, starts: d.starts })
+
+// covers: T2
+test('#4145 record: plan-question replies resume with the starts readReply gives; record-less twin = today, no starts', () => {
+  const cases = [
+    ['ok', 'replan-with-yes'], ['✅', 'replan-with-yes'], ['lgtm', 'replan-with-yes'],
+    ['ok — build it', 'replan-with-feedback'], ['approved, but keep the column', 'replan-with-feedback'],
+    ['ok:', 'replan-with-feedback'], ['drop it, keep the new one', 'replan-with-feedback'],
+  ]
+  for (const [body, starts] of cases) {
+    assert.deepEqual(pick(routeComment({ comment: c(body), issue: asked, record: QREC })), { kind: 'resume', starts }, body)
+    const today = routeComment({ comment: c(body), issue: asked, record: null })
+    assert.equal(today.kind, 'resume', body)
+    assert.equal('starts' in today, false, body)
+  }
+})
+
+// covers: T2
+test('#4145 record: plan-rejected replies — owner ok: <reason> / approval decided by the record, same kind as today', () => {
+  const cases = [
+    ['ok: the reviewer point is cosmetic', 'OWNER', { kind: 'approve-plan', starts: undefined }],
+    ['> quoted\nok: the reviewer point is cosmetic', 'OWNER', { kind: 'approve-plan', starts: undefined }],
+    ['ok: cosmetic', 'MEMBER', { kind: 'approve-plan', starts: undefined }],
+    ['ok', 'OWNER', { kind: 'plan-needs-reason', starts: undefined }],
+    ['approved, but keep the column', 'OWNER', { kind: 'plan-needs-reason', starts: undefined }],
+    ['change X', 'OWNER', { kind: 'resume', starts: 'replan-with-feedback' }],
+    // a non-owner in the router's set gets today's result: resume, no starts (step 4 changes it)
+    ['ok: cosmetic', 'COLLABORATOR', { kind: 'resume', starts: undefined }],
+    // `ok : x` is no accepted form → today's result
+    ['ok : x', 'OWNER', { kind: 'resume', starts: undefined }],
+  ]
+  for (const [body, assoc, want] of cases) {
+    const got = routeComment({ comment: c(body, assoc), issue: rejected, record: REJECTED_RECORD })
+    assert.deepEqual(pick(got), want, `${assoc} ${body}`)
+    assert.equal(routeComment({ comment: c(body, assoc), issue: rejected, record: null }).kind, want.kind, `today: ${assoc} ${body}`)
+  }
+})
+
+// covers: T2
+test('#4145 record: the resume gate is kept and a record never acts on a non-blocked issue', () => {
+  const notOwned = { ...issue(['status:blocked']), planHeld: false }
+  // not pipeline-owned, not an approval → falls through to today's interpret
+  assert.deepEqual(pick(routeComment({ comment: c('drop it'), issue: notOwned, record: QREC })), { kind: 'interpret', starts: undefined })
+  // an approval passes the gate
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: notOwned, record: QREC })), { kind: 'resume', starts: 'replan-with-yes' })
+  // not blocked → the record is ignored
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: issue(['work-this']), record: QREC })), { kind: 'resume', starts: undefined })
+  // a bot reply is still dropped
+  assert.equal(routeComment({ comment: c('ok', 'OWNER', 'Bot'), issue: asked, record: QREC }).kind, 'none')
 })
 
 test('quiz-reply: `ok` on a blocked epic still resumes, as before (case 7)', () => {
