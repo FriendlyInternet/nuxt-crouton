@@ -1,0 +1,127 @@
+{
+  "epic": 4093,
+  "runs": 64,
+  "epicRuns": 6,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44301685686",
+      "workflow": "decompose-on-issue-pidev.yml",
+      "stage": "decompose",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44318023618",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4111
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44319904677",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4110
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44339921387",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4110
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44339992857",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4111
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44350636297",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4110
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44362823271",
+      "workflow": "work-issue-pidev.yml",
+      "stage": "conflict",
+      "child": 4111
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44370601849",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4112
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44378274727",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4111
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44391020518",
+      "workflow": "work-issue-pidev.yml",
+      "stage": "conflict",
+      "child": 4112
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44402585215",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 4112
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 4109,
+      "runs": 7,
+      "planRounds": 1,
+      "buildRounds": 2,
+      "revises": 1,
+      "silent": 0
+    },
+    {
+      "issue": 4110,
+      "runs": 12,
+      "planRounds": 2,
+      "buildRounds": 6,
+      "revises": 1,
+      "silent": 3
+    },
+    {
+      "issue": 4111,
+      "runs": 21,
+      "planRounds": 4,
+      "buildRounds": 8,
+      "revises": 2,
+      "silent": 4
+    },
+    {
+      "issue": 4112,
+      "runs": 18,
+      "planRounds": 3,
+      "buildRounds": 7,
+      "revises": 3,
+      "silent": 3
+    }
+  ],
+  "timeToMainHours": null,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 11,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4093#issuecomment-6976118801",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4093#issuecomment-6977160207",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4093#issuecomment-6977194949",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4093#issuecomment-6977283933",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4111#issuecomment-6987500406",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4112#issuecomment-6991485628",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4117#issuecomment-6986674707",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4117#issuecomment-6987498916",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4137#issuecomment-6990578030",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4137#issuecomment-6991484663",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4156#issuecomment-6993738272"
+    ]
+  },
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44422215927",
+  "stored_at": "2026-11-18T23:42:27.012Z"
+}
