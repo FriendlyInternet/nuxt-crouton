@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "salesManage": "Gérer le point de vente"
+  },
   "sales": {
     "title": "Point de vente",
     "blocks": {

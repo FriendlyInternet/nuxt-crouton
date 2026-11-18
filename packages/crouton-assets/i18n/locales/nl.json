@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "mediaManage": "Mediabestanden beheren"
+  },
   "assets": {
     "title": "Media",
     "admin": {

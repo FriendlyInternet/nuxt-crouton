@@ -290,21 +290,14 @@ export interface TeamsConfig {
   defaultRole?: 'member' | 'admin'
 
   /**
-   * Available roles in the team
+   * Base role → crouton actions (#4104). Defaults: owner and admin get every
+   * action, member none. A role listed here replaces that role's default list;
+   * a role left out keeps its default. The owner must keep `team:manage`
+   * (startup fails otherwise).
+   *
+   * @example { member: ['pages:edit'] }
    */
-  roles?: TeamRole[]
-}
-
-/**
- * Team role definition
- */
-export interface TeamRole {
-  /** Role identifier */
-  id: string
-  /** Display name */
-  name: string
-  /** Role permissions */
-  permissions?: string[]
+  roles?: Partial<Record<'owner' | 'admin' | 'member', string[]>>
 }
 
 // ============================================================================

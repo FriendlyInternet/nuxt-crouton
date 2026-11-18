@@ -433,6 +433,11 @@ const printBridgeBlock: CroutonBlockDefinition = {
 }
 
 export default defineAppConfig({
+  // Actions this package guards (#4104) — see crouton-auth CLAUDE.md "Permissions (actions)".
+  croutonActions: {
+    'sales:manage': { label: 'permissions.salesManage' }
+  },
+
   // App auto-discovery registration for crouton-sales
   croutonApps: {
     sales: {

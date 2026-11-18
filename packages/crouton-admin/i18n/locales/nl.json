@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Beheeromgeving openen"
+  },
   "teams": {
     "generalSettings": "Algemeen",
     "themeSettings": "Thema",

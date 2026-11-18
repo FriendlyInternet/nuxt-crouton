@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "pagesEdit": "Edit pages"
+  },
   "pages": {
     "title": "Pages",
     "search": "Search pages...",

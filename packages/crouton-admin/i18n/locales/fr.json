@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Ouvrir l'espace d'administration"
+  },
   "teams": {
     "generalSettings": "Général",
     "themeSettings": "Thème",

@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Open the admin area"
+  },
   "teams": {
     "generalSettings": "General",
     "themeSettings": "Theme",

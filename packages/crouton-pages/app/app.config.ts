@@ -3,6 +3,10 @@ import { pagesPagesConfig } from '../collections/pages/app/composables/usePagesP
 // means a consuming app lists nothing for pages in its own app.config.
 
 export default defineAppConfig({
+  // Actions this package guards (#4104) — see crouton-auth CLAUDE.md "Permissions (actions)".
+  croutonActions: {
+    'pages:edit': { label: 'permissions.pagesEdit' }
+  },
   croutonCollections: {
     pagesPages: { ...pagesPagesConfig, adminNav: { label: 'pages.collections.pages.title' } }
   },

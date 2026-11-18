@@ -28,7 +28,6 @@ export type {
   AuthMethodsConfig,
   // Teams
   TeamsConfig,
-  TeamRole,
   // UI
   RedirectConfig,
   UIConfig,
