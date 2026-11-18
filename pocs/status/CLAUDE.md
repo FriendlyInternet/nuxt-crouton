@@ -42,6 +42,18 @@ signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
 `/apps` is the four-tab page (Apps, To test, Decisions, Changelog).
 
+## Clock
+
+The Worker's cron (`*/10 * * * *`, in `env.staging.triggers` of `wrangler.jsonc` only, so PR previews and
+production get none) fires `server/plugins/clock.ts`, which calls `onTick` in `server/utils/clock-tick.ts`.
+It does nothing unless the Worker has `CLOCK_ENABLED=1`; then it mints one Harness App installation token
+(`server/utils/github-app.ts`, a copy of crouton-feedback's `githubApp.ts`; env `HARNESS_APP_ID`,
+`HARNESS_APP_PRIVATE_KEY`, `HARNESS_APP_INSTALLATION_ID`, pushed by deploy-app.yml on staging only — never
+the owner's `GITHUB_TOKEN`) and starts each job due in that 10-minute slot (`dueJobs` in
+`server/utils/clock-jobs.ts`) with `workflow_dispatch` on `main`, logging `clock: <workflow> → <status>`.
+A tick that never arrives is skipped, with no catch-up. The clock only starts workflows; it does not sync
+cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch`, and remove its `schedule:`.
+
 ## Owner email
 
 The single email allowed to sign in is read from the Worker var `NUXT_STATUS_OWNER_EMAIL` only.

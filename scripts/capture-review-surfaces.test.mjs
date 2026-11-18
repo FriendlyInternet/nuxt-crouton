@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration } from './capture-review-surfaces.mjs'
+import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -318,4 +319,125 @@ test('pickSurfaces: the marker read from the API is the declared surface; a fail
   assert.equal(r.reason, 'declared on the PR')
   assert.equal(r.surfaces[0].path, '/builder/a')
   await assert.rejects(pickSurfaces({ env, args, manifest: {}, fetchFn: stubFetch({ ok: false, status: 404 }).fn }), /404/)
+})
+
+// ── settlePage (#4134): wait for the draw first, reload only a page still loading ──────────
+// A fake page + fake clock; the REAL isLoading runs against page.content()/page.evaluate().
+function fakeSettle({ states, drawAfterMs = Infinity, drawText = 'x'.repeat(400) }) {
+  // states[i] = { html, text } for load i (0 = goto, 1 = first reload, …); last one repeats.
+  const clock = { t: 0 }
+  let load = 0
+  let loadedAt = 0
+  let drawn = false
+  const cur = () => states[Math.min(load, states.length - 1)]
+  const sleeps = []
+  const page = {
+    content: async () => cur().html,
+    evaluate: async () => (drawn ? drawText : cur().text).trim().length,
+    reload: async () => {
+      load++
+      loadedAt = clock.t
+      drawn = false
+      return { status: () => 200 + load }
+    }
+  }
+  // Fake draw-wait: advance the clock until the page draws or the 30s bound; a loader exits early.
+  const waitDrawn = async () => {
+    if (cur().html.toLowerCase().includes('__nuxt_loading__')) return
+    if (cur().text.trim().length > 50) return
+    const drawAt = loadedAt + drawAfterMs
+    if (drawAt - clock.t > 30000) {
+      clock.t += 30000
+      return
+    }
+    clock.t = Math.max(clock.t, drawAt)
+    drawn = true
+  }
+  const sleep = async (ms) => {
+    sleeps.push(ms)
+    clock.t += ms
+  }
+  const opts = { deadline: 300_000, now: () => clock.t, sleep, waitDrawn, status: 200 }
+  return { page, clock, sleeps, opts }
+}
+const SHELL = { html: '<div id="__nuxt">RT Pages Workspace Drafts</div>', text: 'RT\nPages Workspace\nDrafts' }
+const LOADER = { html: '<div id="__nuxt_loading__">loading</div>', text: 'Loading' }
+const FULL = { html: '<div id="__nuxt">…</div>', text: 'x'.repeat(400) }
+
+// covers: T1
+test('settlePage: a 25-char SSR shell that draws 5s later settles with no reload (#4134)', async () => {
+  const f = fakeSettle({ states: [SHELL], drawAfterMs: 5000 })
+  const r = await settlePage(f.page, f.opts)
+  assert.equal(r.loading, false)
+  assert.equal(r.reloads, 0)
+  assert.equal(f.clock.t, 5000)
+})
+
+// covers: T2
+test('settlePage: a page stuck on Nuxt\'s loader is still loading at the deadline, within budget (#4134)', async () => {
+  const f = fakeSettle({ states: [LOADER] })
+  const r = await settlePage(f.page, f.opts)
+  assert.equal(r.loading, true)
+  assert.ok(r.reloads > 0)
+  // the loader exits the draw-wait early, so one iteration costs only the 3s sleep
+  assert.ok(f.clock.t <= f.opts.deadline + 3000, `clock ${f.clock.t} past deadline + one iteration`)
+})
+
+// covers: T3
+test('settlePage: a cold-start loader then real content is captured after one reload (#2526)', async () => {
+  const f = fakeSettle({ states: [LOADER, FULL] })
+  const r = await settlePage(f.page, f.opts)
+  assert.equal(r.loading, false)
+  assert.equal(r.reloads, 1)
+  assert.equal(r.status, 201) // taken from the reload response
+})
+
+// covers: T4
+test('settlePage: a server-rendered 400-char page settles at once with no sleep', async () => {
+  const f = fakeSettle({ states: [FULL] })
+  const r = await settlePage(f.page, f.opts)
+  assert.equal(r.loading, false)
+  assert.equal(r.reloads, 0)
+  assert.equal(r.status, 200)
+  assert.deepEqual(f.sleeps, [])
+})
+
+// The REAL waitForHydration predicate, run once by a fake page.waitForFunction against a
+// stubbed globalThis.document/window (the predicate is self-contained, as Playwright needs).
+async function runHydrationPredicate({ outerHTML, rootText, nuxtApp }) {
+  const saved = { document: globalThis.document, window: globalThis.window }
+  const call = {}
+  globalThis.document = {
+    documentElement: { outerHTML },
+    querySelector: sel => (sel === '#__nuxt' && rootText != null ? { innerText: rootText } : null)
+  }
+  globalThis.window = nuxtApp ? { useNuxtApp: () => nuxtApp } : {}
+  try {
+    const page = {
+      waitForFunction: async (fn, arg, opts) => {
+        call.arg = arg
+        call.opts = opts
+        call.result = fn(arg)
+      }
+    }
+    await waitForHydration(page)
+  } finally {
+    globalThis.document = saved.document
+    globalThis.window = saved.window
+  }
+  return call
+}
+
+// covers: T5
+test('waitForHydration: real predicate exits early on a loader, waits on a short shell, passes drawn hydrated content; 30s bound (#4134)', async () => {
+  const loader = await runHydrationPredicate({ outerHTML: '<html><body><div id="__nuxt_loading__"></div></body></html>', rootText: null })
+  assert.ok(loader.result, 'a loader marker stops the wait at once')
+  assert.deepEqual(loader.arg, LOADING_MARKERS, 'the shared marker list is passed in, not a copy')
+  assert.equal(loader.opts.timeout, 30000)
+
+  const shell = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'RT\nPages Workspace\nDrafts', nuxtApp: { isHydrating: true } })
+  assert.equal(shell.result, false, 'a 25-char #__nuxt keeps waiting')
+
+  const drawn = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'x'.repeat(60), nuxtApp: { isHydrating: false } })
+  assert.equal(drawn.result, true, 'a 60-char hydrated #__nuxt is done')
 })
