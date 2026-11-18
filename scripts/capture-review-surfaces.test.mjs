@@ -352,6 +352,9 @@ test('#4141 pickSurfaces: metadata team kdm wins over a checked-out manifest wit
   assert.deepEqual(stale.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
   const legacy = await pickSurfaces({ env, args: { pr: '12', app: 'kdm' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
   assert.deepEqual(legacy.surfaces.map(s => s.path), ['/admin/old/workspace'])
+  // an older record has no team, so the job passes `--team ""` → still the manifest fallback
+  const empty = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: '' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(empty.surfaces.map(s => s.path), ['/admin/old/workspace'])
 })
 
 test('#4141 wiring: the deploy records the seeded team and the screenshot job passes it as --team', () => {
@@ -360,8 +363,7 @@ test('#4141 wiring: the deploy records the seeded team and the screenshot job pa
   assert.match(record, /REVIEW_TEAM: \$\{\{ steps\.review_team\.outputs\.team \}\}/)
   assert.match(record, /team:\$team\}/)
   const shot = readFileSync(new URL('../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
-  assert.match(shot, /TEAM=\$\(jq -r '\.team \/\/ ""' "\$META"\)/)
-  assert.match(shot, /capture-review-surfaces\.mjs[^\n]*\n[^\n]*"\$\{TEAM_ARGS\[@\]\}"/)
+  assert.match(shot, /capture-review-surfaces\.mjs[^\n]*\n[^\n]*--team "\$\(jq -r '\.team \/\/ ""' "\$META"\)"/)
   // the screenshot job still must not check out PR code
   assert.doesNotMatch(shot, /ref:\s*\$\{\{\s*github\.event\.(pull_request|workflow_run)\.head/)
 })
