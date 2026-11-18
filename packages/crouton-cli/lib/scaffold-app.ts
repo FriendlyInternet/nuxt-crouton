@@ -107,6 +107,10 @@ interface ScaffoldVars {
   depVersion: string
   /** Optional CF zone — emits <name>.<domain> / <name>-staging.<domain> routes. */
   domain?: string
+  /** Target dir is under `pocs/` (same rule as `.crouton.json` kind) — a POC has no production. */
+  poc: boolean
+  /** The `assets` feature is on (resolved) — the app needs R2 buckets bound as BLOB. */
+  blob: boolean
   modules: Record<string, any>
 }
 
@@ -278,9 +282,14 @@ function tmplCroutonConfig(vars: ScaffoldVars): string {
 // there is no route, so the Worker serves at *.workers.dev: we leave stagingUrl EMPTY and the
 // deploy resolves the real published URL (#1369) instead of advertising an alias that was never
 // bound. Note the staging subdomain is `<name>-staging.<zone>` (matches the route), NOT `<name>`.
+// #4142: a POC (target under `pocs/`) has NO production — its only route is the env.staging
+// `<name>.<zone>`, so stagingUrl is `https://<name>.<zone>` and no productionUrl is written. That
+// is also what scripts/scaffold-poc-deploy.mjs derives from the route, so the two tools agree.
 export function tmplDeployConfig(vars: ScaffoldVars): string {
   const config: Record<string, string> = {}
-  if (vars.domain) {
+  if (vars.poc && vars.domain) {
+    config.stagingUrl = `https://${vars.name}.${vars.domain}`
+  } else if (vars.domain) {
     config.stagingUrl = `https://${vars.name}-staging.${vars.domain}`
     config.productionUrl = `https://${vars.name}.${vars.domain}`
   } else {
@@ -290,15 +299,24 @@ export function tmplDeployConfig(vars: ScaffoldVars): string {
   return JSON.stringify(config, null, 2) + '\n'
 }
 
-function tmplWranglerJsonc(vars: ScaffoldVars): string {
+export function tmplWranglerJsonc(vars: ScaffoldVars): string {
   // Workers (static-assets), id-LESS so the first `pnpm cf:deploy` auto-provisions D1+KV;
   // `sync-wrangler-ids.mjs` writes the ids back (bootstrap → committed). With `--domain`,
   // custom-domain routes auto-bind `<name>.<zone>` / `<name>-staging.<zone>` on deploy.
-  const prodRoute = vars.domain
+  // #4142: a POC has no production → no top-level route, and staging binds `<name>.<zone>`.
+  const prodRoute = vars.domain && !vars.poc
     ? `\n  "routes": [{ "pattern": "${vars.name}.${vars.domain}", "custom_domain": true }],\n`
     : ''
+  const stagingHost = vars.poc ? `${vars.name}.${vars.domain}` : `${vars.name}-staging.${vars.domain}`
   const stagingRoute = vars.domain
-    ? `\n      "routes": [{ "pattern": "${vars.name}-staging.${vars.domain}", "custom_domain": true }],`
+    ? `\n      "routes": [{ "pattern": "${stagingHost}", "custom_domain": true }],`
+    : ''
+  // #4142: the `assets` feature uploads to hub.blob → named R2 buckets (same shape as pocs/crate).
+  const prodBlob = vars.blob
+    ? `,\n  "r2_buckets": [\n    { "binding": "BLOB", "bucket_name": "${vars.name}-blob" }\n  ]`
+    : ''
+  const stagingBlob = vars.blob
+    ? `,\n      "r2_buckets": [\n        { "binding": "BLOB", "bucket_name": "${vars.name}-staging-blob" }\n      ]`
     : ''
   return `{
   // Cloudflare WORKERS (static assets) config for ${vars.name}.
@@ -322,7 +340,7 @@ ${prodRoute}
   ],
   "kv_namespaces": [
     { "binding": "KV" }
-  ],
+  ]${prodBlob},
 
   // Staging environment — its OWN isolated D1 + KV, also id-less so they
   // auto-provision on the first \`pnpm cf:staging\`. The env block is stripped
@@ -339,7 +357,7 @@ ${prodRoute}
       ],
       "kv_namespaces": [
         { "binding": "KV" }
-      ]
+      ]${stagingBlob}
     }
   }
 }
@@ -574,7 +592,7 @@ export async function scaffoldApp(
   const standalone = !(await isCroutonMonorepo(cwd))
   const cf = options.cf ?? !standalone
   const depVersion = standalone ? `^${CROUTON_CLI_VERSION}` : 'workspace:*'
-  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion })
+  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion, outDir })
   const files = await buildScaffoldFiles(ctx, outDir, cf)
   const appDir = outDir || (standalone ? name : join('apps', name))
 
@@ -594,9 +612,9 @@ interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], fea
 // fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
 async function resolveScaffoldContext(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string }
+  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, outDir?: string }
 ): Promise<ScaffoldContext> {
-  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain } = options
+  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain, outDir } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
@@ -614,7 +632,9 @@ async function resolveScaffoldContext(
   if (!frameworkPackages.includes('@fyit/crouton-i18n')) {
     frameworkPackages.splice(frameworkPackages.indexOf('@fyit/crouton-core') + 1, 0, '@fyit/crouton-i18n')
   }
-  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, modules }
+  const poc = (outDir || '').startsWith('pocs/')
+  const blob = features.includes('assets')
+  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, modules }
   return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
 }
 
