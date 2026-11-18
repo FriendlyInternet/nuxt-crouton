@@ -16,6 +16,8 @@ const updateSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
   // Must be one the booking's location lists (#4044)
   product: z.string().min(1).nullish(),
+  // Re-checked against the product's stock; 409 when it doesn't fit (#4112)
+  quantity: z.number().int().min(1).optional(),
 })
 
 export default defineEventHandler(async (event) => {

@@ -10,6 +10,7 @@ export interface BookingFormSource {
   slot?: string | string[] | null
   group?: string | null
   quantity?: number | null
+  product?: string | null
 }
 
 export interface InitialBookingForm {
@@ -17,6 +18,7 @@ export interface InitialBookingForm {
   slotIds: string[]
   groupId: string | null
   quantity: number
+  productId: string | null
 }
 
 /**
@@ -24,13 +26,14 @@ export interface InitialBookingForm {
  * form with quantity 1. A missing or non-positive quantity becomes 1.
  */
 export function initialFormFromBooking(booking?: BookingFormSource | null): InitialBookingForm {
-  if (!booking) return { locationId: null, slotIds: [], groupId: null, quantity: 1 }
+  if (!booking) return { locationId: null, slotIds: [], groupId: null, quantity: 1, productId: null }
   const q = booking.quantity
   return {
     locationId: booking.location ?? null,
     slotIds: parseSlotIds(booking.slot),
     groupId: booking.group ?? null,
     quantity: typeof q === 'number' && Number.isInteger(q) && q > 0 ? q : 1,
+    productId: booking.product ?? null,
   }
 }
 
@@ -41,13 +44,42 @@ export function initialFormFromBooking(booking?: BookingFormSource | null): Init
  * mapped values so the card can fill its local refs.
  */
 export function applyBookingToForm(
-  form: { editingBookingId: string | null; quantity: number },
+  form: { editingBookingId: string | null; quantity: number; productId: string | null },
   booking?: BookingFormSource | null,
 ): InitialBookingForm {
   const initial = initialFormFromBooking(booking)
   form.editingBookingId = booking?.id ?? null
   form.quantity = initial.quantity
+  form.productId = initial.productId
   return initial
+}
+
+export interface EditBookingInput {
+  locationId: string | null
+  slotIds: string[]
+  groupId: string | null
+  /** `YYYY-MM-DD` */
+  date: string
+  productId: string | null
+  quantity: number
+}
+
+/**
+ * The PATCH body the card sends when an edit is saved (#4112): the booking's
+ * product and amount travel with it. A null product is left out, so an old
+ * row stored without one keeps it that way. `slot` goes as a plain array of
+ * slot ids; with no slot ids (a full-day booking) it is left out, so the
+ * booking keeps the slot it has.
+ */
+export function editBookingBody(input: EditBookingInput) {
+  return {
+    location: input.locationId,
+    ...(input.slotIds.length > 0 ? { slot: input.slotIds } : {}),
+    group: input.groupId,
+    date: input.date,
+    quantity: input.quantity,
+    ...(input.productId ? { product: input.productId } : {}),
+  }
 }
 
 export interface BookingGroupOption {

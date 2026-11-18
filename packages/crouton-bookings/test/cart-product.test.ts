@@ -135,6 +135,29 @@ describe('cart counts per product (#4110 S4)', () => {
     c.formState.productId = 'Q'
     expect(c.getSlotRemaining('am')).toBe(1)
   })
+
+  // covers: #4112 how-to-test steps 4–5
+  it('with no slot ticked the amount allows the most free in any open slot, then caps to the ticked slot', async () => {
+    const c = await cartAt('court')
+    c.formState.productId = 'P'
+    await settle()
+    // am has 2 free (one booked), pm and the full day 3 — the box reads 1/3 before a slot is picked
+    expect(c.formState.slotIds).toEqual([])
+    expect(c.maxQuantity.value).toBe(3)
+    expect(c.canAddToCart.value).toBe(false)
+
+    // press + once, then pick a slot → fits
+    c.formState.quantity = 2
+    c.formState.slotIds = ['pm']
+    expect(c.maxQuantity.value).toBe(3)
+    expect(c.canAddToCart.value).toBe(true)
+
+    // a closed slot doesn't count: only am (2 free) left open
+    rules.isSlotAvailableByRules = (id: string) => id === 'am'
+    rules.getRuleBlockedSlotIds = () => ['pm', 'all-day']
+    c.formState.slotIds = []
+    expect(c.maxQuantity.value).toBe(2)
+  })
 })
 
 describe('cart items carry a product and an amount (#4110 S5)', () => {
