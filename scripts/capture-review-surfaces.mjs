@@ -38,6 +38,7 @@ import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
 import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, LOADING_MARKERS } from './lib/capture-validate.mjs'
+import { resolveReviewTeam, DEFAULT_REVIEW_TEAM } from './review-team.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -63,8 +64,9 @@ const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
  * Surfaces a PR declares for one app (#2433), copied there from its issue:
  *   <!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->
  * The worker knows which screen it changed; the app's fixed landing page usually doesn't show it.
+ * Every `{team}` in the path becomes the app's review team (#4141).
  */
-export function parsePrSurfaces(prBody, app) {
+export function parsePrSurfaces(prBody, app, team = DEFAULT_REVIEW_TEAM) {
   const out = []
   for (const m of String(prBody || '').matchAll(/<!--\s*review-surface:\s*(.+?)\s*-->/g)) {
     const [forApp, path, ...rest] = m[1].split(/\s+/)
@@ -74,35 +76,33 @@ export function parsePrSurfaces(prBody, app) {
     const base = nameTok ? nameTok.slice(5) : (path.split('?')[0].split('/').filter(Boolean).pop() || 'surface')
     let name = slug(base)
     while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
-    out.push({ name, path: path.startsWith('/') ? path : `/${path}`, do: steps })
+    const filled = path.replaceAll('{team}', team)
+    out.push({ name, path: filled.startsWith('/') ? filled : `/${filled}`, do: steps })
   }
   return out
 }
 
-// The seeded review team every preview is signed into (#2698).
-const SEEDED_TEAM = 'test1'
-
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
  *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
- *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the seeded team (never `[slug]`, #3886);
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the app's review team (`team`, default test1, #4141) (never `[slug]`, #3886);
  *    pages with any other dynamic segment are skipped (no data to open them with);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
 // The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
-function pageSurface(file, pagePath, app) {
+function pageSurface(file, pagePath, app, team) {
   const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
   if (owner && owner[1] !== app) return null
   if (pagePath.startsWith('__review')) return null
   const segs = pagePath.split('/').filter(s => s !== 'index')
   const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
   if (dynamic.some(s => !/^\[(team|teamSlug|team-slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
-  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? team : s).join('/')
   return { route, label: segs.join('-') || 'index' }
 }
 
-export function deriveSurfaces({ changedFiles, app }) {
+export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM }) {
   const out = []
   const add = (path, label) => {
     if (out.some(s => s.path === path)) return
@@ -115,7 +115,7 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      const surface = pageSurface(file, page[1], app)
+      const surface = pageSurface(file, page[1], app, team)
       if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
@@ -132,9 +132,11 @@ export function deriveSurfaces({ changedFiles, app }) {
  *  - any other PR keeps the manifest's surfaces / landing, as before.
  */
 export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
-  const declared = parsePrSurfaces(prBody, app)
+  // Only the manifest key is read here (no nuxt.config text) — all the screenshot needs (#4141).
+  const team = resolveReviewTeam({ manifest }).team
+  const declared = parsePrSurfaces(prBody, app, team)
   if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
-  const derived = deriveSurfaces({ changedFiles, app })
+  const derived = deriveSurfaces({ changedFiles, app, team })
   if (derived.length) return { surfaces: derived, reason: 'derived from the changed files (#2698)' }
   if (String(prBody || '').includes(HOLD_MARKER)) {
     return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }

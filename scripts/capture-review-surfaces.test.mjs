@@ -123,6 +123,24 @@ test('isFlatFrame: a single 1-px line is still blank (#3854)', () => {
 const HOLD = '<!-- deploy-preview: full-watch -->'
 const EDITOR = '<!-- review-surface: kassa /admin/test1/workspace?page=seed:page:test1:vlaamsekermis name:editor wait:2500 -->'
 
+// #4141 case 5 — `{team}` in a declared path, and a derived `[team]` route, become the app's
+// review team (deploy.config.json `reviewTeam`), default test1.
+test('#4141 parsePrSurfaces fills {team} with the review team, default test1', () => {
+  const body = '<!-- review-surface: kdm /admin/{team}/workspace -->'
+  assert.deepEqual(parsePrSurfaces(body, 'kdm', 'kdm'), [{ name: 'workspace', path: '/admin/kdm/workspace', do: [] }])
+  assert.deepEqual(parsePrSurfaces(body, 'kdm'), [{ name: 'workspace', path: '/admin/test1/workspace', do: [] }])
+})
+
+test('#4141 resolveSurfaces uses the manifest reviewTeam for declared and derived surfaces', () => {
+  const manifest = { reviewTeam: 'kdm' }
+  const declared = resolveSurfaces({ manifest, prBody: '<!-- review-surface: kdm /admin/{team}/workspace -->', app: 'kdm', changedFiles: [] })
+  assert.equal(declared.surfaces[0].path, '/admin/kdm/workspace')
+  const derived = resolveSurfaces({ manifest, prBody: '', app: 'kdm', changedFiles: ['pocs/kdm/app/pages/admin/[team]/workspace.vue'] })
+  assert.deepEqual(derived.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const plain = resolveSurfaces({ manifest: {}, prBody: '', app: 'kdm', changedFiles: ['pocs/kdm/app/pages/admin/[team]/workspace.vue'] })
+  assert.deepEqual(plain.surfaces.map(s => s.path), ['/admin/test1/workspace'])
+})
+
 test('outName: includes the app so two apps on one PR do not overwrite each other', () => {
   assert.equal(outName(2420, 'preview', 'kassa'), 'pr2420-kassa-preview.png')
   assert.equal(outName(2420, 'preview', 'velo'), 'pr2420-velo-preview.png')
