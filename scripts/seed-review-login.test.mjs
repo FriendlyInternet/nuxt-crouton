@@ -307,6 +307,69 @@ test('#3751 deploy-app.yml passes reviewLogin.requireData to the seed; booking-d
   assert.deepEqual(cfg.reviewLogin.requireData, ['bookings_locations', 'bookings_bookings'])
 })
 
+// ── #4126: one membership per team, even when the app already made one ───────────────
+// A `defaultTeamSlug: 'test1'` app joins every new user to test1 at sign-up, so the seed's
+// own insert left the review user with TWO member rows for the same team (seen on the
+// kdm preview). The real CLI over a real SQLite file, same as the #3751 cases.
+import { seedTeamMemberSql } from './seed-review-login.mjs'
+
+const SEED_MEMBER = 'seed:member:test1:review-t-example-com'
+const members = (file) => {
+  const d = new DatabaseSync(file)
+  const r = d.prepare('SELECT * FROM "member" WHERE "userId"=\'u1\' AND "organizationId"=? ORDER BY "id"').all(ORG)
+  d.close()
+  return r
+}
+const addMember = (file, id, role = 'member') => {
+  const d = new DatabaseSync(file)
+  d.prepare('INSERT INTO "member" VALUES (?, \'u1\', ?, ?, 1)').run(id, ORG, role)
+  d.close()
+}
+
+test('#4126 app already joined the user to the team → the seed adds no second row', async () => {
+  const db = teamDb({ locations: 0, bookings: 0 })
+  addMember(db.file, 'app-made', 'owner')
+  const r = await runWithData(db, '')
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(members(db.file).map(m => m.id), ['app-made'])
+})
+
+test('#4126 no membership yet → the seed adds exactly one owner row', async () => {
+  const db = teamDb({ locations: 0, bookings: 0 })
+  const r = await runWithData(db, '')
+  assert.equal(r.code, 0, r.out)
+  const rows = members(db.file)
+  assert.deepEqual(rows.map(m => [m.id, m.role]), [[SEED_MEMBER, 'owner']])
+})
+
+test('#4126 a preview seeded before the fix (two rows) is cleaned to one on redeploy', async () => {
+  const db = teamDb({ locations: 0, bookings: 0 })
+  addMember(db.file, 'app-made', 'owner')
+  addMember(db.file, SEED_MEMBER, 'owner')
+  const r = await runWithData(db, '')
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(members(db.file).map(m => m.id), ['app-made'])
+})
+
+test('#4126 redeploying twice keeps one row, and the review user stays owner', async () => {
+  const db = teamDb({ locations: 0, bookings: 0 })
+  addMember(db.file, 'app-made', 'member')
+  await runWithData(db, '')
+  const r = await runWithData(db, '')
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(members(db.file).map(m => [m.id, m.role]), [['app-made', 'owner']])
+})
+
+test('#4126 seedTeamMemberSql: quotes cannot break out, other users are untouched', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec('CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT, "role" TEXT, "createdAt" INTEGER);')
+  d.exec(`INSERT INTO "member" VALUES ('other', 'u2', '${ORG}', 'member', 1)`)
+  d.exec(seedTeamMemberSql({ memberId: "m'1", userId: "u'1", orgId: ORG, createdAt: 5 }))
+  const rows = d.prepare('SELECT "id","userId","role" FROM "member" ORDER BY "id"').all()
+  assert.deepEqual(rows.map(r => [r.id, r.userId, r.role]), [["m'1", "u'1", 'owner'], ['other', 'u2', 'member']])
+  d.close()
+})
+
 // ── #3340: an invite-only app refuses public sign-up → create the login via SQL ───────
 // The real CLI against a real SQLite file, with a stand-in for the Worker's auth routes
 // that answers sign-up the way crouton-auth's invite-only gate does.
