@@ -37,7 +37,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -365,15 +365,11 @@ async function captureSurface(context, origin, surface, file) {
     page = await context.newPage()
     const url = origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`)
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
-    let status = resp ? resp.status() : 0
     // The dev server serves Nuxt's loading template until its first build finishes (#2526):
-    // reload until real app content renders. The budget is per run (warmedUp), not per width.
-    while (await isLoading(page) && Date.now() < warmDeadline) {
-      await page.waitForTimeout(3000)
-      const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
-      if (again) status = again.status()
-    }
-    if (await isLoading(page)) {
+    // wait for the draw, then reload only while still loading (#4134). The budget is per run.
+    const settled = await settlePage(page, { deadline: warmDeadline, status: resp ? resp.status() : 0 })
+    const status = settled.status
+    if (settled.loading) {
       log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
       report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
       return null
@@ -427,14 +423,38 @@ async function isLoading(page) {
   return looksLikeLoadingScreen({ html }) || textLen <= 50
 }
 
-/** Wait (≤15s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699). Best-effort: a miss falls through to the rejection checks. */
-async function waitForHydration(page) {
-  await page.waitForFunction(() => {
+/** Wait (≤30s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699, #4134). Returns early on Nuxt's loader. Best-effort: a miss falls through to the rejection checks. */
+export async function waitForHydration(page, { timeout = 30000 } = {}) {
+  // Gives up early on Nuxt's loader markers (the same list looksLikeLoadingScreen uses) so a
+  // real loader is reloaded after ~3s as before (#2526), not after the 30s bound (#4134).
+  // An imported binding is initialised before main() runs, so there is no TDZ issue.
+  await page.waitForFunction((markers) => {
+    const html = (document.documentElement?.outerHTML || '').toLowerCase()
+    if (markers.some(m => html.includes(m))) return true
     const root = document.querySelector('#__nuxt')
     if (!root || (root.innerText || '').trim().length <= 50) return false
     const nuxt = window.useNuxtApp?.()
     return nuxt ? !nuxt.isHydrating : true
-  }, null, { timeout: 15000 }).catch(() => {})
+  }, LOADING_MARKERS, { timeout }).catch(() => {})
+}
+
+/**
+ * Navigate result → settled page. Waits for the draw FIRST, then reloads only a page still
+ * loading after that wait (#4134 — a short SSR shell drawn client-side was reloaded forever;
+ * keeps the #2526 cold-start reload). Injectable so it is testable without a browser.
+ */
+export async function settlePage(page, { deadline, now = Date.now, sleep = ms => page.waitForTimeout(ms),
+  waitDrawn = waitForHydration, loading = isLoading, status = 0 } = {}) {
+  let reloads = 0
+  await waitDrawn(page)
+  while (await loading(page) && now() < deadline) {
+    await sleep(3000)
+    const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
+    reloads++
+    if (again) status = again.status()
+    await waitDrawn(page)
+  }
+  return { loading: await loading(page), status, reloads }
 }
 
 /** Request the first surface until the server answers with the app, not the loader. */
@@ -443,10 +463,7 @@ async function warmUp(context, origin, surface) {
   const page = await context.newPage()
   try {
     await page.goto(origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`), { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
-    while (await isLoading(page) && Date.now() < warmDeadline) {
-      await page.waitForTimeout(3000)
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
-    }
+    await settlePage(page, { deadline: warmDeadline })
   } finally {
     await page.close().catch(() => {})
   }
