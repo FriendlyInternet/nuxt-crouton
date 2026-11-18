@@ -5,6 +5,7 @@ exports[`API Endpoint Generators > generateDeleteEndpoint > generates correct ou
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { deleteShopProduct } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
@@ -15,11 +16,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const dbTimer = timing.start('db')
-  const result = await deleteShopProduct(productId, team.id, user.id, { role: membership.role })
+  const result = await deleteShopProduct(productId, team.id, user.id, { seesAll: await can(team.id, user.id, 'collections:manage', event) })
   dbTimer.end()
   return result
 })"
@@ -103,6 +104,7 @@ exports[`API Endpoint Generators > generatePatchEndpoint > generates correct out
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { updateShopProduct } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -121,7 +123,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
@@ -135,7 +137,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const dbTimer = timing.start('db')
-  const result = await updateShopProduct(productId, team.id, user.id, updates, { role: membership.role })
+  const result = await updateShopProduct(productId, team.id, user.id, updates, { seesAll: await can(team.id, user.id, 'collections:manage', event) })
   dbTimer.end()
   return result
 })"

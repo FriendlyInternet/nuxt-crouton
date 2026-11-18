@@ -57,16 +57,16 @@ export async function updateCroutonRedirect(
   teamId: string,
   userId: string,
   updates: Partial<CroutonRedirect>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(croutonRedirects.id, recordId),
     eq(croutonRedirects.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(croutonRedirects.owner, userId))
   }
 
@@ -93,16 +93,16 @@ export async function deleteCroutonRedirect(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(croutonRedirects.id, recordId),
     eq(croutonRedirects.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(croutonRedirects.owner, userId))
   }
 
