@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch } from './plan-hold.mjs'
+import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch, needsOwnerQuestion, answerDecision } from './plan-hold.mjs'
+import { appendDecision } from './lib/decision-line.mjs'
+import { renderComment, RUBRIC, SIGNOFF_QUESTION } from './lib/plan-verdict.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const person = (body) => ({ body, userType: 'User' })
@@ -113,10 +115,120 @@ test('#3564 needs-owner as the only verdict ⇒ plan hold', () => {
   assert.equal(hold([bot(PLAN), bot(OWNER)]), true)
 })
 
-test('#3564 newest needs-owner + bare ok ⇒ not a re-plan', () => {
-  for (const replyBody of ['ok', 'lgtm', 'ok: reason']) {
-    assert.equal(hold([bot(PLAN), bot(OWNER)], { replyBody }), false, replyBody)
+// #4082 reverses #3564's "bare ok ⇒ not a re-plan": on a needs-owner hold no reply is dropped.
+// covers: T1
+test('#4082 newest needs-owner: every reply re-plans, approvals included', () => {
+  for (const replyBody of ['ok', 'lgtm', '✅', 'ok: fine', 'Decision: A', 'yes']) {
+    assert.equal(hold([bot(PLAN), bot(OWNER)], { replyBody }), true, replyBody)
   }
+})
+
+// covers: T1 (unchanged: twice-rejected hold)
+test('#4082 twice-rejected hold: bare ok / ok: reason ⇒ false, a sentence ⇒ true', () => {
+  assert.equal(hold(heldThread(), { replyBody: 'ok' }), false)
+  assert.equal(hold(heldThread(), { replyBody: 'ok: reason' }), false)
+  assert.equal(hold(heldThread(), { replyBody: 'Use the existing helper.' }), true)
+})
+
+// covers: T1 (unchanged: plan:approved, later go, pasted marker — also with reply ok)
+test('#4082 needs-owner exits stay exits, even with a bare ok', () => {
+  const ok = { replyBody: 'ok' }
+  assert.equal(hold([bot(PLAN), bot(OWNER)], { ...ok, labels: ['status:blocked', 'plan:approved'] }), false)
+  assert.equal(hold([bot(PLAN), bot(OWNER), bot(PLAN), bot(GO)], ok), false)
+  assert.equal(hold([person(OWNER)], ok), false)
+})
+
+// The real #4036 needs-owner verdict (2026-11-17T11:38:26Z), checklist trimmed.
+const V4036 = `<!-- plan-review:v1 -->
+<!-- plan-review-verdict:needs-owner -->
+> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on \`claude-opus-5-5\`_
+
+🔀 **Needs your call** — Do you approve the mockup in the plan as the new Activité design? That includes the plural label "Pages · Accueil", "Modification par X" instead of "modifiée par X", and no counters. Recommendation: yes. These choices read correctly for every collection in French and are easy to change later.
+
+yes/no
+**Needs:** answer
+
+<details><summary>Review checklist</summary>
+
+- ✅ **1. Reproduced? (observed, not reasoned)** — trimmed
+
+</details>
+`
+const T4036 = () => [bot(PLAN), bot(V4036)]
+
+// covers: T4
+test('#4082 needsOwnerQuestion: the #4036 question as one line', () => {
+  const q = needsOwnerQuestion(T4036())
+  assert.equal(q.includes('\n'), false)
+  assert.ok(q.startsWith('Do you approve the mockup in the plan as the new Activité design?'), q)
+  assert.match(q, /Recommendation: yes\./)
+  assert.doesNotMatch(q, /yes\s*\/\s*no$/)
+  assert.ok(q.endsWith('easy to change later.'), q)
+})
+
+// covers: T4
+test('#4082 needsOwnerQuestion: SIGNOFF_QUESTION verdict, and no needs-owner ⇒ empty', () => {
+  const items = Object.fromEntries(RUBRIC.map((r) => [r.id, { pass: true, evidence: 'x' }]))
+  const body = renderComment({ verdict: 'needs-owner', question: SIGNOFF_QUESTION, items, failed: [] })
+  assert.equal(needsOwnerQuestion([bot(PLAN), bot(body)]), SIGNOFF_QUESTION)
+  assert.equal(needsOwnerQuestion([bot(PLAN), bot(NOGO)]), '')
+  assert.equal(needsOwnerQuestion([bot(PLAN), bot(V4036), bot(PLAN), bot(GO)]), '')
+  assert.equal(needsOwnerQuestion([person(V4036)]), '')
+  assert.equal(needsOwnerQuestion(), '')
+})
+
+const URL4036 = 'https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6947793038'
+const ans = (extra = {}) => answerDecision({ comments: T4036(), replyBody: 'ok', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+
+// covers: T5
+test('#4082 answerDecision: the owner\'s bare ok on #4036 ⇒ one Decisions line quoting the question', () => {
+  const line = ans()
+  assert.equal(typeof line, 'string')
+  assert.equal(line.includes('\n'), false)
+  assert.match(line, /^- 2026-11-17 · owner answered yes/)
+  assert.ok(line.includes(needsOwnerQuestion(T4036())), line)
+  assert.ok(line.endsWith(`[comment](${URL4036})`), line)
+  assert.equal(typeof ans({ authorAssociation: 'MEMBER' }), 'string')
+  assert.equal(typeof ans({ authorAssociation: 'COLLABORATOR' }), 'string')
+})
+
+// covers: T5
+test('#4082 answerDecision: not the owner, a reason, a sentence or a twice-rejected hold ⇒ null', () => {
+  assert.equal(ans({ authorAssociation: 'NONE' }), null)
+  assert.equal(ans({ authorAssociation: 'CONTRIBUTOR' }), null)
+  assert.equal(ans({ authorAssociation: undefined }), null)
+  assert.equal(ans({ userType: 'Bot' }), null)
+  assert.equal(ans({ replyBody: 'ok: fine' }), null)
+  assert.equal(ans({ replyBody: 'Use the existing helper instead.' }), null)
+  assert.equal(ans({ comments: heldThread() }), null)
+})
+
+test('#4082 answerDecision: an approval plus other text ⇒ null; ok, ✅ or lgtm alone ⇒ the line', () => {
+  assert.equal(ans({ replyBody: '✅\nNo, keep the existing schema' }), null)
+  assert.equal(ans({ replyBody: 'approved, but keep the column' }), null)
+  for (const replyBody of ['ok', '✅', 'lgtm']) {
+    assert.match(String(ans({ replyBody })), /^- 2026-11-17 · owner answered yes/, replyBody)
+  }
+})
+
+// covers: T5
+test('#4082 appendDecision with the same line and url twice changes the body once', () => {
+  const line = ans()
+  const once = appendDecision('## Hypothesis\nx\n', line, URL4036)
+  assert.notEqual(once, '## Hypothesis\nx\n')
+  assert.equal(appendDecision(once, line, URL4036), once)
+})
+
+// covers: T6
+test('#4082 on-comment.yml: replan step records the answer before dispatch; merge step skips a re-plan', () => {
+  const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
+  const step = wf.slice(wf.indexOf('- name: Re-plan a held plan from the reply'), wf.indexOf('- name: Collect the answer payload'))
+  assert.match(step, /answerDecision\(\{[^\n]*authorAssociation: c\.author_association/)
+  const at = step.indexOf('appendDecision(')
+  assert.ok(at > 0 && at < step.indexOf('createWorkflowDispatch'), 'appendDecision before createWorkflowDispatch')
+  assert.match(step, /Re-planning from your \\`ok\\`/)
+  const merge = wf.slice(wf.indexOf('- name: Merge the gate PR on approval'))
+  assert.match(merge.split('\n').find((l) => /^\s*if:/.test(l)), /steps\.replan\.outputs\.replan != 'true'/)
 })
 
 test('#3564 needs-owner with plan:approved ⇒ not a hold', () => {

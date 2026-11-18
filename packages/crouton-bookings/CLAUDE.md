@@ -127,7 +127,6 @@ export default defineNuxtConfig({
 
 1. Create in `app/components/[Category]/MyComponent.vue`
 2. Component auto-registers as `CroutonBooking[Category]MyComponent`
-3. Use Composition API with `<script setup lang="ts">`
 
 ### Add a New API Endpoint
 

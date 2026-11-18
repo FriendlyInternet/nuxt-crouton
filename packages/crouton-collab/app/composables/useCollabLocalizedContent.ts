@@ -1,5 +1,11 @@
-import * as Y from 'yjs'
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import type * as Y from 'yjs'
+import { ref, type Ref, type ComputedRef } from 'vue'
+import {
+  tiptapToYFragment,
+  yFragmentToTiptap,
+  hasFragmentContent,
+  seedYFragment
+} from '../../shared/tiptap-yjs'
 import { useCollabConnection, type UseCollabConnectionReturn } from './useCollabConnection'
 import type { CollabAwarenessState } from '../types/collab'
 
@@ -172,7 +178,7 @@ export function useCollabLocalizedContent(
     const fragment = getXmlFragment(locale)
     // Convert Y.XmlFragment to JSON
     // This produces a structure compatible with TipTap
-    return yXmlFragmentToJson(fragment)
+    return yFragmentToTiptap(fragment)
   }
 
   /**
@@ -180,22 +186,8 @@ export function useCollabLocalizedContent(
    * Returns true if there are any elements in the fragment
    */
   function hasContent(locale: string): boolean {
-    const fragment = getXmlFragment(locale)
-    // Check if fragment has any children
-    if (fragment.length === 0) return false
-
-    // Check if it's just an empty paragraph (TipTap default)
-    if (fragment.length === 1) {
-      const firstItem = fragment.get(0)
-      if (firstItem instanceof Y.XmlElement) {
-        // Empty paragraph has no children
-        if (firstItem.nodeName === 'paragraph' && firstItem.length === 0) {
-          return false
-        }
-      }
-    }
-
-    return true
+    // Empty, or just TipTap's default empty paragraph, counts as empty
+    return hasFragmentContent(getXmlFragment(locale))
   }
 
   /**
@@ -213,7 +205,7 @@ export function useCollabLocalizedContent(
       // doc's own client ID.
       fragment.delete(0, fragment.length)
       if (content && typeof content === 'object') {
-        jsonToYXmlFragment(content, fragment)
+        tiptapToYFragment(content, fragment)
       }
       return
     }
@@ -235,13 +227,9 @@ export function useCollabLocalizedContent(
     // produce identical Yjs structs (same client + clock), which Yjs merges
     // into one copy instead of keeping both (#3983). Different content gives
     // different IDs, so the docs still converge.
-    const fragmentName = `${fieldPrefix}-${locale}`
-    const seedDoc = new Y.Doc()
-    seedDoc.clientID = seedClientId(fragmentName + JSON.stringify(content))
-    jsonToYXmlFragment(content, seedDoc.getXmlFragment(fragmentName))
-    // Origin 'seed' (not 'remote') so the connection still sends it upstream
-    Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(seedDoc), 'seed')
-    seedDoc.destroy()
+    // The same seed the MCP pages tools use (shared/tiptap-yjs), so a server
+    // seed and a browser seed of one page merge too.
+    seedYFragment(ydoc, `${fieldPrefix}-${locale}`, content)
   }
 
   return {
@@ -270,131 +258,4 @@ export function useCollabLocalizedContent(
     connect,
     disconnect
   }
-}
-
-/**
- * Stable 32-bit FNV-1a hash used as a deterministic Yjs clientID (≥ 1)
- */
-function seedClientId(input: string): number {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0) || 1
-}
-
-/**
- * Convert Y.XmlFragment to JSON (TipTap compatible)
- */
-function yXmlFragmentToJson(fragment: Y.XmlFragment): unknown {
-  const content: unknown[] = []
-
-  for (let i = 0; i < fragment.length; i++) {
-    const item = fragment.get(i)
-    if (item instanceof Y.XmlElement) {
-      content.push(yXmlElementToJson(item))
-    } else if (item instanceof Y.XmlText) {
-      content.push({ type: 'text', text: item.toString() })
-    }
-  }
-
-  return {
-    type: 'doc',
-    content
-  }
-}
-
-/**
- * Convert Y.XmlElement to JSON
- */
-function yXmlElementToJson(element: Y.XmlElement): unknown {
-  const result: Record<string, unknown> = {
-    type: element.nodeName
-  }
-
-  // Get attributes
-  const attrs = element.getAttributes()
-  if (Object.keys(attrs).length > 0) {
-    result.attrs = attrs
-  }
-
-  // Get children
-  const content: unknown[] = []
-  for (let i = 0; i < element.length; i++) {
-    const child = element.get(i)
-    if (child instanceof Y.XmlElement) {
-      content.push(yXmlElementToJson(child))
-    } else if (child instanceof Y.XmlText) {
-      const text = child.toString()
-      if (text) {
-        content.push({ type: 'text', text })
-      }
-    }
-  }
-
-  if (content.length > 0) {
-    result.content = content
-  }
-
-  return result
-}
-
-/**
- * Convert JSON to Y.XmlFragment content
- */
-function jsonToYXmlFragment(json: unknown, fragment: Y.XmlFragment): void {
-  if (!json || typeof json !== 'object') return
-
-  const doc = json as { type?: string; content?: unknown[] }
-  if (doc.type !== 'doc' || !Array.isArray(doc.content)) return
-
-  for (const node of doc.content) {
-    const element = jsonToYXmlElement(node)
-    if (element) {
-      fragment.push([element])
-    }
-  }
-}
-
-/**
- * Convert JSON node to Y.XmlElement
- */
-function jsonToYXmlElement(node: unknown): Y.XmlElement | Y.XmlText | null {
-  if (!node || typeof node !== 'object') return null
-
-  const nodeObj = node as { type?: string; text?: string; attrs?: Record<string, unknown>; content?: unknown[] }
-
-  // Text node
-  if (nodeObj.type === 'text' && typeof nodeObj.text === 'string') {
-    const text = new Y.XmlText()
-    text.insert(0, nodeObj.text)
-    return text
-  }
-
-  // Element node
-  if (nodeObj.type) {
-    const element = new Y.XmlElement(nodeObj.type)
-
-    // Set attributes
-    if (nodeObj.attrs) {
-      for (const [key, value] of Object.entries(nodeObj.attrs)) {
-        element.setAttribute(key, String(value))
-      }
-    }
-
-    // Add children
-    if (Array.isArray(nodeObj.content)) {
-      for (const child of nodeObj.content) {
-        const childElement = jsonToYXmlElement(child)
-        if (childElement) {
-          element.push([childElement])
-        }
-      }
-    }
-
-    return element
-  }
-
-  return null
 }
