@@ -186,7 +186,7 @@ The package provides these API endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/crouton-bookings/teams/[id]/availability` | GET | Get booked slots for date range |
+| `/api/crouton-bookings/teams/[id]/availability` | GET | Booked slots for a date range, plus each date's `bookings` (`product`, `quantity`, `slotIds`; full day = `['all-day']`) |
 | `/api/crouton-bookings/teams/[id]/customer-bookings` | GET | Get user's bookings |
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch booking) |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get locations accessible to user |

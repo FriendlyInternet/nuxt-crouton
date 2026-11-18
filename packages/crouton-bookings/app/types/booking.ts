@@ -142,11 +142,23 @@ export interface BookingData {
  * Availability data from the API, keyed by date (YYYY-MM-DD).
  * Shared between useBookingAvailability and useBookingCart.
  */
+/** One non-cancelled booking of a date, as the availability endpoint returns it (#4109). */
+export interface AvailabilityBooking {
+  /** null = an old row with no product; counts against every product */
+  product: string | null
+  /** At least 1 */
+  quantity: number
+  /** Slot ids held; a full day is `['all-day']` */
+  slotIds: string[]
+}
+
 export interface AvailabilityData {
   [dateISO: string]: {
     bookedSlots: string[]
     bookedCount?: number // For inventory mode
     bookedGroupSlots?: Record<string, string[]> // slotId → groupIds that booked it
+    /** The date's bookings per product (always sent by the server) */
+    bookings?: AvailabilityBooking[]
   }
 }
 
