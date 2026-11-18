@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-17T23:04:01Z",
-  "data_commit": "b828b0161b1640f4bf806c87e73c55e81d7ec479",
+  "as_of": "2026-11-18T04:35:40Z",
+  "data_commit": "00cc57296caacb7debb1834aab9ddfcc98784ef5",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -1140,12 +1140,12 @@
         "automerge-epic-subpr.yml/automerge": {
           "failed": 0,
           "rate": 0,
-          "runs": 418
+          "runs": 564
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 86
+          "runs": 104
         },
         "build-review.yml/Release parked tickets": {
           "failed": 0,
@@ -1154,8 +1154,8 @@
         },
         "build-review.yml/review": {
           "failed": 1,
-          "rate": 0.0116,
-          "runs": 86
+          "rate": 0.0096,
+          "runs": 104
         },
         "calendar-scroll-diag.yml/Calendar scroll diagnostics · PR": {
           "failed": 3,
@@ -1164,88 +1164,88 @@
         },
         "ci.yml/Actionlint workflows": {
           "failed": 2,
-          "rate": 0.0476,
-          "runs": 42
+          "rate": 0.0417,
+          "runs": 48
         },
         "ci.yml/Build kassa (cloudflare-pages)": {
           "failed": 1,
-          "rate": 0.0108,
-          "runs": 93
+          "rate": 0.0085,
+          "runs": 117
         },
         "ci.yml/Build kassa (node-server)": {
           "failed": 1,
-          "rate": 0.0106,
-          "runs": 94
+          "rate": 0.0085,
+          "runs": 118
         },
         "ci.yml/Build packages": {
-          "failed": 9,
-          "rate": 0.0811,
-          "runs": 111
+          "failed": 13,
+          "rate": 0.0922,
+          "runs": 141
         },
         "ci.yml/CI Gate": {
-          "failed": 52,
-          "rate": 0.3421,
-          "runs": 152
+          "failed": 72,
+          "rate": 0.3349,
+          "runs": 215
         },
         "ci.yml/Compile changed .vue": {
-          "failed": 3,
-          "rate": 0.0244,
-          "runs": 123
+          "failed": 5,
+          "rate": 0.0316,
+          "runs": 158
         },
         "ci.yml/Detect changes": {
           "failed": 0,
           "rate": 0,
-          "runs": 144
+          "runs": 203
         },
         "ci.yml/Fallow Audit": {
-          "failed": 8,
-          "rate": 0.0879,
-          "runs": 91
+          "failed": 11,
+          "rate": 0.0948,
+          "runs": 116
         },
         "ci.yml/MCP Server (typecheck + tests)": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 96
+          "failed": 2,
+          "rate": 0.0157,
+          "runs": 127
         },
         "ci.yml/Node checks (docs, drift, sync, scripts tests, shellcheck)": {
           "failed": 12,
-          "rate": 0.1091,
-          "runs": 110
+          "rate": 0.0833,
+          "runs": 144
         },
         "ci.yml/Package Validation": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 110
+          "failed": 2,
+          "rate": 0.0141,
+          "runs": 142
         },
         "ci.yml/Plan checks": {
-          "failed": 11,
-          "rate": 0.1833,
-          "runs": 60
+          "failed": 12,
+          "rate": 0.1008,
+          "runs": 119
         },
         "ci.yml/Removed tests": {
-          "failed": 2,
-          "rate": 0.0145,
-          "runs": 138
+          "failed": 3,
+          "rate": 0.0168,
+          "runs": 179
         },
         "ci.yml/Test Suite": {
           "failed": 4,
-          "rate": 0.0417,
-          "runs": 96
+          "rate": 0.0331,
+          "runs": 121
         },
         "ci.yml/Type Check Apps": {
           "failed": 1,
-          "rate": 0.0105,
-          "runs": 95
+          "rate": 0.0083,
+          "runs": 120
         },
         "ci.yml/Type Check Packages": {
           "failed": 0,
           "rate": 0,
-          "runs": 96
+          "runs": 122
         },
         "ci.yml/Typecheck POC": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 33
+          "failed": 2,
+          "rate": 0.0435,
+          "runs": 46
         },
         "decompose-on-issue-pidev.yml/Record run outcome": {
           "failed": 0,
@@ -1258,119 +1258,119 @@
           "runs": 2
         },
         "deploy-apps.yml/deploy (kassa, staging, https://kassa.pmcp.dev, https://kassa.friendlyinter.net, @fyit/crouton-co... / Deploy kassa (staging)": {
-          "failed": 3,
-          "rate": 0.0556,
-          "runs": 54
+          "failed": 4,
+          "rate": 0.0506,
+          "runs": 79
         },
         "deploy-apps.yml/deploy (velo, staging, https://velo.pmcp.dev, https://velo.friendlyinter.net, @fyit/crouton-core ... / Deploy velo (staging)": {
-          "failed": 13,
-          "rate": 0.2063,
-          "runs": 63
+          "failed": 19,
+          "rate": 0.2135,
+          "runs": 89
         },
         "deploy-apps.yml/detect": {
           "failed": 0,
           "rate": 0,
-          "runs": 73
+          "runs": 109
         },
         "deploy-apps.yml/report-bumped-preview": {
           "failed": 0,
           "rate": 0,
-          "runs": 6
+          "runs": 12
         },
         "deploy-docs.yml/Deploy docs to Cloudflare Workers": {
           "failed": 0,
           "rate": 0,
-          "runs": 30
+          "runs": 45
         },
         "deploy-pocs.yml/deploy (booking-demo, staging, https://booking-demo.pmcp.dev, @fyit/crouton-core @fyit/crouton-au... / Deploy booking-demo (staging)": {
-          "failed": 2,
-          "rate": 0.0351,
-          "runs": 57
+          "failed": 4,
+          "rate": 0.0506,
+          "runs": 79
         },
         "deploy-pocs.yml/deploy (crate, staging, https://crate-staging.pmcp.dev, https://crate.pmcp.dev, @fyit/crouton-cor... / Deploy crate (staging)": {
-          "failed": 2,
-          "rate": 0.0408,
-          "runs": 49
+          "failed": 3,
+          "rate": 0.0441,
+          "runs": 68
         },
         "deploy-pocs.yml/deploy (crouton-builder, staging, https://crouton-builder.pmcp.dev, @fyit/crouton-core @fyit/crou... / Deploy crouton-builder (staging)": {
-          "failed": 2,
-          "rate": 0.0323,
-          "runs": 62
+          "failed": 4,
+          "rate": 0.0471,
+          "runs": 85
         },
         "deploy-pocs.yml/deploy (gallery, staging, https://gallery-staging.pmcp.dev, https://gallery.pmcp.dev, @fyit/crout... / Deploy gallery (staging)": {
-          "failed": 4,
-          "rate": 0.0606,
-          "runs": 66
+          "failed": 6,
+          "rate": 0.0645,
+          "runs": 93
         },
         "deploy-pocs.yml/deploy (loop-station, staging, https://loop-station.pmcp.dev, @fyit/crouton-themes, false) / Deploy loop-station (staging)": {
-          "failed": 3,
-          "rate": 0.0588,
-          "runs": 51
+          "failed": 4,
+          "rate": 0.0541,
+          "runs": 74
         },
         "deploy-pocs.yml/deploy (pins, staging, https://pins.pmcp.dev, @fyit/crouton-core @fyit/crouton-auth @fyit/crouton... / Deploy pins (staging)": {
-          "failed": 2,
-          "rate": 0.0408,
-          "runs": 49
+          "failed": 4,
+          "rate": 0.058,
+          "runs": 69
         },
         "deploy-pocs.yml/deploy (snippets, staging, @fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n, false) / Deploy snippets (staging)": {
-          "failed": 1,
-          "rate": 0.0208,
-          "runs": 48
+          "failed": 2,
+          "rate": 0.0294,
+          "runs": 68
         },
         "deploy-pocs.yml/deploy (status, staging, https://status.pmcp.dev, @fyit/crouton-core @fyit/crouton-auth @fyit/cro... / Deploy status (staging)": {
-          "failed": 1,
-          "rate": 0.0164,
-          "runs": 61
+          "failed": 2,
+          "rate": 0.0244,
+          "runs": 82
         },
         "deploy-pocs.yml/detect": {
           "failed": 0,
           "rate": 0,
-          "runs": 94
+          "runs": 136
         },
         "deploy-themes-playground.yml/Deploy themes playground to Cloudflare Workers": {
           "failed": 0,
           "rate": 0,
-          "runs": 10
+          "runs": 14
         },
         "e2e.yml/Detect relevant changes": {
           "failed": 0,
           "rate": 0,
-          "runs": 142
+          "runs": 193
         },
         "e2e.yml/E2E (minimal)": {
-          "failed": 1,
-          "rate": 0.0238,
-          "runs": 42
+          "failed": 2,
+          "rate": 0.0299,
+          "runs": 67
         },
         "e2e.yml/E2E (with-assets)": {
-          "failed": 1,
-          "rate": 0.0256,
-          "runs": 39
+          "failed": 2,
+          "rate": 0.0313,
+          "runs": 64
         },
         "e2e.yml/E2E (with-bookings)": {
-          "failed": 1,
-          "rate": 0.0217,
-          "runs": 46
+          "failed": 3,
+          "rate": 0.0417,
+          "runs": 72
         },
         "e2e.yml/E2E (with-collab)": {
-          "failed": 1,
-          "rate": 0.0238,
-          "runs": 42
+          "failed": 2,
+          "rate": 0.0294,
+          "runs": 68
         },
         "e2e.yml/E2E (with-devtools)": {
-          "failed": 1,
-          "rate": 0.025,
-          "runs": 40
+          "failed": 2,
+          "rate": 0.0303,
+          "runs": 66
         },
         "e2e.yml/E2E (with-maps)": {
-          "failed": 1,
-          "rate": 0.0256,
-          "runs": 39
+          "failed": 2,
+          "rate": 0.0313,
+          "runs": 64
         },
         "e2e.yml/E2E (with-pages)": {
-          "failed": 1,
-          "rate": 0.0233,
-          "runs": 43
+          "failed": 2,
+          "rate": 0.0299,
+          "runs": 67
         },
         "e2e.yml/E2E (with-relations)": {
           "failed": 0,
@@ -1378,19 +1378,19 @@
           "runs": 4
         },
         "e2e.yml/E2E (with-sales)": {
-          "failed": 1,
-          "rate": 0.0238,
-          "runs": 42
+          "failed": 2,
+          "rate": 0.0299,
+          "runs": 67
         },
         "e2e.yml/E2E Gate": {
-          "failed": 11,
-          "rate": 0.0748,
-          "runs": 147
+          "failed": 24,
+          "rate": 0.1194,
+          "runs": 201
         },
         "e2e.yml/detect": {
           "failed": 0,
           "rate": 0,
-          "runs": 60
+          "runs": 93
         },
         "epic-digest.yml/digest": {
           "failed": 0,
@@ -1398,29 +1398,29 @@
           "runs": 1
         },
         "fix-ci-on-failure.yml/Fix": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 37
+          "failed": 1,
+          "rate": 0.0227,
+          "runs": 44
         },
         "fix-ci-on-failure.yml/Record run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 37
+          "runs": 44
         },
         "fix-ci-on-failure.yml/fixbot": {
           "failed": 0,
           "rate": 0,
-          "runs": 37
+          "runs": 44
         },
         "guard-package-approval.yml/No committed approval file": {
           "failed": 0,
           "rate": 0,
-          "runs": 99
+          "runs": 137
         },
         "handoff-sweep.yml/sweep": {
           "failed": 0,
           "rate": 0,
-          "runs": 132
+          "runs": 201
         },
         "housekeeping.yml/digest": {
           "failed": 0,
@@ -1434,58 +1434,58 @@
         },
         "label-router.yml/Route label": {
           "failed": 1,
-          "rate": 0.0083,
-          "runs": 120
+          "rate": 0.0071,
+          "runs": 141
         },
         "labels.yml/labeler": {
           "failed": 0,
           "rate": 0,
-          "runs": 1
+          "runs": 3
         },
         "loop-station-inventory.yml/inventory": {
           "failed": 0,
           "rate": 0,
-          "runs": 5
+          "runs": 13
         },
         "loop-station-refresh.yml/redeploy": {
           "failed": 0,
           "rate": 0,
-          "runs": 6
+          "runs": 10
         },
         "migration-guard.yml/App migrations present": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 25
+          "failed": 2,
+          "rate": 0.0556,
+          "runs": 36
         },
         "on-comment.yml/Read API allowance at start": {
           "failed": 0,
           "rate": 0,
-          "runs": 118
+          "runs": 174
         },
         "on-comment.yml/Record plan-review run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 78
+          "runs": 94
         },
         "on-comment.yml/Record run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 5
+          "runs": 6
         },
         "on-comment.yml/approve-draft": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 6
         },
         "on-comment.yml/approve-epic": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 5
         },
         "on-comment.yml/automerge-go / automerge": {
           "failed": 0,
           "rate": 0,
-          "runs": 13
+          "runs": 40
         },
         "on-comment.yml/explain-skipped-approval": {
           "failed": 0,
@@ -1500,97 +1500,97 @@
         "on-comment.yml/interpret-act": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
         },
         "on-comment.yml/interpret-decide": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
         },
         "on-comment.yml/interpret-read": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
         },
         "on-comment.yml/plan-review": {
           "failed": 0,
           "rate": 0,
-          "runs": 78
+          "runs": 94
         },
         "on-comment.yml/record-decision": {
           "failed": 0,
           "rate": 0,
-          "runs": 1
+          "runs": 4
         },
         "on-comment.yml/resume": {
           "failed": 1,
-          "rate": 0.1111,
-          "runs": 9
+          "rate": 0.0625,
+          "runs": 16
         },
         "on-comment.yml/revise": {
           "failed": 0,
           "rate": 0,
-          "runs": 20
+          "runs": 28
         },
         "on-comment.yml/route": {
           "failed": 0,
           "rate": 0,
-          "runs": 118
+          "runs": 174
         },
         "on-comment.yml/test-card": {
           "failed": 0,
           "rate": 0,
-          "runs": 2
+          "runs": 3
         },
         "on-issue-close.yml/cleanup-epic-branch": {
           "failed": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 67
         },
         "on-issue-close.yml/epic-ready-pr": {
           "failed": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 67
         },
         "on-issue-close.yml/postmortem / auto-close": {
           "failed": 0,
           "rate": 0,
-          "runs": 21
+          "runs": 39
         },
         "on-issue-close.yml/postmortem / post": {
           "failed": 0,
           "rate": 0,
-          "runs": 4
+          "runs": 8
         },
         "on-issue-close.yml/postmortem / target": {
           "failed": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 67
         },
         "on-issue-close.yml/postmortem / write": {
           "failed": 0,
           "rate": 0,
-          "runs": 4
+          "runs": 8
         },
         "on-issue-close.yml/refresh-blocked": {
           "failed": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 67
         },
         "on-issue-close.yml/release": {
           "failed": 0,
           "rate": 0,
-          "runs": 99
+          "runs": 147
         },
         "on-issue-close.yml/strip-status": {
           "failed": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 67
         },
         "on-pr-close.yml/cleanup-epic-branch": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 5
         },
         "on-pr-close.yml/clear-blocked": {
           "failed": 0,
@@ -1600,47 +1600,47 @@
         "on-pr-close.yml/close-linked-issues": {
           "failed": 0,
           "rate": 0,
-          "runs": 33
+          "runs": 71
         },
         "on-pr-close.yml/owner-quiz / post": {
           "failed": 0,
           "rate": 0,
-          "runs": 4
+          "runs": 14
         },
         "on-pr-close.yml/owner-quiz / target": {
           "failed": 0,
           "rate": 0,
-          "runs": 10
+          "runs": 38
         },
         "on-pr-close.yml/owner-quiz / write": {
           "failed": 0,
           "rate": 0,
-          "runs": 4
+          "runs": 14
         },
         "on-pr-close.yml/postmortem / auto-close": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 5
         },
         "on-pr-close.yml/postmortem / target": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 5
         },
         "on-pr-close.yml/release-traffic": {
           "failed": 0,
           "rate": 0,
-          "runs": 24
+          "runs": 56
         },
         "on-pr-close.yml/teardown-preview": {
           "failed": 0,
           "rate": 0,
-          "runs": 34
+          "runs": 72
         },
         "packages-guard.yml/Packages edit declared": {
           "failed": 0,
           "rate": 0,
-          "runs": 140
+          "runs": 193
         },
         "pi-key-canary.yml/canary": {
           "failed": 0,
@@ -1650,32 +1650,37 @@
         "pipeline-metrics.yml/metrics": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
+        },
+        "post-test-card.yml/card": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 5
         },
         "post-test-card.yml/notice": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 12
         },
         "postmortem.yml/auto-close": {
           "failed": 0,
           "rate": 0,
-          "runs": 2
+          "runs": 3
         },
         "postmortem.yml/target": {
           "failed": 0,
           "rate": 0,
-          "runs": 2
+          "runs": 3
         },
         "preview-screenshot.yml/Capture": {
-          "failed": 25,
-          "rate": 0.3247,
-          "runs": 77
+          "failed": 28,
+          "rate": 0.2772,
+          "runs": 101
         },
         "qodo-second-opinion.yml/ask": {
           "failed": 0,
           "rate": 0,
-          "runs": 72
+          "runs": 89
         },
         "quality-digest.yml/gather": {
           "failed": 0,
@@ -1685,47 +1690,47 @@
         "report-failed-deploy.yml/report": {
           "failed": 0,
           "rate": 0,
-          "runs": 4
+          "runs": 8
         },
         "review.yml/a11y": {
-          "failed": 1,
-          "rate": 0.0769,
-          "runs": 13
+          "failed": 2,
+          "rate": 0.0741,
+          "runs": 27
         },
         "review.yml/diff": {
           "failed": 0,
           "rate": 0,
-          "runs": 141
+          "runs": 188
         },
         "review.yml/frontend-review": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 40
+          "failed": 2,
+          "rate": 0.0323,
+          "runs": 62
         },
         "review.yml/red-team": {
-          "failed": 1,
-          "rate": 0.025,
-          "runs": 40
+          "failed": 2,
+          "rate": 0.0345,
+          "runs": 58
         },
         "review.yml/simplify": {
           "failed": 3,
-          "rate": 0.039,
-          "runs": 77
+          "rate": 0.0303,
+          "runs": 99
         },
         "routing-registry.yml/check": {
           "failed": 0,
           "rate": 0,
-          "runs": 48
+          "runs": 61
         },
         "schedule-waves.yml/retry": {
           "failed": 0,
           "rate": 0,
-          "runs": 14
+          "runs": 26
         },
         "secret-scan.yml/Secret scan (new commits)": {
           "failed": 0,
           "rate": 0,
-          "runs": 110
+          "runs": 164
         },
         "skill-freshness-pr.yml/advise": {
           "failed": 0,
@@ -1733,19 +1738,19 @@
           "runs": 6
         },
         "skills-doc.yml/check": {
-          "failed": 3,
-          "rate": 0.0455,
-          "runs": 66
+          "failed": 4,
+          "rate": 0.0494,
+          "runs": 81
         },
         "status.yml/board": {
           "failed": 0,
           "rate": 0,
-          "runs": 326
+          "runs": 450
         },
         "status.yml/pr-comment": {
           "failed": 0,
           "rate": 0,
-          "runs": 592
+          "runs": 822
         },
         "sync-changelogs.yml/sync": {
           "failed": 0,
@@ -1755,27 +1760,27 @@
         "teardown-on-removal.yml/teardown": {
           "failed": 0,
           "rate": 0,
-          "runs": 2
+          "runs": 3
         },
         "ticket-review.yml/Record run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
         },
         "ticket-review.yml/review": {
           "failed": 0,
           "rate": 0,
-          "runs": 3
+          "runs": 4
         },
         "verify-fix-evidence.yml/verify": {
           "failed": 0,
           "rate": 0,
-          "runs": 163
+          "runs": 185
         },
         "warn-closes-blocked.yml/warn": {
           "failed": 0,
           "rate": 0,
-          "runs": 61
+          "runs": 80
         },
         "weekly.yml/advisor": {
           "failed": 0,
@@ -1800,22 +1805,22 @@
         "work-issue-pidev.yml/Record run outcome": {
           "failed": 0,
           "rate": 0,
-          "runs": 193
+          "runs": 233
         },
         "work-issue-pidev.yml/Release parked tickets": {
           "failed": 0,
           "rate": 0,
-          "runs": 13
+          "runs": 17
         },
         "work-issue-pidev.yml/work-pi": {
-          "failed": 15,
-          "rate": 0.0802,
-          "runs": 187
+          "failed": 17,
+          "rate": 0.0752,
+          "runs": 226
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 7749,
-        "runs_with_jobs": 4157
+        "eligible_runs": 7750,
+        "runs_with_jobs": 5655
       },
       "lines": {
         "building": {
@@ -1838,8 +1843,8 @@
         },
         "merging": {
           "failed": 0,
-          "runs": 2778,
-          "schedule_total": 81,
+          "runs": 2779,
+          "schedule_total": 91,
           "workflow_rate": 0
         },
         "planning": {
@@ -1851,7 +1856,7 @@
         "scheduled": {
           "failed": 0,
           "runs": 48,
-          "schedule_total": 51,
+          "schedule_total": 56,
           "workflow_rate": 0
         },
         "tickets": {
@@ -1870,9 +1875,9 @@
       "schedules": {
         "automerge-epic-subpr.yml": {
           "failed_runs": 0,
-          "missed": 40,
-          "slots": 45,
-          "total": 40
+          "missed": 45,
+          "slots": 51,
+          "total": 45
         },
         "e2e.yml": {
           "failed_runs": 0,
@@ -1888,9 +1893,9 @@
         },
         "handoff-sweep.yml": {
           "failed_runs": 1,
-          "missed": 40,
-          "slots": 45,
-          "total": 41
+          "missed": 45,
+          "slots": 50,
+          "total": 46
         },
         "housekeeping.yml": {
           "failed_runs": 0,
@@ -1912,9 +1917,9 @@
         },
         "pipeline-metrics.yml": {
           "failed_runs": 0,
-          "missed": 40,
-          "slots": 45,
-          "total": 40
+          "missed": 45,
+          "slots": 51,
+          "total": 45
         },
         "quality-digest.yml": {
           "failed_runs": 0,
@@ -1939,7 +1944,7 @@
         "automerge-epic-subpr.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 796
+          "runs": 797
         },
         "build-review.yml": {
           "failed": 2,
