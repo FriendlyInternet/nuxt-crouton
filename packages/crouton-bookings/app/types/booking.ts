@@ -113,8 +113,9 @@ export interface CartItem {
   totalSlots?: number
   groupId?: string | null
   groupLabel?: string | null
-  // Inventory mode
-  isInventoryMode?: boolean
+  /** The catalog product booked (#4110) */
+  productId?: string | null
+  /** Amount, every location (default 1) */
   quantity?: number
 }
 

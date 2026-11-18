@@ -10,8 +10,8 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 |------|---------|
 | `nuxt.config.ts` | Layer configuration, component registration, i18n setup |
 | `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, `calendarView` (week/month), and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one (or takes the page's via its `store` prop — `provideBookingsStore(src, existing?)` — so inline + full-screen Panels on the admin page share it); the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
-| `app/composables/useBookingAvailability.ts` | Check slot/inventory availability |
-| `app/composables/useBookingCart.ts` | Shopping cart for bookings |
+| `app/composables/useBookingAvailability.ts` | Fetch availability (per-date bookings per product), slots (`hasSlots`), schedule rules |
+| `app/composables/useBookingCart.ts` | Shopping cart for bookings — counts per product, cart-aware (`productLeft`); items carry `productId` + `quantity` (#4110) |
 | `app/composables/useBookingsSettings.ts` | Team booking settings |
 | `app/composables/useBookingEmail.ts` | Email functionality (opt-in) |
 | `app/composables/useBookingEmailVariables.ts` | Email template variables + demo data for previews |
@@ -76,7 +76,7 @@ Free places are counted per product, per day, per slot:
 - A booking with no `product` (old rows) counts against every product of its location; a stored quantity below 1 counts as 1.
 - A location is fully booked on a day only when every product it lists is at 0 in every slot; a location listing no products is left out of the day check.
 - Slot `capacity`, location `quantity` and `inventoryMode` no longer count. `inventoryMode` only keeps the stored slot as JSON `null` (and the location is counted as slotless). The location form no longer shows them either (#4087); the columns stay until step 5.
-- The pure rule is `app/utils/capacity.ts` (`leftFor`, `fitsCapacity`, `isLocationFull`, `parseLocationProducts`); the calendar's `isDayFullyBooked` (`app/utils/day-availability.ts`) and the cart pre-check use it; `guardSql` is the same rule in SQL; screen helpers built on it (not yet wired, 5a.2–5a.4): `utils/product-left.ts` (cart-aware free stock), `utils/slot-status.ts` (per-slot booked/stock over all listed products), `utils/product-picker.ts` (`showProductPicker`).
+- The pure rule is `app/utils/capacity.ts` (`leftFor`, `fitsCapacity`, `isLocationFull`, `parseLocationProducts`); the calendar's `isDayFullyBooked` (`app/utils/day-availability.ts`) and the cart pre-check use it; `guardSql` is the same rule in SQL. The booking form counts with it too (#4110): `useBookingCart` counts per product, cart-aware, through `utils/product-left.ts` (`getSlotRemaining`, `getSlotCapacity`, `maxQuantity` for the picked `formState.productId` — auto-picked when the location lists one, reset on a location change), and every cart item carries `productId` and `quantity` (default 1) at every location; a location without slots (`inventoryMode` set or no named slots, `hasSlots` false) books `['all-day']` by itself, never the old `inventory` id. Screen helpers not yet wired (5a.3–5a.4): `utils/slot-status.ts` (per-slot booked/stock over all listed products), `utils/product-picker.ts` (`showProductPicker`).
 
 **Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). The location form's Bookings tab edits this list (pick a team product, set its stock ≥ 1, add/remove; an emptied list saves as `[]`) through `app/utils/location-products-edit.ts`, tested in `test/location-products-edit.test.ts` (#4087). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). A location saved without products gets the same own product (`ensureLocationProducts` in `server/utils/location-products.ts`, #4044; the location POST/PATCH routes and the velo/booking-demo seeds call it). A booking always carries a product of its own location (`resolveProduct` in `server/utils/booking-capacity.ts`, on every write): a named product must be listed (else 400 "Unknown product"), none named → the location's only product, two or more listed → 400 "Pick a product", none listed → 400. Counting uses `stock` per product (see Counting); stock is read from `bookings_locations.products` inside the guarded statement, so a product unlisted after validation is refused (409).
 
@@ -84,8 +84,9 @@ Free places are counted per product, per day, per slot:
 `all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
 offer it *next to* them. In one booking the full day can't be combined with another slot (400).
 Across bookings it takes one unit from every slot (see Counting), so at stock 1 it can't share a
-date with another booking; at stock ≥ 2 it can. Until step 5 the form still blocks it
-(`isBlockedByFullDay`); the create endpoint follows the stock rule. The pure helpers:
+date with another booking; at stock ≥ 2 it can. The booking form follows the stock rule too;
+it only refuses the full day combined with another slot in one booking, and a schedule-closed
+slot (closing any slot also closes the full day that date). The pure helpers:
 `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
 `fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
 (booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
@@ -136,9 +137,9 @@ export default defineNuxtConfig({
 
 ### Modify Availability Logic
 
-1. Edit `app/composables/useBookingAvailability.ts`
-2. Functions: `getSlotAvailability()`, `getInventoryAvailability()`
-3. Handles both slot and inventory modes
+1. Counting is `app/utils/capacity.ts` (+ `app/utils/product-left.ts` for the cart)
+2. `useBookingCart` (`getSlotRemaining`, `maxQuantity`, `canAddToCart`) wires it to the form
+3. `app/composables/useBookingAvailability.ts` only fetches the per-date bookings and parses slots/rules
 
 ### Customize Email Behavior
 

@@ -11,9 +11,9 @@ vi.mock('../app/composables/useBookingCartStorage', () => ({
 }))
 vi.mock('../app/composables/useBookingAvailability', () => ({
   useBookingAvailability: () => ({
-    loading: ref(false), availabilityData: ref(null), isInventoryMode: ref(false), inventoryQuantity: ref(0),
+    loading: ref(false), availabilityData: ref({}), hasSlots: ref(true),
     allSlots: ref([]), locationSlots: ref([{ id: 'am', label: 'Morning' }]), fetchAvailability() {},
-    getBookedSlotsForDate: () => [], getBookedCountForDate: () => 0, isDateUnavailable: () => false,
+    getBookedSlotsForDate: () => [], isDateUnavailable: () => false,
     isSlotAvailableByRules: () => true, getBlockedReason: () => null, getRuleBlockedSlotIds: () => [],
   }),
 }))
@@ -27,7 +27,7 @@ beforeEach(() => {
   g.useTeam = () => ({ currentTeam: ref({ id: 't1' }) })
   g.useT = () => ({ t: (k: string) => k })
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
-  g.useFetch = (url: any) => ({ data: ref(String(url?.() ?? '').includes('customer-locations') ? [{ id: 'l1', title: 'Studio' }] : null), status: ref('success'), refresh: async () => {} })
+  g.useFetch = (url: any) => ({ data: ref(String(url?.() ?? '').includes('customer-locations') ? [{ id: 'l1', title: 'Studio', products: [{ product: 'p1', stock: 1 }] }] : null), status: ref('success'), refresh: async () => {} })
 })
 
 describe('cart sends the picked calendar day (#3379)', () => {
@@ -42,5 +42,7 @@ describe('cart sends the picked calendar day (#3379)', () => {
     const item = c.cart.value[0]!
     expect(item.date).toBe('2026-11-09T23:00:00.000Z')
     expect(item.day).toBe('2026-11-10')
+    // #4110: the only product is picked and travels with the item
+    expect(item.productId).toBe('p1')
   })
 })

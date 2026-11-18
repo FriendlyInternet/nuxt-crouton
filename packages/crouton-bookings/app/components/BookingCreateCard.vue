@@ -44,8 +44,8 @@ const {
   toggleSlot,
   submitAll,
   isSubmitting,
-  isInventoryMode,
-  getInventoryAvailability,
+  hasSlots,
+  maxQuantity,
   availabilityLoading,
   // Group support
   enableGroups,
@@ -181,10 +181,10 @@ watch(
   { immediate: true },
 )
 
-// Get inventory info for selected date
+// Free amount for a location without slots (the full day, for the picked product)
 const inventoryInfo = computed(() => {
-  if (!isInventoryMode.value) return null
-  return getInventoryAvailability(props.date)
+  if (hasSlots.value) return null
+  return { remaining: maxQuantity.value, available: maxQuantity.value > 0 }
 })
 
 // Can submit
@@ -194,7 +194,10 @@ const canSubmit = computed(() => {
   // If groups are enabled, require a group selection
   if (enableGroups.value && !localGroupId.value) return false
 
-  if (isInventoryMode.value) {
+  // A new booking also needs a product and an amount that fits (#4110)
+  if (!isEditMode.value && !canAddToCart.value) return false
+
+  if (!hasSlots.value) {
     return inventoryInfo.value?.available ?? false
   } else {
     return localSlotIds.value.length > 0
@@ -346,7 +349,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
               {{ getLocationAddress(selectedLocation) }}
             </span>
             <span class="text-sm font-medium text-default">
-              {{ isInventoryMode ? t('bookings.createCard.howMany') : t('bookings.createCard.pickTimeSlot') }}
+              {{ !hasSlots ? t('bookings.createCard.howMany') : t('bookings.createCard.pickTimeSlot') }}
             </span>
           </div>
 
@@ -365,7 +368,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
           </div>
 
           <!-- Slot selection (slot mode) -->
-          <div v-if="selectedLocation && !isInventoryMode" class="flex flex-wrap gap-1.5">
+          <div v-if="selectedLocation && hasSlots" class="flex flex-wrap gap-1.5">
             <!-- Loading state -->
             <template v-if="availabilityLoading">
               <div v-for="i in 3" :key="i" class="h-6 w-16 bg-elevated rounded animate-pulse" />
@@ -403,7 +406,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
           </div>
 
           <!-- Inventory mode: quantity selector + availability -->
-          <div v-if="localLocationId && isInventoryMode && inventoryInfo" class="flex items-center gap-3">
+          <div v-if="localLocationId && !hasSlots && inventoryInfo" class="flex items-center gap-3">
             <UInputNumber
               v-model="formState.quantity"
               :min="1"
