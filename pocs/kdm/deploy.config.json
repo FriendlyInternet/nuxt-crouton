@@ -1,0 +1,4 @@
+{
+  "stagingUrl": "https://kdm.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n @fyit/crouton-pages @fyit/crouton-assets @fyit/crouton-editor @fyit/crouton-layout"
+}

@@ -203,6 +203,34 @@ function seedId(...parts) {
 const seedOrgId = slug => seedId('org', slug)
 
 /** Single-quote-escape a value for an inline SQLite string literal. */
+/**
+ * The seeded-team membership statement (#832), safe against a membership the APP
+ * already made (#4126). A `defaultTeamSlug: 'test1'` app auto-joins every new user to
+ * test1 at sign-up (`addUserToDefaultOrg`), so blindly inserting our deterministic-id
+ * row left the review user with TWO `member` rows for the same team. So:
+ *   1. drop our own row if another membership for this user+team exists (cleans up
+ *      previews seeded before this fix);
+ *   2. insert ours only when no membership for this user+team exists yet;
+ *   3. either way, make sure the review user is `owner` of the team.
+ * Idempotent on redeploy (conflict on the deterministic id; createdAt preserved).
+ * Mirrors crouton-auth/seed's `member` shape.
+ */
+export function seedTeamMemberSql({ memberId, userId, orgId, createdAt }) {
+  const id = sqlStr(memberId)
+  const u = sqlStr(userId)
+  const o = sqlStr(orgId)
+  return (
+    `DELETE FROM "member" WHERE "id"=${id} AND EXISTS (` +
+    `SELECT 1 FROM "member" WHERE "userId"=${u} AND "organizationId"=${o} AND "id"<>${id});\n` +
+    `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
+    `SELECT ${id},${u},${o},'owner',${Number(createdAt)} ` +
+    `WHERE NOT EXISTS (SELECT 1 FROM "member" WHERE "userId"=${u} AND "organizationId"=${o} AND "id"<>${id}) ` +
+    `ON CONFLICT("id") DO UPDATE SET ` +
+    `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";\n` +
+    `UPDATE "member" SET "role"='owner' WHERE "userId"=${u} AND "organizationId"=${o};`
+  )
+}
+
 function sqlStr(v) {
   return `'${String(v).replace(/'/g, "''")}'`
 }
@@ -561,13 +589,7 @@ async function main() {
     const orgId = seedOrgId(args.seedTeam)
     const memberId = seedId('member', args.seedTeam, email)
     const createdAt = Math.floor(Date.now() / 1000)
-    // Idempotent member upsert (conflict on the deterministic id → no dupes on
-    // redeploy; createdAt preserved). Mirrors crouton-auth/seed's `member` shape.
-    const sql =
-      `INSERT INTO "member" ("id","userId","organizationId","role","createdAt") ` +
-      `VALUES (${sqlStr(memberId)},${sqlStr(userId)},${sqlStr(orgId)},'owner',${createdAt}) ` +
-      `ON CONFLICT("id") DO UPDATE SET ` +
-      `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
+    const sql = seedTeamMemberSql({ memberId, userId, orgId, createdAt })
     try {
       execSeedSql(args, sql)
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
