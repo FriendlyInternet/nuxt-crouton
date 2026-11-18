@@ -26,6 +26,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parsePlan } from './plan-shape.mjs'
+import { recordMarker } from './reply-record.mjs'
 
 export const REVIEW_MARKER = '<!-- plan-review:v1 -->'
 export const RUBRIC = [
@@ -138,6 +139,10 @@ export function holdOrRetry({ round, failedChecks = [] }) {
   return failedChecks.some((id) => JUDGEMENT.includes(String(id))) ? 'hold' : 'retry'
 }
 
+/** The reply records (#4113): which replies a held plan review accepts and what each one starts. */
+export const QUESTION_RECORD = (question) => ({ kind: 'plan-question', question, accepts: ['ok', 'other'], starts: { ok: 'replan-with-yes', other: 'replan-with-feedback' } })
+export const REJECTED_RECORD = { kind: 'plan-rejected', question: 'override the plan review?', accepts: ['ok: <reason>', 'approval', 'other'], starts: { 'ok: <reason>': 'approve-plan', approval: 'plan-needs-reason', other: 'replan-with-feedback' } }
+
 /** PURE. The typed-brief comment (plain language, depth collapsed). */
 export function renderComment(d, { round = 1, model = '' } = {}) {
   const final = d.verdict === 'no-go' && holdOrRetry({ round, failedChecks: d.failed }) === 'hold'
@@ -149,7 +154,8 @@ export function renderComment(d, { round = 1, model = '' } = {}) {
       : `🔴 **Plan sent back** (round ${round} of ${MAX_ROUNDS}) — ${d.failed.filter((i) => i !== '7').length} check(s) failed. The planner is re-run with these reasons.`,
     'needs-owner': `🔀 **Needs your call** — ${d.question}\n**Needs:** answer`,
   }[d.verdict]
-  return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
+  const record = d.verdict === 'needs-owner' ? QUESTION_RECORD(d.question) : final ? REJECTED_RECORD : null
+  return `${REVIEW_MARKER}\n<!-- plan-review-verdict:${d.verdict} -->\n${record ? recordMarker(record) + '\n' : ''}> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review${model ? ` on \`${model}\`` : ''}_\n\n${head}\n\n<details><summary>Review checklist</summary>\n\n${lines}\n\n</details>\n`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
