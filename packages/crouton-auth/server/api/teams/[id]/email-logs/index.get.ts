@@ -1,7 +1,7 @@
 /**
  * GET /api/teams/[id]/email-logs
  *
- * List auth email logs for a team. Requires admin role.
+ * List auth email logs for a team. Requires the `team:manage` action.
  * Scoped to emails sent to team member addresses.
  *
  * Query params:
@@ -10,11 +10,11 @@
  * - limit: max results (default 50, max 200)
  * - offset: pagination offset (default 0)
  */
-import { requireTeamAdmin } from '../../../../utils/team'
+import { requireCan } from '../../../../utils/permissions'
 import { useDB, tables, eq, and, desc, count, inArray } from '../../../../utils/database'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'team:manage')
 
   const query = getQuery(event)
   const emailType = query.type as string | undefined

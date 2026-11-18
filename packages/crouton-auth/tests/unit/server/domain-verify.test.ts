@@ -8,7 +8,13 @@ type Row = { id: string, organizationId: string, domain: string, status: string,
 let rows: Row[] = []
 const tbl = { domain: { id: 'id', domain: 'domain', status: 'status', organizationId: 'organizationId' } }
 
-vi.mock('../../../server/utils/team', () => ({ requireTeamOwner: async () => ({ team: { id: 'B' } }) }))
+// The route asks requireCan(event, 'team:domains') (#4108); route-actions.test.ts runs the real one.
+vi.mock('../../../server/utils/permissions', () => ({
+  requireCan: async (_e: unknown, action: string) => {
+    if (action !== 'team:domains') throw Object.assign(new Error(`unexpected action ${action}`), { status: 500 })
+    return { team: { id: 'B' } }
+  }
+}))
 vi.mock('../../../server/utils/database', () => ({
   tables: tbl,
   eq: (col: string, val: string) => (r: any) => r[col] === val,

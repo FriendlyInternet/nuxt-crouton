@@ -128,7 +128,7 @@ import { requireTeamMember, requireTeamAdmin, requireTeamOwner } from '@crouton/
 
 // Require specific roles
 await requireTeamMember(event)  // Any team member
-await requireTeamAdmin(event)   // Admin or owner
+await requireTeamAdmin(event)   // Admin or owner — prefer `requireCan(event, '<action>')` in package code (#4108)
 await requireTeamOwner(event)   // Owner only
 ```
 
@@ -204,7 +204,7 @@ crouton-auth (`CROUTON_DEFAULT_ACTIONS`) is `team:manage` (the owner can never l
 | `sales:manage` | crouton-sales | owner, admin |
 
 `member` gets none by default. Ownership itself (demote/remove the owner, transfer/delete the team) stays
-role-based (`requireTeamOwner`). Tests: `tests/unit/server/permissions*.test.ts`, `can-endpoint.test.ts`,
+role-based (`requireTeamOwner`). Package server routes ask `requireCan(event, action)` / `can()`, never a role name (#4108); `domains/*` uses `team:domains`, so admins may manage domains (`tests/unit/server/route-actions.test.ts` lists every route and its action). Tests: `tests/unit/server/permissions*.test.ts`, `can-endpoint.test.ts`,
 `tests/unit/composables/useCan.test.ts`.
 
 ### Public Team Resolution

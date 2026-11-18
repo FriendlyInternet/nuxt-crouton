@@ -1,4 +1,4 @@
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 /**
  * POST /api/teams/[id]/translations-ui
@@ -12,8 +12,8 @@ import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
  * - namespace: string (optional, default 'ui')
  */
 export default defineEventHandler(async (event) => {
-  // Get team and verify membership (admin required for creating)
-  const { team, user } = await requireTeamAdmin(event)
+  // Get team and verify membership (`translations:manage` required for creating)
+  const { team, user } = await requireCan(event, 'translations:manage')
 
 
   const body = await readBody(event)

@@ -13,72 +13,28 @@
  * Only `nitropack/runtime` is mocked (the e-mail hook), as in rate-limit.test.ts.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { betterAuth } from 'better-auth'
-import { memoryAdapter } from 'better-auth/adapters/memory'
-import { organization } from 'better-auth/plugins'
-import * as authSchema from '../../../server/database/schema/auth'
-import { buildOrganizationConfig, isAuthInitialized, setAuthInstance } from '../../../server/lib/auth'
+import type Database from 'better-sqlite3'
+import { isAuthInitialized, setAuthInstance } from '../../../server/lib/auth'
 import {
   buildAccessControl,
   setAccessControl,
   validateActions,
   validateBaseRoles,
-  CROUTON_DEFAULT_ACTIONS,
-  type BaseRolesConfig,
-  type CroutonActionRegistry
+  CROUTON_DEFAULT_ACTIONS
 } from '../../../server/lib/access'
 import { can, canMany } from '../../../server/utils/permissions'
+import { DECLARED, OTHER_TEAM, TEAM, openTeamDb, setup } from './helpers/access-setup'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
 }))
 
-const TEAM = 'team-1'
-const OTHER_TEAM = 'team-2'
-
 let sqlite: Database.Database
 
-/** What the packages declare in their app.config (#4104 table) — declared-actions.test.ts checks the real files. */
-const DECLARED: CroutonActionRegistry = {
-  'admin:access': { label: 'permissions.adminAccess' },
-  'team:manage': { label: 'permissions.teamManage' },
-  'team:domains': { label: 'permissions.teamDomains' },
-  'site:manage': { label: 'permissions.siteManage' },
-  'collections:manage': { label: 'permissions.collectionsManage' },
-  'translations:manage': { label: 'permissions.translationsManage' },
-  'pages:edit': { label: 'permissions.pagesEdit' },
-  'media:manage': { label: 'permissions.mediaManage' },
-  'activity:view': { label: 'permissions.activityView' },
-  'bookings:create': { label: 'permissions.bookingsCreate' },
-  'bookings:manage': { label: 'permissions.bookingsManage' },
-  'sales:manage': { label: 'permissions.salesManage' }
-}
-
-/** Wire a real Better Auth + access control the way createAuth() does. */
-function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = DECLARED) {
-  const access = buildAccessControl({ actions, roles })
-  setAccessControl(access)
-  const auth = betterAuth({
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
-    secret: 'test-secret-test-secret-test-secret-123',
-    baseURL: 'https://velo.pmcp.dev',
-    plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)]
-  })
-  setAuthInstance(auth as never)
-  return access
-}
-
+// setup() (real Better Auth + access control) and the SQLite team live in
+// helpers/access-setup.ts, shared with route-actions.test.ts (#4108).
 beforeEach(() => {
-  sqlite = new Database(':memory:')
-  sqlite.exec('CREATE TABLE `member` (`id` text PRIMARY KEY NOT NULL, `userId` text NOT NULL, `organizationId` text NOT NULL, `role` text DEFAULT \'member\' NOT NULL, `createdAt` integer NOT NULL)')
-  const insert = sqlite.prepare('INSERT INTO member (id, userId, organizationId, role, createdAt) VALUES (?, ?, ?, ?, ?)')
-  insert.run('m1', 'u-owner', TEAM, 'owner', Date.now())
-  insert.run('m2', 'u-admin', TEAM, 'admin', Date.now())
-  insert.run('m3', 'u-member', TEAM, 'member', Date.now())
-  const db = drizzle(sqlite, { schema: authSchema })
-  vi.stubGlobal('useDB', () => db)
+  sqlite = openTeamDb()
 })
 
 afterEach(() => {

@@ -2,13 +2,13 @@
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { getAllBookingsBookings, getBookingsBookingsByIds } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-
-const isAdmin = (role?: string) => role === 'admin' || role === 'owner'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
 
-  const scope = isAdmin(membership?.role) ? undefined : { ownerId: user.id }
+  // bookings:manage sees the whole team; everyone else only their own bookings
+  const scope = (await can(team.id, user.id, 'bookings:manage', event)) ? undefined : { ownerId: user.id }
   const query = getQuery(event)
   if (query.ids) {
     const ids = String(query.ids).split(',')

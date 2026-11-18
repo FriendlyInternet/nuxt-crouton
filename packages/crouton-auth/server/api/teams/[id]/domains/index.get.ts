@@ -2,13 +2,13 @@
  * GET /api/teams/[id]/domains
  *
  * List all custom domains for a team/organization.
- * Requires team owner role.
+ * Requires the `team:domains` action (owner/admin by default).
  */
-import { requireTeamOwner } from '../../../../utils/team'
+import { requireCan } from '../../../../utils/permissions'
 import { useDB, tables, eq } from '../../../../utils/database'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamOwner(event)
+  const { team } = await requireCan(event, 'team:domains')
 
   const db = useDB()
   const domains = await db

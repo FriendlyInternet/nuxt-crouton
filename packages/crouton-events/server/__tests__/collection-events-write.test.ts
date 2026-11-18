@@ -6,6 +6,11 @@ vi.mock('@fyit/crouton-auth/server/utils/useServerAuth', () => ({
   requireServerSession: async () => ({ user: fixture.user, session: { activeOrganizationId: null } }),
   useServerAuth: () => ({})
 }))
+// requireCan (#4108): real team check, action answered like can() with no site config
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthModule } = await import('./helpers/teamFixture')
+  return teamAuthModule()
+})
 
 const inserted: any[] = []
 let snapshot = true
@@ -82,9 +87,11 @@ describe('events read routes are admin-only', () => {
       fixture.roles = { 'team-b': 'admin' }
       await expect(h(fakeEvent())).rejects.toSatisfy((e: any) => (e.statusCode ?? e.status) === 403)
       fixture.roles = { 'team-a': 'admin' }
+      fixture.asked.length = 0
       // Past the gate the handler touches the (fake) query builder; any non-403 outcome proves access.
       const out = await h(fakeEvent()).then(() => 0, (e: any) => e?.statusCode ?? e?.status ?? 0)
       expect(out).not.toBe(403)
+      expect(fixture.asked).toEqual(['activity:view'])
     })
   }
 })

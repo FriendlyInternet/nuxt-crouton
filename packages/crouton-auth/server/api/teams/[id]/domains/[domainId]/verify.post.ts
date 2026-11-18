@@ -3,9 +3,9 @@
  *
  * Verify domain ownership via DNS TXT record.
  * Uses Cloudflare's DNS over HTTPS API for DNS lookup.
- * Requires team owner role.
+ * Requires the `team:domains` action (owner/admin by default).
  */
-import { requireTeamOwner } from '../../../../../utils/team'
+import { requireCan } from '../../../../../utils/permissions'
 import { useDB, tables, eq, and } from '../../../../../utils/database'
 
 export default defineEventHandler(async (event) => {
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { team } = await requireTeamOwner(event)
+  const { team } = await requireCan(event, 'team:domains')
 
   const db = useDB()
 

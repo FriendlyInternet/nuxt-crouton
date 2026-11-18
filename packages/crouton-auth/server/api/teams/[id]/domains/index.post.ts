@@ -2,10 +2,10 @@
  * POST /api/teams/[id]/domains
  *
  * Add a new custom domain to a team/organization.
- * Requires team owner role.
+ * Requires the `team:domains` action (owner/admin by default).
  */
 import { z } from 'zod'
-import { requireTeamOwner } from '../../../../utils/team'
+import { requireCan } from '../../../../utils/permissions'
 import { useDB, tables, eq, and, generateVerificationToken } from '../../../../utils/database'
 
 const addDomainSchema = z.object({
@@ -20,7 +20,7 @@ const addDomainSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamOwner(event)
+  const { team } = await requireCan(event, 'team:domains')
 
   const body = await readValidatedBody(event, addDomainSchema.parse)
 

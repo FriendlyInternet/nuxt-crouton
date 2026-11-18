@@ -2,10 +2,10 @@
  * PATCH /api/teams/[id]/settings/site
  *
  * Update team site settings.
- * Requires team admin or owner role.
+ * Requires the `site:manage` action (owner/admin by default).
  */
 import { z } from 'zod'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { useDB, eq } from '@fyit/crouton-auth/server/utils/database'
 import { teamSettings, type TeamSiteSettings } from '@fyit/crouton-auth/server/database/schema/auth'
 
@@ -28,8 +28,8 @@ const siteSettingsSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  // Require admin or owner role
-  const { team } = await requireTeamAdmin(event)
+  // Require the site:manage action
+  const { team } = await requireCan(event, 'site:manage')
 
   // Validate request body
   const body = await readBody(event)
