@@ -541,13 +541,20 @@ async function main() {
   //    (autoCreateOnSignup / defaultTeamSlug apps do; the allowCreate pattern does not).
   let hasActiveOrg = false
   let userId = null
-  try {
-    const { json } = await get('/api/auth/get-session')
-    hasActiveOrg = !!json?.session?.activeOrganizationId
-    userId = json?.user?.id || null
-    if (hasActiveOrg) info('session already has an active team.')
-  } catch (e) {
-    warn(`get-session error: ${e?.message || e}`)
+  // A dropped connection here silently degrades to a fresh EMPTY team (no user id →
+  // no seeded-team attach), so retry it like sign-up does.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const { json } = await get('/api/auth/get-session')
+      hasActiveOrg = !!json?.session?.activeOrganizationId
+      userId = json?.user?.id || null
+      if (hasActiveOrg) info('session already has an active team.')
+      break
+    } catch (e) {
+      warn(`get-session error: ${e?.message || e}`)
+      if (attempt >= maxAttempts) break
+      await new Promise(r => setTimeout(r, delays[attempt - 1]))
+    }
   }
 
   // 3a. --seed-team (#832): attach the review user to the SEEDED demo org so the
