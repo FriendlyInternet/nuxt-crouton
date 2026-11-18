@@ -111,6 +111,11 @@
       },
       {
         "path": "/api/teams/{teamId}/mcp-tokens"
+      },
+      {
+        "path": "/api/teams/{teamId}/can?actions=team:manage",
+        "expectStatus": 200,
+        "expectIncludes": "team:manage"
       }
     ]
   }
