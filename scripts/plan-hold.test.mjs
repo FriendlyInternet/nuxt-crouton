@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch, needsOwnerQuestion, answerDecision } from './plan-hold.mjs'
+import { isPlanHold, isRejectedTwice, resumeOutcome, replanDispatch, needsOwnerQuestion, answerDecision, cleanQuestion, recordDecision, replanFromReply } from './plan-hold.mjs'
 import { appendDecision } from './lib/decision-line.mjs'
-import { renderComment, RUBRIC, SIGNOFF_QUESTION } from './lib/plan-verdict.mjs'
+import { renderComment, RUBRIC, SIGNOFF_QUESTION, QUESTION_RECORD } from './lib/plan-verdict.mjs'
+import { recordMarker } from './lib/reply-record.mjs'
 
 const bot = (body) => ({ body, userType: 'Bot' })
 const person = (body) => ({ body, userType: 'User' })
@@ -96,7 +97,8 @@ test('on-comment.yml wires the helper: replan step, agent skip, gate outcome', (
   assert.match(wf, /steps\.replan\.outputs\.replan != 'true'/)
   assert.match(wf, /resumeOutcome\(/)
   assert.match(wf, /\.\.\.replanDispatch\(\{ issue: issue_number, commentId: context\.payload\.comment\.id \}\)/)
-  assert.match(wf, /replyBody: context\.payload\.comment\.body/)
+  assert.match(wf, /replanFromReply\(\{ starts: process\.env\.STARTS/)
+  assert.match(wf, /STARTS: \$\{\{ needs\.route\.outputs\.starts \}\}/)
 })
 
 test('#3359 a verdict quoted below visible text does not count', async () => {
@@ -211,6 +213,64 @@ test('#4082 answerDecision: an approval plus other text ⇒ null; ok, ✅ or lgt
   }
 })
 
+// ── #4145: recordDecision / replanFromReply — the re-plan step follows the router's `starts` ───────────────────────
+const Q4036 = V4036.slice(V4036.indexOf('— ') + 2, V4036.indexOf('\n**Needs:**'))
+const R4036 = QUESTION_RECORD(Q4036)
+const rec = (extra = {}) => recordDecision({ record: R4036, starts: 'replan-with-yes', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+
+test('#4145 cleanQuestion: blank lines and a trailing yes / no line dropped, one line', () => {
+  assert.equal(cleanQuestion('Keep it?\n\n  really  ?\nyes / no'), 'Keep it? really ?')
+  assert.equal(cleanQuestion(Q4036), needsOwnerQuestion(T4036()))
+  assert.equal(cleanQuestion(undefined), '')
+})
+
+// covers: T3
+test('#4145 recordDecision: the owner\'s bare ok ⇒ the same line answerDecision writes (two-line question ending in yes/no)', () => {
+  assert.ok(Q4036.trimEnd().endsWith('yes/no'), 'the record question spans lines and ends in yes/no')
+  assert.equal(rec(), ans())
+  assert.equal(rec({ authorAssociation: 'MEMBER' }), ans({ authorAssociation: 'MEMBER' }))
+  assert.equal(rec({ authorAssociation: 'COLLABORATOR' }), ans({ authorAssociation: 'COLLABORATOR' }))
+})
+
+// covers: T3
+test('#4145 recordDecision: a non-owner, a bot, replan-with-feedback or no starts ⇒ null', () => {
+  assert.equal(rec({ authorAssociation: 'NONE' }), null)
+  assert.equal(rec({ userType: 'Bot' }), null)
+  assert.equal(rec({ starts: 'replan-with-feedback' }), null)
+  assert.equal(rec({ starts: '' }), null)
+  assert.equal(rec({ starts: 'approve-plan' }), null)
+})
+
+const withRecord = V4036.replace('-->\n>', `-->\n${recordMarker(R4036)}\n>`)
+const T4036R = () => [bot(PLAN), bot(withRecord)]
+const reply = (body, extra = {}) => ({ body, date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+
+// covers: T3
+test('#4145 replanFromReply: with starts it re-plans without re-reading the reply', () => {
+  assert.deepEqual(replanFromReply({ starts: 'replan-with-yes', comments: T4036R(), labels: BLOCKED, comment: reply('ok') }), { replan: true, line: ans(), followed: true })
+  assert.deepEqual(replanFromReply({ starts: 'replan-with-feedback', comments: T4036R(), labels: BLOCKED, comment: reply('ok — build it') }), { replan: true, line: null, followed: true })
+  // `ok:` on a needs-owner question reads as `other` → replan-with-feedback: no yes line (record-decision owns `ok: <reason>`).
+  assert.deepEqual(replanFromReply({ starts: 'replan-with-feedback', comments: T4036R(), labels: BLOCKED, comment: reply('ok:') }), { replan: true, line: null, followed: true })
+  // isPlanHold would say no here (twice-rejected + approval); the router's starts wins.
+  assert.equal(replanFromReply({ starts: 'replan-with-feedback', comments: heldThread(), labels: BLOCKED, comment: reply('ok') }).replan, true)
+})
+
+// covers: T3
+test('#4145 replanFromReply: no starts ⇒ exactly today\'s isPlanHold / answerDecision', () => {
+  const cases = [
+    [T4036(), 'ok'], [T4036(), 'ok:'], [T4036(), 'approved, but keep the column'],
+    [heldThread(), 'ok'], [heldThread(), 'ok : x'], [heldThread(), 'Use the existing helper.'], [[bot(PLAN), bot(GO)], 'ok'],
+  ]
+  for (const [comments, body] of cases) {
+    for (const starts of ['', undefined, 'approve-plan', 'plan-needs-reason']) {
+      const r = replanFromReply({ starts, comments, labels: BLOCKED, comment: reply(body) })
+      assert.equal(r.replan, isPlanHold({ comments, labels: BLOCKED, replyBody: body }), `${body} / ${starts}`)
+      assert.equal(r.line, answerDecision({ comments, replyBody: body, ...reply(body) }), `${body} / ${starts}`)
+      assert.equal(r.followed, false)
+    }
+  }
+})
+
 // covers: T5
 test('#4082 appendDecision with the same line and url twice changes the body once', () => {
   const line = ans()
@@ -223,7 +283,8 @@ test('#4082 appendDecision with the same line and url twice changes the body onc
 test('#4082 on-comment.yml: replan step records the answer before dispatch; merge step skips a re-plan', () => {
   const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
   const step = wf.slice(wf.indexOf('- name: Re-plan a held plan from the reply'), wf.indexOf('- name: Collect the answer payload'))
-  assert.match(step, /answerDecision\(\{[^\n]*authorAssociation: c\.author_association/)
+  // #4145: the author now reaches answerDecision / recordDecision through replanFromReply.
+  assert.match(step, /replanFromReply\(\{[^\n]*authorAssociation: c\.author_association/)
   const at = step.indexOf('appendDecision(')
   assert.ok(at > 0 && at < step.indexOf('createWorkflowDispatch'), 'appendDecision before createWorkflowDispatch')
   assert.match(step, /Re-planning from your \\`ok\\`/)
