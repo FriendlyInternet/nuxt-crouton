@@ -366,6 +366,25 @@ _Source: `packages/crouton-auth/server/utils/pairing-code.ts`_
 
 **Also exported from `packages/crouton-auth/server/utils/pairing-code.ts`:** `TILL_DEVICE_RESOURCE_TYPE`
 
+## can
+
+```ts
+can(teamId: string, userId: string, action: string): Promise<boolean>
+```
+
+_Source: `packages/crouton-auth/server/utils/permissions.ts`_
+
+## requireCan
+
+Resolve the team from the request (like `requireTeamAdmin`), then 403 unless
+the signed-in member `can` do `action` there.
+
+```ts
+requireCan(event: H3Event, action: string): Promise<TeamContext>
+```
+
+_Source: `packages/crouton-auth/server/utils/permissions.ts`_
+
 ## resolveTeamBrandFromHost
 
 Resolve an organization/team name from a request hostname.
@@ -700,7 +719,7 @@ isTeamMemberWithEvent(event: H3Event, teamId: string, userId: string): Promise<b
 
 _Source: `packages/crouton-auth/server/utils/team-auth.ts`_
 
-**Also exported from `packages/crouton-auth/server/utils/team-auth.ts`:** everything from `team.ts`
+**Also exported from `packages/crouton-auth/server/utils/team-auth.ts`:** everything from `team.ts`, everything from `permissions.ts`
 
 ## resolveTeamAndCheckMembership
 
