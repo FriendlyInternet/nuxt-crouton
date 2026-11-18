@@ -88,8 +88,8 @@ date with another booking; at stock ≥ 2 it can. The booking form follows the s
 it only refuses the full day combined with another slot in one booking, and a schedule-closed
 slot (closing any slot also closes the full day that date). The pure helpers:
 `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
-`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
-(booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
+`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart`'s `isSlotDisabled(id, [])`
+asks "booked/full/closed?" regardless of the current ticks.
 
 ## Configuration
 

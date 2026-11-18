@@ -302,11 +302,14 @@ export function useBookingCart() {
     return Math.max(0, ...locationProducts.value.map(p => productLeftFor(slotId, p.product)))
   }
 
-  // The largest amount that fits: the lowest free stock over the chosen slots
+  // The largest amount that fits: the lowest free stock over the chosen slots.
+  // With no slot ticked yet: the most free in any slot still open, so the
+  // amount can be set before or after picking a slot (#4112).
   const maxQuantity = computed(() => {
     const ids = selectedSlotIds.value
-    if (ids.length === 0) return 0
-    return Math.min(...ids.map(id => getSlotRemaining(id)))
+    if (ids.length > 0) return Math.min(...ids.map(id => getSlotRemaining(id)))
+    const open = allSlots.value.filter(slot => !isSlotDisabled(slot.id, []))
+    return Math.max(0, ...open.map(slot => getSlotRemaining(slot.id)))
   })
 
   // Check if a group+slot combination is already booked (API data)
@@ -344,7 +347,7 @@ export function useBookingCart() {
 
   // Check if a slot button is disabled (locations with slots only)
   // `selected` = slots ticked in the booking being made; pass [] to ask "is it
-  // taken?" regardless of the current ticks (see isSlotTaken)
+  // taken?" regardless of the current ticks
   function isSlotDisabled(slotId: string, selected: string[] = formState.slotIds): boolean {
     if (!formState.date || !hasSlots.value) return true
 
@@ -359,12 +362,6 @@ export function useBookingCart() {
     // The full day can't share one booking with another slot (#2261). Across
     // bookings it is stock that counts, not exclusivity (#4110).
     return isBlockedByFullDay(slotId, [], selected)
-  }
-
-  // Unavailable no matter what is ticked (booked, full, closed) — vs. only
-  // excluded by the current selection (e.g. full day while Matin is ticked)
-  function isSlotTaken(slotId: string): boolean {
-    return isSlotDisabled(slotId, [])
   }
 
   // Compute available slots (locations with slots only; allSlots is empty otherwise)
@@ -592,7 +589,6 @@ export function useBookingCart() {
     availableSlots,
     rawSlots,
     isSlotDisabled,
-    isSlotTaken,
     getSlotRemaining,
 
     // Calendar availability helpers
