@@ -15,7 +15,7 @@ import { openRecord } from './lib/reply-record.mjs'
 
 /**
  * The router + re-plan outcome for one recorded case.
- * @param {{issue: number, labels: string[], comments: object[], reply: {body: string, authorAssociation?: string, userType?: string}}} c
+ * @param {{issue: number, labels: string[], comments: object[], reply: {body: string, authorAssociation?: string, userType?: string, userLogin?: string}}} c
  * @returns {{kind: string, replan: boolean, decision: boolean}}
  */
 export function todayOutcome(c) {
@@ -26,7 +26,7 @@ export function todayOutcome(c) {
     starts: d.starts || '',
     comments: c.comments,
     labels: c.labels,
-    comment: { body: c.reply.body, authorAssociation: c.reply.authorAssociation, userType: c.reply.userType },
+    comment: { body: c.reply.body, authorAssociation: c.reply.authorAssociation, userType: c.reply.userType, userLogin: c.reply.userLogin },
   })
   return { kind: d.kind, replan: r.replan, decision: r.replan && r.line !== null }
 }

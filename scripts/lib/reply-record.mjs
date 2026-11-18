@@ -88,11 +88,11 @@ const FORMS = {
  * order. On a `plan-rejected` record an approval or an `ok:`-shaped reply is never `other`
  * (today's isPlanHold does not re-plan it): `{ form: null, starts: null }`.
  * @param {object|null} record
- * @param {{body?: string, authorAssociation?: string, userType?: string}} comment
+ * @param {{body?: string, userLogin?: string, owner?: string, userType?: string}} comment
  * @returns {{form: string|null, starts: string|null}}
  */
 export function readReply(record, comment = {}) {
-  const c = { body: String(comment?.body || ''), authorAssociation: comment?.authorAssociation, userType: comment?.userType }
+  const c = { body: String(comment?.body || ''), userLogin: comment?.userLogin, owner: comment?.owner, userType: comment?.userType }
   if (!record || !Array.isArray(record.accepts)) return { form: 'other', starts: null }
   for (const form of record.accepts) {
     if (form === 'other') {

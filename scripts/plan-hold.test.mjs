@@ -180,7 +180,9 @@ test('#4082 needsOwnerQuestion: SIGNOFF_QUESTION verdict, and no needs-owner ⇒
 })
 
 const URL4036 = 'https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6947793038'
-const ans = (extra = {}) => answerDecision({ comments: T4036(), replyBody: 'ok', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+// The owner is a login (#4168): the fixture is the owner's account `pmcp`; a non-owner gets another login.
+const ans = (extra = {}) => answerDecision({ comments: T4036(), replyBody: 'ok', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp', ...extra })
+const OTHER = 'someone-else'
 
 // covers: T5
 test('#4082 answerDecision: the owner\'s bare ok on #4036 ⇒ one Decisions line quoting the question', () => {
@@ -196,9 +198,9 @@ test('#4082 answerDecision: the owner\'s bare ok on #4036 ⇒ one Decisions line
 
 // covers: T5
 test('#4082 answerDecision: not the owner, a reason, a sentence or a twice-rejected hold ⇒ null', () => {
-  assert.equal(ans({ authorAssociation: 'NONE' }), null)
-  assert.equal(ans({ authorAssociation: 'CONTRIBUTOR' }), null)
-  assert.equal(ans({ authorAssociation: undefined }), null)
+  assert.equal(ans({ authorAssociation: 'NONE', userLogin: OTHER }), null)
+  assert.equal(ans({ authorAssociation: 'CONTRIBUTOR', userLogin: OTHER }), null)
+  assert.equal(ans({ authorAssociation: undefined, userLogin: undefined }), null)
   assert.equal(ans({ userType: 'Bot' }), null)
   assert.equal(ans({ replyBody: 'ok: fine' }), null)
   assert.equal(ans({ replyBody: 'Use the existing helper instead.' }), null)
@@ -216,7 +218,7 @@ test('#4082 answerDecision: an approval plus other text ⇒ null; ok, ✅ or lgt
 // ── #4145: recordDecision / replanFromReply — the re-plan step follows the router's `starts` ───────────────────────
 const Q4036 = V4036.slice(V4036.indexOf('— ') + 2, V4036.indexOf('\n**Needs:**'))
 const R4036 = QUESTION_RECORD(Q4036)
-const rec = (extra = {}) => recordDecision({ record: R4036, starts: 'replan-with-yes', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+const rec = (extra = {}) => recordDecision({ record: R4036, starts: 'replan-with-yes', date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp', ...extra })
 
 test('#4145 cleanQuestion: blank lines and a trailing yes / no line dropped, one line', () => {
   assert.equal(cleanQuestion('Keep it?\n\n  really  ?\nyes / no'), 'Keep it? really ?')
@@ -234,7 +236,7 @@ test('#4145 recordDecision: the owner\'s bare ok ⇒ the same line answerDecisio
 
 // covers: T3
 test('#4145 recordDecision: a non-owner, a bot, replan-with-feedback or no starts ⇒ null', () => {
-  assert.equal(rec({ authorAssociation: 'NONE' }), null)
+  assert.equal(rec({ authorAssociation: 'NONE', userLogin: OTHER }), null)
   assert.equal(rec({ userType: 'Bot' }), null)
   assert.equal(rec({ starts: 'replan-with-feedback' }), null)
   assert.equal(rec({ starts: '' }), null)
@@ -243,7 +245,42 @@ test('#4145 recordDecision: a non-owner, a bot, replan-with-feedback or no start
 
 const withRecord = V4036.replace('-->\n>', `-->\n${recordMarker(R4036)}\n>`)
 const T4036R = () => [bot(PLAN), bot(withRecord)]
-const reply = (body, extra = {}) => ({ body, date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', ...extra })
+const reply = (body, extra = {}) => ({ body, date: '2026-11-17T12:17:16Z', url: URL4036, authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp', ...extra })
+
+// covers: T3
+test('#4168 answerDecision / recordDecision / replanFromReply decide by login, not role', () => {
+  // role OWNER with another login writes nothing; the owner's login under any role writes the line
+  assert.equal(ans({ authorAssociation: 'OWNER', userLogin: OTHER }), null)
+  assert.equal(rec({ authorAssociation: 'OWNER', userLogin: OTHER }), null)
+  assert.equal(typeof ans({ authorAssociation: 'COLLABORATOR', userLogin: 'pmcp' }), 'string')
+  assert.equal(typeof rec({ authorAssociation: 'NONE', userLogin: 'PMCP' }), 'string')
+  // a custom owner login is honoured; '' falls back to pmcp
+  assert.equal(typeof ans({ userLogin: 'alice', owner: 'alice' }), 'string')
+  assert.equal(ans({ userLogin: 'pmcp', owner: 'alice' }), null)
+  assert.equal(typeof ans({ owner: '' }), 'string')
+  // the re-plan step's reading: another login gets no Decisions line, on both paths
+  assert.equal(replanFromReply({ starts: 'replan-with-yes', comments: T4036R(), labels: BLOCKED, comment: reply('ok', { userLogin: OTHER }) }).line, null)
+  assert.equal(replanFromReply({ comments: T4036(), labels: BLOCKED, comment: reply('ok', { userLogin: OTHER }) }).line, null)
+  assert.equal(replanFromReply({ starts: 'replan-with-yes', comments: T4036R(), labels: BLOCKED, comment: reply('ok') }).line, ans())
+})
+
+// covers: T3
+test('#4168 on-comment.yml passes the owner login to the route, re-plan, record-decision and approve-plan steps', () => {
+  const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
+  const ENV = /OWNER_LOGIN: \$\{\{ vars\.PIPELINE_OWNER \|\| 'pmcp' \}\}/
+  const between = (from, to) => wf.slice(wf.indexOf(from), wf.indexOf(to, wf.indexOf(from)))
+  const route = between('- id: route', 'core.setOutput(\'kind\'')
+  assert.match(route, ENV)
+  assert.match(route, /routeComment\(\{\s*comment, owner: process\.env\.OWNER_LOGIN,/)
+  const replan = between('- name: Re-plan a held plan from the reply', '- name: Collect the answer payload')
+  assert.match(replan, ENV)
+  assert.match(replan, /replanFromReply\(\{ starts: process\.env\.STARTS[^\n]*userLogin: c\.user && c\.user\.login, owner: process\.env\.OWNER_LOGIN/)
+  const record = between('  record-decision:', 'recorded decision from comment')
+  assert.match(record, ENV)
+  assert.match(record, /parseDecision\(\{[^\n]*userLogin: c\.user\.login, owner: process\.env\.OWNER_LOGIN/)
+  const approve = between('  approve-plan:', 'await approvePlan(')
+  assert.match(approve, ENV)
+})
 
 // covers: T3
 test('#4145 replanFromReply: with starts it re-plans without re-reading the reply', () => {
@@ -314,7 +351,7 @@ test('#4082 on-comment.yml: replan step records the answer before dispatch; merg
   const wf = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
   const step = wf.slice(wf.indexOf('- name: Re-plan a held plan from the reply'), wf.indexOf('- name: Collect the answer payload'))
   // #4145: the author now reaches answerDecision / recordDecision through replanFromReply.
-  assert.match(step, /replanFromReply\(\{[^\n]*authorAssociation: c\.author_association/)
+  assert.match(step, /replanFromReply\(\{[^\n]*userLogin: c\.user && c\.user\.login, owner: process\.env\.OWNER_LOGIN/)
   const at = step.indexOf('appendDecision(')
   assert.ok(at > 0 && at < step.indexOf('createWorkflowDispatch'), 'appendDecision before createWorkflowDispatch')
   assert.match(step, /Re-planning from your \\`ok\\`/)

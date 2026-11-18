@@ -28,6 +28,15 @@ for (const file of files) {
   })
 }
 
+// covers: T7
+test('#4168 exactly one known gap is left (3982-6957996134.json), and every case names its reply login', () => {
+  const cases = files.map((f) => [f, JSON.parse(readFileSync(new URL(f, dir), 'utf8'))])
+  for (const [f, c] of cases) assert.equal(typeof c.reply.userLogin, 'string', f)
+  assert.deepEqual(cases.filter(([, c]) => c.today !== c.want).map(([f]) => f), ['3982-6957996134.json'])
+  const nonOwner = cases.find(([f]) => f === '4036-non-owner-ok.json')[1]
+  assert.equal(meaningToday(todayOutcome(nonOwner)), 'ignore')
+})
+
 // ── #4145: record twins — the record the hold writes must not change what a reply does ────────────────
 const RECORD_LINE = /^<!-- reply-record:v1 .* -->\n/m
 const isBotC = (x) => x?.userType === 'Bot'

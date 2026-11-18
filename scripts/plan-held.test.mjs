@@ -135,7 +135,7 @@ test('holdFacts: human-pasted verdicts (even with a record) ⇒ nothing', async 
 })
 
 // ── approvePlan: the approve-plan job ───────────────────────────────────────────────────────
-function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer point is cosmetic', epicBody = '# Epic' } = {}) {
+function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer point is cosmetic', epicBody = '# Epic', login = 'pmcp', assoc = 'OWNER' } = {}) {
   const calls = []
   const failed = []
   const github = {
@@ -158,7 +158,7 @@ function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer p
     repo: { owner: 'o', repo: 'r' },
     payload: {
       issue: { number: 7, body: issueBody },
-      comment: { body: commentBody, author_association: 'OWNER', user: { type: 'User' }, created_at: '2026-11-10T12:00:00Z', html_url: 'https://x/c1' },
+      comment: { body: commentBody, author_association: assoc, user: { type: 'User', login }, created_at: '2026-11-10T12:00:00Z', html_url: 'https://x/c1' },
     },
   }
   const core = { info: () => {}, warning: () => {}, setFailed: (m) => failed.push(m) }
@@ -192,6 +192,29 @@ test('approvePlan: no `ok: <reason>` ⇒ setFailed, no write', async () => {
   await f.run()
   assert.deepEqual(f.calls, [])
   assert.equal(f.failed.length, 1)
+})
+
+// covers: T6
+test('#4168 approvePlan: only the owner login (OWNER_LOGIN unset ⇒ pmcp) approves, whatever the role', async () => {
+  const saved = process.env.OWNER_LOGIN
+  delete process.env.OWNER_LOGIN
+  try {
+    const other = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'someone-else', assoc: 'OWNER' })
+    await other.run()
+    assert.deepEqual(other.calls, [])
+    assert.equal(other.failed.length, 1)
+    const owner = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'pmcp', assoc: 'COLLABORATOR' })
+    await owner.run()
+    assert.deepEqual(owner.failed, [])
+    assert.equal(owner.calls.at(-1)[0], 'addLabels')
+    process.env.OWNER_LOGIN = 'alice'
+    const custom = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'pmcp' })
+    await custom.run()
+    assert.equal(custom.failed.length, 1)
+  } finally {
+    if (saved === undefined) delete process.env.OWNER_LOGIN
+    else process.env.OWNER_LOGIN = saved
+  }
 })
 
 test('NEEDS_REASON asks for `ok: <why>` and carries the note marker + provenance header', () => {
