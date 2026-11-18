@@ -1890,6 +1890,58 @@ importers:
         specifier: ^4.64.0
         version: 4.151.0(@types/node@26.6.5)
 
+  pocs/kdm:
+    dependencies:
+      '@fyit/crouton-assets':
+        specifier: workspace:*
+        version: link:../../packages/crouton-assets
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../../packages/crouton-core
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
+      '@fyit/crouton-editor':
+        specifier: workspace:*
+        version: link:../../packages/crouton-editor
+      '@fyit/crouton-i18n':
+        specifier: workspace:*
+        version: link:../../packages/crouton-i18n
+      '@fyit/crouton-layout':
+        specifier: workspace:*
+        version: link:../../packages/crouton-layout
+      '@fyit/crouton-pages':
+        specifier: workspace:*
+        version: link:../../packages/crouton-pages
+      '@libsql/client':
+        specifier: ^0.17.0
+        version: 0.17.4
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.29.6)(pg@8.17.1)
+      nuxt:
+        specifier: ^4.6.4
+        version: 4.6.4(9604f65e504d023548f362ddccb1b4b3)
+      vue:
+        specifier: ^3.5.44
+        version: 3.5.44(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.6.4
+        version: 4.6.4(vue@3.5.44(typescript@5.9.3))
+    devDependencies:
+      '@fyit/crouton-cli':
+        specifier: workspace:*
+        version: link:../../packages/crouton-cli
+      drizzle-kit:
+        specifier: ^0.31.0
+        version: 0.31.11
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.14.6)(jsdom@27.4.0)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
+      wrangler:
+        specifier: ^4.64.0
+        version: 4.151.0(@types/node@26.6.5)
+
   pocs/kvr:
     dependencies:
       '@fyit/crouton-core':
@@ -31303,7 +31355,7 @@ snapshots:
   h3@2.0.2(crossws@0.4.17(srvx@1.0.8)):
     dependencies:
       rou3: 1.0.0
-      srvx: 1.0.5
+      srvx: 1.0.8
     optionalDependencies:
       crossws: 0.4.17(srvx@1.0.8)
 
