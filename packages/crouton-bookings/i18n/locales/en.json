@@ -95,7 +95,6 @@
       "signIn": "Sign in"
     },
     "calendar": {
-      "units": "Units",
       "noBookings": "No bookings",
       "bookingCount": "{count} booking | {count} bookings",
       "closed": "Closed",
