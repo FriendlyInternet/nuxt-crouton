@@ -1,7 +1,7 @@
 import { useLocalStorage } from '@vueuse/core'
 import type { LocationData, SlotItem, BookingData, SettingsData, CartItem } from '../types/booking'
 import { isBlockedByFullDay, FULL_DAY_ID } from '../utils/full-day'
-import { parseLocationProducts, slotIdsOf, stockOf, type CapacityLocation } from '../utils/capacity'
+import { parseLocationProducts, slotIdsOf, type CapacityLocation } from '../utils/capacity'
 import { productLeft } from '../utils/product-left'
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { useBookingMonthlyLimit } from './useBookingMonthlyLimit'
@@ -292,12 +292,6 @@ export function useBookingCart() {
       cart: cart.value,
       slotId,
     })
-  }
-
-  // Stock of the chosen product; the highest stock when none is picked
-  function getSlotCapacity(_slotId: string): number {
-    if (formState.productId) return stockOf(capLocation.value, formState.productId)
-    return Math.max(0, ...locationProducts.value.map(p => p.stock ?? 0))
   }
 
   // How many of the chosen product are still free in a slot on the selected
@@ -600,7 +594,6 @@ export function useBookingCart() {
     isSlotDisabled,
     isSlotTaken,
     getSlotRemaining,
-    getSlotCapacity,
 
     // Calendar availability helpers
     hasBookingsOnDate,
