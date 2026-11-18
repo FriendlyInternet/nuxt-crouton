@@ -26,12 +26,15 @@ export function rawImageUrl({ repo, sha, file }) {
 
 const surfaceOf = (file) => String(file).replace(/\.png$/i, '')
 
-export function captureCommentBody({ key, repo, sha, files = [], artifactUrl, reasons }) {
+export function captureCommentBody({ key, repo, sha, files = [], artifactUrl, reasons, note }) {
   const marker = captureMarker(key)
   if (!files.length) {
     return `${marker}\n📷 no usable screenshot: ${reasons || 'none captured'}\n`
   }
-  const lines = [marker, '📷 **Preview screenshot**', '']
+  const lines = [marker, '📷 **Preview screenshot**']
+  // Which previewed apps were NOT shot, and why — visible, not in <details> (#3970).
+  if (note) lines.push(`_${note}_`)
+  lines.push('')
   for (const f of files) lines.push(`![${surfaceOf(f)}](${rawImageUrl({ repo, sha, file: f })})`, '')
   const detail = []
   if (artifactUrl) detail.push(`Download: ${artifactUrl}`)

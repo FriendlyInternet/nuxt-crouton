@@ -113,3 +113,28 @@ test('preview-screenshot.yml installs repo Playwright before the capture (#3593)
   assert.ok(!yml.split('\n').some(l => l.includes('playwright install') && /\|\|\s*true\s*$/.test(l)))
   assert.ok(!/playwright install[^\n]*--with-deps/.test(yml))
 })
+
+test('T8 — preview-screenshot.yml reads both deploy runs and shoots only the picked apps (#3970)', () => {
+  const yml = readFileSync(new URL('../../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
+  const resolve = yml.slice(yml.indexOf('- name: Resolve target'), yml.indexOf('- name: Open check run'))
+  // The deploy-run lookup runs for every event, not only inside the workflow_dispatch branch.
+  const loop = resolve.indexOf('for wf in deploy-apps.yml deploy-pocs.yml')
+  const branch = resolve.indexOf('if [ "$EVENT" = workflow_dispatch ]')
+  assert.ok(loop >= 0 && branch >= 0 && loop < branch, 'deploy-run loop must sit outside the dispatch branch')
+  assert.ok(resolve.includes('$RUN_ID $(deploy_runs "$HEAD_SHA")'), 'triggering run unioned with both deploy runs')
+  // A "Pick apps to shoot" step runs the tested script before the capture.
+  const pick = yml.indexOf('- name: Pick apps to shoot')
+  const pickRun = yml.indexOf('node scripts/screenshot-targets.mjs')
+  const capture = yml.indexOf('node scripts/capture-review-surfaces.mjs')
+  assert.ok(pick >= 0 && pick < pickRun && pickRun < capture)
+  assert.ok(yml.includes('id: pick'))
+  // The capture loop reads the picked list, never every downloaded record.
+  assert.ok(yml.includes('done < "$RUNNER_TEMP/targets.txt"'))
+  assert.ok(!yml.includes('done < <(find "$RUNNER_TEMP/records" -name meta.json)'))
+  // A failed pick (file list or PR body) fails the step: no `|| true` on its lines.
+  const pickBlock = yml.slice(pick, yml.indexOf('- name: Capture + post'))
+  assert.ok(!pickBlock.includes('|| true'))
+  assert.ok(pickBlock.includes('pulls/$PR_NUMBER/files'))
+  assert.ok(yml.includes('CAPTURE_NOTE: ${{ steps.pick.outputs.note }}'))
+  assert.ok(yml.includes("steps.pick.outcome == 'failure'"))
+})
