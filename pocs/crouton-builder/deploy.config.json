@@ -18,6 +18,9 @@
         "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
+      },
+      {
         "path": "/api/teams/{teamId}/catalog-products",
         "expectIncludes": "\"id\""
       }

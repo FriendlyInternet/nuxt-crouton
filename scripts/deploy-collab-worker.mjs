@@ -45,18 +45,8 @@ writeFileSync(cfgPath, JSON.stringify(config, null, 2))
 const wrangler = (args, opts = {}) =>
   execFileSync('npx', ['wrangler', ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], ...opts })
 
-// 1. Worker (provisions the D1 on first run). A brand-new Worker can 404 (code 10007) on the
-// follow-up lookup right after its first upload; the retry sees it and finishes the deploy.
-const deployWorker = () => {
-  for (let attempt = 1; ; attempt++) {
-    try { return wrangler(['deploy', '--config', cfgPath]) } catch (e) {
-      if (attempt === 3) throw e
-      console.error(`wrangler deploy failed (attempt ${attempt}/3) — retrying in 10s`)
-      execFileSync('sleep', ['10'])
-    }
-  }
-}
-const out = deployWorker()
+// 1. Worker (provisions the D1 on first run)
+const out = wrangler(['deploy', '--config', cfgPath])
 process.stdout.write(out)
 let url
 try { url = extractWorkerUrl(out, name) } catch (e) {
