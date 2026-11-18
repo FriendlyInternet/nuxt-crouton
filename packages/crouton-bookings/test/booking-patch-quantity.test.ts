@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { editBookingBody } from '../app/utils/booking-form'
 
 // #4112 (S10, server) — the booking card's edit sends `quantity`; the REAL
 // bookings/[bookingId]/index.patch.ts must store it, re-checked against the
@@ -32,6 +33,10 @@ beforeEach(async () => {
   db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('one','t1','one',?,0,?)`)
     .run(SLOTS, JSON.stringify([{ product: 'p-one', stock: 2 }]))
   db.$client.prepare(`insert into bookings_bookings values ('b1','t1','u1',0,'one',?,'["am"]',null,1,'active',1,1,'u1','u1','p-one')`).run(DAY)
+  // A slotless location: its bookings are full-day
+  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('day','t1','day','[]',0,?)`)
+    .run(JSON.stringify([{ product: 'p-day', stock: 2 }]))
+  db.$client.prepare(`insert into bookings_bookings values ('b2','t1','u1',0,'day',?,'["all-day"]',null,1,'active',1,1,'u1','u1','p-day')`).run(DAY)
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)
   vi.stubGlobal('createError', (e: any) => Object.assign(new Error(e.statusText), e, { statusCode: e.status }))
   vi.stubGlobal('useDB', () => db)
@@ -44,6 +49,27 @@ beforeEach(async () => {
 afterEach(() => { db.$client.close(); vi.unstubAllGlobals() })
 
 const send = (body: any) => { hoisted.body = body; return patch({}) }
+beforeEach(() => { hoisted.params.bookingId = 'b1' })
+
+describe('saving an edit from the booking card (#4112)', () => {
+  // covers: T1
+  it('a timed booking: the card\'s body changes quantity 1 → 2', async () => {
+    hoisted.params.bookingId = 'b1'
+    await expect(send(editBookingBody({ locationId: 'one', slotIds: ['am'], groupId: null, date: '2026-11-10', productId: 'p-one', quantity: 2 })))
+      .resolves.toBeTruthy()
+    expect(row('b1').quantity).toBe(2)
+    expect(row('b1').slot).toBe('["am"]')
+  })
+
+  // covers: T1
+  it('a full-day booking (no slot ids): the card\'s body changes quantity 1 → 2', async () => {
+    hoisted.params.bookingId = 'b2'
+    await expect(send(editBookingBody({ locationId: 'day', slotIds: [], groupId: null, date: '2026-11-10', productId: 'p-day', quantity: 2 })))
+      .resolves.toBeTruthy()
+    expect(row('b2').quantity).toBe(2)
+    expect(row('b2').slot).toBe('["all-day"]')
+  })
+})
 
 describe('PATCH a booking\'s quantity (#4112)', () => {
   // covers: T2

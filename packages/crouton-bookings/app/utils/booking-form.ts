@@ -67,13 +67,14 @@ export interface EditBookingInput {
 /**
  * The PATCH body the card sends when an edit is saved (#4112): the booking's
  * product and amount travel with it. A null product is left out, so an old
- * row stored without one keeps it that way.
+ * row stored without one keeps it that way. `slot` goes as a plain array of
+ * slot ids; with no slot ids (a full-day booking) it is left out, so the
+ * booking keeps the slot it has.
  */
 export function editBookingBody(input: EditBookingInput) {
   return {
     location: input.locationId,
-    // Slot is stored as a JSON array string in the DB
-    slot: input.slotIds.length > 0 ? JSON.stringify(input.slotIds) : null,
+    ...(input.slotIds.length > 0 ? { slot: input.slotIds } : {}),
     group: input.groupId,
     date: input.date,
     quantity: input.quantity,

@@ -90,16 +90,17 @@ describe('edit keeps the product and amount (#4112)', () => {
   })
 
   // covers: T1
-  it('editBookingBody sends product and quantity, slot as JSON', () => {
+  it('editBookingBody sends product and quantity, slot as an array', () => {
     expect(editBookingBody({ locationId: 'court', slotIds: ['0900', '1400'], groupId: 'g1', date: '2026-11-19', productId: 'cargo', quantity: 2 }))
-      .toEqual({ location: 'court', slot: '["0900","1400"]', group: 'g1', date: '2026-11-19', quantity: 2, product: 'cargo' })
+      .toEqual({ location: 'court', slot: ['0900', '1400'], group: 'g1', date: '2026-11-19', quantity: 2, product: 'cargo' })
   })
 
   // covers: T1
-  it('editBookingBody leaves product out when null, slot null without slots', () => {
+  it('editBookingBody leaves product out when null, slot out without slots', () => {
     const body = editBookingBody({ locationId: 'kayak', slotIds: [], groupId: null, date: '2026-11-19', productId: null, quantity: 3 })
-    expect(body).toEqual({ location: 'kayak', slot: null, group: null, date: '2026-11-19', quantity: 3 })
+    expect(body).toEqual({ location: 'kayak', group: null, date: '2026-11-19', quantity: 3 })
     expect('product' in body).toBe(false)
+    expect('slot' in body).toBe(false)
   })
 })
 
