@@ -95,7 +95,6 @@
       "signIn": "Se connecter"
     },
     "calendar": {
-      "units": "Unités",
       "noBookings": "Aucune réservation",
       "bookingCount": "{count} réservation | {count} réservations",
       "closed": "Fermé",

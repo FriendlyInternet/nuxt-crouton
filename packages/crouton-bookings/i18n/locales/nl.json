@@ -95,7 +95,6 @@
       "signIn": "Inloggen"
     },
     "calendar": {
-      "units": "Eenheden",
       "noBookings": "Geen boekingen",
       "bookingCount": "{count} boeking | {count} boekingen",
       "closed": "Gesloten",
