@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
 import { isSuperAdminUser } from '../../shared/utils/auth'
 import { resolveInitialOrgId, getOrgBySlug } from './session-org'
+import { buildAccessControl, setAccessControl, type CroutonAccessControl } from './access'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type {
@@ -77,6 +78,12 @@ export interface CreateAuthOptions {
    * the app can send e-mail (crouton-email installed).
    */
   requireEmailVerification?: boolean
+  /**
+   * Crouton actions → Better Auth access control (#4104). `useServerAuth`
+   * builds it from every layer's `croutonActions` + `teams.roles`. When left
+   * out, it is built from `config.teams.roles` and the built-in actions.
+   */
+  access?: CroutonAccessControl
 }
 
 /**
@@ -113,6 +120,10 @@ export function createAuth(options: CreateAuthOptions) {
     schema,
     requireEmailVerification = false
   } = options
+
+  // One access-control definition for the organization plugin and can() (#4104).
+  const access = options.access ?? buildAccessControl({ roles: config.teams?.roles })
+  setAccessControl(access)
 
   // Build Better Auth configuration
   const authConfig: BetterAuthOptions = {
@@ -213,7 +224,7 @@ export function createAuth(options: CreateAuthOptions) {
     },
 
     // Plugins - Organization (Teams), Passkey, and 2FA support
-    plugins: buildPlugins(config, baseURL, config.debug, db),
+    plugins: buildPlugins(config, baseURL, config.debug, db, access),
 
     // Database hooks for single-tenant mode (auto-add users to default org)
     databaseHooks: buildDatabaseHooks(config, db)
@@ -737,13 +748,14 @@ function buildPlugins(
   config: CroutonAuthConfig,
   baseURL: string,
   debug?: boolean,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- typing as BetterAuthPlugin[] widens the tuple betterAuth infers auth.api's plugin endpoints from
   const plugins: any[] = [
     // Organization plugin is always enabled (teams support)
     // Cast to any to work around strict typing - config is validated at runtime
-    organization(buildOrganizationConfig(config, db) as any),
+    organization(buildOrganizationConfig(config, db, access) as any),
 
     // Admin plugin - user management (ban, impersonate, revoke sessions, etc.)
     admin({
@@ -1223,7 +1235,8 @@ function buildGenericProviderConfig(config: OAuthProviderConfig): SocialProvider
  */
 export function buildOrganizationConfig(
   config: CroutonAuthConfig,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   const teamsConfig = config.teams ?? {}
 
@@ -1255,6 +1268,11 @@ export function buildOrganizationConfig(
   }
 
   return {
+    // Roles carry crouton actions on top of Better Auth's own statements (#4104).
+    // A custom `roles` map replaces Better Auth's defaults, so buildAccessControl
+    // merges ownerAc/adminAc/memberAc into each role.
+    ...(access && { ac: access.ac, roles: access.roles }),
+
     // Organization creation control
     allowUserToCreateOrganization: getAllowUserToCreateOrganization(),
 

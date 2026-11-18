@@ -20,9 +20,10 @@
  */
 import type { H3Event } from 'h3'
 import { createError, getRequestURL, getCookie, parseCookies } from 'h3'
-import { useRuntimeConfig } from '#imports'
+import { useRuntimeConfig, useAppConfig } from '#imports'
 import { eq, and, gt } from 'drizzle-orm'
 import { createAuth, isEmailVerificationRequired, type AuthInstance, setAuthInstance, getAuthInstance, isAuthInitialized } from '../lib/auth'
+import { buildAccessControl, type CroutonActionRegistry } from '../lib/access'
 import { session as sessionTable, user as userTable } from '../database/schema/auth'
 import type { CroutonAuthConfig } from '../../types/config'
 import * as authSchema from '../database/schema/auth'
@@ -98,7 +99,12 @@ export function useServerAuth(event?: H3Event): AuthInstance {
     schema: authSchema,
     // The one place the "can this app send e-mail?" signal is read (#3141):
     // verification is required exactly when crouton-email is installed.
-    requireEmailVerification: isEmailVerificationRequired(config)
+    requireEmailVerification: isEmailVerificationRequired(config),
+    // Every layer's declared actions + the site's base roles (#4104).
+    access: buildAccessControl({
+      actions: (useAppConfig() as { croutonActions?: CroutonActionRegistry }).croutonActions,
+      roles: authConfig.teams?.roles
+    })
   })
 
   // Cache the instance

@@ -33,6 +33,9 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | `module.ts` | Nuxt module entry point |
 | `nuxt.config.ts` | Layer configuration |
 | `server/lib/auth.ts` | Better Auth factory (`createAuth`) |
+| `server/lib/access.ts` | Crouton actions + base roles → Better Auth `ac`/`roles` (`buildAccessControl`, #4104) |
+| `server/utils/permissions.ts` | `can()` / `requireCan()` — see "Permissions (actions)" |
+| `server/api/teams/[id]/can.get.ts` | `GET /api/teams/[id]/can?actions=…` → `{ action: boolean }` |
 | `server/utils/team-auth.ts` | Team auth utilities (exported via `@crouton/auth/server`) |
 | `server/utils/team.ts` | Core team resolution logic |
 | `types/config.ts` | `CroutonAuthConfig` configuration type |
@@ -73,6 +76,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 | `useTeam()` | Team/organization management |
 | `useTeamContext()` | Current team context |
 | `useTeamState()` | Team state management |
+| `useCan(action)` | May the signed-in member do `action` in the current team? `ComputedRef<boolean>`, SSR-safe (#4104) |
 
 ## Components
 
@@ -127,6 +131,69 @@ await requireTeamMember(event)  // Any team member
 await requireTeamAdmin(event)   // Admin or owner
 await requireTeamOwner(event)   // Owner only
 ```
+
+### Permissions (actions) (#4104)
+
+One question everywhere: **may this person do this here?** Packages declare the *actions* they guard; the
+site sets which base role gets which action; crouton turns both into Better Auth access control
+(`server/lib/access.ts` → `organization({ ac, roles })`), so Better Auth and `can()` answer from one
+definition.
+
+**Declare an action** (a package, in its `app/app.config.ts` — packages never declare roles):
+
+```typescript
+export default defineAppConfig({
+  croutonActions: {
+    'pages:edit': { label: 'permissions.pagesEdit' } // `resource:verb` + i18n label key (en/fr/nl)
+  }
+})
+```
+
+**Set base roles** (the site, `crouton.auth.teams.roles`): base role → actions. A role listed replaces
+that role's defaults; a role left out keeps them. The owner must keep `team:manage` — startup fails
+otherwise (`server/plugins/permissions-check.ts`). Only `owner` / `admin` / `member` are base roles.
+
+```typescript
+crouton: { auth: { teams: { roles: { member: ['pages:edit'] } } } }
+```
+
+**Ask:**
+
+```typescript
+// Server — auto-imported, or '@fyit/crouton-auth/server/utils/permissions' / '#crouton/team-auth'
+await can(teamId, userId, 'pages:edit') // boolean; reads the role from the DB, no session needed; never throws
+const { team } = await requireCan(event, 'pages:edit') // resolves the team like requireTeamAdmin, 403 unless allowed
+
+// Client (works during SSR — useRequestFetch forwards the cookie)
+const canEdit = useCan('pages:edit') // ComputedRef<boolean>; an array = all must be allowed
+
+// HTTP
+GET /api/teams/[id]/can?actions=pages:edit,site:manage // → { 'pages:edit': true, 'site:manage': false }
+```
+
+Unknown actions answer `false`. `admin:access` is true when the role has it **or any other crouton action**
+(so a custom role reaches its screen; Better Auth's own statements like `ac:read` don't count). The 12
+actions below are always known to crouton-auth (`CROUTON_DEFAULT_ACTIONS`), even before the owning package
+declares its label.
+
+| Action | Declared by | Default |
+|---|---|---|
+| `admin:access` | crouton-admin | owner, admin (+ any role with another action) |
+| `team:manage` | crouton-auth | owner, admin (owner can never lose it) |
+| `team:domains` | crouton-auth | owner, admin |
+| `site:manage` | crouton-core | owner, admin |
+| `collections:manage` | crouton-core | owner, admin |
+| `translations:manage` | crouton-i18n | owner, admin |
+| `pages:edit` | crouton-pages | owner, admin |
+| `media:manage` | crouton-assets | owner, admin |
+| `activity:view` | crouton-events | owner, admin |
+| `bookings:create` | crouton-bookings | owner, admin |
+| `bookings:manage` | crouton-bookings | owner, admin |
+| `sales:manage` | crouton-sales | owner, admin |
+
+`member` gets none by default. Ownership itself (demote/remove the owner, transfer/delete the team) stays
+role-based (`requireTeamOwner`). Tests: `tests/unit/server/permissions*.test.ts`, `can-endpoint.test.ts`,
+`tests/unit/composables/useCan.test.ts`.
 
 ### Public Team Resolution
 

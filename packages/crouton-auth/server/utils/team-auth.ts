@@ -12,6 +12,9 @@
 
 // Re-export all main team utilities
 export * from './team'
+// Action checks (#4104): can(teamId, userId, action), requireCan(event, action)
+// (star re-export, like './team', so the server/utils auto-import scan sees one source)
+export * from './permissions'
 
 import type { H3Event } from 'h3'
 

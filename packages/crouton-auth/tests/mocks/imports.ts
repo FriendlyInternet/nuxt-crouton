@@ -2,6 +2,9 @@
 export { ref, computed, readonly } from 'vue'
 export { useNuxtApp, useRuntimeConfig } from './nuxt-app'
 
+// Server-side app.config (Nitro). Tests override via globalThis.__mockAppConfig.
+export const useAppConfig = () => (globalThis as { __mockAppConfig?: Record<string, unknown> }).__mockAppConfig ?? {}
+
 // These will be mocked per-test
 export const useSession = () => ({
   user: { value: null },
