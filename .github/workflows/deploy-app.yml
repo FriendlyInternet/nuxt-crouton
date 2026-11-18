@@ -1029,10 +1029,13 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The team this deploy actually seeded (#4141): the screenshot job checks out main, so it
+          # must read the team from here, not from a deploy.config.json that may predate the PR.
+          REVIEW_TEAM: ${{ steps.review_team.outputs.team }}
         run: |
           mkdir -p "$RUNNER_TEMP/preview-meta"
-          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
-            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" --arg team "$REVIEW_TEAM" \
+            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber), team:$team}' > "$RUNNER_TEMP/preview-meta/meta.json"
           echo "recorded=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload preview record

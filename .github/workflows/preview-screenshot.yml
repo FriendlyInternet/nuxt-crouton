@@ -162,6 +162,9 @@ jobs:
           LOG="$RUNNER_TEMP/capture.log"; : > "$LOG"
           while IFS= read -r META; do
             APP=$(jq -r .app "$META"); WORKSPACE=$(jq -r .workspace "$META"); URL=$(jq -r .url "$META")
+            # The team the deploy seeded (#4141) — this checkout is main, so its manifest can miss a
+            # reviewTeam the PR adds. Absent (older record) → the capture falls back to the manifest.
+            TEAM=$(jq -r '.team // ""' "$META"); TEAM_ARGS=(); [ -z "$TEAM" ] || TEAM_ARGS=(--team "$TEAM")
             # Same login the deploy's seed step created (deploy-app.yml "Seed review login").
             EMAIL="review+${APP}-pr${PR_NUMBER}@example.com"
             PW="$(printf '%s' "${REVIEW_SEED_SECRET}:${APP}:pr${PR_NUMBER}" | sha256sum | cut -c1-24)"
@@ -175,7 +178,7 @@ jobs:
               AUTH=(--preview-token "$TOKEN")
             fi
             node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
-              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
+              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" "${TEAM_ARGS[@]}" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
           done < <(find "$RUNNER_TEMP/records" -name meta.json)
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
           shopt -s nullglob; PNGS=("$OUT"/*.png)

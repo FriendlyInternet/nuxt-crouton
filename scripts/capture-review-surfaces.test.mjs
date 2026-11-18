@@ -339,6 +339,33 @@ test('pickSurfaces: the marker read from the API is the declared surface; a fail
   await assert.rejects(pickSurfaces({ env, args, manifest: {}, fetchFn: stubFetch({ ok: false, status: 404 }).fn }), /404/)
 })
 
+// #4141: the screenshot job checks out MAIN, so a reviewTeam the PR adds is missing from its
+// manifest. The team the deploy seeded travels in preview-meta and arrives as --team.
+test('#4141 pickSurfaces: metadata team kdm wins over a checked-out manifest with no reviewTeam', async () => {
+  const env = { REPO: 'o/r', GH_TOKEN: 't', CHANGED_FILES: 'pocs/kdm/app/pages/admin/[team]/workspace.vue' }
+  const r = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: {}, fetchFn: stubFetch(ok('Closes #1')).fn })
+  assert.deepEqual(r.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const declared = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: {}, fetchFn: stubFetch(ok('<!-- review-surface: kdm /admin/{team}/workspace -->')).fn })
+  assert.equal(declared.surfaces[0].path, '/admin/kdm/workspace')
+  // the deployed team also beats a stale manifest value; no --team (older record) → manifest fallback
+  const stale = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(stale.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const legacy = await pickSurfaces({ env, args: { pr: '12', app: 'kdm' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(legacy.surfaces.map(s => s.path), ['/admin/old/workspace'])
+})
+
+test('#4141 wiring: the deploy records the seeded team and the screenshot job passes it as --team', () => {
+  const deploy = readFileSync(new URL('../.github/workflows/deploy-app.yml', import.meta.url), 'utf8')
+  const record = deploy.slice(deploy.indexOf('- name: Record preview for the screenshot check'), deploy.indexOf('- name: Upload preview record'))
+  assert.match(record, /REVIEW_TEAM: \$\{\{ steps\.review_team\.outputs\.team \}\}/)
+  assert.match(record, /team:\$team\}/)
+  const shot = readFileSync(new URL('../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
+  assert.match(shot, /TEAM=\$\(jq -r '\.team \/\/ ""' "\$META"\)/)
+  assert.match(shot, /capture-review-surfaces\.mjs[^\n]*\n[^\n]*"\$\{TEAM_ARGS\[@\]\}"/)
+  // the screenshot job still must not check out PR code
+  assert.doesNotMatch(shot, /ref:\s*\$\{\{\s*github\.event\.(pull_request|workflow_run)\.head/)
+})
+
 // ── settlePage (#4134): wait for the draw first, reload only a page still loading ──────────
 // A fake page + fake clock; the REAL isLoading runs against page.content()/page.evaluate().
 function fakeSettle({ states, drawAfterMs = Infinity, drawText = 'x'.repeat(400) }) {

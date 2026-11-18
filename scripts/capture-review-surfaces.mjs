@@ -22,7 +22,8 @@
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--team <slug>] [--out screenshots/review-captures] [--desktop]
+//   --team: the review team the deploy seeded (preview-meta `team`, #4141); wins over the manifest's reviewTeam.
 //   PR_BODY (env, optional): the PR body, read for review-surface markers (#2433); unset or empty → read
 //   from the GitHub API by --pr (GH_TOKEN + REPO), and a failed read captures nothing (#3957).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
@@ -131,9 +132,11 @@ export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM }
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
  *  - any other PR keeps the manifest's surfaces / landing, as before.
  */
-export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
-  // Only the manifest key is read here (no nuxt.config text) — all the screenshot needs (#4141).
-  const team = resolveReviewTeam({ manifest }).team
+export function resolveSurfaces({ manifest, prBody, app, changedFiles, team: deployedTeam }) {
+  // The team the DEPLOY seeded wins (preview-meta `team`, passed as --team, #4141): the screenshot
+  // job checks out main, so its manifest misses a `reviewTeam` the PR adds or changes. The manifest
+  // key (no nuxt.config text) is only the fallback for a record written before that field existed.
+  const team = (typeof deployedTeam === 'string' && deployedTeam.trim()) || resolveReviewTeam({ manifest }).team
   const declared = parsePrSurfaces(prBody, app, team)
   if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
   const derived = deriveSurfaces({ changedFiles, app, team })
@@ -170,7 +173,7 @@ export async function readPrBody({ env, pr, fetchFn = fetch }) {
 /** Read the PR body, then resolve what to capture for this app (#3957). */
 export async function pickSurfaces({ env, args, manifest, fetchFn = fetch }) {
   const prBody = await readPrBody({ env, pr: args.pr, fetchFn })
-  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n') })
+  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n'), team: args.team })
 }
 
 /**
