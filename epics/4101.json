@@ -1,0 +1,26 @@
+{
+  "epic": 4101,
+  "runs": 4,
+  "epicRuns": 0,
+  "silent": [],
+  "perChild": [
+    {
+      "issue": 4102,
+      "runs": 4,
+      "planRounds": 1,
+      "buildRounds": 1,
+      "revises": 0,
+      "silent": 0
+    }
+  ],
+  "timeToMainHours": 0.9,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 1,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4101#issuecomment-6977016446"
+    ]
+  },
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44301724799",
+  "stored_at": "2026-11-18T12:15:41.105Z"
+}
