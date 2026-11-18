@@ -43,3 +43,10 @@ Status: plain public addresses + Kasper's look (#4153). Pages made in the editor
 - Route check: `node pocs/kdm/scripts/check-public-routes.mjs <baseUrl>` (needs `welcome`, `draft-page`,
   `home`, `members-page` rows — see the script header). Local dev needs `BETTER_AUTH_SECRET` in the
   environment or the members-only case 500s.
+- **Workaround — remove once the package builds plain links in `custom` mode (tracked on
+  https://github.com/FriendlyInternet/nuxt-crouton/issues/4154):** crouton-pages still builds
+  public page links as `/<locale>/<slug>` (`buildPagePath()` drops the team, keeps the locale), so
+  the editor's "open the public page" link and page-link blocks point at `/en/<slug>`.
+  `server/middleware/locale-redirect.ts` redirects `/en/<slug>`, `/en` and `/en/` permanently (301)
+  to `/<slug>` / `/` — the site's one locale only; `/nl/<slug>` etc. stay a 404. Checked by cases
+  8–10 of `check-public-routes.mjs`.

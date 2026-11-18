@@ -51,6 +51,21 @@ const cases = [
   ['7 members-only page signed out → not 200, title absent', async () => {
     const r = await get('/members-page'); const html = await r.text()
     return [r.status !== 200 && !html.includes(MEMBERS_TITLE), `status ${r.status}, title in body ${html.includes(MEMBERS_TITLE)}`]
+  }],
+  // Workaround for the package's `/<locale>/<slug>` links (remove via #4154).
+  ['8 /en/welcome → permanent redirect to /welcome', async () => {
+    const r = await get('/en/welcome', { redirect: 'manual' })
+    const loc = r.headers.get('location') || ''
+    return [r.status === 301 && new URL(loc, base).pathname === '/welcome', `status ${r.status}${loc ? ` → ${loc}` : ''}`]
+  }],
+  ['9 /en → permanent redirect to /', async () => {
+    const r = await get('/en', { redirect: 'manual' })
+    const loc = r.headers.get('location') || ''
+    return [r.status === 301 && new URL(loc, base).pathname === '/', `status ${r.status}${loc ? ` → ${loc}` : ''}`]
+  }],
+  ['10 other locale /nl/welcome → 404', async () => {
+    const r = await get('/nl/welcome', { redirect: 'manual' })
+    return [r.status === 404, `status ${r.status}`]
   }]
 ]
 
