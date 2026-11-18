@@ -27,6 +27,7 @@ import {
   type CroutonAccessControl,
   type CroutonActionRegistry
 } from '../lib/access'
+import { getAuthInstance, isAuthInitialized } from '../lib/auth'
 import { getOrganizationMembershipDirect, resolveTeamAndCheckMembership, type TeamContext } from './team'
 import { useServerAuth } from './useServerAuth'
 
@@ -53,25 +54,45 @@ function resolveAccess(): CroutonAccessControl {
 type RoleCheck = (action: string) => Promise<boolean>
 
 /**
- * A checker for one member's role, through Better Auth's hasPermission. It uses
- * the organization plugin's own options so per-team roles (when dynamic access
- * control is turned on) load through the same path.
+ * Better Auth's context, without ever building the auth instance from a
+ * request-less call: with an event, `useServerAuth(event)` (it derives the base
+ * URL from the request); without one, only an instance that already exists.
+ * Null when there is none yet — the check then uses the static roles.
  */
-async function roleChecker(access: CroutonAccessControl, role: string, teamId: string): Promise<RoleCheck> {
-  const ctx = await useServerAuth().$context
-  const plugin = (ctx.options.plugins ?? []).find((p: { id?: string }) => p.id === 'organization') as
+async function authContext(event?: H3Event) {
+  if (event) return await useServerAuth(event).$context
+  if (isAuthInitialized()) return await getAuthInstance().$context
+  return null
+}
+
+/**
+ * A checker for one member's role, through Better Auth's hasPermission. With an
+ * auth context it uses the organization plugin's own options, so per-team roles
+ * (when dynamic access control is turned on) load through the same path. Each
+ * action is answered once (cached), so `admin:access` reuses the others.
+ */
+async function roleChecker(access: CroutonAccessControl, role: string, teamId: string, event?: H3Event): Promise<RoleCheck> {
+  const ctx = await authContext(event)
+  const plugin = (ctx?.options.plugins ?? []).find((p: { id?: string }) => p.id === 'organization') as
     { options?: Record<string, unknown> } | undefined
   const options = { ac: access.ac, roles: access.roles, ...plugin?.options }
+  const answers = new Map<string, Promise<boolean>>()
 
-  return async (action: string) => {
-    const parsed = parseAction(action)
-    if (!parsed) return false
-    return hasPermission({
-      role,
-      options: options as never,
-      permissions: { [parsed.resource]: [parsed.verb] },
-      organizationId: teamId
-    }, { context: ctx } as never)
+  return (action: string) => {
+    let answer = answers.get(action)
+    if (!answer) {
+      const parsed = parseAction(action)
+      answer = parsed
+        ? hasPermission({
+            role,
+            options: options as never,
+            permissions: { [parsed.resource]: [parsed.verb] },
+            organizationId: teamId
+          }, (ctx ? { context: ctx } : undefined) as never)
+        : Promise.resolve(false)
+      answers.set(action, answer)
+    }
+    return answer
   }
 }
 
@@ -84,27 +105,47 @@ async function allowsAdminAccess(access: CroutonAccessControl, allows: RoleCheck
   return false
 }
 
-async function checkCan(teamId: string, userId: string, action: string): Promise<boolean> {
-  if (!teamId || !userId || !parseAction(action)) return false
+async function checkMany(teamId: string, userId: string, actions: string[], event?: H3Event): Promise<Record<string, boolean>> {
+  const result: Record<string, boolean> = Object.fromEntries(actions.map(a => [a, false]))
+  if (!teamId || !userId) return result
 
   const access = resolveAccess()
-  if (!access.actions.includes(action)) return false
+  const known = actions.filter(a => parseAction(a) && access.actions.includes(a))
+  if (known.length === 0) return result
 
+  // One membership read and one checker for every asked action.
   const membership = await getOrganizationMembershipDirect(teamId, userId)
-  if (!membership?.role) return false
+  if (!membership?.role) return result
 
-  const allows = await roleChecker(access, membership.role, teamId)
-  return action === ADMIN_ACCESS_ACTION ? allowsAdminAccess(access, allows) : allows(action)
+  const allows = await roleChecker(access, membership.role, teamId, event)
+  for (const action of known) {
+    result[action] = action === ADMIN_ACCESS_ACTION ? await allowsAdminAccess(access, allows) : await allows(action)
+  }
+  return result
 }
 
-export async function can(teamId: string, userId: string, action: string): Promise<boolean> {
+/**
+ * Several actions at once: `{ action: boolean }`. Reads the membership once and
+ * builds one checker, so asking for many actions costs about the same as one.
+ * Pass the request `event` when there is one. Never throws (all false on error).
+ */
+export async function canMany(teamId: string, userId: string, actions: string[], event?: H3Event): Promise<Record<string, boolean>> {
   try {
-    return await checkCan(teamId, userId, action)
+    return await checkMany(teamId, userId, actions, event)
   }
   catch (err) {
-    console.error(`[crouton/auth] can(${action}) failed — answering false:`, err)
-    return false
+    console.error(`[crouton/auth] can(${actions.join(',')}) failed — answering false:`, err)
+    return Object.fromEntries(actions.map(a => [a, false]))
   }
+}
+
+/**
+ * Pass the request `event` when there is one. Without it, `can()` never builds
+ * the auth instance itself (that would cache it with no request to read the base
+ * URL from); it uses the existing instance, or the static roles.
+ */
+export async function can(teamId: string, userId: string, action: string, event?: H3Event): Promise<boolean> {
+  return (await canMany(teamId, userId, [action], event))[action] === true
 }
 
 /**
@@ -116,7 +157,7 @@ export async function can(teamId: string, userId: string, action: string): Promi
  */
 export async function requireCan(event: H3Event, action: string): Promise<TeamContext> {
   const context = await resolveTeamAndCheckMembership(event)
-  if (!(await can(context.team.id, context.user.id, action))) {
+  if (!(await can(context.team.id, context.user.id, action, event))) {
     throw createError({
       status: 403,
       message: `Not allowed: ${action}`

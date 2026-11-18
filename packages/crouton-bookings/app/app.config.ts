@@ -183,6 +183,12 @@ const withNavLabel = <T extends object>(config: T, labelKey: string) => ({
 })
 
 export default defineAppConfig({
+  // Actions this package guards (#4104) — see crouton-auth CLAUDE.md "Permissions (actions)".
+  croutonActions: {
+    'bookings:create': { label: 'permissions.bookingsCreate' },
+    'bookings:manage': { label: 'permissions.bookingsManage' }
+  },
+
   croutonCollections: {
     bookingsBookings: withNavLabel(bookingsBookingsConfig, 'bookings.collections.bookings.title'),
     bookingsLocations: withNavLabel(bookingsLocationsConfig, 'bookings.collections.locations.title'),

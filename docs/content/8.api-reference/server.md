@@ -366,10 +366,26 @@ _Source: `packages/crouton-auth/server/utils/pairing-code.ts`_
 
 **Also exported from `packages/crouton-auth/server/utils/pairing-code.ts`:** `TILL_DEVICE_RESOURCE_TYPE`
 
-## can
+## canMany
+
+Several actions at once: `{ action: boolean }`. Reads the membership once and
+builds one checker, so asking for many actions costs about the same as one.
+Pass the request `event` when there is one. Never throws (all false on error).
 
 ```ts
-can(teamId: string, userId: string, action: string): Promise<boolean>
+canMany(teamId: string, userId: string, actions: string[], event?: H3Event): Promise<Record<string, boolean>>
+```
+
+_Source: `packages/crouton-auth/server/utils/permissions.ts`_
+
+## can
+
+Pass the request `event` when there is one. Without it, `can()` never builds
+the auth instance itself (that would cache it with no request to read the base
+URL from); it uses the existing instance, or the static roles.
+
+```ts
+can(teamId: string, userId: string, action: string, event?: H3Event): Promise<boolean>
 ```
 
 _Source: `packages/crouton-auth/server/utils/permissions.ts`_

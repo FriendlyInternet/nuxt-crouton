@@ -19,15 +19,17 @@ import { betterAuth } from 'better-auth'
 import { memoryAdapter } from 'better-auth/adapters/memory'
 import { organization } from 'better-auth/plugins'
 import * as authSchema from '../../../server/database/schema/auth'
-import { buildOrganizationConfig, setAuthInstance } from '../../../server/lib/auth'
+import { buildOrganizationConfig, isAuthInitialized, setAuthInstance } from '../../../server/lib/auth'
 import {
   buildAccessControl,
   setAccessControl,
+  validateActions,
   validateBaseRoles,
   CROUTON_DEFAULT_ACTIONS,
-  type BaseRolesConfig
+  type BaseRolesConfig,
+  type CroutonActionRegistry
 } from '../../../server/lib/access'
-import { can } from '../../../server/utils/permissions'
+import { can, canMany } from '../../../server/utils/permissions'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
@@ -38,20 +40,25 @@ const OTHER_TEAM = 'team-2'
 
 let sqlite: Database.Database
 
+/** What the packages declare in their app.config (#4104 table) — declared-actions.test.ts checks the real files. */
+const DECLARED: CroutonActionRegistry = {
+  'admin:access': { label: 'permissions.adminAccess' },
+  'team:manage': { label: 'permissions.teamManage' },
+  'team:domains': { label: 'permissions.teamDomains' },
+  'site:manage': { label: 'permissions.siteManage' },
+  'collections:manage': { label: 'permissions.collectionsManage' },
+  'translations:manage': { label: 'permissions.translationsManage' },
+  'pages:edit': { label: 'permissions.pagesEdit' },
+  'media:manage': { label: 'permissions.mediaManage' },
+  'activity:view': { label: 'permissions.activityView' },
+  'bookings:create': { label: 'permissions.bookingsCreate' },
+  'bookings:manage': { label: 'permissions.bookingsManage' },
+  'sales:manage': { label: 'permissions.salesManage' }
+}
+
 /** Wire a real Better Auth + access control the way createAuth() does. */
-function setup(roles?: BaseRolesConfig) {
-  const access = buildAccessControl({
-    // What the four approved packages declare in their app.config (#4104).
-    actions: {
-      'admin:access': { label: 'permissions.adminAccess' },
-      'team:manage': { label: 'permissions.teamManage' },
-      'team:domains': { label: 'permissions.teamDomains' },
-      'site:manage': { label: 'permissions.siteManage' },
-      'collections:manage': { label: 'permissions.collectionsManage' },
-      'pages:edit': { label: 'permissions.pagesEdit' }
-    },
-    roles
-  })
+function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = DECLARED) {
+  const access = buildAccessControl({ actions, roles })
   setAccessControl(access)
   const auth = betterAuth({
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
@@ -83,19 +90,79 @@ afterEach(() => {
 describe('can() — defaults with no site config (T1, the rule)', () => {
   it('owner and admin can every action in the table; member none', async () => {
     setup()
-    expect(CROUTON_DEFAULT_ACTIONS).toHaveLength(12)
-    for (const action of CROUTON_DEFAULT_ACTIONS) {
+    expect(Object.keys(DECLARED)).toHaveLength(12)
+    for (const action of Object.keys(DECLARED)) {
       expect(await can(TEAM, 'u-owner', action), `owner ${action}`).toBe(true)
       expect(await can(TEAM, 'u-admin', action), `admin ${action}`).toBe(true)
       expect(await can(TEAM, 'u-member', action), `member ${action}`).toBe(false)
     }
   })
 
-  it('actions an unapproved package has not declared yet still follow the defaults', async () => {
+  it('a newly declared action outside the fallback goes to owner and admin with no config', async () => {
+    setup(undefined, { ...DECLARED, 'reports:export': { label: 'permissions.reportsExport' } })
+    expect(CROUTON_DEFAULT_ACTIONS).not.toContain('reports:export')
+    expect(await can(TEAM, 'u-owner', 'reports:export')).toBe(true)
+    expect(await can(TEAM, 'u-admin', 'reports:export')).toBe(true)
+    expect(await can(TEAM, 'u-member', 'reports:export')).toBe(false)
+  })
+
+  it('a config role still replaces the defaults for a newly declared action', async () => {
+    setup({ admin: ['team:manage'] }, { ...DECLARED, 'reports:export': {} })
+    expect(await can(TEAM, 'u-admin', 'reports:export')).toBe(false)
+    expect(await can(TEAM, 'u-owner', 'reports:export')).toBe(true)
+  })
+
+  it('an action no package declares is unknown (only the fallback is built in)', async () => {
+    setup(undefined, {})
+    expect(await can(TEAM, 'u-owner', 'bookings:manage')).toBe(false)
+    expect(await can(TEAM, 'u-owner', 'team:manage')).toBe(true)
+  })
+})
+
+describe('a package action may not reuse a Better Auth permission name', () => {
+  it('declaring member:create is refused with a clear message', () => {
+    const message = /'member:create' is a Better Auth organization permission/
+    expect(() => validateActions({ 'member:create': {} })).toThrow(message)
+    expect(() => buildAccessControl({ actions: { 'member:create': {} } })).toThrow(message)
+  })
+
+  it('crouton-auth\'s own team:* actions do not collide (Better Auth only uses team:create/update/delete)', () => {
+    expect(() => validateActions(DECLARED)).not.toThrow()
+  })
+
+  it('the startup plugin refuses that declaration at boot', async () => {
+    vi.stubGlobal('defineNitroPlugin', (fn: () => void) => fn)
+    vi.stubGlobal('useRuntimeConfig', () => ({ public: { crouton: { auth: {} } } }))
+    vi.stubGlobal('useAppConfig', () => ({ croutonActions: { 'invitation:create': {} } }))
+    const plugin = (await import('../../../server/plugins/permissions-check')).default as unknown as () => void
+    expect(() => plugin()).toThrow(/'invitation:create' is a Better Auth organization permission/)
+    vi.stubGlobal('useAppConfig', () => ({ croutonActions: DECLARED }))
+    expect(() => plugin()).not.toThrow()
+  })
+})
+
+describe('canMany() — several actions, one membership read', () => {
+  it('answers each action and reads the member row once', async () => {
     setup()
-    // bookings/sales/i18n/assets/events declare theirs in a follow-up; crouton-auth knows them already.
-    expect(await can(TEAM, 'u-admin', 'bookings:manage')).toBe(true)
-    expect(await can(TEAM, 'u-member', 'bookings:manage')).toBe(false)
+    const db = (globalThis as unknown as { useDB: () => unknown }).useDB()
+    const useDB = vi.fn(() => db)
+    vi.stubGlobal('useDB', useDB)
+    const result = await canMany(TEAM, 'u-member', ['admin:access', 'pages:edit', 'bogus'])
+    expect(result).toEqual({ 'admin:access': false, 'pages:edit': false, 'bogus': false })
+    expect(useDB).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('can() without a request never builds the auth instance', () => {
+  it('with no auth instance yet, answers from the static roles and leaves auth unbuilt', async () => {
+    const access = buildAccessControl({ actions: DECLARED, roles: { member: ['pages:edit'] } })
+    setAccessControl(access)
+    setAuthInstance(null as never)
+    expect(isAuthInitialized()).toBe(false)
+    expect(await can(TEAM, 'u-member', 'pages:edit')).toBe(true)
+    expect(await can(TEAM, 'u-member', 'site:manage')).toBe(false)
+    expect(await can(TEAM, 'u-owner', 'team:manage')).toBe(true)
+    expect(isAuthInitialized()).toBe(false)
   })
 })
 
@@ -164,6 +231,7 @@ describe('owner keeps team:manage (T6)', () => {
   it('the startup plugin refuses that config at boot', async () => {
     vi.stubGlobal('defineNitroPlugin', (fn: () => void) => fn)
     vi.stubGlobal('useRuntimeConfig', () => ({ public: { crouton: { auth: { teams: { roles: { owner: ['pages:edit'] } } } } } }))
+    vi.stubGlobal('useAppConfig', () => ({}))
     const plugin = (await import('../../../server/plugins/permissions-check')).default as unknown as () => void
     expect(() => plugin()).toThrow(message)
     vi.stubGlobal('useRuntimeConfig', () => ({ public: { crouton: { auth: {} } } }))

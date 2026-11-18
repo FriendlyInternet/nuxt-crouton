@@ -149,20 +149,29 @@ export default defineAppConfig({
 })
 ```
 
-**Set base roles** (the site, `crouton.auth.teams.roles`): base role → actions. A role listed replaces
-that role's defaults; a role left out keeps them. The owner must keep `team:manage` — startup fails
+An action may not reuse one of Better Auth's own organization permission names (`member:create`,
+`invitation:create`, `team:update`, …) — that would also open the native endpoint; startup fails.
+
+**Set base roles** (the site, the `croutonAuth` module option in `nuxt.config.ts` — the module copies it
+to `runtimeConfig.public.crouton.auth`): base role → actions. A role listed replaces that role's
+defaults; a role left out keeps them. Defaults: owner and admin get **every declared action** (a newly
+declared one too, no config needed), member none. The owner must keep `team:manage` — startup fails
 otherwise (`server/plugins/permissions-check.ts`). Only `owner` / `admin` / `member` are base roles.
 
 ```typescript
-crouton: { auth: { teams: { roles: { member: ['pages:edit'] } } } }
+// nuxt.config.ts
+croutonAuth: { teams: { roles: { member: ['pages:edit'] } } }
 ```
 
 **Ask:**
 
 ```typescript
 // Server — auto-imported, or '@fyit/crouton-auth/server/utils/permissions' / '#crouton/team-auth'
-await can(teamId, userId, 'pages:edit') // boolean; reads the role from the DB, no session needed; never throws
+await can(teamId, userId, 'pages:edit', event) // boolean; reads the role from the DB, no session needed; never throws
+await canMany(teamId, userId, ['pages:edit', 'site:manage'], event) // { action: boolean }, one membership read
 const { team } = await requireCan(event, 'pages:edit') // resolves the team like requireTeamAdmin, 403 unless allowed
+// Pass `event` when you have one. Without it can() never builds the auth instance (that would cache it
+// with no request to take the base URL from); it uses the existing one, or the static roles.
 
 // Client (works during SSR — useRequestFetch forwards the cookie)
 const canEdit = useCan('pages:edit') // ComputedRef<boolean>; an array = all must be allowed
@@ -172,9 +181,12 @@ GET /api/teams/[id]/can?actions=pages:edit,site:manage // → { 'pages:edit': tr
 ```
 
 Unknown actions answer `false`. `admin:access` is true when the role has it **or any other crouton action**
-(so a custom role reaches its screen; Better Auth's own statements like `ac:read` don't count). The 12
-actions below are always known to crouton-auth (`CROUTON_DEFAULT_ACTIONS`), even before the owning package
-declares its label.
+(so a custom role reaches its screen; Better Auth's own statements like `ac:read` don't count). Each
+action below is declared, with en/fr/nl labels, by the package in its column. The only fallback built into
+crouton-auth (`CROUTON_DEFAULT_ACTIONS`) is `team:manage` (the owner can never lose it) and `admin:access`
+(the one `can()` gives its own meaning) — so they exist even when `createAuth()` gets no layer's
+`croutonActions`. Any other action a package does not declare is unknown (`false`).
+`tests/unit/server/declared-actions.test.ts` checks the table against the real package files.
 
 | Action | Declared by | Default |
 |---|---|---|

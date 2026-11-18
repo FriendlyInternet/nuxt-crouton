@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "activityView": "Voir le journal d'activité"
+  },
   "events": {
     "title": "Activité",
     "admin": {

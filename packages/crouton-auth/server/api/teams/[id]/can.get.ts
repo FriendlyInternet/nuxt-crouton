@@ -7,7 +7,7 @@
  */
 import { getQuery } from 'h3'
 import { resolveTeamAndCheckMembership } from '../../../utils/team'
-import { can } from '../../../utils/permissions'
+import { canMany } from '../../../utils/permissions'
 
 /** Parse `?actions=a,b` (or repeated `?actions=a&actions=b`) into a unique list. */
 function parseActionsQuery(raw: unknown): string[] {
@@ -23,9 +23,6 @@ export default defineEventHandler(async (event) => {
   const { team, user } = await resolveTeamAndCheckMembership(event)
   const actions = parseActionsQuery(getQuery(event).actions)
 
-  const result: Record<string, boolean> = {}
-  for (const action of actions) {
-    result[action] = await can(team.id, user.id, action)
-  }
-  return result
+  // One membership read + one checker for all of them (not one per action).
+  return await canMany(team.id, user.id, actions, event)
 })

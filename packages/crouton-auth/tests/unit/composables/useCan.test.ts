@@ -9,7 +9,7 @@
  * by running the handler immediately, as it does on the server.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref, computed, isRef, type Ref } from 'vue'
+import { ref, computed, isRef, watch, type Ref, type WatchSource } from 'vue'
 
 import { useCan } from '../../../app/composables/useCan'
 
@@ -21,10 +21,19 @@ vi.stubGlobal('computed', computed)
 vi.stubGlobal('useTeamContext', () => ({ teamId }))
 vi.stubGlobal('useRequestFetch', () => requestFetch)
 vi.stubGlobal('$fetch', plainFetch)
-vi.stubGlobal('useAsyncData', (key: unknown, handler: () => Promise<unknown>, opts: { default: () => unknown }) => {
+// Like Nuxt: run the handler now and again when a `watch` source changes; the
+// old value stays in `data` until the new request resolves.
+let lastKey: unknown
+const stops: Array<() => void> = []
+vi.stubGlobal('useAsyncData', (key: unknown, handler: () => Promise<unknown>, opts: { default: () => unknown, watch?: WatchSource[] }) => {
   const data: Ref<unknown> = ref(opts.default())
+  lastKey = key
   const resolvedKey = typeof key === 'function' ? key() : isRef(key) ? key.value : key
-  const pending = handler().then((v) => { data.value = v })
+  const run = () => handler().then((v) => {
+    data.value = v
+  })
+  const pending = run()
+  if (opts.watch) stops.push(watch(opts.watch, () => run(), { flush: 'sync' }))
   return { data, pending, key: resolvedKey }
 })
 
@@ -32,6 +41,7 @@ const flush = () => new Promise(r => setTimeout(r, 0))
 
 describe('useCan (T8)', () => {
   beforeEach(() => {
+    stops.splice(0).forEach(stop => stop()) // the previous test's watchers
     vi.clearAllMocks()
     teamId.value = 'team-1'
   })
@@ -58,6 +68,32 @@ describe('useCan (T8)', () => {
     const allowed = useCan(['pages:edit', 'site:manage'])
     await flush()
     expect(requestFetch).toHaveBeenCalledWith('/api/teams/team-1/can', { query: { actions: 'pages:edit,site:manage' } })
+    expect(allowed.value).toBe(false)
+  })
+
+  it('uses a plain string key (reactive keys need Nuxt ≥3.17; the peer range allows 3.14)', () => {
+    requestFetch.mockResolvedValue({})
+    useCan('pages:edit')
+    expect(typeof lastKey).toBe('string')
+  })
+
+  it('a team switch from allowed to denied answers false while the new answer is still loading', async () => {
+    requestFetch.mockResolvedValueOnce({ 'pages:edit': true })
+    const allowed = useCan('pages:edit')
+    await flush()
+    expect(allowed.value).toBe(true)
+
+    let resolveSecond!: (v: unknown) => void
+    requestFetch.mockReturnValueOnce(new Promise((r) => {
+      resolveSecond = r
+    }))
+    teamId.value = 'team-2'
+    await flush()
+    expect(requestFetch).toHaveBeenLastCalledWith('/api/teams/team-2/can', { query: { actions: 'pages:edit' } })
+    expect(allowed.value).toBe(false) // team-1's "yes" must not show in team-2
+
+    resolveSecond({ 'pages:edit': false })
+    await flush()
     expect(allowed.value).toBe(false)
   })
 

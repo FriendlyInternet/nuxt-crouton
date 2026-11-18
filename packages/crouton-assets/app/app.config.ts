@@ -3,6 +3,11 @@ import { croutonAssetsConfig } from '../collections/assets/app/composables/useCr
 // means a consuming app lists nothing for assets in its own app.config.
 
 export default defineAppConfig({
+  // Actions this package guards (#4104) — see crouton-auth CLAUDE.md "Permissions (actions)".
+  croutonActions: {
+    'media:manage': { label: 'permissions.mediaManage' }
+  },
+
   croutonCollections: {
     croutonAssets: {
       ...croutonAssetsConfig,

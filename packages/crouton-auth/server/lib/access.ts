@@ -3,7 +3,7 @@
  *
  * Packages declare the actions they guard (`croutonActions` in their
  * `app/app.config.ts`, e.g. `{ 'pages:edit': { label: 'pages.permissions.edit' } }`).
- * A site sets which base role gets which action (`crouton.auth.teams.roles`).
+ * A site sets which base role gets which action (`croutonAuth.teams.roles`).
  * This module turns both into Better Auth's `ac` + `roles`, so the organization
  * plugin and `can()` answer from the same definition.
  *
@@ -34,33 +34,41 @@ export const ADMIN_ACCESS_ACTION = 'admin:access'
 const OWNER_LOCKED_ACTION = 'team:manage'
 
 /**
- * Every action crouton packages guard today (the #4104 table). Owner and
- * admin get them all by default; member gets none.
- *
- * These are always registered, even when the owning package has not (yet)
- * declared them in its `croutonActions`, so `can()` matches today's rights
- * on every site. Packages add labels and any new actions via `croutonActions`.
+ * The fallback: actions crouton-auth itself needs registered even when no
+ * layer's `croutonActions` is passed in (e.g. `createAuth()` called without
+ * `access`). `team:manage` is the action the owner can never lose, and
+ * `admin:access` is the one `can()` gives its own meaning. Every other action
+ * is declared by the package that guards it, in its `croutonActions`.
  */
 export const CROUTON_DEFAULT_ACTIONS = [
-  'admin:access',
-  'team:manage',
-  'team:domains',
-  'site:manage',
-  'collections:manage',
-  'translations:manage',
-  'pages:edit',
-  'media:manage',
-  'activity:view',
-  'bookings:create',
-  'bookings:manage',
-  'sales:manage'
+  ADMIN_ACCESS_ACTION,
+  OWNER_LOCKED_ACTION
 ] as const
 
-/** Defaults when the site sets no `teams.roles`. */
-const DEFAULT_BASE_ROLES: Record<BaseRole, readonly string[]> = {
-  owner: CROUTON_DEFAULT_ACTIONS,
-  admin: CROUTON_DEFAULT_ACTIONS,
-  member: []
+const BASE_ROLE_NAMES: readonly BaseRole[] = ['owner', 'admin', 'member']
+
+/**
+ * Better Auth's own organization permissions (invite, change role, …). A crouton
+ * action with one of these names would also grant the native endpoint, so they
+ * are reserved.
+ */
+function isReservedAction(action: string): boolean {
+  const parsed = parseAction(action)
+  if (!parsed) return false
+  const verbs = (defaultStatements as Record<string, readonly string[]>)[parsed.resource]
+  return !!verbs?.includes(parsed.verb)
+}
+
+/**
+ * Startup check: no package may declare an action that is one of Better Auth's
+ * own organization permissions (e.g. `member:create`). Throws a clear message.
+ */
+export function validateActions(registry?: CroutonActionRegistry | null): void {
+  for (const action of Object.keys(registry ?? {})) {
+    if (isReservedAction(action)) {
+      throw new Error(`[crouton/auth] croutonActions '${action}' is a Better Auth organization permission — pick another name`)
+    }
+  }
 }
 
 const BASE_ROLE_STATEMENTS: Record<BaseRole, Record<string, readonly string[]>> = {
@@ -103,13 +111,14 @@ function actionsToStatements(actions: Iterable<string>): Record<string, string[]
 
 /**
  * Resolve the site's base roles: a role listed in the config replaces that
- * role's default list; a role left out keeps its default.
+ * role's default list; a role left out keeps its default. Defaults: owner and
+ * admin get every registered action (so a newly declared one too), member none.
  */
-function resolveBaseRoles(config?: BaseRolesConfig | null): Record<BaseRole, string[]> {
+function resolveBaseRoles(config: BaseRolesConfig | null | undefined, registered: readonly string[]): Record<BaseRole, string[]> {
   return {
-    owner: [...(config?.owner ?? DEFAULT_BASE_ROLES.owner)],
-    admin: [...(config?.admin ?? DEFAULT_BASE_ROLES.admin)],
-    member: [...(config?.member ?? DEFAULT_BASE_ROLES.member)]
+    owner: [...(config?.owner ?? registered)],
+    admin: [...(config?.admin ?? registered)],
+    member: [...(config?.member ?? [])]
   }
 }
 
@@ -123,14 +132,14 @@ export function validateBaseRoles(config?: BaseRolesConfig | null): void {
     throw new Error('[crouton/auth] teams.roles must be an object of base role → actions, e.g. { member: [\'pages:edit\'] }')
   }
   for (const [role, actions] of Object.entries(config)) {
-    if (!(role in DEFAULT_BASE_ROLES)) {
+    if (!BASE_ROLE_NAMES.includes(role as BaseRole)) {
       throw new Error(`[crouton/auth] teams.roles.${role} is not a base role (use owner, admin or member)`)
     }
     if (actions !== undefined && !Array.isArray(actions)) {
       throw new Error(`[crouton/auth] teams.roles.${role} must be a list of actions`)
     }
   }
-  const owner = resolveBaseRoles(config).owner
+  const owner = resolveBaseRoles(config, CROUTON_DEFAULT_ACTIONS).owner
   if (!owner.includes(OWNER_LOCKED_ACTION)) {
     throw new Error(`[crouton/auth] teams.roles.owner must include '${OWNER_LOCKED_ACTION}' — the owner can never lose it`)
   }
@@ -139,7 +148,7 @@ export function validateBaseRoles(config?: BaseRolesConfig | null): void {
 export interface BuildAccessControlInput {
   /** Merged `croutonActions` registry (every layer's app.config). */
   actions?: CroutonActionRegistry | null
-  /** Site base roles (`crouton.auth.teams.roles`). */
+  /** Site base roles (`croutonAuth.teams.roles`). */
   roles?: BaseRolesConfig | null
 }
 
@@ -161,11 +170,12 @@ export interface CroutonAccessControl {
  */
 export function buildAccessControl(input: BuildAccessControlInput = {}): CroutonAccessControl {
   validateBaseRoles(input.roles)
+  validateActions(input.actions)
 
   const registered = new Set<string>(CROUTON_DEFAULT_ACTIONS)
   for (const a of Object.keys(input.actions ?? {})) if (parseAction(a)) registered.add(a)
   const actions = [...registered]
-  const baseRoles = resolveBaseRoles(input.roles)
+  const baseRoles = resolveBaseRoles(input.roles, actions)
 
   const ac = createAccessControl(mergeStatements(defaultStatements, actionsToStatements(actions)))
 
