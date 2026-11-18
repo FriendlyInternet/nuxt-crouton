@@ -14,7 +14,8 @@ const props = withDefaults(defineProps<{
 const { locations } = useBookingsList({ scope: props.scope })
 const { filters } = useBookingsLayoutFilters()
 const { open: openCroutonForm } = useCrouton()
-const { isAdmin } = useTeam()
+// Managing locations is the `bookings:manage` action (#4105)
+const isAdmin = useCan('bookings:manage')
 
 function onAddLocation() {
   openCroutonForm('create', 'bookingsLocations', [], 'slideover')

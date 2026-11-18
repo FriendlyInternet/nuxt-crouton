@@ -9,7 +9,8 @@
  */
 definePageMeta({
   layout: 'admin',
-  middleware: ['auth', 'team-admin']
+  middleware: ['auth', 'can'],
+  can: 'collections:manage'
 })
 
 const route = useRoute()

@@ -7,9 +7,14 @@
  *
  * @route /admin/[team]/team/email-templates
  */
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
+})
+
 const { teamSlug, teamId } = useTeamContext()
 const { t } = useT()
-const { isAdmin } = useTeam()
+const canManage = useCan('team:manage')
 const notify = useNotify()
 
 // Email types with metadata
@@ -180,7 +185,7 @@ onMounted(loadSettings)
   <div class="p-4 sm:p-6">
     <!-- Not a team admin -->
     <div
-      v-if="!isAdmin"
+      v-if="!canManage"
       class="text-center py-8"
     >
       <UIcon

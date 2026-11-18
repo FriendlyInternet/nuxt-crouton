@@ -24,7 +24,7 @@
  *     icon: 'i-lucide-pencil',
  *     label: t('pages.admin.editPage'),
  *     onSelect: startEditing,
- *     show: () => isAdmin.value && !isEditing.value && !!page.value?.id,
+ *     show: () => canEdit.value && !isEditing.value && !!page.value?.id, // canEdit = useCan('pages:edit', { server: false })
  *   })
  *   onUnmounted(off)
  * })

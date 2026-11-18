@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, computed, isRef, watch, type Ref, type WatchSource } from 'vue'
 
-import { useCan } from '../../../app/composables/useCan'
+import { useCan, useCanAnswers } from '../../../app/composables/useCan'
 
 const requestFetch = vi.fn()
 const plainFetch = vi.fn()
@@ -21,13 +21,17 @@ vi.stubGlobal('computed', computed)
 vi.stubGlobal('useTeamContext', () => ({ teamId }))
 vi.stubGlobal('useRequestFetch', () => requestFetch)
 vi.stubGlobal('$fetch', plainFetch)
+const state: Record<string, Ref<unknown>> = {}
+vi.stubGlobal('useState', (key: string, init: () => unknown) => (state[key] ??= ref(init())))
 // Like Nuxt: run the handler now and again when a `watch` source changes; the
 // old value stays in `data` until the new request resolves.
 let lastKey: unknown
+let lastOpts: Record<string, unknown> | undefined
 const stops: Array<() => void> = []
 vi.stubGlobal('useAsyncData', (key: unknown, handler: () => Promise<unknown>, opts: { default: () => unknown, watch?: WatchSource[] }) => {
   const data: Ref<unknown> = ref(opts.default())
   lastKey = key
+  lastOpts = opts as Record<string, unknown>
   const resolvedKey = typeof key === 'function' ? key() : isRef(key) ? key.value : key
   const run = () => handler().then((v) => {
     data.value = v
@@ -44,6 +48,7 @@ describe('useCan (T8)', () => {
     stops.splice(0).forEach(stop => stop()) // the previous test's watchers
     vi.clearAllMocks()
     teamId.value = 'team-1'
+    Object.keys(state).forEach(k => delete state[k])
   })
 
   it('fetches through useRequestFetch (cookie forwarded), not $fetch, and returns the answer', async () => {
@@ -103,5 +108,40 @@ describe('useCan (T8)', () => {
     await flush()
     expect(requestFetch).not.toHaveBeenCalled()
     expect(allowed.value).toBe(false)
+  })
+})
+
+// T4 (#4105): browser-only answers for shared-cached public pages, and the
+// shared answer store useTeam() reads.
+describe('useCan options + answer store (T4, #4105)', () => {
+  beforeEach(() => {
+    stops.splice(0).forEach(stop => stop())
+    vi.clearAllMocks()
+    teamId.value = 'team-1'
+    Object.keys(state).forEach(k => delete state[k])
+  })
+
+  it('{ server: false } passes server:false to useAsyncData under a different key', () => {
+    requestFetch.mockResolvedValue({})
+    useCan('pages:edit', { server: false })
+    expect(lastOpts?.server).toBe(false)
+    expect(lastKey).toBe('crouton-can:pages:edit:client')
+  })
+
+  it('the default call is unchanged (no server option, plain key)', () => {
+    requestFetch.mockResolvedValue({})
+    useCan('pages:edit')
+    expect(lastOpts && 'server' in lastOpts).toBe(false)
+    expect(lastKey).toBe('crouton-can:pages:edit')
+  })
+
+  it('an answer is written into useCanAnswers() under the team id it asked for', async () => {
+    requestFetch.mockResolvedValueOnce({ 'team:manage': true })
+    useCan('team:manage')
+    await flush()
+    requestFetch.mockResolvedValueOnce({ 'site:manage': false })
+    useCan('site:manage')
+    await flush()
+    expect(useCanAnswers().value).toEqual({ 'team-1': { 'team:manage': true, 'site:manage': false } })
   })
 })

@@ -7,9 +7,15 @@
  *
  * @route /admin/[team]/team/settings
  */
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
+})
+
 const { teamSlug } = useTeamContext()
 const { t } = useT()
-const { currentTeam, isOwner, deleteTeam, isAdmin } = useTeam()
+const { currentTeam, isOwner, deleteTeam } = useTeam()
+const canManage = useCan('team:manage')
 const notify = useNotify()
 
 // Show delete confirmation modal
@@ -39,7 +45,7 @@ function handleSaved() {
   <div class="p-4 sm:p-6">
     <!-- Not a team admin -->
     <div
-      v-if="!isAdmin"
+      v-if="!canManage"
       class="text-center py-8"
     >
       <UIcon

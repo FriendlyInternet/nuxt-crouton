@@ -8,16 +8,21 @@
  *
  * @route /admin/[team]/team/look-and-feel
  */
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'site:manage'
+})
+
 const { teamSlug } = useTeamContext()
 const { t } = useT()
-const { isAdmin } = useTeam()
+const canManage = useCan('site:manage')
 </script>
 
 <template>
   <div class="p-4 sm:p-6">
     <!-- Not a team admin -->
     <div
-      v-if="!isAdmin"
+      v-if="!canManage"
       class="text-center py-8"
     >
       <UIcon
