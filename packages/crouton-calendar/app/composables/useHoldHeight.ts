@@ -1,36 +1,60 @@
-import type { Ref, WatchSource } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
+import type { Ref } from 'vue'
 
 /**
- * Hold an element's height while `source` changes, until the next frame (#3924 / #3813).
+ * Hold an element's height for good — never released (#3924 / #3813).
  *
  * The swipe strip has no height of its own: while its panels are patched it is
- * briefly shorter, and WebKit clamps the page scroll to fit. Pinning the
- * current height before the re-render (and releasing it a frame later) stops
- * the page jumping. The style is written straight to the element — Vue patches
- * children before the parent's props, so a bound `:style` would arrive too late.
+ * briefly shorter, and WebKit clamps the page scroll to fit, so a page scrolled
+ * to the bottom jumps. A hold that starts when the date changes is too late on
+ * iOS (it jumps already), so the strip keeps a `min-height` at its measured
+ * height ALL the time, from mount on.
+ *
+ * - Measured after mount, and again from scratch when the strip's WIDTH changes
+ *   (rotation, pane resize) — every month shows the same 6 rows, so the height
+ *   only depends on the width.
+ * - Never stops the strip growing: `min-height` lets content get taller, and
+ *   when it does the held value goes up with it.
+ * - A hidden strip (height 0) is never given a min-height.
+ *
+ * The style is written straight to the element, not through a bound `:style`.
  */
-export function useHoldHeight(el: Ref<HTMLElement | null>, source: WatchSource<unknown>): void {
-  let frame: number | null = null
-  function cancel() {
-    if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame)
-    frame = null
+export function useHoldHeight(el: Ref<HTMLElement | null>): void {
+  let held = 0
+  let width = -1
+  let observer: ResizeObserver | null = null
+
+  function hold(node: HTMLElement, height: number) {
+    held = height > 0 ? height : 0
+    node.style.minHeight = held > 0 ? `${held}px` : ''
   }
-  // pre: before the re-render, pin the current height (unrounded) straight on the element
-  watch(source, () => {
-    cancel()
+
+  function measure() {
     const node = el.value
     if (!node) return
-    const height = node.getBoundingClientRect().height
-    if (height > 0) node.style.minHeight = `${height}px`
-  }, { flush: 'pre' })
-  // post: after the patch, release on the next frame
-  watch(source, () => {
-    if (typeof requestAnimationFrame !== 'function') return
-    cancel()
-    frame = requestAnimationFrame(() => {
-      frame = null
-      if (el.value) el.value.style.minHeight = ''
-    })
-  }, { flush: 'post' })
-  onBeforeUnmount(cancel)
+    const rect = node.getBoundingClientRect()
+    if (rect.width !== width) {
+      // first measure or width changed: read the natural height from scratch
+      width = rect.width
+      node.style.minHeight = ''
+      hold(node, node.getBoundingClientRect().height)
+    }
+    else if (rect.height > held) {
+      // content grew: the hold goes up with it
+      hold(node, rect.height)
+    }
+  }
+
+  onMounted(() => {
+    measure()
+    if (el.value && typeof ResizeObserver === 'function') {
+      observer = new ResizeObserver(measure)
+      observer.observe(el.value)
+    }
+  })
+
+  onBeforeUnmount(() => {
+    observer?.disconnect()
+    observer = null
+  })
 }
