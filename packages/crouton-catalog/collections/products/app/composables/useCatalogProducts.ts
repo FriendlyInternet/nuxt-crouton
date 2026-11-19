@@ -12,10 +12,13 @@
  */
 
 import { z } from 'zod'
+import { formRequiredLocale, type FormI18n } from '../../../../required-locale'
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
-// Keep schema outside of objects that might be serialized/cloned during SSR
-export const catalogProductSchema = z.object({
+// Keep schema outside of objects that might be serialized/cloned during SSR.
+// The required translation is the app's default language (same rule as the
+// translation input), so the form schema is built per language.
+export const catalogProductSchemaFor = (locale: string) => z.object({
   title: z.string().optional(),
   description: z.string().nullish(),
   active: z.boolean().optional(),
@@ -26,10 +29,12 @@ export const catalogProductSchema = z.object({
       description: z.string().optional()
     })
   ).refine(
-    translations => translations.en && translations.en.title,
-    { message: 'English translations for title are required' }
+    translations => !!translations[locale]?.title,
+    { message: `Translations for title (${locale}) are required` }
   )
 })
+
+export const catalogProductSchema = catalogProductSchemaFor('en')
 
 export const catalogProductsColumns = [
   { accessorKey: 'title', header: 'Title' },
@@ -83,10 +88,13 @@ export const catalogProductsConfig = _catalogProductsConfig as typeof _catalogPr
 export const useCatalogProducts = () => catalogProductsConfig
 
 // Default export for auto-import compatibility
-export default function () {
+// The form passes its `useI18n()` in; the schema requires that app's default
+// language (no i18n passed → English).
+export default function (i18n?: FormI18n) {
+  const locale = formRequiredLocale(i18n)
   return {
     defaultValue: catalogProductsConfig.defaultValues,
-    schema: catalogProductSchema,
+    schema: catalogProductSchemaFor(locale),
     columns: catalogProductsConfig.columns,
     collection: catalogProductsConfig.name
   }

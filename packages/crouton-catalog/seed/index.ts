@@ -30,8 +30,10 @@ export const provider: SeedProvider = {
         title: product.title,
         description: null,
         active: true,
+        // The app's default language carries the main title (#4236); when that
+        // language is nl, the later nl key wins.
         translations: {
-          en: { title: product.title },
+          [ctx.locale]: { title: product.title },
           nl: { title: product.titleNl }
         },
         createdAt: ctx.now,

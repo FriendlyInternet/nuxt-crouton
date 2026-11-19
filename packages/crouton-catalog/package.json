@@ -7,6 +7,7 @@
   "exports": {
     ".": "./nuxt.config.ts",
     "./crouton.manifest": "./crouton.manifest.ts",
+    "./required-locale": "./required-locale.ts",
     "./seed": {
       "import": "./seed/index.ts",
       "types": "./seed/index.ts"
@@ -28,6 +29,7 @@
     "seed",
     "products-schema.json",
     "crouton.manifest.ts",
+    "required-locale.ts",
     "nuxt.config.ts",
     "README.md",
     "docs/llms.txt"

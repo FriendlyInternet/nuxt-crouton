@@ -30,7 +30,7 @@
       }"
       field-type="products"
       :label="$t('products.form.translations')"
-      @update:english="(data: { field: string, value: string }) => applyEnglishProductTitle(state, data)"
+      @update:english="(data: { field: string, value: string }) => applyDefaultLocaleProductFields(state, data)"
     />
 
     <UFormField name="active">
@@ -48,7 +48,7 @@
 
 <script setup lang="ts">
 import useCatalogProducts from '../composables/useCatalogProducts'
-import { applyEnglishProductTitle } from '../utils/applyEnglishProductTitle'
+import { applyDefaultLocaleProductFields } from '../utils/applyDefaultLocaleProductFields'
 
 interface ProductFormProps {
   action: 'create' | 'update' | 'delete'
@@ -57,7 +57,7 @@ interface ProductFormProps {
 }
 
 const props = defineProps<ProductFormProps>()
-const { defaultValue, schema, collection } = useCatalogProducts()
+const { defaultValue, schema, collection } = useCatalogProducts(useI18n())
 
 const { create, update, deleteItems } = useCollectionMutation(collection)
 const { close, loading } = useCrouton()

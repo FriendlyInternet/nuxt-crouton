@@ -251,7 +251,7 @@
             }"
             show-ai-translate
             field-type="locations"
-            @update:english="(data: { field: string, value: string }) => applyEnglishTitle(state, data)"
+            @update:english="(data: { field: string, value: string }) => applyDefaultLocaleLocationFields(state, data)"
             :label="$t('bookings.locationForm.translations')"
           />
         </div>
@@ -279,7 +279,8 @@
 
 <script setup lang="ts">
 import type { LocationData } from '../../../../app/types/booking'
-import { applyEnglishTitle } from '../utils/applyEnglishTitle'
+import { applyDefaultLocaleLocationFields } from '../utils/applyDefaultLocaleLocationFields'
+import useBookingsLocationsForm from '../composables/useBookingsLocations'
 import {
   addProduct,
   normaliseProducts,
@@ -290,13 +291,6 @@ import {
   type TeamProduct
 } from '../../../../app/utils/location-products-edit'
 
-// useBookingsLocations is auto-imported from the generated collection layer at runtime
-declare function useBookingsLocations(): {
-  defaultValue: Record<string, any>
-  schema: any
-  collection: string
-}
-
 interface LocationFormProps {
   action: 'create' | 'update' | 'delete'
   items?: Array<{ id: string }>
@@ -304,7 +298,13 @@ interface LocationFormProps {
 }
 
 const props = defineProps<LocationFormProps>()
-const { defaultValue, schema, collection } = useBookingsLocations()
+// The default export (form object), imported explicitly: the auto-imported
+// named `useBookingsLocations` is the config, not the form object.
+const locationsForm = useBookingsLocationsForm(useI18n())
+const { defaultValue, collection } = locationsForm
+// Kept untyped as before: the stored row's nullable columns don't match the
+// zod output type UForm would otherwise infer for `state`.
+const schema: any = locationsForm.schema
 const { t } = useT()
 
 // Optional maps integration — gracefully degrades when crouton-maps is not installed

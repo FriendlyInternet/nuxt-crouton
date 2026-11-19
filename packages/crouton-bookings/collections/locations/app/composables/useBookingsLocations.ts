@@ -23,6 +23,7 @@
  */
 
 import { z } from 'zod'
+import { formRequiredLocale, type FormI18n } from '@fyit/crouton-catalog/required-locale'
 
 export const bookingsLocationsSlotItemSchema = z.object({
   id: z.string(),
@@ -30,8 +31,10 @@ export const bookingsLocationsSlotItemSchema = z.object({
 })
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
-// Keep schema outside of objects that might be serialized/cloned during SSR
-export const bookingsLocationSchema = z.object({
+// Keep schema outside of objects that might be serialized/cloned during SSR.
+// The required translation is the app's default language (same rule as the
+// translation input), so the form schema is built per language.
+export const bookingsLocationSchemaFor = (locale: string) => z.object({
   color: z.string().optional(),
   location: z.string().nullish(),
   allowedMemberIds: z.array(z.string()).nullish(),
@@ -58,10 +61,12 @@ export const bookingsLocationSchema = z.object({
       content: z.string().optional()
     })
   ).refine(
-    (translations) => translations.en && translations.en.title,
-    { message: 'English translations for title are required' }
+    translations => !!translations[locale]?.title,
+    { message: `Translations for title (${locale}) are required` }
   )
 })
+
+export const bookingsLocationSchema = bookingsLocationSchemaFor('en')
 
 export const bookingsLocationsColumns = [
   { accessorKey: 'title', header: 'Title' },
@@ -209,10 +214,13 @@ export const bookingsLocationsConfig = _bookingsLocationsConfig as typeof _booki
 export const useBookingsLocations = () => bookingsLocationsConfig
 
 // Default export for auto-import compatibility
-export default function () {
+// The form passes its `useI18n()` in; the schema requires that app's default
+// language (no i18n passed → English).
+export default function (i18n?: FormI18n) {
+  const locale = formRequiredLocale(i18n)
   return {
     defaultValue: bookingsLocationsConfig.defaultValues,
-    schema: bookingsLocationSchema,
+    schema: bookingsLocationSchemaFor(locale),
     columns: bookingsLocationsConfig.columns,
     collection: bookingsLocationsConfig.name
   }

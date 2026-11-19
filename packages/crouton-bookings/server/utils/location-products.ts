@@ -5,14 +5,16 @@
  * own SQL rule for the stock of rows that existed then:
  *
  * - catalog product id `'loc-' + location.id`, title = the location's title;
- * - translations = each language with a non-empty title, plus `en` = the
- *   location title when there is no non-empty English title;
+ * - translations = each language with a non-empty title, plus the app's
+ *   default language = the location title when that language has no
+ *   non-empty title;
  * - `products` = `[{ product: 'loc-<id>', stock: 1 }]` — stock 1 (#4172; the
  *   old location `quantity` / slot `capacity` are no longer read).
  */
 import { eq, and, isNull } from 'drizzle-orm'
 import { bookingsLocations } from '../../collections/locations/server/database/schema'
 import { catalogProducts } from '@fyit/crouton-catalog/collections/products/server/database/schema'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 
 export interface LocationForProduct {
   id: string
@@ -58,14 +60,14 @@ function toDate(value: unknown): Date {
 }
 
 /** Pure: the catalog product + `products` list a location without products gets. */
-export function defaultLocationProduct(location: LocationForProduct): DefaultLocationProduct {
+export function defaultLocationProduct(location: LocationForProduct, locale = 'en'): DefaultLocationProduct {
   const id = `loc-${location.id}`
   const translations: Record<string, { title: string }> = {}
   for (const [lang, value] of Object.entries(toObject(location.translations))) {
     const title = value && typeof value === 'object' ? (value as any).title : undefined
     if (typeof title === 'string' && title !== '') translations[lang] = { title }
   }
-  if (!translations.en) translations.en = { title: location.title }
+  if (!translations[locale]) translations[locale] = { title: location.title }
 
   return {
     catalogProduct: {
@@ -97,7 +99,10 @@ export async function ensureLocationProducts(db: any, teamId: string, locationId
   if (!row) return undefined
   if (row.products !== null && row.products !== undefined) return row
 
-  const own = defaultLocationProduct(row)
+  // Same rule as the translation input: the app's default language when it is
+  // configured, else the first configured language, else `en`.
+  const cfg = (useRuntimeConfig() as any).croutonI18n ?? {}
+  const own = defaultLocationProduct(row, requiredLocale(cfg.supportedLocales ?? [], cfg.defaultLocale))
   await db.insert(catalogProducts).values(own.catalogProduct).onConflictDoNothing()
   await db.update(bookingsLocations)
     .set({ products: own.products } as any)

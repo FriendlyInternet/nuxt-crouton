@@ -38,6 +38,7 @@ beforeEach(() => {
   vi.stubGlobal('assertRefsInTeam', async () => undefined)
   vi.stubGlobal('getRouterParams', () => params)
   vi.stubGlobal('readValidatedBody', async (_e: any, parse: (b: unknown) => unknown) => parse(body))
+  vi.stubGlobal('useRuntimeConfig', () => ({ croutonI18n: { supportedLocales: ['en', 'nl'], defaultLocale: 'en' } }))
 })
 afterEach(() => { db.$client.close(); vi.unstubAllGlobals() })
 
@@ -52,6 +53,15 @@ describe('a location saved without products gets its own product (#4044)', () =>
     const own = products().find((p: any) => p.id === `loc-${res.id}`)
     expect(own).toMatchObject({ teamId: 't1', title: 'Kayak Rental', createdBy: 'u1', updatedBy: 'u1' })
     expect(JSON.parse(own.translations)).toEqual({ nl: { title: 'Kajakverhuur' }, en: { title: 'Kayak Rental' } })
+  })
+
+  // #4236 — the own product's fallback title follows the app's languages, not always `en`.
+  it('F2 POST in an nl-only app stores the own product with nl and no forced en', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ croutonI18n: { supportedLocales: ['nl'], defaultLocale: 'en' } }))
+    body = { title: 'Kayak Rental', translations: { nl: { title: 'Kajakverhuur' } } }
+    const res = await run(`${L}/index.post`)
+    const own = products().find((p: any) => p.id === `loc-${res.id}`)
+    expect(JSON.parse(own.translations)).toEqual({ nl: { title: 'Kajakverhuur' } })
   })
 
   // covers: T2
