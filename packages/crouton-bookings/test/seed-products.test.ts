@@ -13,19 +13,24 @@ CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner
 CREATE TABLE catalog_products (id text primary key, teamId text not null, owner text not null, "order" integer not null, title text not null, description text, active integer, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
 `
 
+async function seeded(providers: Parameters<typeof collectSeedSql>[0]['providers']) {
+  const client = new Database(':memory:')
+  client.exec(DDL)
+  const seedSql = await collectSeedSql({ providers, teamSlug: 'acme', teamId: 't1', locale: 'nl' })
+  for (const statement of seedSql.split('\n').map(s => s.trim()).filter(Boolean)) client.exec(statement)
+  return client
+}
+
 describe('package seed writes products (#4044)', () => {
-  // covers: T4
-  it('S1 catalog + bookings seed: 3 locations, 4 bookings, 2 products; every location lists products, every booking has a seeded product', async () => {
-    const client = new Database(':memory:')
-    client.exec(DDL)
+  // covers: T1
+  it('S1 catalog + bookings seed: 4 locations, 5 bookings, 4 products; every location lists products, every booking has a seeded product', async () => {
     // bookings listed first on purpose: dependsOn must still run catalog before it
-    const seedSql = await collectSeedSql({ providers: [bookingsProvider, catalogProvider], teamSlug: 'acme', teamId: 't1', locale: 'nl' })
-    for (const statement of seedSql.split('\n').map(s => s.trim()).filter(Boolean)) client.exec(statement)
+    const client = await seeded([bookingsProvider, catalogProvider])
 
     const count = (t: string) => (client.prepare(`select count(*) as n from ${t}`).get() as { n: number }).n
-    expect(count('bookings_locations')).toBe(3)
-    expect(count('bookings_bookings')).toBe(4)
-    expect(count('catalog_products')).toBe(2)
+    expect(count('bookings_locations')).toBe(4)
+    expect(count('bookings_bookings')).toBe(5)
+    expect(count('catalog_products')).toBe(4)
 
     const productIds = new Set((client.prepare('select id from catalog_products').all() as { id: string }[]).map(r => r.id))
     const locations = client.prepare('select id, products from bookings_locations').all() as { id: string, products: string | null }[]
@@ -42,6 +47,47 @@ describe('package seed writes products (#4044)', () => {
       expect(productIds.has(b.product!)).toBe(true)
       expect(listed.get(b.location)).toContain(b.product)
     }
+    client.close()
+  })
+
+  // covers: T2
+  it('S1b Bike Shed lists three products with full day and two slots; its booking is a cargo bike; the other locations keep one product', async () => {
+    const client = await seeded([bookingsProvider, catalogProvider])
+    const pid = (key: string) => `seed:catalog-product:acme:${key}`
+    const loc = (key: string) => client.prepare('select products, offerFullDay, slots from bookings_locations where id = ?')
+      .get(`seed:bookings-location:acme:${key}`) as { products: string, offerFullDay: number, slots: string } | undefined
+
+    const shed = loc('bike-shed')
+    expect(shed).toBeDefined()
+    expect(JSON.parse(shed!.products)).toEqual([
+      { product: pid('cargo-bike'), stock: 3 },
+      { product: pid('kids-bike'), stock: 5 },
+      { product: pid('kayak'), stock: 8 }
+    ])
+    expect(shed!.offerFullDay).toBe(1)
+    expect((JSON.parse(shed!.slots) as { id: string }[]).map(s => s.id)).toEqual(['slot-morning', 'slot-afternoon'])
+
+    const shedBookings = client.prepare('select product, quantity, slot from bookings_bookings where location = ?')
+      .all('seed:bookings-location:acme:bike-shed') as { product: string, quantity: number, slot: string }[]
+    expect(shedBookings).toHaveLength(1)
+    expect(shedBookings[0]!.product).toBe(pid('cargo-bike'))
+    expect(shedBookings[0]!.quantity).toBe(2)
+    expect(JSON.parse(shedBookings[0]!.slot)).toEqual(['slot-morning'])
+
+    for (const [key, product, stock] of [['center-court', 'court', 2], ['park-court', 'court', 1], ['kayak-rental', 'kayak', 8]] as const) {
+      const row = loc(key)
+      expect(row, key).toBeDefined()
+      expect(JSON.parse(row!.products)).toEqual([{ product: pid(product), stock }])
+      expect(row!.offerFullDay, key).toBe(0)
+    }
+    client.close()
+  })
+
+  // covers: T3
+  it('S2 catalog seed alone writes exactly 4 products for the team', async () => {
+    const client = await seeded([catalogProvider])
+    const rows = client.prepare('select id from catalog_products where teamId = ? order by "order"').all('t1') as { id: string }[]
+    expect(rows.map(r => r.id)).toEqual(['court', 'kayak', 'cargo-bike', 'kids-bike'].map(k => `seed:catalog-product:acme:${k}`))
     client.close()
   })
 })

@@ -32,7 +32,7 @@ export default defineNuxtConfig({
   // No need to declare it here - just provide locale files
 
   $meta: {
-    description: 'Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations',
+    description: 'Booking system layer for Nuxt Crouton - locations with or without time slots, each offering products with a stock',
     name: 'crouton-bookings'
   },
 
