@@ -27,6 +27,7 @@ import { BOARD_HIDDEN_KEY, isPaneHidden, type HiddenItem } from '~/utils/board-h
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
 import { placeBlock, movePaneToTarget, type BoardTarget } from '~/utils/board-target'
 import { paletteBlocksOf } from '~/utils/palette-blocks'
+import { withBlockSources } from '~/utils/block-sources'
 import { usePaletteMenu } from '~/utils/palette-menu'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
@@ -144,7 +145,8 @@ function ungroupSelected() {
 function newLeaf(blockId: string): LayoutLeaf {
   const def = blocks.value[blockId]
   const leaf: LayoutLeaf = { ...makeLeaf(blockId, def), id: Math.random().toString(36).slice(2, 8) }
-  return def?.defaultConfig ? { ...leaf, config: { ...def.defaultConfig } } : leaf
+  // A bookings block is fed by the `bookings` layout store (#3651): seed its source.
+  return withBlockSources(def?.defaultConfig ? { ...leaf, config: { ...def.defaultConfig } } : leaf) as LayoutLeaf
 }
 
 function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload, target: BoardTarget) {
@@ -154,7 +156,7 @@ function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload, target:
     // Centre on a leaf swaps the block; an edge lands beside (flattening into a
     // parallel split, wrapping otherwise); the page's / a group's edge lands beside
     // the whole page / group (#3916).
-    if (target.scope === 'pane' && edge === 'center') return writeRoot(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
+    if (target.scope === 'pane' && edge === 'center') return writeRoot(withBlockSources(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId])))
     return writeRoot(placeBlock(r, target, newLeaf(payload.blockId)))
   }
   // Moving a pane: beside the target, or — a centre drop — grouped with it; a move

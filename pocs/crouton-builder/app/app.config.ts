@@ -95,10 +95,13 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     sizing: { width: 'fill', height: 'fill' },
     defaultConfig: { collection: 'builderBookings', heading: 'Bookings' },
     // @fyit/crouton-bookings registers its own `bookings-list` (#2559) and app config
-    // merges with defu, which CONCATENATES arrays — the package's `scope` field would
-    // leak into this demo block's options. The function form (Nuxt app.config merge
-    // strategy) replaces the lower layer's array instead of appending to it.
-    configSchema: (() => BUILDER_BOOKINGS_LIST_FIELDS) as unknown as typeof BUILDER_BOOKINGS_LIST_FIELDS,
+    // merges with defu, which CONCATENATES arrays. The package's list has no options
+    // since #3651 (it is fed by the `bookings` layout store), so a plain array is safe.
+    // It used the function form (replace the lower layer's array) while the package
+    // had a `scope` field; that form only runs when the lower layer has the key, so
+    // with none it would stay a function. If the package registers list options
+    // again, bookings-blocks.test.ts ("no package scope leaking in") fails.
+    configSchema: BUILDER_BOOKINGS_LIST_FIELDS,
   },
   // ── @fyit/crouton-bookings blocks (#2559) ──
   // The package's calendar / filters / locations come straight from its app.config
@@ -114,7 +117,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   'bookings-package-list': {
     id: 'bookings-package-list',
     name: 'Bookings · Bookings list',
-    description: 'Live list of bookings (respects the shared filter)',
+    description: 'Live list of bookings (fed by the Bookings store)',
     icon: 'i-lucide-list',
     component: 'CroutonBookingsLayoutList',
     kind: 'atomic',
@@ -124,18 +127,8 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     minHeight: 240,
     defaultSize: 40,
     sizing: { width: 'fill', height: 'fill' },
-    configSchema: [
-      {
-        name: 'scope',
-        type: 'select',
-        label: 'Scope',
-        default: 'team',
-        options: [
-          { label: 'All team bookings', value: 'team' },
-          { label: 'My bookings', value: 'personal' },
-        ],
-      },
-    ],
+    // No options: the list takes no `scope` since #3651 — the builder seeds
+    // `source: 'bookings'` on it (utils/block-sources.ts).
   },
   // Artists · Stats — KPI cards, Fit height (as tall as one row of cards).
   'artists-stats': {
