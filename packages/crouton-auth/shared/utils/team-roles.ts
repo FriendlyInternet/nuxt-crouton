@@ -9,7 +9,10 @@
  * Pure — no Nuxt / H3 imports — so client, server and vitest load it as is.
  */
 
-/** The three built-in team roles. They can't be created, edited or deleted. */
+/**
+ * The three built-in team roles. None can be created or deleted; owner and
+ * member can't be edited, admin only by the team's owner (#4130).
+ */
 export const BASE_ROLES = ['owner', 'admin', 'member'] as const
 
 export type BaseRoleName = typeof BASE_ROLES[number]
@@ -32,6 +35,18 @@ export const TEAM_MANAGE_NATIVE: Readonly<Record<string, readonly string[]>> = {
   member: ['create', 'update', 'delete'],
   invitation: ['create', 'cancel'],
   ac: ['create', 'read', 'update', 'delete']
+}
+
+/** The team's admin role: one stored row per team, edited by the owner only (#4130). */
+export const ADMIN_ROLE = 'admin'
+
+/**
+ * Better Auth's own admin rights that have no checkbox on the roles screen, so
+ * the admin row always keeps them: update the team, manage its sub-teams.
+ */
+export const ADMIN_FIXED_NATIVE: Readonly<Record<string, readonly string[]>> = {
+  organization: ['update'],
+  team: ['create', 'update', 'delete']
 }
 
 /** Longest role name the screen accepts. */
@@ -65,6 +80,19 @@ export function actionsToRolePermission(actions: readonly string[]): Record<stri
     for (const [resource, verbs] of Object.entries(TEAM_MANAGE_NATIVE)) {
       for (const verb of verbs) add(out, resource, verb)
     }
+  }
+  return out
+}
+
+/**
+ * Crouton actions → the permission map of the team's admin row (#4130): the
+ * same as a custom role (`team:manage` brings member / invitation / ac), plus
+ * `ADMIN_FIXED_NATIVE`, which an edit never removes.
+ */
+export function adminActionsToRolePermission(actions: readonly string[]): Record<string, string[]> {
+  const out = actionsToRolePermission(actions)
+  for (const [resource, verbs] of Object.entries(ADMIN_FIXED_NATIVE)) {
+    for (const verb of verbs) add(out, resource, verb)
   }
   return out
 }

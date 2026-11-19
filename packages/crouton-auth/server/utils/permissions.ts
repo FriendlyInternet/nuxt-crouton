@@ -28,6 +28,7 @@ import {
   type CroutonActionRegistry
 } from '../lib/access'
 import { getAuthInstance, isAuthInitialized } from '../lib/auth'
+import { ADMIN_ROLE_NAME, readTeamAdminRole, type RawDb } from '../lib/team-admin-role'
 import { getOrganizationMembershipDirect, resolveTeamAndCheckMembership, type TeamContext } from './team'
 import { useServerAuth } from './useServerAuth'
 
@@ -66,6 +67,18 @@ async function authContext(event?: H3Event) {
 }
 
 /**
+ * The roles to check against. `admin` is a row per team (#4130), not a code
+ * role: for an admin, read that team's row through `useDB()` (so the answer is
+ * the same with or without an auth context), or use the config template while
+ * the team has no row yet. Owner and member never read the extra row.
+ */
+async function rolesFor(access: CroutonAccessControl, role: string, teamId: string): Promise<Record<string, unknown>> {
+  if (!role.split(',').map(r => r.trim()).includes(ADMIN_ROLE_NAME)) return { ...access.roles }
+  const row = await readTeamAdminRole(useDB() as unknown as RawDb, teamId)
+  return { ...access.roles, admin: row ? access.ac.newRole(row as never) : access.adminTemplateRole }
+}
+
+/**
  * A checker for one member's role, through Better Auth's hasPermission. With an
  * auth context it uses the organization plugin's own options, so per-team roles
  * (when dynamic access control is turned on) load through the same path. Each
@@ -75,7 +88,8 @@ async function roleChecker(access: CroutonAccessControl, role: string, teamId: s
   const ctx = await authContext(event)
   const plugin = (ctx?.options.plugins ?? []).find((p: { id?: string }) => p.id === 'organization') as
     { options?: Record<string, unknown> } | undefined
-  const options = { ac: access.ac, roles: access.roles, ...plugin?.options }
+  // The admin row is per team (#4130): this roles map wins over the plugin's own.
+  const options = { ac: access.ac, ...plugin?.options, roles: await rolesFor(access, role, teamId) }
   const answers = new Map<string, Promise<boolean>>()
 
   return (action: string) => {

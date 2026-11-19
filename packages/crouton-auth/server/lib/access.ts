@@ -152,11 +152,25 @@ export interface BuildAccessControlInput {
   roles?: BaseRolesConfig | null
 }
 
+type AccessRole = ReturnType<ReturnType<typeof createAccessControl>['newRole']>
+
+/** The roles defined in code. `admin` is not one of them: it is a row per team (#4130). */
+export type CodeRole = Exclude<BaseRole, 'admin'>
+
 export interface CroutonAccessControl {
   /** Better Auth access control: its default statements + crouton actions. */
   ac: ReturnType<typeof createAccessControl>
-  /** Better Auth roles: each base role's own statements + its crouton actions. */
-  roles: Record<BaseRole, ReturnType<ReturnType<typeof createAccessControl>['newRole']>>
+  /**
+   * Better Auth roles defined in code: `owner` and `member`, each with its own
+   * statements + its crouton actions. `admin` is left out on purpose (#4130):
+   * each team stores its own `admin` row (`organizationRole`), seeded from
+   * `adminTemplate`, so the team's owner can take actions away from it.
+   */
+  roles: Record<CodeRole, AccessRole>
+  /** The crouton actions a team's admin row starts with (`teams.roles.admin`, default every action). */
+  adminTemplate: string[]
+  /** The admin role `can()` answers with while a team has no admin row yet. */
+  adminTemplateRole: AccessRole
   /** Registered crouton action ids. */
   actions: string[]
   /** Resolved base role → crouton actions. */
@@ -179,13 +193,26 @@ export function buildAccessControl(input: BuildAccessControlInput = {}): Crouton
 
   const ac = createAccessControl(mergeStatements(defaultStatements, actionsToStatements(actions)))
 
-  const roles = {} as CroutonAccessControl['roles']
-  for (const role of Object.keys(baseRoles) as BaseRole[]) {
-    const own = baseRoles[role].filter(a => registered.has(a))
-    roles[role] = ac.newRole(mergeStatements(BASE_ROLE_STATEMENTS[role], actionsToStatements(own)) as never)
-  }
+  const statementsFor = (role: BaseRole) =>
+    mergeStatements(BASE_ROLE_STATEMENTS[role], actionsToStatements(baseRoles[role].filter(a => registered.has(a))))
 
-  return { ac, roles, actions, baseRoles }
+  const roles = {
+    owner: ac.newRole(statementsFor('owner') as never),
+    member: ac.newRole(statementsFor('member') as never)
+  } as CroutonAccessControl['roles']
+  const adminTemplate = baseRoles.admin.filter(a => registered.has(a))
+  const adminTemplateRole = ac.newRole(statementsFor('admin') as never)
+
+  return { ac, roles, adminTemplate, adminTemplateRole, actions, baseRoles }
+}
+
+/**
+ * The permission map a team's fresh `admin` row holds: Better Auth's own admin
+ * rights (invite, change role, manage roles, update the team, sub-teams) plus
+ * the template's crouton actions (#4130).
+ */
+export function adminRolePermission(access: Pick<CroutonAccessControl, 'adminTemplate'>): Record<string, string[]> {
+  return mergeStatements(adminAc.statements, actionsToStatements(access.adminTemplate))
 }
 
 // ----------------------------------------------------------------------------

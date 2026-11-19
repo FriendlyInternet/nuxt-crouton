@@ -19,6 +19,7 @@ import {
   type BaseRolesConfig,
   type CroutonActionRegistry
 } from '../../../../server/lib/access'
+import { buildAuthHooks } from '../../../../server/lib/team-admin-role'
 
 export const TEAM = 'team-1'
 export const OTHER_TEAM = 'team-2'
@@ -47,7 +48,9 @@ export function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = 
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: 'https://velo.pmcp.dev',
-    plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)]
+    plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)],
+    // As createAuth() wires it: admin is each team's own row (#4130).
+    hooks: buildAuthHooks(access)
   })
   setAuthInstance(auth as never)
   return { access, auth }

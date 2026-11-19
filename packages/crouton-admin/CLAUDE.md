@@ -70,7 +70,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 ### Team Components
 - `Admin/TeamList.vue` - Team table with member counts
 - `Admin/TeamMembers.vue` - View team members
-- `TeamRolesSettings.vue` - Rôles tab (`/admin/[team]/team/roles`, #4106): base roles read-only, the team's own roles (name + ticked actions grouped per package, labels from `croutonActions`), create / edit actions / delete via crouton-auth `useTeamRoles()`. Actions you don't hold are disabled; a role holding one opens read-only. i18n `teams.rolesScreen.*`
+- `TeamRolesSettings.vue` - Rôles tab (`/admin/[team]/team/roles`, #4106): owner and member read-only; admin editable by the owner only (read-only for everyone else, never deletable, #4130); the team's own roles (name + ticked actions grouped per package, labels from `croutonActions`), create / edit actions / delete via crouton-auth `useTeamRoles()`. Actions you don't hold are disabled; a role holding one opens read-only. i18n `teams.rolesScreen.*`
 
 ### Global Components
 - `ImpersonationBanner.vue` - Top banner when impersonating a user

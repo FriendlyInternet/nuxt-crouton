@@ -5,8 +5,10 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  ADMIN_FIXED_NATIVE,
   TEAM_MANAGE_NATIVE,
   actionsToRolePermission,
+  adminActionsToRolePermission,
   isBaseRole,
   roleEditState,
   rolePermissionToActions,
@@ -66,5 +68,24 @@ describe('team roles helper (T7)', () => {
     expect(roleEditState(['site:manage'], grantable)).toEqual({ lockedActions: ['pages:edit'], readOnly: false })
     expect(roleEditState(['pages:edit'], grantable)).toEqual({ lockedActions: ['pages:edit'], readOnly: true })
     expect(roleEditState(['pages:edit'], { 'pages:edit': true })).toEqual({ lockedActions: [], readOnly: false })
+  })
+})
+
+describe('the admin row\'s permission (#4130)', () => {
+  // covers: T7
+  it('always keeps organization:update and the sub-team rights; team:manage adds and removes only member / invitation / ac', () => {
+    const without = adminActionsToRolePermission(['pages:edit'])
+    expect(without).toEqual({ pages: ['edit'], organization: ['update'], team: ['create', 'update', 'delete'] })
+    expect(without.member).toBeUndefined()
+    expect(without.invitation).toBeUndefined()
+    expect(without.ac).toBeUndefined()
+
+    const withManage = adminActionsToRolePermission(['pages:edit', 'team:manage'])
+    for (const [resource, verbs] of Object.entries({ ...TEAM_MANAGE_NATIVE, ...ADMIN_FIXED_NATIVE })) {
+      for (const verb of verbs) expect(withManage[resource]).toContain(verb)
+    }
+    expect(withManage.team).toEqual(['manage', 'create', 'update', 'delete'])
+    // Read back, the screen sees only the crouton actions.
+    expect(rolePermissionToActions(withManage, REGISTERED)).toEqual(['team:manage', 'pages:edit'])
   })
 })

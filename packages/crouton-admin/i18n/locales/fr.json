@@ -97,6 +97,9 @@
       "adminAccessHint": "Un rôle avec au moins une action ouvre aussi l'espace d'administration.",
       "notYoursHint": "Vous ne pouvez donner que les actions que vous avez vous-même",
       "readOnlyRole": "Ce rôle contient des actions que vous n'avez pas — seul un responsable qui les a peut le modifier",
+      "adminOwnerOnly": "Seul le propriétaire peut modifier ce rôle",
+      "adminCannotDelete": "Le rôle admin ne peut pas être supprimé",
+      "adminCannotRename": "Le rôle admin ne peut pas être renommé",
       "groups": {
         "team": "Équipe",
         "site": "Site",

@@ -166,8 +166,13 @@ An action may not reuse one of Better Auth's own organization permission names (
 **Set base roles** (the site, the `croutonAuth` module option in `nuxt.config.ts` — the module copies it
 to `runtimeConfig.public.crouton.auth`): base role → actions. A role listed replaces that role's
 defaults; a role left out keeps them. Defaults: owner and admin get **every declared action** (a newly
-declared one too, no config needed), member none. The owner must keep `team:manage` — startup fails
-otherwise (`server/plugins/permissions-check.ts`). Only `owner` / `admin` / `member` are base roles; a team adds its own roles on top (see **Team roles** below).
+declared one too, no config needed), member none — for admin this is the template a team's admin row is
+seeded with (and what `can()` answers until the row exists); an action declared later reaches teams created
+after it (existing teams: #4282). The owner must keep `team:manage` — startup fails
+otherwise (`server/plugins/permissions-check.ts`). `owner` and `member` are fixed roles; `admin` is one row
+per team (`organizationRole`), seeded from `teams.roles.admin` (the template, `adminRolePermission()`) on every
+team-creation path and lazily on the team's first `/organization/*` call, editable by the owner only, never
+deletable (`server/lib/team-admin-role.ts`, #4130). A team adds its own roles on top (see **Team roles** below).
 
 ```typescript
 // nuxt.config.ts
@@ -230,7 +235,11 @@ migration, checked by `scripts/team-roles-migrations.test.mjs`) and count everyw
 `shared/utils/team-roles.ts` maps ticked actions ↔ the stored permission: `admin:access` is never stored
 (it comes with any other action), and a role with `team:manage` also stores Better Auth's
 `member`/`invitation`/`ac` rights so its own invite / change-role / role endpoints work. Better Auth enforces
-the rest: base roles can't be created, edited or deleted; a role a member still has can't be deleted
+the rest: owner and member can't be created, edited or deleted; the team's admin row can be edited only by an
+owner (by name or id), and is never renamed or deleted; no role may be named or renamed `admin` (crouton's
+`buildAuthHooks`, `ADMIN_ROLE_OWNER_ONLY` / `ADMIN_ROLE_CANNOT_BE_RENAMED` / `ADMIN_ROLE_CANNOT_BE_DELETED`;
+`useTeamRoles().adminRole` / `updateAdmin()`, saved through `adminActionsToRolePermission()`, which always keeps
+admin's `organization:update` + sub-team rights); a role a member still has can't be deleted
 (`ROLE_IS_ASSIGNED_TO_MEMBERS`); you can only give a role actions you hold; the last owner can't be demoted.
 The name can't change after creation (members hold it by name). `MemberRole` is a base role or any team role
 name (`BaseMemberRole` for the three). Screen: crouton-admin `/admin/[team]/team/roles`; the Members picker

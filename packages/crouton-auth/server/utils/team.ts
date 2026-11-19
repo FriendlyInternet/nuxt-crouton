@@ -12,6 +12,8 @@ import { organization, member as memberTable } from '../database/schema/auth'
 import type { Team, Member, User } from '../../types'
 import { mapOrganizationToTeam } from '../../shared/utils/auth'
 import { useServerAuth, requireServerSession } from './useServerAuth'
+import { getAccessControl } from '../lib/access'
+import { seedTeamAdminRole } from '../lib/team-admin-role'
 import type { CroutonAuthConfig } from '../../types/config'
 
 // Extended session type with organization plugin properties
@@ -317,6 +319,8 @@ export async function getOrCreateDefaultOrganization(event: H3Event): Promise<Te
       INSERT INTO organization (id, name, slug, isDefault, personal, createdAt)
       VALUES (${orgId}, ${appName}, ${defaultTeamSlug}, 1, 0, ${now})
     `)
+    // The team's own admin row, from the config template (#4130).
+    await seedTeamAdminRole(db, orgId, getAccessControl())
     console.log(`[crouton/auth] Created default organization "${appName}" (slug: ${defaultTeamSlug})`)
   } catch (error: unknown) {
     // Handle race condition - if another request created it, fetch it

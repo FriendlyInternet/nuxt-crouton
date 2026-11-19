@@ -17,6 +17,7 @@ import { memoryAdapter } from 'better-auth/adapters/memory'
 import { organization } from 'better-auth/plugins'
 import { buildOrganizationConfig } from '../../../server/lib/auth'
 import { buildAccessControl } from '../../../server/lib/access'
+import { buildAuthHooks } from '../../../server/lib/team-admin-role'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
@@ -31,7 +32,9 @@ function makeAuth() {
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: ORIGIN,
     emailAndPassword: { enabled: true },
-    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)]
+    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)],
+    // As createAuth() wires it: admin is each team's own row (#4130).
+    hooks: buildAuthHooks(access)
   })
 }
 
