@@ -186,8 +186,8 @@ describe('onTick', () => {
     // a 500 on one dispatch neither throws nor stops the next
     f.mockClear()
     const both = [
-      { workflow: 'automerge-epic-subpr.yml', every: 'hour' as const, minute: 11 },
-      { workflow: 'handoff-sweep.yml', every: 'hour' as const, minute: 12 }
+      { workflow: 'automerge-epic-subpr.yml', every: 'hour' as const, minute: 11, since: '2026-11-18T18:15:00Z', about: '' },
+      { workflow: 'handoff-sweep.yml', every: 'hour' as const, minute: 12, since: '2026-11-18T18:15:00Z', about: '' }
     ]
     CLOCK_JOBS.push(...both)
     try {

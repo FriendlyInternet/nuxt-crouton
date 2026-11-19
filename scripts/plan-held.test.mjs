@@ -109,41 +109,51 @@ const fakeGithub = (comments = []) => {
     paginate: async (fn, args) => { calls.push(['paginate', fn === listComments, args]); return comments },
   }
 }
-const thread = [PLAN, NOGO, PLAN, NOGO].map((body) => ({ body, user: { type: 'Bot' } }))
+const thread = [PLAN, NOGO, PLAN, NOGO].map((body, i) => ({ id: 100 + i, body, user: { type: 'Bot' } }))
 
 test('holdFacts: twice-rejected blocked issue ⇒ planHeld true, no record, one paginate', async () => {
   const github = fakeGithub(thread)
   const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
-  assert.deepEqual(await holdFacts({ github, repo: { owner: 'o', repo: 'r' }, issue }), { planHeld: true, record: null })
+  assert.deepEqual(await holdFacts({ github, repo: { owner: 'o', repo: 'r' }, issue }), { planHeld: true, record: null, recordComment: null })
   assert.deepEqual(github.calls, [['paginate', true, { owner: 'o', repo: 'r', issue_number: 7, per_page: 100 }]])
 })
 test('holdFacts: the final no-go carries its record ⇒ planHeld true and the record, still one paginate', async () => {
   const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
-  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body) => ({ body, user: { type: 'Bot' } })))
+  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body, i) => ({ id: 200 + i, body, user: { type: 'Bot' } })))
   const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
-  assert.deepEqual(await holdFacts({ github, repo: {}, issue }), { planHeld: true, record: REJECTED_RECORD })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue }), { planHeld: true, record: REJECTED_RECORD, recordComment: 203 })
   assert.equal(github.calls.length, 1)
 })
 // covers: T3
 test('holdFacts: reads the login, so an owner answer already given closes a worker question (#4192)', async () => {
   const WQ = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
-  const q = { body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n## 🔀 Blocked — A or B?`, user: { type: 'Bot', login: 'nuxt-harness[bot]' } }
-  const answer = { body: 'A', user: { type: 'User', login: 'pmcp' } }
+  const q = { id: 301, body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n## 🔀 Blocked — A or B?`, user: { type: 'Bot', login: 'nuxt-harness[bot]' } }
+  const answer = { id: 302, body: 'A', user: { type: 'User', login: 'pmcp' } }
   const issue = { number: 7, labels: [{ name: 'status:blocked' }, { name: 'plan:approved' }] }
-  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer]), repo: {}, issue }), { planHeld: false, record: WQ }, 'the first answer still reads the record')
-  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer, { body: 'ok', user: { type: 'User', login: 'pmcp' } }]), repo: {}, issue }), { planHeld: false, record: null })
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer]), repo: {}, issue }), { planHeld: false, record: WQ, recordComment: 301 }, 'the first answer still reads the record')
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer, { id: 303, body: 'ok', user: { type: 'User', login: 'pmcp' } }]), repo: {}, issue }), { planHeld: false, record: null, recordComment: null })
 })
 
 test('holdFacts: no status:blocked, or a PR ⇒ nothing, no API call', async () => {
   const github = fakeGithub(thread)
-  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: [] } }), { planHeld: false, record: null })
-  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), { planHeld: false, record: null })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: [] } }), { planHeld: false, record: null, recordComment: null })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), { planHeld: false, record: null, recordComment: null })
   assert.deepEqual(github.calls, [])
 })
 test('holdFacts: human-pasted verdicts (even with a record) ⇒ nothing', async () => {
   const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
   const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body) => ({ body, user: { type: 'User' } })))
-  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), { planHeld: false, record: null })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), { planHeld: false, record: null, recordComment: null })
+})
+// covers: T4 (#4207)
+test('holdFacts: recordComment is the REST id of the comment carrying the open record, else null', async () => {
+  const Q = { kind: 'plan-question', question: 'A?', accepts: ['ok', 'other'], starts: { ok: 'replan-with-yes', other: 'replan-with-feedback' } }
+  const ask = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:needs-owner -->\n' + `${recordMarker(Q)}\n🔀 **Needs your call** — A?`
+  const comments = [{ id: 11, body: PLAN, user: { type: 'Bot' } }, { id: 12, body: ask, user: { type: 'Bot' } }, { id: 13, body: 'yes', user: { type: 'User', login: 'pmcp' } }]
+  const issue = { number: 7, labels: ['status:blocked'] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub(comments), repo: {}, issue }), { planHeld: false, record: Q, recordComment: 12 })
+  const approved = { number: 7, labels: ['status:blocked', 'plan:approved'] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub(comments), repo: {}, issue: approved }), { planHeld: false, record: null, recordComment: null })
 })
 
 // ── approvePlan: the approve-plan job ───────────────────────────────────────────────────────

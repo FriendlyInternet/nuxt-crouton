@@ -12,7 +12,8 @@
 // scripts/lib/worker-question.mjs; the owner's first answer starts `answer-worker` (a revision).
 //
 // The router (comment-route.mjs) reads a reply against the open record once (`openRecord` +
-// `readReply`, #4145) and passes on what it starts; the re-plan step follows that.
+// `readReply`, #4145) and passes on what it starts; the re-plan step follows that. `openRecordAt`
+// also gives the record's comment index, for the receipt (#4207).
 import { leadingMarkers, markerValue } from './marker.mjs'
 import { parseOverride, isOwnerVoice } from './decision-line.mjs'
 import { isApproval, isBareApproval } from '../approval.mjs'
@@ -76,15 +77,24 @@ const who = (c) => ({ body: c?.body, userType: c?.userType ?? c?.user?.type, use
  *   typed, or relayed by a chat) closes it. A chat's status note neither answers nor closes it.
  * @param {{comments?: object[], labels?: Array<string|{name:string}>, owner?: string}} input
  */
-export function openRecord({ comments, labels, owner } = {}) {
+export const openRecord = (input) => openRecordAt(input)?.record ?? null
+
+/**
+ * PURE. Same as `openRecord`, plus the index in `comments` of the comment carrying the record
+ * (#4207, the reply receipt): `{ record, index }`, or null whenever `openRecord` is null.
+ * @param {{comments?: object[], labels?: Array<string|{name:string}>, owner?: string}} input
+ * @returns {{record: object, index: number}|null}
+ */
+export function openRecordAt({ comments, labels, owner } = {}) {
   const names = labelNames(labels)
   if (!names.includes('status:blocked')) return null
   const list = Array.isArray(comments) ? comments : []
   const at = list.findLastIndex((c) => isWorkerQuestion(c) || isVerdict(c))
   if (at < 0) return null
   const c = list[at]
-  if (isWorkerQuestion(c)) return answeredAfter(list, at, owner) ? null : readRecord(c.body)
-  return isBot(c) && !names.includes('plan:approved') ? readRecord(c.body) : null
+  const open = isWorkerQuestion(c) ? !answeredAfter(list, at, owner) : isBot(c) && !names.includes('plan:approved')
+  const record = open ? readRecord(c.body) : null
+  return record ? { record, index: at } : null
 }
 
 /** A bot comment whose record is a worker's question (#4192). */

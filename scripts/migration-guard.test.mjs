@@ -192,3 +192,15 @@ test('app schema/migration files involve the guard; report says app-caused, not 
   const pkg = evaluateMigrationGuard({ changedFiles: SALES, results: { 'apps/kassa': { statements: stmt } }, names })
   assert.match(pkg.markdown, /changes a package schema/)
 })
+
+// PR #4213: the PR lacked kassa's migration, so the self-test's control ("kassa as shipped → pass")
+// failed first and the job died before posting its "run this command" comment. The self-test uses
+// the PR's own kassa, so it only means something once the real check has passed: it runs last.
+test('migration-guard.yml: the self-test runs after the real check and its comment', () => {
+  const yml = readFileSync(join(REPO, '.github/workflows/migration-guard.yml'), 'utf8')
+  const at = name => { const i = yml.indexOf(`- name: ${name}`); assert.ok(i > 0, name); return i }
+  assert.ok(at('Self-test') > at('Evaluate'))
+  assert.ok(at('Self-test') > at('Sticky comment'))
+  const selfTest = yml.slice(at('Self-test')).split('\n      - ')[0]
+  assert.doesNotMatch(selfTest, /if:\s*always\(\)/)
+})

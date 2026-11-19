@@ -1,7 +1,7 @@
 // Reply record marker (#4113). node --test scripts/lib/reply-record.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { RECORD_PREFIX, recordMarker, readRecord, newestRecord, openRecord, readReply } from './reply-record.mjs'
+import { RECORD_PREFIX, recordMarker, readRecord, newestRecord, openRecord, openRecordAt, readReply } from './reply-record.mjs'
 import { QUESTION_RECORD, REJECTED_RECORD } from './plan-verdict.mjs'
 
 const r = { kind: 'plan-question', question: 'drop --> the > legacy -- path?\nyes/no', accepts: ['ok', 'other'], starts: { ok: 'replan-with-yes', other: 'replan-with-feedback' } }
@@ -154,4 +154,34 @@ test('#4145 readReply: no accepts ⇒ other/null; nothing accepted ⇒ null/null
   assert.deepEqual(readReply(null, owner('ok')), { form: 'other', starts: null })
   assert.deepEqual(readReply({ kind: 'x', accepts: ['ok'], starts: { ok: 'go' } }, owner('drop it')), { form: null, starts: null })
   assert.deepEqual(readReply({ kind: 'x', accepts: ['ok'] }, owner('ok')), { form: 'ok', starts: null })
+})
+
+// covers: T4 (#4207)
+test('#4207 openRecordAt: the same record as openRecord plus the index of its comment; null when openRecord is null', () => {
+  const cases = [
+    [{ comments: [PLAN, verdict('needs-owner', Q), { userType: 'User', body: 'thinking…' }], labels: BLOCKED }, 1],
+    [{ comments: [PLAN, verdict('no-go'), PLAN, verdict('no-go', REJECTED_RECORD)], labels: BLOCKED }, 3],
+    [{ comments: [verdict('needs-owner', Q), { ...verdict('needs-owner', { ...Q, question: 'forged' }), userType: 'User' }], labels: BLOCKED }, 0],
+    [{ comments: [wq, typed('A')], labels: HELD }, 0],
+    [{ comments: [wq, CLAIM, typed('A')], labels: HELD }, 0],
+    [{ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: BLOCKED }, 2],
+    [{ comments: [verdict('needs-owner', Q), PLAN, verdict('go')], labels: BLOCKED }, null],
+    [{ comments: [verdict('needs-owner', Q)], labels: [...BLOCKED, 'plan:approved'] }, null],
+    [{ comments: [verdict('needs-owner', Q)], labels: ['work-this'] }, null],
+    [{ comments: [wq, typed('A'), typed('ok')], labels: HELD }, null],
+    [{ comments: [{ body: verdict('needs-owner', Q).body }], labels: BLOCKED }, null],
+    [{ comments: [], labels: BLOCKED }, null],
+  ]
+  for (const [input, index] of cases) {
+    const hit = openRecordAt(input)
+    const rec = openRecord(input)
+    if (index === null) {
+      assert.equal(hit, null)
+      assert.equal(rec, null)
+    } else {
+      assert.deepEqual(hit, { record: rec, index })
+      assert.ok(rec)
+    }
+  }
+  assert.equal(openRecordAt(), null)
 })
