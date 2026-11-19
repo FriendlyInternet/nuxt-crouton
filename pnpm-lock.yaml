@@ -631,8 +631,8 @@ importers:
         specifier: ^0.45.4
         version: 0.45.4(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.29.6)(pg@8.17.1)
       nuxt:
-        specifier: ^4.6.2
-        version: 4.6.3(c4cc59da17ced58df43407aa99b185f6)
+        specifier: ^4.6.4
+        version: 4.6.4(8ba89bd9026b41b679257952968cc0a1)
       vue:
         specifier: ^3.5.44
         version: 3.5.44(typescript@5.9.3)
@@ -31334,7 +31334,7 @@ snapshots:
   h3@2.0.2(crossws@0.4.17(srvx@1.0.8)):
     dependencies:
       rou3: 1.0.0
-      srvx: 1.0.5
+      srvx: 1.0.8
     optionalDependencies:
       crossws: 0.4.17(srvx@1.0.8)
 
