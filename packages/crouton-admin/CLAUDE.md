@@ -41,6 +41,8 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `app/composables/useAdminTeams.ts` | Team management composable |
 | `app/composables/useAdminStats.ts` | Dashboard statistics composable |
 | `app/composables/useImpersonation.ts` | Impersonation composable |
+| `app/composables/useTeamAdminPages.ts` | Team pages for the side menu + team tabs, filtered by `can()` |
+| `app/utils/team-pages.ts` | The one ordered team-page list (label, icon, path, action) |
 
 ## Composables
 
@@ -112,7 +114,7 @@ definePageMeta({ middleware: ['auth', 'can'], can: 'site:manage' })
 
 The actions per page: admin home + `team.vue` → `admin:access`; members, invitations,
 settings, email logs/templates → `team:manage`; site info, look & feel, redirects →
-`site:manage`; domains → `team:domains`. The `team.vue` tabs only show pages you can open.
+`site:manage`; domains → `team:domains`. The `team.vue` tabs and the admin side menu's Team section both draw from `useTeamAdminPages()` (list in `app/utils/team-pages.ts`), so they show the same pages in the same order and only pages you can open.
 
 `team-admin` is **deprecated**: it now runs the same check with `team:manage`
 (default owner/admin — the same people as before). No package page uses it.
