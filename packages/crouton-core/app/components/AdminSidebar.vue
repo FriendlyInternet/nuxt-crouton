@@ -161,6 +161,10 @@ const dashboardItem = computed<NavigationMenuItem | null>(() => {
   }
 })
 
+// Team pages from crouton-admin's one list — same as the team.vue tabs, only
+// pages this member can open (#4220). Called at setup, not inside the computed.
+const teamAdminPageList = useTeamAdminPages()
+
 // Team group with sub-items (navigates to team section with horizontal tabs)
 const teamItem = computed<NavigationMenuItem | null>(() => {
   if (props.context === 'super') {
@@ -171,68 +175,14 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || ''
   if (!teamParam) return null
 
-  const teamPath = `/admin/${teamParam}/team`
-  const translationsPath = `/admin/${teamParam}/translations`
+  const children = toSidebarItems(teamAdminPageList.value, t, route.path)
+  if (children.length === 0) return null
+
   return {
     label: t('navigation.team') || 'Team',
     icon: 'i-lucide-users',
     defaultOpen: true,
-    children: [
-      {
-        label: t('teams.teamSettings') || 'Settings',
-        icon: 'i-lucide-settings',
-        to: `${teamPath}/settings`,
-        active: route.path === `${teamPath}/settings` || route.path === `${teamPath}/settings/`
-      },
-      {
-        label: t('teams.members') || 'Members',
-        icon: 'i-lucide-users',
-        to: teamPath,
-        active: route.path === teamPath || route.path === `${teamPath}/`
-      },
-      {
-        label: t('teams.invitations') || 'Invitations',
-        icon: 'i-lucide-mail',
-        to: `${teamPath}/invitations`,
-        active: route.path === `${teamPath}/invitations` || route.path === `${teamPath}/invitations/`
-      },
-      {
-        label: t('teams.lookAndFeel') || 'Look and feel',
-        icon: 'i-lucide-palette',
-        to: `${teamPath}/look-and-feel`,
-        active: route.path === `${teamPath}/look-and-feel` || route.path === `${teamPath}/look-and-feel/`
-      },
-      {
-        label: t('teams.siteInfo.tab') || 'Site info',
-        icon: 'i-lucide-info',
-        to: `${teamPath}/site-info`,
-        active: route.path === `${teamPath}/site-info` || route.path === `${teamPath}/site-info/`
-      },
-      {
-        label: t('navigation.translations') || 'Translations',
-        icon: 'i-lucide-languages',
-        to: translationsPath,
-        active: route.path === translationsPath || route.path.startsWith(`${translationsPath}/`)
-      },
-      {
-        label: t('redirects.title') || 'Redirects',
-        icon: 'i-lucide-arrow-right-left',
-        to: `${teamPath}/redirects`,
-        active: route.path === `${teamPath}/redirects` || route.path === `${teamPath}/redirects/`
-      },
-      {
-        label: t('emailTemplates.title') || 'Email Templates',
-        icon: 'i-lucide-mail-open',
-        to: `${teamPath}/email-templates`,
-        active: route.path === `${teamPath}/email-templates` || route.path === `${teamPath}/email-templates/`
-      },
-      {
-        label: t('emailLogs.title') || 'Email Logs',
-        icon: 'i-lucide-mail-check',
-        to: `${teamPath}/email-logs`,
-        active: route.path === `${teamPath}/email-logs` || route.path === `${teamPath}/email-logs/`
-      }
-    ]
+    children
   }
 })
 
