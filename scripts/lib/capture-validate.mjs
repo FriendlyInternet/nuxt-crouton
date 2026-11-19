@@ -55,7 +55,7 @@ export function looksLikeErrorPage({ status, text = '', title = '' } = {}) {
 
 // Nuxt's dev "loading" template (served while the first build runs) is neither blank nor an
 // error page, so it slipped through as evidence (#2526). Matched on the HTML or visible text.
-const LOADING_MARKERS = [
+export const LOADING_MARKERS = [
   'nuxt-loading',
   '__nuxt_loading__',
   'generating types',

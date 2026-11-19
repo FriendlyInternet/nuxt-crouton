@@ -5,7 +5,8 @@
  *   pnpm preview kassa
  *
  * Boots the app's dev server, seeds the demo content, mints a disposable review
- * login attached to the seeded `test1` team, and prints the PREFILLED one-click
+ * login attached to the seeded review team (`reviewTeam` in deploy.config.json,
+ * default `test1`, #4141), and prints the PREFILLED one-click
  * URL. The dev server stays in the foreground — Ctrl-C stops everything.
  *
  * Why this exists: an ordinary `packages/*` PR gets NO deploy preview by design
@@ -32,13 +33,13 @@ import { spawn, execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { buildLoginUrl } from './seed-review-login.mjs'
+import { teamForAppDir, DEFAULT_REVIEW_TEAM } from './review-team.mjs'
 
 const APP_DIRS = ['apps', 'pocs']
 // Deterministic + obviously disposable. Local-only: this account exists in a
 // gitignored sqlite file on one laptop, so a fixed password is not a secret.
 export const DEFAULT_EMAIL = 'review+local@example.com'
 export const DEFAULT_PASSWORD = 'ReviewLocal2026' // gitleaks:allow — local throwaway login, never deployed (#2376)
-const SEED_TEAM = 'test1'
 const BOOT_TIMEOUT_MS = 180_000
 // Nuxt prints its URL before the first route is compiled, so the port can refuse
 // a moment longer — the seed + login steps need it answering.
@@ -79,6 +80,26 @@ export function readLanding(dir, read = p => readFileSync(p, 'utf8')) {
 }
 
 /**
+ * The `pnpm` argv that seeds `team` for `app` locally (#4141). The default team keeps the
+ * app's own `db:seed` exactly as before. Another team runs `crouton-seed --db <db> --team`
+ * with the db the app's `db:seed` (or the `pnpm db:seed:local` it delegates to) names; an
+ * app whose script names no `--db` gets the flag passed through to `db:seed` instead.
+ */
+export function seedCommand(app, team, scripts = {}) {
+  if (team === DEFAULT_REVIEW_TEAM) return ['--filter', app, 'db:seed']
+  let script = scripts['db:seed'] || ''
+  const delegate = /^pnpm (?:run )?(\S+)$/.exec(script.trim())
+  if (delegate) script = scripts[delegate[1]] || ''
+  const db = /crouton-seed\b.*?--db[= ](\S+)/.exec(script)?.[1]
+  if (db) return ['--filter', app, 'exec', 'crouton-seed', '--db', db, '--team', team]
+  return ['--filter', app, 'db:seed', '--team', team]
+}
+
+function readScripts(dir) {
+  try { return JSON.parse(readFileSync(`${dir}/package.json`, 'utf8')).scripts || {} } catch { return {} }
+}
+
+/**
  * Poll `check` until it returns something truthy or the timeout elapses; resolves
  * to the last value either way, so the caller decides what a timeout means.
  * (One helper for both waits here — waiting for the printed URL, then for the
@@ -115,6 +136,13 @@ async function main() {
     process.exit(2)
   }
 
+  // The seeded team the seed creates and the login joins (#4141). A local tool never
+  // refuses to boot: a resolve error warns and keeps the default team.
+  const resolved = teamForAppDir(target.dir)
+  if (resolved.error) warn(`${resolved.error} — using ${DEFAULT_REVIEW_TEAM}.`)
+  else if (resolved.warning) warn(resolved.warning)
+  const team = resolved.error ? DEFAULT_REVIEW_TEAM : resolved.team
+
   // ── 1. Boot dev, wait for the URL it prints ──────────────────────────────────
   log(`booting ${target.dir}`)
   const dev = spawn('pnpm', ['--filter', args.app, 'dev'], { stdio: ['inherit', 'pipe', 'inherit'] })
@@ -147,9 +175,10 @@ async function main() {
     // AFTER boot on purpose: the local seed needs the DB dev creates + migrates on
     // its first run (crouton-cli asserts this and errors otherwise).
     if (args.seed) {
-      log('seeding demo content')
+      const seedArgv = seedCommand(args.app, team, readScripts(target.dir))
+      log(`seeding demo content (team ${team}): pnpm ${seedArgv.join(' ')}`)
       try {
-        execFileSync('pnpm', ['--filter', args.app, 'db:seed'], { stdio: 'inherit' })
+        execFileSync('pnpm', seedArgv, { stdio: 'inherit' })
       } catch {
         warn('db:seed failed (or the app has no db:seed) — continuing; the login below still works.')
       }
@@ -166,7 +195,7 @@ async function main() {
           '--url', devUrl,
           '--email', email,
           '--password', password,
-          '--seed-team', SEED_TEAM,
+          '--seed-team', team,
           '--sqlite', `${target.dir}/.data/db/sqlite.db`
         // NODE_NO_WARNINGS: the local attach uses node:sqlite, which prints an
         // ExperimentalWarning that would be the loudest line in this output.

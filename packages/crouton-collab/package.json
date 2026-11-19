@@ -7,11 +7,14 @@
   "exports": {
     ".": "./nuxt.config.ts",
     "./types": "./app/types/collab.ts",
-    "./utils": "./app/utils/avatar.ts"
+    "./utils": "./app/utils/avatar.ts",
+    "./server/utils/collabServerDoc": "./server/utils/collabServerDoc.ts",
+    "./shared/tiptap-yjs": "./shared/tiptap-yjs.ts"
   },
   "files": [
     "app",
     "server",
+    "shared",
     "nuxt.config.ts",
     "docs/llms.txt",
     "docs/components.md"

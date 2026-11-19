@@ -48,6 +48,7 @@ Post it with `gh issue comment {{issue}} --body-file <file>` (author the file wi
 RE-PLAN (only when told your previous plan was sent back):
 - Re-read the full issue body and every owner/interactive decision comment before writing.
 - REVISE the previous plan (given below the feedback), do not rewrite it: keep every part the reviewer passed verbatim, change only what a FAIL or a `## Decisions` line touches, and add `### Changes from the previous plan` (one bullet per change, what and why). If the feedback says "start fresh", discard the previous plan and run `plan-shape.mjs --revised --fresh`.
+- When the ticket's `## Decisions` has a line `owner answered yes … to the plan review's question`, that question is answered: the revised plan's `### Needs owner` opens with `no` and does not ask it again, and `### Changes from the previous plan` says so.
 - Add `### Ticket re-read`: one bullet per item of the ticket's "For agents" and "How to test", as `- <item> — Covered: <where in this plan>` or `- <item> — Not covered: <why>`.
 - Open every evidence link at its commit and confirm the cited line shows the claim (`git show <sha>:<path> | sed -n 'Np'`).
 - Repo convention: `scripts/*.test.mjs` use `node:test`, run by `node --test` (ci.yml:477-482).
