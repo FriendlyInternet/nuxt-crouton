@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideFinishCheck } from './finish-check-loop.mjs'
+import { decideFinishCheck, MIN_LEFT_MS } from './finish-check-loop.mjs'
 
 const red = { status: 'red', findings: [{ file: 'scripts/zz-probe.mjs', line: 1, message: 'adds a Fallow ignore comment' }] }
 
@@ -59,6 +59,20 @@ test('a custom cap is respected', () => {
   assert.equal(decideFinishCheck(red, 0, 1).action, 'followUp')
   assert.equal(decideFinishCheck(red, 1, 1).action, 'end')
   assert.ok(decideFinishCheck(red, 0, 1).message.includes('round 1 of 1'))
+})
+
+test('#4183 T1: red with 5 min left ends with "skipped: 5 min left" instead of a new round', () => {
+  const d = decideFinishCheck(red, 0, 2, 5 * 60_000)
+  assert.equal(d.action, 'end')
+  assert.deepEqual(d.outcome, { ran: false, rounds: 0, last: 'skipped', reason: 'skipped: 5 min left' })
+  assert.equal(decideFinishCheck(red, 1, 2, 5 * 60_000 + 30_000).outcome.ran, true)
+  assert.equal(MIN_LEFT_MS, 8 * 60_000)
+})
+
+test('#4183 T1: red with 20 min left, or with no time given, still hands back (today\'s behaviour)', () => {
+  assert.equal(decideFinishCheck(red, 0, 2, 20 * 60_000).action, 'followUp')
+  assert.equal(decideFinishCheck(red, 0, 2).action, 'followUp')
+  assert.equal(decideFinishCheck(red, 0, 2, undefined).action, 'followUp')
 })
 
 test('more than 20 findings are summarised', () => {

@@ -8,10 +8,17 @@
 // at most 2 rounds (`scripts/lib/finish-check-loop.mjs` decides). Every result writes the outcome to
 // $RUNNER_TEMP/finish-check-outcome.json for the run-record line. Only when FINISH_CHECK=1 (set by
 // work-issue-pidev.yml outside plan mode) and never on a revise run. Any crash → settle as before.
+// Skipped when PI_DEADLINE leaves under 8 minutes (#4183) — a round that late is killed mid-way.
 import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decideFinishCheck } from "../../scripts/lib/finish-check-loop.mjs";
+import { decideFinishCheck, DEFAULT_CAP, MIN_LEFT_MS } from "../../scripts/lib/finish-check-loop.mjs";
+
+// #4183: ms left before the pi step's own time limit (PI_DEADLINE, epoch seconds); undefined when unset.
+const left = (): number | undefined => {
+  const d = Number(process.env.PI_DEADLINE);
+  return Number.isFinite(d) && d > 0 ? d * 1000 - Date.now() : undefined;
+};
 
 function runCheck(): Promise<any> {
   return new Promise((resolve) => {
@@ -32,7 +39,11 @@ export default function (pi: any) {
   pi.on("agent_before_settle", async (event: any) => {
     try {
       if (process.env.FINISH_CHECK !== "1" || process.env.REVISE) return;
-      const d = decideFinishCheck(await runCheck(), rounds);
+      const before = left();
+      const tooLate = before !== undefined && before < MIN_LEFT_MS;
+      // Re-measure after the check: it can take up to 3 minutes.
+      const d = decideFinishCheck(tooLate ? null : await runCheck(), rounds, DEFAULT_CAP, left());
+      if (d.outcome.last === "skipped") console.error(`[finish-check] ${d.outcome.reason} (#4183)`);
       if (process.env.RUNNER_TEMP) {
         try { writeFileSync(join(process.env.RUNNER_TEMP, "finish-check-outcome.json"), JSON.stringify(d.outcome)); } catch {}
       }
