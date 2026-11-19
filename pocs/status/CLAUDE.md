@@ -40,7 +40,7 @@ The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/deli
 signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
-`/apps` is the four-tab page (Apps, To test, Decisions, Changelog).
+`/apps` is the five-tab page (Apps, To test, Decisions, Changelog, Clock).
 
 ## Clock
 
@@ -57,6 +57,10 @@ A row has `every` (`hour` | `day` | `week` | `month`) and `minute`, plus `hour` 
 A tick that never arrives is skipped, with no catch-up. The clock only starts workflows; it does not sync
 cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch` with a boolean `clock`
 input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
+The **Clock** tab (`components/dashboard/ClockTab.vue`, fed by `GET /api/status/clock`) shows each job's last due slot,
+whether a clock run (workflow_dispatch by `nuxt-harness[bot]`, titled the workflow's name) started within 20 min of it
+and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A 403 on the runs list means the
+status token needs Actions: read (every row shows `unknown`).
 
 ## Owner email
 
