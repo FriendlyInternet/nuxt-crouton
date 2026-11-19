@@ -201,6 +201,16 @@ export function useAuth() {
         throw new AuthError(AUTH_ERROR_CODES.AUTH_LOGIN_FAILED, result.error.message)
       }
 
+      // Sign-in for an MCP app (Claude, #4096): the server resumed the OAuth
+      // flow and answered { redirect: true, url } (consent page or the client's
+      // callback). better-auth's redirect plugin is already loading that URL;
+      // setting it again would abort and restart the navigation. Never resolve,
+      // so the modal doesn't run its own redirect on top of it.
+      const data = result.data as { redirect?: boolean, url?: string } | null
+      if (data?.redirect && data.url) {
+        await new Promise<never>(() => {})
+      }
+
       if (debug) {
         console.log('[@crouton/auth] login: refreshing session state')
       }

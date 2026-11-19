@@ -88,6 +88,8 @@
   },
   "dependencies": {
     "@better-auth/i18n": "^1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
     "@better-auth/passkey": "^1.7.7",
     "@fyit/crouton-i18n": "workspace:*",
     "better-auth": "^1.7.7",

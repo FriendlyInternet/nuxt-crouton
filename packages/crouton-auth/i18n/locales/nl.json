@@ -9,6 +9,20 @@
     "justAMoment": "Even geduld…"
   },
   "auth": {
+    "consent": {
+      "title": "{client} wil toegang tot je teams",
+      "unnamedClient": "Een app",
+      "via": "Verzoek van {host}",
+      "intro": "Als je dit toestaat, kan deze app:",
+      "scopes": {
+        "pages": "je pagina's live lezen en aanpassen — zonder op te slaan",
+        "offline_access": "verbonden blijven zonder je opnieuw te laten inloggen"
+      },
+      "allow": "Toestaan",
+      "deny": "Weigeren",
+      "missingRequest": "Dit verzoek is niet meer geldig. Start de verbinding opnieuw vanuit de app.",
+      "failed": "Je antwoord kon niet worden verstuurd. Probeer opnieuw."
+    },
     "resetLinkSentDescription": "We hebben een link om je wachtwoord te resetten naar je e-mail gestuurd. Klik op de link om je wachtwoord te resetten.",
     "inviteOnly": {
       "title": "{app} werkt alleen op uitnodiging",

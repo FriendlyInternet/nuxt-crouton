@@ -18,6 +18,13 @@ onMounted(async () => {
   // like /auth/login?email=…&password=…). Fills the fields only — never submits.
   const prefillEmail = (route.query.email as string) || undefined
   const prefillPassword = (route.query.password as string) || undefined
+  // An OAuth sign-in for an MCP app (Claude, #4096) arrives as
+  // /auth/login?…&sig=…. Keep that signed query in the URL: the auth client
+  // sends it with the sign-in request so the server resumes the flow.
+  if (route.query.sig) {
+    authModal.open('login', redirectTo, route.fullPath, prefillEmail, false, prefillPassword)
+    return
+  }
   await navigateTo('/', { replace: true })
   authModal.open('login', redirectTo, '/', prefillEmail, false, prefillPassword)
 })
