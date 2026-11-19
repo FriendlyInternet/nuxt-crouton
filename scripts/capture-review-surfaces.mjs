@@ -88,11 +88,13 @@ export function parsePrSurfaces(prBody, app, team = DEFAULT_REVIEW_TEAM) {
  *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
  *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the app's review team (`team`, default test1, #4141) (never `[slug]`, #3886);
  *    pages with any other dynamic segment are skipped (no data to open them with);
+ *    pages under `fixtures/` and `e2e/` are never shot (not deployed, #4084);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
 // The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
 function pageSurface(file, pagePath, app, team) {
+  if (/^(?:fixtures|e2e)\//.test(file)) return null
   const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
   if (owner && owner[1] !== app) return null
   if (pagePath.startsWith('__review')) return null

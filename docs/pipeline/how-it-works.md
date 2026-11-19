@@ -42,14 +42,17 @@ exact word they reply.
      lists live in `.claude/plan-routing.json`.
    - d. Anything else → `work-issue-pidev.yml` builds directly, with no plan step (step 4).
 2. **Plan.** The planner posts one `<!-- pipeline-plan:v1 -->` comment on the issue, shape-checked
-   by `scripts/lib/plan-shape.mjs`.
+   by `scripts/lib/plan-shape.mjs`. A plan too big for one run may add an optional `### Split`
+   that moves part of the ticket to a follow-up.
 3. **Plan review.** The `plan-review` job in `on-comment.yml` (`scripts/lib/plan-verdict.mjs`)
    judges the plan. `go` → the bot adds `plan:approved` and the build starts. `needs-owner` →
    `status:blocked` plus one yes/no question: **owner answers here — any reply re-plans; the owner's bare `ok` is recorded in the ticket's `## Decisions` as "yes" and re-plans from it**. `no-go` →
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
-   (`scripts/epic-base.mjs`).
+   (`scripts/epic-base.mjs`). If the approved plan has a `### Split`, `handoff-exec.mjs` first
+   files the moved part as a new ticket (`Blocked-by:` this one, same epic) and notes it on the
+   issue; it starts once this one closes.
 5. **Checks and build review.** `ci.yml` (the `CI Gate` check) plus `build-review.yml`
    (`scripts/build-review-pick.mjs`). The build review has three answers: `go` → the reviewer adds
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
@@ -98,7 +101,7 @@ The table below is generated from the workflow files and the grouping in
 
 | File | Name | Starts on |
 | --- | --- | --- |
-| [label-ready-epics.yml](../../.github/workflows/label-ready-epics.yml) | label-ready-epics | `schedule`, `workflow_dispatch` |
+| [label-ready-epics.yml](../../.github/workflows/label-ready-epics.yml) | label-ready-epics | `workflow_dispatch` |
 | [label-router.yml](../../.github/workflows/label-router.yml) | Label router (work-this · delegate · plan:approved) | `issues` |
 | [labels.yml](../../.github/workflows/labels.yml) | Sync issue labels | `push`, `workflow_dispatch` |
 | [on-issue-close.yml](../../.github/workflows/on-issue-close.yml) | On issue close | `issues`, `workflow_dispatch` |
@@ -121,7 +124,7 @@ The table below is generated from the workflow files and the grouping in
 | --- | --- | --- |
 | [build-review.yml](../../.github/workflows/build-review.yml) | Build review (independent reviewer — pi.dev) | `workflow_run`, `workflow_dispatch` |
 | [ci.yml](../../.github/workflows/ci.yml) | CI | `push`, `pull_request` |
-| [e2e.yml](../../.github/workflows/e2e.yml) | E2E | `push`, `pull_request`, `schedule`, `workflow_dispatch` |
+| [e2e.yml](../../.github/workflows/e2e.yml) | E2E | `push`, `pull_request`, `workflow_dispatch` |
 | [guard-package-approval.yml](../../.github/workflows/guard-package-approval.yml) | Guard package-edit approval | `pull_request` |
 | [migration-guard.yml](../../.github/workflows/migration-guard.yml) | Migration guard | `pull_request`, `workflow_dispatch` |
 | [packages-guard.yml](../../.github/workflows/packages-guard.yml) | Packages guard | `pull_request` |
@@ -175,16 +178,16 @@ The table below is generated from the workflow files and the grouping in
 | File | Name | Starts on |
 | --- | --- | --- |
 | [canary.yml](../../.github/workflows/canary.yml) | Canary rig (worker pipeline) | `workflow_dispatch` |
-| [epic-digest.yml](../../.github/workflows/epic-digest.yml) | epic-digest | `schedule`, `workflow_dispatch` |
-| [housekeeping.yml](../../.github/workflows/housekeeping.yml) | housekeeping | `schedule`, `workflow_dispatch` |
+| [epic-digest.yml](../../.github/workflows/epic-digest.yml) | epic-digest | `workflow_dispatch` |
+| [housekeeping.yml](../../.github/workflows/housekeeping.yml) | housekeeping | `workflow_dispatch` |
 | [loop-station-inventory.yml](../../.github/workflows/loop-station-inventory.yml) | loop-station-inventory | `push`, `workflow_dispatch` |
 | [loop-station-refresh.yml](../../.github/workflows/loop-station-refresh.yml) | Loop-station refresh | `push`, `workflow_dispatch` |
-| [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `schedule`, `workflow_dispatch` |
+| [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `workflow_dispatch` |
 | [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `workflow_dispatch` |
-| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `schedule`, `workflow_dispatch` |
-| [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `schedule`, `workflow_dispatch` |
-| [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `schedule`, `workflow_dispatch` |
-| [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `schedule`, `workflow_dispatch` |
-| [weekly.yml](../../.github/workflows/weekly.yml) | weekly | `schedule`, `workflow_dispatch` |
+| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `workflow_dispatch` |
+| [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `workflow_dispatch` |
+| [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `workflow_dispatch` |
+| [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `workflow_dispatch` |
+| [weekly.yml](../../.github/workflows/weekly.yml) | weekly | `workflow_dispatch` |
 
 <!-- pipeline-map:end -->

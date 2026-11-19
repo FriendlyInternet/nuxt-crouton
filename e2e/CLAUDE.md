@@ -158,7 +158,7 @@ E2E_FIXTURE=with-i18n pnpm test:e2e
 - `fixtures/<name>/**` → that fixture.
 - **Universal** (`crouton`, `crouton-core`, `crouton-i18n`, `crouton-cli`, `crouton-auth`,
   `e2e/**`, `pnpm-lock.yaml`, the workflow) → **all** fixtures.
-- **Backstops:** push to `main` and the **nightly schedule** always run the full matrix, so
+- **Backstops:** push to `main` and the **nightly clock run** (04:00 UTC, the status app's clock) always run the full matrix, so
   selection can never silently hide a regression.
 
 When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in the workflow

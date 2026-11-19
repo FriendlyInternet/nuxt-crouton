@@ -78,9 +78,9 @@ Branch data needs a full checkout with remote branches present (`git fetch origi
 ## Scheduling & delivery — `.github/digests.yml`
 
 Cadence and delivery channel are **config-as-data**, not workflow plumbing (#637). The
-workflow cron fires **daily** (cheap wake-up); `schedule.mjs` reads `digests.yml` and exits
-early when today isn't a send day — so changing "weekly → daily" or "Wed → Mon" is a one-line
-edit, never a `cron` change. Delivery is selection over rails that already exist: `issue`
+status app's clock starts the workflow **daily** (cheap wake-up, `clock: true` so it gates like a
+timed run); `schedule.mjs` reads `digests.yml` and exits early when today isn't a send day — so
+changing "weekly → daily" or "Wed → Mon" is a one-line edit, never a clock-row change. Delivery is selection over rails that already exist: `issue`
 (this standing-issue path) and `email` (Resend, mirrors `red-team-daily.yml`; degrades to a
 green no-op when `RESEND_API_KEY` is unset).
 

@@ -3,6 +3,7 @@
  * carrying PLAN_MARKER and these `### ` sections, in any order:
  *
  *   Reproduced · Cause · Fix · Files · Test · Docs · Assumptions · Needs owner
+ *   (+ optional `Split`, #4184 — see below)
  *
  * Rules the parser enforces (a malformed plan is rejected, not waved through):
  *  - the marker and every section are present and non-empty
@@ -31,6 +32,15 @@
  *   - <ticket item> — Covered: <where in this plan>   (or `— Not covered: <reason>`)
  * It proves the section was written, not that it is true. First plans are unchanged.
  *
+ * OPTIONAL `### Split` (#4184): a plan too big for one worker run moves part of the ticket to a
+ * follow-up ticket (filed by handoff-exec.mjs once the plan is approved). Absent = no split. Shape:
+ *   yes — <title of the follow-up ticket>
+ *   - Moves: <ticket step or acceptance line, quoted>   (one bullet each, at least one)
+ *   - Tests moved: T<n>, …                              (optional; they leave `### Test`)
+ *   - Why: <why it does not fit one run>
+ * or the single line `no — fits one run`. A `yes` with no title / no Moves / no Why, a first line
+ * that is neither yes nor no, or a moved T-id still in `### Test` is a `Split: …` shape error.
+ *
  *   node scripts/lib/plan-shape.mjs [--revised [--fresh]] <comment-body-file>   → JSON verdict on stdout, exit 1 if malformed
  */
 import { readFileSync } from 'node:fs'
@@ -44,6 +54,8 @@ export const SECTIONS = ['Reproduced', 'Cause', 'Fix', 'Files', 'Test', 'Docs', 
 export const REREAD = 'Ticket re-read'
 // #3341: a revision also says what it changed (waived by `--fresh`, a plan started from scratch).
 export const CHANGES = 'Changes from the previous plan'
+// #4184: optional — a plan too big for one run moves part of the ticket to a follow-up.
+export const SPLIT = 'Split'
 
 const norm = (s) => s.toLowerCase().replace(/[^a-z]/g, '')
 
@@ -53,7 +65,7 @@ function splitSections(body) {
   for (const line of body.split('\n')) {
     const h = line.match(/^#{2,4}\s+\**\s*(.+?)\s*\**\s*$/)
     if (h) {
-      cur = [...SECTIONS, REREAD, CHANGES].find((s) => norm(s) === norm(h[1])) || null
+      cur = [...SECTIONS, REREAD, CHANGES, SPLIT].find((s) => norm(s) === norm(h[1])) || null
       if (cur) out[cur] = ''
       continue
     }
@@ -183,6 +195,27 @@ export function parseReread(text) {
   return { items, errors }
 }
 
+// `### Split` (#4184) → { split: null | { title, moves, tests, why }, errors }. testIds = the ids still in `### Test`.
+export function parseSplit(text, testIds = []) {
+  const errors = []
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean)
+  const first = (lines[0] || '').replace(/\*\*/g, '')
+  const m = first.match(/^\W*(yes|no)\b\s*[—–:-]*\s*(.*)$/i)
+  if (!m) return { split: null, errors: ['Split: the first line must be "yes — <title>" or "no — fits one run"'] }
+  if (m[1].toLowerCase() === 'no') return { split: null, errors }
+  const title = m[2].trim()
+  const bullet = (key) => lines.slice(1).map((l) => l.match(new RegExp(`^(?:[-*]|\\d+\\.)\\s+\\**${key}:\\**\\s*(.*)$`, 'i'))).filter(Boolean).map((x) => x[1].trim())
+  const moves = bullet('Moves').filter(Boolean)
+  const tests = [...new Set(bullet('Tests moved').join(' ').match(/\bT\d+\b/g) || [])]
+  const why = bullet('Why').filter(Boolean).join(' ')
+  if (!title) errors.push('Split: "yes" needs the follow-up ticket title — "yes — <title>"')
+  if (!moves.length) errors.push('Split: needs at least one "- Moves: <ticket step>" bullet')
+  if (!why) errors.push('Split: needs a "- Why: <why it does not fit one run>" bullet')
+  const still = tests.filter((id) => testIds.includes(id))
+  if (still.length) errors.push(`Split: moved test(s) ${still.join(', ')} are still in ### Test — remove them there`)
+  return { split: { title, moves, tests, why }, errors }
+}
+
 function markerErrors(body) {
   if (!body.includes(PLAN_MARKER)) return [`missing marker ${PLAN_MARKER}`]
   if (!hasMarker(body, PLAN_MARKER)) return [`marker ${PLAN_MARKER} must be the first line`]
@@ -213,7 +246,9 @@ export function parsePlan(body, { revised = false, fresh = false } = {}) {
   errors.push(...d.errors)
   const t = sections.Test ? parseChecklist(sections.Test) : { items: [], errors: [] }
   errors.push(...t.errors.map((e) => `Test: ${e}`))
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, checklist: t.items, reread, unverified: reproduced === false }
+  const sp = SPLIT in sections ? parseSplit(sections[SPLIT], t.items.map((i) => i.id)) : { split: null, errors: [] }
+  errors.push(...sp.errors)
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, docs: d.rows, checklist: t.items, reread, unverified: reproduced === false, split: sp.split }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

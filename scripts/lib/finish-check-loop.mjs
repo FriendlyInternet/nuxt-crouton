@@ -5,10 +5,13 @@
 // (`followUp`) or let the run end (`end`). `outcome` is written to $RUNNER_TEMP and becomes the
 // "finish check: …" line on the run record (scripts/run-record.mjs `finish-check-line`).
 //
-// Rules: only `red` hands back, at most `cap` times. Anything that is not `red`/`green` (null, a
+// Rules: only `red` hands back, at most `cap` times, and never with under 8 minutes left before
+// PI_DEADLINE (`skipped: N min left`, #4183). Anything that is not `red`/`green` (null, a
 // parse failure, a timeout, `not-run`) counts as `not-run` and never hands back.
 
 export const DEFAULT_CAP = 2;
+// #4183: a fix-up round started this close to the pi step's own time limit gets killed mid-way.
+export const MIN_LEFT_MS = 8 * 60_000;
 const MAX_LISTED = 20;
 // Built from parts so this file does not itself read as adding an ignore comment.
 const IGNORE_WORD = 'fallow' + '-ignore';
@@ -32,7 +35,13 @@ export function followUpMessage(result, round, cap = DEFAULT_CAP) {
   ].join('\n');
 }
 
-export function decideFinishCheck(result, roundsSoFar, cap = DEFAULT_CAP) {
+export function decideFinishCheck(result, roundsSoFar, cap = DEFAULT_CAP, msLeft) {
+  if (typeof msLeft === 'number' && Number.isFinite(msLeft) && msLeft < MIN_LEFT_MS) {
+    return {
+      action: 'end',
+      outcome: { ran: roundsSoFar > 0, rounds: roundsSoFar, last: 'skipped', reason: `skipped: ${Math.max(0, Math.floor(msLeft / 60000))} min left` },
+    };
+  }
   const raw = result?.status;
   const status = raw === 'red' || raw === 'green' ? raw : 'not-run';
   if (status === 'red' && roundsSoFar < cap) {
