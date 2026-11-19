@@ -43,6 +43,13 @@
       "when": 1794486207917,
       "tag": "0005_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795096717873,
+      "tag": "0006_wandering_mauler",
+      "breakpoints": true
     }
   ]
 }

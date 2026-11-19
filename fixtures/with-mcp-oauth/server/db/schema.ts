@@ -1,0 +1,6 @@
+// Database schema exports
+// This file is auto-managed by crouton-generate
+
+// Export auth schema from crouton-auth package (includes the OAuth provider tables, #4096)
+export * from '@fyit/crouton-auth/server/database/schema/auth'
+export * from './translations-ui'
