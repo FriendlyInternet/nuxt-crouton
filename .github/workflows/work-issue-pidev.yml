@@ -1406,6 +1406,9 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           GITHUB_TOKEN_DEFAULT: ${{ github.token }}
+        # `|| true` — best effort: a failed redaction must not fail the job (the record is a debug
+        # aid, not the deliverable). Only already-redacted files are ever written to pi-session-out,
+        # so a failure means fewer files get uploaded, never an unredacted one.
         run: node "$RUNNER_TEMP/pi-session-redact.mjs" "$RUNNER_TEMP/pi-session" pi-session-out || true
 
       - name: Upload pi session record
