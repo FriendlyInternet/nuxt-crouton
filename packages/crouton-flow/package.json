@@ -28,9 +28,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "peerDependencies": {
-    "@fyit/crouton-auth": "workspace:*",
-    "@fyit/crouton-core": "workspace:*",
-    "@fyit/crouton-collab": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
+    "@fyit/crouton-collab": "workspace:0.x",
     "nuxt": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {

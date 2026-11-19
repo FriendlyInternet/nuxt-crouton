@@ -824,6 +824,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          # Full history: a plan Test line may run `changeset status`, which does
+          # `git merge-base <baseBranch> HEAD` and dies on a shallow clone (#3393).
+          fetch-depth: 0
+      # ...and it names the base branch bare (`main`), so give it a local branch to find.
+      - name: Local default branch for git-based plan tests
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: git show-ref --verify --quiet "refs/heads/$DEFAULT_BRANCH" || git branch "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}

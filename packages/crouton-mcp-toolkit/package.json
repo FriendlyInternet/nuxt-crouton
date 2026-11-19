@@ -50,10 +50,10 @@
     "zod": "^3.24.0"
   },
   "peerDependencies": {
-    "@fyit/crouton-auth": "workspace:*",
-    "@fyit/crouton-collab": "workspace:*",
-    "@fyit/crouton-layout": "workspace:*",
-    "@fyit/crouton-pages": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-collab": "workspace:0.x",
+    "@fyit/crouton-layout": "workspace:0.x",
+    "@fyit/crouton-pages": "workspace:0.x",
     "@nuxtjs/mcp-toolkit": "^0.24.2",
     "nuxt": "^3.14.0 || ^4.0.0"
   },

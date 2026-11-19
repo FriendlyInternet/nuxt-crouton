@@ -57,7 +57,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@fyit/crouton-cli": "workspace:*"
+    "@fyit/crouton-cli": "workspace:0.x"
   },
   "engines": {
     "node": ">=18.0.0"

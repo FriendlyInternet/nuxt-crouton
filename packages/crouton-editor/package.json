@@ -40,7 +40,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "@nuxt/icon": "^1.0.0",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"

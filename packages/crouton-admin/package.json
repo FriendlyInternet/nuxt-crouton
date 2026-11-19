@@ -40,7 +40,7 @@
     "vue": "catalog:"
   },
   "peerDependencies": {
-    "@fyit/crouton-auth": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^3.14.0 || ^4.0.0"
   },
