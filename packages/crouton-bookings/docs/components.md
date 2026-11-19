@@ -84,7 +84,7 @@ File: `app/components/Layout/List.vue`
 | --- | --- | --- | --- | --- |
 | `bookings` | `Booking[]` | `[]` | no |  |
 | `loading` | `boolean` | `false` | no |  |
-| `error` | `unknown` | `null` | no |  |
+| `error` | `unknown` | `undefined` | no |  |
 | `highlightedBookingId` | `string \| null` | `null` | no |  |
 | `selectedDate` | `Date \| null` | `null` | no |  |
 | `scrollTarget` | `Date \| null` | `null` | no |  |
