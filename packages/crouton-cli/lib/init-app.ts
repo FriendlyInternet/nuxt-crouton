@@ -14,6 +14,8 @@ interface InitAppOptions {
   dialect?: string
   cf?: boolean
   domain?: string
+  /** Small public site (#4263): one team, one locale with plain addresses; adds `@fyit/crouton-pages`. */
+  site?: boolean
   dryRun?: boolean
   /** Target directory for the app. Defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere; pass `pocs/<name>` for a POC. */
   out?: string
@@ -31,7 +33,7 @@ export function initFeatures(features: string[] = [], layout = true): string[] {
  * Run the full init pipeline: scaffold -> generate -> doctor -> summary.
  */
 export async function initApp(name: string, options: InitAppOptions = {}): Promise<void> {
-  const { features = [], layout = true, theme, dialect = 'sqlite', cf, domain, dryRun = false, out } = options
+  const { features = [], layout = true, theme, dialect = 'sqlite', cf, domain, site, dryRun = false, out } = options
 
   console.log(`\n  crouton init — creating ${name}${out ? ` in ${out}` : ''}\n`)
 
@@ -52,7 +54,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
         addLayout = false
       }
     }
-    const result = await scaffoldApp(name, { features: initFeatures(features, addLayout), theme, dialect, cf, domain, dryRun, outDir: out })
+    const result = await scaffoldApp(name, { features: initFeatures(features, addLayout), theme, dialect, cf, domain, site, dryRun, outDir: out })
     appDir = result.appDir
     resolvedCf = result.cf
   } catch (error) {

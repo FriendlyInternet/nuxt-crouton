@@ -50,6 +50,16 @@ File: `app/components/Editor/BlockEditorWithPreview.vue`
 | --- | --- |
 | `update:modelValue` | `[value: string \| TipTapDoc]` |
 
+## CroutonPagesPublicPage
+
+Public page view (fetch, SEO, render) shared by both public routes
+
+File: `app/components/PublicPage.vue`
+
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `locale` | `string` | - | yes | The page's locale code (from the URL, or the app's one locale when hidden). |
+
 ## CroutonPagesRegularContent
 
 Rich text content display
