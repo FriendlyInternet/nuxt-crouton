@@ -64,6 +64,11 @@ exact word they reply.
    The reviewer is given the PR's `plan-checks` table (`scripts/lib/build-review-prompt.mjs`) as the
    record of which plan tests ran and passed on that commit, and judges only whether each test aims
    at the ticket's rule.
+   It is also given the outside reviewer's High findings (`scripts/lib/outside-review.mjs`, the review
+   asked by `qodo-second-opinion.yml`, trusted only from the `qodo-code-review[bot]` app); it must
+   answer each one in its verdict ("fixed in <commit>" or "not a problem because …"), and a go with an
+   unanswered High finding is turned into no-go by `build-verdict.mjs`. With no outside review (paused
+   or never asked) the comment says so in one line.
    The owner can also ask for changes at any time with a top-level `**Worker:** <what to change>`
    comment.
 6. **Merge into the epic branch.** `automerge-epic-subpr.yml` decides it with
