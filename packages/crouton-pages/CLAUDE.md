@@ -331,9 +331,11 @@ the page payload; it just isn't displayed. Gate sensitive content with the
 page-level `visibility` field, which is enforced server-side. The property panel
 says so in as many words — the failure mode is an author assuming otherwise.
 
-**Why the two axes resolve differently.** The public page route declares
-`defineRouteRules({ swr: 3600 })` (`app/pages/[team]/[locale]/[...slug].vue`), so
-its HTML is cached for an hour and **shared between visitors**. Therefore:
+**Why the two axes resolve differently.** The public page route's SSR HTML must be
+the same for every visitor. It is not server-cached today: an inline
+one-hour `defineRouteRules` swr rule was never applied under Nuxt 4.6 (NUXT_B4016) and
+was removed in #4198. But any shared cache (a CDN, a future route rule) would serve
+one render to everyone. Therefore:
 
 - **viewport → CSS classes** on the existing per-block wrapper in
   `BlockContent.vue`. One hide-class per *excluded* band (`max-md:hidden`,
@@ -425,8 +427,7 @@ Components auto-import with `CroutonPages` prefix:
 - **Homepage**: `/[team]/[locale]/` (first published root page)
 
 **Building URLs:** always go through `app/utils/page-path.ts` (`buildSlugPath` walks
-the parentId chain → localized slug path; `buildPagePath` adds team/locale prefix; `buildSeoUrl` builds the canonical/og:url/hreflang
-URLs from the team **slug** (`publicTeamSegment`: route param → slug → id), never the bare team id).
+the parentId chain → localized slug path; `buildPagePath` adds team/locale prefix).
 The lookup endpoint returns `meta.fullPath` (canonical nested path) for SEO. Used by
 `useNavigation`, `usePageLink`, the public render route, and the admin "open in
 public" button — keep them all on these helpers so the format never drifts.
