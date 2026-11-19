@@ -2,7 +2,7 @@
  * GET /api/teams/[id]/email-logs
  *
  * List auth email logs for a team. Requires admin role.
- * Scoped to emails sent to team member addresses.
+ * Scoped by teamEmailLogScope: this team's emails, plus team-less ones to its members (#3546).
  *
  * Query params:
  * - type: filter by email type (verification, password-reset, invitation, magic-link)
@@ -11,7 +11,8 @@
  * - offset: pagination offset (default 0)
  */
 import { requireTeamAdmin } from '../../../../utils/team'
-import { useDB, tables, eq, and, desc, count, inArray } from '../../../../utils/database'
+import { useDB, tables, eq, and, desc, count } from '../../../../utils/database'
+import { teamEmailLogScope } from '../../../../utils/email-log-scope'
 
 export default defineEventHandler(async (event) => {
   const { team } = await requireTeamAdmin(event)
@@ -24,23 +25,8 @@ export default defineEventHandler(async (event) => {
 
   const db = useDB()
 
-  // Get team member emails to scope logs to this team
-  const teamMembers = await db
-    .select({ email: tables.user.email })
-    .from(tables.member)
-    .innerJoin(tables.user, eq(tables.member.userId, tables.user.id))
-    .where(eq(tables.member.organizationId, team.id))
-
-  const memberEmails = teamMembers.map((m: any) => m.email)
-
-  if (memberEmails.length === 0) {
-    return { items: [], total: 0 }
-  }
-
   // Build where conditions
-  const conditions: any[] = [
-    inArray(tables.authEmailLog.recipientEmail, memberEmails)
-  ]
+  const conditions: any[] = [teamEmailLogScope(db, team.id)]
 
   if (emailType) {
     conditions.push(eq(tables.authEmailLog.emailType, emailType))
