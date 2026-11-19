@@ -12,8 +12,8 @@ import { useBookingAvailability } from './useBookingAvailability'
  * Composable for managing the booking cart and customer booking flow.
  * Every booking is for one product and an amount; what is free is counted per
  * product, cart-aware, with the server's rule (`utils/product-left.ts` over
- * `utils/capacity.ts`, #4110). A location without slots (`inventoryMode` set or
- * no named slots) books the full day.
+ * `utils/capacity.ts`, #4110). A location without slots (no slots = the parsed
+ * `slots` list is empty) books the full day.
  *
  * Delegates to focused sub-composables:
  *   - useBookingAvailability  — base API availability, schedule rules, slot parsing

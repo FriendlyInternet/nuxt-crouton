@@ -85,11 +85,6 @@ const locationColor = computed(() => {
   return props.booking.locationData?.color || '#3b82f6'
 })
 
-// Is this an inventory mode booking?
-const isInventoryMode = computed(() => {
-  return props.booking.locationData?.inventoryMode === true
-})
-
 // Booker info - handle Drizzle leftJoin which returns { id: null, name: null } instead of null
 const bookerUser = computed(() => {
   const owner = props.booking.ownerUser
@@ -327,28 +322,18 @@ function confirmSend() {
 
           <!-- Slot indicator + time + group -->
           <div class="flex items-center gap-2 flex-wrap">
-            <template v-if="isInventoryMode">
-              <span
-                class="size-2 rounded-full shrink-0"
-                :style="{ backgroundColor: isCancelled ? '#ef4444' : locationColor }"
-              />
-              <span class="text-xs tabular-nums" :class="isCancelled ? 'text-red-400' : 'text-muted'">
-                {{ booking.quantity ?? 1 }} / {{ booking.locationData?.quantity || '?' }}
-              </span>
-            </template>
-            <template v-else>
-              <!-- Show slot indicator for booked slots only -->
-              <CroutonBookingsSlotIndicator
-                v-if="bookedSlots.length > 0"
-                :slots="bookedSlots"
-                :booked-slot-ids="bookedSlotIds"
-                :cancelled-slot-ids="isCancelled ? bookedSlotIds : []"
-                :color="locationColor"
-                size="sm"
-                variant="dots"
-              />
-              <span class="text-xs text-muted">{{ slotLabel }}</span>
-            </template>
+            <!-- Show slot indicator for booked slots only -->
+            <CroutonBookingsSlotIndicator
+              v-if="bookedSlots.length > 0"
+              :slots="bookedSlots"
+              :booked-slot-ids="bookedSlotIds"
+              :cancelled-slot-ids="isCancelled ? bookedSlotIds : []"
+              :color="locationColor"
+              size="sm"
+              variant="dots"
+            />
+            <span class="text-xs text-muted">{{ slotLabel }}</span>
+            <span v-if="(booking.quantity ?? 1) > 1" class="text-xs text-muted tabular-nums">×{{ booking.quantity }}</span>
 
             <!-- Group badge inline -->
             <UBadge

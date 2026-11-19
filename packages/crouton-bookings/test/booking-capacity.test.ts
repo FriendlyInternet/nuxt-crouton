@@ -194,6 +194,20 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     await expect(send('post', { location: 'c', date: '2026-11-10', slot: ['am'], quantity: 0, status: 'active' })).rejects.toMatchObject({ status: 400 })
   })
 
+  // covers: T1 (#4172)
+  it('inventoryMode no longer decides: a location with inventoryMode 1 and slots am/pm books the slot that was sent', async () => {
+    mkLoc('x', ['am', 'pm'], [{ product: 'P', stock: 1 }], { inventoryMode: 1, offerFullDay: 0 })
+    const { LOCATION_COLS, validateSelection } = await import('../server/utils/booking-capacity')
+    const { bookingsLocations } = await import('../collections/locations/server/database/schema')
+    const { eq } = await import('drizzle-orm')
+    const [l] = await db.select(LOCATION_COLS).from(bookingsLocations).where(eq(bookingsLocations.id as any, 'x'))
+    expect(validateSelection(l, ['am'], 1)).toMatchObject({ slot: ['am'], slotIds: ['am'], guardIds: ['am'] })
+    const r = await send('post', { location: 'x', date: '2026-11-10', slot: ['am'], quantity: 1, status: 'active' })
+    expect(r.slot).toEqual(['am'])
+    expect(await left('x', 'am')).toBe(0)
+    expect(await left('x', 'pm')).toBe(1)
+  })
+
   // covers: T3
   it('moving an old quantity-0 row works and stores quantity 1', async () => {
     book('b1', { slot: '["pm"]', quantity: 0 })

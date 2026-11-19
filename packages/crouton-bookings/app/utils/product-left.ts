@@ -16,7 +16,7 @@ export type ProductLeftCartItem = Pick<CartItem, 'locationId' | 'date' | 'day' |
 }
 
 export interface ProductLeftInput {
-  /** The location, already normalised by the caller (slots `[]` for an inventoryMode location) */
+  /** The location, already normalised by the caller (no slots = the parsed `slots` list is empty) */
   location: CapacityLocation
   locationId: string
   /** YYYY-MM-DD */

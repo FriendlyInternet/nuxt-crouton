@@ -15,13 +15,13 @@ const two = (stock: number, extra: Record<string, unknown> = {}) => ({ slots: [{
 describe('capacity rule (#3139)', () => {
   // Rewritten for #4061: stock decides; the old columns are kept at a different value
   it('day location with empty quantity accepts 1, refuses a 2nd', () => {
-    const loc = { inventoryMode: true, quantity: 5, products: [{ product: 'P', stock: 1 }] }
+    const loc = { slots: [], quantity: 5, products: [{ product: 'P', stock: 1 }] }
     expect(fitsCapacity(loc, 'P', [], [])).toBe(true)
     expect(fitsCapacity(loc, 'P', [], [b()])).toBe(false)
   })
 
   it('stock 5 accepts 5 in total and refuses the 6th', () => {
-    const loc = { inventoryMode: true, quantity: 1, products: [{ product: 'P', stock: 5 }] }
+    const loc = { slots: [], quantity: 1, products: [{ product: 'P', stock: 5 }] }
     expect(fitsCapacity(loc, 'P', [], [b([], 2)], 3)).toBe(true)
     expect(fitsCapacity(loc, 'P', [], [b([], 2)], 4)).toBe(false)
     expect(fitsCapacity(loc, 'P', [], [b([], 5)], 1)).toBe(false)
@@ -53,7 +53,7 @@ describe('capacity rule (#3139)', () => {
   })
 
   it('calendar and server helper agree', () => {
-    const loc = { id: 'loc', inventoryMode: true, quantity: 5, products: [{ product: 'P', stock: 2 }] } as any
+    const loc = { id: 'loc', slots: [], quantity: 5, products: [{ product: 'P', stock: 2 }] } as any
     const day = new Date(2026, 9, 28)
     const bk = (q: number) => ({ id: 'x', location: 'loc', date: day.toISOString(), status: 'active', slot: null, quantity: q, product: 'P' }) as any
     expect(isDayFullyBooked(day, [loc], [bk(2)])).toBe(isLocationFull(loc, [b([], 2)]))
@@ -95,7 +95,7 @@ describe('capacity rule per product (#4061)', () => {
 
   // covers: T1
   it('C4 no slots, stock 8, 2 booked → 6 left (old location quantity 1 ignored)', () => {
-    const loc = { products: [{ product: 'P', stock: 8 }], quantity: 1, inventoryMode: true }
+    const loc = { products: [{ product: 'P', stock: 8 }], quantity: 1, slots: [] }
     const bs = [b([], 2)]
     expect(leftFor(loc, 'P', bs, 'all-day')).toBe(6)
     expect(fitsCapacity(loc, 'P', [], bs, 6)).toBe(true)
@@ -176,7 +176,7 @@ describe('capacity rule per product (#4061)', () => {
 
   // covers: T1
   it('calendar day check: stock 2, old quantity 5 ignored', () => {
-    const loc = { id: 'loc', inventoryMode: true, quantity: 5, products: [{ product: 'P', stock: 2 }] } as any
+    const loc = { id: 'loc', slots: [], quantity: 5, products: [{ product: 'P', stock: 2 }] } as any
     const day = new Date(2026, 9, 28)
     const bk = (q: number) => ({ id: 'x', location: 'loc', date: day.toISOString(), status: 'active', slot: null, quantity: q, product: 'P' }) as any
     expect(isDayFullyBooked(day, [loc], [bk(2)])).toBe(true)

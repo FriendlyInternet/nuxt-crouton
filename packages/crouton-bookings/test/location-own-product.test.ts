@@ -43,12 +43,13 @@ afterEach(() => { db.$client.close(); vi.unstubAllGlobals() })
 
 describe('a location saved without products gets its own product (#4044)', () => {
   // covers: T2
-  it('L1 POST without products stores [{ product: loc-<id>, stock }] and creates that catalog product in the same team', async () => {
+  it('L1 POST without products stores [{ product: loc-<id>, stock: 1 }] and creates that catalog product in the same team', async () => {
+    // #4172: the old `quantity` no longer decides the stock
     body = { title: 'Kayak Rental', inventoryMode: true, quantity: 6, translations: { nl: { title: 'Kajakverhuur' } } }
     const res = await run(`${L}/index.post`)
     const stored = locRow(res.id)
-    expect(JSON.parse(stored.products)).toEqual([{ product: `loc-${res.id}`, stock: 6 }])
-    expect(res.products).toEqual([{ product: `loc-${res.id}`, stock: 6 }])
+    expect(JSON.parse(stored.products)).toEqual([{ product: `loc-${res.id}`, stock: 1 }])
+    expect(res.products).toEqual([{ product: `loc-${res.id}`, stock: 1 }])
     const own = products().find((p: any) => p.id === `loc-${res.id}`)
     expect(own).toMatchObject({ teamId: 't1', title: 'Kayak Rental', createdBy: 'u1', updatedBy: 'u1' })
     expect(JSON.parse(own.translations)).toEqual({ nl: { title: 'Kajakverhuur' }, en: { title: 'Kayak Rental' } })
@@ -69,8 +70,9 @@ describe('a location saved without products gets its own product (#4044)', () =>
     params = { locationId: created.id }
     body = { products: null }
     const res = await run(`${L}/[locationId].patch`)
-    expect(JSON.parse(locRow(created.id).products)).toEqual([{ product: `loc-${created.id}`, stock: 3 }])
-    expect(res.products).toEqual([{ product: `loc-${created.id}`, stock: 3 }])
+    // #4172: the old slot `capacity: 3` no longer decides the stock
+    expect(JSON.parse(locRow(created.id).products)).toEqual([{ product: `loc-${created.id}`, stock: 1 }])
+    expect(res.products).toEqual([{ product: `loc-${created.id}`, stock: 1 }])
     expect(products().some((p: any) => p.id === `loc-${created.id}` && p.teamId === 't1')).toBe(true)
   })
 })

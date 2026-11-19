@@ -202,7 +202,7 @@
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.scheduling') }}</legend>
             <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.schedulingHint') }}</p>
-            <UFormField v-if="!state.inventoryMode" :label="t('bookings.locationForm.slots')" name="slots">
+            <UFormField :label="t('bookings.locationForm.slots')" name="slots">
               <CroutonFormRepeater
                 v-model="(state.slots as any)"
                 component-name="BookingsLocationsSlotInput"
@@ -211,7 +211,7 @@
               />
             </UFormField>
             <UFormField
-              v-if="!state.inventoryMode && state.slots?.length"
+              v-if="state.slots?.length"
               name="offerFullDay"
             >
               <USwitch
@@ -223,7 +223,7 @@
             <UFormField :label="t('bookings.schedule.openDays')" name="openDays">
               <CroutonBookingsOpenDaysPicker v-model="state.openDays" />
             </UFormField>
-            <UFormField v-if="!state.inventoryMode && state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
+            <UFormField v-if="state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
               <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" :open-days="state.openDays" />
             </UFormField>
             <UFormField :label="t('bookings.schedule.blockedDates')" name="blockedDates">

@@ -48,7 +48,6 @@ const GROUPS: OptionItem[] = [
 interface SeedSlot {
   id: string
   label: string
-  capacity: number
 }
 
 interface SeedLocation {
@@ -57,8 +56,6 @@ interface SeedLocation {
   titleNl: string
   color: string
   city: string
-  inventoryMode: boolean
-  quantity?: number
   slots: SeedSlot[]
   /** The catalog seed's product this location offers (#4044) */
   product: 'court' | 'kayak'
@@ -72,11 +69,10 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Centrumplein',
     color: '#3b82f6',
     city: 'Antwerpen',
-    inventoryMode: false,
     slots: [
-      { id: 'slot-0900', label: '09:00 – 10:00', capacity: 1 },
-      { id: 'slot-1000', label: '10:00 – 11:00', capacity: 1 },
-      { id: 'slot-1100', label: '11:00 – 12:00', capacity: 2 }
+      { id: 'slot-0900', label: '09:00 – 10:00' },
+      { id: 'slot-1000', label: '10:00 – 11:00' },
+      { id: 'slot-1100', label: '11:00 – 12:00' }
     ],
     product: 'court',
     stock: 2
@@ -87,10 +83,9 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Parkzijde',
     color: '#22c55e',
     city: 'Gent',
-    inventoryMode: false,
     slots: [
-      { id: 'slot-1400', label: '14:00 – 15:00', capacity: 1 },
-      { id: 'slot-1500', label: '15:00 – 16:00', capacity: 1 }
+      { id: 'slot-1400', label: '14:00 – 15:00' },
+      { id: 'slot-1500', label: '15:00 – 16:00' }
     ],
     product: 'court',
     stock: 1
@@ -101,8 +96,6 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Kajakverhuur',
     color: '#f59e0b',
     city: 'Brugge',
-    inventoryMode: true,
-    quantity: 8,
     slots: [],
     product: 'kayak',
     stock: 8
@@ -168,13 +161,11 @@ export const provider: SeedProvider = {
         color: loc.color,
         city: loc.city,
         content: null,
-        slots: loc.inventoryMode ? null : loc.slots,
+        slots: loc.slots,
         products: [{ product: productId(ctx, loc.product), stock: loc.stock }],
         openDays: null,
         slotSchedule: null,
         blockedDates: null,
-        inventoryMode: loc.inventoryMode,
-        quantity: loc.inventoryMode ? (loc.quantity ?? 0) : null,
         maxBookingsPerMonth: null,
         translations: {
           [ctx.locale]: { title: loc.titleNl, city: loc.city },
@@ -187,8 +178,9 @@ export const provider: SeedProvider = {
       })
     })
 
-    // Bookings — slot-mode store a JSON array of slot ids; inventory stores the
-    // JSON literal `null` (NOT-NULL column → `'null'` text, like the live app).
+    // Bookings — slot bookings store a JSON array of slot ids; the slotless row
+    // stores the JSON literal `null` (NOT-NULL column → `'null'` text; read as
+    // full day — new live bookings store `["all-day"]` since #4172).
     BOOKINGS.forEach((booking, index) => {
       ctx.upsert(
         'bookings_bookings',

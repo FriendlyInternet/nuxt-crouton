@@ -12,11 +12,11 @@ import { parseLocationSlots, parseSlotIds } from '../composables/useBookingSlots
  * - a location is full when every product it lists has 0 left in every slot
  *   (a location with no named slots has one implicit full-day slot)
  * - locations that list no products are left out; none left → not full
- * - an inventory location counts as slotless, as on the server
+ * - no slots = the parsed `slots` list is empty, as on the server (#4172)
  */
 export function isDayFullyBooked(
   date: Date,
-  locations: Pick<LocationData, 'id' | 'inventoryMode' | 'slots' | 'products'>[],
+  locations: Pick<LocationData, 'id' | 'slots' | 'products'>[],
   bookings: Pick<Booking, 'date' | 'status' | 'location' | 'slot' | 'quantity' | 'product'>[],
 ): boolean {
   const counted = locations.filter(l => parseLocationProducts(l.products).length > 0)
@@ -30,7 +30,7 @@ export function isDayFullyBooked(
       .filter(b => b.location === location.id)
       .map(b => ({ product: b.product, quantity: b.quantity, slotIds: parseSlotIds(b.slot) }))
     return isLocationFull(
-      { slots: location.inventoryMode ? [] : parseLocationSlots(location), products: location.products },
+      { slots: parseLocationSlots(location), products: location.products },
       mine,
     )
   })

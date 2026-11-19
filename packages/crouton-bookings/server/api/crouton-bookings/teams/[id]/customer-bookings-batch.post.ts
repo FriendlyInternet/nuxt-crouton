@@ -42,8 +42,7 @@ interface CartItem {
   slotLabels?: string[]
   groupId?: string | null
   groupLabel?: string | null
-  quantity?: number // For inventory mode
-  isInventoryMode?: boolean
+  quantity?: number // How many units of the product (#4061)
   /** Catalog product; the location's only product when absent (#4044) */
   productId?: string
 }
@@ -111,9 +110,7 @@ export default defineEventHandler(async (event) => {
           translations: bookingsLocations.translations,
           slots: bookingsLocations.slots,
           maxBookingsPerMonth: bookingsLocations.maxBookingsPerMonth,
-          quantity: bookingsLocations.quantity,
           offerFullDay: bookingsLocations.offerFullDay,
-          inventoryMode: bookingsLocations.inventoryMode,
           products: bookingsLocations.products,
         })
         .from(bookingsLocations)
@@ -292,8 +289,8 @@ export default defineEventHandler(async (event) => {
       dayCache.set(key, found.map(f => ({ product: f.product, quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
     }
     const taken = dayCache.get(key)!
-    // Per product, per slot, against its stock (#4061); an inventory location counts as slotless
-    const capLocation = { slots: dbLocation.inventoryMode ? [] : parseSlots(dbLocation.slots), products: dbLocation.products }
+    // Per product, per slot, against its stock (#4061); an empty `slots` list = no slots (#4172)
+    const capLocation = { slots: parseSlots(dbLocation.slots), products: dbLocation.products }
     if (!fitsCapacity(capLocation, sel.product, sel.slotIds, taken, sel.quantity)) {
       throw createError({ status: 409, statusText: `No room left at "${dbLocation.title}" on ${item.day || item.date}` })
     }
