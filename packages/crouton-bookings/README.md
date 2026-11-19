@@ -1,6 +1,6 @@
 # @fyit/crouton-bookings
 
-A booking system layer for Nuxt applications. Supports both **slot-based bookings** (courts, rooms, time slots) and **inventory-based reservations** (equipment, rentals).
+A booking system layer for Nuxt applications. Bookings for locations with or without time slots, each offering team products with a stock.
 
 ## Installation
 
@@ -17,8 +17,7 @@ pnpm add @fyit/crouton-bookings
 export default defineNuxtConfig({
   extends: [
     '@fyit/crouton-core',  // bundles crouton-auth
-    '@fyit/crouton-bookings',
-    './layers/bookings' // Your generated layer
+    '@fyit/crouton-bookings'
   ],
   // ... other config
 })
@@ -130,27 +129,14 @@ Email functionality (opt-in).
 const { isEmailEnabled, resendEmail } = useBookingEmail()
 ```
 
-## Booking Modes
+## Locations, slots and products
 
-### Slot-Based (Default)
-
-For resources with fixed time slots (courts, rooms, appointments):
+A location has named time slots, or none (then it is booked for the whole day; `offerFullDay` adds a full-day choice next to the slots). It lists the team's products it offers (`@fyit/crouton-catalog`), each with a stock that is counted per day and per slot:
 
 ```json
 {
-  "inventoryMode": false,
-  "slots": ["09:00", "10:00", "11:00", "12:00"]
-}
-```
-
-### Inventory-Based
-
-For resources tracked by quantity (equipment rentals, tickets):
-
-```json
-{
-  "inventoryMode": true,
-  "quantity": 10
+  "slots": [{ "id": "morning", "label": "Morning" }, { "id": "afternoon", "label": "Afternoon" }],
+  "products": [{ "product": "cargo-bike", "stock": 3 }, { "product": "kids-bike", "stock": 5 }]
 }
 ```
 
@@ -186,7 +172,7 @@ The package provides these API endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/crouton-bookings/teams/[id]/availability` | GET | Get booked slots for date range |
+| `/api/crouton-bookings/teams/[id]/availability` | GET | Booked slots for a date range, plus each date's `bookings` (`product`, `quantity`, `slotIds`; full day = `['all-day']`) |
 | `/api/crouton-bookings/teams/[id]/customer-bookings` | GET | Get user's bookings |
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch booking) |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get locations accessible to user |

@@ -82,10 +82,22 @@
       "sortable": true,
       "area": "main",
       "group": "scheduling",
-      "help": "Only used in slot mode. Hidden when inventory mode is enabled.",
+      "help": "Leave empty for a location booked by the whole day.",
       "properties": {
-        "label": { "type": "string", "required": true, "label": "Slot Name" },
-        "capacity": { "type": "number", "label": "Capacity", "default": 1 }
+        "label": { "type": "string", "required": true, "label": "Slot Name" }
+      }
+    }
+  },
+  "products": {
+    "type": "repeater",
+    "meta": {
+      "label": "Products",
+      "area": "main",
+      "group": "scheduling",
+      "help": "Products this location offers, each with its own stock.",
+      "properties": {
+        "product": { "type": "string", "required": true, "label": "Product" },
+        "stock": { "type": "number", "required": true, "label": "Stock", "default": 1 }
       }
     }
   },
@@ -132,27 +144,6 @@
       "area": "main",
       "group": "scheduling",
       "help": "Adds a full-day option next to the named slots. It blocks the other slots on that date, and any booked slot blocks it."
-    }
-  },
-  "inventoryMode": {
-    "type": "boolean",
-    "meta": {
-      "label": "Inventory Mode",
-      "default": false,
-      "area": "sidebar",
-      "group": "inventorySettings",
-      "help": "When enabled, books from a quantity pool instead of time slots. Use for equipment rentals, bike pools, etc."
-    }
-  },
-  "quantity": {
-    "type": "number",
-    "meta": {
-      "label": "Available Units",
-      "default": 0,
-      "area": "sidebar",
-      "group": "inventorySettings",
-      "dependsOn": "inventoryMode",
-      "help": "Number of items available for booking per day (e.g., 5 bikes, 10 kayaks)"
     }
   },
   "maxBookingsPerMonth": {
