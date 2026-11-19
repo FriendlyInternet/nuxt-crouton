@@ -50,7 +50,10 @@ exact word they reply.
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
-   (`scripts/epic-base.mjs`). If the approved plan has a `### Split`, `handoff-exec.mjs` first
+   (`scripts/epic-base.mjs`). If the worker has to ask something, it writes the question to a
+   file; the step after the build posts it with `status:blocked` and, when the PR is open, a reply
+   record, so the owner's first answer (typed or relayed) re-runs the worker on that PR
+   (`scripts/lib/worker-question.mjs`, #4192). If the approved plan has a `### Split`, `handoff-exec.mjs` first
    files the moved part as a new ticket (`Blocked-by:` this one, same epic) and notes it on the
    issue; it starts once this one closes.
 5. **Checks and build review.** `ci.yml` (the `CI Gate` check) plus `build-review.yml`

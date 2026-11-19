@@ -111,6 +111,43 @@ test('#4145 readReply on a plan-rejected record', () => {
   for (const b of ['change X', 'ok — build it']) assert.deepEqual(readReply(REJECTED_RECORD, owner(b)), { form: 'other', starts: 'replan-with-feedback' }, b)
 })
 
+// ── #4192: the worker's question ─────────────────────────────────────────────────────────────────────────────────────────────────────
+const WQ = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+const wq = { userType: 'Bot', userLogin: 'nuxt-harness[bot]', body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _the worker's question during the build_\n\n## 🔀 Blocked — A or B?\n**Needs:** answer` }
+const CLAIM = { userType: 'User', userLogin: 'pmcp', body: "> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from `@pmcp`'s account (not Maarten) · _claim_\n\n🪪 claimed by chat 1be68d" }
+const RELAY = { userType: 'User', userLogin: 'pmcp', body: "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner answer in chat 2026-11-17_\n\n**A** — default it off." }
+const typed = (body) => ({ userType: 'User', userLogin: 'pmcp', body })
+const HELD = ['status:blocked', 'plan:approved', 'work-this']
+
+// covers: T2
+test('#4192 openRecord: a worker question is open (even with plan:approved) until the owner has answered it', () => {
+  assert.deepEqual(openRecord({ comments: [wq, typed('A')], labels: HELD }), WQ, 'the reply being routed is the newest comment')
+  assert.deepEqual(openRecord({ comments: [wq], labels: HELD }), WQ)
+  assert.deepEqual(openRecord({ comments: [wq, RELAY], labels: HELD }), WQ, 'a relayed first answer reads it too')
+  assert.equal(openRecord({ comments: [wq, typed('A'), typed('ok')], labels: HELD }), null, 'a typed answer closes it')
+  assert.equal(openRecord({ comments: [wq, RELAY, typed('ok')], labels: HELD }), null, 'a relayed answer closes it')
+  assert.deepEqual(openRecord({ comments: [wq, { userType: 'User', userLogin: 'someone', body: 'B!' }, typed('A')], labels: HELD }), WQ, 'a non-owner comment between does not close it')
+  assert.deepEqual(openRecord({ comments: [wq, CLAIM, typed('A')], labels: HELD }), WQ, "a chat's status note between does not close it")
+})
+
+// covers: T2
+test('#4192 openRecord: a newer verdict, no status:blocked, or a record on a non-bot comment ⇒ null', () => {
+  assert.equal(openRecord({ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: HELD }), null, 'newer verdict + plan:approved')
+  assert.deepEqual(openRecord({ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: BLOCKED }), Q, 'the newer verdict decides')
+  assert.equal(openRecord({ comments: [wq, typed('A')], labels: ['plan:approved', 'work-this'] }), null)
+  assert.equal(openRecord({ comments: [{ ...wq, userType: 'User', userLogin: 'pmcp' }, typed('A')], labels: HELD }), null)
+  assert.deepEqual(openRecord({ comments: [verdict('needs-owner', Q)], labels: BLOCKED }), Q, 'plan-review cases unchanged')
+  assert.equal(openRecord({ comments: [verdict('needs-owner', Q)], labels: [...BLOCKED, 'plan:approved'] }), null, 'plan-review cases unchanged')
+})
+
+// covers: T2
+test("#4192 readReply on a worker question: only the owner speaking starts answer-worker", () => {
+  assert.deepEqual(readReply(WQ, { ...CLAIM, owner: 'pmcp' }), { form: null, starts: null }, "a chat's 🪪 claim note")
+  assert.deepEqual(readReply(WQ, { ...RELAY, owner: 'pmcp' }), { form: 'other', starts: 'answer-worker' }, 'the #3982 relay')
+  assert.deepEqual(readReply(WQ, owner('A')), { form: 'other', starts: 'answer-worker' }, 'typed')
+  assert.deepEqual(readReply(WQ, { ...owner('A'), userLogin: 'someone' }), { form: null, starts: null }, 'not the owner')
+})
+
 // covers: T1
 test('#4145 readReply: no accepts ⇒ other/null; nothing accepted ⇒ null/null', () => {
   assert.deepEqual(readReply({ kind: 'x' }, owner('ok')), { form: 'other', starts: null })
