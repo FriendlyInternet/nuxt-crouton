@@ -34,7 +34,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-maps` | `packages/crouton-maps` | Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required |
 | `@fyit/crouton-mcp` | `packages/crouton-mcp` | MCP server for AI-powered Crouton collection generation |
 | `@fyit/crouton-mcp-toolkit` | `packages/crouton-mcp-toolkit` | MCP Toolkit integration for Crouton - expose collections to AI assistants via Model Context Protocol |
-| `@fyit/crouton-pages` | `packages/crouton-pages` | Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality |
+| `@fyit/crouton-pages` | `packages/crouton-pages` | Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality — serves a team's public site on its own custom domain, with plain one-language addresses (hideLocaleInUrl) |
 | `@fyit/crouton-printing` | `packages/crouton-printing` | Domain-agnostic printing layer for Nuxt Crouton - print-job queue, ESC/POS engine, drivers, and on-site transport. Consumed by crouton-sales, crouton-bookings, etc. |
 | `@fyit/crouton-sales` | `packages/crouton-sales` | POS/Sales system for Nuxt Crouton - products, categories, orders, and optional thermal receipt printing |
 | `@fyit/crouton-themes` | `packages/crouton-themes` | Swappable themes for Nuxt UI applications |

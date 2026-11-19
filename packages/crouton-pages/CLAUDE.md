@@ -633,6 +633,38 @@ The footer page type uses `hasBlockContent: true` — a flag on `CroutonPageType
 
 The package includes automatic custom domain resolution via a Nitro plugin (`server/plugins/domain-resolver.ts`).
 
+### Public site recipe
+
+Use this when one team wants a small public site, in one language, on its own domain.
+Three pieces — nothing else to configure:
+
+1. **Team routing — the default.** Leave `routingMode` unset (or `'team'`). The package's
+   public page routes, the editor, the nav edit pencil and sign-in all keep working unchanged.
+2. **Connect the domain to the team.** In admin at `/admin/[team]/team/domains`, add the
+   domain, verify it, and point its DNS at the app. On that domain every non-app address
+   belongs to the team, and `/` is the team's home page. List the app's own hosts in
+   `croutonPages.appDomains` so they are never treated as a team domain.
+3. **`croutonPages.hideLocaleInUrl: true`** with exactly one locale in `crouton.config.js`
+   (the build fails otherwise). Addresses carry no language (`/about`, not `/en/about`),
+   and a `/en/about` link forwards (302) to `/about`.
+
+Sign-in, admin and the editor stay on the app's own address — `/auth/*` and `/admin/*`
+are never rewritten on a connected domain. Signing in *on the domain itself* shows
+crouton's start page behind the sign-in pop-up (an in-app navigation to `/` resolves to
+the start page; a fresh load of `/` shows the team's home page), so recommend that
+editors sign in on the app's address.
+
+**Escape hatches** — each has a cost:
+
+- `routingMode: 'locale'` — removes the package's public page routes, so the app must
+  provide `[locale]/[...slug].vue`. Links drop the team, and `/` redirects to
+  `/{defaultLocale}/`. See [Locale Routing Mode](#locale-routing-mode).
+- `routingMode: 'custom'` — removes the package's public page routes and adds no redirect,
+  so the app owns every public address. Package links (nav, `usePageLink`, the editor's
+  "view page") point at team-less addresses only the app's routes can serve, and an app
+  route at `/` replaces the page crouton-auth's `/auth/login` opens the sign-in pop-up on.
+  This is what broke sign-in and editor links in kdm's first attempt (PR #4166).
+
 ### How It Works
 
 ```
@@ -707,7 +739,7 @@ export default defineNuxtConfig({
         appDomains: ['myapp.com', 'staging.myapp.com'],
         // Enable debug logging
         debug: false,
-        // Routing mode: 'team' (default) or 'locale'
+        // Routing mode: 'team' (default), 'locale' or 'custom' — see Public site recipe
         routingMode: 'team',
         // Team mode, one-locale apps only: drop the locale from public URLs (/acme/about). Build fails if more than one locale.
         hideLocaleInUrl: false,
@@ -731,7 +763,7 @@ The server plugin sets `event.context.routingMode = 'locale'` which makes `useDo
 
 ### Domain Setup
 
-1. Add domain to team in admin (`/admin/[team]/settings/domains`)
+1. Add domain to team in admin (`/admin/[team]/team/domains`)
 2. Add DNS TXT record for verification
 3. Verify domain via UI
 4. Point domain DNS to your app
