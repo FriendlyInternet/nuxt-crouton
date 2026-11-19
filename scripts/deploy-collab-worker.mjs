@@ -45,19 +45,8 @@ writeFileSync(cfgPath, JSON.stringify(config, null, 2))
 const wrangler = (args, opts = {}) =>
   execFileSync('npx', ['wrangler', ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], ...opts })
 
-// 1. Worker (provisions the D1 on first run). On a brand-new Worker the upload can succeed and the
-// follow-up Cloudflare API call then 404s (code 10007, "Worker does not exist") before the new
-// Worker has propagated — the deploy is idempotent, so retry a few times.
-const deployWithRetry = (attempts = 4) => {
-  for (let i = 1; ; i++) {
-    try { return wrangler(['deploy', '--config', cfgPath]) } catch (e) {
-      if (i >= attempts) throw e
-      console.error(`wrangler deploy failed (attempt ${i}/${attempts}) — retrying in ${i * 5}s`)
-      execFileSync('sleep', [String(i * 5)])
-    }
-  }
-}
-const out = deployWithRetry()
+// 1. Worker (provisions the D1 on first run)
+const out = wrangler(['deploy', '--config', cfgPath])
 process.stdout.write(out)
 let url
 try { url = extractWorkerUrl(out, name) } catch (e) {
