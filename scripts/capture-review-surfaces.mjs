@@ -70,6 +70,16 @@ const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
 // The marker a PR carries when its plan says there is no page to look at (#4201).
 const NONE_MARKER = '<!-- review-surface-none -->'
 
+/**
+ * The reason a PR gives for "no screen to check" (#4252): the text of
+ * `<!-- review-surface-none: <reason> -->`, or '' for the bare marker, an empty reason or no marker.
+ * Only the form with a reason wins over pages guessed from the changed files.
+ */
+export function noneReason(prBody) {
+  const m = /<!--\s*review-surface-none:\s*(.*?)\s*-->/s.exec(String(prBody || ''))
+  return m ? m[1].replace(/\s+/g, ' ').trim() : ''
+}
+
 /** True when the PR changes a screen file (VISUAL_PATH), ignoring fixtures/ and e2e/ (#4201). */
 export function changesScreen(changedFiles) {
   return (changedFiles || []).some((raw) => {
@@ -111,12 +121,32 @@ function pathOf(url) {
 }
 
 /**
+ * True when a `/api/auth/get-session` answer shows a signed-in user (#4265): a 2xx status and
+ * a body whose `user` is a non-null object. `body` is `undefined` when the answer is not JSON.
+ */
+export function sessionFromResponse(status, body) {
+  return status >= 200 && status < 300 && body?.user != null && typeof body.user === 'object'
+}
+
+/** Ask the app whether this browser context has a session (its own cookies). Never throws (#4265). */
+async function hasSession(context, origin) {
+  try {
+    const res = await context.request.get(`${origin}/api/auth/get-session`)
+    return sessionFromResponse(res.status(), await res.json().catch(() => undefined))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Decide what to do with a surface after its signed-in try, or after both tries (#4248).
- * `tries` is `[{ url, dialogForm }]` (signed in) or `[signedIn, signedOut]`; `dialogForm` says
- * whether a `[role="dialog"] form` was visible. Returns `{ keep: 'signed-in' }`,
+ * `tries` is `[{ url, session? }]` (signed in) or `[{ url, session? }, { url, dialogForm }]`;
+ * `session` says whether the signed-in browser had a session (#4265), `dialogForm` whether the
+ * signed-out try showed a `[role="dialog"] form`. Returns `{ keep: 'signed-in' }`,
  * `{ retry: 'signed-out' }`, `{ keep: 'signed-out', popup? }` or `{ reject: <reason> }`.
- * A sign-in pop-up on `/` counts only for a real sign-in page: one that, signed in, sent the
- * visitor outside `/auth/` and showed them no sign-in form.
+ * A sign-in pop-up on `/` counts only for a real sign-in page: one that, signed in with a
+ * session, sent the visitor outside `/auth/`. A sign-in form on the signed-in try proves
+ * nothing — a slow session check shows it to signed-in visitors too (#4265).
  */
 export function authTryDecision(surface, tries) {
   const [first, second] = tries || []
@@ -128,9 +158,10 @@ export function authTryDecision(surface, tries) {
   if (!off2) return { keep: 'signed-out' }
   const path1 = pathOf(first.url)
   const popupShape = pathOf(second.url) === '/' && second.dialogForm === true
-  if (popupShape && !isAuthPath(path1) && first.dialogForm !== true) return { keep: 'signed-out', popup: true }
-  if (popupShape) return { reject: `a sign-in pop-up on / is not ${surface.path} (signed in it landed on ${path1})` }
-  return { reject: off2 }
+  if (!popupShape) return { reject: off2 }
+  if (isAuthPath(path1)) return { reject: `a sign-in pop-up on / is not ${surface.path} (signed in it landed on ${path1})` }
+  if (first.session !== true) return { reject: `the review login did not work (no session on the signed-in try), so a sign-in pop-up on / cannot stand in for ${surface.path}` }
+  return { keep: 'signed-out', popup: true }
 }
 
 /**
@@ -205,6 +236,8 @@ export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM, 
 /**
  * What to capture for one app on one PR (#2433):
  *  - surfaces the PR declares for this app win;
+ *  - `<!-- review-surface-none: <reason> -->` comes next (#4252): the start page, named `no-screen-…`;
+ *    the marker without a reason does not beat a guessed page;
  *  - a PR held for visual sign-off that declares none gets NOTHING: the landing page would pass
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
  *  - a PR that changes a screen and names/guesses no page gets NOTHING either (#4201): the start
@@ -221,6 +254,9 @@ export function resolveSurfaces({ manifest, prBody, app, changedFiles, team: dep
   const declared = parsePrSurfaces(prBody, app, team)
   const tag = list => list.map(s => ({ ...s, checkLanding: true }))
   if (declared.length) return { surfaces: tag(declared), reason: 'declared on the PR' }
+  // A reasoned "no screen to check" beats the guesses below (#4252); the picture names say so.
+  const why = noneReason(prBody)
+  if (why) return { surfaces: parseSurfaces(manifest).map(sf => ({ ...sf, name: `no-screen-${sf.name}` })), reason: `no screen to check: ${why}` }
   const derived = deriveSurfaces({ changedFiles, app, team, packages })
   if (derived.length) return { surfaces: tag(derived), reason: 'derived from the changed files (#2698)' }
   const body = String(prBody || '')
@@ -465,7 +501,8 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
 
 /**
  * Open one surface in `context` and let it settle (navigate → loader wait → hydrate → idle).
- * Returns `{ page, status, url, dialogForm }`, or null (page closed) after reporting a page stuck
+ * Returns `{ page, status, url, dialogForm }` (`dialogForm` is read only on the signed-out try,
+ * #4265), or null (page closed) after reporting a page stuck
  * on Nuxt's loading screen. May throw; the caller closes `page` on success.
  */
 async function openSettled(context, origin, surface) {
@@ -508,6 +545,7 @@ async function captureWithTries(inContext, signedOut, origin, surface, file) {
     let decision = authTryDecision(surface, [t1])
     let kept = t1
     if (decision.retry) {
+      t1.session = await hasSession(inContext, origin)
       await t1.page.close().catch(() => {})
       const t2 = await openSettled(await signedOut(), origin, surface)
       if (!t2) return null

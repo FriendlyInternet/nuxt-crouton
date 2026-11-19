@@ -10,6 +10,11 @@ import { CARDS_SYNC_SINCE } from '../server/utils/clock-status-core'
 
 let fail: Record<string, string>
 let paths: string[]
+/** #4269: this workflow's clock run (id 77) ended cancelled; its /jobs count and the later runs it can read. */
+let cancelWf: string | null
+let jobsCount: number
+let laterError: string | null
+const CANCELLED_ID = 77
 /** KV the endpoint reads the clock sync's record from (`clock:cards-sync:last`, #4234). */
 let kv: ReturnType<typeof createStorage>
 
@@ -17,8 +22,34 @@ const NOW = '2026-11-19T10:45:00Z' // automerge (:10 slot) ran at 10:13; pipelin
 
 function fakeGh(_event: unknown, path: string) {
   paths.push(path)
+  // /actions/runs/<id>/jobs carries no workflow in its path, so match it before the /runs branch.
+  const jobsOf = path.match(/actions\/runs\/(\d+)\/jobs/)?.[1]
+  if (jobsOf) return Promise.resolve({ data: { total_count: Number(jobsOf) === CANCELLED_ID ? jobsCount : 1 }, error: null })
   const wf = path.match(/actions\/workflows\/([^/?]+)/)?.[1] as string
+  if (path.includes('created=')) {
+    if (laterError) return Promise.resolve({ data: null, error: laterError })
+    return Promise.resolve({
+      data: {
+        workflow_runs: [{
+          id: 88, html_url: `https://gh/${wf}/88`, event: 'workflow_run', status: 'completed', conclusion: 'success',
+          created_at: '2026-11-19T10:13:20Z', display_title: 'other', actor: { login: 'pmcp' }
+        }]
+      },
+      error: null
+    })
+  }
   if (fail[wf]) return Promise.resolve({ data: null, error: fail[wf] })
+  if (wf === cancelWf && path.includes('/runs')) {
+    return Promise.resolve({
+      data: {
+        workflow_runs: [{
+          id: CANCELLED_ID, html_url: `https://gh/${wf}/77`, event: 'workflow_dispatch', status: 'completed', conclusion: 'cancelled',
+          created_at: '2026-11-19T10:13:00Z', display_title: `name of ${wf}`, actor: { login: 'nuxt-harness[bot]' }
+        }]
+      },
+      error: null
+    })
+  }
   if (!path.includes('/runs')) return Promise.resolve({ data: { name: `name of ${wf}` }, error: null })
   if (wf === 'e2e.yml') return Promise.resolve({ data: { workflow_runs: [] }, error: null }) // never run by the clock yet
   const created = wf === 'automerge-epic-subpr.yml' ? '2026-11-19T10:13:00Z' : '2026-11-19T10:22:00Z'
@@ -47,6 +78,9 @@ beforeEach(() => {
   vi.setSystemTime(new Date(NOW))
   fail = {}
   paths = []
+  cancelWf = null
+  jobsCount = 0
+  laterError = null
   kv = createStorage({ driver: memory() })
 })
 
@@ -92,6 +126,47 @@ describe('GET /api/status/clock', () => {
     const res = await (await handler())({})
     expect(res.data.slice(0, 13).every((r: any) => r.state === 'unknown' && r.error === 'the status token needs Actions: read')).toBe(true)
     expect(res.error).toBe('the status token needs Actions: read')
+  })
+})
+
+describe('GET /api/status/clock — a cancelled clock run replaced by a newer run (#4269)', () => {
+  const AM = 'automerge-epic-subpr.yml'
+  const jobsReads = () => paths.filter(p => p.includes('/jobs'))
+  const createdReads = () => paths.filter(p => p.includes('created='))
+
+  // covers: T6
+  it('7. never started a job + a later success → that row ok, one /jobs read and one created= read, for it only', async () => {
+    cancelWf = AM
+    const res = await (await handler())({})
+    const row = res.data.find((r: any) => r.workflow === AM)
+    expect(row.state).toBe('ok')
+    expect(row.lastRun.id).toBe(88)
+    expect(jobsReads()).toEqual([`/repos/FriendlyInternet/nuxt-crouton/actions/runs/${CANCELLED_ID}/jobs?per_page=1`])
+    expect(createdReads()).toEqual([
+      `/repos/FriendlyInternet/nuxt-crouton/actions/workflows/${AM}/runs?per_page=20&created=2026-11-19T10:13:00Z..2026-11-19T10:33:00.000Z`
+    ])
+    expect(res.error).toBeNull()
+  })
+
+  // covers: T6
+  it('8. never started a job, the created= read errors → that row failed, no tab-wide error', async () => {
+    cancelWf = AM
+    laterError = 'GitHub 500 Internal Server Error'
+    const res = await (await handler())({})
+    const row = res.data.find((r: any) => r.workflow === AM)
+    expect(row.state).toBe('failed')
+    expect(row.lastRun.id).toBe(CANCELLED_ID)
+    expect(res.error).toBeNull()
+  })
+
+  // covers: T6
+  it('9. it started a job (total_count 1) → that row failed, no created= read', async () => {
+    cancelWf = AM
+    jobsCount = 1
+    const res = await (await handler())({})
+    expect(res.data.find((r: any) => r.workflow === AM).state).toBe('failed')
+    expect(jobsReads()).toHaveLength(1)
+    expect(createdReads()).toHaveLength(0)
   })
 })
 

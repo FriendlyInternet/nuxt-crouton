@@ -11,7 +11,9 @@ Cards are filled by `runCardsSync` (`server/utils/cards-sync-run.ts`), run by `P
 inbox page on load) and by the clock at :00 and :30 UTC (`server/utils/cards-sync-clock.ts`; owner =
 `NUXT_STATUS_OWNER_EMAIL`, team `test1`; both share the 60 s throttle key `cards-sync:last:<team>`): it reads GitHub live,
 upserts one card per waiting ask under the owner's team, never changes a card answered from the inbox, and leaves an
-item's cards untouched when its GitHub read fails. Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
+item's cards untouched when its GitHub read fails. A failed card save never stops the others or answers 500: the sync
+answers 200 with `error` (how many saves failed and the first message), and the inbox shows it as "Refreshed with
+problems". Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
 logic — keep in step).
 A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
 closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
@@ -62,7 +64,9 @@ the owner's `GITHUB_TOKEN` (not the App token), before and independent of the di
 input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
 The **Clock** tab (`components/dashboard/ClockTab.vue`, fed by `GET /api/status/clock`) shows each job's last due slot,
 whether a clock run (workflow_dispatch by `nuxt-harness[bot]`, titled the workflow's name) started within 20 min of it
-and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A 403 on the runs list means the
+and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A clock run cancelled before it
+started a job counts as ran when a run of the same workflow (any actor or event) created within 20 min after it
+succeeded; its link then opens that run. A 403 on the runs list means the
 status token needs Actions: read (every row shows `unknown`). A 14th row, `inbox stuck check`, is built from that KV
 record (`cardsSyncStatus` in `clock-status-core.ts`): ok < 40 min, failed when `ok` is false, missed when older, grey
 `before-clock` with no record before `CARDS_SYNC_SINCE` or on a Worker without the clock; its read errors are row text,
