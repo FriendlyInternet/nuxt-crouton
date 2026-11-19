@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, needsSignedOut, splitBySession, signInModalLanding } from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
@@ -550,4 +550,29 @@ test('landingRejection: named/guessed pages must stay put, the start page may re
   assert.equal(landingRejection(start, 'https://h/crate/test1'), null)
   const [guessed] = resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: ['apps/velo/app/pages/admin/[team]/media.vue'] }).surfaces
   assert.equal(landingRejection(guessed, 'https://h/admin/test1/media/'), null)
+})
+
+test('needsSignedOut: sign-in pages only (#4235, cases 1-5)', () => {
+  assert.equal(needsSignedOut('/auth/login'), true)
+  assert.equal(needsSignedOut('/auth/consent'), true)
+  assert.equal(needsSignedOut('/admin/test1/team'), false)
+  assert.equal(needsSignedOut('/'), false)
+  assert.equal(needsSignedOut('/auth-ish/x'), false)
+})
+
+test('splitBySession: /auth pages go signed out, the rest signed in (#4235, case 6)', () => {
+  const { signedIn, signedOut } = splitBySession([{ path: '/auth/login' }, { path: '/admin/test1/team' }])
+  assert.deepEqual(signedOut, [{ path: '/auth/login' }])
+  assert.deepEqual(signedIn, [{ path: '/admin/test1/team' }])
+})
+
+test('landingRejection still rejects a signed-out /auth/login that lands on / (#4235, case 7)', () => {
+  assert.equal(landingRejection({ path: '/auth/login', checkLanding: true }, 'https://h/'), 'landed on / instead of /auth/login')
+})
+
+test('signInModalLanding: only a sign-in form in a dialog on / counts (#4235)', () => {
+  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/', true), true)
+  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/', false), false)
+  assert.equal(signInModalLanding({ path: '/admin/test1/team' }, 'https://h/', true), false)
+  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/admin/test1/sales/events', true), false)
 })
