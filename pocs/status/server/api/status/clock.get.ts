@@ -1,7 +1,11 @@
 // GET /api/status/clock — each clock job: last due slot, whether the clock ran it then, next due (owner-only, #4216).
 // One workflow's failed read makes that row `unknown` with the reason; it never fails the whole tab.
+// A 14th row, the inbox stuck check (#4234), comes from the clock sync's KV record, not from GitHub;
+// its read errors are that row's text and never the tab-wide error.
 import { CLOCK_JOBS } from '../../utils/clock-jobs'
-import { jobStatus, readError, unknownStatus, type GhRun, type JobStatus } from '../../utils/clock-status-core'
+import { CARDS_SYNC_KEY } from '../../utils/clock-tick'
+import type { CardsSyncRecord } from '../../utils/cards-sync-clock'
+import { cardsSyncStatus, jobStatus, readError, unknownStatus, type GhRun, type JobStatus } from '../../utils/clock-status-core'
 
 const REPO = 'FriendlyInternet/nuxt-crouton'
 
@@ -20,5 +24,14 @@ export default defineEventHandler(async (event) => {
   }))
   // Surface a read error once at the top too (e.g. every row 403s on a token without Actions: read).
   const firstError = rows.find(r => r.error)?.error ?? null
+
+  let record: CardsSyncRecord | null = null
+  try {
+    record = (await useStorage('kv').getItem<CardsSyncRecord>(CARDS_SYNC_KEY)) ?? null
+  } catch {
+    record = null // an unreadable record reads as no record
+  }
+  const env = (event?.context as { cloudflare?: { env?: Record<string, unknown> } } | undefined)?.cloudflare?.env
+  rows.push(cardsSyncStatus(record, now, env?.CLOCK_ENABLED === '1'))
   return { data: rows, error: firstError }
 })
