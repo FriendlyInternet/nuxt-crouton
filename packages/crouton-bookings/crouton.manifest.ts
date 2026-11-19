@@ -8,7 +8,7 @@ import emailLogSchema from './schemas/email-log.json'
 export default defineCroutonManifest({
   id: 'crouton-bookings',
   name: 'Booking System',
-  description: 'Slot-based and inventory booking with optional email notifications. Perfect for courts, rooms, appointments, equipment rentals, and more.',
+  description: 'Bookings for locations with or without time slots, each offering team products with a stock, with optional email notifications. Perfect for courts, rooms, appointments, equipment rentals, and more.',
   icon: 'i-lucide-calendar',
   version: '1.0.0',
   category: 'miniapp',
@@ -22,7 +22,8 @@ export default defineCroutonManifest({
 
   dependencies: [
     '@fyit/crouton-core',
-    '@fyit/crouton-auth'
+    '@fyit/crouton-auth',
+    '@fyit/crouton-catalog'
   ],
 
   // The collections below ship from this package (collections/*), end to end (#2278).
@@ -41,7 +42,7 @@ export default defineCroutonManifest({
     {
       name: 'location',
       tableName: 'bookingsLocations',
-      description: 'Bookable venues, resources, or items. Supports time slots or inventory-based booking.',
+      description: 'Bookable locations, with or without time slots, each listing team products with a stock.',
       schema: locationSchema,
       schemaPath: './schemas/location.json'
     },
@@ -87,8 +88,7 @@ export default defineCroutonManifest({
       description: 'How resources can be booked.',
       default: ['slots'],
       options: [
-        { value: 'slots', label: 'Time Slots (courts, rooms, appointments)' },
-        { value: 'inventory', label: 'Inventory (equipment, tickets, rentals)' }
+        { value: 'slots', label: 'Time Slots (courts, rooms, appointments)' }
       ]
     }
   },
