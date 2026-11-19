@@ -53,6 +53,14 @@ export function verifySignature(rawBody: string, header: string | undefined, sec
   return timingSafeEqual(given, want)
 }
 
+/** The few fields of a GitHub webhook body we read; every one may be absent. */
+interface GithubPayload {
+  action?: unknown
+  issue?: { number?: number, pull_request?: unknown }
+  pull_request?: { number?: number }
+  repository?: { full_name?: unknown }
+}
+
 export type ParsedWebhook =
   | { ok: false, status: 400 | 401 }
   | { ok: true, event: string, action: string | null, number: number | null, isPr: boolean, repo: string | null }
@@ -60,10 +68,9 @@ export type ParsedWebhook =
 /** Check the signature, then read the event. Header names are read lower-case. */
 export function parseWebhook(headers: Record<string, string | undefined>, rawBody: string, secret: string): ParsedWebhook {
   if (!verifySignature(rawBody, headers['x-hub-signature-256'], secret)) return { ok: false, status: 401 }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a GitHub payload
-  let body: any
+  let body: GithubPayload | null
   try {
-    body = JSON.parse(rawBody)
+    body = JSON.parse(rawBody) as GithubPayload | null
   } catch {
     return { ok: false, status: 400 }
   }
