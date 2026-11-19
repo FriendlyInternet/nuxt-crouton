@@ -121,12 +121,32 @@ function pathOf(url) {
 }
 
 /**
+ * True when a `/api/auth/get-session` answer shows a signed-in user (#4265): a 2xx status and
+ * a body whose `user` is a non-null object. `body` is `undefined` when the answer is not JSON.
+ */
+export function sessionFromResponse(status, body) {
+  return status >= 200 && status < 300 && body?.user != null && typeof body.user === 'object'
+}
+
+/** Ask the app whether this browser context has a session (its own cookies). Never throws (#4265). */
+async function hasSession(context, origin) {
+  try {
+    const res = await context.request.get(`${origin}/api/auth/get-session`)
+    return sessionFromResponse(res.status(), await res.json().catch(() => undefined))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Decide what to do with a surface after its signed-in try, or after both tries (#4248).
- * `tries` is `[{ url, dialogForm }]` (signed in) or `[signedIn, signedOut]`; `dialogForm` says
- * whether a `[role="dialog"] form` was visible. Returns `{ keep: 'signed-in' }`,
+ * `tries` is `[{ url, session? }]` (signed in) or `[{ url, session? }, { url, dialogForm }]`;
+ * `session` says whether the signed-in browser had a session (#4265), `dialogForm` whether the
+ * signed-out try showed a `[role="dialog"] form`. Returns `{ keep: 'signed-in' }`,
  * `{ retry: 'signed-out' }`, `{ keep: 'signed-out', popup? }` or `{ reject: <reason> }`.
- * A sign-in pop-up on `/` counts only for a real sign-in page: one that, signed in, sent the
- * visitor outside `/auth/` and showed them no sign-in form.
+ * A sign-in pop-up on `/` counts only for a real sign-in page: one that, signed in with a
+ * session, sent the visitor outside `/auth/`. A sign-in form on the signed-in try proves
+ * nothing — a slow session check shows it to signed-in visitors too (#4265).
  */
 export function authTryDecision(surface, tries) {
   const [first, second] = tries || []
@@ -138,9 +158,10 @@ export function authTryDecision(surface, tries) {
   if (!off2) return { keep: 'signed-out' }
   const path1 = pathOf(first.url)
   const popupShape = pathOf(second.url) === '/' && second.dialogForm === true
-  if (popupShape && !isAuthPath(path1) && first.dialogForm !== true) return { keep: 'signed-out', popup: true }
-  if (popupShape) return { reject: `a sign-in pop-up on / is not ${surface.path} (signed in it landed on ${path1})` }
-  return { reject: off2 }
+  if (!popupShape) return { reject: off2 }
+  if (isAuthPath(path1)) return { reject: `a sign-in pop-up on / is not ${surface.path} (signed in it landed on ${path1})` }
+  if (first.session !== true) return { reject: `the review login did not work (no session on the signed-in try), so a sign-in pop-up on / cannot stand in for ${surface.path}` }
+  return { keep: 'signed-out', popup: true }
 }
 
 /**
@@ -480,7 +501,8 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
 
 /**
  * Open one surface in `context` and let it settle (navigate → loader wait → hydrate → idle).
- * Returns `{ page, status, url, dialogForm }`, or null (page closed) after reporting a page stuck
+ * Returns `{ page, status, url, dialogForm }` (`dialogForm` is read only on the signed-out try,
+ * #4265), or null (page closed) after reporting a page stuck
  * on Nuxt's loading screen. May throw; the caller closes `page` on success.
  */
 async function openSettled(context, origin, surface) {
@@ -523,6 +545,7 @@ async function captureWithTries(inContext, signedOut, origin, surface, file) {
     let decision = authTryDecision(surface, [t1])
     let kept = t1
     if (decision.retry) {
+      t1.session = await hasSession(inContext, origin)
       await t1.page.close().catch(() => {})
       const t2 = await openSettled(await signedOut(), origin, surface)
       if (!t2) return null

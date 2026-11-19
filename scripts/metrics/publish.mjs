@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // publish.mjs — commit `metrics/` in a pipeline-data checkout and push it (#3679).
-// Rebases and retries on a non-fast-forward: record-run only writes records/ and plan-ledger/,
-// so the rebase cannot conflict. Prints `pushed <sha>` or `no change`.
+// Rebases and retries on a non-fast-forward, up to 6 times, no waiting; a failing rebase stops at once
+// (#4268). record-run only writes records/ and plan-ledger/, so the rebase cannot conflict.
+// Prints `pushed <sha>` or `no change`.
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,9 +11,12 @@ import { pathToFileURL } from 'node:url'
 export const README_LINE = 'metrics/: hourly run/job history + latest.json (#3679, scripts/metrics/README.md).'
 const BOT = ['-c', 'user.name=nuxt-harness[bot]', '-c', 'user.email=nuxt-harness[bot]@users.noreply.github.com']
 
+// Last non-empty line of git's output: execFileSync puts it on e.stderr, a plain Error only has .message.
+const lastLine = (e) => String(e?.stderr || e?.message || '').split('\n').map(l => l.trim()).filter(Boolean).pop() || ''
+
 const defaultRun = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8' })
 
-export function publish({ dir, message, run = defaultRun, tries = 3 }) {
+export function publish({ dir, message, run = defaultRun, tries = 6 }) {
   const readme = join(dir, 'README.md')
   if (existsSync(readme) && !readFileSync(readme, 'utf8').includes('metrics/')) appendFileSync(readme, `\n${README_LINE}\n`)
   run(['add', 'metrics', ...(existsSync(readme) ? ['README.md'] : [])], dir)
@@ -23,7 +27,11 @@ export function publish({ dir, message, run = defaultRun, tries = 3 }) {
       run(['push', 'origin', 'HEAD:pipeline-data'], dir)
       return { pushed: true, sha: run(['rev-parse', 'HEAD'], dir).trim() }
     } catch (e) {
-      if (n >= tries) throw e
+      if (n >= tries) {
+        throw new Error(`push to pipeline-data refused ${n} times — other runs kept writing to pipeline-data; git said: ${lastLine(e)}`, { cause: e })
+      }
+      // Outside the try on purpose: a failing rebase throws its own error at once and never counts
+      // as a try — more tries would hide it (#4268).
       run([...BOT, 'pull', '--rebase', 'origin', 'pipeline-data'], dir)
     }
   }
