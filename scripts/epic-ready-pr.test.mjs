@@ -8,14 +8,14 @@ const BLOCK = (epic, branch) => `<!-- pipeline: epic=${epic} epic_branch=${branc
 function world(o = {}) {
   const calls = { create: [], review: [] }
   const log = [], warns = [], failed = []
-  const o2 = { subIssues: [{ number: 1, state: 'closed', title: 'a' }, { number: 2, state: 'closed', title: 'b' }], merged: [], files: {}, comments: {}, existing: [], ahead: 3, refs: [], ...o }
+  const o2 = { subIssues: [{ number: 1, state: 'closed', title: 'a' }, { number: 2, state: 'closed', title: 'b' }], merged: [], files: {}, comments: {}, existing: [], changed: 3, refs: [], ...o }
   const fn = name => { const f = () => {}; f.n = name; return f }
   const rest = {
     pulls: { list: fn('list'), listFiles: fn('listFiles'), listReviews: fn('listReviews'),
       create: async a => { if (o2.createThrows) throw new Error('boom'); calls.create.push(a); return { data: { number: 99 } } },
       requestReviewers: async a => { if (o2.reviewThrows) throw new Error('nope'); calls.review.push(a) } },
     issues: { listComments: fn('listComments'), get: async () => ({ data: { title: 'Epic: T', body: '' } }) },
-    repos: { compareCommitsWithBasehead: async () => { if (o2.compareThrows) throw new Error('cmp'); return { data: { ahead_by: o2.ahead } } } },
+    repos: { compareCommitsWithBasehead: async () => { if (o2.compareThrows) throw new Error('cmp'); return { data: { ahead_by: 3, files: Array.from({ length: o2.changed }, (_, i) => ({ filename: `f${i}` })) } } } },
   }
   const github = {
     rest,
@@ -146,4 +146,18 @@ test('full gather with all packages PRs approved → declares', async () => {
   const body = w.calls.create[0].body
   assert.ok(body.includes('Packages-approved: owner approved #11, #12'))
   assert.ok(!body.includes('🔒'))
+})
+
+// Empty epic→main PRs #4063, #4034, #3628: the branch was ahead only by the bot's own
+// "merge main into epic" commits (the world's ahead_by is 3), with no file differing from main.
+test('a branch ahead in commits but with no changed file never opens the epic→main PR', async () => {
+  const w = world({ issue: child, changed: 0 })
+  await run(w)
+  assert.equal(w.calls.create.length, 0)
+  assert.ok(w.log.some(m => /no file differs from main/.test(m)), w.log.join('\n'))
+})
+test('the same epic with changed files opens it', async () => {
+  const w = world({ issue: child, changed: 2 })
+  await run(w)
+  assert.equal(w.calls.create.length, 1)
 })

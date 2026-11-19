@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { LocaleObject } from '@nuxtjs/i18n'
 import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
+import { appPageSegments } from './app-page-segments'
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url))
 
@@ -88,6 +89,15 @@ export default defineNuxtConfig({
     // In locale/custom mode, remove crouton-pages public page routes so the app
     // can provide its own routes without conflicts.
     function (_options, nuxt) {
+      // The app's own top-level addresses (#4175), read from the resolved page
+      // tree (every layer's pages + the app's, after pages:extend). The domain
+      // resolver leaves these untouched on a connected domain. Evaluated lazily
+      // when Nitro loads the module, after the pages are resolved (same two
+      // lines @nuxt/kit's addServerTemplate runs).
+      nuxt.options.nitro.virtual ||= {}
+      nuxt.options.nitro.virtual['#crouton-pages/app-segments'] = () =>
+        `export const appPageSegments = ${JSON.stringify(appPageSegments(nuxt.apps.default?.pages || []))}`
+
       nuxt.hook('pages:extend', (pages) => {
         const routingMode = (nuxt.options.runtimeConfig?.public as any)?.croutonPages?.routingMode || 'team'
         if (routingMode === 'locale' || routingMode === 'custom') {
