@@ -19,18 +19,21 @@ function routes(w, args, j) {
     [/rate_limit/, () => '5000'],
     [/issues\/(\d+)\/comments/, (m) => {
       if (!post) return j(w.comments[m[1]] || [])
-      ;(w.comments[m[1]] ||= []).push({ id: w.nextId++, body: body().slice(5) }); return ''
+      ;(w.comments[m[1]] ||= []).push({ id: w.nextId++, body: body().slice(5), updated_at: new Date(w.t).toISOString() }); return ''
     }],
-    [/issues\/comments\/(\d+)/, (m) => { for (const l of Object.values(w.comments)) for (const c of l) if (c.id == m[1]) c.body = body().slice(5); return '' }],
+    [/issues\/comments\/(\d+)/, (m) => {
+      for (const l of Object.values(w.comments)) for (const c of l) if (c.id == m[1]) { c.body = body().slice(5); c.updated_at = new Date(w.t).toISOString() }
+      return ''
+    }],
     [/issues\/(\d+)\/labels\/(.+)$/, (m) => { if (args.includes('DELETE')) w.labels.delete(`${m[1]}:${decodeURIComponent(m[2])}`); return '' }],
     [/issues\/(\d+)\/labels/, (m) => {
       const l = body().slice(9); w.labels.add(`${m[1]}:${l}`); w.adds = (w.adds || 0) + (l === 'handoff:pending' ? 0 : 1)
-      if (l !== 'handoff:pending') w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: l }, actor: { login: 'nuxt-harness[bot]' } })
+      w.events.push({ event: 'labeled', created_at: new Date(w.t).toISOString(), label: { name: l }, actor: { login: 'nuxt-harness[bot]' } })
       return ''
     }],
     [/issues\/\d+\/events/, () => j(w.events)],
     [/actions\/workflows/, () => j(w.runs)],
-    [/issues\?labels=/, () => Object.entries(w.comments).filter(([n]) => w.labels.has(`${n}:handoff:pending`)).map(([n]) => n).join('\n')],
+    [/issues\?labels=/, () => [...w.labels].filter((l) => l.endsWith(':handoff:pending')).map((l) => l.split(':')[0]).join('\n')],
     [/pipeline-plan/, () => '777'],
     [/no-go/, () => '888'],
   ]
@@ -220,6 +223,81 @@ test('10e: both tokens fail to write the retry -> still green, says so', async (
   const w = world({ failOn: (s) => (s.includes('/comments') ? LIMIT() : null) }); const warns = []
   const r = await deferMergeCheck(OCTO_LIMIT(), 7, w.deps, (m) => warns.push(m))
   assert.deepEqual(r, { recorded: false }); assert.ok(warns.some((m) => /retry not recorded/.test(m)))
+  // #4202: the label went on first, so the sweep sees the ticket and reports the missing step
+  assert.ok(warns.some((m) => /token 1 of 2/.test(m) && /token 2 of 2/.test(m)))
+  assert.ok(w.labels.has('7:handoff:pending'))
+  w.failOn = () => null; w.t += 11 * 60e3
+  const s = await sweep(w.deps)
+  assert.ok(s.failures.includes('#7 handoff:pending without a saved step'), JSON.stringify(s.failures))
+})
+
+// #4202 — label before note; one error naming every token; the sweep reports a label with no saved step.
+const S502G = () => ghErr('gh: Bad gateway (HTTP 502)')
+const FORBID = () => ghErr('gh: Resource not accessible by integration (HTTP 403)')
+const DROP = 'DELETE repos/o/r/issues/5/labels/handoff%3Apending'
+const pendingEvent = (ms) => ({ event: 'labeled', created_at: new Date(ms).toISOString(), label: { name: 'handoff:pending' }, actor: { login: 'nuxt-harness[bot]' } })
+
+// covers: T1
+test('H1: label POST fails for both tokens → no note, one error naming each token', async () => {
+  const w = world({ failOn: (s, t) => {
+    if (s.startsWith('workflow run')) return S502G()
+    if (/labels\[\]=handoff:pending/.test(s)) return t === 'app' ? S502G() : FORBID()
+    return null
+  } })
+  await assert.rejects(handoffExec(dispatchStep, w.deps), (e) => {
+    assert.match(e.message, /token 1 of 2: gh: Bad gateway \(HTTP 502\)/)
+    assert.match(e.message, /token 2 of 2: gh: Resource not accessible by integration \(HTTP 403\)/)
+    assert.ok(!/\bapp\b|\bfb\b/.test(e.message), 'never the token value')
+    return true
+  })
+  assert.equal(w.comments[5], undefined)
+  assert.ok(!w.calls.some((c) => /POST repos\/o\/r\/issues\/5\/comments/.test(c)))
+})
+
+// covers: T2
+test('H2: the pending label is posted before the note', async () => {
+  const w = world({ failOn: (s) => (s.startsWith('workflow run') ? S502G() : null) })
+  assert.equal((await handoffExec(dispatchStep, w.deps)).status, 'deferred')
+  const label = w.calls.findIndex((c) => /issues\/5\/labels .*labels\[\]=handoff:pending/.test(c))
+  const note = w.calls.findIndex((c) => /POST repos\/o\/r\/issues\/5\/comments/.test(c))
+  assert.ok(label >= 0 && note >= 0 && label < note, `label ${label} note ${note}`)
+})
+
+// covers: T3
+test('H3a/H3c: a 1 h-old label with no saved step is reported and kept; a newer done note drops it', async () => {
+  const w = world({ events: [pendingEvent(T0 - 3600e3)] })
+  w.comments[5] = []; w.labels.add('5:handoff:pending')
+  const r = await sweep(w.deps)
+  assert.deepEqual(r.failures, ['#5 handoff:pending without a saved step'])
+  assert.ok(!w.calls.some((c) => c.includes(DROP))); assert.ok(w.labels.has('5:handoff:pending'))
+  // H3c: only a done note, updated after the label went on → a leftover; drop it quietly
+  const w2 = world({ events: [pendingEvent(T0 - 3600e3)] })
+  w2.comments[5] = [{ id: 1, body: '<!-- handoff-done:v1 -->\n✅ replayed at 09:30 UTC', updated_at: new Date(T0 - 1800e3).toISOString() }]
+  w2.labels.add('5:handoff:pending')
+  const r2 = await sweep(w2.deps)
+  assert.deepEqual(r2.failures, []); assert.ok(w2.calls.some((c) => c.includes(DROP))); assert.ok(!w2.labels.has('5:handoff:pending'))
+})
+
+// covers: T4
+test('H3b: a 2 min-old label with no saved step is left alone (grace period)', async () => {
+  const w = world({ events: [pendingEvent(T0 - 2 * 60e3)] })
+  w.comments[5] = []; w.labels.add('5:handoff:pending')
+  const r = await sweep(w.deps)
+  assert.deepEqual(r.failures, []); assert.ok(!w.calls.some((c) => c.includes(DROP))); assert.ok(w.labels.has('5:handoff:pending'))
+})
+
+// covers: T5
+test('H5: whichever save call fails for both tokens, never a note without the label', async () => {
+  const steps = [/labels\[\]=handoff:pending/, /GET|--paginate repos\/o\/r\/issues\/5\/comments/, /POST repos\/o\/r\/issues\/5\/comments/]
+  for (const re of steps) {
+    const w = world({ failOn: (s) => (s.startsWith('workflow run') ? S502G() : re.test(s) && s.includes('issues/5/') ? S502G() : null) })
+    let err = null
+    try { await handoffExec(dispatchStep, w.deps) } catch (e) { err = e }
+    const label = w.labels.has('5:handoff:pending'); const note = pendingMarkers(w, 5).length > 0
+    if (err) { assert.match(err.message, /token 1 of 2/, String(re)); assert.match(err.message, /token 2 of 2/, String(re)) }
+    else assert.ok(label && note, String(re))
+    assert.ok(!(note && !label), `note without label for ${re}`)
+  }
 })
 
 const S502 = () => Object.assign(new Error('bad gateway'), { status: 502 })
