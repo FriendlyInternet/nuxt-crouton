@@ -98,6 +98,25 @@ export function isUserTable(name) {
 /** Lists a D1 database's tables (filter the result with isUserTable). Shared by db-clone + pr-preview-migrate. */
 export const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
 
+/** Every foreign-key edge as `{ child, parent }` rows. */
+export const LIST_FKS_SQL = "SELECT m.name AS child, f.\"table\" AS parent FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type='table'"
+
+/**
+ * Order tables so a child comes before the parent it references. Dropping a parent first makes the
+ * child's later implicit DELETE fail with "no such table: main.<parent>" (defer_foreign_keys does
+ * not cover that). A cycle falls through in the original order.
+ */
+export function orderForDrop(tables, edges) {
+  const left = new Set(tables)
+  const ordered = []
+  while (left.size) {
+    const leaves = [...left].filter(t => !edges.some(e => e.parent === t && e.child !== t && left.has(e.child)))
+    const batch = leaves.length ? leaves : [...left]
+    for (const t of batch) { ordered.push(t); left.delete(t) }
+  }
+  return ordered
+}
+
 /** SQL that drops every listed table in one batch; foreign keys are deferred so order does not matter. */
 export function dropTablesSql(tables) {
   return 'PRAGMA defer_foreign_keys = TRUE;\n'
