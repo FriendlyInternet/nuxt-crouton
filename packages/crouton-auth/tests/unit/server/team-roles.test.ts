@@ -153,7 +153,7 @@ describe('team roles (#4106)', () => {
     vi.unstubAllGlobals()
   })
 
-  // T1
+  // covers: T1
   it('a member with a team role "éditeur" (pages:edit) can pages:edit, not collections:manage, and reaches admin:access', async () => {
     expect(await can(orgX, editor.userId, 'pages:edit')).toBe(true)
     expect(await can(orgX, editor.userId, 'collections:manage')).toBe(false)
@@ -161,7 +161,7 @@ describe('team roles (#4106)', () => {
     expect(await can(orgX, editor.userId, 'team:manage')).toBe(false)
   })
 
-  // T2 (rule)
+  // covers: T2 (rule)
   it('base roles can\'t be created, edited or deleted', async () => {
     expect(await outcome(auth.api.createOrgRole({
       body: { role: 'admin', permission: { pages: ['edit'] }, organizationId: orgX }, headers: owner.headers
@@ -183,7 +183,7 @@ describe('team roles (#4106)', () => {
     }))).toBe('FORBIDDEN')
   })
 
-  // T3
+  // covers: T3
   it('deleting a role a member still has is refused; once nobody has it, delete works', async () => {
     await auth.api.createOrgRole({
       body: { role: 'temp', permission: actionsToRolePermission(['site:manage']), organizationId: orgX }, headers: owner.headers
@@ -199,7 +199,7 @@ describe('team roles (#4106)', () => {
     }))).toBe('ok')
   })
 
-  // T4 (rule)
+  // covers: T4 (rule)
   it('a role created in team X doesn\'t exist in team Y', async () => {
     const inY = await auth.api.listOrgRoles({ query: { organizationId: orgY }, headers: owner.headers })
     expect(inY).toEqual([])
@@ -209,7 +209,7 @@ describe('team roles (#4106)', () => {
     expect(await can(orgY, editor.userId, 'pages:edit')).toBe(false)
   })
 
-  // T5 (rule)
+  // covers: T5 (rule)
   it('a team role with team:manage can invite, change a role and create a role, and opens the Rôles tab', async () => {
     expect(await can(orgX, manager.userId, 'team:manage')).toBe(true)
     expect(await outcome(auth.api.createInvitation({
@@ -225,6 +225,10 @@ describe('team roles (#4106)', () => {
     expect(await outcome(auth.api.createOrgRole({
       body: { role: 'redacteur', permission: actionsToRolePermission(['pages:edit']), organizationId: orgX }, headers: manager.headers
     }))).toBe('YOU_ARE_NOT_ALLOWED_TO_CREATE_A_ROLE')
+    // …and can't edit a role that carries an action they don't hold (why the screen opens it read-only)
+    expect(await outcome(auth.api.updateOrgRole({
+      body: { roleName: 'éditeur', data: { permission: actionsToRolePermission(['pages:edit', 'team:manage']) }, organizationId: orgX }, headers: manager.headers
+    }))).toBe('YOU_ARE_NOT_ALLOWED_TO_UPDATE_A_ROLE')
   })
 
   it('without team:manage, none of that', async () => {
