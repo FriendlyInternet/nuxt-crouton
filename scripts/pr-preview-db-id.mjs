@@ -14,11 +14,11 @@ import { applyD1Ids } from './lib/pr-preview-db-id.mjs'
 
 const [file] = process.argv.slice(2)
 if (!file) {
-  console.error('usage: pr-preview-db-id.mjs <built-wrangler.json>')
+  console.error('::error::pr-preview-db-id: usage: pr-preview-db-id.mjs <built-wrangler.json>')
   process.exit(2)
 }
 if (!existsSync(file)) {
-  console.error(`pr-preview-db-id: ${file} not found — run the build + deploy first.`)
+  console.error(`::error::pr-preview-db-id: ${file} not found — run the build + deploy first.`)
   process.exit(1)
 }
 

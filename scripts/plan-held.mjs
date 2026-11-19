@@ -8,17 +8,17 @@
 // The build reads the reason back from that bot comment only: the same words from a person,
 // another bot, or from before the newest plan are ignored.
 //
-// CLI (the build step in work-issue-pidev.yml):
-//   node scripts/plan-held.mjs --approved-prompt --plan-id <id> --plan-file <path> --issue <n>
-//     → the whole approved-plan section of the build prompt on stdout, written once at the end.
-//       It reads the issue's comments itself; a failed or partial read means NO override and a
-//       ::warning:: on stderr (exit 0). An unreadable plan file exits 1 and writes nothing.
+// The build prompt's approved-plan section comes from approvedPromptSection(), which
+// scripts/pi-run.mjs calls directly (#3620).
+//
+// CLI:
 //   gh api --paginate .../comments --jq '.[] | @json' | node scripts/plan-held.mjs --decision
 //     → the override reason (or nothing); for tests and manual use.
 
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { isRejectedTwice } from './plan-hold.mjs'
+import { openRecord } from './lib/reply-record.mjs'
 import { parseOverride, decisionLine, appendDecision } from './lib/decision-line.mjs'
 import { handoffGuard as defaultHandoffGuard } from './handoff-exec.mjs'
 
@@ -84,14 +84,17 @@ export function approvedPromptSection({ planId, planText, issue, repo = process.
 const labelNames = (labels = []) => labels.map((l) => (typeof l === 'string' ? l : l?.name))
 
 /**
- * The route step's `planHeld` fact: is this issue held after two reviewer rejections?
+ * The route step's facts from one comments read (#4145): `planHeld` — held after two reviewer
+ * rejections? — and `record` — the open reply record (reply-record.mjs openRecord), or null.
  * No API call unless the issue is a plain issue carrying `status:blocked`.
+ * @returns {Promise<{planHeld: boolean, record: object|null}>}
  */
-export async function planHeldFor({ github, repo, issue }) {
+export async function holdFacts({ github, repo, issue }) {
   const labels = labelNames(issue?.labels)
-  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return false
-  const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
-  return isRejectedTwice({ comments: comments.map((c) => ({ body: c.body, userType: c.user && c.user.type })), labels })
+  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return { planHeld: false, record: null }
+  const raw = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
+  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type }))
+  return { planHeld: isRejectedTwice({ comments, labels }), record: openRecord({ comments, labels }) }
 }
 
 /** The parent epic of a ticket: `epic=N` in the hidden marker, else the GitHub sub-issue parent (0 = none). */
@@ -118,7 +121,7 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
   const c = context.payload.comment
   const issue = context.payload.issue
   const issue_number = issue.number
-  const reason = parseOverride({ body: c.body, authorAssociation: c.author_association, userType: c.user?.type })
+  const reason = parseOverride({ body: c.body, userLogin: c.user?.login, owner: process.env.OWNER_LOGIN, userType: c.user?.type })
   if (!reason) return core.setFailed('routed to approve-plan but no ok: <reason> found')
   await github.rest.issues.createComment({ ...context.repo, issue_number, body: overrideComment({ reason, date: c.created_at, url: c.html_url }) })
   const epic = await parentEpic({ github, context, core, issue })
@@ -136,24 +139,10 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
   core.info(`#${issue_number}: plan approved by owner override`)
 }
 
-function argValue(argv, name) {
-  const i = argv.indexOf(name)
-  return i >= 0 ? argv[i + 1] : undefined
-}
-
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const { readFileSync } = await import('node:fs')
   const argv = process.argv.slice(2)
-  if (argv.includes('--approved-prompt')) {
-    let planText
-    try {
-      planText = readFileSync(argValue(argv, '--plan-file'), 'utf8')
-    } catch (e) {
-      process.stderr.write(`plan-held: cannot read the plan file: ${e.message}\n`)
-      process.exit(1)
-    }
-    process.stdout.write(approvedPromptSection({ planId: argValue(argv, '--plan-id'), planText, issue: argValue(argv, '--issue') }))
-  } else if (argv.includes('--decision')) {
+  if (argv.includes('--decision')) {
     const out = currentOverrideDecision(parseCommentLines(readFileSync(0, 'utf8')))
     if (out) console.log(out)
   }

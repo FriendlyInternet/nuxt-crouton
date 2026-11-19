@@ -22,7 +22,8 @@
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--team <slug>] [--out screenshots/review-captures] [--desktop]
+//   --team: the review team the deploy seeded (preview-meta `team`, #4141); wins over the manifest's reviewTeam.
 //   PR_BODY (env, optional): the PR body, read for review-surface markers (#2433); unset or empty → read
 //   from the GitHub API by --pr (GH_TOKEN + REPO), and a failed read captures nothing (#3957).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
@@ -37,7 +38,8 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, LOADING_MARKERS } from './lib/capture-validate.mjs'
+import { resolveReviewTeam, DEFAULT_REVIEW_TEAM } from './review-team.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -63,8 +65,9 @@ const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
  * Surfaces a PR declares for one app (#2433), copied there from its issue:
  *   <!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->
  * The worker knows which screen it changed; the app's fixed landing page usually doesn't show it.
+ * Every `{team}` in the path becomes the app's review team (#4141).
  */
-export function parsePrSurfaces(prBody, app) {
+export function parsePrSurfaces(prBody, app, team = DEFAULT_REVIEW_TEAM) {
   const out = []
   for (const m of String(prBody || '').matchAll(/<!--\s*review-surface:\s*(.+?)\s*-->/g)) {
     const [forApp, path, ...rest] = m[1].split(/\s+/)
@@ -74,35 +77,35 @@ export function parsePrSurfaces(prBody, app) {
     const base = nameTok ? nameTok.slice(5) : (path.split('?')[0].split('/').filter(Boolean).pop() || 'surface')
     let name = slug(base)
     while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
-    out.push({ name, path: path.startsWith('/') ? path : `/${path}`, do: steps })
+    const filled = path.replaceAll('{team}', team)
+    out.push({ name, path: filled.startsWith('/') ? filled : `/${filled}`, do: steps })
   }
   return out
 }
 
-// The seeded review team every preview is signed into (#2698).
-const SEEDED_TEAM = 'test1'
-
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
  *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
- *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the seeded team (never `[slug]`, #3886);
+ *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the app's review team (`team`, default test1, #4141) (never `[slug]`, #3886);
  *    pages with any other dynamic segment are skipped (no data to open them with);
+ *    pages under `fixtures/` and `e2e/` are never shot (not deployed, #4084);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
 // The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
-function pageSurface(file, pagePath, app) {
+function pageSurface(file, pagePath, app, team) {
+  if (/^(?:fixtures|e2e)\//.test(file)) return null
   const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
   if (owner && owner[1] !== app) return null
   if (pagePath.startsWith('__review')) return null
   const segs = pagePath.split('/').filter(s => s !== 'index')
   const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
   if (dynamic.some(s => !/^\[(team|teamSlug|team-slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
-  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? team : s).join('/')
   return { route, label: segs.join('-') || 'index' }
 }
 
-export function deriveSurfaces({ changedFiles, app }) {
+export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM }) {
   const out = []
   const add = (path, label) => {
     if (out.some(s => s.path === path)) return
@@ -115,7 +118,7 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      const surface = pageSurface(file, page[1], app)
+      const surface = pageSurface(file, page[1], app, team)
       if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
@@ -131,10 +134,14 @@ export function deriveSurfaces({ changedFiles, app }) {
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
  *  - any other PR keeps the manifest's surfaces / landing, as before.
  */
-export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
-  const declared = parsePrSurfaces(prBody, app)
+export function resolveSurfaces({ manifest, prBody, app, changedFiles, team: deployedTeam }) {
+  // The team the DEPLOY seeded wins (preview-meta `team`, passed as --team, #4141): the screenshot
+  // job checks out main, so its manifest misses a `reviewTeam` the PR adds or changes. The manifest
+  // key (no nuxt.config text) is only the fallback for a record written before that field existed.
+  const team = (typeof deployedTeam === 'string' && deployedTeam.trim()) || resolveReviewTeam({ manifest }).team
+  const declared = parsePrSurfaces(prBody, app, team)
   if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
-  const derived = deriveSurfaces({ changedFiles, app })
+  const derived = deriveSurfaces({ changedFiles, app, team })
   if (derived.length) return { surfaces: derived, reason: 'derived from the changed files (#2698)' }
   if (String(prBody || '').includes(HOLD_MARKER)) {
     return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
@@ -168,7 +175,7 @@ export async function readPrBody({ env, pr, fetchFn = fetch }) {
 /** Read the PR body, then resolve what to capture for this app (#3957). */
 export async function pickSurfaces({ env, args, manifest, fetchFn = fetch }) {
   const prBody = await readPrBody({ env, pr: args.pr, fetchFn })
-  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n') })
+  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n'), team: args.team })
 }
 
 /**
@@ -365,15 +372,11 @@ async function captureSurface(context, origin, surface, file) {
     page = await context.newPage()
     const url = origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`)
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
-    let status = resp ? resp.status() : 0
     // The dev server serves Nuxt's loading template until its first build finishes (#2526):
-    // reload until real app content renders. The budget is per run (warmedUp), not per width.
-    while (await isLoading(page) && Date.now() < warmDeadline) {
-      await page.waitForTimeout(3000)
-      const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
-      if (again) status = again.status()
-    }
-    if (await isLoading(page)) {
+    // wait for the draw, then reload only while still loading (#4134). The budget is per run.
+    const settled = await settlePage(page, { deadline: warmDeadline, status: resp ? resp.status() : 0 })
+    const status = settled.status
+    if (settled.loading) {
       log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
       report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
       return null
@@ -427,14 +430,38 @@ async function isLoading(page) {
   return looksLikeLoadingScreen({ html }) || textLen <= 50
 }
 
-/** Wait (≤15s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699). Best-effort: a miss falls through to the rejection checks. */
-async function waitForHydration(page) {
-  await page.waitForFunction(() => {
+/** Wait (≤30s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699, #4134). Returns early on Nuxt's loader. Best-effort: a miss falls through to the rejection checks. */
+export async function waitForHydration(page, { timeout = 30000 } = {}) {
+  // Gives up early on Nuxt's loader markers (the same list looksLikeLoadingScreen uses) so a
+  // real loader is reloaded after ~3s as before (#2526), not after the 30s bound (#4134).
+  // An imported binding is initialised before main() runs, so there is no TDZ issue.
+  await page.waitForFunction((markers) => {
+    const html = (document.documentElement?.outerHTML || '').toLowerCase()
+    if (markers.some(m => html.includes(m))) return true
     const root = document.querySelector('#__nuxt')
     if (!root || (root.innerText || '').trim().length <= 50) return false
     const nuxt = window.useNuxtApp?.()
     return nuxt ? !nuxt.isHydrating : true
-  }, null, { timeout: 15000 }).catch(() => {})
+  }, LOADING_MARKERS, { timeout }).catch(() => {})
+}
+
+/**
+ * Navigate result → settled page. Waits for the draw FIRST, then reloads only a page still
+ * loading after that wait (#4134 — a short SSR shell drawn client-side was reloaded forever;
+ * keeps the #2526 cold-start reload). Injectable so it is testable without a browser.
+ */
+export async function settlePage(page, { deadline, now = Date.now, sleep = ms => page.waitForTimeout(ms),
+  waitDrawn = waitForHydration, loading = isLoading, status = 0 } = {}) {
+  let reloads = 0
+  await waitDrawn(page)
+  while (await loading(page) && now() < deadline) {
+    await sleep(3000)
+    const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
+    reloads++
+    if (again) status = again.status()
+    await waitDrawn(page)
+  }
+  return { loading: await loading(page), status, reloads }
 }
 
 /** Request the first surface until the server answers with the app, not the loader. */
@@ -443,10 +470,7 @@ async function warmUp(context, origin, surface) {
   const page = await context.newPage()
   try {
     await page.goto(origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`), { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
-    while (await isLoading(page) && Date.now() < warmDeadline) {
-      await page.waitForTimeout(3000)
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
-    }
+    await settlePage(page, { deadline: warmDeadline })
   } finally {
     await page.close().catch(() => {})
   }

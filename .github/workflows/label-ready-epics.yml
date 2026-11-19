@@ -11,10 +11,14 @@ name: label-ready-epics
 # to actually write labels; until then it logs what it WOULD do and changes nothing.
 
 on:
-  schedule:
-    - cron: '0 5 * * *'   # daily, an hour before the digests so labels are fresh when they render
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — daily 05:00 UTC, an
+  # hour before the digests so labels are fresh when they render
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       apply:
         description: 'Write labels (true) or dry-run (false)'
         type: boolean

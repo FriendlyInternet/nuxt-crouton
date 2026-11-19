@@ -1,0 +1,163 @@
+name: Pipeline review (every 10 closed epics)
+
+# (#3254) Every 10 completed epics, open one `pipeline-review` issue and post a read-only review of them
+# (top causes, a cause table, code quality of the merged PRs, proposals). Report only: proposals become
+# tickets only after the owner's `ok`. Decisions live in scripts/pipeline-review.mjs (pure, tested) +
+# scripts/pipeline-review-run.mjs (I/O).
+#
+# WHEN: a daily wake-up; the `count` job (code, not a model) decides. It counts epics closed as completed
+# since the newest `pipeline-review` issue — REST list API, not search, so a just-opened review is seen —
+# and opens one only at ≥ threshold. With no earlier review it takes the newest 10 (no backfill).
+#
+# WHY A NEW WORKFLOW (not a job in housekeeping.yml / weekly.yml): an issue opened with GITHUB_TOKEN starts
+# no other workflow, so the review jobs must sit in the counter's run; housekeeping's single job holds
+# `issues: write`, which the model job must not share; weekly.yml runs on Mondays only.
+#
+# SPLIT BY TRUST (same as postmortem.yml): `gather-and-write` holds read-only scopes; its Gather step reads
+# GitHub + pipeline-data into a bundle, and the model step runs with NO GitHub token in env and no git
+# credentials. `post` runs no model, always runs, and posts the review or a skipped note with the run link.
+#
+# Workflow-change: new pipeline-review.yml (counter + read-only Opus review + separate post), #3254
+
+on:
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — daily 06:45 UTC
+  # wake-up; the count decides
+  workflow_dispatch:
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
+      threshold:
+        description: Completed epics needed to open a review
+        default: '10'
+      dry_run:
+        description: Only print the issue the count would open - create nothing
+        type: boolean
+        default: false
+
+# A dispatch overlapping the daily run waits for it instead of counting at the same moment.
+concurrency:
+  group: pipeline-review
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      go: ${{ steps.c.outputs.go }}
+      issue: ${{ steps.c.outputs.issue }}
+      since: ${{ steps.c.outputs.since }}
+      until: ${{ steps.c.outputs.until }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: c
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          THRESHOLD: ${{ inputs.threshold || '10' }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        with:
+          script: |
+            const { count } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-review-run.mjs`)
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await count({ github, context, core }, { threshold: Number(process.env.THRESHOLD), dryRun: process.env.DRY_RUN === 'true', runUrl })
+
+  gather-and-write:
+    needs: count
+    if: needs.count.outputs.go == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      ISSUE: ${{ needs.count.outputs.issue }}
+      SINCE: ${{ needs.count.outputs.since }}
+      UNTIL: ${{ needs.count.outputs.until }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # gather.mjs counts main commits; a shallow clone silently reads 0
+          persist-credentials: false # no token in .git/config
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Every GitHub read happens here, before the model. The repo is public, so the anonymous fetch of
+      # pipeline-data works without git credentials (same as postmortem.yml).
+      - name: Gather
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/review"; mkdir -p "$D/data" "$D/bundle"
+          git fetch --depth=1 origin pipeline-data && git archive FETCH_HEAD records metrics epics | tar -x -C "$D/data"
+          node scripts/pipeline-review-run.mjs gather "$ISSUE" "$SINCE" "$UNTIL" "$D/bundle" --data-dir "$D/data"
+          node scripts/pipeline-review-run.mjs prompt "$D/bundle" "$D/review.md" > "$D/prompt.txt"
+          cp "$D/bundle/gaps.json" "$D/gaps.json"
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      # No GitHub token in this step: the model reads only the bundle. Tier from
+      # .claude/pipeline-models.json (#2161); prompt on stdin (#3331). Step timeout < job timeout.
+      - name: Write the review (review model)
+        timeout-minutes: 25
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/review"
+          pi --print --approve --provider claude-bridge --model "$(node scripts/resolve-pipeline-model.mjs review)" \
+            --skill .claude/skills < "$D/prompt.txt" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: pipeline-review-body
+          path: |
+            ${{ runner.temp }}/review/review.md
+            ${{ runner.temp }}/review/gaps.json
+          if-no-files-found: ignore
+
+  post:
+    needs: [count, gather-and-write]
+    if: always() && needs.count.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # no artifact = the model wrote nothing; post records it as skipped
+        with:
+          name: pipeline-review-body
+          path: ${{ runner.temp }}/review
+      - name: Post the review (or the skipped note)
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ISSUE: ${{ needs.count.outputs.issue }}
+          WRITE_RESULT: ${{ needs.gather-and-write.result }}
+        with:
+          script: |
+            const { post } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/pipeline-review-run.mjs`)
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const d = `${process.env.RUNNER_TEMP}/review`
+            await post({ github, context, core }, { issue: process.env.ISSUE, modelFile: `${d}/review.md`, gapsFile: `${d}/gaps.json`, runUrl, writeResult: process.env.WRITE_RESULT })

@@ -75,6 +75,23 @@ export function isApproval(body) {
   return APPROVAL_WORD.test(text)
 }
 
+/** Whole-reply forms for isBareApproval: only check marks, or only lgtm/approve/approved (trailing punctuation/emoji fine). */
+const CHECK_ONLY_REPLY = /^\s*(?:[✅✔☑]\u{FE0F}?\s*)+$/u
+const WORD_ONLY_REPLY = /^\s*(?:lgtm|approved?)[\p{P}\p{Extended_Pictographic}\u{FE0F}\u{200D}\s]*$/iu
+
+/**
+ * Is `body` NOTHING BUT an approval (#4082)? Stricter than isApproval: `✅` + `No, keep X` or
+ * `approved, but keep the column` is false — any other text makes it feedback, not a plain yes.
+ * @param {string} body Raw Markdown of the comment.
+ * @returns {boolean}
+ */
+export function isBareApproval(body) {
+  if (isAgentComment(body)) return false
+  if (ownerScreenEmoji(body)) return false
+  const text = stripNonCommandRegions(String(body || ''))
+  return OK_ONLY_REPLY.test(text) || CHECK_ONLY_REPLY.test(text) || WORD_ONLY_REPLY.test(text)
+}
+
 /** Which form was used — for the acknowledgement, so the reply mirrors the gesture. */
 export function approvalKind(body) {
   const text = stripNonCommandRegions(String(body || ''))

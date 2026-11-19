@@ -49,7 +49,9 @@
     "riso",
     "eink",
     "blueprint",
-    "lib"
+    "lib",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

@@ -7,14 +7,18 @@ export default {
   // collections: [
   //   { name: 'products', fieldsFile: './schemas/products.json' }
   // ],
-  collections: [],
+  collections: [
+    { name: 'cards', fieldsFile: './schemas/cards.json' }
+  ],
 
   // Target layers (add after creating collections)
   // Example:
   // targets: [
   //   { layer: 'shop', collections: ['products'] }
   // ],
-  targets: [],
+  targets: [
+    { layer: 'inbox', collections: ['cards'] }
+  ],
 
   dialect: 'sqlite'
 }

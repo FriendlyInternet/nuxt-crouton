@@ -235,7 +235,7 @@ crouton init <name> --poc --dry-run            # preview, writes nothing
 ```
 
 Flags: `--poc` (→ `pocs/<name>`) · `--out <dir>` · `--features a,b,c` · `--theme <t>` · `-d sqlite|pg`
-· `--no-cf` · `--domain <zone>` · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
+· `--cf`/`--no-cf` (default: on in the monorepo, off elsewhere) · `--domain <zone>` (with `--poc`: staging route `<name>.<zone>`; a POC preview uses `--poc --domain pmcp.dev`) · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
 init also generates its collections. **This is the command a POC-scaffold task runs — it is not
 undocumented; don't read `init-app.ts`/`scaffold-app.ts` to figure it out (that's the #1213/#1223
 30-min timeout).** Adding a collection to an *existing* app is the separate `crouton config` /

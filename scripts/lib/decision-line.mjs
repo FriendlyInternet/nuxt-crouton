@@ -1,14 +1,14 @@
 // decision-line.mjs — turn an owner's `Decision:` comment into a line of the ticket's
 // `## Decisions` section (#3054). Pure and Node-core-only; record-decision.yml does the edit.
 //
-// Recognised by FORMAT, no interpretation: a comment by the owner (OWNER/MEMBER/COLLABORATOR — the owner's own account) whose first
+// Recognised by FORMAT, no interpretation: a comment by the owner (the owner's own account, matched by login — scripts/lib/owner.mjs isOwner, #4168) whose first
 // non-quote line starts with `Decision:` — or `ok: <reason>` on a held plan. An agent comment
 // (🤖 header) counts only when its header says "owner decision". Append-only and idempotent:
 // a comment already linked in the section is never added twice.
 
 import { stripGeneratedTrailer } from '../comment-command.mjs'
+import { isOwner } from './owner.mjs'
 
-const OWNERS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 const DECISION = /^\s*decision:\s*/i
 const OK_REASON = /^\s*ok:\s*(?=\S)/i
 const NOT_OK = /^\s*not\s+ok:\s*(?=\S)/i
@@ -23,8 +23,8 @@ function matchPrefix(line, held) {
 }
 
 /** @returns {string|null} the decision text (single line, verbatim words), or null */
-export function parseDecision({ body, authorAssociation, userType, held = false } = {}) {
-  if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
+export function parseDecision({ body, userLogin, owner, userType, held = false } = {}) {
+  if (!isOwner({ userLogin, userType }, owner)) return null
   const lines = stripGeneratedTrailer(String(body || '')).split('\n')
   const header = lines.find(l => l.trim())
   const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')

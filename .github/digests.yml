@@ -5,9 +5,10 @@
 # front-end over this same file). To change WHEN a report runs or HOW it's delivered, edit
 # one line here — never the workflow plumbing.
 #
-# How it works (cadence-as-data): each report's workflow cron fires DAILY (a cheap wake-up);
+# How it works (cadence-as-data): each report's workflow is started DAILY by the status app's
+# clock (pocs/status/server/utils/clock-jobs.ts) — a cheap wake-up;
 # .claude/skills/housekeeping/schedule.mjs reads this file and exits early when today isn't a
-# send day. That sidesteps GitHub's static-cron limitation without ever editing `cron`.
+# send day. That sidesteps a static timer without ever editing the clock row.
 #
 # Fields per report:
 #   schedule: daily | weekly:<dow> | monthly:<dom>
@@ -46,7 +47,7 @@ skills-digest:
   # to: [you@example.com]   # the workflow reads the DIGEST_REPORT_EMAIL repo var; this is documentation
 
 # Weekly deterministic quality gather (#3063/#3065): what the pipeline merged, churn, reverts,
-# postmortems and the workflow security scans. Numbers only — the review half reads its JSON.
+# postmortems and the workflow security scans. Numbers only — pipeline-review.yml (#3254) reads it for the 10-epic review.
 quality-digest:
   schedule: weekly:mon
   deliver: []

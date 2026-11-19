@@ -22,6 +22,9 @@ export const SCRIPTS_TEST_CMD = 'node --test scripts/*.test.mjs scripts/lib/*.te
 /** A conflicted package's tests. `--if-present` must come BEFORE the script name — after it, pnpm passes it to the script (#3900). */
 export function packageTestCmd(p) { return `pnpm --filter "./packages/${p}" run --if-present test` }
 
+/** Package tests need the merged branch's workspace links, not main's (#4155); `--ignore-scripts` because they don't need the apps' `nuxt prepare`. */
+export const INSTALL_CMD = 'pnpm install --frozen-lockfile --prefer-offline --ignore-scripts'
+
 /** Files a generator produces are regenerated, never hand-merged. `inputs` + `outputs` are exact paths or prefixes. */
 export const GENERATORS = [
   {
@@ -72,7 +75,7 @@ export function resolutionPaths({ modified, conflicted }) {
   return [...new Set(keep)].sort()
 }
 
-const MARKER = /^(<<<<<<<|=======|>>>>>>>)(\s|$)/m
+export const MARKER = /^(<<<<<<<|=======|>>>>>>>)(\s|$)/m
 
 /** Files (path → text) that still carry a conflict marker. */
 export function withMarkers(contents) {
@@ -100,7 +103,7 @@ The merge is IN PROGRESS in the working tree (do not run git merge --abort, git 
 ${gens}
 3. If both sides change the SAME logic in incompatible ways (same lines, different intent), do NOT pick one. Write the choice to ${choiceFile} instead: name side A's intent and side B's intent in one line each, then your recommendation. Leave the files as they are. Making no file change and writing no choice is a FAILED run.
 4. When every conflict is resolved, no \`<<<<<<<\`, \`=======\` or \`>>>>>>>\` line may remain in any file.
-Run the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
+Once every conflict (including pnpm-lock.yaml) is resolved, run \`${INSTALL_CMD}\`, then the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
 }
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
@@ -134,6 +137,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
     if (!run(SCRIPTS_TEST_CMD)) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
     const pkgs = [...new Set(files.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
+    if (pkgs.length && !run(INSTALL_CMD)) { console.error('::error::install for the merged branch failed — package tests not run'); process.exit(1) }
     for (const p of pkgs) if (!run(packageTestCmd(p))) { console.error(`::error::${p} tests fail after resolution`); process.exit(1) }
     console.log(files.join('\n'))
   } else {

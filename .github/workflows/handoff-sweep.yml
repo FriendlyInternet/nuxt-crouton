@@ -1,17 +1,21 @@
 name: Hand-off sweep (replay saved pipeline hand-offs)
 
 # Pipeline hand-offs that hit the GitHub API limit or a server error are saved as a
-# `handoff-pending` comment + the `handoff:pending` label (#3306). This replays them hourly + after every CI run (#3361: GitHub skips many cron runs).
+# `handoff-pending` comment + the `handoff:pending` label (#3306). This replays them hourly + after every CI run (#3361: GitHub skips many cron runs). Hourly = the status app's clock (#4133).
 # Each replay checks its own proof first, so a hand-off that half-worked is finished, not redone.
 # Red if one is still pending 24 h after it was first tried.
 
 on:
-  schedule:
-    - cron: '41 * * * *'
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_run:
     workflows: ["CI"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
