@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection } from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
@@ -123,6 +123,24 @@ test('isFlatFrame: a single 1-px line is still blank (#3854)', () => {
 const HOLD = '<!-- deploy-preview: full-watch -->'
 const EDITOR = '<!-- review-surface: kassa /admin/test1/workspace?page=seed:page:test1:vlaamsekermis name:editor wait:2500 -->'
 
+// #4141 case 5 — `{team}` in a declared path, and a derived `[team]` route, become the app's
+// review team (deploy.config.json `reviewTeam`), default test1.
+test('#4141 parsePrSurfaces fills {team} with the review team, default test1', () => {
+  const body = '<!-- review-surface: kdm /admin/{team}/workspace -->'
+  assert.deepEqual(parsePrSurfaces(body, 'kdm', 'kdm'), [{ name: 'workspace', path: '/admin/kdm/workspace', do: [] }])
+  assert.deepEqual(parsePrSurfaces(body, 'kdm'), [{ name: 'workspace', path: '/admin/test1/workspace', do: [] }])
+})
+
+test('#4141 resolveSurfaces uses the manifest reviewTeam for declared and derived surfaces', () => {
+  const manifest = { reviewTeam: 'kdm' }
+  const declared = resolveSurfaces({ manifest, prBody: '<!-- review-surface: kdm /admin/{team}/workspace -->', app: 'kdm', changedFiles: [] })
+  assert.equal(declared.surfaces[0].path, '/admin/kdm/workspace')
+  const derived = resolveSurfaces({ manifest, prBody: '', app: 'kdm', changedFiles: ['pocs/kdm/app/pages/admin/[team]/workspace.vue'] })
+  assert.deepEqual(derived.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const plain = resolveSurfaces({ manifest: {}, prBody: '', app: 'kdm', changedFiles: ['pocs/kdm/app/pages/admin/[team]/workspace.vue'] })
+  assert.deepEqual(plain.surfaces.map(s => s.path), ['/admin/test1/workspace'])
+})
+
 test('outName: includes the app so two apps on one PR do not overwrite each other', () => {
   assert.equal(outName(2420, 'preview', 'kassa'), 'pr2420-kassa-preview.png')
   assert.equal(outName(2420, 'preview', 'velo'), 'pr2420-velo-preview.png')
@@ -231,6 +249,16 @@ test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
 })
 
+test('deriveSurfaces: a fixtures/ or e2e/ page gives no surface for any app (#4084)', () => {
+  const changedFiles = [
+    'fixtures/with-relations/app/pages/admin/[team]/relations-check.vue',
+    'e2e/x/app/pages/foo.vue'
+  ]
+  for (const app of ['pins', 'velo', 'gallery']) {
+    assert.deepEqual(deriveSurfaces({ app, changedFiles }), [])
+  }
+})
+
 test('deriveSurfaces: a [slug] segment is not the team (#3886)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles: ['pocs/crouton-builder/app/pages/site/[slug].vue'] }), [])
 })
@@ -319,6 +347,35 @@ test('pickSurfaces: the marker read from the API is the declared surface; a fail
   assert.equal(r.reason, 'declared on the PR')
   assert.equal(r.surfaces[0].path, '/builder/a')
   await assert.rejects(pickSurfaces({ env, args, manifest: {}, fetchFn: stubFetch({ ok: false, status: 404 }).fn }), /404/)
+})
+
+// #4141: the screenshot job checks out MAIN, so a reviewTeam the PR adds is missing from its
+// manifest. The team the deploy seeded travels in preview-meta and arrives as --team.
+test('#4141 pickSurfaces: metadata team kdm wins over a checked-out manifest with no reviewTeam', async () => {
+  const env = { REPO: 'o/r', GH_TOKEN: 't', CHANGED_FILES: 'pocs/kdm/app/pages/admin/[team]/workspace.vue' }
+  const r = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: {}, fetchFn: stubFetch(ok('Closes #1')).fn })
+  assert.deepEqual(r.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const declared = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: {}, fetchFn: stubFetch(ok('<!-- review-surface: kdm /admin/{team}/workspace -->')).fn })
+  assert.equal(declared.surfaces[0].path, '/admin/kdm/workspace')
+  // the deployed team also beats a stale manifest value; no --team (older record) → manifest fallback
+  const stale = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: 'kdm' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(stale.surfaces.map(s => s.path), ['/admin/kdm/workspace'])
+  const legacy = await pickSurfaces({ env, args: { pr: '12', app: 'kdm' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(legacy.surfaces.map(s => s.path), ['/admin/old/workspace'])
+  // an older record has no team, so the job passes `--team ""` → still the manifest fallback
+  const empty = await pickSurfaces({ env, args: { pr: '12', app: 'kdm', team: '' }, manifest: { reviewTeam: 'old' }, fetchFn: stubFetch(ok('')).fn })
+  assert.deepEqual(empty.surfaces.map(s => s.path), ['/admin/old/workspace'])
+})
+
+test('#4141 wiring: the deploy records the seeded team and the screenshot job passes it as --team', () => {
+  const deploy = readFileSync(new URL('../.github/workflows/deploy-app.yml', import.meta.url), 'utf8')
+  const record = deploy.slice(deploy.indexOf('- name: Record preview for the screenshot check'), deploy.indexOf('- name: Upload preview record'))
+  assert.match(record, /REVIEW_TEAM: \$\{\{ steps\.review_team\.outputs\.team \}\}/)
+  assert.match(record, /team:\$team\}/)
+  const shot = readFileSync(new URL('../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
+  assert.match(shot, /capture-review-surfaces\.mjs[^\n]*\n[^\n]*--team "\$\(jq -r '\.team \/\/ ""' "\$META"\)"/)
+  // the screenshot job still must not check out PR code
+  assert.doesNotMatch(shot, /ref:\s*\$\{\{\s*github\.event\.(pull_request|workflow_run)\.head/)
 })
 
 // ── settlePage (#4134): wait for the draw first, reload only a page still loading ──────────
@@ -440,4 +497,57 @@ test('waitForHydration: real predicate exits early on a loader, waits on a short
 
   const drawn = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'x'.repeat(60), nuxtApp: { isHydrating: false } })
   assert.equal(drawn.result, true, 'a 60-char hydrated #__nuxt is done')
+})
+
+// ── #4201: shoot the changed screen, or go red ────────────────────────────────
+
+test('resolveSurfaces: a PR that changes a screen and names no page gets no start-page shot (#4201)', () => {
+  const vue = ['packages/crouton-core/app/components/X.vue']
+  const none = resolveSurfaces({ manifest: {}, prBody: '', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(none.surfaces, [])
+  assert.ok(none.reason.startsWith('no screenshot of the changed screen'), none.reason)
+
+  const scripts = resolveSurfaces({ manifest: {}, prBody: '', app: 'kassa', changedFiles: ['scripts/x.mjs'] })
+  assert.deepEqual(scripts.surfaces.map(s => s.path), ['/'])
+  assert.equal(scripts.reason, 'start page — this PR changes no screen')
+
+  const optedOut = resolveSurfaces({ manifest: {}, prBody: 'x <!-- review-surface-none -->', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(optedOut.surfaces.map(s => s.path), ['/'])
+
+  const declared = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface: kassa /admin/test1/x -->', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(declared.surfaces.map(s => s.path), ['/admin/test1/x'])
+  assert.equal(declared.reason, 'declared on the PR')
+})
+
+test('changesScreen: VISUAL_PATH files outside fixtures/ and e2e/ (#4201)', () => {
+  assert.equal(changesScreen(['a/b.vue']), true)
+  assert.equal(changesScreen(['fixtures/x/app/pages/a.vue', 'e2e/a.vue', 'scripts/a.mjs']), false)
+  assert.equal(changesScreen(undefined), false)
+})
+
+test('deriveSurfaces: a package page only for apps that use its package (#4151, #4201)', () => {
+  const changedFiles = ['packages/crouton-assets/app/pages/admin/[team]/media.vue', 'packages/crouton-events/app/pages/admin/[team]/activity.vue']
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'kassa', packages: ['crouton-core'] }), [])
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'velo', packages: ['crouton-core', 'crouton-assets'] }).map(s => s.path), ['/admin/test1/media'])
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'kassa' }).map(s => s.path), ['/admin/test1/media', '/admin/test1/activity'])
+  assert.ok(!appPackages('kassa', 'apps').includes('crouton-assets'))
+  assert.ok(appPackages('velo', 'apps').includes('crouton-assets'))
+  assert.equal(appPackages('no-such-app', 'apps'), undefined)
+})
+
+test('pickSurfaces: reads the app\'s package list from the manifest\'s workspace (#4151, #4201)', async () => {
+  const env = { PR_BODY: 'body', CHANGED_FILES: 'packages/crouton-assets/app/pages/admin/[team]/media.vue' }
+  const kassa = await pickSurfaces({ env, args: { pr: 1, app: 'kassa', manifest: 'apps/kassa/deploy.config.json' }, manifest: {} })
+  assert.deepEqual(kassa.surfaces, [])
+  const velo = await pickSurfaces({ env, args: { pr: 1, app: 'velo', manifest: 'apps/velo/deploy.config.json' }, manifest: {} })
+  assert.deepEqual(velo.surfaces.map(s => s.path), ['/admin/test1/media'])
+})
+
+test('landingRejection: named/guessed pages must stay put, the start page may redirect (#4201)', () => {
+  const [declared] = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface: velo /admin/test1/media -->', app: 'velo', changedFiles: [] }).surfaces
+  assert.equal(landingRejection(declared, 'https://h/auth/login?redirect=x'), 'landed on /auth/login instead of /admin/test1/media')
+  const [start] = resolveSurfaces({ manifest: {}, prBody: '', app: 'crate', changedFiles: [] }).surfaces
+  assert.equal(landingRejection(start, 'https://h/crate/test1'), null)
+  const [guessed] = resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: ['apps/velo/app/pages/admin/[team]/media.vue'] }).surfaces
+  assert.equal(landingRejection(guessed, 'https://h/admin/test1/media/'), null)
 })

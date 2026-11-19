@@ -16,13 +16,17 @@
 //     { "name": "data-pane", "path": "/admin/test1/sales/events/x",
 //       "do": ["click:[data-review=data-tab]", "wait:800", "click:[aria-label='Filters']"] }
 //   ]
-// Falls back to a single surface at reviewLogin.landing (or "/") when none are declared.
-// A PR can name its own surface instead (`<!-- review-surface: <app> <path> -->`, #2433), and a
-// PR held for visual sign-off that names none gets no capture rather than the landing page.
+// A PR can name its own surface instead (`<!-- review-surface: <app> <path> -->`, #2433); without
+// one the page is guessed from the changed files — a package page only on apps that use that
+// package (#4201). A PR that changes a screen and names/guesses no page gets NO capture (the check
+// goes red); only a PR that changes no screen (or carries `<!-- review-surface-none -->`) falls
+// back to a single surface at reviewLogin.landing (or "/"). A named or guessed page must stay on
+// its path: a redirect elsewhere (e.g. to login) is rejected (#4201).
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out screenshots/review-captures] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--team <slug>] [--out screenshots/review-captures] [--desktop]
+//   --team: the review team the deploy seeded (preview-meta `team`, #4141); wins over the manifest's reviewTeam.
 //   PR_BODY (env, optional): the PR body, read for review-surface markers (#2433); unset or empty → read
 //   from the GitHub API by --pr (GH_TOKEN + REPO), and a failed read captures nothing (#3957).
 //   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
@@ -32,12 +36,15 @@
 // Prints `captured=<file>` per kept shot (the workflow publishes them to a non-branch ref + PR comment, #3351). NEVER exits non-zero on a
 // capture miss — a missing capture just means no evidence, and the sign-off gate withholds.
 
-import { resolve } from 'node:path'
+import { resolve, basename, dirname } from 'node:path'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, LOADING_MARKERS } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness, landedWhereAsked, LOADING_MARKERS } from './lib/capture-validate.mjs'
+import { resolveReviewTeam, DEFAULT_REVIEW_TEAM } from './review-team.mjs'
+import { VISUAL_PATH } from './ui-touched.mjs'
+import { loadApps } from './deploy-detect.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -58,13 +65,45 @@ export function outName(pr, name, app) {
 
 // The marker work-issue-pidev.yml puts on a PR held for visual sign-off (deploy-detect.mjs #2140).
 const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
+// The marker a PR carries when its plan says there is no page to look at (#4201).
+const NONE_MARKER = '<!-- review-surface-none -->'
+
+/** True when the PR changes a screen file (VISUAL_PATH), ignoring fixtures/ and e2e/ (#4201). */
+export function changesScreen(changedFiles) {
+  return (changedFiles || []).some((raw) => {
+    const file = String(raw ?? '').trim()
+    return Boolean(file) && !/^(?:fixtures|e2e)\//.test(file) && VISUAL_PATH.test(file)
+  })
+}
+
+/**
+ * The `packages/<x>/**` watch paths of `app` as `x` (#4201), or undefined when the app isn't found.
+ * Known limit: the watch list comes from the checked-out (main) package.json, so a PR that adds a
+ * package dependency drops that package's guessed pages for that app.
+ */
+export function appPackages(app, workspace, apps = loadApps(workspace)) {
+  const entry = (apps || []).find(a => a.app === app)
+  if (!entry) return undefined
+  return (entry.watchPaths || [])
+    .map(p => /^packages\/([^/]+)\/\*\*$/.exec(p)?.[1])
+    .filter(Boolean)
+}
+
+/** Why a named/guessed surface is not where it was asked to be, or null (#4201). */
+export function landingRejection(surface, finalUrl) {
+  if (!surface?.checkLanding || landedWhereAsked(surface.path, finalUrl)) return null
+  let landed
+  try { landed = new URL(finalUrl).pathname } catch { landed = String(finalUrl) }
+  return `landed on ${landed} instead of ${surface.path}`
+}
 
 /**
  * Surfaces a PR declares for one app (#2433), copied there from its issue:
  *   <!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->
  * The worker knows which screen it changed; the app's fixed landing page usually doesn't show it.
+ * Every `{team}` in the path becomes the app's review team (#4141).
  */
-export function parsePrSurfaces(prBody, app) {
+export function parsePrSurfaces(prBody, app, team = DEFAULT_REVIEW_TEAM) {
   const out = []
   for (const m of String(prBody || '').matchAll(/<!--\s*review-surface:\s*(.+?)\s*-->/g)) {
     const [forApp, path, ...rest] = m[1].split(/\s+/)
@@ -74,35 +113,38 @@ export function parsePrSurfaces(prBody, app) {
     const base = nameTok ? nameTok.slice(5) : (path.split('?')[0].split('/').filter(Boolean).pop() || 'surface')
     let name = slug(base)
     while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
-    out.push({ name, path: path.startsWith('/') ? path : `/${path}`, do: steps })
+    const filled = path.replaceAll('{team}', team)
+    out.push({ name, path: filled.startsWith('/') ? filled : `/${filled}`, do: steps })
   }
   return out
 }
 
-// The seeded review team every preview is signed into (#2698).
-const SEEDED_TEAM = 'test1'
-
 /**
  * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
  *  - a page file (`…/app/pages/**.vue`) → its route; a page under `apps/<x>/` or `pocs/<x>/` only for
- *    app `<x>` (#3794), a `packages/` page for every app; with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the seeded team (never `[slug]`, #3886);
+ *    app `<x>` (#3794), a `packages/<pkg>/` page only for apps whose `packages` list has `<pkg>`
+ *    (every app when `packages` is undefined, #4201); with a `[team]`, `[teamSlug]` or `[team-slug]` segment → the app's review team (`team`, default test1, #4141) (never `[slug]`, #3886);
  *    pages with any other dynamic segment are skipped (no data to open them with);
+ *    pages under `fixtures/` and `e2e/` are never shot (not deployed, #4084);
  *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
  *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
  */
 // The route + label a changed page file opens at for `app`, or null when it isn't reviewable there.
-function pageSurface(file, pagePath, app) {
+function pageSurface(file, pagePath, app, team, packages) {
+  if (/^(?:fixtures|e2e)\//.test(file)) return null
   const owner = /^(?:apps|pocs)\/([^/]+)\//.exec(file)
   if (owner && owner[1] !== app) return null
+  const pkg = /^packages\/([^/]+)\//.exec(file)
+  if (pkg && Array.isArray(packages) && !packages.includes(pkg[1])) return null
   if (pagePath.startsWith('__review')) return null
   const segs = pagePath.split('/').filter(s => s !== 'index')
   const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
   if (dynamic.some(s => !/^\[(team|teamSlug|team-slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) return null
-  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+  const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? team : s).join('/')
   return { route, label: segs.join('-') || 'index' }
 }
 
-export function deriveSurfaces({ changedFiles, app }) {
+export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM, packages }) {
   const out = []
   const add = (path, label) => {
     if (out.some(s => s.path === path)) return
@@ -115,7 +157,7 @@ export function deriveSurfaces({ changedFiles, app }) {
     if (!file.endsWith('.vue')) continue
     const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
     if (page) {
-      const surface = pageSurface(file, page[1], app)
+      const surface = pageSurface(file, page[1], app, team, packages)
       if (surface) add(surface.route, surface.label)
     } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
       add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
@@ -129,17 +171,30 @@ export function deriveSurfaces({ changedFiles, app }) {
  *  - surfaces the PR declares for this app win;
  *  - a PR held for visual sign-off that declares none gets NOTHING: the landing page would pass
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
+ *  - a PR that changes a screen and names/guesses no page gets NOTHING either (#4201): the start
+ *    page is not proof of the change (unless the PR carries `<!-- review-surface-none -->`);
  *  - any other PR keeps the manifest's surfaces / landing, as before.
+ * Declared and derived surfaces are tagged `checkLanding` (the browser must stay on their path);
+ * the manifest / start page is not (a logged-in `/` redirects on purpose on crate and kassa).
  */
-export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
-  const declared = parsePrSurfaces(prBody, app)
-  if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
-  const derived = deriveSurfaces({ changedFiles, app })
-  if (derived.length) return { surfaces: derived, reason: 'derived from the changed files (#2698)' }
-  if (String(prBody || '').includes(HOLD_MARKER)) {
+export function resolveSurfaces({ manifest, prBody, app, changedFiles, team: deployedTeam, packages }) {
+  // The team the DEPLOY seeded wins (preview-meta `team`, passed as --team, #4141): the screenshot
+  // job checks out main, so its manifest misses a `reviewTeam` the PR adds or changes. The manifest
+  // key (no nuxt.config text) is only the fallback for a record written before that field existed.
+  const team = (typeof deployedTeam === 'string' && deployedTeam.trim()) || resolveReviewTeam({ manifest }).team
+  const declared = parsePrSurfaces(prBody, app, team)
+  const tag = list => list.map(s => ({ ...s, checkLanding: true }))
+  if (declared.length) return { surfaces: tag(declared), reason: 'declared on the PR' }
+  const derived = deriveSurfaces({ changedFiles, app, team, packages })
+  if (derived.length) return { surfaces: tag(derived), reason: 'derived from the changed files (#2698)' }
+  const body = String(prBody || '')
+  if (body.includes(HOLD_MARKER)) {
     return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
   }
-  return { surfaces: parseSurfaces(manifest), reason: 'app default' }
+  if (changesScreen(changedFiles) && !body.includes(NONE_MARKER)) {
+    return { surfaces: [], reason: 'no screenshot of the changed screen — the PR names no page (add <!-- review-surface: <app> <path> -->)' }
+  }
+  return { surfaces: parseSurfaces(manifest), reason: 'start page — this PR changes no screen' }
 }
 
 /**
@@ -168,7 +223,11 @@ export async function readPrBody({ env, pr, fetchFn = fetch }) {
 /** Read the PR body, then resolve what to capture for this app (#3957). */
 export async function pickSurfaces({ env, args, manifest, fetchFn = fetch }) {
   const prBody = await readPrBody({ env, pr: args.pr, fetchFn })
-  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n') })
+  // The workflow passes --manifest $WORKSPACE/$APP/deploy.config.json, so the workspace is its grandparent folder.
+  const packages = (args.manifest && args.app)
+    ? appPackages(args.app, basename(dirname(dirname(String(args.manifest)))))
+    : undefined
+  return resolveSurfaces({ manifest, prBody, app: args.app || '', changedFiles: (env.CHANGED_FILES || '').split('\n'), team: args.team, packages })
 }
 
 /**
@@ -377,6 +436,13 @@ async function captureSurface(context, origin, surface, file) {
     await waitForHydration(page)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
+    // Before the interactions: a `click:` step may navigate on purpose (#4201).
+    const off = landingRejection(surface, page.url())
+    if (off) {
+      log(`✗ ${surface.name}: ${off} — discarding`)
+      report(surface.name, 'rejected', off)
+      return null
+    }
     await runInteractions(page, surface, log)
     await page.waitForTimeout(600)
     const title = await page.title().catch(() => '')

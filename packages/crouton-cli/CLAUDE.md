@@ -229,7 +229,7 @@ crouton init my-app --dry-run
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
 | `-d, --dialect <type>` | `sqlite` (default; the only supported value — others exit non-zero) |
 | `--cf` / `--no-cf` | Force Cloudflare Workers config on/off. Default: on inside the crouton monorepo, off in a standalone app |
-| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
+| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
 | `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
 | `--dry-run` | Preview without writing files |
@@ -298,8 +298,8 @@ NOT Cloudflare Pages. Generated artifacts:
 
 | File | Purpose |
 |------|---------|
-| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
-| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
+| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) + named R2 buckets `<name>-blob` / `<name>-staging-blob` (BLOB) when the `assets` feature is on (#4142), so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
+| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern) for apps; a `--poc` gets `stagingUrl: https://<name>.<zone>` and no `productionUrl`, matching its only route and what `scripts/scaffold-poc-deploy.mjs` writes (#4142). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
 | `scripts/sync-wrangler-ids.mjs` | After provisioning, queries `wrangler d1 list`/`kv namespace list` and writes the ids back into `wrangler.jsonc` (D1 by `database_name`, KV by the deterministic `<worker>-<binding>` title). Idempotent, comment-preserving |
 | `scripts/inject-wrangler-env.mjs` | Re-injects the `env` block Nitro strips from `.output/server/wrangler.json` (nitro#3429) + drops the redirect so `--env staging` deploys work |
 | `drizzle.config.ts` | Resolves the bundled schema path (`.nuxt/` or the cache buildDir) so `db:generate` works unedited |
@@ -315,7 +315,8 @@ re-inject-env → migrate staging. `nuxt.config` pins **no** nitro preset (suppl
 
 **Custom domains (`--domain <zone>`):** when passed, `wrangler.jsonc` also gets
 custom-domain `routes` — `<app>.<zone>` (top-level/prod) + `<app>-staging.<zone>`
-(`env.staging`). On deploy, wrangler binds them and creates the DNS record + cert
+(`env.staging`). A `--poc` (target under `pocs/`) has no production: only `env.staging`
+gets a route, `<app>.<zone>` (#4142). On deploy, wrangler binds them and creates the DNS record + cert
 (the zone must be in the same CF account). Nitro preserves top-level `routes`;
 `inject-wrangler-env` carries the `env.staging` ones. Without `--domain`, apps stay
 on id-less `*.workers.dev` (the CLI stays domain-agnostic for general use). Adding

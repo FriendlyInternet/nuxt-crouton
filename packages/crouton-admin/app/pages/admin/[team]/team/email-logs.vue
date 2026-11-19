@@ -7,7 +7,8 @@
  * @route /admin/[team]/team/email-logs
  */
 definePageMeta({
-  middleware: ['auth', 'team-admin']
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
 })
 </script>
 

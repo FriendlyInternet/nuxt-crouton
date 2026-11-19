@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { localeLessTarget, stripTeamPrefix } from '../../../utils/custom-domain-path'
+
 /**
  * Public Page Route with Locale
  *
@@ -46,7 +48,9 @@ definePageMeta({
 
 // Cache public pages for 1 hour (SWR: serve stale while regenerating in background)
 // Nuxt 4.3: payload extraction means SPA navigation also uses cached payload
-defineRouteRules({ swr: 3600 })
+// The cache varies by host: the app host and a connected domain render the same
+// path with different hrefs (with and without the team, #4175).
+defineRouteRules({ swr: 3600, cache: { varies: ['host', 'x-forwarded-host'] } })
 
 // Share page layout with the layout component via useState (works across components)
 const pageLayout = useState<'default' | 'full-height' | 'full-screen'>('pageLayout', () => 'default')
@@ -55,10 +59,14 @@ const route = useRoute()
 const { teamId } = useTeamContext()
 const { t } = useT()
 const { getPageType } = usePageTypes()
-const { isCustomDomain, hideTeamInUrl } = useDomainContext()
+const { isCustomDomain, hideTeamInUrl, hideTeamInLinks, isTeamHost, resolvedTeamSlug } = useDomainContext()
+
+// On a connected domain the server writes the Location header verbatim, so the
+// team prefix is stripped there; on the client the team-host history hides it (#4175).
+const forward = (p: string) => (import.meta.server && isTeamHost.value) ? stripTeamPrefix(p, resolvedTeamSlug.value!) : p
 
 // i18n for locale handling and SEO
-const { locale: i18nLocale, locales, setLocale } = useI18n()
+const { locale: i18nLocale, locales, setLocale, defaultLocale: i18nDefaultLocale } = useI18n()
 
 // Get team, locale, and slug from route params
 const team = computed(() => teamId.value || null)
@@ -75,7 +83,18 @@ const slug = computed(() => {
 const validLocales = computed(() => locales.value.map((l: { code: string }) => l.code))
 const isValidLocale = computed(() => validLocales.value.includes(urlLocale.value))
 
-if (!isValidLocale.value) {
+if (!isValidLocale.value && isTeamHost.value) {
+  // Connected domain: an address without a language (/about → /acme/about,
+  // team=acme locale=about) forwards to the default locale (#4175).
+  const defaultLoc = validLocales.value.length === 1
+    ? validLocales.value[0]!
+    : ((i18nDefaultLocale as string) || validLocales.value[0]!)
+  await navigateTo(
+    forward(localeLessTarget(route.params.team as string, urlLocale.value, slug.value, defaultLoc)),
+    { redirectCode: 302 }
+  )
+}
+else if (!isValidLocale.value) {
   showError({ statusCode: 404, statusMessage: 'Page Not Found' })
 }
 
@@ -186,13 +205,14 @@ watchEffect(() => {
 
 // --- Inline editing ---
 
-// Admin detection (useTeam may not be available if auth package not installed)
-let isAdmin = ref(false)
+// Who may edit this page: `pages:edit` (#4105). Browser-only — this route is
+// shared-cached (swr), so a server-resolved answer would reach the next visitor.
+// (useCan may not be available if the auth package is not installed.)
+let canEdit: Readonly<{ value: boolean }> = ref(false)
 try {
-  const teamComposable = useTeam()
-  isAdmin = teamComposable.isAdmin
+  canEdit = useCan('pages:edit', { server: false })
 } catch {
-  // Auth package not installed or useTeam unavailable
+  // Auth package not installed or useCan unavailable
 }
 
 // Shared editing state with layout
@@ -229,7 +249,7 @@ onMounted(() => {
     label: t('pages.admin.editPage', 'Edit Page'),
     order: 100,
     onSelect: startEditing,
-    show: () => isAdmin.value && !isEditing.value && !!page.value?.id
+    show: () => canEdit.value && !isEditing.value && !!page.value?.id
   })
 })
 
@@ -358,7 +378,7 @@ useHead({
         <UIcon name="i-lucide-file-x" class="size-16 text-muted mb-6 mx-auto" />
         <h2 class="text-2xl font-semibold mb-2">{{ t('pages.notFound') || 'Page not found' }}</h2>
         <p class="text-muted mb-6">{{ t('pages.notFoundDescription') || 'The page you are looking for does not exist.' }}</p>
-        <UButton :to="hideTeamInUrl ? '/' : `/${team}/${urlLocale}`" color="primary">
+        <UButton :to="hideTeamInLinks ? '/' : `/${team}/${urlLocale}`" color="primary">
           <UIcon name="i-lucide-home" class="mr-2" />
           {{ t('pages.backToHome') || 'Back to Home' }}
         </UButton>

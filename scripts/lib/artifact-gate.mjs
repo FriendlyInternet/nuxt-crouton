@@ -5,9 +5,10 @@ import nodeFs from 'node:fs'
 import { execFileSync as nodeExecFileSync } from 'node:child_process'
 import { parseRunStart } from './run-start.mjs'
 import { decideDeliverable, pushedThisRun } from './run-deliverable.mjs'
+import { ranOutOfTime } from './pi-time-budget.mjs'
 
 // fallow-ignore-next-line complexity -- the pi worker's artifact-gate moved verbatim out of work-issue-pidev.yml; each branch is a distinct deliverable check, covered by artifact-gate.test.mjs (#3382)
-export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync }) {
+export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync, now = Date.now }) {
   const issue_number = Number(env.ISSUE_NUMBER)
   if (env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
   if (env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
@@ -185,6 +186,14 @@ export async function artifactGate({ github, context, core, env = process.env, f
     why = `the HARNESS failed after committing — \`work-${issue_number}\` (\`${workBranch.sha}\`) was pushed this run, but the finish step died before opening the PR`
     action = 'open the run log at the `finish` step — this is a workflow bug, NOT an underspecified issue. '
       + 'Do not edit the issue; fix the workflow, delete the branch, and re-apply the label'
+  }
+
+  // #4183: the pi step FAILED at its own time limit (the job was not cancelled — a cancelled job
+  // is #4161's case). Its outputs are empty after a kill, so without this the `!hadLog` branch
+  // below blamed "upstream of pi, in the workflow".
+  if (!why && env.JOB_STATUS !== 'cancelled' && ranOutOfTime({ outcome: env.PI_OUTCOME, deadline: env.PI_DEADLINE, now: now() / 1000 })) {
+    why = `the worker ran out of time — the agent step hit its ${env.PI_MINUTES}-minute limit and was stopped`
+    action = 'do not edit the ticket. Reply `**Worker:** continue` (or re-dispatch) to resume; if it keeps running out, split the ticket'
   }
 
   try {

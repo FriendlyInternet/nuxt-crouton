@@ -21,11 +21,17 @@ const EPIC_BRANCH = 'epic/900-thing'
 const MAIN_SHA = 'mainsha900'
 /** PR number → its changed files (served 100 per page); unset → no files. */
 let prFiles: Record<number, Array<{ filename: string }>>
+/** #4233: cards already stored before the sync. */
+let existingCards: unknown[]
+/** #4233: quiz search hits, served only to the matching typed search. */
+let quizHits: { issue: any[], pr: any[] }
+/** #4233: issue/PR number → its comments (quiz comments). */
+let quizComments: Record<number, unknown[]>
 
 const createInboxCard = vi.fn(async (c: unknown) => c)
 const updateInboxCard = vi.fn(async () => ({}))
 vi.mock('../layers/inbox/collections/cards/server/database/queries', () => ({
-  getAllInboxCards: vi.fn(async () => []),
+  getAllInboxCards: vi.fn(async () => existingCards),
   createInboxCard: (...a: unknown[]) => (createInboxCard as any)(...a),
   updateInboxCard: (...a: unknown[]) => (updateInboxCard as any)(...a)
 }))
@@ -47,7 +53,13 @@ const EPIC_CONFLICT = {
 }
 
 function searchRoute(url: URL) {
-  const epicSearch = (url.searchParams.get('q') ?? '').includes('no longer merges cleanly with main')
+  const q = url.searchParams.get('q') ?? ''
+  // GitHub refuses a search that names neither type (#4233).
+  if (!q.includes('is:issue') && !q.includes('is:pull-request')) {
+    return json({ message: "Query must include 'is:issue' or 'is:pull-request'" }, 422)
+  }
+  if (q.includes('reached main')) return json({ items: q.includes('is:pull-request') ? quizHits.pr : quizHits.issue })
+  const epicSearch = q.includes('no longer merges cleanly with main')
   return json({ items: epicSearch && epicBehind !== undefined ? [EPIC_ISSUE] : [] })
 }
 function pullsRoute(url: URL) {
@@ -61,6 +73,7 @@ function compareRoute(url: URL) {
 }
 function commentsRoute(n: number) {
   if (n === 900) return json([EPIC_CONFLICT])
+  if (quizComments[n]) return json(quizComments[n])
   return n === failComments ? json({ message: 'boom' }, 500) : json([])
 }
 function prFilesRoute(url: URL, n: number) {
@@ -125,6 +138,9 @@ beforeEach(() => {
   pagedPulls = false
   epicBehind = undefined
   prFiles = {}
+  existingCards = []
+  quizHits = { issue: [], pr: [] }
+  quizComments = {}
   waited = []
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
@@ -206,6 +222,31 @@ describe('POST /api/cards/sync', () => {
       expect(out.body.error).toBeUndefined()
       expect(out.body.skipped).toBeUndefined()
     }
+  })
+
+  it('#4233: every read succeeds (untyped search would be refused) → no error, and a waiting card whose ask is gone goes stale', async () => {
+    existingCards = [{ id: 'c1', kind: 'issue', sourceType: 'issue', sourceNumber: 77, sourceCommentId: 'gone', title: 'x', ask: 'x', link: 'x', state: 'waiting', askedAt: OLD }]
+    const out = await run()
+    expect(out.body.error).toBeUndefined()
+    expect(out.body.stale).toBe(1)
+    expect(updateInboxCard).toHaveBeenCalledWith('c1', 'team1', 'u1', { state: 'stale' }, { role: 'owner' })
+  })
+
+  it('#4233: a quiz on a PR and a quiz on an issue, each found by its own typed search → quiz cards pr + issue', async () => {
+    quizHits.pr = [{ number: 50, title: 'PR 50', html_url: 'https://github.com/o/r/pull/50', pull_request: {} }]
+    quizHits.issue = [{ number: 51, title: 'Issue 51', html_url: 'https://github.com/o/r/issues/51' }]
+    for (const n of [50, 51]) {
+      quizComments[n] = [{
+        id: 5000 + n, user: BOT, created_at: OLD, html_url: `https://github.com/o/r/issues/${n}#issuecomment-${5000 + n}`,
+        body: `Quick check — PR #${n} reached main.\n\n<!-- owner-quiz:v1 pr=${n} sha=abc key=k1 -->`
+      }]
+    }
+    const out = await run()
+    expect(out.body.error).toBeUndefined()
+    expect(out.body.created).toBe(4)
+    const quiz = createInboxCard.mock.calls.map(c => (c as any[])[0]).filter(c => c.kind === 'quiz')
+    expect(quiz.find(c => c.sourceNumber === 50)).toMatchObject({ sourceType: 'pr' })
+    expect(quiz.find(c => c.sourceNumber === 51)).toMatchObject({ sourceType: 'issue' })
   })
 
   it('#3785: 150 files over two pages, the only packages/ file on page 2 → the card still names it', async () => {

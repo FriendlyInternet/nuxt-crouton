@@ -505,17 +505,17 @@ when the page type changes.
 
 ### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
 
-The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, admins only — the pill itself honours `hideAuthControls`) plus:
+The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, only for people who may `pages:edit` (`useCan('pages:edit', { server: false })`, #4105) — the pill itself honours `hideAuthControls`) plus:
 
 - **Theme quick-select** — a palette `UDropdownMenu` reading the shared
   `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's
   `themeProvider.client` plugin). Rendered only when that state is populated **and**
-  `allowUserThemes || isAdmin`, inside `<ClientOnly>` (no hard dep on crouton-themes;
+  `allowUserThemes` or the reader may `site:manage`, inside `<ClientOnly>` (no hard dep on crouton-themes;
   hidden entirely when the themes layer isn't extended). Dark-mode toggle stays adjacent.
 - **Package action slot** — `useCroutonNavPill().visibleActions` render as ghost icon
   buttons. Any layer contributes via `register()` (see the composable in Key Files). The
   **edit-page pencil** is pages' own contribution: `[...slug].vue` registers it on mount
-  (`show: isAdmin && !isEditing && page.id`, `onSelect: startEditing`) — it **replaced the
+  (`show: canEdit && !isEditing && page.id`, where `canEdit = useCan('pages:edit', { server: false })`; `onSelect: startEditing`) — it **replaced the
   old fixed bottom-right FAB**. Client-only registration, so the button appears just after
   hydration.
 
@@ -629,7 +629,7 @@ The footer page type uses `hasBlockContent: true` — a flag on `CroutonPageType
 
 ## Custom Domain Support
 
-The package includes automatic custom domain resolution via server middleware.
+The package includes automatic custom domain resolution via a Nitro plugin (`server/plugins/domain-resolver.ts`).
 
 ### How It Works
 
@@ -638,17 +638,27 @@ Custom Domain Request:
 booking.acme.com/about
     │
     ▼
-01-domain-resolver.ts middleware
+domain-resolver.ts (Nitro plugin)
     │
     │  looks up 'booking.acme.com' in domain table
     │  finds: organizationId → org with slug 'acme'
     │
     ▼
-URL Rewrite: /about → /acme/about
+Rewrite (team routing mode): every non-app path gets the team prefix
+  /about → /acme/about, /en/about → /acme/en/about, / → /acme
+  left alone: the app's own top-level pages (from the page tree: /admin, /auth,
+  /account, /onboarding, …), /api, /_*, static files, /acme/…
     │
     ▼
-Normal routing: [team]/[...slug].vue
+No locale? the page forwards 302 to /<defaultLocale>/about (plain address)
+    │
+    ▼
+[team]/[locale]/[...slug].vue renders
 ```
+
+In the browser, links carry the team and `app/router.options.ts` installs a
+history (`app/utils/team-host-history.ts`) that strips it from the address bar
+and every `href`. Locale/custom routing mode: unchanged.
 
 ### useDomainContext() Composable
 
@@ -658,7 +668,11 @@ const {
   isLocaleMode,      // Whether locale routing mode is active
   resolvedDomain,    // The custom domain hostname
   resolvedTeamId,    // Team ID from domain lookup
-  hideTeamInUrl,     // true on custom domains OR locale mode
+  resolvedTeamSlug,  // Team slug from domain lookup (null off a connected domain)
+  appSegments,       // The app's own top-level page addresses, left untouched on a connected domain
+  hideTeamInUrl,     // true on custom domains OR locale mode (canonical URLs, team UI — not router links)
+  isTeamHost,        // true on a connected domain in team routing mode
+  hideTeamInLinks,   // true only in locale/custom mode — drives router links
   hostname,          // Current hostname
   isAppDomain        // Whether hostname is known app domain
 } = useDomainContext()
@@ -708,7 +722,7 @@ For single-team sites, locale mode removes the team slug from public URLs and le
 - Admin/API/auth routes are unaffected
 - crouton-pages does NOT register public page routes — the app provides `[locale]/[...slug].vue`
 
-The server plugin sets `event.context.routingMode = 'locale'` which makes `useDomainContext().hideTeamInUrl` return `true`, so all navigation links automatically omit the team slug.
+The server plugin sets `event.context.routingMode = 'locale'` which makes `useDomainContext().hideTeamInLinks` (and `hideTeamInUrl`) return `true`, so all navigation links automatically omit the team slug.
 
 ### Domain Setup
 

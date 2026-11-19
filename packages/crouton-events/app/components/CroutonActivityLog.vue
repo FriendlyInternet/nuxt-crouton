@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useToggle } from '@vueuse/core'
 import type { CroutonEvent, FilterState } from '../types/events'
 
 const props = withDefaults(defineProps<{
@@ -13,18 +12,20 @@ const props = withDefaults(defineProps<{
   showFilters?: boolean
   /** Show pagination */
   showPagination?: boolean
-  /** Empty state message */
+  /** Empty state message (defaults to the translated `events.log.empty`) */
   emptyMessage?: string
 }>(), {
   pageSize: 50,
   showFilters: true,
   showPagination: true,
-  emptyMessage: 'No activity found'
+  emptyMessage: undefined
 })
 
 const emit = defineEmits<{
   eventClick: [event: CroutonEvent]
 }>()
+
+const { t } = useI18n()
 
 // Filter state
 const filters = ref<FilterState>({
@@ -37,9 +38,8 @@ const filters = ref<FilterState>({
 
 // Pagination
 const page = ref(1)
-const pageSize = ref(props.pageSize)
 
-// Build query options
+// Reactive query: changing a filter or the page re-runs the fetch
 const queryOptions = computed(() => ({
   filters: {
     collectionName: filters.value.collectionName || undefined,
@@ -50,45 +50,43 @@ const queryOptions = computed(() => ({
   },
   pagination: {
     page: page.value,
-    pageSize: pageSize.value
+    pageSize: props.pageSize
   }
 }))
 
-// Fetch events using the existing composable
-const { data: events, pending, error, refresh } = useCroutonEvents(queryOptions.value)
+const { data, pending, error, refresh } = useCroutonEvents(queryOptions)
+const events = computed(() => (data.value as CroutonEvent[] | null | undefined) || [])
 
-// Watch for filter changes and refetch
+// Back to the first page when a filter changes
 watch(filters, () => {
-  page.value = 1 // Reset to first page on filter change
-  refresh()
+  page.value = 1
 }, { deep: true })
 
-watch(page, () => {
-  refresh()
-})
+// The endpoint returns no total: show a next page only when this one is full
+const total = computed(() =>
+  (page.value - 1) * props.pageSize + events.value.length + (events.value.length === props.pageSize ? 1 : 0)
+)
 
-// Get unique collections from events for filter dropdown
-const availableCollections = computed(() => {
-  if (!events.value) return []
-  const collections = new Set(events.value.map((e: CroutonEvent) => e.collectionName))
-  return Array.from(collections).sort()
-})
+// Collections / people seen so far — kept across filter changes so the menus don't shrink
+const seenCollections = ref<string[]>([])
+const seenUsers = ref<Array<{ id: string, name: string }>>([])
 
-// Get unique users from events for filter dropdown
-const availableUsers = computed(() => {
-  if (!events.value) return []
-  const usersMap = new Map<string, { id: string, name: string }>()
-  events.value.forEach((e: CroutonEvent) => {
-    if (e.userId && !usersMap.has(e.userId)) {
-      usersMap.set(e.userId, { id: e.userId, name: e.userName || 'Unknown' })
+watch(events, (list) => {
+  const collections = new Set(seenCollections.value)
+  const users = new Map(seenUsers.value.map(u => [u.id, u]))
+  for (const e of list) {
+    if (e.collectionName) collections.add(e.collectionName)
+    if (e.userId && !users.has(e.userId)) {
+      users.set(e.userId, { id: e.userId, name: e.userName || t('events.log.unknownUser') })
     }
-  })
-  return Array.from(usersMap.values())
-})
+  }
+  seenCollections.value = Array.from(collections).sort()
+  seenUsers.value = Array.from(users.values())
+}, { immediate: true })
 
-// Selected event for detail modal
+// Selected event for the detail modal
 const selectedEvent = ref<CroutonEvent | null>(null)
-const [showDetail, toggleShowDetail] = useToggle(false)
+const showDetail = ref(false)
 
 function handleEventClick(event: CroutonEvent) {
   selectedEvent.value = event
@@ -96,160 +94,70 @@ function handleEventClick(event: CroutonEvent) {
   emit('eventClick', event)
 }
 
-// Export functionality
+// Export — triggered from the page navbar via the exposed exportAs()
 const { exportToCSV, exportToJSON, exporting } = useCroutonEventsExport()
 
-async function handleExportCSV() {
+async function exportAs(format: 'csv' | 'json') {
   try {
-    await exportToCSV({ filters: filters.value })
+    if (format === 'csv') await exportToCSV({ filters: filters.value })
+    else await exportToJSON({ filters: filters.value })
   } catch (err) {
     console.error('Export failed:', err)
   }
 }
 
-async function handleExportJSON() {
-  try {
-    await exportToJSON({ filters: filters.value })
-  } catch (err) {
-    console.error('Export failed:', err)
-  }
+// Phone: the page header's "Filtres" button opens the filters drawer and shows its count
+const filtersRef = ref<{ openDrawer: () => void, activeFilterCount: number } | null>(null)
+const activeFilterCount = computed(() => filtersRef.value?.activeFilterCount ?? 0)
+
+function openFilters() {
+  filtersRef.value?.openDrawer()
 }
 
-// Stats
-const stats = computed(() => {
-  if (!events.value) return { total: 0, creates: 0, updates: 0, deletes: 0 }
-  const evts = events.value as CroutonEvent[]
-  return {
-    total: evts.length,
-    creates: evts.filter(e => e.operation === 'create').length,
-    updates: evts.filter(e => e.operation === 'update').length,
-    deletes: evts.filter(e => e.operation === 'delete').length
-  }
-})
+defineExpose({ refresh, exportAs, exporting, openFilters, activeFilterCount })
 </script>
 
 <template>
-  <div class="crouton-activity-log space-y-4">
-    <!-- Header with stats -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <h2 class="text-lg font-semibold">
-          Activity Log
-        </h2>
-        <div class="flex items-center gap-2 text-sm text-muted">
-          <span>{{ stats.total }} events</span>
-          <span class="text-green-500">+{{ stats.creates }}</span>
-          <span class="text-blue-500">~{{ stats.updates }}</span>
-          <span class="text-red-500">-{{ stats.deletes }}</span>
-        </div>
-      </div>
-
-      <!-- Export buttons -->
-      <div class="flex items-center gap-2">
-        <UDropdownMenu
-          :items="[
-            [
-              { label: 'Export as CSV', icon: 'i-lucide-file-spreadsheet', onSelect: handleExportCSV },
-              { label: 'Export as JSON', icon: 'i-lucide-file-json', onSelect: handleExportJSON }
-            ]
-          ]"
-        >
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="sm"
-            :loading="exporting"
-          >
-            <UIcon
-              name="i-lucide-download"
-              class="size-4 mr-1"
-            />
-            Export
-          </UButton>
-        </UDropdownMenu>
-      </div>
-    </div>
-
-    <!-- Filters -->
+  <div class="crouton-activity-log flex flex-col gap-6">
     <CroutonActivityFilters
       v-if="showFilters"
+      ref="filtersRef"
       v-model="filters"
-      :collections="availableCollections"
-      :users="availableUsers"
-      @refresh="refresh"
+      :collections="seenCollections"
+      :users="seenUsers"
     />
 
-    <!-- Error state -->
-    <div
+    <UAlert
       v-if="error"
-      class="rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 p-4"
-    >
-      <div class="flex items-center gap-2 text-red-600 dark:text-red-400">
-        <UIcon
-          name="i-lucide-alert-circle"
-          class="size-5"
-        />
-        <span>Failed to load activity: {{ error.message }}</span>
-      </div>
-      <UButton
-        color="error"
-        variant="ghost"
-        size="sm"
-        class="mt-2"
-        @click="() => refresh()"
-      >
-        Try Again
-      </UButton>
-    </div>
+      color="error"
+      variant="subtle"
+      icon="i-lucide-circle-alert"
+      :title="t('events.log.error')"
+      :description="error.message"
+      :actions="[{ label: t('events.log.retry'), color: 'error', variant: 'outline', onClick: () => refresh() }]"
+    />
 
-    <!-- Timeline -->
     <CroutonActivityTimeline
       v-else
-      :events="(events as CroutonEvent[]) || []"
+      :events="events"
       :loading="pending"
       :empty-message="emptyMessage"
       @event-click="handleEventClick"
     />
 
-    <!-- Pagination -->
     <div
-      v-if="showPagination && events?.length"
-      class="flex items-center justify-between border-t pt-4"
+      v-if="showPagination && !error && total > pageSize"
+      class="flex justify-center"
     >
-      <div class="text-sm text-muted">
-        Showing {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, stats.total) }} of {{ stats.total }}
-      </div>
-      <div class="flex items-center gap-2">
-        <UButton
-          color="neutral"
-          variant="outline"
-          size="sm"
-          :disabled="page <= 1"
-          @click="page--"
-        >
-          <UIcon
-            name="i-lucide-chevron-left"
-            class="size-4"
-          />
-          Previous
-        </UButton>
-        <UButton
-          color="neutral"
-          variant="outline"
-          size="sm"
-          :disabled="events && events.length < pageSize"
-          @click="page++"
-        >
-          Next
-          <UIcon
-            name="i-lucide-chevron-right"
-            class="size-4"
-          />
-        </UButton>
-      </div>
+      <UPagination
+        v-model:page="page"
+        :total="total"
+        :items-per-page="pageSize"
+        :sibling-count="1"
+        size="sm"
+      />
     </div>
 
-    <!-- Event Detail Modal -->
     <CroutonEventDetail
       v-if="selectedEvent"
       v-model="showDetail"

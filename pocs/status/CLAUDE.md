@@ -40,7 +40,7 @@ The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/deli
 signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
-`/apps` is the four-tab page (Apps, To test, Decisions, Changelog).
+`/apps` is the five-tab page (Apps, To test, Decisions, Changelog, Clock).
 
 ## Clock
 
@@ -50,9 +50,17 @@ It does nothing unless the Worker has `CLOCK_ENABLED=1`; then it mints one Harne
 (`server/utils/github-app.ts`, a copy of crouton-feedback's `githubApp.ts`; env `HARNESS_APP_ID`,
 `HARNESS_APP_PRIVATE_KEY`, `HARNESS_APP_INSTALLATION_ID`, pushed by deploy-app.yml on staging only — never
 the owner's `GITHUB_TOKEN`) and starts each job due in that 10-minute slot (`dueJobs` in
-`server/utils/clock-jobs.ts`) with `workflow_dispatch` on `main`, logging `clock: <workflow> → <status>`.
+`server/utils/clock-jobs.ts`) with `workflow_dispatch` on `main` and input `clock: 'true'` (so a gated
+workflow behaves as its timed run, not a hand start), logging `clock: <workflow> → <status>`.
+A row has `every` (`hour` | `day` | `week` | `month`) and `minute`, plus `hour` for day/week/month,
+`weekday` for week (0 = Sunday, as cron) and `day` for month; all times UTC.
 A tick that never arrives is skipped, with no catch-up. The clock only starts workflows; it does not sync
-cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch`, and remove its `schedule:`.
+cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch` with a boolean `clock`
+input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
+The **Clock** tab (`components/dashboard/ClockTab.vue`, fed by `GET /api/status/clock`) shows each job's last due slot,
+whether a clock run (workflow_dispatch by `nuxt-harness[bot]`, titled the workflow's name) started within 20 min of it
+and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A 403 on the runs list means the
+status token needs Actions: read (every row shows `unknown`).
 
 ## Owner email
 

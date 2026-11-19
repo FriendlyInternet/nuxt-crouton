@@ -59,8 +59,20 @@ export const NOISE_LINES = [
 /** The runner's own closing line — present in every failed job, never the cause. */
 export const EXIT_LINE = /^##\[error\]Process completed with exit code \d+\.?\s*$/
 
+/**
+ * Test-runner lines that are never a cause, whatever words they contain: a passing or skipped test
+ * and a "# Subtest:" header carry the test's NAME (PR #4148: a passing test named "… the real
+ * RollupError line → ok" was quoted as the failure), and a `# TODO` test is a known gap.
+ */
+const NOT_A_CAUSE = [
+  /^\s*ok \d+ - /,
+  /^\s*# Subtest: /,
+  /^\s*not ok \d+ - .*(?<!\\) # (TODO|SKIP)\b/, // a `#` inside a test name is printed as `\#`
+]
+
 const CAUSE_LINES = [
   /^\s*not ok \d+ - /,
+  /^FAIL: /, // this repo's own check scripts (PR #4150: "FAIL: … grew from 53 to 56 lines")
   /^##\[error\]/,
   /error TS\d+/,
   /\bRollupError\b/,
@@ -86,6 +98,7 @@ export function failingLines(raw, { max = 3 } = {}) {
     if (/^##\[(group|endgroup)\]/.test(text)) continue
     if (EXIT_LINE.test(text)) continue
     if (NOISE_LINES.some(re => re.test(text))) continue
+    if (NOT_A_CAUSE.some(re => re.test(text))) continue
     if (seen.has(text)) continue
     if (!CAUSE_LINES.some(re => re.test(text))) continue
     seen.add(text)

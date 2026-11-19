@@ -13,10 +13,13 @@ name: weekly
 # cleanup-merged-branches for the design notes (#1064, #1570, #933, #644).
 
 on:
-  schedule:
-    - cron: '30 6 * * 1'   # Mondays 06:30 UTC
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — Mondays 06:30 UTC
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       apply:
         description: 'cleanup job: actually delete merged branches (false = dry-run report only)'
         type: boolean
@@ -211,7 +214,7 @@ jobs:
       # Only here does the LLM run — to turn deterministic findings into a human-readable
       # recommendation issue. Pinned to the same SHA as the repo's other claude-code-action
       # workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+      - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: llm
         if: steps.advisor.outputs.actionable == 'true'
         # An LLM outage must not kill the run before the deterministic fallback below —

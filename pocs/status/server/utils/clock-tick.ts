@@ -33,7 +33,7 @@ export async function onTick(
       return results
     }
     for (const job of due) {
-      const r = await ghPost(`/repos/${REPO}/actions/workflows/${job.workflow}/dispatches`, token, { ref: 'main' }, fetchFn)
+      const r = await ghPost(`/repos/${REPO}/actions/workflows/${job.workflow}/dispatches`, token, { ref: 'main', inputs: { clock: 'true' } }, fetchFn)
       console.log(`clock: ${job.workflow} → ${r.status ?? r.error}`)
       results.push({ workflow: job.workflow, status: r.status })
     }

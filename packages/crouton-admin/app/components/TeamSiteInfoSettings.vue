@@ -6,7 +6,8 @@
  * calendar URL, registration URL, and social media links.
  */
 const { teamId } = useTeamContext()
-const { isAdmin } = useTeam()
+// Editing site info is the `site:manage` action (#4105)
+const isAdmin = useCan('site:manage')
 const { t } = useT()
 const notify = useNotify()
 

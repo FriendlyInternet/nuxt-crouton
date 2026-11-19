@@ -77,6 +77,16 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 | `useTeamContext()` | Current team context |
 | `useTeamState()` | Team state management |
 | `useCan(action)` | May the signed-in member do `action` in the current team? `ComputedRef<boolean>`, SSR-safe (#4104) |
+| `useCan(action, { server: false })` | Same, browser only — for shared-cached public pages, so no visitor's answer lands in the cached HTML (#4105) |
+| `useCanAnswers()` | Shared state of every `useCan` answer (`{ [teamId]: { [action]: boolean } }`); `useTeam()`'s `isAdmin` / `canManageMembers` / `canInviteMembers` read `team:manage` from it, else the owner/admin default (#4105) |
+
+## Middleware
+
+| Middleware | Purpose |
+|------------|---------|
+| `auth` | Signed-in only |
+| `guest` | Signed-out only |
+| `can` | Page guard: every matched route's `meta.can` must pass in the route's `[team]`; super-admins skip; refused → 403 (#4105). Shared check: `checkRouteCan(to, actions)` / `routeActions(to)` in `app/utils/routeCan.ts` |
 
 ## Components
 
@@ -175,6 +185,11 @@ const { team } = await requireCan(event, 'pages:edit') // resolves the team like
 
 // Client (works during SSR — useRequestFetch forwards the cookie)
 const canEdit = useCan('pages:edit') // ComputedRef<boolean>; an array = all must be allowed
+const canEditPublic = useCan('pages:edit', { server: false }) // on a cached public page: browser only
+
+// Page guard (#4105) — every matched route's `can` must pass (parent + child both checked)
+definePageMeta({ middleware: ['auth', 'can'], can: 'site:manage' })
+// Never use useCan() inside middleware: it reads false while loading, so it would refuse everyone.
 
 // HTTP
 GET /api/teams/[id]/can?actions=pages:edit,site:manage // → { 'pages:edit': true, 'site:manage': false }

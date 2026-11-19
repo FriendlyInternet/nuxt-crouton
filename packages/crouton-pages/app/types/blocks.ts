@@ -569,6 +569,12 @@ export interface BlockVisibility {
 export interface BlockAudienceContext {
   authenticated: boolean | null
   role: BlockAudienceRole | null
+  /**
+   * May the reader `admin:access` in this team (#4105)? When a boolean, the
+   * `admin` audience follows it instead of the role list; unset/`null` falls
+   * back to the role list.
+   */
+  canAdmin?: boolean | null
 }
 
 // ============================================================================

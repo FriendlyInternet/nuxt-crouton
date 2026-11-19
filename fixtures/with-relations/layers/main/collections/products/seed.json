@@ -1,0 +1,21 @@
+{
+  "table": "main_products",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "price": 1,
+      "inStock": true
+    },
+    {
+      "title": "Sample title 2",
+      "price": 2,
+      "inStock": false
+    },
+    {
+      "title": "Sample title 3",
+      "price": 3,
+      "inStock": true
+    }
+  ]
+}
