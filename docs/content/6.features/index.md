@@ -211,8 +211,7 @@ CMS-like page management system:
 **File**: `19.bookings.md` | **Status**: Experimental ⚠️
 
 Booking system for appointments and reservations:
-- Slot-based bookings (courts, rooms)
-- Inventory-based reservations (equipment)
+- Locations with or without time slots, each offering team products with a stock
 - Customer booking wizard
 - Cart system for multiple bookings
 - Email notifications (opt-in)

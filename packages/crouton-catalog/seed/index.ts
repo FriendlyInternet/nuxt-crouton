@@ -1,7 +1,7 @@
 /**
  * crouton-catalog seed provider.
  *
- * Two demo products per team ("Court" and "Kayak"), so an app with bookings
+ * Four demo products per team (Court, Kayak, Cargo bike, Kids' bike), so an app with bookings
  * opens with a populated Products list. Pure module: references the
  * `catalog_products` table/column names as strings, so it loads cleanly under
  * jiti. Idempotent — stable `seedId(...)` ids upsert in place on re-run.
@@ -13,7 +13,9 @@ import { seedId } from '@fyit/crouton-core/shared/seed'
 
 const PRODUCTS = [
   { key: 'court', title: 'Court', titleNl: 'Terrein' },
-  { key: 'kayak', title: 'Kayak', titleNl: 'Kajak' }
+  { key: 'kayak', title: 'Kayak', titleNl: 'Kajak' },
+  { key: 'cargo-bike', title: 'Cargo bike', titleNl: 'Bakfiets' },
+  { key: 'kids-bike', title: "Kids' bike", titleNl: 'Kinderfiets' }
 ]
 
 export const provider: SeedProvider = {

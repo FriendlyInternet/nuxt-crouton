@@ -2,7 +2,7 @@
 
 ## Package Purpose
 
-Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
+Booking system layer for Nuxt applications: bookings for locations with or without time slots, each offering team products (`@fyit/crouton-catalog`) with a stock. Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
 
 ## Key Files
 
@@ -24,7 +24,7 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | Route access (#3135) | **Writes to `locations`, `settings`, `emailtemplates`, all `emaillogs` routes, `bookings-bookings` POST and `admin-bookings` need `requireTeamAdmin`.** Members: `bookings-bookings` list returns only their own rows (no user emails); `bookings/[id]` PATCH and `resend-email` are owner-or-admin (403 otherwise). The customer calendar reads `calendar-bookings` (member-safe: id/location/date/slot/quantity/status only). Template `fromEmail` must be on the domain of `runtimeConfig.email.from` (`server/utils/sender-domain.ts`). Tests: `test/booking-authz.test.ts` |
 | `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps pick up the 5 collection tables in `db:generate` (velo: "No schema changes" after the move) |
 | `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
-| `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two courts with time slots, one rental without slots (stock 8)) + a few bookings, so previews open populated |
+| `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two courts with time slots, one rental without slots (stock 8), and a Bike Shed (two slots, full day, three products)) + a few bookings, so previews open populated |
 
 **Note:** Since #2278 the collection composables (`useBookingsBookings()`, `useBookingsLocations()`, …), tables and CRUD routes ship from this package (`collections/*`). A consuming app only extends `@fyit/crouton-bookings`; it generates nothing for bookings and lists nothing in `crouton.config.js` for it. `features.bookings` in that file only carries the email configuration. Changing a column = edit `collections/<name>/server/database/schema.ts` here, then `db:generate` in each app.
 
@@ -238,18 +238,20 @@ bookings.
 ## Demo Seeding (`@fyit/crouton-bookings/seed`)
 
 Part of the composable seeding system (epic #82, contract in
-`@fyit/crouton-core/shared/seed`). Provider id `bookings`, `dependsOn: ['auth']`:
+`@fyit/crouton-core/shared/seed`). Provider id `bookings`, `dependsOn: ['auth', 'catalog']`:
 
 - **Settings:** one `bookings_settings` row with three statuses
   (confirmed/pending/cancelled) and two age groups (adults/youth), each an
   option item (`{ id, value, label, translations }`) so booking `status`/`group`
   values resolve to readable, translated labels in the admin list.
-- **Locations:** three `bookings_locations` — two courts with named time slots
-  and one rental without slots (its product's stock is 8). Titles carry
-  `nl`/`en` translations.
-- **Bookings:** four `bookings_bookings` referencing those locations/slots,
-  dated `unixepoch() + N*86400` so they always sit in the near future. Slot-mode
-  rows store a JSON array of slot ids (`["slot-0900"]`); the slotless row stores
+- **Locations:** four `bookings_locations` — two courts with named time slots,
+  one rental without slots (its product's stock is 8), and a Bike Shed with two
+  slots, `offerFullDay` and three products (cargo-bike 3 / kids-bike 5 /
+  kayak 8). Titles carry `nl`/`en` translations.
+- **Bookings:** five `bookings_bookings` referencing those locations/slots,
+  dated `unixepoch() + N*86400` so they always sit in the near future (the Bike
+  Shed one names its product, cargo-bike; the others book their location's
+  first product). Rows with slots store a JSON array of slot ids (`["slot-0900"]`); the slotless row stores
   the JSON literal `null` (read as full day; new live bookings store
   `["all-day"]` since #4172; the `slot` column is NOT-NULL JSON).
 

@@ -44,7 +44,8 @@ Venues, resources, or bookable items.
 | `description` | textarea | No | Description |
 | `address` | text | No | Physical address (for venues) |
 | `maxBookingsPerMonth` | number | No | Max bookings per user per calendar month (null = unlimited) |
-| `slots` | json/array | No | Available time slots (slot mode only) |
+| `slots` | json/array | No | Available time slots (empty = booked for the whole day) |
+| `offerFullDay` | boolean | No | Offer a full-day choice next to the slots |
 | `products` | repeater | No | Products this location offers, each with its own stock (`[{ product, stock }]`); saved without products → the server gives it one product of its own (`loc-<id>`); each product's `stock` is what the counting uses, per day and per slot |
 | `slotGroups` | json | No | Grouped time slots with colors |
 | `accessControl` | select | No | Who can book (public, members, team) |
