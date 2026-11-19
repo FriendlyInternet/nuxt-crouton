@@ -11,7 +11,7 @@ import { loginHrefFor } from '../app/utils/walk'
 // source) with one fixture per branch, so splitting the page into tab components (#3763) is held
 // to the same output. Stubbed: Nuxt auto-imports (useFetch returns the fixture for each endpoint),
 // the Nuxt UI components (plain tags that print their label/title and every slot), and
-// ReplyButtons (prints kind + number). UTabs renders all four tab slots at once.
+// ReplyButtons (prints kind + number). UTabs renders all five tab slots at once.
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appDir = resolve(here, '../app')
@@ -40,6 +40,14 @@ const label = (attrs: Record<string, unknown>) => (attrs.label ?? attrs.title ??
 const ui = (tag: string) => defineComponent({
   inheritAttrs: false,
   setup: (_, { slots, attrs }) => () => h(tag, { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant }, [label(attrs), ...Object.values(slots).map(s => s?.())])
+})
+// UTabs prints each tab's label (data-tab) before every slot.
+const tabsStub = defineComponent({
+  inheritAttrs: false,
+  setup: (_, { slots, attrs }) => () => h('div', [
+    ...((attrs.items ?? []) as Array<{ label: string }>).map(i => h('span', { 'data-tab': i.label })),
+    ...Object.values(slots).map(s => s?.())
+  ])
 })
 const replyButtons = defineComponent({ props: ['kind', 'number'], setup: p => () => h('reply', `${p.kind}:${p.number}`) })
 
@@ -70,6 +78,13 @@ const FIXTURES: Record<string, unknown> = {
   '/api/status/changelog': {
     data: [{ date: '2026-11-12', number: 21, title: 'Inbox first', area: 'status', url: 'https://gh/21' }],
     error: null
+  },
+  '/api/status/clock': {
+    data: [
+      { workflow: 'pipeline-metrics.yml', schedule: 'every hour, :20–:30', lastDue: '2026-11-19T10:20:00Z', nextDue: '2026-11-19T11:20:00Z', lastRun: { id: 5, url: 'https://gh/runs/5', createdAt: '2026-11-19T10:22:00Z', status: 'completed', conclusion: 'success' }, state: 'ok' },
+      { workflow: 'housekeeping.yml', schedule: 'daily 06:00 UTC', lastDue: '2026-11-19T06:00:00Z', nextDue: '2026-11-20T06:00:00Z', lastRun: null, state: 'missed' }
+    ],
+    error: null
   }
 }
 
@@ -81,7 +96,8 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
   const Page = await compile(path)
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
-  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput', 'UTabs']) app.component(n, ui('div'))
+  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput']) app.component(n, ui('div'))
+  app.component('UTabs', tabsStub)
   app.component('ReplyButtons', replyButtons)
   for (const f of readdirSync(dashboardDir).filter(f => f.endsWith('.vue'))) {
     app.component(`Dashboard${basename(f, '.vue')}`, await compile(join(dashboardDir, f)))
@@ -137,13 +153,28 @@ describe('apps dashboard page server render', () => {
 
   it('loading and empty states', async () => {
     const loading = visible(await renderPage(pagePath, {}, 'pending'))
-    expect(loading.match(/Loading…/g)?.length).toBe(4)
+    expect(loading.match(/Loading…/g)?.length).toBe(5)
     expect(loading).not.toContain('No apps found.')
     const empty = visible(await renderPage(pagePath, {}))
     expect(empty).toContain('No apps found.')
     expect(empty).toContain('Nothing to test yet.')
     expect(empty).toContain('No decisions yet.')
     expect(empty).toContain('No changes yet.')
+    expect(empty).toContain('No clock jobs.')
     expect(empty).not.toContain('data-c="All"') // no filter buttons without options
+  })
+
+  // covers: T4
+  it('Clock tab: five tabs, a missed job listed before an ok one, badge words + run link', async () => {
+    const html = visible(await renderPage())
+    expect(html.match(/data-tab="[^"]+"/g)).toEqual(['Apps', 'To test', 'Decisions', 'Changelog', 'Clock'].map(t => `data-tab="${t}"`))
+    expect(html.indexOf('>housekeeping<')).toBeGreaterThan(-1)
+    expect(html.indexOf('>housekeeping<')).toBeLessThan(html.indexOf('>pipeline-metrics<'))
+    expect(html).toContain('daily 06:00 UTC')
+    expect(html).toContain('data-color="error"')
+    expect(html).toContain('>missed<')
+    expect(html).toContain('>ran<')
+    expect(html).toContain('href="https://gh/runs/5"')
+    expect(html).toContain('Thu 19 Nov, 11:22') // last run in Europe/Brussels (UTC+1)
   })
 })

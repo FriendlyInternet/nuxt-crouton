@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// The dashboard: Apps · To test · Decisions · Changelog. The page fetches and owns the filter
+// The dashboard: Apps · To test · Decisions · Changelog · Clock. The page fetches and owns the filter
 // state (so it survives switching tabs); each tab is its own component in components/dashboard/.
-import type { AppRow, ChangelogRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
+import { sortClockRows } from '~/utils/dashboard'
+import type { AppRow, ChangelogRow, ClockRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -9,12 +10,17 @@ const tabs = [
   { label: 'Apps', slot: 'apps', icon: 'i-lucide-layout-grid' },
   { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
   { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
-  { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' }
+  { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' },
+  { label: 'Clock', slot: 'clock', icon: 'i-lucide-clock' }
 ]
 
 const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
+const { data: clockRes, status: clockStatus } = await useFetch<{ data: ClockRow[] | null, error: string | null }>('/api/status/clock', { lazy: true })
+
+// --- Clock ---
+const clockRows = computed(() => sortClockRows(clockRes.value?.data ?? []))
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
@@ -73,6 +79,9 @@ const filteredRows = computed(() => {
       </template>
       <template #changelog>
         <DashboardChangelogTab v-model:search="search" v-model:area="areaFilter" :error="changelogRes?.error" :pending="changelogStatus === 'pending'" :areas="areas" :rows="filteredRows" />
+      </template>
+      <template #clock>
+        <DashboardClockTab :error="clockRes?.error" :pending="clockStatus === 'pending'" :rows="clockRows" />
       </template>
     </UTabs>
   </UContainer>
