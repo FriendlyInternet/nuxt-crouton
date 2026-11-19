@@ -74,6 +74,7 @@ export default defineNuxtConfig({
 | `app/components/TabsPanel.vue` | `CroutonTabsPanel` — **the** shell for a tabbed admin section (#2380); use it instead of hand-rolling `UDashboardPanel` + `UDashboardNavbar` + `UNavigationMenu`. Props: `title`, `tabs` (`NavigationMenuItem[]`, flat or grouped), `maxWidth?` (default `max-w-5xl`, left-aligned), `fill?` (default `false`; opt-in — bounds the body to the panel height with `overflow-hidden` so the page owns its scrolling; used only by the bookings overview). Default slot = the tab's page (`<NuxtPage />`). One top-bar row: sidebar toggle/collapse, title (screen-reader only on phones), full-label tabs that swipe sideways and auto-scroll the active tab into view. **Gutter convention:** the body adds no padding — each tab page owns it with `p-4 sm:p-6` (16/24px = the top bar's inset; `CroutonCollectionViewer` already matches). Consumers: crouton-admin `team.vue`, crouton-bookings `bookings.vue`, crouton-sales `sales.vue`. |
 | `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. On mobile the detail opens in a full-screen `USlideover`; the shell renders a **back bar** to dismiss it (there's no tappable backdrop). A consumer that folds its own back affordance into the detail (pages' editor toolbar) sets **`content-provides-back`** to suppress that bar and uses the **`onClose`** content-slot prop to deselect. |
 | `app/layouts/admin.vue`, `super-admin.vue` | Mount `<CroutonUserPill placement="fixed" />` (crouton-auth; no-op stub in core) top-right; on phones the layouts add end padding to navbar roots (`[data-slot=root]:has(>[data-slot=right])`) so the pill never covers page tabs (#2466). The old bottom `AdminStatusBar`, `useAdminStatusBar()` and the sidebar `UserMenu` footer are gone (#2424) — status comes from `useCroutonStatus()` / `useNotify()`. |
+| `app/composables/useCroutonStatus.ts` | Status feed. `refreshTeamEvents(force)` merges crouton-events rows into the feed (returns the count of new teammate rows, `null` when skipped/failed). With collab, `onRemoteChange()` (fed by `crouton:remoteChange`, debounced 1 s) refreshes at once and retries once after 2 s only if no new teammate row came back (never on request errors). `mergeTeamEvents(..., ownFloor)` keeps 3 of the 5 feed slots for own changes (own = local entries + fetched rows of the current user); with collab a separate 3-row own fetch runs beside the team fetch. |
 | `app/composables/useNotify.ts` | The ONE notification sink (#2465). Every level goes to the status feed when the app has the pill (`appConfig.crouton.status === 'pill'`, set by crouton-auth) — decided from config, never from mount state; no pill → toast; `target: 'toast'` opts out. `useNotify().add()` is a drop-in for `useToast().add()`: success/info/warning/error/primary-coloured toasts without `actions` go to the feed, anything else (neutral, action buttons) stays a toast. Don't call `useToast().add()` for status messages. |
 | `app/composables/useTeamContext.ts` | Team context access (teamId, teamSlug from route or auth) |
 | `app/composables/useImageCrop.ts` | Cropperjs v2 composable for image cropping |
@@ -87,13 +88,15 @@ export default defineNuxtConfig({
 | `app/components/stubs/` | No-op stubs (`priority: -1`) for optional package components |
 | `app/composables/useCroutonApps.ts` | App registry — `hasApp('assets')` for optional package detection |
 | `app/types/layout-block.ts` | `CroutonLayoutBlockDefinition` (id/name/description/icon + component **string** + `kind`/`configSchema`) — the placeable-block contract (mirrors `CroutonPageType`). Plus the **sizing contract** (#710): `minWidth`/`minHeight`/`maxWidth`/`defaultSize`/`aspect`/`resize`/`density` — all optional; undeclared = fully fluid (`minWidth` 0). **Plus the fill/hug descriptor + first-class variants (#986):** `sizing?: { width, height: 'fill'\|'hug' }` (the qualitative "component decides its size"; absent ⇒ `DEFAULT_BLOCK_SIZING` fully `fill`; `LayoutAxisSizing`/`LayoutBlockSizing` exported here) and `variants?: string[]` (the bounded display-variant option list, parallel to the `configSchema` `variant` select, read directly by `crouton-layout`'s `deriveSizing`/`resolveVariant`). |
-| `app/types/layout.ts` | `LayoutTree` / `LayoutNode` (`split` \| `leaf` \| `nested`) — the persisted "layout is data" tree. A `nested` node hosts a whole sub-layout (`{ type:'nested', layout: LayoutTree, label? }`) so a page-layout's panes can be app-layouts (recursive "layouts in layouts", WS2 #871). Plus `LayoutBreakpoint` + `LayoutTree.breakpoints?` (WS5 #874) — authored min-width checkpoints that **lock upward** (per-field last-wins: `root` arrangement / `collapsed` set / `variants` / `collapseStyle`); resolved by `crouton-layout`'s `resolveLayoutAtWidth`. Plus `LayoutCollapseStyle` (WS6 #875) — the **closed** set of pane-collapse motions (`gutter-tabs` \| `spring-drawer` \| `crt-power-down` \| `iris-portal`) with `LAYOUT_COLLAPSE_STYLES` / `DEFAULT_COLLAPSE_STYLE` / `isLayoutCollapseStyle` / `isInPlaceCollapse` (`gutter-tabs` leaves the splitter into a rail; the rest collapse in place). `LayoutBreakpoint.collapseStyle` is typed to it; the value is per-breakpoint. |
+| `app/types/layout.ts` | `LayoutTree` / `LayoutNode` (`split` \| `leaf` \| `nested`) — the persisted "layout is data" tree. A `nested` node hosts a whole sub-layout (`{ type:'nested', layout: LayoutTree, label? }`) so a page-layout's panes can be app-layouts (recursive "layouts in layouts", WS2 #871). Plus `LayoutBreakpoint` + `LayoutTree.breakpoints?` (WS5 #874) — authored min-width checkpoints that **lock upward** (per-field last-wins: `root` arrangement / `collapsed` set / `variants` / `collapseStyle`); resolved by `crouton-layout`'s `resolveLayoutAtWidth`. Plus `LayoutCollapseStyle` (WS6 #875) — the **closed** set of pane-collapse motions (`gutter-tabs` \| `spring-drawer` \| `crt-power-down` \| `iris-portal`) with `LAYOUT_COLLAPSE_STYLES` / `DEFAULT_COLLAPSE_STYLE` / `isLayoutCollapseStyle` / `isInPlaceCollapse` (`gutter-tabs` leaves the splitter into a rail; the rest collapse in place). `LayoutBreakpoint.collapseStyle` is typed to it; the value is per-breakpoint. **Layout stores (#3650):** a leaf may name a `source` (`'id'` or `'id#copy'`); a tree may carry `sources` options; store/feed types `CroutonLayoutStoreDefinition` / `CroutonLayoutStoreFeed` / `LayoutStoreContext` / `LayoutStoreEntry`. |
 | `app/types/block-core.ts` | `CroutonBlockCore` (#716) — the surface-agnostic projection both block registries share (id/name/description/icon/category + `renderer` NAME + `clientOnly` + `surface`). A read-side projection, **not** a base both definitions `extends` (keeps the working TipTap `croutonBlocks` shape — `type`/`components.renderer` — untouched). |
 | `app/composables/useCroutonBlockCatalog.ts` | **Unified block catalog** (#716) — one read facade over BOTH registries (`croutonBlocks` TipTap content + `croutonLayoutBlocks` panes). `getBlock(id)` / `listBlocks(surface?)` answer from a single merged `id → CroutonBlockCore` map (pane wins an id collision). Pure `documentBlockToCore` / `layoutBlockToCore` / `buildBlockCatalog` exported for tests. So pages/panes/(later)flow ask one place. |
 
 > **The layout *engine* now lives in `@fyit/crouton-layout`** (extraction epic #751): the editor/renderer components (`CroutonLayout*`), the compose/viability/edit utils, the `useCroutonLayout{Blocks,Edit,Store}` composables, the `croutonLayoutBlocks` defaults, and the `layout_configs` schema + API + `/admin/[team]/layout` page. Core keeps the **shared types** above (`layout.ts`, `layout-block.ts`, `block-core.ts`), the `useCroutonBlockCatalog` facade, **and the `sanitizeLayoutTree` gate** (`app/utils/layout-tree.ts`) — so feature packages (bookings/pages) depend on core, not on the layout layer. See `packages/crouton-layout/CLAUDE.md`.
 
-> **`app/utils/layout-tree.ts` — `sanitizeLayoutTree`** (auto-imported): the pure shape gate that validates an untrusted `LayoutTree` (from a page's embedded `paneBlock`) before render, or returns `null`. It lives HERE (paired with the `layout.ts` types), not in crouton-layout, so `crouton-pages`' `PaneBlock` validates an embedded layout WITHOUT the app extending crouton-layout (#1618 — was in layout since #756; moved back when crouton-pages became a consumer). crouton-layout re-imports it from `@fyit/crouton-core/app/utils/layout-tree`.
+> **`app/utils/layout-tree.ts` — `sanitizeLayoutTree`** (auto-imported): the pure shape gate that validates an untrusted `LayoutTree` (from a page's embedded `paneBlock`) before render, or returns `null`. It lives HERE (paired with the `layout.ts` types), not in crouton-layout, so `crouton-pages`' `PaneBlock` validates an embedded layout WITHOUT the app extending crouton-layout (#1618 — was in layout since #756; moved back when crouton-pages became a consumer). crouton-layout re-imports it from `@fyit/crouton-core/app/utils/layout-tree`. It keeps a leaf's `source` string and a tree's `sources` map (#3650).
+
+> **Layout stores (#3650)** — `app/utils/layout-stores.ts` `collectLayoutStores(tree)` (pure, auto-imported; also `@fyit/crouton-core/app/utils/layout-stores`): every store copy a layout needs (leaf sources + `sources` keys across root, breakpoint roots and nested sub-layouts; outer options win; sorted). `app/utils/layout-store-registry.ts` `defineCroutonLayoutStore({ id, setup, feeds })` — **call from a Nuxt plugin**; one registry per Nuxt app (so per server request), re-registering the same definition is silent, a different one under a taken id warns in dev. Read with `useCroutonLayoutStoreRegistry()` (`get`/`list`). A domain package registers stores with only a core dependency; the scope + binding live in crouton-layout.
 | `app/components/BlockFrame.vue` | `<CroutonBlockFrame>` (#2414) — shared chrome for editor-block NodeViews: selected border, label row, edit/delete (hover on desktop, always on `pointer-coarse`), double-click opens panel. Props `node`, `getPos`, `selected`, `icon`, `label`, `tapToOpen` (default false); emits `delete`; slots default, `#actions`, `#meta`. The block keeps its own `<NodeViewWrapper>` (tiptap stays out of core) |
 | `app/composables/useBlockEditRequest.ts` | `findEditorId` + `useBlockEditRequest(ref).openPanel(node, pos)` — dispatches the bubbling `block-edit-request`. Import explicitly in NodeViews (composables aren't auto-imported there) |
 | `app/composables/useCroutonRedirects.ts` | Built-in redirects collection config, Zod schema, columns |
@@ -234,6 +237,9 @@ collection:{name}:{queryJSON}     # List queries
 collection-item:{name}:{id}       # Single items
 ```
 
+The list key is a reactive `computed`, so changing a query on one instance changes
+that instance's key (two lists with different filters never share data).
+
 Mutations invalidate ALL cache keys for the collection.
 
 ## Server Pagination
@@ -250,7 +256,7 @@ const { items, page, pageSize, total, pageCount, paginationData, setPage }
 ```
 
 - `page`/`pageSize` are writable refs folded into the request query (changing `pageSize`
-  resets to page 1). They become part of the cache key, so each page caches separately.
+  resets to page 1). They become part of the cache key, so the key changes with the page and each page caches separately.
 - `total` prefers the server's `{ total }`, falling back to array length (so it also works
   against a non-paginated endpoint). `pageCount = ceil(total / pageSize)`.
 - `paginationData` is shaped for `<CroutonCollection :pagination-data>` and is `null` when
@@ -387,8 +393,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 ### Add a new component
 1. Create file in `app/components/{Name}.vue`
-2. Use `<script setup lang="ts">`
-3. Auto-imports as `Crouton{Name}`
+2. Auto-imports as `Crouton{Name}`
 
 ### Modify team-auth logic
 1. Team auth is now in `@crouton/auth` package
@@ -476,6 +481,6 @@ Delete actions always use modal overlay regardless of container type.
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 pnpm build          # Verify build works
 ```

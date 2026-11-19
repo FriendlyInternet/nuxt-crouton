@@ -260,6 +260,8 @@ pi.interaction (root)
 
 **Privacy rule:** Use `metadata_only` (the default). This aligns with our "names + ids + durations + cost ONLY, never tool payloads" rule.
 
+Exception (#4161): the worker also uploads the raw session file, secrets redacted by `scripts/pi-session-redact.mjs`, as the `pi-session-<run>` artifact (3-day retention) so a killed run can be diagnosed; the trace itself stays payload-free.
+
 ### Config sample (for `~/.pi/agent/settings.json`)
 ```jsonc
 {

@@ -2,7 +2,7 @@
  * FLIP reflow helpers (#943) — the *pure* half of animating a split's panes when
  * its children change (a pane detached, a block inserted between panes).
  *
- * `CroutonLayoutRenderer` keys its panes by index, so on a pane-count change reka-ui
+ * `CroutonLayoutRenderer` keys its panes by index, so on a pane-count change the splitter
  * tears down the old panes and builds fresh ones already at their final size — there's
  * nothing in-place to tween. FLIP solves that *without* changing keys or sizing: measure
  * each pane's box BEFORE the change, let the DOM settle, then apply the inverse transform

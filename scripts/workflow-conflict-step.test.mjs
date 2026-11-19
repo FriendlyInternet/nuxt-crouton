@@ -119,3 +119,33 @@ test('gate: conflict failed -> run fails, but no ticket comment', async () => {
   const c = await gate({ CONFLICT_FAILED: '1' })
   assert.equal(c.failed.length, 1)
 })
+
+test("pi-request runs the owner's request only after the conflict merge is committed (#3775)", () => {
+  const at = (id) => YML.findIndex((l) => l.trim() === `- id: ${id}`)
+  const [conflict, request, finish] = [at('conflict'), at('pi-request'), at('finish')]
+  assert.ok(conflict >= 0 && request > conflict && finish > request, `order conflict(${conflict}) < pi-request(${request}) < finish(${finish})`)
+  const cond = YML.slice(request, request + 3).find((l) => l.trim().startsWith('if:'))
+  assert.ok(cond, 'pi-request has an if:')
+  assert.ok(cond.includes("steps.revise.outputs.conflict == '1'"), cond)
+  assert.ok(cond.includes("steps.conflict.outputs.rev_base != ''"), 'skipped unless the conflict step committed a merge')
+  const run = block('- id: pi-request', 'run')
+  assert.match(run, /pipeline-prompt\.mjs pi-reviser [^\n]*--var-file "feedback=/)
+  assert.match(run, /--session-dir "\$RUNNER_TEMP\/pi-session"/)
+  assert.match(run, /tee -a "decompose-pidev-exec-/)
+  // and the resolver itself is no longer handed the comment. The pi step builds its prompt in
+  // scripts/pi-run.mjs (#3620), so check the vars buildPrompt hands the resolver persona.
+  assert.match(block('- id: pi', 'run'), /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+})
+
+test('the conflict resolver prompt (scripts/pi-run.mjs buildPrompt) gets only pr/issue/branch/task, never feedback', async () => {
+  const { buildPrompt } = await import('./pi-run.mjs')
+  const rt = mkdtempSync(join(tmpdir(), 'conflict-prompt-'))
+  writeFileSync(join(rt, 'feedback.txt'), 'OWNER-COMMENT-MARKER\n')
+  writeFileSync(join(rt, 'conflict-task.txt'), 'merge conflicted in a.mjs\n')
+  const calls = []
+  const renderPrompt = (agent, vars) => { calls.push({ agent, vars }); return `${agent}:${JSON.stringify(vars)}` }
+  const gh = () => '77\n'
+  const out = await buildPrompt({ ISSUE: '1', REVISE: '1', REV_CONFLICT: '1', REV_BRANCH: 'epic/1--x', RUNNER_TEMP: rt, GITHUB_REPOSITORY: 'o/r' }, { gh, renderPrompt })
+  assert.deepEqual(calls, [{ agent: 'pi-conflict-resolver', vars: { pr: '77', issue: '1', branch: 'epic/1--x', task: 'merge conflicted in a.mjs\n' } }])
+  assert.doesNotMatch(out, /OWNER-COMMENT-MARKER/)
+})

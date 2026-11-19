@@ -1,13 +1,21 @@
 {
   "name": "@fyit/crouton-editor",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "nuxt typecheck"
+  },
   "description": "Rich text editor layer extending nuxt-crouton (wraps Nuxt UI Editor)",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit"
+  },
   "files": [
     "app",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
@@ -38,6 +46,7 @@
     "nuxt": "^4.0.0"
   },
   "dependencies": {
-    "@tiptap/extension-collaboration": "^3.15.3"
+    "@tiptap/extension-collaboration": "^3.15.3",
+    "@tiptap/y-tiptap": "^3.0.1"
   }
 }

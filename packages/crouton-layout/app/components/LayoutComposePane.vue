@@ -13,9 +13,9 @@
  * Kept separate from the read-only `CroutonLayoutRenderer` so that stays chrome-free.
  */
 import { computed } from 'vue'
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '../utils/layout-edit'
+import { composeSplitterItems, splitterHandleClass } from '../utils/layout-splitter-items'
 
 export interface ComposeAddr { inner: NodePath, nestedAt: NodePath | null }
 
@@ -114,32 +114,22 @@ const childNestedAt = computed<NodePath | null>(() => props.nestedAt ?? props.pa
     />
   </div>
 
-  <!-- Split → reka-ui group, recursing with each child's path (nestedAt forwarded) -->
-  <SplitterGroup
+  <!-- Split → USplitter, recursing with each child's path (nestedAt forwarded) -->
+  <USplitter
     v-else-if="node.type === 'split'"
-    :direction="node.direction"
+    :orientation="node.direction"
+    :items="composeSplitterItems(node)"
     class="h-full w-full"
+    :ui="{ handle: `bg-border transition-colors hover:bg-primary ${splitterHandleClass(node.direction, 'px')}` }"
   >
-    <template
-      v-for="(child, i) in node.children"
-      :key="i"
-    >
-      <SplitterResizeHandle
-        v-if="i > 0"
-        class="bg-border transition-colors hover:bg-primary data-[orientation=horizontal]:w-px data-[orientation=vertical]:h-px"
+    <template #pane="{ index }">
+      <CroutonLayoutComposePane
+        :node="node.children[index]!"
+        :path="[...path, index]"
+        :nested-at="nestedAt"
+        @detach="(a: ComposeAddr) => emit('detach', a)"
+        @remove="(a: ComposeAddr) => emit('remove', a)"
       />
-      <SplitterPanel
-        :default-size="child.defaultSize ?? (100 / node.children.length)"
-        class="overflow-hidden"
-      >
-        <CroutonLayoutComposePane
-          :node="child"
-          :path="[...path, i]"
-          :nested-at="nestedAt"
-          @detach="(a: ComposeAddr) => emit('detach', a)"
-          @remove="(a: ComposeAddr) => emit('remove', a)"
-        />
-      </SplitterPanel>
     </template>
-  </SplitterGroup>
+  </USplitter>
 </template>

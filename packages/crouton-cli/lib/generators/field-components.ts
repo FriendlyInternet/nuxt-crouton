@@ -303,7 +303,7 @@ function tplString(value: unknown): string {
 }
 
 function generateTranslatableFormField(propName: string, label: string, propDef: Record<string, any>, isRequired: boolean): string {
-  const inputType = propDef.type === 'text' ? 'UTextarea' : 'UInput'
+  const inputType = propDef.component || 'UInput'
   const placeholder = propDef.placeholder || `Enter ${label.toLowerCase()}`
 
   // Generate proper label with optional required asterisk

@@ -59,3 +59,18 @@ test('16 early verify failure fails the run with the numbers (not just a warning
   assert.match(block, /exit 1/)
   assert.ok(!block.includes('::warning::${VERIFY_MSG}'))
 })
+
+test('17 #3704 merge guard: after the #2914 block, before the first checkout -f -B "$BR", caught with || GRC=$?', () => {
+  const lines = SRC.split('\n')
+  const g2914 = lines.findIndex(l => l.includes('pushing nothing (#2914)'))
+  const guard = lines.findIndex(l => l.includes('node "$RUNNER_TEMP/revise-merge-guard.mjs"'))
+  const checkout = lines.findIndex(l => l.includes('git checkout -f -B "$BR"'))
+  assert.ok(g2914 > 0 && guard > g2914 && checkout > guard, `${g2914} < ${guard} < ${checkout}`)
+  assert.match(lines[guard], /\|\| GRC=\$\?\s*$/)
+  assert.match(lines[guard + 1], /"\$GRC" -eq 3 \]; then echo "merge_refused=1" >> "\$GITHUB_OUTPUT"; exit 0/)
+  assert.match(SRC, /cp scripts\/revise-merge-guard\.mjs "\$RUNNER_TEMP\/revise-merge-guard\.mjs"/)
+})
+
+test('18 artifact-gate step receives MERGE_REFUSED from the finish step (#3704)', () => {
+  assert.match(SRC, /^\s+MERGE_REFUSED: \$\{\{ steps\.finish\.outputs\.merge_refused \}\}/m)
+})

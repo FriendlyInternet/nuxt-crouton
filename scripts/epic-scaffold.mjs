@@ -73,6 +73,11 @@ export function parseScaffoldPlan(raw) {
 /** PURE: the branch name for an epic number. */
 export const epicBranch = (n, slug) => `epic/${n}-${slug}`
 
+// #3501: pipeline:v1 is read by the decomposer only; a hand-made epic stays on today's path.
+export const v1LabelWarning = (labels = []) => (labels || []).includes('pipeline:v1')
+  ? "epic-scaffold: pipeline:v1 is ignored for hand-made epics — this epic uses today's path (branch epic/<n>-<slug>); use the decomposer for v1 (#3501)"
+  : ''
+
 /** PURE: child gh actions for an already-numbered epic (depth 0 → children at depth 1). */
 export function scaffoldActions(plan, { epic, knownLabels = [] }) {
   return planToActions(
@@ -118,12 +123,16 @@ export function resolveMainSha(run = exec) {
   return sha
 }
 
-/** Create the branch at main's sha on the remote, idempotently (never a duplicate). */
-function ensureBranch(branch, sha) {
-  if (exec('git', ['ls-remote', '--heads', 'origin', branch])) return false
+/**
+ * Create the branch at main's sha on the remote, idempotently (never a duplicate).
+ * The lookup is anchored to `refs/heads/`: an unanchored ls-remote pattern matches the END of a ref,
+ * so `epic/9-x` would also find `archive/epic/9-x` (a branch set aside by /fresh-branch, #3881).
+ */
+export function ensureBranch(branch, sha, run = exec) {
+  if (run('git', ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])) return false
   // Fetch main explicitly so the object exists locally, then push the SHA — not `origin/main`.
-  exec('git', ['fetch', 'origin', 'main'])
-  exec('git', ['push', 'origin', `${sha}:refs/heads/${branch}`])
+  run('git', ['fetch', 'origin', 'main'])
+  run('git', ['push', 'origin', `${sha}:refs/heads/${branch}`])
   return true
 }
 
@@ -148,6 +157,8 @@ function main(argv) {
     console.error(`epic-scaffold: ${e.message}`)
     process.exit(1)
   }
+  const v1Warn = v1LabelWarning(plan.labels)
+  if (v1Warn) console.error(v1Warn)
   const knownLabels = knownLabelsFromFile()
   if (dry) {
     console.log(renderTree(plan, scaffoldActions(plan, { epic: 'N', knownLabels })))

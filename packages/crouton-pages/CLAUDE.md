@@ -22,6 +22,7 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/composables/usePageBlocks.ts` | Block manipulation utilities |
 | `app/composables/useFooterPage.ts` | Fetch singleton footer page for current team |
 | `app/composables/useNavPill.ts` | `useCroutonNavPill()` — the **floating-nav action slot**. A shared-state registry (`crouton:navPillActions`, same cross-layer decoupling as `crouton:themePreferenceItems`) any package pushes icon buttons into: `register(action)` → unregister fn; `visibleActions` (filtered by reactive `show`, `order`-sorted). Register **client-side** (actions carry functions — not SSR-serializable). `Nav.vue` renders them in both pills; the pages package is the first consumer (the edit-page pencil, registered in `[...slug].vue`) |
+| `app/components/PublicPage.vue` | `CroutonPagesPublicPage` - The one public-page renderer (fetch, SEO, layout, inline edit) shared by `[team]/[locale]/[...slug].vue` and, when `hideLocaleInUrl` is on, `[team]/[...slug].vue`. Takes the page's `locale` as a prop; the routes own their meta |
 | `app/components/Renderer.vue` | `CroutonPagesRenderer` - Renders page based on type |
 | `app/components/CollectionPageRenderer.vue` | `CroutonPagesCollectionPageRenderer` - Bridge for publishable collection pages |
 | `app/components/RegularContent.vue` | `CroutonPagesRegularContent` - Rich text content display |
@@ -394,6 +395,7 @@ locale files (keep en/nl/fr at parity).
 ## Component Naming
 
 Components auto-import with `CroutonPages` prefix:
+- `PublicPage.vue` → `<CroutonPagesPublicPage :locale="..." />`
 - `Renderer.vue` → `<CroutonPagesRenderer />`
 - `CollectionPageRenderer.vue` → `<CroutonPagesCollectionPageRenderer />`
 - `RegularContent.vue` → `<CroutonPagesRegularContent />`
@@ -629,7 +631,39 @@ The footer page type uses `hasBlockContent: true` — a flag on `CroutonPageType
 
 ## Custom Domain Support
 
-The package includes automatic custom domain resolution via server middleware.
+The package includes automatic custom domain resolution via a Nitro plugin (`server/plugins/domain-resolver.ts`).
+
+### Public site recipe
+
+Use this when one team wants a small public site, in one language, on its own domain.
+Three pieces — nothing else to configure:
+
+1. **Team routing — the default.** Leave `routingMode` unset (or `'team'`). The package's
+   public page routes, the editor, the nav edit pencil and sign-in all keep working unchanged.
+2. **Connect the domain to the team.** In admin at `/admin/[team]/team/domains`, add the
+   domain, verify it, and point its DNS at the app. On that domain every non-app address
+   belongs to the team, and `/` is the team's home page. List the app's own hosts in
+   `croutonPages.appDomains` so they are never treated as a team domain.
+3. **`croutonPages.hideLocaleInUrl: true`** with exactly one locale in `crouton.config.js`
+   (the build fails otherwise). Addresses carry no language (`/about`, not `/en/about`),
+   and a `/en/about` link forwards (302) to `/about`.
+
+Sign-in, admin and the editor stay on the app's own address — `/auth/*` and `/admin/*`
+are never rewritten on a connected domain. Signing in *on the domain itself* shows
+crouton's start page behind the sign-in pop-up (an in-app navigation to `/` resolves to
+the start page; a fresh load of `/` shows the team's home page), so recommend that
+editors sign in on the app's address.
+
+**Escape hatches** — each has a cost:
+
+- `routingMode: 'locale'` — removes the package's public page routes, so the app must
+  provide `[locale]/[...slug].vue`. Links drop the team, and `/` redirects to
+  `/{defaultLocale}/`. See [Locale Routing Mode](#locale-routing-mode).
+- `routingMode: 'custom'` — removes the package's public page routes and adds no redirect,
+  so the app owns every public address. Package links (nav, `usePageLink`, the editor's
+  "view page") point at team-less addresses only the app's routes can serve, and an app
+  route at `/` replaces the page crouton-auth's `/auth/login` opens the sign-in pop-up on.
+  This is what broke sign-in and editor links in kdm's first attempt (PR #4166).
 
 ### How It Works
 
@@ -638,17 +672,27 @@ Custom Domain Request:
 booking.acme.com/about
     │
     ▼
-01-domain-resolver.ts middleware
+domain-resolver.ts (Nitro plugin)
     │
     │  looks up 'booking.acme.com' in domain table
     │  finds: organizationId → org with slug 'acme'
     │
     ▼
-URL Rewrite: /about → /acme/about
+Rewrite (team routing mode): every non-app path gets the team prefix
+  /about → /acme/about, /en/about → /acme/en/about, / → /acme
+  left alone: the app's own top-level pages (from the page tree: /admin, /auth,
+  /account, /onboarding, …), /api, /_*, static files, /acme/…
     │
     ▼
-Normal routing: [team]/[...slug].vue
+No locale? the page forwards 302 to /<defaultLocale>/about (plain address)
+    │
+    ▼
+[team]/[locale]/[...slug].vue renders
 ```
+
+In the browser, links carry the team and `app/router.options.ts` installs a
+history (`app/utils/team-host-history.ts`) that strips it from the address bar
+and every `href`. Locale/custom routing mode: unchanged.
 
 ### useDomainContext() Composable
 
@@ -658,7 +702,12 @@ const {
   isLocaleMode,      // Whether locale routing mode is active
   resolvedDomain,    // The custom domain hostname
   resolvedTeamId,    // Team ID from domain lookup
-  hideTeamInUrl,     // true on custom domains OR locale mode
+  resolvedTeamSlug,  // Team slug from domain lookup (null off a connected domain)
+  appSegments,       // The app's own top-level page addresses, left untouched on a connected domain
+  hideTeamInUrl,     // true on custom domains OR locale mode (canonical URLs, team UI — not router links)
+  isTeamHost,        // true on a connected domain in team routing mode
+  hideTeamInLinks,   // true only in locale/custom mode — drives router links
+  hideLocaleInUrl,   // true when croutonPages.hideLocaleInUrl is on in team mode — links and pages drop the locale (/acme/about)
   hostname,          // Current hostname
   isAppDomain        // Whether hostname is known app domain
 } = useDomainContext()
@@ -690,8 +739,10 @@ export default defineNuxtConfig({
         appDomains: ['myapp.com', 'staging.myapp.com'],
         // Enable debug logging
         debug: false,
-        // Routing mode: 'team' (default) or 'locale'
+        // Routing mode: 'team' (default), 'locale' or 'custom' — see Public site recipe
         routingMode: 'team',
+        // Team mode, one-locale apps only: drop the locale from public URLs (/acme/about). Build fails if more than one locale.
+        hideLocaleInUrl: false,
         // Default locale for root redirect in locale mode
         defaultLocale: 'en'
       }
@@ -708,11 +759,11 @@ For single-team sites, locale mode removes the team slug from public URLs and le
 - Admin/API/auth routes are unaffected
 - crouton-pages does NOT register public page routes — the app provides `[locale]/[...slug].vue`
 
-The server plugin sets `event.context.routingMode = 'locale'` which makes `useDomainContext().hideTeamInUrl` return `true`, so all navigation links automatically omit the team slug.
+The server plugin sets `event.context.routingMode = 'locale'` which makes `useDomainContext().hideTeamInLinks` (and `hideTeamInUrl`) return `true`, so all navigation links automatically omit the team slug.
 
 ### Domain Setup
 
-1. Add domain to team in admin (`/admin/[team]/settings/domains`)
+1. Add domain to team in admin (`/admin/[team]/team/domains`)
 2. Add DNS TXT record for verification
 3. Verify domain via UI
 4. Point domain DNS to your app
@@ -801,5 +852,5 @@ export default defineNuxtConfig({
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

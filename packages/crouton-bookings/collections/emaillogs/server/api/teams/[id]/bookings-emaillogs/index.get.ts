@@ -1,10 +1,10 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
+// The requireTeamAdmin utility handles team resolution and auth
 import { getAllBookingsEmaillogs, getBookingsEmaillogsByIds } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  const { team } = await requireTeamAdmin(event)
 
   const query = getQuery(event)
   if (query.ids) {

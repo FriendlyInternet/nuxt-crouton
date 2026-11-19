@@ -29,6 +29,8 @@ const layoutScopeConfig = [
   },
 ]
 
+// Sizing (#3815): every block writes `sizing.height` out (Filters `hug`, the rest
+// `fill`) plus a `minHeight` floor picked from what the block draws.
 const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   'bookings-calendar': {
     id: 'bookings-calendar',
@@ -39,6 +41,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'compound',
     category: 'bookings',
     minWidth: 520,
+    // Calendar + list panel; a month grid needs roughly this.
+    minHeight: 480,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 65,
   },
   // Atomic: JUST the calendar grid (no list/filters), self-fetching + shared-filter aware.
@@ -51,6 +56,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 460,
+    // One week/month grid with its header.
+    minHeight: 360,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 60,
     configSchema: layoutScopeConfig,
   },
@@ -64,6 +72,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 300,
+    // Heading + ~3 rows, like any list.
+    minHeight: 240,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 40,
     configSchema: layoutScopeConfig,
   },
@@ -77,6 +88,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 220,
+    // A few location chips/rows.
+    minHeight: 160,
+    sizing: { width: 'fill', height: 'fill' },
     defaultSize: 25,
     configSchema: layoutScopeConfig,
   },
@@ -90,6 +104,9 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     kind: 'atomic',
     category: 'bookings',
     minWidth: 240,
+    // Fit height: one row of filter controls (`p-2`/`@md:p-3` + PanelFilters).
+    minHeight: 56,
+    sizing: { width: 'fill', height: 'hug' },
     defaultSize: 25,
     configSchema: layoutScopeConfig,
   },

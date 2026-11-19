@@ -2,7 +2,7 @@
 import type { CratePile } from '~/composables/useCrate'
 
 defineProps<{ trail: CratePile[], trayLabel: string, trayCount: number, uploading?: { done: number, total: number } | null, editing: boolean, dropKey?: string | null }>()
-const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], list: [], listen: [], upload: [], edit: [] }>()
+const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], recent: [], list: [], listen: [], upload: [], edit: [] }>()
 </script>
 
 <template>
@@ -41,6 +41,7 @@ const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], lis
       @click="emit('edit')"
     />
     <UButton icon="i-lucide-undo-2" size="sm" variant="ghost" color="neutral" aria-label="Undo last change" class="shrink-0" @click="emit('undo')" />
+    <UButton icon="i-lucide-history" size="sm" variant="ghost" color="neutral" aria-label="Recent changes" class="shrink-0" @click="emit('recent')" />
     <UColorModeButton size="sm" class="shrink-0" />
     <UButton :label="String(trayCount)" icon="i-lucide-inbox" size="sm" variant="soft" color="neutral" class="shrink-0 tabular-nums" :aria-label="`${trayLabel}: ${trayCount} tracks`" @click="emit('list')" />
   </header>

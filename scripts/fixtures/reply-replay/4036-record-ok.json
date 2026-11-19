@@ -1,0 +1,33 @@
+{
+  "issue": 4036,
+  "source": "https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6947793038",
+  "labels": [
+    "pkg:crouton-events",
+    "app:velo",
+    "type:feat",
+    "work-this",
+    "status:blocked"
+  ],
+  "comments": [
+    {
+      "body": "<!-- pipeline-plan:v1 -->\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes — on the PR #4018 preview (trimmed)",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    },
+    {
+      "body": "<!-- plan-review:v1 --><!-- plan-review-verdict:needs-owner -->\n<!-- reply-record:v1 {\"kind\":\"plan-question\",\"question\":\"Do you approve the mockup in the plan as the new Activité design? That includes the plural label \\\"Pages · Accueil\\\", \\\"Modification par X\\\" instead of \\\"modifiée par X\\\", and no counters. Recommendation: yes. These choices read correctly for every collection in French and are easy to change later.\\n\\nyes/no\",\"accepts\":[\"ok\",\"other\"],\"starts\":{\"ok\":\"replan-with-yes\",\"other\":\"replan-with-feedback\"}} -->\n\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔀 **Needs your call** — Do you approve the mockup in the plan as the new Activité design? That includes the plural label \"Pages · Accueil\", \"Modification par X\" instead of \"modifiée par X\", and no counters. Recommendation: yes. These choices read correctly for every collection in French and are easy to change later.\n\nyes/no\n**Needs:** answer",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    }
+  ],
+  "reply": {
+    "body": "ok",
+    "authorAssociation": "COLLABORATOR",
+    "userType": "User",
+    "userLogin": "pmcp"
+  },
+  "want": "yes",
+  "today": "yes",
+  "note": "Synthetic (#4145): 4036-6947793038.json with the plan-question reply record the needs-owner hold writes. The router reads the bare ok as replan-with-yes; the re-plan step follows it and records the yes.",
+  "synthetic": true
+}

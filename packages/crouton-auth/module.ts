@@ -101,7 +101,7 @@ function validateConfig(config: CroutonAuthConfig): void {
 
   if (teams.defaultTeamSlug) {
     console.info(
-      `[${name}] defaultTeamSlug set: All new users will join team "${teams.defaultTeamSlug}".`
+      `[${name}] defaultTeamSlug set: Every user joins team "${teams.defaultTeamSlug}" on sign-up and sign-in.`
     )
   }
 }

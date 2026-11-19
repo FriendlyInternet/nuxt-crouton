@@ -22,7 +22,7 @@ import type { H3Event } from 'h3'
 import { createError, getRequestURL, getCookie, parseCookies } from 'h3'
 import { useRuntimeConfig } from '#imports'
 import { eq, and, gt } from 'drizzle-orm'
-import { createAuth, type AuthInstance, setAuthInstance, getAuthInstance, isAuthInitialized } from '../lib/auth'
+import { createAuth, isEmailVerificationRequired, type AuthInstance, setAuthInstance, getAuthInstance, isAuthInitialized } from '../lib/auth'
 import { session as sessionTable, user as userTable } from '../database/schema/auth'
 import type { CroutonAuthConfig } from '../../types/config'
 import * as authSchema from '../database/schema/auth'
@@ -95,7 +95,10 @@ export function useServerAuth(event?: H3Event): AuthInstance {
     provider: 'sqlite',
     secret,
     baseURL,
-    schema: authSchema
+    schema: authSchema,
+    // The one place the "can this app send e-mail?" signal is read (#3141):
+    // verification is required exactly when crouton-email is installed.
+    requireEmailVerification: isEmailVerificationRequired(config)
   })
 
   // Cache the instance

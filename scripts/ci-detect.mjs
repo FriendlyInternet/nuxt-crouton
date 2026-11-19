@@ -14,12 +14,18 @@
  *   packages      JSON list of changed packages/*
  *   pocs          JSON list of changed pocs/*
  *   mcp           'true' when packages/crouton-mcp changed (or infra)
- *   workflows     'true' when .github/(workflows|actions) changed
+ *   workflows     'true' when .github/(workflows|actions) changed, or the generated pipeline map (#3730)
+ *   docs          'true' when docs/** or packages/** changed — the doc checks (#3166) run then, even
+ *                 on a docs-only PR whose stage is 'none'
+ *   scripts       'true' when the scripts/*.test.mjs suites must run: code changes, or any CI-file
+ *                 change (#4139)
  *
  *   EVENT=pull_request FILES="$(git diff --name-only …)" node scripts/ci-detect.mjs
+ *   BEFORE=<sha> node scripts/ci-detect.mjs --list-files   # push: files changed since the previous main
  */
 import { readdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { execFileSync } from 'node:child_process'
 import { loadStages, stageForPath } from './harness-stages.mjs'
 import { deriveWatchPaths, fileMatchesAny } from './deploy-detect.mjs'
 
@@ -57,14 +63,43 @@ export function detect({ files = [], event = '', apps = [], readPkg = () => null
   const stage = files.map(f => stageOf(f, model)).reduce((hi, s) => RANK[s] > RANK[hi] ? s : hi, 'none')
   const packages = topNames(files, 'packages/')
 
+  const workflows = files.some(f => /^\.github\/(workflows|actions)\//.test(f) || f === 'docs/pipeline/how-it-works.md')
   return {
     stage,
     apps: affectedApps({ files, stage, event, apps, readPkg }),
     packages: [...packages].sort(),
     pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
-    workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f))
+    workflows,
+    docs: files.some(f => /^(docs|packages)\//.test(f)),
+    // A workflow-only PR can still break a scripts/ suite (#4135 → #4138), so CI-file changes run them too.
+    scripts: ['app', 'package', 'infra'].includes(stage) || workflows
   }
+}
+
+/**
+ * PURE (#4139). The git argv that lists a push's changed files. `git show --name-only HEAD`
+ * prints NOTHING for a merge commit, so a merged PR on main looked like an empty change.
+ *   before = the pre-push SHA (github.event.before); beforeExists = it resolves locally;
+ *   parents = HEAD's parent count.
+ */
+export function pushDiffArgs({ before = '', beforeExists = false, parents = 0 } = {}) {
+  if (before && !/^0+$/.test(before) && beforeExists) return ['diff', '--name-only', before, 'HEAD']
+  if (parents >= 1) return ['diff', '--name-only', 'HEAD^1', 'HEAD']
+  return ['show', '--name-only', '--pretty=format:', 'HEAD']
+}
+
+function listPushFiles() {
+  const git = args => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  const before = (process.env.BEFORE || '').trim()
+  let beforeExists = false
+  if (before && !/^0+$/.test(before)) {
+    try { git(['cat-file', '-e', `${before}^{commit}`]); beforeExists = true } catch { beforeExists = false }
+  }
+  const parents = git(['rev-list', '--parents', '-n1', 'HEAD']).trim().split(/\s+/).length - 1
+  const out = git(pushDiffArgs({ before, beforeExists, parents }))
+  const files = out.split('\n').map(f => f.trim()).filter(Boolean)
+  if (files.length) console.log(files.join('\n'))
 }
 
 function readJson(path) {
@@ -72,6 +107,7 @@ function readJson(path) {
 }
 
 function main() {
+  if (process.argv.includes('--list-files')) return Promise.resolve().then(listPushFiles)
   return loadStages().then((model) => {
     const apps = existsSync('apps')
       ? readdirSync('apps').filter(n => existsSync(`apps/${n}/package.json`)).map(n => ({ name: n, pkg: readJson(`apps/${n}/package.json`) || {} }))

@@ -87,6 +87,7 @@ An issue is **leaf-sized** when:
 To split:
 1. Derive 2–6 child workstreams (coherent concerns, not file-by-file).
 2. For each: `issue_write` (create) with full two-audience body + `## 🧪 How to test`
+   (PLAIN TEST STEPS (#3301, github-tasks § How to test → Plain steps): each step is one action + `→ what you should see` on the next line; start from the preview URL and name any login or data; only needs what the preview has (the change seeds it, or the step says how to make it in the app); no repo jargon (file/script names, CLI commands, internal terms) unless explained in ≤3 plain words; no owner homework off the phone (scripts, Mac, terminal) — if it can't be tested on the preview, say so in one line.)
    + correct `type:*` and `pkg:*`/`app:*` labels + a closing `Dedup-checked:` line (these
    are children of the current issue, so `_Dedup-checked: sub-issue of #<this>, no sibling
    overlap_` suffices — the `require-issue-dedup` hook **blocks a create without it**, #297);

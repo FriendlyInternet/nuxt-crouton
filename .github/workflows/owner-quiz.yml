@@ -1,0 +1,142 @@
+name: Owner quiz
+
+# (#3715, epic #3714) After a PRODUCT epic (app:* / pkg:* on it or its children) merges to main,
+# post 3–5 A/B/C statements about how the product now behaves on the epic. The owner replies
+# `1B 2A 3C`; on-comment.yml's `quiz-reply` job answers. The quiz never blocks anything and never
+# touches a label. Decisions live in scripts/owner-quiz.mjs (pure) + scripts/owner-quiz-run.mjs (I/O).
+#
+# Called by on-pr-close.yml (the one PR-close listener). Re-run by hand: dispatch with `pr` set
+# to a recently merged epic → main PR; a second run for the same PR posts nothing new.
+#
+# SPLIT BY TRUST (same as on-comment.yml interpret-*, #3068): `write` runs the model, which has a
+# shell, so it holds NO write scope and keeps no git credentials; `post` holds `issues: write` on a
+# fresh runner and receives only the model's text as an artifact.
+
+on:
+  workflow_call:
+    inputs:
+      pr:
+        type: number
+        required: true
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Merged PR number (epic/<N>-… or work-<N> → main)
+        required: true
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.t.outputs.go }}
+      issue: ${{ steps.t.outputs.issue }}
+      sha: ${{ steps.t.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: t
+        continue-on-error: true # the quiz is advisory (#3715): a failed lookup means no quiz, never a red merge
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ inputs.pr }}
+        with:
+          script: |
+            const { target } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/owner-quiz-run.mjs`)
+            await target({ github, context, core }, { pr: Number(process.env.PR) })
+
+  write:
+    needs: target
+    if: needs.target.outputs.go == 'true'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false # no token in .git/config
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Write the prompt
+        continue-on-error: true # advisory quiz (#3715): no prompt just means no quiz is posted
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ inputs.pr }}
+          ISSUE: ${{ needs.target.outputs.issue }}
+          SHA: ${{ needs.target.outputs.sha }}
+        with:
+          script: |
+            const { writePrompt } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/owner-quiz-run.mjs`)
+            const { PR: pr, ISSUE: issue, SHA: sha } = process.env
+            await writePrompt({ github, context, core }, {
+              pr, issue, sha,
+              file: `${process.env.RUNNER_TEMP}/quiz-prompt.txt`,
+            })
+      - name: Set up pi + Claude CLI (subscription)
+        continue-on-error: true # advisory quiz (#3715): a CLI install failure skips the quiz, blocks nothing
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      # Tier from .claude/pipeline-models.json only — no model literal here (#2161). Prompt on stdin (#3331).
+      - name: Write the quiz (review model)
+        continue-on-error: true # advisory quiz (#3715): a model failure means no quiz; `post` validates whatever arrives
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [ -s "$RUNNER_TEMP/quiz-prompt.txt" ] || { echo "no prompt — nothing to ask"; exit 0; }
+          pi --print --approve --provider claude-bridge --model "$(node scripts/resolve-pipeline-model.mjs review)" \
+            < "$RUNNER_TEMP/quiz-prompt.txt" > "$RUNNER_TEMP/quiz-model.txt" 2>"$RUNNER_TEMP/quiz-model.err" \
+            || echo "quiz model run failed (no quiz is posted)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        continue-on-error: true # advisory quiz (#3715): nothing to upload = nothing to post
+        with:
+          name: owner-quiz-model
+          path: ${{ runner.temp }}/quiz-model.txt
+          if-no-files-found: ignore
+
+  post:
+    needs: [target, write]
+    if: needs.target.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # Fresh checkout at the merge SHA: the model's code locations are checked against it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.target.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # advisory quiz (#3715): a missing artifact means the model wrote nothing; post skips
+        with:
+          name: owner-quiz-model
+          path: ${{ runner.temp }}
+      - name: Validate + post the quiz
+        continue-on-error: true # advisory quiz (#3715): an invalid quiz is dropped, never fails the PR-close run
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ inputs.pr }}
+          ISSUE: ${{ needs.target.outputs.issue }}
+          SHA: ${{ needs.target.outputs.sha }}
+        with:
+          script: |
+            const { post } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/owner-quiz-run.mjs`)
+            const { PR: pr, ISSUE: issue, SHA: sha } = process.env
+            await post({ github, context, core }, {
+              pr, issue, sha,
+              modelFile: `${process.env.RUNNER_TEMP}/quiz-model.txt`, root: process.env.GITHUB_WORKSPACE,
+            })

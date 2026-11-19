@@ -3,6 +3,7 @@
 //   PR_BODY=... node scripts/check-removed-tests.mjs --base <sha> --head <sha> --branch <ref>
 // `work-*` (pipeline) heads: exit 1 on any removal without a `Test removed: <title> — <why>`
 // line in the PR body. Other heads: report only, exit 0.
+// REMOVED_TESTS_MODE=report: pipeline heads also warn only (exit 0).
 import { execFileSync } from 'node:child_process'
 import { parseArgs } from './lib/cli-args.mjs'
 import { isPipelineBranch } from './lib/pipeline-branch.mjs'
@@ -19,24 +20,22 @@ export function collect(baseTip, head) {
   // branch point are not removals by this PR.
   let base = baseTip
   try { base = git('merge-base', baseTip, head).trim() } catch { /* unrelated history: use tip */ }
-  const snapshots = []
   const baseSnap = {}
   for (const f of testFilesAt(base)) baseSnap[f] = tryShow(base, f)
-  snapshots.push(baseSnap)
-  const commits = git('rev-list', '--reverse', '--first-parent', `${base}..${head}`).split('\n').filter(Boolean)
+  // Only the PR's own commits: --no-merges drops "Merge main" commits, whose first-parent
+  // diff is main's history, not this PR's work (#3538).
+  const added = []
+  const commits = git('rev-list', '--reverse', '--first-parent', '--no-merges', `${base}..${head}`).split('\n').filter(Boolean)
   for (const c of commits) {
-    const snap = {}
-    for (const f of git('diff-tree', '-r', '--no-commit-id', '--name-only', '-m', '--first-parent', c).split('\n')) {
-      if (TEST_FILE.test(f)) {
-        const src = tryShow(c, f)
-        if (src !== undefined) snap[f] = src
-      }
+    for (const f of git('diff-tree', '-r', '--no-commit-id', '--name-only', c).split('\n')) {
+      if (!TEST_FILE.test(f)) continue
+      const after = tryShow(c, f)
+      if (after !== undefined) added.push({ file: f, before: tryShow(`${c}^`, f), after })
     }
-    snapshots.push(snap)
   }
   const headSnap = {}
   for (const f of testFilesAt(head)) headSnap[f] = tryShow(head, f)
-  return removedTests(snapshots, headSnap)
+  return removedTests({ base: baseSnap, added }, headSnap)
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -47,9 +46,12 @@ if (args.base && args.head) {
   if (!removed.length) console.log('removed-tests: no test case removed.')
   for (const r of removed) console.log(`removed: ${r.file} — ${r.title}`)
   if (pipeline && missing.length) {
+    // REMOVED_TESTS_MODE=report (set in ci.yml): warn, never fail, until proven (#3538).
+    const report = process.env.REMOVED_TESTS_MODE === 'report'
+    for (const r of missing) console.log(`::warning::removed test not explained: ${r.file} — ${r.title}`)
     console.error(`\n${missing.length} removed test case(s) not explained. Add one PR-body line per removal:`)
     for (const r of missing) console.error(`  Test removed: ${r.title} — <why>`)
-    process.exit(1)
+    process.exit(report ? 0 : 1)
   }
   if (removed.length && !pipeline) console.log('(not a pipeline branch — report only)')
 }

@@ -203,9 +203,10 @@ export interface TeamsConfig {
   autoCreateOnSignup?: boolean
 
   /**
-   * Default team slug that all users join on signup
+   * Default team slug that every user joins — on sign-up and on every sign-in
    *
-   * When set, all new users are automatically added to this team.
+   * When set, users are added to this team when they sign up and whenever they
+   * sign in (accounts made before the setting included).
    * The team is auto-created on first boot if it doesn't exist.
    *
    * Use case: Company apps where everyone belongs to one team.
@@ -416,6 +417,20 @@ export interface CroutonAuthConfig {
    * @example 'My Company App'
    */
   appName?: string
+
+  /**
+   * Who may create an account (#3340)
+   *
+   * - `'open'` (default) — anyone can sign up.
+   * - `'invite'` — only people with a pending invitation for their email can
+   *   create an account, on every path (email + password, magic link, OAuth
+   *   first sign-in). Enforced on the server in a `user.create.before` hook;
+   *   the UI also hides the "Create account" links. The site admin can still
+   *   create users (server-side `auth.api` calls are trusted).
+   *
+   * @default 'open'
+   */
+  signup?: 'open' | 'invite'
 
   /**
    * Authentication methods configuration

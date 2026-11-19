@@ -27,17 +27,14 @@ export default defineCroutonManifest({
       {
         name: 'CroutonThreeScene',
         description: 'TresJS canvas wrapper with camera, lights, optional orbit controls, and a default slot for arbitrary 3D content (meshes, models, game objects)',
-        props: ['height', 'background', 'controls', 'autoRotate', 'cameraPosition', 'ambientIntensity', 'grid', 'shadows'],
       },
       {
         name: 'CroutonThreeModelViewer',
         description: 'glTF/.glb model viewer with orbit controls and auto-rotate; renders a placeholder when no model is set',
-        props: ['src', 'height', 'background', 'autoRotate', 'autoRotateSpeed', 'cameraPosition', 'grid'],
       },
       {
         name: 'CroutonThreeStarterScene',
         description: 'Runnable game starter — a WASD / arrow-key controllable cube on a ground plane (uses useThreeControls)',
-        props: ['height', 'speed'],
       },
     ],
     apiRoutes: [],

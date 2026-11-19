@@ -1,4 +1,5 @@
 // Generator for List.vue component
+import { isPersonRef } from '../utils/team-ref-fields.ts'
 import { toCase } from '../utils/helpers.ts'
 import { resolveRefCollectionKey } from '../utils/ref-collection.ts'
 
@@ -53,7 +54,8 @@ export function generateListComponent(data: Record<string, any>, config: Record<
   const hasTranslations = translatableFields.length > 0
 
   // Check for reference fields (fields with refTarget property)
-  const referenceFields = fields.filter(f => f.refTarget)
+  const personFields = fields.filter(f => isPersonRef(f) && f.type !== 'array')
+  const referenceFields = fields.filter(f => f.refTarget && !personFields.includes(f))
 
   // Check for plain array fields (without refTarget - just display as badges)
   const plainArrayFields = fields.filter(f => f.type === 'array' && !f.refTarget)
@@ -103,6 +105,13 @@ export function generateListComponent(data: Record<string, any>, config: Record<
     </template>${filteredTranslatableFields.map(field => `
     <template #${field}-cell="{ row }">
       {{ t(row.original, '${field}') }}
+    </template>`).join('')}${personFields.map(field => `
+    <template #${field.name}-cell="{ row }">
+      <CroutonUsersCardMini
+        v-if="row.original.${field.name}User"
+        :item="row.original.${field.name}User"
+        :name="true"
+      />
     </template>`).join('')}${referenceFields.map((field) => {
       // Resolve collection name based on refScope
       let resolvedCollection

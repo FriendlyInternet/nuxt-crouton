@@ -3,6 +3,7 @@ import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { tryOnMounted, tryOnUnmounted } from '@vueuse/core'
 import { useCollabTeamId } from './useCollabTeamId'
 import type { CollabConnectionState, CollabRoomMessage, CollabAwarenessState } from '../types/collab'
+import { createCollabAwareness, type CollabAwarenessAdapter } from '../utils/collabAwareness'
 
 export interface UseCollabConnectionOptions {
   /** Unique room identifier. Can be null to create inactive connection. */
@@ -35,9 +36,24 @@ export interface UseCollabConnectionReturn {
   // Awareness
   sendAwareness: (state: CollabAwarenessState) => void
   onAwareness: (callback: (users: CollabAwarenessState[]) => void) => void
+  /**
+   * y-protocols-style Awareness over this connection (#3984) — pass the connection as
+   * TipTap's `collab-provider` and y-tiptap's `yCursorPlugin` draws peers' carets.
+   */
+  awareness: CollabAwarenessAdapter
 
   // Yjs
   ydoc: Y.Doc
+}
+
+/**
+ * Has this app opted into live sync? (#3810) — only when its built client carries a
+ * non-empty `runtimeConfig.public.collabWorkerUrl` (the `"collab": true` deploy flag
+ * bakes it in). Local dev is the one exception: it uses the same-host Nitro route.
+ * Not opted in → no socket, no token fetch, no presence, no console errors.
+ */
+export function isCollabEnabled(workerUrl: unknown, isDev: boolean): boolean {
+  return (typeof workerUrl === 'string' && workerUrl.length > 0) || isDev
 }
 
 /**
@@ -73,6 +89,9 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
 
   // Yjs document
   const ydoc = new Y.Doc()
+
+  // Editor caret/selection awareness, sent through sendAwareness (#3984)
+  const awareness = createCollabAwareness({ clientID: ydoc.clientID, send: sendAwareness })
 
   // Connection state
   const state = ref<CollabConnectionState>({
@@ -150,6 +169,9 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
    */
   async function connect(): Promise<void> {
     if (isServer || !roomId) return
+    const config = useRuntimeConfig()
+    // Not opted into live sync → behave as if collab isn't there (#3810)
+    if (!isCollabEnabled(config.public.collabWorkerUrl, import.meta.env.DEV)) return
     if (!requestedTeamId) {
       state.value = { ...state.value, error: new Error('No team to scope the collab room to') }
       return
@@ -164,7 +186,6 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
     intentionalDisconnect = false
 
     // For cross-origin connections, fetch a collab token first
-    const config = useRuntimeConfig()
     const workerUrl = config.public.collabWorkerUrl as string
     if (workerUrl && !collabToken) {
       collabToken = await fetchCollabToken()
@@ -192,6 +213,8 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
           error: null
         }
         reconnectAttempts = 0
+        // Re-announce this editor's caret/selection after a (re)connect
+        awareness.resend()
       }
 
       socket.onmessage = (event) => {
@@ -280,6 +303,8 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
       case 'awareness':
         // Broadcast to awareness callbacks
         if (message.users) {
+          // Called directly, not via onAwareness: disconnect() empties those callbacks
+          awareness.receive(message.users)
           for (const callback of awarenessCallbacks) {
             callback(message.users)
           }
@@ -408,6 +433,7 @@ export function useCollabConnection(options: UseCollabConnectionOptions): UseCol
     // Awareness
     sendAwareness,
     onAwareness,
+    awareness,
 
     // Yjs
     ydoc

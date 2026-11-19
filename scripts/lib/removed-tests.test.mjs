@@ -86,6 +86,81 @@ test('a test added to main after the branch point is not a removal (merge-base)'
   assert.match(r.stdout, /no test case removed/)
 })
 
+/** Branch work-9 off main, run `steps` (each a function of (g, dir)), then check vs main tip. */
+function mergeRun(steps, env = {}, body = '') {
+  const { dir } = repo([{ ...base, 'y.test.mjs': suite('one', 'two') }])
+  const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const w = (p, src) => { if (src === null) rmSync(join(dir, p), { force: true }); else writeFileSync(join(dir, p), src) }
+  const baseSha = g('rev-parse', 'HEAD').trim()
+  g('checkout', '-q', '-b', 'work-9')
+  steps({ g, w, dir })
+  g('checkout', '-q', 'work-9')
+  const head = g('rev-parse', 'HEAD').trim()
+  const tip = g('rev-parse', 'main').trim()
+  const r = spawnSync('node', [CLI, '--base', tip, '--head', head, '--branch', 'work-9'],
+    { cwd: dir, encoding: 'utf8', env: { ...process.env, PR_BODY: body, ...env } })
+  rmSync(dir, { recursive: true, force: true })
+  void baseSha
+  return r
+}
+const commit = (g, w, files, msg) => {
+  for (const [p, s] of Object.entries(files)) w(p, s)
+  g('add', '-A'); g('commit', '-qm', msg)
+}
+const onMain = (g, w, files, msg) => { g('checkout', '-q', 'main'); commit(g, w, files, msg); g('checkout', '-q', 'work-9') }
+
+test('a test main removed and merged into the branch is not this PR removal (the #3177 shape)', () => {
+  const r = mergeRun(({ g, w }) => {
+    commit(g, w, { 'a.mjs': 'b\n' }, 'branch work')
+    onMain(g, w, { 'y.test.mjs': suite('one') }, 'main removes two')
+    g('merge', '-q', '--no-ff', '-m', 'Merge main', 'main')
+    commit(g, w, { 'a.mjs': 'c\n' }, 'more work')
+  })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.match(r.stdout, /no test case removed/)
+})
+
+test('… even when main changed the file between two merges', () => {
+  const r = mergeRun(({ g, w }) => {
+    commit(g, w, { 'a.mjs': 'b\n' }, 'branch work')
+    onMain(g, w, { 'y.test.mjs': suite('one', 'two', 'three') }, 'main adds three')
+    g('merge', '-q', '--no-ff', '-m', 'Merge main 1', 'main')
+    onMain(g, w, { 'y.test.mjs': suite('one', 'two') }, 'main removes three')
+    g('merge', '-q', '--no-ff', '-m', 'Merge main 2', 'main')
+  })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
+test('a PR that deletes a base test is still caught across a merge', () => {
+  const r = mergeRun(({ g, w }) => {
+    commit(g, w, { 'y.test.mjs': suite('two') }, 'branch deletes one')
+    onMain(g, w, { 'a.mjs': 'm\n' }, 'main unrelated')
+    g('merge', '-q', '--no-ff', '-m', 'Merge main', 'main')
+  })
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /y\.test\.mjs — one/)
+})
+
+test('add-then-delete inside one PR is still caught with a merge in between', () => {
+  const r = mergeRun(({ g, w }) => {
+    commit(g, w, { 'x.test.mjs': suite('rule holds') }, 'branch adds')
+    onMain(g, w, { 'a.mjs': 'm\n' }, 'main unrelated')
+    g('merge', '-q', '--no-ff', '-m', 'Merge main', 'main')
+    commit(g, w, { 'x.test.mjs': null }, 'branch deletes')
+  })
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /x\.test\.mjs — rule holds/)
+})
+
+test('REMOVED_TESTS_MODE=report prints the removal as a warning but exits 0', () => {
+  const { dir, shas } = repo([{ ...base, 'y.test.mjs': suite('one') }, { 'y.test.mjs': null }])
+  const r = spawnSync('node', [CLI, '--base', shas[0], '--head', shas[1], '--branch', 'work-1'],
+    { cwd: dir, encoding: 'utf8', env: { ...process.env, PR_BODY: '', REMOVED_TESTS_MODE: 'report' } })
+  rmSync(dir, { recursive: true, force: true })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /::warning::.*one/)
+})
+
 test('a PR that only adds tests passes', () => {
   const r = run([{ ...base, 'y.test.mjs': suite('one') }, { 'y.test.mjs': suite('one', 'two') }])
   assert.equal(r.status, 0)

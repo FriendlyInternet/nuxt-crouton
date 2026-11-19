@@ -25,9 +25,10 @@ Individual booking records.
 |-------|------|----------|-------------|
 | `owner` | relation (users) | Yes | User who made the booking |
 | `location` | relation (locations) | Yes | Location/resource being booked |
+| `product` | reference (catalog products) | No | The product this booking is for; always set by the server (the location's only product when none is sent); counted against that product's stock (#4061) |
 | `date` | date | Yes | Booking date |
 | `slot` | text/array | No | Time slot(s) for slot-based bookings |
-| `quantity` | number | No | Quantity for inventory-based bookings |
+| `quantity` | number | No | How many units of the booking's product (whole number ≥ 1, default 1), at every location |
 | `status` | select | Yes | Booking status (active, cancelled) |
 | `notes` | textarea | No | Optional notes |
 
@@ -42,10 +43,10 @@ Venues, resources, or bookable items.
 | `name` | text | Yes | Display name |
 | `description` | textarea | No | Description |
 | `address` | text | No | Physical address (for venues) |
-| `inventoryMode` | boolean | No | True for inventory-based, false for slot-based |
-| `quantity` | number | No | Total quantity (inventory mode only) |
 | `maxBookingsPerMonth` | number | No | Max bookings per user per calendar month (null = unlimited) |
-| `slots` | json/array | No | Available time slots (slot mode only) |
+| `slots` | json/array | No | Available time slots (empty = booked for the whole day) |
+| `offerFullDay` | boolean | No | Offer a full-day choice next to the slots |
+| `products` | repeater | No | Products this location offers, each with its own stock (`[{ product, stock }]`); saved without products → the server gives it one product of its own (`loc-<id>`); each product's `stock` is what the counting uses, per day and per slot |
 | `slotGroups` | json | No | Grouped time slots with colors |
 | `accessControl` | select | No | Who can book (public, members, team) |
 | `isActive` | boolean | Yes | Whether location is bookable |
@@ -150,48 +151,6 @@ export default {
 }
 ```
 
-## Inventory Mode vs Slot Mode
+## Locations with and without slots
 
-### Slot Mode (Default)
-
-Location with fixed time slots:
-
-```json
-{
-  "name": "Tennis Court A",
-  "inventoryMode": false,
-  "slots": ["08:00", "09:00", "10:00", "11:00", "12:00"]
-}
-```
-
-Bookings reference specific slots:
-
-```json
-{
-  "location": "court-a",
-  "date": "2024-01-15",
-  "slot": ["09:00"]
-}
-```
-
-### Inventory Mode
-
-Location with quantity-based availability:
-
-```json
-{
-  "name": "Rental Bikes",
-  "inventoryMode": true,
-  "quantity": 20
-}
-```
-
-Bookings specify quantity:
-
-```json
-{
-  "location": "rental-bikes",
-  "date": "2024-01-15",
-  "quantity": 3
-}
-```
+A location with named `slots` is booked per slot; with an empty `slots` list it is booked for the whole day. How many fit is each product's `stock` (see `products`).

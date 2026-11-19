@@ -1,6 +1,8 @@
 import { useLocalStorage } from '@vueuse/core'
 import type { LocationData, SlotItem, BookingData, SettingsData, CartItem } from '../types/booking'
-import { isBlockedByFullDay } from '../utils/full-day'
+import { isBlockedByFullDay, FULL_DAY_ID } from '../utils/full-day'
+import { parseLocationProducts, slotIdsOf, type CapacityLocation } from '../utils/capacity'
+import { productLeft } from '../utils/product-left'
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { useBookingMonthlyLimit } from './useBookingMonthlyLimit'
 import { useBookingCartStorage } from './useBookingCartStorage'
@@ -8,7 +10,10 @@ import { useBookingAvailability } from './useBookingAvailability'
 
 /**
  * Composable for managing the booking cart and customer booking flow.
- * Supports both slot-based and inventory-based booking modes.
+ * Every booking is for one product and an amount; what is free is counted per
+ * product, cart-aware, with the server's rule (`utils/product-left.ts` over
+ * `utils/capacity.ts`, #4110). A location without slots (no slots = the parsed
+ * `slots` list is empty) books the full day.
  *
  * Delegates to focused sub-composables:
  *   - useBookingAvailability  — base API availability, schedule rules, slot parsing
@@ -23,17 +28,23 @@ export function useBookingCart() {
   const teamId = computed(() => currentTeam.value?.id)
 
   // Read customer bookings from shared cache (useBookingsList owns the fetch).
-  // Only uses key — no watch trigger to avoid cancellation cascade where both
-  // composables' watchers fire simultaneously and cancel each other's requests.
-  const { data: myBookings, status: myBookingsStatus, refresh: refreshMyBookings } = useFetch<BookingData[]>(
+  // The key carries the team id, so a team change (e.g. the team arriving after mount)
+  // re-fetches once per key — no separate watch, so no cancellation cascade (#3751).
+  // dedupe: 'defer' on every fetch here: each owner of a shared key re-runs it when the key
+  // changes, and Nuxt's default 'cancel' would abort the other owners' request (#3789).
+  // The manual refreshers returned below pass 'cancel' so a save still gets fresh data.
+  const { data: myBookings, status: myBookingsStatus, refresh: rawRefreshMyBookings } = useFetch<BookingData[]>(
     () => teamId.value
       ? `/api/crouton-bookings/teams/${teamId.value}/customer-bookings`
       : null as any,
     {
-      key: 'crouton-booking-sidebar-customer-bookings',
+      key: () => `crouton-booking-sidebar-customer-bookings-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
     },
   )
+
+  const refreshMyBookings = () => rawRefreshMyBookings({ dedupe: 'cancel' })
 
   // Count of upcoming bookings (future dates only)
   const upcomingBookingsCount = computed(() => {
@@ -67,7 +78,8 @@ export function useBookingCart() {
       ? `/api/teams/${teamId.value}/bookings-settings`
       : null as any,
     {
-      key: 'crouton-booking-cart-settings',
+      key: () => `crouton-booking-cart-settings-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
     },
   )
@@ -83,6 +95,7 @@ export function useBookingCart() {
     date: Date | null
     slotIds: string[]
     groupId: string | null
+    productId: string | null
     quantity: number
     editingBookingId: string | null
   }>('croutonBookingFormState', () => ({
@@ -90,6 +103,7 @@ export function useBookingCart() {
     date: null,
     slotIds: [],
     groupId: null,
+    productId: null,
     quantity: 1,
     editingBookingId: null,
   }))
@@ -104,6 +118,8 @@ export function useBookingCart() {
     set slotIds(v: string[]) { formStateRef.value.slotIds = v },
     get groupId() { return formStateRef.value.groupId },
     set groupId(v: string | null) { formStateRef.value.groupId = v },
+    get productId() { return formStateRef.value.productId ?? null },
+    set productId(v: string | null) { formStateRef.value.productId = v },
     get quantity() { return formStateRef.value.quantity },
     set quantity(v: number) { formStateRef.value.quantity = v },
     get editingBookingId() { return formStateRef.value.editingBookingId },
@@ -111,16 +127,19 @@ export function useBookingCart() {
   })
 
   // Fetch allowed locations
-  const { data: locations, status: locationsStatus, refresh: refreshLocations } = useFetch<LocationData[]>(
+  const { data: locations, status: locationsStatus, refresh: rawRefreshLocations } = useFetch<LocationData[]>(
     () => teamId.value
       ? `/api/crouton-bookings/teams/${teamId.value}/customer-locations`
       : null as any,
     {
-      key: 'crouton-booking-cart-locations',
+      key: () => `crouton-booking-cart-locations-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
       server: false,
       default: () => [],
     },
   )
+
+  const refreshLocations = () => rawRefreshLocations({ dedupe: 'cancel' })
 
   // Selected location object
   const selectedLocation = computed(() => {
@@ -135,13 +154,11 @@ export function useBookingCart() {
   const {
     loading: availabilityLoading,
     availabilityData,
-    isInventoryMode,
-    inventoryQuantity,
+    hasSlots,
     allSlots,
     locationSlots: rawSlots,
     fetchAvailability: baseFetchAvailability,
     getBookedSlotsForDate: getApiBookedSlotsForDate,
-    getBookedCountForDate: getApiBookedCountForDate,
     isDateUnavailable,
     isSlotAvailableByRules,
     getBlockedReason,
@@ -211,76 +228,89 @@ export function useBookingCart() {
 
   // === Cart-aware availability (overlays cart data on top of API data) ===
 
-  // Get booked slots from cart for a specific date and location (slot mode)
+  // Get booked slots from cart for a specific date and location
   function getCartBookedSlotsForDate(date: Date): string[] {
     if (!formState.locationId) return []
 
     return cart.value
       .filter(item =>
         item.locationId === formState.locationId
-        && !item.isInventoryMode
         && isSameDay(new Date(item.date), date),
       )
       .flatMap(item => item.slotIds)
   }
 
-  // Get booked count from cart for a specific date and location (inventory mode)
-  function getCartBookedCountForDate(date: Date): number {
-    if (!formState.locationId) return 0
+  // === Product + amount (#4110) ===
 
-    return cart.value
-      .filter(item =>
-        item.locationId === formState.locationId
-        && item.isInventoryMode
-        && isSameDay(new Date(item.date), date),
-      )
-      .reduce((sum, item) => sum + (item.quantity ?? 1), 0)
-  }
+  // The products the selected location lists, with their stock
+  const locationProducts = computed(() => parseLocationProducts(selectedLocation.value?.products))
 
-  // Get inventory availability for a date (API + cart combined)
-  function getInventoryAvailability(date: Date) {
-    const apiBooked = getApiBookedCountForDate(date)
-    const cartBooked = getCartBookedCountForDate(date)
-    const bookedCount = apiBooked + cartBooked
-    const total = inventoryQuantity.value
-    const remaining = Math.max(0, total - bookedCount)
-
-    return {
-      available: remaining > 0,
-      remaining,
-      total,
-      bookedCount,
+  // Keep the picked product valid: drop it when it is no longer listed, and
+  // pick it automatically when the location lists exactly one.
+  function syncProduct() {
+    const listed = locationProducts.value
+    if (formState.productId && !listed.some(p => p.product === formState.productId)) {
+      formState.productId = null
+    }
+    if (!formState.productId && listed.length === 1) {
+      formState.productId = listed[0]!.product
     }
   }
 
-  // Get all booked slot IDs for the selected date (API + cart combined, with duplicates for capacity counting)
-  const bookedSlotIds = computed<string[]>(() => {
-    if (!formState.date || isInventoryMode.value) return []
+  // A location change resets the product. Sync, so a caller that sets the
+  // location and then the product in the same tick keeps its product.
+  watch(() => formState.locationId, () => {
+    formState.productId = null
+    syncProduct()
+  }, { flush: 'sync' })
 
-    const apiBooked = getApiBookedSlotsForDate(formState.date)
-    const cartBooked = getCartBookedSlotsForDate(formState.date)
-    // Keep duplicates — needed for capacity counting
-    return [...apiBooked, ...cartBooked]
-  })
+  // The location's product list changed (fetched, edited) — re-check the pick
+  watch(() => locationProducts.value.map(p => p.product).join(','), () => {
+    syncProduct()
+  }, { immediate: true })
 
-  // Get the capacity for a slot from rawSlots
-  function getSlotCapacity(slotId: string): number {
-    if (slotId === 'all-day') return 1
-    const slot = rawSlots.value.find(s => s.id === slotId)
-    return slot?.capacity ?? 1
+  // The slots this booking takes: the ticked ones, or the full day at a
+  // location without slots (derived, so it can't race the card's slot reset)
+  const selectedSlotIds = computed<string[]>(() => hasSlots.value ? formState.slotIds : [FULL_DAY_ID])
+
+  // The location as the counting rule sees it (no slots when it has none)
+  const capLocation = computed<CapacityLocation>(() => ({
+    slots: hasSlots.value ? rawSlots.value : [],
+    products: selectedLocation.value?.products,
+  }))
+
+  // Free stock of `product` in `slotId` on `date`: the server's bookings plus the cart
+  function productLeftFor(slotId: string, product: string, date: Date | null = formState.date): number {
+    if (!date || !formState.locationId) return 0
+    const day = toDateKey(date)
+    return productLeft({
+      location: capLocation.value,
+      locationId: formState.locationId,
+      day,
+      product,
+      bookings: availabilityData.value[day]?.bookings ?? [],
+      cart: cart.value,
+      slotId,
+    })
   }
 
-  // Count how many times a slot appears in the booked list
-  function getSlotBookedCount(slotId: string): number {
-    return bookedSlotIds.value.filter(id => id === slotId).length
-  }
-
-  // Get remaining capacity for a slot on the selected date
+  // How many of the chosen product are still free in a slot on the selected
+  // date. With no product picked: the highest over the listed products, so a
+  // slot shows full only when every product is full there.
   function getSlotRemaining(slotId: string): number {
-    const capacity = getSlotCapacity(slotId)
-    const bookedCount = getSlotBookedCount(slotId)
-    return Math.max(0, capacity - bookedCount)
+    if (formState.productId) return Math.max(0, productLeftFor(slotId, formState.productId))
+    return Math.max(0, ...locationProducts.value.map(p => productLeftFor(slotId, p.product)))
   }
+
+  // The largest amount that fits: the lowest free stock over the chosen slots.
+  // With no slot ticked yet: the most free in any slot still open, so the
+  // amount can be set before or after picking a slot (#4112).
+  const maxQuantity = computed(() => {
+    const ids = selectedSlotIds.value
+    if (ids.length > 0) return Math.min(...ids.map(id => getSlotRemaining(id)))
+    const open = allSlots.value.filter(slot => !isSlotDisabled(slot.id, []))
+    return Math.max(0, ...open.map(slot => getSlotRemaining(slot.id)))
+  })
 
   // Check if a group+slot combination is already booked (API data)
   function isGroupSlotBookedInApi(slotId: string, groupId: string, date: Date): boolean {
@@ -300,50 +330,43 @@ export function useBookingCart() {
     )
   }
 
-  // Check if a slot is disabled (slot mode only)
+  // Has the selected group already booked this slot (server or cart)?
+  function isGroupBlocked(slotId: string): boolean {
+    if (!enableGroups.value || !formState.groupId || !formState.date) return false
+    return isGroupSlotBookedInApi(slotId, formState.groupId, formState.date)
+      || isGroupSlotInCart(slotId, formState.groupId, formState.date)
+  }
+
+  // Closed by the schedule on the selected date? Closing any slot also closes
+  // the full day (getRuleBlockedSlotIds adds `all-day` then).
+  function isRuleClosed(slotId: string): boolean {
+    if (!formState.date) return true
+    return !isSlotAvailableByRules(slotId, formState.date)
+      || getRuleBlockedSlotIds(formState.date).includes(slotId)
+  }
+
+  // Check if a slot button is disabled (locations with slots only)
   // `selected` = slots ticked in the booking being made; pass [] to ask "is it
-  // taken?" regardless of the current ticks (see isSlotTaken)
+  // taken?" regardless of the current ticks
   function isSlotDisabled(slotId: string, selected: string[] = formState.slotIds): boolean {
-    if (!formState.date || isInventoryMode.value) return true
+    if (!formState.date || !hasSlots.value) return true
 
-    // Check schedule rules first
-    if (!isSlotAvailableByRules(slotId, formState.date)) {
-      return true
-    }
+    if (isRuleClosed(slotId)) return true
 
-    // If "all-day" is booked, all slots are disabled
-    if (bookedSlotIds.value.includes('all-day')) {
-      return true
-    }
-
-    // Capacity-aware: slot is full when booked count >= capacity
-    if (getSlotRemaining(slotId) <= 0) {
-      return true
-    }
+    // Full when the chosen product has no stock left there (#4110)
+    if (getSlotRemaining(slotId) <= 0) return true
 
     // When groups are enabled and a group is selected, check if this group already booked this slot
-    if (enableGroups.value && formState.groupId && formState.date) {
-      if (isGroupSlotBookedInApi(slotId, formState.groupId, formState.date)
-        || isGroupSlotInCart(slotId, formState.groupId, formState.date)) {
-        return true
-      }
-    }
+    if (isGroupBlocked(slotId)) return true
 
-    // Full day ⇄ other slots exclude each other — counting what's booked, in
-    // the cart, rule-blocked, AND ticked in this booking (#2261)
-    const ruleBlocked = getRuleBlockedSlotIds(formState.date)
-    return isBlockedByFullDay(slotId, [...bookedSlotIds.value, ...ruleBlocked], selected)
+    // The full day can't share one booking with another slot (#2261). Across
+    // bookings it is stock that counts, not exclusivity (#4110).
+    return isBlockedByFullDay(slotId, [], selected)
   }
 
-  // Unavailable no matter what is ticked (booked, full, closed) — vs. only
-  // excluded by the current selection (e.g. full day while Matin is ticked)
-  function isSlotTaken(slotId: string): boolean {
-    return isSlotDisabled(slotId, [])
-  }
-
-  // Compute available slots (slot mode only)
+  // Compute available slots (locations with slots only; allSlots is empty otherwise)
   const availableSlots = computed<SlotItem[]>(() => {
-    if (!formState.date || !selectedLocation.value || isInventoryMode.value) return []
+    if (!formState.date || !selectedLocation.value) return []
     return allSlots.value.filter(slot => !isSlotDisabled(slot.id))
   })
 
@@ -356,37 +379,24 @@ export function useBookingCart() {
     return [...apiBooked, ...cartBooked]
   }
 
-  // Check if a date has any bookings
+  // Check if a date has any bookings (server or cart) at the selected location
   function hasBookingsOnDate(date: Date): boolean {
-    if (isInventoryMode.value) {
-      const { bookedCount } = getInventoryAvailability(date)
-      return bookedCount > 0
-    }
-    return getBookedSlotsForDate(date).length > 0
+    const apiBookings = availabilityData.value[toDateKey(date)]?.bookings ?? []
+    if (apiBookings.length > 0) return true
+    if (!formState.locationId) return false
+    return cart.value.some(item =>
+      item.locationId === formState.locationId
+      && isSameDay(new Date(item.date), date),
+    )
   }
 
-  // Check if a date is fully booked
+  // Fully booked = every listed product has no stock left in every slot
+  // (same rule as isLocationFull); never full when no product is listed
   function isDateFullyBooked(date: Date): boolean {
-    if (isInventoryMode.value) {
-      const { remaining } = getInventoryAvailability(date)
-      return remaining === 0
-    }
-
-    const bookedSlots = getBookedSlotsForDate(date)
-
-    // If "all-day" is booked, the date is fully booked
-    if (bookedSlots.includes('all-day')) {
-      return true
-    }
-
-    // Capacity-aware: all individual slots are full when booked count >= capacity
-    if (rawSlots.value.length === 0) return false
-
-    return rawSlots.value.every((slot) => {
-      const capacity = slot.capacity ?? 1
-      const bookedCount = bookedSlots.filter(id => id === slot.id).length
-      return bookedCount >= capacity
-    })
+    const products = locationProducts.value
+    if (products.length === 0) return false
+    const ids = slotIdsOf(capLocation.value)
+    return products.every(p => ids.every(id => productLeftFor(id, p.product, date) <= 0))
   }
 
   // Get booked slot labels for tooltip display (slot mode)
@@ -409,7 +419,7 @@ export function useBookingCart() {
 
   // === Cart operations ===
 
-  // Can add to cart - adapts to inventory mode
+  // Can add to cart — a product, slots that all fit, and an amount within the free stock
   const canAddToCart = computed(() => {
     // Must have location and date
     if (!formState.locationId || !formState.date) return false
@@ -417,17 +427,23 @@ export function useBookingCart() {
     // Check schedule rules - date must be available
     if (isDateUnavailable(formState.date)) return false
 
-    if (isInventoryMode.value) {
-      // Inventory mode: need location + date + enough availability for requested quantity
-      const { remaining } = getInventoryAvailability(formState.date)
-      if (remaining < formState.quantity) return false
-    }
-    else {
-      // Slot mode: need location + date + at least one slot selected
-      if (formState.slotIds.length === 0) return false
-      // Check that at least one selected slot isn't disabled
-      if (formState.slotIds.every(id => isSlotDisabled(id))) return false
-    }
+    // Every booking is for one product
+    if (!formState.productId) return false
+
+    const selected = selectedSlotIds.value
+    if (selected.length === 0) return false
+
+    // Every chosen slot must be open, free for the group, and not the full day
+    // combined with another slot in this one booking
+    if (hasSlots.value && !selected.every(id =>
+      !isRuleClosed(id)
+      && !isGroupBlocked(id)
+      && !isBlockedByFullDay(id, [], selected),
+    )) return false
+
+    // The amount must fit in every chosen slot
+    const quantity = formState.quantity
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity.value) return false
 
     // If groups are enabled, require a group selection
     if (enableGroups.value && !formState.groupId) return false
@@ -489,10 +505,9 @@ export function useBookingCart() {
       return
     }
 
-    const slotIds = isInventoryMode.value ? ['inventory'] : formState.slotIds
-    const slotLabels = isInventoryMode.value
-      ? ['Inventory Booking']
-      : formState.slotIds.map(id => getSlotLabel(id))
+    // The full day at a location without slots (never the old `inventory` id)
+    const slotIds = [...selectedSlotIds.value]
+    const slotLabels = slotIds.map(id => getSlotLabel(id))
 
     const item: CartItem = {
       id: generateId(),
@@ -504,13 +519,13 @@ export function useBookingCart() {
       slotLabels,
       groupId: formState.groupId,
       groupLabel: getGroupLabel(formState.groupId),
-      isInventoryMode: isInventoryMode.value,
-      quantity: isInventoryMode.value ? formState.quantity : undefined,
+      productId: formState.productId,
+      quantity: formState.quantity,
     }
 
-    // Add slot-specific info for slot mode (use first selected slot for position)
-    if (!isInventoryMode.value && formState.slotIds.length > 0) {
-      const positionInfo = getSlotPositionInfo(formState.slotIds[0]!)
+    // Add slot position info at a location with slots (use first selected slot)
+    if (hasSlots.value && slotIds.length > 0) {
+      const positionInfo = getSlotPositionInfo(slotIds[0]!)
       if (positionInfo) {
         item.slotColor = positionInfo.color
         item.totalSlots = positionInfo.totalSlots
@@ -520,7 +535,7 @@ export function useBookingCart() {
 
     cart.value.push(item)
 
-    // Reset form for next booking
+    // Reset form for next booking (the product stays picked)
     formState.slotIds = []
     formState.groupId = null
     formState.quantity = 1
@@ -535,6 +550,7 @@ export function useBookingCart() {
     formState.date = null
     formState.slotIds = []
     formState.groupId = null
+    formState.productId = null
     formState.quantity = 1
   }
 
@@ -550,9 +566,11 @@ export function useBookingCart() {
     availabilityLoading,
     cartPulse,
 
-    // Mode detection
-    isInventoryMode,
-    inventoryQuantity,
+    // Slots + product + amount (#4110)
+    hasSlots,
+    selectedSlotIds,
+    maxQuantity,
+    locationProducts,
 
     // Monthly booking limit
     monthlyBookingLimit,
@@ -571,16 +589,13 @@ export function useBookingCart() {
     availableSlots,
     rawSlots,
     isSlotDisabled,
-    isSlotTaken,
     getSlotRemaining,
-    getSlotCapacity,
 
     // Calendar availability helpers
     hasBookingsOnDate,
     isDateFullyBooked,
     getBookedSlotLabelsForDate,
     getBookedSlotsForDate,
-    getInventoryAvailability,
 
     // Schedule rules
     isDateUnavailable,

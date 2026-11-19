@@ -16,6 +16,8 @@ export default defineNuxtConfig({
   extends: [
     '@fyit/crouton-editor',
     '@fyit/crouton-calendar',
+    // The shared team product list (catalogProducts) — locations will give it a stock
+    '@fyit/crouton-catalog',
     join(currentDir, 'collections/bookings'),
     join(currentDir, 'collections/locations'),
     join(currentDir, 'collections/settings'),
@@ -30,7 +32,7 @@ export default defineNuxtConfig({
   // No need to declare it here - just provide locale files
 
   $meta: {
-    description: 'Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations',
+    description: 'Booking system layer for Nuxt Crouton - locations with or without time slots, each offering products with a stock',
     name: 'crouton-bookings'
   },
 

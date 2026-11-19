@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isSafePath } from '../../shared/safe-path'
 
 // Mirrors the "Seed review login" step in .github/workflows/deploy-app.yml — keep in sync.
 export function reviewLogin(secret: string, app: string, key: string) {
@@ -15,6 +16,23 @@ export function sanitizeWalk(raw: unknown): string {
 export function withWalk(to: string, walk: string): string {
   if (!walk) return to
   return `${to || '/'}${(to || '/').includes('?') ? '&' : '?'}walk=${walk}`
+}
+
+// Where a signed-out tap on /api/status/login/<app> comes back to after the sign-in mail (#3840).
+// Keeps `key`, `to` and `walk` only when they pass the same checks the route applies; anything
+// else (and every other param) is dropped, so raw input never passes through.
+export function signedOutBackPath(slug: unknown, query: Record<string, unknown>): string {
+  const app = typeof slug === 'string' ? slug : ''
+  if (!/^[a-z0-9-]+$/.test(app)) return '/'
+  const q = new URLSearchParams()
+  const key = query.key
+  if (typeof key === 'string' && /^pr\d+$/.test(key)) q.set('key', key)
+  const to = query.to
+  if (typeof to === 'string' && to && isSafePath(to)) q.set('to', to)
+  const walk = sanitizeWalk(query.walk)
+  if (walk) q.set('walk', walk)
+  const qs = q.toString()
+  return `/api/status/login/${app}${qs ? `?${qs}` : ''}`
 }
 
 export function reviewLoginUrl(baseUrl: string, secret: string, app: string, key: string, redirect = '', walk = ''): string {

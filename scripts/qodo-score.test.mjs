@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { asked, askedAt, unanswered, qodoFindings, row, verdictOf } from './qodo-score.mjs'
+import { asked, askedAt, unanswered, qodoFindings, row, verdictOf, searchQuery, truncated } from './qodo-score.mjs'
 
 const cs = [
   { body: '/review\n<!-- qodo-asked-sha:abc123 -->', user: { login: 'nuxt-harness[bot]' } },
@@ -28,4 +28,14 @@ test('asks once per head SHA', () => {
 
 test('flags asked PRs Qodo never answered', () => {
   assert.deepEqual(unanswered([{ pr: 1, findings: 0 }, { pr: 2, findings: 3 }]), [1])
+})
+
+test('searchQuery adds the created window', () => {
+  assert.equal(searchQuery('2026-11-05'), 'head:work- created:>=2026-11-05')
+})
+
+test('truncated flags a result that filled the limit', () => {
+  assert.equal(truncated(1000, '1000'), true)
+  assert.equal(truncated(999, 1000), false)
+  assert.equal(truncated(100, '100'), true)
 })

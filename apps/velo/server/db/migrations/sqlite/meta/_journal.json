@@ -29,6 +29,62 @@
       "when": 1793955340404,
       "tag": "0003_email_log_provider_id",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793955340405,
+      "tag": "0004_domain_per_team_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486051878,
+      "tag": "0005_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794486195814,
+      "tag": "0006_verify_existing_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794853983726,
+      "tag": "0007_omniscient_ares",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794853984726,
+      "tag": "0008_brave_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794860589643,
+      "tag": "0009_massive_mister_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794860602168,
+      "tag": "0010_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081098142,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
     }
   ]
 }

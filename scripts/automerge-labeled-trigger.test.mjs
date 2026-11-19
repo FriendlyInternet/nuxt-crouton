@@ -64,3 +64,15 @@ test('a skipped label event never merges; without the label the epic sub-PR is h
   })
   assert.equal(gate.merge, false)
 })
+
+// #3501: the Harness App's own `Merge decision` check_suite must never restart this workflow.
+const runsFor = (event_name, event) => new Function('github', `return !!(${expr})`)({ event_name, event })
+test('check_suite success from nuxt-harness → skipped', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'success', app: { slug: 'nuxt-harness' } } }), false)
+})
+test('check_suite success from another app → runs', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'success', app: { slug: 'github-actions' } } }), true)
+})
+test('check_suite failure → skipped', () => {
+  assert.equal(runsFor('check_suite', { check_suite: { conclusion: 'failure', app: { slug: 'github-actions' } } }), false)
+})

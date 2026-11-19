@@ -1,11 +1,11 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The resolveTeamAndCheckMembership utility handles team resolution and auth
+// The requireTeamAdmin utility handles team resolution and auth
 // Hand-edited (#3379): picks allowed fields only and checks capacity in the same statement.
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { assertBookingsBookingReferences } from '../../../../database/queries'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { bookingsBookings } from '../../../../database/schema'
 import { bookingsLocations } from '../../../../../../locations/server/database/schema'
 import { LOCATION_COLS, dayRange, validateSelection, guardSql, guardedInsert, runAtomic } from '../../../../../../../server/utils/booking-capacity'
@@ -17,11 +17,13 @@ const bodySchema = z.object({
   slot: z.array(z.string()).min(1),
   group: z.string().nullish(),
   quantity: z.number().int(),
-  status: z.string().min(1)
+  status: z.string().min(1),
+  // The location's only product when none is sent (#4044)
+  product: z.string().min(1).nullish()
 }).strip()
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await requireTeamAdmin(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
   const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
@@ -36,13 +38,13 @@ export default defineEventHandler(async (event) => {
   const range = dayRange(body.date, tz)
   if (!range) throw createError({ status: 400, statusText: 'Invalid date' })
 
-  const selection = validateSelection(location, body.slot, body.quantity)
+  const selection = validateSelection(location, body.slot, body.quantity, body.product)
   const guard = guardSql({ teamId: team.id, locationId: location.id, range, selection })
   const id = nanoid()
   await runAtomic(db, [guardedInsert({
     id, teamId: team.id, owner: user.id, location: location.id, storedTs: range.storedTs,
     slot: selection.slot, group: body.group || null, quantity: selection.quantity,
-    status: body.status || 'active', by: user.id, nowTs: Math.floor(Date.now() / 1000),
+    status: body.status || 'active', product: selection.product, by: user.id, nowTs: Math.floor(Date.now() / 1000),
   }, guard)], 'No room left for that booking')
 
   const [booking] = await db.select().from(bookingsBookings).where(eq(bookingsBookings.id as any, id))

@@ -5,6 +5,7 @@
  *   node scripts/email-probe.mjs detect <deploy.config.json>   → prints is_email=… / mode=…
  *   … wrangler secret list --format json | node scripts/email-probe.mjs has-key   (exit 0/1)
  *   … wrangler d1 execute … --json         | node scripts/email-probe.mjs verdict   (exit 0/1, reason on stdout)
+ *   node scripts/email-probe.mjs ensure-user-sql <email>   → prints the idempotent INSERT for the probe user (#3972)
  */
 import { readFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
@@ -29,6 +30,21 @@ export function probeMode(config) {
 /** Resend test inbox, labelled per app so log rows stay separate. */
 export function probeAddress(app) {
   return `delivered+${app}@resend.dev`
+}
+
+const PROBE_EMAIL_RE = /^[a-z0-9+._-]+@[a-z0-9.-]+$/i
+
+/**
+ * #3972 — one idempotent statement that makes sure the probe user exists in the app's D1.
+ * Invite-only apps answer the probe's sign-up with a 200 and create nobody, and a password reset
+ * for a missing user sends nothing — so the probe inserts its own user row. Columns follow
+ * packages/crouton-auth/server/database/schema/user.ts (timestamps are unix seconds).
+ */
+export function probeUserSql(email, now = Date.now()) {
+  if (typeof email !== 'string' || !PROBE_EMAIL_RE.test(email)) throw new Error(`unsafe probe email: ${email}`)
+  const e = email.toLowerCase()
+  const ts = Math.floor(now / 1000)
+  return `INSERT OR IGNORE INTO "user" (id, name, email, emailVerified, createdAt, updatedAt, superAdmin, banned, role) VALUES ('email-probe:${e}', 'email-probe', '${e}', 1, ${ts}, ${ts}, 0, 0, 'user')`
 }
 
 /** Does `wrangler secret list --format json` output contain a Resend key? */
@@ -165,6 +181,16 @@ async function requests(mode, base, email) {
   return post('request-password-reset', { email, redirectTo: '/' })
 }
 
+const QUOTA_RE = /daily (email )?sending quota/i
+
+/** #3586 — what the workflow does with a probe result: skip | pass | warn | fail. Previews never send; only a staging daily-quota refusal is a warning. */
+export function probeOutcome({ kind, reason } = {}) {
+  if (kind === 'preview') return 'skip'
+  if (kind === 'staging' && reason === 'sent') return 'pass'
+  if (kind === 'staging' && QUOTA_RE.test(reason ?? '')) return 'warn'
+  return 'fail'
+}
+
 function readStdin() {
   try {
     return readFileSync(0, 'utf8')
@@ -185,8 +211,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === 'has-key') {
     process.exit(hasEmailKey(readStdin()) ? 0 : 1)
   }
-  else if (cmd === 'bundle-has-key') {
-    process.exit(bundleHasEmailKey(readStdin()) ? 0 : 1)
+  else if (cmd === 'outcome') {
+    console.log(probeOutcome({ kind: arg, reason: process.argv[4] }))
   }
   else if (cmd === 'verdict') {
     const v = verdict(readStdin())
@@ -204,11 +230,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === 'send') {
     process.exit(await send(arg, process.argv[4] ?? '{}'))
   }
+  else if (cmd === 'ensure-user-sql') {
+    console.log(probeUserSql(arg))
+  }
   else if (cmd === 'requests') {
     process.exit(await requests(arg, process.argv[4], process.argv[5]))
   }
   else {
-    console.error('usage: email-probe.mjs detect <config> | has-key | bundle-has-key | verdict | sender <app> <appDir> | send <url> <json> | requests <mode> <base> <email>')
+    console.error('usage: email-probe.mjs detect <config> | has-key | verdict | outcome <kind> [reason] | sender <app> <appDir> | send <url> <json> | ensure-user-sql <email> | requests <mode> <base> <email>')
     process.exit(2)
   }
 }

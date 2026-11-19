@@ -134,6 +134,7 @@ fixtures/with-pages/.data
 fixtures/with-bookings/.data
 fixtures/with-assets/.data
 fixtures/with-collab/.data
+fixtures/with-relations/.data
 # Loose Excalidraw scenes — the editable scene is embedded in the committed PNG instead
 writeups/diagrams/*.excalidraw
 
@@ -160,3 +161,9 @@ pocs/snippets/.data
 pocs/crate/.data
 # Generator history, written per app by `crouton config`; read by crouton-devtools (#2290)
 .crouton-generation-history.json
+
+# Nuxt test env writes this inside the runtime-test project
+packages/crouton-core/tests/nuxt-runtime/.nuxtrc
+packages/crouton-core/tests/nuxt-runtime/.nuxt
+
+pocs/status/.data

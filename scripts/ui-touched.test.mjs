@@ -189,8 +189,8 @@ test('#3228 removed lines are read from the merge-base text, not the tip', async
   assert.equal(await uiTouchedFromFiles([file('x.vue', p)], () => tip.join('\n')), 1)
 })
 
-test('status.yml passes merge_base_commit as the old-side source', () => {
-  const yml = readFileSync(new URL('../.github/workflows/status.yml', import.meta.url), 'utf8')
+test('the status job (pr-status-io.mjs) passes merge_base_commit as the old-side source', () => {
+  const yml = readFileSync(new URL('./lib/pr-status-io.mjs', import.meta.url), 'utf8')
   assert.match(yml, /merge_base_commit/)
   assert.match(yml, /ref: ref === 'head' \? pr\.head\.sha : mergeBase/)
 })

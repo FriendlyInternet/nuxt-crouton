@@ -11,7 +11,7 @@
         "path": "/api/teams/{teamId}/sales-categories",
         "method": "POST",
         "body": {
-          "eventId": "smoke-check",
+          "eventId": "seed:event:test1:vlaamsekermis",
           "title": "smoke-{rand}"
         }
       },
@@ -34,6 +34,10 @@
     },
     "required": true,
     "reads": [
+      {
+        "path": "/api/teams/{teamId}/crouton-layouts/default",
+        "expectStatus": [200, 204]
+      },
       {
         "path": "/api/public/{teamId}/smoke-none",
         "expectStatus": [404]

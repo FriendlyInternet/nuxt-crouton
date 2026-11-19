@@ -1,5 +1,5 @@
 // The pure epic→main-ready predicate (#1815). A false SKIP is safe; a false OPEN spams main — so
-// these pin the conservative rule: open only when children exist, ALL closed, branch ahead, no PR.
+// these pin the conservative rule: open only when children exist, ALL closed, branch differs from main, no PR.
 //   node --test scripts/epic-ready.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -17,33 +17,42 @@ test('parseEpicNumber pulls the number from an epic branch, else null', () => {
 const CLOSED = { state: 'closed' }
 const OPEN = { state: 'open' }
 
-test('opens when all children closed, branch ahead, no existing PR', () => {
-  const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], aheadCount: 3 })
+test('opens when all children closed, files differ from main, no existing PR', () => {
+  const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, true)
 })
 
 test('does NOT open while any child is still open', () => {
-  const d = decideOpen({ subIssues: [CLOSED, OPEN], existingEpicMainPrs: [], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [CLOSED, OPEN], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /1 child/)
 })
 
 test('does NOT open when an epic→main PR already exists (idempotent, no dup)', () => {
-  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [{ number: 9 }], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [{ number: 9 }], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /already open/)
 })
 
 test('does NOT open an epic with no sub-issues', () => {
-  const d = decideOpen({ subIssues: [], existingEpicMainPrs: [], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /no sub-issues/)
 })
 
-test('does NOT open when the branch is not ahead of main (nothing to land)', () => {
-  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [], aheadCount: 0 })
+test('does NOT open when no file differs from main (nothing to land)', () => {
+  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [], changedFiles: 0 })
   assert.equal(d.open, false)
-  assert.match(d.reason, /ahead of main/)
+  assert.match(d.reason, /no file differs from main/)
+})
+
+// The branch being "ahead" in commits proves nothing: the pipeline's own "merge main into epic"
+// commits count as ahead. Seen as empty epic→main PRs #4063 (3 merge commits), #4034 (1), #3628 (2).
+test('commits ahead but no file differs (only merge-main commits) → does NOT open', () => {
+  for (const aheadCount of [3, 1, 2]) {
+    const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], aheadCount, changedFiles: 0 })
+    assert.equal(d.open, false)
+  }
 })
 
 test('defaults are safe — empty call never opens', () => {
@@ -138,4 +147,50 @@ test('collectApprovalLines copies Packages-approved lines from epic + children, 
   const b = 'x\n  Packages-approved: owner ok #1\nPackages-approved: other\n```\nPackages-approved: in fence\n```'
   assert.deepEqual(collectApprovalLines([a, b, null]), ['Packages-approved: owner ok #1', 'Packages-approved: other'])
   assert.deepEqual(collectApprovalLines(['nothing']), [])
+})
+
+// ── buildEpicMainPr (#3619) ──
+import { buildEpicMainPr } from './epic-ready.mjs'
+const noCarry = { packagesPrs: [], approved: [], unapproved: [], line: null }
+const mk = o => buildEpicMainPr({ epicNumber: 7, epicBranch: 'epic/7-x', epicTitle: 'Epic: Thing', subIssues: [{ number: 1, title: 'a' }], carry: noCarry, declared: [], owner: 'pmcp', ...o })
+
+test('buildEpicMainPr: no packages, no declared → plain body with footer', () => {
+  const { title, body } = mk()
+  assert.equal(title, 'Epic #7: Thing')
+  assert.ok(!body.includes('Packages-approved') && !body.includes('🔒'))
+  assert.ok(body.endsWith('<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @pmcp</sub>'))
+  assert.ok(body.includes('**Children (1):**\n- #1 a\n\n'))
+})
+test('buildEpicMainPr: carry.line is embedded', () => {
+  const line = 'Packages-approved: owner approved #3 (sub-PR sign-off carried by epic-ready-pr, #2494)'
+  assert.ok(mk({ carry: { packagesPrs: [3], approved: [3], unapproved: [], line } }).body.includes(`\n\n${line}\n`))
+})
+test('buildEpicMainPr: unapproved packages PRs list the 🔒 section', () => {
+  const { body } = mk({ carry: { packagesPrs: [1, 2], approved: [], unapproved: [1, 2], line: null } })
+  assert.ok(body.includes('## 🔒 Shared code not yet signed off'))
+  assert.ok(body.includes('#1, #2'))
+})
+test('buildEpicMainPr: declared line equal to carry.line appears once', () => {
+  const line = 'Packages-approved: owner approved #3 (sub-PR sign-off carried by epic-ready-pr, #2494)'
+  const { body } = mk({ carry: { packagesPrs: [3], approved: [3], unapproved: [], line }, declared: [line, 'Packages-approved: x'] })
+  assert.equal(body.split(line).length - 1, 1)
+  assert.ok(body.includes('Packages-approved: x'))
+})
+test('buildEpicMainPr: title strips Epic: and is cut to 250', () => {
+  const { title } = mk({ epicTitle: 'EPIC: ' + 'z'.repeat(400) })
+  assert.equal(title.length, 250)
+  assert.ok(title.startsWith('Epic #7: zzz'))
+})
+// #3846 rule: a rolling epic is finished only when every step in its step list has a closed ticket.
+test('10. decideOpen: pending steps of a rolling epic keep the epic→main PR closed', () => {
+  const r = decideOpen({ subIssues: [CLOSED], changedFiles: 2, pendingSteps: 3 })
+  assert.equal(r.open, false)
+  assert.match(r.reason, /step/)
+  assert.equal(decideOpen({ subIssues: [CLOSED], changedFiles: 2, pendingSteps: 0 }).open, true)
+  assert.equal(decideOpen({ subIssues: [CLOSED], changedFiles: 2 }).open, true)
+})
+
+test('buildEpicMainPr: solo-leaf child renders "undefined" title', () => {
+  // quirk preserved — see #3619
+  assert.ok(mk({ subIssues: [{ number: 9, state: 'closed' }] }).body.includes('- #9 undefined'))
 })

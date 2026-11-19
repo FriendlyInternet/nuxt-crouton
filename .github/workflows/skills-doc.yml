@@ -11,6 +11,13 @@ on:
       - '.claude/agents/**'
       - 'scripts/gen-skills-doc.mjs'
       - 'scripts/harness-layers.mjs'
+      - 'scripts/gen-api-reference.mjs'
+      - 'docs/content/8.api-reference/**'
+      - 'packages/crouton-core/app/components/**'
+      - 'packages/crouton-core/app/composables/**'
+      - 'packages/*/crouton.manifest.ts'
+      - 'packages/crouton-cli/bin/**'
+      - 'packages/crouton-cli/lib/utils/load-fields.ts'
       - 'writeups/architecture/skills-and-triggers.html'
   push:
     branches: [main]
@@ -40,3 +47,7 @@ jobs:
         run: node scripts/gen-skills-doc.mjs --check
       - name: Verify every skill/agent carries a layer tag (#1098)
         run: node scripts/harness-layers.mjs --check
+      - name: Verify generated API reference is up to date (#3167)
+        run: |
+          corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+          node scripts/gen-api-reference.mjs --check

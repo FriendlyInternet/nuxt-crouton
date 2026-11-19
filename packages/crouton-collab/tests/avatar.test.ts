@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateUserColor, getTextColor } from '../app/utils/avatar'
+import { generateUserColor, getTextColor, toHexColor } from '../app/utils/avatar'
 
 const hueOf = (c: string) => Number(c.match(/hsl\((\d+)/)![1])
 
@@ -15,6 +15,23 @@ describe('generateUserColor', () => {
         const d = Math.abs(hues[i]! - hues[j]!)
         expect(Math.min(d, 360 - d)).toBeGreaterThanOrEqual(25)
       }
+    }
+  })
+})
+
+describe('toHexColor (T6, #3984)', () => {
+  it('converts hsl to #rrggbb', () => {
+    expect(toHexColor('hsl(120, 65%, 45%)')).toBe('#28bd28')
+  })
+  it('passes #rrggbb through', () => {
+    expect(toHexColor('#aabbcc')).toBe('#aabbcc')
+  })
+  it('maps anything else to neutral grey', () => {
+    expect(toHexColor('not-a-colour')).toBe('#6b7280')
+  })
+  it('turns every generated user colour into valid hex', () => {
+    for (const id of ['u0', 'u1', 'user-123']) {
+      expect(toHexColor(generateUserColor(id))).toMatch(/^#[0-9a-fA-F]{6}$/)
     }
   })
 })

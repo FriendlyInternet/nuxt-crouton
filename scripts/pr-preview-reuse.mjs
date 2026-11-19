@@ -13,11 +13,11 @@ import { reuseExisting } from './lib/pr-preview-reuse.mjs'
 
 const [file] = process.argv.slice(2)
 if (!file) {
-  console.error('usage: pr-preview-reuse.mjs <built-wrangler.json>')
+  console.error('::error::pr-preview-reuse: usage: pr-preview-reuse.mjs <built-wrangler.json>')
   process.exit(2)
 }
 if (!existsSync(file)) {
-  console.error(`pr-preview-reuse: ${file} not found — run the build and pr-preview-wrangler first.`)
+  console.error(`::error::pr-preview-reuse: ${file} not found — run the build and pr-preview-wrangler first.`)
   process.exit(1)
 }
 

@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/bookings-locations
  * - Form component: BookingsLocationsForm (the package's own form; the generated _Form.vue was removed in #2278 — it depended on crouton-maps composables)
  * - List component: BookingsLocationsList
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, products, openDays, slotSchedule, blockedDates, offerFullDay, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -23,32 +23,34 @@
  */
 
 import { z } from 'zod'
+import { formRequiredLocale, type FormI18n } from '@fyit/crouton-catalog/required-locale'
 
 export const bookingsLocationsSlotItemSchema = z.object({
   id: z.string(),
-  label: z.string(),
-  capacity: z.number().optional()
+  label: z.string()
 })
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
-// Keep schema outside of objects that might be serialized/cloned during SSR
-export const bookingsLocationSchema = z.object({
+// Keep schema outside of objects that might be serialized/cloned during SSR.
+// The required translation is the app's default language (same rule as the
+// translation input), so the form schema is built per language.
+export const bookingsLocationSchemaFor = (locale: string) => z.object({
   color: z.string().optional(),
-  location: z.string().optional(),
+  location: z.string().nullish(),
   allowedMemberIds: z.array(z.string()).nullish(),
   slots: z.array(bookingsLocationsSlotItemSchema).optional(),
+  products: z.array(z.object({ product: z.string().min(1), stock: z.number().int().min(1) })).nullish(),
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
-  offerFullDay: z.boolean().optional(),
-  inventoryMode: z.boolean().optional(),
-  quantity: z.number().optional(),
-  maxBookingsPerMonth: z.number().optional(),
+  // .nullish(): stored rows (seed, migration, API) hold null here; the server accepts it too (#4087)
+  offerFullDay: z.boolean().nullish(),
+  maxBookingsPerMonth: z.number().nullish(),
   title: z.string().optional(),
-  street: z.string().optional(),
-  zip: z.string().optional(),
+  street: z.string().nullish(),
+  zip: z.string().nullish(),
   city: z.string().optional(),
-  content: z.string().optional(),
+  content: z.string().nullish(),
   translations: z.record(
     z.string(),
     z.object({
@@ -59,10 +61,12 @@ export const bookingsLocationSchema = z.object({
       content: z.string().optional()
     })
   ).refine(
-    (translations) => translations.en && translations.en.title,
-    { message: 'English translations for title are required' }
+    translations => !!translations[locale]?.title,
+    { message: `Translations for title (${locale}) are required` }
   )
 })
+
+export const bookingsLocationSchema = bookingsLocationSchemaFor('en')
 
 export const bookingsLocationsColumns = [
   { accessorKey: 'title', header: 'Title' },
@@ -77,8 +81,6 @@ export const bookingsLocationsColumns = [
   { accessorKey: 'openDays', header: 'OpenDays' },
   { accessorKey: 'slotSchedule', header: 'SlotSchedule' },
   { accessorKey: 'blockedDates', header: 'BlockedDates' },
-  { accessorKey: 'inventoryMode', header: 'InventoryMode' },
-  { accessorKey: 'quantity', header: 'Quantity' },
   { accessorKey: 'maxBookingsPerMonth', header: 'MaxBookingsPerMonth' },
   { accessorKey: 'translations', header: 'Translations' }
 ]
@@ -98,20 +100,18 @@ const _bookingsLocationsConfig = {
     content: '',
     allowedMemberIds: [],
     slots: [],
+    products: null,
     openDays: [],
     slotSchedule: {},
     blockedDates: [],
     offerFullDay: false,
-    inventoryMode: false,
-    quantity: 0,
     maxBookingsPerMonth: 0,
     translations: {}
   },
   columns: bookingsLocationsColumns,
   dependentFieldComponents: {
     slots: 'BookingsLocationsSlotSelect',
-    blockedDates: 'BookingsLocationsBlockedDateSelect',
-    quantity: 'BookingsLocationsQuantitySelect'
+    blockedDates: 'BookingsLocationsBlockedDateSelect'
   },
   fields: [
       {
@@ -193,18 +193,6 @@ const _bookingsLocationsConfig = {
           "area": "main"
       },
       {
-          "name": "inventoryMode",
-          "type": "boolean",
-          "label": "Inventory Mode",
-          "area": "sidebar"
-      },
-      {
-          "name": "quantity",
-          "type": "number",
-          "label": "Available Units",
-          "area": "sidebar"
-      },
-      {
           "name": "maxBookingsPerMonth",
           "type": "number",
           "label": "Max Bookings Per Month",
@@ -226,10 +214,13 @@ export const bookingsLocationsConfig = _bookingsLocationsConfig as typeof _booki
 export const useBookingsLocations = () => bookingsLocationsConfig
 
 // Default export for auto-import compatibility
-export default function () {
+// The form passes its `useI18n()` in; the schema requires that app's default
+// language (no i18n passed → English).
+export default function (i18n?: FormI18n) {
+  const locale = formRequiredLocale(i18n)
   return {
     defaultValue: bookingsLocationsConfig.defaultValues,
-    schema: bookingsLocationSchema,
+    schema: bookingsLocationSchemaFor(locale),
     columns: bookingsLocationsConfig.columns,
     collection: bookingsLocationsConfig.name
   }

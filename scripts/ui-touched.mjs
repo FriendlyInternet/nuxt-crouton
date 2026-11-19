@@ -24,7 +24,7 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-const VISUAL_PATH = /\.(vue|css)$|\/app\/(components|layouts|pages)\//
+export const VISUAL_PATH = /\.(vue|css)$|\/app\/(components|layouts|pages)\//
 // Regenerated e2e fixture apps: generator output, never a surface a human signs off on (#2852).
 const FIXTURE_PATH = /^fixtures\//
 const APP_CONFIG = /(^|\/)app\.config\.ts$/
@@ -197,7 +197,7 @@ export function uiTouched(diff, getLines) {
 }
 
 /**
- * Same verdict from GitHub `pulls.listFiles` entries (#3228) -- for status.yml, which has no checkout.
+ * Same verdict from GitHub `pulls.listFiles` entries (#3228) -- for status.yml, which has no checkout of the PR's files.
  * @param {{filename:string, patch?:string, status?:string, previous_filename?:string}[]} files
  * @param {(ref:'head'|'merge-base', path:string) => string | null | Promise<string|null>} readText
  *   'head' = PR head; 'merge-base' = merge base of base...head (patch old-side line numbers

@@ -11,5 +11,9 @@ export default defineCroutonManifest({
   dependencies: [],
   provides: {
     composables: ['useChat', 'createAIProvider'],
+    components: [
+      { name: 'AIPageGenerator', description: 'Modal that generates page content with AI for one or more locales' },
+      { name: 'AITranslateButton', description: 'Translate button that calls the AI translation API and emits the result' },
+    ],
   },
 })

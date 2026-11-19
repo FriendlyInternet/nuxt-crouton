@@ -110,9 +110,6 @@ crouton add bookings i18n
 # Preview what would be done
 crouton add auth --dry-run
 
-# Skip migration generation
-crouton add auth --skip-migrations
-
 # Force reinstall
 crouton add auth --force
 
@@ -124,7 +121,6 @@ crouton add --list
 
 | Option | Description |
 |--------|-------------|
-| `--skip-migrations` | Skip running `npx nuxt db:generate` and `db:migrate` |
 | `--skip-install` | Skip `pnpm add` (assume already installed) |
 | `--dry-run` | Preview what would be done without making changes |
 | `--force` | Force reinstall even if already installed |
@@ -132,23 +128,21 @@ crouton add --list
 
 ### Available Modules
 
-| Module | Package | Has Schema | Description |
-|--------|---------|------------|-------------|
-| `auth` | `@fyit/crouton-auth` | ● | Authentication with Better Auth (**bundled in core**) |
-| `i18n` | `@fyit/crouton-i18n` | ● | Multi-language support (**bundled in core**) |
-| `admin` | `@fyit/crouton-admin` | ○ | Admin dashboard (**bundled in core**) |
-| `bookings` | `@fyit/crouton-bookings` | ○ | Booking system |
-| `editor` | `@fyit/crouton-editor` | ○ | Rich text editor |
-| `assets` | `@fyit/crouton-assets` | ○ | Asset management |
-| `events` | `@fyit/crouton-events` | ○ | Event tracking/audit trail |
-| `flow` | `@fyit/crouton-flow` | ○ | Vue Flow graphs |
-| `email` | `@fyit/crouton-email` | ○ | Email integration |
-| `maps` | `@fyit/crouton-maps` | ○ | Map integration |
-| `ai` | `@fyit/crouton-ai` | ○ | AI integration |
-| `devtools` | `@fyit/crouton-devtools` | ○ | Nuxt Devtools |
+| Module | Package | Description |
+|--------|---------|-------------|
+| `auth` | `@fyit/crouton-auth` | Authentication with Better Auth (**bundled in core**) |
+| `i18n` | `@fyit/crouton-i18n` | Multi-language support (**bundled in core**) |
+| `admin` | `@fyit/crouton-admin` | Admin dashboard (**bundled in core**) |
+| `bookings` | `@fyit/crouton-bookings` | Booking system |
+| `editor` | `@fyit/crouton-editor` | Rich text editor |
+| `assets` | `@fyit/crouton-assets` | Asset management |
+| `events` | `@fyit/crouton-events` | Event tracking/audit trail |
+| `flow` | `@fyit/crouton-flow` | Vue Flow graphs |
+| `email` | `@fyit/crouton-email` | Email integration |
+| `maps` | `@fyit/crouton-maps` | Map integration |
+| `ai` | `@fyit/crouton-ai` | AI integration |
+| `devtools` | `@fyit/crouton-devtools` | Nuxt Devtools |
 
-● = Has database schema (will update `server/db/schema.ts`)
-○ = No database tables
 **bundled in core** = Automatically included when using `@fyit/crouton-core`
 
 ⚠️ **WARNING**: Do NOT add bundled packages (`auth`, `i18n`, `admin`) to your
@@ -161,9 +155,7 @@ and SSR errors like `$setup.t is not a function`.
 1. **Validates** module exists and dependencies are installed
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
-4. **Updates** `server/db/schema.ts` - adds schema export (if applicable)
-5. **Generates** migrations **directly** — drizzle-kit, no Nuxt build (see below)
-6. **Applies** migrations with `npx nuxt db:migrate` (if applicable)
+4. **Prints one fixed block, for every package** (dry-run too): `crouton add does not create database tables. If this package brings tables, run next:` followed by the `manualMigrationSteps()` commands (`lib/utils/generate-migrations.ts`). It does not detect which packages have tables, touch `server/db/schema.ts`, or run migrations (#3998)
 
 #### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
@@ -173,15 +165,22 @@ same set NuxtHub globs), gates it for duplicate tables (`findDuplicateTables`,
 `duplicate-tables.ts`), then runs the app's own `db:generate` (drizzle-kit reads
 the runtime-resolving `drizzle.config.ts` and is resolved from the app dir). **No
 `nuxt build`, no `nuxt db generate`** — the old build-first dance (build →
-poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config`,
-`crouton add` (step 5), and `crouton init` (step 3).
+poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config` and
+`crouton init` (step 3).
 
 Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
 - **Duplicate table** (two DISTINCT defs share a name) → throws `DuplicateTableError`
   naming both files → the CLI exits **non-zero**.
 - **Unresolvable `extends`** (e.g. an out-of-monorepo scaffold whose deps aren't
   installed, so a layer can't resolve) → **defers** softly: `{ generated: false,
-  reason: 'deferred', recipe }`, the caller prints `manualMigrationSteps()`.
+  reason: 'deferred', cause: 'unresolved-layers', recipe, unresolved }`, the caller prints `manualMigrationSteps()`
+  mid-log and the closing summary repeats it as numbered next step 1
+  (`formatClosingSummary`, both `crouton config` and `crouton generate`, #1742).
+  Bare `extends` specs resolve with ESM conditions (`exsolve`), so import-only
+  layers like `@fyit/crouton-admin` no longer trigger a false deferral.
+- **No `db:generate` script** in the app's `package.json` (apps not scaffolded by
+  `crouton init`, e.g. most `fixtures/*`) → also **defers** softly, exit 0, with
+  `cause: 'no-db-generate-script'`; the summary's step 1 says to add the script.
 - **drizzle-kit error** → `{ reason: 'generate-failed', detail }` → non-zero.
 
 The scaffolded `drizzle.config.ts` (`tmplDrizzleConfig`) calls
@@ -205,17 +204,35 @@ crouton init my-app --features bookings,pages,editor --theme ko
 crouton init my-app --dry-run
 ```
 
+### Standalone vs monorepo
+
+`init` / `scaffold-app` detect where they run (#3392): `isCroutonMonorepo(cwd)` in
+`lib/scaffold-app.ts` uses `findPackagesDir` (walk up to a `pnpm-workspace.yaml` with a
+`packages/` dir) and checks `packages/crouton-core` is `@fyit/crouton-core`.
+
+| | Inside the crouton monorepo | Anywhere else (standalone) |
+|---|---|---|
+| Target dir | `apps/<name>` | `./<name>` |
+| `@fyit/*` deps + devDeps | `workspace:*` | `^<cli version>` |
+| Cloudflare (`wrangler.jsonc`, CF stubs) | on (`--no-cf` to skip) | off (`--cf` to add) |
+| Database | `hub.db: 'sqlite'` | `hub.db: 'sqlite'` (local SQLite via NuxtHub) |
+
+`--out` wins in both modes. Standalone: `npx @fyit/crouton-cli init my-app && cd my-app && pnpm install && pnpm dev`.
+`--noCf` is kept as a deprecated alias for `--no-cf`.
+
 ### Init Options
 
 | Option | Description |
 |--------|-------------|
 | `--features <list>` | Comma-separated features (e.g., `bookings,pages,editor`) |
+| `--no-layout` | Leave out `@fyit/crouton-layout` (added by default, #3956) |
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
 | `-d, --dialect <type>` | `sqlite` (default; the only supported value — others exit non-zero) |
-| `--no-cf` | Skip Cloudflare-specific config |
-| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
+| `--cf` / `--no-cf` | Force Cloudflare Workers config on/off. Default: on inside the crouton monorepo, off in a standalone app |
+| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
-| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` |
+| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
+| `--site` | Small public site: one team (`test1`, no switcher/creation/management), one locale (`en`) with `runtimeConfig.public.croutonPages.hideLocaleInUrl: true`, an empty `appDomains` to fill in; adds `@fyit/crouton-pages`. Writes no pages, middleware or `routingMode`. See [crouton-pages](../crouton-pages/CLAUDE.md) |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -224,6 +241,9 @@ crouton init quotes --poc
 
 # Explicit output directory (overrides --poc)
 crouton init scratch --out sandboxes/scratch
+
+# A small one-team, one-language public site (#4263)
+crouton init my-site --site --poc
 ```
 
 ### What `crouton init` Does
@@ -246,6 +266,8 @@ crouton init scratch --out sandboxes/scratch
 5. **Summary** — Prints next steps (dev server, deploy)
 
 ## Rollback Command (`crouton rollback`)
+
+**Removing a collection:** `crouton config` never deletes generated files. It does clean up *dangling* references (schema barrel, `app.config`, layer/root `extends`) to collection or layer folders that no longer exist (`lib/utils/prune-dangling-collections.ts`, exact matching). A collection that is still on disk but missing from `crouton.config` stays wired up and gets a warning; remove it with `crouton rollback <layer> <collection>`.
 
 Removes a generated collection — files, schema-index re-export, `app.config.ts`
 entry, and layer/root `extends`. Two things WS4 (#1445) got right:
@@ -280,8 +302,8 @@ NOT Cloudflare Pages. Generated artifacts:
 
 | File | Purpose |
 |------|---------|
-| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
-| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
+| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) + named R2 buckets `<name>-blob` / `<name>-staging-blob` (BLOB) when the `assets` feature is on (#4142), so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
+| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern) for apps; a `--poc` gets `stagingUrl: https://<name>.<zone>` and no `productionUrl`, matching its only route and what `scripts/scaffold-poc-deploy.mjs` writes (#4142). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
 | `scripts/sync-wrangler-ids.mjs` | After provisioning, queries `wrangler d1 list`/`kv namespace list` and writes the ids back into `wrangler.jsonc` (D1 by `database_name`, KV by the deterministic `<worker>-<binding>` title). Idempotent, comment-preserving |
 | `scripts/inject-wrangler-env.mjs` | Re-injects the `env` block Nitro strips from `.output/server/wrangler.json` (nitro#3429) + drops the redirect so `--env staging` deploys work |
 | `drizzle.config.ts` | Resolves the bundled schema path (`.nuxt/` or the cache buildDir) so `db:generate` works unedited |
@@ -297,7 +319,8 @@ re-inject-env → migrate staging. `nuxt.config` pins **no** nitro preset (suppl
 
 **Custom domains (`--domain <zone>`):** when passed, `wrangler.jsonc` also gets
 custom-domain `routes` — `<app>.<zone>` (top-level/prod) + `<app>-staging.<zone>`
-(`env.staging`). On deploy, wrangler binds them and creates the DNS record + cert
+(`env.staging`). A `--poc` (target under `pocs/`) has no production: only `env.staging`
+gets a route, `<app>.<zone>` (#4142). On deploy, wrangler binds them and creates the DNS record + cert
 (the zone must be in the same CF account). Nitro preserves top-level `routes`;
 `inject-wrangler-env` carries the `env.staging` ones. Without `--domain`, apps stay
 on id-less `*.workers.dev` (the CLI stays domain-agnostic for general use). Adding
@@ -374,6 +397,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | File | Purpose |
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
+| `lib/utils/prune-dangling-collections.ts` | `pruneDanglingCollectionRefs` — removes barrel/app.config/`extends` entries whose collection or layer folder is gone; runs at the start of `config` and `generate` |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
 | `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
 | `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
@@ -381,7 +405,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
 | `lib/generators/*.ts` | Template generators (16 files) |
 | `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. Opt-in with `--tests` (#785, off by default since #2286). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
-| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths. Same `--tests` gate (#791) |
+| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths, and (for collections with reference fields) same-team reference cases: other-team id / missing id → 400 with no write, same-team + null → ok, optional single and list refs (#3424, #3600). Same `--tests` gate (#791) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -391,6 +415,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/ref-collection.ts` | `resolveRefCollectionKey(refTarget, currentLayer, collectionLayerMap)` — the registered collection KEY a reference points the UI at (`croutonAssets`, `bookingsLocations`), via the TARGET's layer. Used by the form picker, the list cell and the asset detector, which used to prefix the current layer (`mainAssets`) (#2311) |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/team-ref-fields.ts` | Which fields are team-scoped references; the generator emits `assertXReferences` (queries) + calls in create/update routes, backed by crouton-core `assertRefsInTeam` (#3378) |
+| `lib/utils/list-fields.ts` | `isDependentField` / `isListField` — the one rule for "this field's body value is a list" (dependent fields, `z.array(` zod, `array` type), shared by the schema generator and the generated tests (#3600) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
@@ -458,8 +483,14 @@ it against the collection list only ever produces a false refusal. Omitting `ref
 `users` target still fails — that's the #1825 chores case, where the generator took the
 collection path and wrote an import to a `users` collection nobody created.
 
-Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
-raw id) in the generated List. The join works today; the UI half does not.
+**Person field (#1958)** — the same spelling also drives the whole surface (predicate:
+`isPersonRef` in `lib/utils/team-ref-fields.ts`):
+
+- **Form**: a team-scoped `USelectMenu` fed by `useTeam().loadMembers()` (`multiple` for `type: "array"`).
+- **List**: `CroutonUsersCardMini` on the joined `<field>User` row (single refs; array person fields keep the generic cell).
+- **API**: POST/PATCH call `assert<X>TeamMembers(event, team.id, body)` (built on crouton-auth `getMembership`), so an id from another team gets a 400.
+- **Seed**: `seed.json` records `personFields`; `seed-app.ts` fills a real member of the seeded team via a `member` subquery (NULL when none exists yet).
+- No FK to `user.id` (same as `owner`), and no separate `person` field type.
 
 ### Field Meta Properties
 
@@ -710,7 +741,7 @@ and **error paths** (invalid body → rejected before any write, missing id para
 
 ## Default Layout (generate → POC, #709)
 
-After collections are generated, `runPostGeneration` runs the **deterministic
+After collections are generated, `runPostGeneration` runs, **for an app that extends `@fyit/crouton-layout`**, the **deterministic
 layout pass** (`lib/compose-layout.ts` → `@fyit/crouton-layout`'s `composeDefaultLayout`)
 and writes **`crouton.layout.json`** at the app root: a `layout_configs`-format
 tree that arranges the generated collections into a good default — **calendar-primary**
@@ -723,9 +754,10 @@ side-by-side split falls back to a vertical stack.
 (row id `default`), so a freshly seeded POC boots with a real, data-bound layout
 instead of a blank canvas — editable in `CroutonLayout` (the layout is **data**,
 not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
-The seed only does this for an app that **extends `@fyit/crouton-layout`** — the generator
-writes `crouton.layout.json` for every app, but the table exists only where that layer is
-migrated, so for any other app the file is skipped with a log line (#2249).
+The seed only does this for an app that **extends `@fyit/crouton-layout`** — both halves
+are opt-in: the generator writes `crouton.layout.json` only for such an app (otherwise it prints
+`Skipped default layout (layout not enabled)`), and the seed skips any leftover file (#2249, #2282). `crouton init` extends crouton-layout by
+default (`--no-layout` opts out, #3956), so a new app gets both halves.
 
 ## Output Location
 
@@ -933,8 +965,8 @@ When modifying the generator, **always check if examples need updating**:
 4. Call generator in appropriate step
 
 ### Add a new field type
-1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `drizzle`,
-   `zod`, `tsType`, `defaultValue`, **and `component`** (the form control). That row is the
+1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `sqlite`,
+   `zod`, `tsType`, `defaultValue`, **`component`** (the form control), and `translatable: true` if collection-level `translatable` should auto-translate it (string, text, richText). That row is the
    single source: `getTypeMapping()` (`lib/utils/manifest-loader.ts`) flattens it and `loadFields`
    attaches `zod` / `default` / `tsType` / `component` to every field (#285, #2286).
 2. The generated `_Form.vue` renders `field.component` as-is (`renderDefaultTypeField` in
@@ -942,7 +974,7 @@ When modifying the generator, **always check if examples need updating**:
    bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
    → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
    *type* because they describe the value, not the widget.
-3. Add the SQLite column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+3. Add the SQLite column in `lib/generators/database-schema.ts` if the `sqlite` column kind is new.
 4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
    attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
    are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
@@ -1109,7 +1141,7 @@ npx nuxt typecheck
 | `lib/generators/types.ts` | TypeScript type generation (snapshot) |
 | `lib/generators/composable.ts` | Composable generation (snapshot) |
 | `lib/generators/collection-test.ts` | Schema-smoke test emission — import path, per-type sample derivation, valid/invalid cases (#785) |
-| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791) |
+| `lib/generators/api-test.ts` | API route handler test emission — handler import paths, query-mock factory, auth/team-scope + 400/403/404 cases, hierarchy move/reorder (#791), same-team reference cases (#3424) |
 
 ## Seed Data Generation
 

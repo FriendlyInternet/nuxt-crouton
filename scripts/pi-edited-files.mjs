@@ -19,7 +19,14 @@ import { fileURLToPath } from 'node:url';
 export const WRITE_TOOLS = new Set(['edit', 'write', 'create', 'str_replace', 'multiedit', 'apply_patch']);
 // Never commit pi's own runtime/scratch, dependency installs, or build output — even if a tool
 // happened to touch them. Shared by the commit-plan splitter for the GENERATED bucket too (#1849).
-export const DENY = /(^|\/)(\.pi|node_modules|\.nuxt|\.output|dist)(\/|$)|decompose-pidev-(prompt|exec)-\d+\.(txt|log)|(^|\/)pi-telemetry-out(\/|$)/;
+// `.pi/extensions/**` is tracked source (pi extensions, e.g. `complete-work.ts`) and is NOT junk.
+// `.pi/sessions/`, `.pi/npm/` and any other `.pi/` path are pi runtime. `.pi/settings.json` is
+// tracked, and pi does NOT rewrite it (checked, #3801); it stays out on purpose because it is the
+// CI trust profile — it pins which npm packages and which provider every pi CI run loads ("bump
+// them deliberately", #2275), so it changes through a reviewed interactive PR, not an unattended
+// worker run. `scripts/review-checkout.mjs` treats a PR's own `.pi/settings.json` the same way
+// (untrusted, replaced from main).
+export const DENY = /(^|\/)(\.pi(?!\/extensions\/)|node_modules|\.nuxt|\.output|dist)(\/|$)|decompose-pidev-(prompt|exec)-\d+\.(txt|log)|(^|\/)pi-telemetry-out(\/|$)/;
 
 // The set of repo-relative paths pi WROTE via its edit/write tools (deduped, in-repo, non-deny,
 // existing). This is the "inputs / hand-authored" bucket — NOT generator output (which pi produced

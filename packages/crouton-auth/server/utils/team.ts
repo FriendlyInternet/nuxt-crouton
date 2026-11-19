@@ -287,7 +287,7 @@ export async function getUserTeams(event: H3Event): Promise<Team[]> {
  * Can be called during request handling to lazily create the default org.
  *
  * Note: The default org is typically created automatically via databaseHooks
- * on first user signup. This function can be used to manually trigger
+ * on the first sign-up or sign-in. This function can be used to manually trigger
  * creation or fetch the default org.
  *
  * @param event - H3 event (needed for database access)

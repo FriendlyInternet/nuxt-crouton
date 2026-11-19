@@ -112,6 +112,7 @@ Use this skill when the user mentions:
 | tags, string list | `array` | `"tags": { "type": "array" }` |
 | image, photo, picture | `image` | `"coverImage": { "type": "image" }` |
 | file, attachment, document | `file` | `"attachment": { "type": "file" }` |
+| link to another collection, foreign key | `reference` | `"authorId": { "type": "reference", "refTarget": "authors" }` |
 
 ### Common Field Meta Options
 
@@ -231,10 +232,11 @@ crouton init <name>                            # → apps/<name>   (a launched a
 crouton init <name> --out <dir>                # explicit target directory
 crouton init <name> --features bookings,pages --theme ko -d sqlite   # options
 crouton init <name> --poc --dry-run            # preview, writes nothing
+crouton init <name> --site --poc               # a small one-team, one-language public site
 ```
 
 Flags: `--poc` (→ `pocs/<name>`) · `--out <dir>` · `--features a,b,c` · `--theme <t>` · `-d sqlite|pg`
-· `--no-cf` · `--domain <zone>` · `--dry-run`. If a `crouton.config.js` already exists in the target,
+· `--cf`/`--no-cf` (default: on in the monorepo, off elsewhere) · `--domain <zone>` (with `--poc`: staging route `<name>.<zone>`; a POC preview uses `--poc --domain pmcp.dev`) · `--site` (one team, one locale `en`, plain addresses via `hideLocaleInUrl`, empty `appDomains`; adds crouton-pages — see `packages/crouton-pages/CLAUDE.md`) · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
 init also generates its collections. **This is the command a POC-scaffold task runs — it is not
 undocumented; don't read `init-app.ts`/`scaffold-app.ts` to figure it out (that's the #1213/#1223
 30-min timeout).** Adding a collection to an *existing* app is the separate `crouton config` /
@@ -340,7 +342,7 @@ crouton {layer} {collection} --fields-file=./schemas/{collection}.json --dialect
 
 ### Step 6: Default Layout (generate → POC, #709)
 
-The generator's final step runs the **deterministic layout pass** and writes
+For an app that extends `@fyit/crouton-layout` only (on by default — `crouton init` adds it; opt out with `--no-layout`, #3956; apps without it get a one-line skip and no file), the generator's final step runs the **deterministic layout pass** and writes
 **`crouton.layout.json`** at the app root — a `layout_configs`-format tree that
 arranges the just-generated collections into a good default (no LLM):
 

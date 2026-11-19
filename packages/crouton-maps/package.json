@@ -7,7 +7,9 @@
   "files": [
     "app",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
@@ -44,6 +46,7 @@
     "@nuxt/ui": "^4.3.0"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends ../crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run"
   }
 }

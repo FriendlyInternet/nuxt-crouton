@@ -6,7 +6,7 @@
  */
 import { z } from 'zod'
 import { requireTeamOwner } from '../../../../utils/team'
-import { useDB, tables, eq, generateVerificationToken } from '../../../../utils/database'
+import { useDB, tables, eq, and, generateVerificationToken } from '../../../../utils/database'
 
 const addDomainSchema = z.object({
   domain: z
@@ -26,12 +26,17 @@ export default defineEventHandler(async (event) => {
 
   const db = useDB()
 
-  // Check if domain already exists
-  const existingDomain = await db
-    .select()
-    .from(tables.domain)
-    .where(eq(tables.domain.domain, body.domain))
-    .get()
+  // Only a VERIFIED claim (or this team's own row) blocks the name. An unverified
+  // claim by another team must not squat it; ownership is proven at verify time.
+  const [verifiedElsewhere, ownRow] = await Promise.all([
+    db.select().from(tables.domain)
+      .where(and(eq(tables.domain.domain, body.domain), eq(tables.domain.status, 'verified')))
+      .get(),
+    db.select().from(tables.domain)
+      .where(and(eq(tables.domain.domain, body.domain), eq(tables.domain.organizationId, team.id)))
+      .get()
+  ])
+  const existingDomain = verifiedElsewhere ?? ownRow
 
   if (existingDomain) {
     throw createError({

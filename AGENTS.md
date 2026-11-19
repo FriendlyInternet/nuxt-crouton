@@ -70,6 +70,9 @@ not merge.** Every change is built by the pipeline, so traffic control sees all 
 - **Hand off** — open or mark the ticket for the pipeline, then report the PR and preview it produces.
 - **Follow up** — review the pipeline's PR; request changes by commenting on it, not by pushing.
 - **Never** commit to a feature branch, push, or merge from an interactive session.
+- **One driver per ticket** — a chat claims the epics/tickets it drives; never start, unblock or
+  rework a ticket another chat claimed — ask the owner. Don't start a ticket whose `Blocked-by:` is
+  still open.
 
 The check: after a week, the history shows only pipeline authors, no interactive-session commits.
 
@@ -211,7 +214,7 @@ code: what changed, the concrete surface, numbered steps with before/after, test
 acceptance check.
 
 **The epic is the verification unit.** When the last child merges, post one `## 🧪 Verify the whole
-thing` rollup, **walk up the tree** (a parent never auto-closes), run the postmortem, close on
+thing` rollup, **walk up the tree** (a parent closes only once its work is on trunk, its test is confirmed and its postmortem is posted), run the postmortem, close on
 confirmation. Human-action tasks are discrete **assigned** issues closed by a confirming comment.
 
 **Agent comments carry provenance** — posted under a *human* account, disclaim it

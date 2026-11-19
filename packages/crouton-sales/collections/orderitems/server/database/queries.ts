@@ -231,3 +231,11 @@ export async function deleteSalesOrderitem(
 
   return { success: true }
 }
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesOrderitemReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'orderId', table: ordersSchema.salesOrders, value: data.orderId },
+    { field: 'productId', table: productsSchema.salesProducts, value: data.productId },
+  ])
+}

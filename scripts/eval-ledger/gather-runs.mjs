@@ -31,7 +31,10 @@ function main() {
   const repo = process.env.GITHUB_REPOSITORY || 'FriendlyInternet/nuxt-crouton'
   const runs = []
   for (const wf of WORKFLOWS) {
-    const list = JSON.parse(gh('run', 'list', '--workflow', wf, '--created', `>=${since}`, '--limit', '500', '--json', 'databaseId,conclusion'))
+    // plan-review.yml was folded into on-comment.yml (#3313); its old runs stay listable for a
+    // while, but a removed workflow must not abort the whole table.
+    let list = []
+    try { list = JSON.parse(gh('run', 'list', '--workflow', wf, '--created', `>=${since}`, '--limit', '500', '--json', 'databaseId,conclusion')) } catch (e) { console.error(`gather-runs: ${wf}: ${e.message.split('\n')[0]}`) }
     // skipped runs never started an agent (on-comment fires on every comment) — not "missing"
     for (const r of list.filter((x) => x.conclusion !== 'skipped')) runs.push({ id: r.databaseId, workflow: wf })
   }

@@ -1,6 +1,14 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '#build/crouton-collection-forms.mjs': resolve(import.meta.dirname, 'tests/components/mocks/collection-forms.ts')
+    }
+  },
   test: {
     include: [
       'app/composables/__tests__/**/*.test.ts',
@@ -11,7 +19,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/.nuxt/**'
+      '**/.nuxt/**',
+      'tests/nuxt-runtime/**'
     ],
     environment: 'happy-dom',
     globals: true,

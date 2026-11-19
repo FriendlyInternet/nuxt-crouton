@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly, changedPaths, gateMergeDecision, checksHeldNote } from './pr-merge-gate.mjs'
+import { readFileSync } from 'node:fs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
 const owner = 'pmcp'
@@ -299,10 +300,43 @@ test('decideReview equals decideLeafMerge on the #3173/#3428 comment fixtures vi
 
 const v1 = (o) => decideV1({ draft: false, authorIsPipeline: true, baseRef: 'epic/1--v1-x', headRef: 'work-1', labels: ['build:approved'],
   go: { go: false }, headReview: { kind: 'other' }, headSha: SHA, files: ['scripts/a.mjs'], ...o })
-test('v1 deadlock case: CI pending, blocked, red check → answered from review alone', () => {
-  const r = v1({ ciGate: 'pending', mergeableState: 'blocked', red: true })
+test('v1 deadlock case: CI pending, blocked → answered from review alone', () => {
+  const r = v1({ ciGate: 'pending', mergeableState: 'blocked' })
   assert.equal(r.merge, true)
   assert.equal(r.code, 'merge')
+})
+test('v1 deadlock case: CI pending and mergeable blocked → answered from review alone', () => {
+  const r = v1({ red: false, ciGate: 'pending', mergeableState: 'blocked' })
+  assert.equal(r.merge, true)
+  assert.equal(r.code, 'merge')
+})
+test('v1 C2 #339: red + review approved → hold red', () => {
+  const r = v1({ red: true })
+  assert.equal(r.merge, false)
+  assert.equal(r.code, 'red')
+})
+test('v1 red:false → unchanged', () => assert.deepEqual(v1({ red: false }), v1({})))
+test('v1 red beats not-pipeline', () => assert.equal(v1({ red: true, authorIsPipeline: false }).code, 'red'))
+test('v1 red beats an owner ok', () => assert.equal(v1({ red: true, labels: [], go: { go: true } }).code, 'red'))
+test('withoutMergeDecision ignores the Merge decision run', () => {
+  const runs = [{ name: 'Merge decision', status: 'completed', conclusion: 'failure' }, { name: 'CI Gate', status: 'completed', conclusion: 'success' }]
+  const f = withoutMergeDecision(runs)
+  assert.deepEqual(f.map((r) => r.name), ['CI Gate'])
+  assert.equal(f.some((r) => r.conclusion === 'failure'), false)
+})
+test('shouldEnableAuto', () => {
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'merge' }, autoMergeOn: false }), true)
+  assert.equal(shouldEnableAuto({ answer: { merge: false, code: 'no-review' }, autoMergeOn: false }), true)
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'merge' }, autoMergeOn: true }), false)
+  assert.equal(shouldEnableAuto({ answer: { merge: true, code: 'not-pipeline' }, autoMergeOn: false }), false)
+})
+test('canMergeNow', () => {
+  const m = { merge: true, code: 'merge' }
+  assert.equal(canMergeNow({ answer: m, ciGate: 'success', red: false }), true)
+  assert.equal(canMergeNow({ answer: m, ciGate: 'pending', red: false }), false)
+  assert.equal(canMergeNow({ answer: m, ciGate: 'success', red: true }), false)
+  assert.equal(canMergeNow({ answer: { merge: false, code: 'no-review' }, ciGate: 'success', red: false }), false)
+  assert.equal(canMergeNow({ answer: { merge: true, code: 'not-pipeline' }, ciGate: 'success', red: false }), false)
 })
 test('v1 draft → wait', () => {
   const r = v1({ draft: true })
@@ -361,4 +395,161 @@ test('v1 missing files → need-files; a held review stays its own hold', () => 
 })
 test('v1 non-v1 base → not-v1-base', () => {
   for (const baseRef of ['epic/1-x', 'epic/12-v1-step-1']) assert.equal(v1({ baseRef }).code, 'not-v1-base')
+})
+
+const HOLD_AT = '2026-11-07T12:00:53Z'
+const held = (kind, go, o = {}) => v1({ labels: [], headReview: { kind, at: HOLD_AT }, ownerHold: { kind, at: HOLD_AT }, go, ...o })
+for (const kind of ['final', 'needs-owner']) {
+  test(`v1 ownerHold ${kind}, no ok → owner-held`, () => {
+    const r = held(kind, { go: false })
+    assert.equal(r.code, 'owner-held')
+    assert.equal(r.merge, false)
+    assert.match(r.reason, new RegExp(kind))
+  })
+}
+test('v1 ownerHold final, ok after → merge', () => {
+  assert.equal(held('final', { go: true, approvedAt: '2026-11-07T12:06:32Z' }).code, 'merge')
+})
+test('v1 no ownerHold, no build:approved → no-review', () => {
+  assert.equal(v1({ labels: [], ownerHold: null }).code, 'no-review')
+})
+test('mergeDecisionCheck owner-held title', () => {
+  const c = mergeDecisionCheck({ merge: false, code: 'owner-held', reason: 'x' })
+  assert.equal(c.output.title, 'held: waiting for your ok')
+  assert.equal(c.status, 'in_progress')
+  assert.equal(c.conclusion, undefined)
+})
+// ---- #3757: a POC-only work-* → main PR merges on a build-review go, without the owner's ok ----
+const HEAD3757 = 'ae8ea0fd1234567890'
+const POC = ['pocs/crouton-builder/app/pages/index.vue', 'pocs/crouton-builder/package.json']
+const inc = (o = {}) => leaf({ go: { go: false }, headSha: HEAD3757, headReview: { kind: 'other' }, files: POC, ...o })
+test('3757-1. incubator-only: all files under pocs/crouton-builder/ + review go on head + green → merge, reason names incubator', () => {
+  const r = inc()
+  assert.equal(r.merge, true)
+  assert.match(r.reason, /incubator-only/)
+  assert.ok(r.reason.includes('ae8ea0fd'))
+})
+test('3757-2. incubator-only: one file outside pocs/ → no-ok hold', () => {
+  for (const f of ['packages/x.ts', '.github/workflows/x.yml', 'scripts/x.mjs', 'apps/velo/x.vue', 'pnpm-lock.yaml']) {
+    assert.equal(inc({ files: [...POC, f] }).code, 'no-ok', f)
+  }
+})
+test('3757-3. incubator-only but review not go on head → hold', () => {
+  for (const kind of ['round1', 'pending', 'failed']) assert.equal(inc({ headReview: { kind } }).merge, false, kind)
+  const goOld = { user: { login: 'app[bot]', type: 'Bot' }, created_at: '2026-11-10T10:00:00Z',
+    body: '<!-- build-review-sha:OLD -->\n<!-- build-review-verdict:go -->\n\n✅ go\n' }
+  const st = reviewState({ comments: [goOld], headSha: 'NEW', bots: ['app[bot]'] })
+  assert.equal(st.kind, 'pending')
+  assert.equal(inc({ headSha: 'NEW', headReview: st }).merge, false)
+})
+test('3757-4. incubator-only + review go but a red check / CI Gate pending / first-run → hold', () => {
+  assert.equal(inc({ red: true }).code, 'red')
+  assert.equal(inc({ ciGate: 'pending' }).code, 'ci-pending')
+  assert.equal(inc({ firstRun: ['x'] }).code, 'first-run-no-ok')
+})
+test('3757-5. incubator-only with ownerHold (rejected twice / needs-owner) → still waits', () => {
+  for (const kind of ['final', 'needs-owner']) {
+    const h = { kind, at: '2026-11-10T10:00:00Z' }
+    assert.equal(inc({ headReview: h, ownerHold: h }).merge, false, kind)
+  }
+})
+test('3757-6. draft POC-only PR → hold (the workflow draft gate runs before decideLeafMerge)', () => {
+  assert.deepEqual(skipBeforeReads({ draft: true, authorIsPipeline: true, baseRef: 'main', headRef: 'work-1' }), { skip: true, code: 'draft' })
+})
+test('3757-7. owner ok still merges any PR', () => {
+  const r = leaf({ go: okGo, files: ['packages/x.ts'], headReview: { kind: 'pending' } })
+  assert.equal(r.merge, true)
+  assert.equal(r.reason, 'owner ok')
+})
+test('3757-8. missing or empty file list never counts as incubator-only', () => {
+  assert.equal(inc({ files: undefined }).code, 'no-ok')
+  assert.equal(inc({ files: [] }).code, 'no-ok')
+})
+test('3757-9. stage is read from the model, not the folder name', () => {
+  const model = { stages: { spike: { paths: ['spikes/'], deploy: 'preview' } }, unstaged: { deploy: 'none' } }
+  assert.equal(isIncubatorOnly(['spikes/a.ts'], model), true)
+  assert.equal(isIncubatorOnly(['pocs/a.ts'], model), false)
+  assert.equal(isIncubatorOnly(['pocs/a.ts']), true)
+})
+
+test('3757-10. a rename out of packages/ into pocs/ counts the old path too → no-ok hold', () => {
+  const entries = [
+    { filename: 'pocs/crouton-builder/x.ts', previous_filename: 'packages/x.ts', status: 'renamed' },
+    { filename: 'pocs/crouton-builder/y.vue', status: 'modified' },
+  ]
+  assert.deepEqual(changedPaths(entries), ['pocs/crouton-builder/x.ts', 'packages/x.ts', 'pocs/crouton-builder/y.vue'])
+  assert.equal(inc({ files: changedPaths(entries) }).code, 'no-ok')
+  // a rename that stays inside the incubator still merges
+  assert.equal(inc({ files: changedPaths([{ filename: 'pocs/a/x.ts', previous_filename: 'pocs/b/x.ts' }]) }).merge, true)
+})
+test('3757-11. the workflow builds every changed-file list with changedPaths (renames keep their old path)', () => {
+  const yml = readFileSync(new URL('../../.github/workflows/automerge-epic-subpr.yml', import.meta.url), 'utf8')
+  const lists = yml.split('\n').filter((l) => l.includes('pulls.listFiles'))
+  assert.ok(lists.length >= 2)
+  for (const l of lists) {
+    assert.match(l, /changedPaths\(await github\.paginate\(github\.rest\.pulls\.listFiles/)
+    assert.doesNotMatch(l, /\.map\(f => f\.filename\)/)
+  }
+  assert.match(yml, /const \{ decideLeafMerge, withoutMergeDecision, changedPaths\b[^}]*\} = await import/)
+})
+
+test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {
+  const r = decideLeafMerge({ draft: false, authorIsPipeline: true, baseRef: 'epic/12-slug', headRef: 'work-5', labels: [], go: { go: false },
+    ownerHold: { kind: 'final', at: HOLD_AT }, headReview: { kind: 'final', at: HOLD_AT }, headSha: SHA, files: ['scripts/a.mjs'], ciGate: 'success', mergeableState: 'clean' })
+  assert.equal(r.code, 'no-review')
+})
+
+// ── #4038: the merge-on-approval gate waits for green ──────────────────────────
+const gatePr = (o = {}) => ({ number: 3942, state: 'open', merged: false, base: { ref: 'epic/3193-plan-tests-become-a-checklist-of-command' }, ...o })
+const gate = (o = {}) => gateMergeDecision({ pr: gatePr(), linkReason: 'body reference', ciGate: 'success', red: [], issue: 3195, ...o })
+
+test('#4038 T1: #3942 facts (CI Gate + Actionlint failed) → no merge, both checks named', () => {
+  const d = gate({ ciGate: 'pending', red: [{ name: 'CI Gate', conclusion: 'failure' }, { name: 'Actionlint workflows', conclusion: 'failure' }] })
+  assert.equal(d.merge, false)
+  assert.equal(d.checks, true)
+  assert.match(d.skip, /CI Gate is failure/)
+  assert.match(d.skip, /Actionlint workflows is failure/)
+})
+
+test('#4038 T1: CI Gate success and nothing red → merge', () => {
+  assert.deepEqual(gate(), { merge: true })
+})
+
+test('#4038 T1: CI Gate pending / missing / other with nothing red → no merge, says why', () => {
+  assert.match(gate({ ciGate: 'pending' }).skip, /CI Gate is still running/)
+  assert.match(gate({ ciGate: 'missing' }).skip, /CI Gate has not reported/)
+  assert.match(gate({ ciGate: 'neutral' }).skip, /CI Gate is neutral/)
+  for (const ciGate of ['pending', 'missing', 'neutral']) assert.equal(gate({ ciGate }).merge, false)
+})
+
+test('#4038 T1: CI Gate success but another check red → no merge naming it', () => {
+  const d = gate({ red: [{ name: 'Actionlint workflows', conclusion: 'failure' }] })
+  assert.equal(d.merge, false)
+  assert.match(d.skip, /Actionlint workflows is failure/)
+})
+
+test('#4038 T1: base main / no link → no merge, today\'s skip text, not a check hold', () => {
+  const main = gate({ pr: gatePr({ base: { ref: 'main' } }) })
+  assert.equal(main.merge, false)
+  assert.equal(main.skip, '#3942 — base `main` is not an `epic/*` branch')
+  assert.ok(!main.checks)
+  const nolink = gate({ linkReason: null })
+  assert.equal(nolink.merge, false)
+  assert.match(nolink.skip, /no link to this issue .*Refs #3195/)
+  assert.ok(!nolink.checks)
+})
+
+test('#4038 T1: a closed or merged PR is passed over silently', () => {
+  assert.deepEqual(gate({ pr: gatePr({ state: 'closed' }) }), { merge: false })
+  assert.deepEqual(gate({ pr: gatePr({ merged: true }) }), { merge: false })
+})
+
+test('#4038 T1: checksHeldNote keeps the ok, lists the checks, never @mentions', () => {
+  const b = checksHeldNote(3195, ['#3942 — CI Gate is still running'])
+  assert.match(b, /<!-- pipeline-note -->/)
+  assert.match(b, /pi\.dev harness/)
+  assert.match(b, /your `ok` is kept/)
+  assert.match(b, /- #3942 — CI Gate is still running/)
+  assert.match(b, /reply `ok` again once the checks are green/)
+  assert.doesNotMatch(b, /@\w/)
 })

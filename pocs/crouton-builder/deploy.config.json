@@ -1,4 +1,29 @@
 {
   "stagingUrl": "https://crouton-builder.pmcp.dev",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-feedback @fyit/crouton-layout"
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback @fyit/crouton-layout",
+  "smoke": {
+    "reads": [
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings",
+        "expectIncludes": "\"id\""
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-locations",
+        "expectIncludes": "\"id\""
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
+      },
+      {
+        "path": "/api/teams/{teamId}/catalog-products",
+        "expectIncludes": "\"id\""
+      }
+    ]
+  }
 }

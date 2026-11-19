@@ -3,16 +3,12 @@
  * Linked devices list (#806): each till / print router with its last push/pull and an unlink
  * action. Auto-imported as <SalesSyncDeviceList>.
  */
-interface Device {
-  deviceId: string
-  type: string
-  claimedAt: string | number | null
-}
-interface SyncDevice { deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }
+import type { SalesDevice, SalesSyncDevice } from '../../types'
+import { bareDeviceId, shortDeviceId } from '../../utils/sync-devices'
 
 const props = defineProps<{
-  devices: Device[]
-  syncDevices: SyncDevice[]
+  devices: SalesDevice[]
+  syncDevices: SalesSyncDevice[]
   /** Server clock (ms) the sync ages are measured against. */
   now: number
 }>()
@@ -24,12 +20,10 @@ const toast = useToast()
 const { teamSlug } = useTeamContext()
 
 // The sync feed ids carry a `device:` prefix the grant ids may not.
-const bare = (id: string) => id.replace(/^device:/, '')
-const syncOf = (id: string) => props.syncDevices.find(d => bare(d.deviceId) === bare(id))
-const shortId = (id: string) => bare(id).slice(0, 8) || '—'
+const syncOf = (id: string) => props.syncDevices.find(d => bareDeviceId(d.deviceId) === bareDeviceId(id))
 const dateOf = (at: string | number | null) => at ? new Date(at).toLocaleDateString() : '—'
 
-const unlinkTarget = ref<Device | null>(null)
+const unlinkTarget = ref<SalesDevice | null>(null)
 const unlinkOpen = computed({
   get: () => !!unlinkTarget.value,
   set: (v) => { if (!v) unlinkTarget.value = null }
@@ -70,7 +64,7 @@ async function unlink() {
       <li v-for="d in devices" :key="d.deviceId" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-3">
         <div class="min-w-0 space-y-0.5">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">{{ shortId(d.deviceId) }}</span>
+            <span class="font-medium">{{ shortDeviceId(d.deviceId) }}</span>
             <UBadge
               :label="d.type === 'print-device' ? t('sales.devices.router') : t('sales.devices.till')"
               :icon="d.type === 'print-device' ? 'i-lucide-printer' : 'i-lucide-monitor-smartphone'"
@@ -88,7 +82,7 @@ async function unlink() {
           color="error"
           variant="ghost"
           icon="i-lucide-unlink"
-          :aria-label="`${t('sales.devices.unlink')} ${shortId(d.deviceId)}`"
+          :aria-label="`${t('sales.devices.unlink')} ${shortDeviceId(d.deviceId)}`"
           @click="unlinkTarget = d"
         >
           {{ t('sales.devices.unlink') }}
@@ -99,7 +93,7 @@ async function unlink() {
     <UModal v-model:open="unlinkOpen" :title="t('sales.devices.unlinkTitle')">
       <template #body>
         <p class="text-sm">
-          {{ t('sales.devices.unlinkBody', { name: unlinkTarget ? shortId(unlinkTarget.deviceId) : '' }) }}
+          {{ t('sales.devices.unlinkBody', { name: unlinkTarget ? shortDeviceId(unlinkTarget.deviceId) : '' }) }}
         </p>
       </template>
       <template #footer>

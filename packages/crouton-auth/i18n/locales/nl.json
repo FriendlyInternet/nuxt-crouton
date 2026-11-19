@@ -10,6 +10,11 @@
   },
   "auth": {
     "resetLinkSentDescription": "We hebben een link om je wachtwoord te resetten naar je e-mail gestuurd. Klik op de link om je wachtwoord te resetten.",
+    "inviteOnly": {
+      "title": "{app} werkt alleen op uitnodiging",
+      "description": "Vraag een team om een uitnodiging. Heb je al een account? Log dan in.",
+      "thisApp": "Deze app"
+    },
     "magicLinkSentDescription": "We hebben een magic link naar je e-mail gestuurd. Klik op de link om in te loggen.",
     "tryAnotherEmail": "Probeer een ander e-mailadres",
     "enterEmailAndPassword": "Voer je e-mailadres en wachtwoord in.",

@@ -10,3 +10,8 @@ export const isV1Base = (ref) => /^epic\/\d+--v1-/.test(String(ref || ''))
 
 // v1 is on unless the repo variable PIPELINE_V1 is `off`.
 export const v1Enabled = (vars) => String(vars?.PIPELINE_V1 ?? '').trim().toLowerCase() !== 'off'
+
+// Which version a NEW epic branch gets (#3462): the `pipeline:v1` label, or the repo variable
+// PIPELINE_DEFAULT=v1. Pure; returns 'v1' or ''.
+export const chooseEpicVersion = ({ labels = [], defaultVersion } = {}) =>
+  labels.includes('pipeline:v1') || String(defaultVersion ?? '').trim().toLowerCase() === 'v1' ? 'v1' : ''

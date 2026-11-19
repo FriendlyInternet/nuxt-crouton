@@ -13,15 +13,11 @@
 
 // A CI-fix commit (#3104): the fix-bot's commit carries this trailer and is committed by claude[bot].
 // Owner decision (#3058): such a commit keeps the owner's `ok`; a worker revision commit voids it.
-export const CI_FIX_MARKER = 'CI-Fix: true'
-
-function isCiFixCommit(k) {
-  const msg = k.commit?.message || ''
-  if (!msg.split('\n').some(l => l.trim() === CI_FIX_MARKER)) return false
-  return k.commit?.committer?.name === 'claude[bot]'
-}
-
+// The test lives in ci-fix-commit.mjs (#3668) so the fix-ci workflow can copy it on its own.
+import { CI_FIX_MARKER, isCiFixCommit } from './ci-fix-commit.mjs'
 import { isAgentComment, isApproval } from '../approval.mjs'
+
+export { CI_FIX_MARKER }
 
 /**
  * @param {{ comments: Array<{user?: {login?: string, type?: string}, body?: string, created_at: string}>,

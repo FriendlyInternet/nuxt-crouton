@@ -40,6 +40,9 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/api/crouton-sales/sync/ingest.post.ts` | Cloud D1 ingest endpoint (#178); also stamps the freshness heartbeat (#179) |
 | `server/utils/sync-pull.ts` + `sync/pull.get.ts` | Cloud → till config sync (#815): `collectConfigChanges()` (cloud, device-authed, per team, cursor + `skip` paging) and `pullConfigChanges()` (till, runs after each push; applies via `resolveConflict` side=till; cursor in `sales_sync_pull_state`; never writes the outbox). Equal timestamps keep the till's version on both sides. Delete markers are written on both sides (`captureConfigWrite`) |
 | `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, devices[], serverNow }` (headline = freshest till) |
+| `app/utils/sync-devices.ts` + `app/types/index.ts` | `bareDeviceId()` / `shortDeviceId()` (contract: `test/sync-devices.test.ts`; the one place the `device:` prefix + 8-char display id is handled) and the shared `SalesDevice` / `SalesSyncDevice` / `SalesLostEdit` types for the Sync components |
+| `app/components/Sync/Devices.vue` / `DeviceList.vue` / `PairingPanel.vue` | `SalesSyncDevices` (#806) composes `SalesSyncPairingPanel` (one-time pairing code) + `SalesSyncDeviceList` (linked tills/print routers, last push/pull, unlink) |
+| `app/components/Sync/Details.vue` | `SalesSyncDetails` — per-till push/pull + lost config edits for `<SalesSyncStatus detailed>` (#816) |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |
 | `app/components/Dashboard/SalesSummary.vue` | `SalesDashboardSalesSummary` — live revenue/orders/avg + top products (#179), built on the chart endpoints |
 | `app/components/Dashboard/PerProductTotals.vue` | `SalesDashboardPerProductTotals` — **per-product Verkocht + Nog uit** in the Data pane (#1867): the mid-event "moeten we nog pils bijbestellen?" question, with the kitchen backlog beside it. `outstanding: null` renders as **—**, never `0` — an opt-out location *cannot* have a backlog, which is a different statement from "has none right now" (a `0` reads as "all caught up" and invites waiting for a number that never moves). Presentation decisions live in computeds, not template branches |
@@ -49,12 +52,9 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/utils/cancel-order.ts` | `cancelOrder(db, { table, orderId, teamId, eventId, actor })` → `cancelled` / `already-cancelled` / `not-found` (#1941). A status write, **never** a cascade — the line items are the record being kept. Team AND event are in the WHERE (an id from a URL is attacker-controlled), and the status predicate lives IN the update so a double-tap is a no-op rather than a race (same reasoning as `handover.ts`). Also exports `actorLabel`. Contract: `test/cancel-order.test.ts` |
 | `server/utils/per-product-totals.ts` | **Per-product aggregation (#1867).** `buildPerProductTotals(db, tables, { teamId, eventId, personnel })` → one row per product with `sold` (units gone from the cellar) + `outstanding` (units a location still owes, or `null` when no backlog is possible). **Two queries on purpose**: `sales_kdsbumps` has no uniqueness constraint, so joining bumps in to compute both at once would let a double-tapped location fan the item rows out and silently double `sold`. Cancelled orders are excluded from BOTH (a mis-punch is not consumption) — ⚠️ note this deliberately differs from `product-day-matrix`, which filters no status at all. Tables injected (same reason as `handover.ts`). Contract: `test/per-product-totals.test.ts` |
 | `server/utils/personnel-condition.ts` | The staff-order rule as a condition over an **injected column** (`personnelConditionOn`) + `parsePersonnelMode`. Split out of `personnel-filter.ts` (#1867) because that module imports the Nuxt-bound `salesOrders` table at module scope, so it can't run in a plain package unit test or from a query that receives its tables as parameters. `personnel-filter.ts` is now the thin binding that supplies the table — and deliberately does **not** re-export these (Nitro auto-imports every `server/utils/` export, so a re-export makes the symbol resolvable from two modules and Nuxt warns "Duplicated imports") |
-| `server/database/schema.ts` | Package-owned Drizzle schema: `salesSyncOutbox` (`sales_sync_outbox`) + `salesSyncStatus` (`sales_sync_status`, #179 heartbeat) |
+| `server/database/schema.ts` | Package-owned Drizzle schema: `salesSyncOutbox` (`sales_sync_outbox`), `salesSyncStatus` (`sales_sync_status`, #179 heartbeat), `salesSyncTombstones`, `salesSyncPullState`, `salesSyncConflicts`. No package SQL ships: each consuming app's `db:generate` is the only migration source (#3076) |
 | `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps auto-pick-up the package tables in `db:generate`: `sales_sync_outbox` + `sales_sync_status` and the 11 collection tables (`salesEvents` … `salesKdsbumps`, #2278) |
-| `collections/<name>/` | **The 11 sales collections, owned end to end (#2278)** — `server/database/{schema,queries}.ts`, `server/api/teams/[id]/sales-<plural>/*`, `types.ts`, `app/composables/useSales<Plural>.ts` (Zod schema), `app/components/List.vue` (+ `_Form.vue` where no bespoke form exists). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate (deployed D1s depend on them). Moved verbatim from kassa's generated layer, hand edits included. Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Types are importable as `@fyit/crouton-sales/collections/<name>/types` |
-| `server/database/migrations/0001_sales_sync_outbox.sql` | Package migration creating `sales_sync_outbox` |
-| `server/database/migrations/0002_sales_sync_status.sql` | Package migration creating `sales_sync_status` (#179 heartbeat) |
-| `server/database/migrations/0003_sales_sync_status_per_device.sql` | Adds `team_id`; heartbeat rows keyed per device (#2725) |
+| `collections/<name>/` | **The 11 sales collections, owned end to end (#2278)** — `server/database/{schema,queries}.ts`, `server/api/teams/[id]/sales-<plural>/*`, `types.ts`, `app/composables/useSales<Plural>.ts` (Zod schema), `app/components/List.vue` (+ `_Form.vue` where no bespoke form exists). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate (deployed D1s depend on them). Moved verbatim from kassa's generated layer, hand edits included. POST/PATCH of the 9 collections that have references call `assertSales<X>References` (queries.ts → crouton-core `assertRefsInTeam`) so a reference to another team's record is a 400 (#3404). Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Types are importable as `@fyit/crouton-sales/collections/<name>/types` |
 | `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
 | `seed/index.ts` | Seed provider (`@fyit/crouton-sales/seed`) — event `vlaamsekermis` (PIN `1234`) + categories/products + a scoped kassa demo page |
 
@@ -217,8 +217,8 @@ it — the ref binds before an async-setup component's exposed object attaches, 
 are explained rows in the Event Details card; the full event form (incl. slug) isn't reachable here.
 Beside the POS, up to three **side panes** open via vertical tabs stacked in a reserved gutter at
 the kassa's right edge (Shell-owned, no prop plumbing). Any combination can be open at once, each
-resizable via Reka UI's Splitter (`SplitterGroup`/`Panel`/`ResizeHandle`; panels carry explicit
-`id`/`order` because the set is dynamic; ratios persist via `autoSaveId`). Pane visibility
+resizable via Nuxt UI's `USplitter` (`:items` = the visible panes, stable ids; ratios persist via
+`auto-save-id`). Pane visibility
 persists too: `useLocalStorage('sales-workspace-{orders,clients,data}-open')` with `initOnMounted`
 (SSR renders closed, restores after hydration); the keys are global across events, so the
 clients flag is gated per event by `requiresClient` (`clientsPaneOpen`) and the data flag per
@@ -566,7 +566,7 @@ Auth: shared `x-api-key` header validated against `runtimeConfig.croutonSales.pr
 | `print-server/jobs?mark_as_printing=true` | GET | **Device-scoped poll (#1366)** — the zero-SSH successor of the per-event endpoint. Auth: `x-device-id` + `x-device-code` (the router's self-generated identity; verified against its scoped-access grant via the `crouton:printing:device-auth` hook the sales scoped-access plugin answers). 200 = the same bare jobs array (all pending `network-escpos` jobs of the claimed team's `router-spooler` events, #1324-gated); 428 = `{ status: 'unclaimed', ticket }` with a server-rendered base64 pairing ticket; 401/429 = wrong code / lockout. Claim/revoke UI: `teams/[id]/print-devices` below. |
 | `print-server/events/[eventId]/jobs?mark_as_printing=true` | GET | **Legacy** (pre-#1366 script): list pending jobs for ONE event, `x-api-key` authed. Kept during migration — retire once the fleet runs the self-pairing script. |
 | `teams/[id]/print-devices` GET/POST + `[deviceId]` DELETE | team member | Router pairing (#1366): list the team's claimed devices; POST `{ deviceId, code }` claims one (creates the scoped-access grant — 409 when another team holds it); DELETE revokes (device drops to unclaimed and re-prints its pairing ticket). Backs `SalesEventWorkspaceRouterPairing` in the Print flow picker's Setup panel (`setup-extra` slot). |
-| `teams/[id]/devices/pairing-codes` POST | team member | **Mint a till pairing code (#1662)** — the *app-mints* direction, mirror of #1366's device-prints-code. Body `{ eventId? }`; returns `{ code, expiresAt }`. The plaintext code exists only in that response (stored hashed). Delegates to crouton-auth's `mintPairingCode` (#1661) |
+| `teams/[id]/devices/pairing-codes` POST | team member | **Mint a till pairing code (#1662)** — the *app-mints* direction, mirror of #1366's device-prints-code. Body `{ eventId? }` (must be one of this team's events, else 404 — #3992); returns `{ code, expiresAt }`. The plaintext code exists only in that response (stored hashed). Delegates to crouton-auth's `mintPairingCode` (#1661) |
 | `devices/claim` POST | **public** (the code is the auth) | **Claim a till (#1662)** — a freshly installed device has no session and doesn't yet know its org, so this is deliberately unauthenticated; brute force is bounded by the per-grant lockout. Body `{ code, deviceName }` → `{ deviceId, orgId, eventId, token, expiresAt, deviceSecret }`, and sets the `scoped-access-token` cookie for SSR. `eventId` is the org's `isCurrent` event, or **null** — a till may be provisioned before the event exists. Errors mirror the scoped-access contract: 429 + `Retry-After` locked, 410 spent/expired, 401 otherwise (unknown and wrong codes are indistinguishable) |
 | `teams/[id]/devices` GET | team member | List claimed devices — **tills and print routers together** (`{ deviceId, type, claimedAt }`), since to an operator they're one inventory. `/print-devices` stays as the routers-only view |
 | `teams/[id]/devices/[deviceId]` DELETE | team member | Revoke a device of either type. **Deactivates** the grant rather than deleting it (audit trail). Team-scoped: another team's device is a 404, not a probe |
@@ -591,7 +591,7 @@ live orders/sales. #176 is the **capture** layer (this package); the push loop
   idempotent (re-sending after an uncertain push is safe). `seq` is the monotonic
   cursor the pusher drains oldest-first; `syncedAt` stays NULL until the cloud
   acks. NuxtHub auto-discovers the table via `server/db/schema.ts` — consuming
-  apps just run `db:generate` + migrate (or apply `0001_sales_sync_outbox.sql`).
+  apps just run `db:generate` + migrate.
 - **Capture** (`recordOutboxEvents()` in `server/utils/sync-outbox.ts`) is wired
   into the existing mutation paths:
   - order create + each order-item → `orders/index.post.ts`
@@ -741,6 +741,15 @@ dropped in favour of the persistent trailing pencil; reorder persists via
 | Component | Auto-import Name | Purpose |
 |-----------|------------------|---------|
 | `PosSidebar.vue` | `SalesAdminPosSidebar` | Admin navigation sidebar |
+
+### Sync (`Sync/`)
+| Component | Auto-import Name | Purpose |
+|-----------|------------------|---------|
+| `Devices.vue` | `SalesSyncDevices` | Linked-devices section: composes the pairing panel + device list |
+| `DeviceList.vue` | `SalesSyncDeviceList` | Linked tills / print routers with last push/pull and unlink |
+| `PairingPanel.vue` | `SalesSyncPairingPanel` | "Link a till" button + one-time pairing code dialog |
+| `Details.vue` | `SalesSyncDetails` | Per-till push/pull + lost config edits |
+| `Status.vue` | `SalesSyncStatus` | Mirror freshness banner (`detailed` shows Details) |
 
 ### Print Settings (`Settings/`) - Opt-in
 | Component | Auto-import Name | Purpose |
@@ -923,6 +932,6 @@ deleted row is still re-created, an existing one is left alone.
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 pnpm build          # Build with unbuild
 ```

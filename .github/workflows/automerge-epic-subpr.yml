@@ -1,5 +1,5 @@
 name: Auto-merge epic sub-PRs
-run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}"
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.pr && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}"
 
 # The decompose pipeline's design (task-decompose SKILL): a NON-GATE sub-PR merges
 # into its epic branch automatically. The epic branch is a staging area — the only
@@ -12,6 +12,12 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0
 # opened READY. So `!draft` cleanly selects only the non-gate PRs here — gate PRs stay
 # untouched and are merged by resume-on-comment.yml when the owner comments `approve`.
 # No double-merge.
+#
+# V1 PATH (#3501): a PR whose base is epic/<n>--v1-* is NOT merged here. This workflow only answers (decideV1, review +
+# red check) and writes the required `Merge decision` check with the App token, then turns GitHub auto-merge on; GitHub
+# merges when `CI Gate` + `Merge decision` are green (ruleset docs/pipeline/ruleset-pipeline-v1.json). The App bypasses that
+# ruleset, so the one direct-merge fallback (GitHub refuses auto-merge on an already-clean PR) re-checks canMergeNow() itself.
+# Off order: variable PIPELINE_V1=off -> dispatch this check (switches auto-merge off) -> disable the ruleset. On: ruleset first.
 #
 # GREEN GATE (#339): don't auto-merge a PR whose checks are RED. We block on any FAILED
 # check-run / commit status for the head SHA; we deliberately do NOT block on merely
@@ -76,8 +82,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0
 # green, presence, shared-code, App-token merge) applies identically, so a PR that should be
 # held is re-asked and held again, not waved through.
 on:
-  schedule:
-    - cron: '17 * * * *'   # hourly, off-the-hour so it doesn't pile onto :00 with everything else
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   pull_request:
     # #3229: `build:approved` IS the reviewer's approval and arrives as a label event — a PR green
     # before approval otherwise waits for an unrelated event. Other labels are filtered out in the script (scripts/lib/automerge-trigger.mjs).
@@ -93,9 +98,14 @@ on:
   # read `issue_comment` keep working unchanged.
   workflow_call:
   # #3361: GitHub drops many scheduled runs, so the merge check can be re-run by hand (or by the
-  # hand-off sweep replaying a saved retry). With `pr` it evaluates that PR; empty = sweep all.
+  # hand-off sweep replaying a saved retry), and the status app's clock starts the hourly sweep (#4133).
+  # With `pr` it evaluates that PR; empty = sweep all.
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       pr:
         description: 'PR number to evaluate; empty = sweep all open sub-PRs'
         required: false
@@ -109,7 +119,7 @@ jobs:
   automerge:
     # On a PR event, evaluate it directly; on a check_suite, only when it went green
     # (a red/again-pending suite will re-fire this when it next completes green).
-    # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
+    # `workflow_dispatch` (the hourly clock or a hand run) always runs — it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
@@ -120,7 +130,8 @@ jobs:
         (github.event.comment.author_association == 'OWNER' ||
          github.event.comment.author_association == 'MEMBER' ||
          github.event.comment.author_association == 'COLLABORATOR')) ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success' &&
+        github.event.check_suite.app.slug != 'nuxt-harness') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -143,6 +154,7 @@ jobs:
           FLOW_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}   # #3470: what the checks loaded
+          PIPELINE_V1: ${{ vars.PIPELINE_V1 }}   # #3501: `off` = the v1 path is skipped, auto-merge on v1 PRs is switched off
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}   # #3361: writes the retry note when the App is out of allowance
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -154,7 +166,9 @@ jobs:
             // Helpers load unguarded from the default-branch checkout: a missing one fails the run loudly.
             const { shouldRunOnEvent } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/automerge-trigger.mjs`)
             const { isDone, requiredCheckState: requiredCheckStateFn, liveCheckRuns, needsLiveFilter, RED_CONCLUSIONS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/required-check-state.mjs`)
-            const { decideLeafMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { decideLeafMerge, withoutMergeDecision, changedPaths /* #3757: renames keep their old path */ } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-merge-gate.mjs`)
+            const { isV1Base, v1Enabled } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pipeline-version.mjs`)
+            const { runV1, v1OffSwitch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/v1-merge-io.mjs`)
             const { decideEpicMerge } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
             const { reviewState } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/build-review-state.mjs`)
             const { chooseOkReply } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/ok-reply.mjs`)
@@ -162,7 +176,7 @@ jobs:
               core.info(`skip: ${context.eventName}/${context.payload.action} label=${context.payload.label?.name}`)
               return
             }
-            const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
+            const { PIPELINE_BOTS: BOTS } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
 
             // The check that must have REPORTED before we merge (#1698). ci.yml's `gate`
@@ -247,36 +261,27 @@ jobs:
 
               // Only a non-draft, pipeline-authored, non-gate PR targeting an epic branch.
               if (pr.draft) { core.info(`#${pull_number} is a draft (gate PR) — skip.`); continue }
+              // #3501: a PR into a v1 epic branch takes the v1 path (GitHub merges; this only writes the `Merge decision` check).
+              const v1Base = isV1Base(pr.base.ref)
+              const v1 = v1Base && v1Enabled(process.env)
+              if (v1Base && !v1 && pr.auto_merge) await v1OffSwitch({ github, core, pr, pull_number })
               // An epic → main PR (#2832) is evaluated too, but ONLY merges on an owner `ok` (below).
               const epicToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('epic/')
-              // A pipeline leaf PR straight into main (head `work-<N>`, no epic) — same rule: ONLY an owner `ok` merges it.
+              // A pipeline leaf PR straight into main (head `work-<N>`): an owner `ok` merges it, or incubator-only + head review go (#3757).
               const leafToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('work-')
               if (!pr.base.ref.startsWith('epic/') && !epicToMain && !leafToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
-              if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
+              // A v1 base needs a `Merge decision` on owner PRs too, or the ruleset blocks even a hand merge (decideV1 answers not-pipeline).
+              if (!BOTS.includes(pr.user.login) && !v1) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
-              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // An epic → main or work-<N> → main (#4260) PR that conflicts with main would otherwise sit forever with no checks
               // (#2875): start the conflict resolver once per head (marker carries the sha).
-              if (epicToMain && state === 'dirty') {
-                const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
-                const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
-                // Concurrent sweeps all see "no marker yet" for the same head (#2914), so also hold off
-                // while ANY resolver note on this PR is under 30 minutes old: one run per branch at a time.
-                const recent = prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:')
-                  && Date.now() - Date.parse(x.created_at) < 30 * 60 * 1000)
-                if (!recent && !prior.some(x => (x.body || '').includes(marker))) {
-                  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
-                  try {
-                    const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                      body: `${marker}\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
-                        + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
-                    const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
-                    const rin = { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
-                    await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'work-issue-pidev.yml', inputs: rin },
-                      () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main', inputs: rin }))
-                    core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
-                  } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
-                }
+              if ((epicToMain || leafToMain) && state === 'dirty') {
+                const { startConflictResolver } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
+                const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
+                const r = await startConflictResolver({ github, owner, repo, pull_number, pr, state, handoffGuard })
+                if (r.status === 'error') core.warning(`#${pull_number}: could not start the conflict resolver: ${r.error}`)
+                else core.info(`#${pull_number} conflicts with main — resolver ${r.status} (#2875).`)
               }
               // Facts for the ONE merge decision below (#3103): red, CI Gate, mergeable, owner go.
               // The rule itself lives in scripts/lib/pr-merge-gate.mjs; this file only gathers facts.
@@ -294,7 +299,12 @@ jobs:
               }
               core.info(`#${pull_number} workflow-runs read: ${readWf ? 'yes (red/cancelled check present, #2950)' : 'no (no red check)'}`)
               const checkRuns = liveCheckRuns(rawRuns, wfRuns)
-              const { red, firstRun, noteIgnored } = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: () => isRed(pr.head.sha, checkRuns), defaultBranch: process.env.DEFAULT_BRANCH })
+              // ONE red read per PR, minus our own `Merge decision` run (it must never wait on itself). A v1 PR never waves
+              // first-run reds through (#3470 known limit), so it skips firstRunSplit and its extra reads.
+              const rawRed = await isRed(pr.head.sha, withoutMergeDecision(checkRuns))
+              const { red, firstRun, noteIgnored } = v1
+                ? { red: rawRed.statusRed || rawRed.redRuns.length > 0, firstRun: [], noteIgnored: async () => {} }
+                : await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/first-run-check.mjs`)).firstRunSplit({ github, core, owner, repo, pull_number, pr, isRed: async () => rawRed, defaultBranch: process.env.DEFAULT_BRANCH })
               // Presence gate (#1698): require that CI Gate actually REPORTED success.
               // 'pending' → the check_suite trigger re-fires this when it completes.
               // 'missing' → the workflow never started (a dropped event); say so loudly
@@ -324,11 +334,16 @@ jobs:
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
               // The merge decision (#2777, #3103): one pure call owns the whole rule — who said yes
-              // (owner `ok` for anything → main, `build:approved` for epic-based PRs), any red check,
-              // CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
+              // (owner `ok` for anything → main, except an incubator-only work-* PR with a build-review go on its head
+              // (#3757); `build:approved` for epic-based PRs), any red check, CI Gate, mergeable. Green + presence still gate: `ok` never overrides a red check.
               // Loaded from the default-branch checkout above — never the PR head, so a PR cannot edit the
               // rule that judges it.
-              let gate
+              if (v1) {
+                await runV1({ github, core, owner, repo, env: process.env, pr, pull_number, go, prComments, rawRuns, red, checkState, BOTS, reviewState })
+                continue
+              }
+
+              let gate, fileNames // fileNames: the PR's changed files, fetched lazily at most once (#3306 API budget)
               if (epicToMain) {
                 // epic → main (#3105): the SAME decision the owner's `ok` runs (decideEpicMerge) — both
                 // aggregate gates green AND a standing ok. A green that lands after the ok merges here,
@@ -342,7 +357,8 @@ jobs:
                 if (pr.head.ref.startsWith('work-')) {
                   reviewSt = reviewState({ comments: prComments, headSha: pr.head.sha, bots: [`${process.env.APP_SLUG}[bot]`] })
                 }
-                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
+                if (leafToMain && !go.go && reviewSt.kind === 'other') fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number }))
+                gate = decideLeafMerge({ baseRef: pr.base.ref, headRef: pr.head.ref, labels: (pr.labels || []).map(l => l.name), go, headSha: pr.head.sha, headReview: reviewSt, files: fileNames, ownerHold: ['final', 'needs-owner'].includes(reviewSt.kind) ? reviewSt : null, red, firstRun, ciGate: checkState, mergeableState: state })
                 // The owner said ok but it cannot count yet: say why, once per reason and commit — never silent.
                 if (!gate.merge && gate.code === 'no-review' && go.go) {
                   const okBeforeFinal = ['final', 'needs-owner'].includes(reviewSt.kind) && !(new Date(go.approvedAt) > new Date(reviewSt.at))
@@ -356,15 +372,14 @@ jobs:
                   }
                 }
               }
-              if (!gate.merge) { core.info(`#${pull_number} not merging — ${gate.reason}.`); continue }
+              core.info(`#${pull_number} ${gate.merge ? 'merging' : 'not merging'} — ${gate.reason}.`); if (!gate.merge) continue
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
               // workflows, but a workflow change never self-merges.
-              const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
-              // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
+              if (!fileNames) fileNames = changedPaths(await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })) // #2777: packages-only + `build:approved` (checked above) releases; workflows never do.
               const { decideSharedCodeHold } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/shared-code-hold.mjs`)
-              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: files.map(f => f.filename) })
+              const hold = decideSharedCodeHold({ baseRef: pr.base.ref, labels: (pr.labels || []).map(l => l.name), files: fileNames })
               const sharedCode = hold.held
               if (hold.action === 'hold' && !go.go) {
                 // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
@@ -434,7 +449,7 @@ jobs:
             }
            } catch (e) {
             // GitHub API allowance exhausted (#3287): not a failure of the PR. End green with a warning;
-            // the hourly schedule re-evaluates every open PR. Any other error still goes red.
+            // the hourly clock sweep re-evaluates every open PR. Any other error still goes red.
             // With a PR in hand, a retry of this merge check is saved for the hand-off sweep (#3361).
             let deferMergeCheck
             try {

@@ -134,3 +134,12 @@ test('a `crouton config` run keeps the split', () => {
 test('MCP generate_collection counts as a generator', () => {
   assert.equal(generatorRanInSession(tmpSession(sessionOf({ name: 'generate_collection', arguments: {} }))), true)
 })
+
+test('.pi/extensions source is committed; .pi runtime and settings.json are not (#3801)', () => {
+  const { inputs, generated } = planCommits({
+    ledger: ['.pi/extensions/finish-check.ts'],
+    changed: ['.pi/extensions/finish-check.ts', '.pi/sessions/x.jsonl', '.pi/settings.json', '.pi/npm/x'],
+  })
+  assert.deepEqual(inputs, ['.pi/extensions/finish-check.ts'])
+  assert.deepEqual(generated, [])
+})

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { releaseReady, closeLinkedIssues, mayCloseHeldIssue } from './wave-release.mjs'
+import { releaseReady, retryOnCiFinished, closeLinkedIssues, mayCloseHeldIssue } from './wave-release.mjs'
 
 const lbl = names => names.map(name => ({ name }))
 
@@ -48,6 +48,15 @@ test('one blocker open → hold (no label, no comment)', async () => {
   await releaseReady(w)
   assert.equal(w.calls.addLabels.length, 0)
   assert.ok(w.log.some(m => m.includes('blockers-open')))
+})
+
+test('Blocked-by blocker with an open held PR (still open issue) → not released (#3583)', async () => {
+  const w = world({
+    found: [{ number: 10, body: 'Blocked-by: #1', labels: [] }],
+    issues: { 1: { state: 'open', labels: lbl(['status:blocked']) } },
+  })
+  await releaseReady(w)
+  assert.equal(w.calls.addLabels.length, 0)
 })
 
 test('already-dispatched dependent is skipped', async () => {
@@ -176,4 +185,34 @@ test('closeLinkedIssues: unheld issue → no comment fetch', async () => {
   await closeLinkedIssues(w)
   assert.equal(w.fetched, 0)
   assert.equal(w.calls.updates.length, 1)
+})
+
+// #3879: the CI-green retry only re-checks tickets of the epic branch that went green
+// (a green epic/2561 once released parked #2886 from epic/2882).
+function ciGreenWorld(body, head_branch = 'epic/A') {
+  const w = world({ found: [{ number: 10, body, labels: [] }], issues: { 1: { state: 'closed' } } })
+  w.context.payload.workflow_run = { head_branch, conclusion: 'success' }
+  return w
+}
+const marker = branch => `<!-- pipeline: epic=2 depth=1 epic_branch=${branch} dispatch=work-this -->`
+
+test('retryOnCiFinished on epic/A leaves a ready Blocked-by issue whose epic_branch is epic/B unreleased', async () => { // covers: T1
+  const w = ciGreenWorld(`Blocked-by: #1\n${marker('epic/B')}`)
+  await retryOnCiFinished(w)
+  assert.equal(w.calls.addLabels.length, 0)
+  assert.ok(w.log.some(m => m.includes('other-epic')))
+})
+
+test('retryOnCiFinished on epic/A still releases a ready issue whose epic_branch is epic/A', async () => { // covers: T1
+  const w = ciGreenWorld(`Blocked-by: #1\n${marker('epic/A')}`)
+  await retryOnCiFinished(w)
+  assert.equal(w.calls.addLabels.length, 1)
+  assert.deepEqual(w.calls.addLabels[0].labels, ['work-this'])
+})
+
+test('retryOnCiFinished on epic/A skips a ready issue with no marker whose blocker PR did not land on epic/A', async () => { // covers: T2
+  const w = ciGreenWorld('Blocked-by: #1')
+  await retryOnCiFinished(w)
+  assert.equal(w.calls.addLabels.length, 0)
+  assert.ok(w.log.some(m => m.includes('other-epic')))
 })

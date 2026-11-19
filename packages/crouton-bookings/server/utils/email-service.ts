@@ -10,10 +10,14 @@
  * Required setup:
  * - Enable: runtimeConfig.croutonBookings.email.enabled = true
  * - Install: @fyit/crouton-email (or implement custom email provider)
- * - Generate: email-template and email-log collections
+ * - Tables: bookings_emailtemplates / bookings_emaillogs ship from this package (#2278);
+ *   the app only needs its migrations applied. A missing table is logged as an error.
  */
 import { eq, and, inArray } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
+import { bookingsEmailtemplates } from '../../collections/emailtemplates/server/database/schema'
+import { bookingsEmaillogs } from '../../collections/emaillogs/server/database/schema'
 import {
   isBookingEmailEnabled,
   getBookingEmailService,
@@ -25,15 +29,6 @@ import {
   type BookingEmailVariables,
   type BookingWithEmailContext
 } from './booking-emails'
-
-/**
- * The consuming app's generated schema. Each app generates its own tables at build time,
- * so the package can't type the exports; a collection the app doesn't have is just absent.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-async function loadAppSchema(): Promise<Record<string, any>> {
-  return await import('~~/server/db/schema')
-}
 
 /**
  * Email template record shape (from generated bookingsEmailtemplates table)
@@ -107,11 +102,6 @@ export async function getActiveTemplatesForTrigger(
   const db = useDB()
 
   try {
-    // Import from the centralized schema index (always exists, Vite resolves ~~ alias)
-    const schema = await loadAppSchema()
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmailtemplates) return []
-
     // Build conditions
     const conditions = [
       eq(bookingsEmailtemplates.teamId as any, teamId),
@@ -202,10 +192,6 @@ export async function logEmailSend(options: {
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return null
-
     const [log] = await db
       .insert(bookingsEmaillogs)
       .values({
@@ -247,10 +233,6 @@ export async function updateEmailLogStatus(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return
-
     await db
       .update(bookingsEmaillogs)
       .set({
@@ -445,6 +427,10 @@ export async function sendBookingEmails(
     }
   }
 
+  // The app's default language — the one a template is required to have (#4236/#4244)
+  const i18nCfg = (useRuntimeConfig() as any).croutonI18n ?? {}
+  const defaultLocale = requiredLocale(i18nCfg.supportedLocales ?? [], i18nCfg.defaultLocale)
+
   // Build email variables (locale-aware date formatting)
   const variables = buildEmailVariables(booking, locale)
 
@@ -455,10 +441,10 @@ export async function sendBookingEmails(
 
   // Process each matching template
   for (const template of templates) {
-    // Resolve translated subject/body when locale is provided
+    // Resolve subject/body: customer language → default language → main field → any translation
     const tr = template.translations as Record<string, Record<string, string>> | null
-    const resolvedSubject = locale ? resolveTranslatedField(template.subject, tr, 'subject', locale) : template.subject
-    const resolvedBody = locale ? resolveTranslatedField(template.body, tr, 'body', locale) : template.body
+    const resolvedSubject = resolveTranslatedField(template.subject, tr, 'subject', locale ?? defaultLocale, defaultLocale)
+    const resolvedBody = resolveTranslatedField(template.body, tr, 'body', locale ?? defaultLocale, defaultLocale)
 
     const { subject, body } = renderBookingEmail(
       { subject: resolvedSubject, body: resolvedBody },
@@ -466,6 +452,51 @@ export async function sendBookingEmails(
     )
 
     const recipientType = template.recipientType || 'customer'
+
+    // Never send a blank email: log it failed for each intended recipient (#4244)
+    if (!subject.trim() || !body.trim()) {
+      const EMPTY = 'Template has no subject or body in any language'
+      console.warn(`[booking-email] Not sending ${triggerType} (template ${template.id}): ${EMPTY}`)
+      const recipients: Array<{ email: string, type: 'customer' | 'admin' }> = []
+      const customerEmail = options.recipientEmail || variables.customer_email
+      if ((recipientType === 'customer' || recipientType === 'both') && customerEmail) {
+        recipients.push({ email: customerEmail, type: 'customer' })
+      }
+      if ((recipientType === 'admin' || recipientType === 'both') && adminEmail) {
+        recipients.push({ email: adminEmail, type: 'admin' })
+      }
+      for (const r of recipients) {
+        const logId = await logEmailSend({
+          teamId,
+          userId,
+          bookingId: booking.id,
+          templateId: template.id,
+          recipientEmail: r.email,
+          triggerType,
+          status: 'failed',
+          error: EMPTY
+        })
+        nitroApp.hooks.callHook('crouton:operation', {
+          type: 'booking:email-failed',
+          source: 'crouton-bookings',
+          teamId,
+          userId,
+          metadata: {
+            bookingId: booking.id,
+            recipient: r.email,
+            recipientType: r.type,
+            template: triggerType,
+            status: 'failed',
+            templateId: template.id,
+            emailLogId: logId || undefined,
+            error: EMPTY,
+          },
+        }).catch(() => {})
+      }
+      results.success = false
+      results.errors?.push(EMPTY)
+      continue
+    }
 
     // Send to customer
     if (recipientType === 'customer' || recipientType === 'both') {
@@ -482,6 +513,13 @@ export async function sendBookingEmails(
           triggerType,
           status: 'pending'
         })
+
+        if (!logId) {
+          console.error(`[booking-email] Not sending ${triggerType} to ${customerEmail}: could not write the email log`)
+          results.success = false
+          results.errors?.push('Customer email not sent: email log could not be written')
+          continue
+        }
 
         // Send
         const result = await sendSingleEmail({
@@ -548,6 +586,13 @@ export async function sendBookingEmails(
         triggerType,
         status: 'pending'
       })
+
+      if (!logId) {
+        console.error(`[booking-email] Not sending ${triggerType} to ${adminEmail}: could not write the email log`)
+        results.success = false
+        results.errors?.push('Admin email not sent: email log could not be written')
+        continue
+      }
 
       // Send
       const result = await sendSingleEmail({
@@ -680,10 +725,6 @@ export async function getBatchBookingEmailStats(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return new Map()
-
     // D1 has a 100-parameter limit — chunk the IDs
     const chunks = chunkArray(bookingIds, D1_PARAM_CHUNK_SIZE)
     const allLogs: Array<{ bookingId: string; status: string }> = []
@@ -745,11 +786,6 @@ export async function getBatchBookingEmailDetails(
   const bookingIds = bookings.map(b => b.id)
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmaillogs || !bookingsEmailtemplates) return new Map()
-
     // D1 has a 100-parameter limit — chunk the booking IDs
     const chunks = chunkArray(bookingIds, D1_PARAM_CHUNK_SIZE)
 
@@ -934,10 +970,6 @@ export async function getBookingEmailStats(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    if (!bookingsEmaillogs) return { total: 0, sent: 0, pending: 0, failed: 0 }
-
     const logs = await db
       .select({
         status: bookingsEmaillogs.status
@@ -997,11 +1029,6 @@ export async function getBookingEmailDetails(
   const db = useDB()
 
   try {
-    const schema = await loadAppSchema()
-    const bookingsEmaillogs = schema.bookingsEmaillogs
-    const bookingsEmailtemplates = schema.bookingsEmailtemplates
-    if (!bookingsEmaillogs || !bookingsEmailtemplates) return results
-
     // Get all email logs for this booking
     const logs = await db
       .select({

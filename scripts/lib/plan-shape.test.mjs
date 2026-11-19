@@ -5,11 +5,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parsePlan, parseAssumptions, PLAN_MARKER } from './plan-shape.mjs'
+import { parsePlan, parseAssumptions, parseDocs, parseSplit, PLAN_MARKER } from './plan-shape.mjs'
 
 const A_OK = '- The bug is in foo — Why: the stack trace ends there — Evidence: https://github.com/o/r/blob/abc/foo.ts#L10 — Status: verified'
 
@@ -19,8 +19,9 @@ const plan = (over = {}) => {
     Cause: 'foo.ts:10 reads undefined',
     Fix: 'guard the read',
     Files: '- foo.ts',
-    Test: 'foo.test.ts',
+    Test: '- [ ] T1 — foo is guarded — Run: `node --test foo.test.mjs`',
     Assumptions: A_OK,
+    Docs: 'none — test fixture',
     'Needs owner': 'no — mechanical',
     ...over,
   }
@@ -64,12 +65,35 @@ test('an assumption with no evidence is malformed', () => {
 })
 
 test('a verified assumption needs a link; an unverified one only needs a reason', () => {
-  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /linked proof/.test(e)))
+  assert.ok(parseAssumptions('- c — Why: w — Evidence: I looked — Status: verified').errors.some((e) => /checkable proof/.test(e)))
   assert.deepEqual(parseAssumptions('- c — Why: w — Evidence: no prod access to check — Status: unverified').errors, [])
 })
 
 test('status must be verified or unverified', () => {
   assert.ok(parseAssumptions('- c — Why: w — Evidence: https://x.dev — Status: probably').errors.some((e) => /Status/.test(e)))
+})
+
+// #3271 — Status is its first word; verified evidence may be a link, a commit SHA or path:line / path#Lnn.
+const pa = (ev, st) => parseAssumptions(`- c — Why: w — Evidence: ${ev} — Status: ${st}`)
+
+test('Status reads first word; trailing reason allowed', () => {
+  const r = pa('no staging access', 'unverified (could not reach staging)')
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.items[0].status, 'unverified')
+  assert.ok(pa('x', 'maybe').errors.some((e) => /Status/.test(e)))
+})
+
+test('verified evidence forms', () => {
+  assert.ok(pa('I looked at it', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.ok(pa('defaced', 'verified').errors.some((e) => /checkable proof/.test(e)))
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs:74', 'verified').errors, [])
+  assert.deepEqual(pa('scripts/lib/plan-shape.mjs#L74', 'verified').errors, [])
+  assert.deepEqual(pa('commit dd1b002a4', 'verified').errors, [])
+  assert.deepEqual(pa('https://x.dev/a', 'verified').errors, [])
+})
+
+test('unverified needs no evidence form', () => {
+  assert.deepEqual(pa('could not check', 'unverified').errors, [])
 })
 
 // #3149 — a re-plan (--revised) must carry a "Ticket re-read" section.
@@ -127,4 +151,151 @@ test('CLI: --revised before or after the file fails a plan missing the section',
 test('#3359 marker not on the first line is rejected', () => {
   const r = parsePlan(`intro text\n${PLAN_MARKER}\n`)
   assert.ok(r.errors.some((e) => e.includes('must be the first line')))
+})
+
+const D_OK = '- a.md:3 "x" — Status: checked — Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 — Regression: no — Edit: none needed'
+
+test('docs: missing section → malformed', () => {
+  const r = parsePlan(plan({ Docs: null }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /Docs/.test(e)))
+})
+
+test('docs: bare "none" → malformed', () => {
+  const r = parsePlan(plan({ Docs: 'none' }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /reason/.test(e)))
+})
+
+test('docs: "none — pure refactor" → ok', () => {
+  const r = parsePlan(plan({ Docs: 'none — pure refactor' }))
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.docs, [])
+})
+
+test('docs: a row missing Status → malformed', () => {
+  const r = parsePlan(plan({ Docs: '- a.md:3 "x" — Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 — Regression: no — Edit: none' }))
+  assert.equal(r.ok, false)
+  assert.ok(r.errors.some((e) => /docs row 1: .*Status/.test(e)))
+})
+
+test('docs: a valid two-row table → ok', () => {
+  const table = [
+    '| Claim | Status | Evidence | Regression | Edit |',
+    '|---|---|---|---|---|',
+    '| a.md:3 "x" | Status: checked | Evidence: https://github.com/o/r/blob/abc1234/a.ts#L1 | Regression: no | Edit: none needed |',
+    '| b.md:9 "y" | Status: wrong | Regression: yes | Debt: fixed in follow-up |',
+  ].join('\n')
+  const r = parsePlan(plan({ Docs: table }))
+  assert.deepEqual(r.errors, [])
+  assert.equal(r.docs.length, 2)
+})
+
+test('docs: checked needs a permalink; can\'t tell does not', () => {
+  const bare = parseDocs('- a.md:3 "x" — Status: checked — Evidence: scripts/a.ts — Regression: no — Edit: none')
+  assert.ok(bare.errors.some((e) => /permalink/.test(e)))
+  const branch = parseDocs('- a.md:3 "x" — Status: checked — Evidence: https://github.com/o/r/blob/main/a.ts — Regression: no — Edit: none')
+  assert.ok(branch.errors.some((e) => /permalink/.test(e)))
+  assert.deepEqual(parseDocs('- a.md:3 "x" — Status: can\'t tell — Regression: no — Debt: unknown').errors, [])
+  assert.deepEqual(parseDocs(D_OK).errors, [])
+})
+
+test('docs: neither Edit nor Debt, or a bad Regression → malformed', () => {
+  assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: no').errors.some((e) => /Edit/.test(e)))
+  assert.ok(parseDocs('- a.md:3 "x" — Status: wrong — Regression: maybe — Edit: x').errors.some((e) => /Regression/.test(e)))
+})
+
+// #3194 — the Test checklist rule, through the CLI the workflow's plan step runs.
+function cli(over) {
+  const dir = mkdtempSync(join(tmpdir(), 'plan-'))
+  const f = join(dir, 'p.md')
+  writeFileSync(f, plan(over))
+  const r = spawnSync('node', [fileURLToPath(new URL('./plan-shape.mjs', import.meta.url)), f], { encoding: 'utf8' })
+  return { status: r.status, verdict: JSON.parse(r.stdout) }
+}
+
+// covers: T3
+test('Test checklist: prose Test section exits 1 with a Test: error', () => {
+  const r = cli({ Test: 'foo.test.ts: a row without teamId gets the current teamId.' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => e.startsWith('Test: ')), r.verdict.errors.join('; '))
+})
+
+// covers: T3
+test('Test checklist: valid checklist exits 0', () => {
+  const r = cli({ Test: '- [ ] T1 — guarded — Run: `node --test foo.test.mjs`\n- [ ] T2 — looks right — Manual: a person must look' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+  assert.deepEqual(r.verdict.checklist.map((i) => i.id), ['T1', 'T2'])
+})
+
+// covers: T3
+test('Test checklist: lone T0 line exits 0', () => {
+  const r = cli({ Test: '- [ ] T0 — no runnable test — Manual: config only' })
+  assert.equal(r.status, 0, r.verdict.errors.join('; '))
+})
+
+// #4184 T1 — the optional `### Split` section.
+const SPLIT_OK = 'yes — Browser tests for the OAuth flow\n- Moves: "7 e2e tests on fixtures/with-mcp-oauth"\n- Moves: "the new fixture app"\n- Tests moved: T4, T5\n- Why: a new test app plus 7 browser tests do not fit one run'
+const splitErr = (r) => r.errors.filter((e) => e.startsWith('Split:'))
+
+test('#4184 T1: a plan without ### Split is valid with split: null', () => {
+  const r = parsePlan(plan())
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.equal(r.split, null)
+})
+
+test('#4184 T1: "no — fits one run" → split: null, still valid', () => {
+  const r = parsePlan(plan({ Split: 'no — fits one run' }))
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.equal(r.split, null)
+})
+
+test('#4184 T1: a full yes Split is parsed (title, moves, tests, why)', () => {
+  const r = parsePlan(plan({ Split: SPLIT_OK }))
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.deepEqual(r.split, {
+    title: 'Browser tests for the OAuth flow',
+    moves: ['"7 e2e tests on fixtures/with-mcp-oauth"', '"the new fixture app"'],
+    tests: ['T4', 'T5'],
+    why: 'a new test app plus 7 browser tests do not fit one run',
+  })
+  // `Tests moved:` is optional
+  assert.deepEqual(parseSplit('yes — X\n- Moves: "a"\n- Why: big').split.tests, [])
+})
+
+test('#4184 T1: yes without title / Moves / Why, or a first line that is neither → a Split: error', () => {
+  const noTitle = parsePlan(plan({ Split: 'yes\n- Moves: "a"\n- Why: big' }))
+  assert.equal(noTitle.ok, false); assert.ok(splitErr(noTitle).some((e) => /title/.test(e)))
+  const noMoves = parsePlan(plan({ Split: 'yes — X\n- Why: big' }))
+  assert.equal(noMoves.ok, false); assert.ok(splitErr(noMoves).some((e) => /Moves/.test(e)))
+  const noWhy = parsePlan(plan({ Split: 'yes — X\n- Moves: "a"' }))
+  assert.equal(noWhy.ok, false); assert.ok(splitErr(noWhy).some((e) => /Why/.test(e)))
+  const neither = parsePlan(plan({ Split: 'maybe later' }))
+  assert.equal(neither.ok, false); assert.equal(splitErr(neither).length, 1)
+  // the reproduced case from the plan: a broken split no longer passes silently
+  assert.equal(parsePlan(plan({ Split: 'yes\n- Moves: "e2e tests"' })).ok, false)
+})
+
+test('#4184 T1: a moved T-id still in ### Test is an error', () => {
+  const r = parsePlan(plan({ Split: 'yes — X\n- Moves: "a"\n- Tests moved: T1\n- Why: big' }))
+  assert.equal(r.ok, false)
+  assert.ok(splitErr(r).some((e) => /T1/.test(e) && /### Test/.test(e)), r.errors.join('; '))
+})
+
+test('#4184 T5: the plan-review fixtures (approved plans with no Split) parse with split: null and the same ok', () => {
+  const dir = new URL('../fixtures/plan-review/', import.meta.url)
+  const files = readdirSync(dir).filter((f) => f.endsWith('.plan.md'))
+  assert.ok(files.length > 0)
+  for (const f of files) {
+    const r = parsePlan(readFileSync(new URL(f, dir), 'utf8'))
+    assert.equal(r.split, null, f)
+    assert.equal(r.ok, true, `${f}: ${r.errors.join('; ')}`)
+  }
+})
+
+// covers: T3
+test('Test checklist: duplicate ID exits 1', () => {
+  const r = cli({ Test: '- [ ] T1 — a — Run: `node --test a.test.mjs`\n- [ ] T1 — b — Run: `node --test b.test.mjs`' })
+  assert.equal(r.status, 1)
+  assert.ok(r.verdict.errors.some((e) => /Test: .*duplicate id T1/.test(e)))
 })

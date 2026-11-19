@@ -105,7 +105,7 @@ Both reconstruct **2+-level recursion** (agent→agent→…) to the correct dep
 | file | role |
 |------|------|
 | `parse-transcripts.mjs` | **claude harness:** parse one Claude Code session → `trace.jsonl` of `{ts,kind,name,parent,depth,agentId?,durMs?}` (also importable: `parseSession()`) |
-| `pi-telemetry.mjs` | **pi harness (#944):** adapt pi.dev telemetry (native session JSONL + subagent meta, per `writeups/architecture/pi-telemetry-schema.md`) → the SAME WS2 event shape **and** the #883 ledger slice. `buildPiTrace(dir)` / `runOutcomeToLedgerRecord(outcome)`; CLI: `node pi-telemetry.mjs <dir> [--ledger]` |
+| `pi-telemetry.mjs` | **pi harness (#944):** adapt pi.dev telemetry (native session JSONL + subagent meta, per `writeups/architecture/pi-telemetry-schema.md`) → the SAME WS2 event shape **and** the #883 ledger slice. `buildPiTrace(dir)` / `runOutcomeToLedgerRecord(outcome)`; CLI: `node pi-telemetry.mjs <dir> [--ledger]`; tool calls become `kind:'tool'` events (name only, #4161) |
 | `pi-telemetry.test.mjs` | runs the adapter against the real captured fixtures (`pocs/loop-station/data/pi-telemetry-sample/`); asserts the ledger slice passes the real `eval-ledger/schema.mjs` validator + payload-freeness |
 | `collect-traces.mjs` | CI collector — discover the run's session across all project dirs, tag events with the run id, write one NDJSON file (meta header + tagged events) for artifact upload |
 | `lib/parse-transcripts.test.mjs` | fixtures for both layouts, 2-level recursion, payload-freeness, defensiveness |
@@ -178,8 +178,9 @@ node .claude/skills/loop-station/aggregate-usage.mjs --window 7 trace1.jsonl tra
 ## In CI
 
 `.github/workflows/weekly.yml` (`usage` job) runs **weekly** (Mondays 06:30 UTC,
-first, before `findings` and `advisor`): list the window's `loop-station-trace-*` artifacts →
-download → aggregate → append → commit back `[skip ci]`. Fail-loud contract
+first, before `findings` and `advisor`): list the window's `loop-station-trace-*` and `pi-telemetry-*` artifacts with
+`scripts/fetch-artifacts.mjs` (stops at the cutoff, retries a bad page, downloads 8 at a time) →
+aggregate → append → open an auto-merge data PR (#3490). Fail-loud contract
 (#1037): a listing failure **fails the job** (an outage must not read as a
 quiet week); zero artifacts appends a meta-only record (a gap you can see).
 

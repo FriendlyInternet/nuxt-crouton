@@ -1,6 +1,9 @@
 {
   "name": "@fyit/crouton-themes",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+  },
   "description": "Swappable themes for Nuxt UI applications",
   "type": "module",
   "exports": {
@@ -46,7 +49,9 @@
     "riso",
     "eink",
     "blueprint",
-    "lib"
+    "lib",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

@@ -1,14 +1,14 @@
 // decision-line.mjs — turn an owner's `Decision:` comment into a line of the ticket's
 // `## Decisions` section (#3054). Pure and Node-core-only; record-decision.yml does the edit.
 //
-// Recognised by FORMAT, no interpretation: a comment by the owner (OWNER/MEMBER/COLLABORATOR — the owner's own account) whose first
+// Recognised by FORMAT, no interpretation: a comment by the owner (the owner's own account, matched by login — scripts/lib/owner.mjs isOwner, #4168) whose first
 // non-quote line starts with `Decision:` — or `ok: <reason>` on a held plan. An agent comment
 // (🤖 header) counts only when its header says "owner decision". Append-only and idempotent:
 // a comment already linked in the section is never added twice.
 
 import { stripGeneratedTrailer } from '../comment-command.mjs'
+import { isOwner } from './owner.mjs'
 
-const OWNERS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 const DECISION = /^\s*decision:\s*/i
 const OK_REASON = /^\s*ok:\s*(?=\S)/i
 const NOT_OK = /^\s*not\s+ok:\s*(?=\S)/i
@@ -22,13 +22,24 @@ function matchPrefix(line, held) {
   return [OK_REASON, NOT_OK].find(r => r.test(line)) || null
 }
 
-/** @returns {string|null} the decision text (single line, verbatim words), or null */
-export function parseDecision({ body, authorAssociation, userType, held = false } = {}) {
-  if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
-  const lines = stripGeneratedTrailer(String(body || '')).split('\n')
-  const header = lines.find(l => l.trim())
+/**
+ * PURE. Is this comment the owner speaking (#4192)? The owner's login, and either no leading 🤖
+ * header (typed by the owner) or a 🤖 header that says "owner decision" or relays the owner's
+ * answer (`RELAYED`). A chat's status note from the owner's account (🪪 claim, FYI, ✅ done) is not.
+ * @param {{body?: string, userLogin?: string, userType?: string}} c
+ * @param {string} [owner]
+ */
+export function isOwnerVoice({ body, userLogin, userType } = {}, owner) {
+  if (!isOwner({ userLogin, userType }, owner)) return false
+  const header = stripGeneratedTrailer(String(body || '')).split('\n').find(l => l.trim())
   const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')
-  if (isAgent && !/owner decision/i.test(header) && !RELAYED.test(header)) return null
+  return !(isAgent && !/owner decision/i.test(header) && !RELAYED.test(header))
+}
+
+/** @returns {string|null} the decision text (single line, verbatim words), or null */
+export function parseDecision({ body, userLogin, owner, userType, held = false } = {}) {
+  if (!isOwnerVoice({ body, userLogin, userType }, owner)) return null
+  const lines = stripGeneratedTrailer(String(body || '')).split('\n')
   const rest = lines.filter(l => !/^\s*>/.test(l))
   const first = rest.findIndex(l => l.trim())
   if (first < 0) return null
@@ -54,4 +65,14 @@ export function appendDecision(issueBody, line, url) {
   const end = next < 0 ? body.length : start + next
   const section = body.slice(start, end).replace(/\s+$/, '')
   return `${body.slice(0, start)}${section}\n${line}\n${end < body.length ? '\n' : ''}${body.slice(end)}`
+}
+
+/**
+ * The owner's `ok: <reason>` on a plan held after two rejections (#3272): the reason, or null.
+ * Only the `ok:` form — a `Decision:` comment records but does not approve.
+ */
+export function parseOverride(args = {}) {
+  const first = stripGeneratedTrailer(String(args.body || '')).split('\n').filter(l => !/^\s*>/.test(l)).find(l => l.trim())
+  if (!first || !OK_REASON.test(first)) return null
+  return parseDecision({ ...args, held: true })
 }

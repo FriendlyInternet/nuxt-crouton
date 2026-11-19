@@ -10,11 +10,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  extends: [
-    '@fyit/crouton-core',
-    '@fyit/crouton-i18n',
-    '@fyit/crouton-email'
-  ],
+  extends: ['@fyit/crouton-core', '@fyit/crouton-i18n', '@fyit/crouton-email', './layers/inbox'],
   hub: {
     db: 'sqlite',
     kv: true
@@ -28,6 +24,8 @@ export default defineNuxtConfig({
   croutonAuth: {
     // Signed-out visitors land on the status-only /signin (not /auth/*: the shared auth modal grabs those)
     ui: { redirects: { unauthenticated: '/signin' } },
+    // One-team mode on the team every deploy seeds (seed:org:test1); the owner joins it on sign-in (#3786)
+    teams: { defaultTeamSlug: 'test1', allowCreate: false, showSwitcher: false },
     methods: {
       password: false,
       passkeys: false,
