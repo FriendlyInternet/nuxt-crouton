@@ -1359,6 +1359,7 @@ jobs:
           PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
         run: |
           # #4183: a round that finished in time removes an earlier round's ⏱️ line (kept if this one timed out too).
+          # `|| true`: the line is cosmetic — a failure to remove it must not stop the held check below.
           node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" clear --branch "$BR" --outcome "$PI_OUTCOME" --deadline "$PI_DEADLINE" || true
           D="$(gh pr list --head "$BR" --state open --json isDraft -q '.[0].isDraft' 2>/dev/null || true)"
           [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
