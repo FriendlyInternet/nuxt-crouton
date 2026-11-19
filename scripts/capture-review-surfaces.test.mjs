@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, isAuthPath, authTryDecision, noneReason } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, isAuthPath, authTryDecision, noneReason, sessionFromResponse } from './capture-review-surfaces.mjs'
 import * as captureModule from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
@@ -562,24 +562,24 @@ const consent = { name: 'auth-consent', path: '/auth/consent', checkLanding: tru
 const login = { name: 'auth-login', path: '/auth/login', checkLanding: true }
 
 test('authTryDecision T1: /auth/consent that stays put signed in is kept signed in, no retry (#4248 case 1)', () => {
-  assert.deepEqual(authTryDecision(consent, [{ url: 'https://h/auth/consent', dialogForm: false }]), { keep: 'signed-in' })
+  assert.deepEqual(authTryDecision(consent, [{ url: 'https://h/auth/consent' }]), { keep: 'signed-in' })
 })
 
 test('authTryDecision T2: /auth/login sent to / signed in is retried, then kept signed out (#4248 case 2)', () => {
-  const t1 = { url: 'https://h/', dialogForm: false }
+  const t1 = { url: 'https://h/', session: true }
   assert.deepEqual(authTryDecision(login, [t1]), { retry: 'signed-out' })
   assert.deepEqual(authTryDecision(login, [t1, { url: 'https://h/auth/login', dialogForm: false }]), { keep: 'signed-out' })
 })
 
 test('authTryDecision T3: a sign-in page shown as a pop-up on / is kept (#4248 case 3)', () => {
   assert.deepEqual(
-    authTryDecision(login, [{ url: 'https://h/', dialogForm: false }, { url: 'https://h/', dialogForm: true }]),
+    authTryDecision(login, [{ url: 'https://h/', session: true }, { url: 'https://h/', dialogForm: true }]),
     { keep: 'signed-out', popup: true }
   )
 })
 
 test('authTryDecision T4: a pop-up on / never counts for /auth/consent (#4248 case 4)', () => {
-  const d = authTryDecision(consent, [{ url: 'https://h/auth/login', dialogForm: false }, { url: 'https://h/', dialogForm: true }])
+  const d = authTryDecision(consent, [{ url: 'https://h/auth/login' }, { url: 'https://h/', dialogForm: true }])
   assert.ok(d.reject, 'rejected')
   assert.match(d.reject, /\/auth\/consent/)
   assert.equal(d.keep, undefined)
@@ -587,13 +587,13 @@ test('authTryDecision T4: a pop-up on / never counts for /auth/consent (#4248 ca
 
 test('authTryDecision T5: a non-/auth page that lands on /auth/login is rejected with no retry (#4248 case 5)', () => {
   const team = { name: 'team', path: '/admin/test1/team', checkLanding: true }
-  assert.deepEqual(authTryDecision(team, [{ url: 'https://h/auth/login?redirect=x', dialogForm: true }]), { reject: 'landed on /auth/login instead of /admin/test1/team' })
+  assert.deepEqual(authTryDecision(team, [{ url: 'https://h/auth/login?redirect=x' }]), { reject: 'landed on /auth/login instead of /admin/test1/team' })
 })
 
 test('authTryDecision T6: in one run, /auth/login is kept signed out and /auth/consent signed in (#4248 case 6)', () => {
   const decisions = [login, consent].map((s) => {
     const landings = { '/auth/login': ['https://h/', 'https://h/auth/login'], '/auth/consent': ['https://h/auth/consent'] }[s.path]
-    const t1 = { url: landings[0], dialogForm: false }
+    const t1 = { url: landings[0], session: true }
     const d = authTryDecision(s, [t1])
     return d.retry ? authTryDecision(s, [t1, { url: landings[1], dialogForm: false }]) : d
   })
@@ -601,9 +601,39 @@ test('authTryDecision T6: in one run, /auth/login is kept signed out and /auth/c
 })
 
 test('authTryDecision T7: when the review login failed (signed-in try shows the pop-up too), consent is rejected (#4248 case 7)', () => {
-  const d = authTryDecision(consent, [{ url: 'https://h/', dialogForm: true }, { url: 'https://h/', dialogForm: true }])
+  const d = authTryDecision(consent, [{ url: 'https://h/', session: false }, { url: 'https://h/', dialogForm: true }])
   assert.ok(d.reject, 'rejected')
   assert.match(d.reject, /\/auth\/consent/)
+})
+
+// #4265 — a sign-in form on the signed-in try proves nothing; the app's session decides.
+test('#4265 T1: /auth/login kept as a pop-up when the signed-in try had a session, whatever form it showed', () => {
+  const out = { url: 'https://h/', dialogForm: true }
+  assert.deepEqual(authTryDecision(login, [{ url: 'https://h/', session: true, dialogForm: true }, out]), { keep: 'signed-out', popup: true })
+  assert.deepEqual(authTryDecision(login, [{ url: 'https://h/', session: true, dialogForm: 'search-form' }, out]), { keep: 'signed-out', popup: true })
+})
+
+test('#4265 T2: /auth/login pop-up rejected as a failed review login when the signed-in try had no session', () => {
+  const d = authTryDecision(login, [{ url: 'https://h/', session: false, dialogForm: true }, { url: 'https://h/', dialogForm: true }])
+  assert.ok(d.reject, 'rejected')
+  assert.match(d.reject, /review login did not work/)
+  assert.doesNotMatch(d.reject, /is not \/auth\/login/)
+})
+
+test('#4265 T3: sessionFromResponse is true only for a 2xx answer with a user', () => {
+  assert.equal(sessionFromResponse(200, { user: { id: 'u' }, session: {} }), true)
+  assert.equal(sessionFromResponse(200, null), false)
+  assert.equal(sessionFromResponse(200, {}), false)
+  assert.equal(sessionFromResponse(200, undefined), false)
+  assert.equal(sessionFromResponse(401, { user: { id: 'u' } }), false)
+  assert.equal(sessionFromResponse(404, undefined), false)
+})
+
+test('#4265 case 3: consent sent to /auth/login signed in, pop-up on / signed out, is still rejected', () => {
+  const d = authTryDecision(consent, [{ url: 'https://h/auth/login', session: true }, { url: 'https://h/', dialogForm: true }])
+  assert.ok(d.reject, 'rejected')
+  assert.equal(d.keep, undefined)
+  assert.match(d.reject, /is not \/auth\/consent/)
 })
 
 test('T8: the old fixed "/auth/ ⇒ signed out" rule is gone; isAuthPath only says "under /auth" (#4248)', () => {
