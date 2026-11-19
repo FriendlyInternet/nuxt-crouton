@@ -428,9 +428,10 @@ export async function requireTeamRole(
 ): Promise<TeamContext> {
   const context = await resolveTeamAndCheckMembership(event)
 
-  const roleHierarchy = { owner: 3, admin: 2, member: 1 }
-  const userRoleLevel = roleHierarchy[context.membership.role] ?? 0
-  const requiredRoleLevel = roleHierarchy[requiredRole]
+  const roleHierarchy: Record<string, number> = { owner: 3, admin: 2, member: 1 }
+  // A team's own role (#4106) is still a member of the team: rank it as member.
+  const userRoleLevel = roleHierarchy[context.membership.role] ?? 1
+  const requiredRoleLevel = roleHierarchy[requiredRole] ?? 1
 
   if (userRoleLevel < requiredRoleLevel) {
     throw createError({
@@ -473,7 +474,7 @@ export async function requireTeamOwner(event: H3Event): Promise<TeamContext> {
 export async function getOrganizationMembershipDirect(
   organizationId: string,
   userId: string
-): Promise<{ role: 'owner' | 'admin' | 'member' } | null> {
+): Promise<{ role: string } | null> {
   const db = useDB()
 
   const result = await db
@@ -487,7 +488,8 @@ export async function getOrganizationMembershipDirect(
 
   const row = result[0]
   if (!row) return null
-  return { role: row.role as 'owner' | 'admin' | 'member' }
+  // A base role or one of the team's own roles (#4106)
+  return { role: row.role }
 }
 
 // ============================================================================

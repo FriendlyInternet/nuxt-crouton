@@ -57,6 +57,13 @@
       "when": 1794486209097,
       "tag": "0007_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795107699654,
+      "tag": "0008_team_roles",
+      "breakpoints": true
     }
   ]
 }

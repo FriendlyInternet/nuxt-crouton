@@ -90,6 +90,10 @@
         "expectStatus": 405
       },
       {
+        "path": "/api/auth/organization/list-roles?organizationId={teamId}",
+        "expectStatus": 200
+      },
+      {
         "path": "/api/teams/{teamId}/can?actions=team:manage",
         "expectStatus": 200,
         "expectIncludes": "\"team:manage\":true"

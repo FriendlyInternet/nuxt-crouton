@@ -15,6 +15,13 @@
       "when": 1794864174164,
       "tag": "0001_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795107728050,
+      "tag": "0002_team_roles",
+      "breakpoints": true
     }
   ]
 }

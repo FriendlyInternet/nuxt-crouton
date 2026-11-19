@@ -20,6 +20,7 @@ const GUARDED = {
   'packages/crouton-admin/app/pages/admin/[team]/team/index.vue': 'team:manage',
   'packages/crouton-admin/app/pages/admin/[team]/team/settings.vue': 'team:manage',
   'packages/crouton-admin/app/pages/admin/[team]/team/invitations.vue': 'team:manage',
+  'packages/crouton-admin/app/pages/admin/[team]/team/roles.vue': 'team:manage',
   'packages/crouton-admin/app/pages/admin/[team]/team/email-logs.vue': 'team:manage',
   'packages/crouton-admin/app/pages/admin/[team]/team/email-templates.vue': 'team:manage',
   'packages/crouton-admin/app/pages/admin/[team]/team/site-info.vue': 'site:manage',

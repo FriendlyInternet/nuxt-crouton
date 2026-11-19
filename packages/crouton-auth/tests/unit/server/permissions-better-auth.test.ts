@@ -27,7 +27,7 @@ const ORIGIN = 'https://velo.pmcp.dev'
 function makeAuth() {
   const access = buildAccessControl({ actions: { 'pages:edit': { label: 'permissions.pagesEdit' } } })
   return betterAuth({
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: ORIGIN,
     emailAndPassword: { enabled: true },

@@ -70,6 +70,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 ### Team Components
 - `Admin/TeamList.vue` - Team table with member counts
 - `Admin/TeamMembers.vue` - View team members
+- `TeamRolesSettings.vue` - Rôles tab (`/admin/[team]/team/roles`, #4106): base roles read-only, the team's own roles (name + ticked actions grouped per package, labels from `croutonActions`), create / edit actions / delete via crouton-auth `useTeamRoles()`. Actions you don't hold are disabled; a role holding one opens read-only. i18n `teams.rolesScreen.*`
 
 ### Global Components
 - `ImpersonationBanner.vue` - Top banner when impersonating a user
@@ -112,7 +113,7 @@ definePageMeta({ middleware: ['auth', 'can'], can: 'site:manage' })
    (`team.vue` asks `admin:access`, each child its own action) — refused → 403
 3. Super-admins skip the check
 
-The actions per page: admin home + `team.vue` → `admin:access`; members, invitations,
+The actions per page: admin home + `team.vue` → `admin:access`; members, invitations, roles,
 settings, email logs/templates → `team:manage`; site info, look & feel, redirects →
 `site:manage`; domains → `team:domains`. The `team.vue` tabs and the admin side menu's Team section both draw from `useTeamAdminPages()` (list in `app/utils/team-pages.ts`), so they show the same pages in the same order and only pages you can open.
 

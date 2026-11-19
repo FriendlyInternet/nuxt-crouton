@@ -14,6 +14,7 @@ const EXPECTED = [
   '/admin/x/team/settings',
   '/admin/x/team',
   '/admin/x/team/invitations',
+  '/admin/x/team/roles',
   '/admin/x/team/look-and-feel',
   '/admin/x/team/site-info',
   '/admin/x/translations',
@@ -31,7 +32,7 @@ describe('team admin pages (#4220)', () => {
     expect(toSidebarItems(pages, t, '/admin/x').map(i => i.to)).toEqual(EXPECTED)
     expect(TEAM_ADMIN_ACTIONS).toEqual(['team:manage', 'site:manage', 'translations:manage', 'team:domains'])
     // fallback label when translation is missing
-    expect(toTabItems(pages, t)[6]!.label).toBe('Domains')
+    expect(toTabItems(pages, t)[7]!.label).toBe('Domains')
   })
 
   // covers: T2

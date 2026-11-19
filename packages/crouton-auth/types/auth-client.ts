@@ -25,7 +25,8 @@ import { passkeyClient } from '@better-auth/passkey/client'
  */
 const _typedAuthClient = createAuthClient({
   plugins: [
-    organizationClient(),
+    // dynamicAccessControl: team roles — listRoles/createRole/updateRole/deleteRole (#4106)
+    organizationClient({ dynamicAccessControl: { enabled: true } }),
     passkeyClient(),
     twoFactorClient(),
     magicLinkClient(),

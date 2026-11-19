@@ -44,7 +44,7 @@ export function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = 
   const access = buildAccessControl({ actions, roles })
   setAccessControl(access)
   const auth = betterAuth({
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: 'https://velo.pmcp.dev',
     plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)]
