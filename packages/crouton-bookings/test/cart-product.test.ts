@@ -13,8 +13,10 @@ function baseLocations() {
     // P stock 3, Q stock 1; slots am/pm with the full day offered next to them
     { id: 'court', title: 'Court', slots: [{ id: 'am', label: 'Morning' }, { id: 'pm', label: 'Afternoon' }], offerFullDay: true, products: [{ product: 'P', stock: 3 }, { product: 'Q', stock: 1 }] },
     { id: 'single', title: 'Single', slots: [{ id: 'am', label: 'Morning' }, { id: 'pm', label: 'Afternoon' }], products: [{ product: 'P', stock: 3 }] },
-    // inventoryMode set → no slots, even though it still lists one
-    { id: 'kayak', title: 'Kayak', inventoryMode: true, quantity: 8, slots: [{ id: 'am', label: 'Morning' }], products: [{ product: 'K', stock: 8 }] },
+    // an empty slots list → no slots
+    { id: 'kayak', title: 'Kayak', slots: [], products: [{ product: 'K', stock: 8 }] },
+    // #4172: the old inventoryMode switch no longer decides — it still lists a slot, so it has slots
+    { id: 'legacy', title: 'Legacy', inventoryMode: true, quantity: 8, slots: [{ id: 'am', label: 'Morning' }], products: [{ product: 'K', stock: 8 }] },
     // no named slots → no slots
     { id: 'plain', title: 'Plain', slots: [], products: [{ product: 'K', stock: 2 }] },
   ]
@@ -174,7 +176,7 @@ describe('cart items carry a product and an amount (#4110 S5)', () => {
   })
 
   // covers: T3
-  it('a location without slots (inventoryMode, or no named slots) books the full day by itself', async () => {
+  it('a location without slots (an empty slots list) books the full day by itself', async () => {
     for (const [id, product] of [['kayak', 'K'], ['plain', 'K']] as const) {
       states.clear()
       const c = await cartAt(id)
@@ -188,6 +190,17 @@ describe('cart items carry a product and an amount (#4110 S5)', () => {
       expect(item.productId).toBe(product)
       expect(item.quantity).toBe(1)
     }
+  })
+
+  // covers: T3 (#4172)
+  it('a location with inventoryMode that still lists a slot asks for the slot', async () => {
+    const c = await cartAt('legacy')
+    expect(c.hasSlots.value).toBe(true)
+    expect(c.canAddToCart.value).toBe(false)
+    c.formState.slotIds = ['am']
+    expect(c.canAddToCart.value).toBe(true)
+    c.addToCart()
+    expect(c.cart.value[0]!.slotIds).toEqual(['am'])
   })
 })
 

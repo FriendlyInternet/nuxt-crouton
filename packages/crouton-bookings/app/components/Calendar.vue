@@ -220,8 +220,8 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
   const indicators: IndicatorData[] = []
 
   for (const location of visibleLocations.value) {
-    // Inventory mode ignores named slots — counted as slotless, like the server (#4111)
-    const locationSlots = location.inventoryMode ? [] : parseLocationSlots(location)
+    // No named slots = slotless, like the server (#4111, #4172)
+    const locationSlots = parseLocationSlots(location)
     const effectiveSlots = locationSlots.length > 0
       ? locationSlots
       : [{ id: 'all-day', label: t('bookings.allDay') }]
@@ -314,8 +314,8 @@ const maxIndicatorCount = computed(() => visibleLocations.value.length)
 const maxSlotCount = computed(() => {
   let max = 0
   for (const location of visibleLocations.value) {
-    // Inventory mode locations have a single all-day slot (count as 1)
-    const slotCount = location.inventoryMode ? 1 : Math.max(parseLocationSlots(location).length, 1)
+    // A location without slots has a single all-day slot (count as 1)
+    const slotCount = Math.max(parseLocationSlots(location).length, 1)
     if (slotCount > max) max = slotCount
   }
   return max

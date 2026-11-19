@@ -9,7 +9,6 @@ export type { AvailabilityData }
 
 export interface LocationWithInventory {
   id: string
-  inventoryMode?: boolean
   /** Offer the built-in full day next to named slots (#2261) */
   offerFullDay?: boolean | null
   quantity?: number
@@ -51,9 +50,9 @@ export function useBookingAvailability(
   // Parse slots from location (handles string or array) — uses shared utility
   const locationSlots = computed<SlotItem[]>(() => parseLocationSlots(location.value))
 
-  // Does the location book by slot? "No slots" = `inventoryMode` set or no
-  // named slots — the same rule as server/utils/booking-capacity.ts (#4110).
-  const hasSlots = computed(() => !location.value?.inventoryMode && locationSlots.value.length > 0)
+  // Does the location book by slot? "No slots" = the parsed `slots` list is
+  // empty — the same rule as server/utils/booking-capacity.ts (#4110, #4172).
+  const hasSlots = computed(() => locationSlots.value.length > 0)
 
   // The slot buttons: the named slots, plus the full day next to them when the
   // location offers it (#2261). A location without slots shows none — the

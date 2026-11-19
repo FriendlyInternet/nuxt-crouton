@@ -42,7 +42,6 @@ export interface SlotItem {
   label?: string
   value?: string
   color?: string
-  capacity?: number
   translations?: {
     label?: Record<string, string>
   }
@@ -77,9 +76,6 @@ export interface LocationData {
   blockedDates?: BlockedDateItem[] | string | null
   /** Offer the built-in full day next to named slots (#2261) */
   offerFullDay?: boolean | null
-  // Inventory mode fields
-  inventoryMode?: boolean
-  quantity?: number
   /** Products on offer with their stock — what the counting uses (#4061) */
   products?: { product: string, stock: number }[] | string | null
   // Monthly booking limit

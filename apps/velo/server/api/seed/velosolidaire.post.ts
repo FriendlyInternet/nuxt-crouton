@@ -390,8 +390,6 @@ function locationRow(ctx: SeedContext, loc: { slug: string }, frParsed: ParsedMd
     openDays,
     slotSchedule: {},
     blockedDates: null,
-    inventoryMode: false,
-    quantity: 0,
     maxBookingsPerMonth: 0,
     translations: {
       en: locationTranslationFr(frParsed, loc),

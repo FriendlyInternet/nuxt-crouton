@@ -9,7 +9,8 @@
  *
  * - a location with no named slots has one implicit full-day slot
  * - a full-day request needs room in every slot
- * - slot `capacity`, location `quantity` and `inventoryMode` no longer count
+ * - no slots = the parsed `slots` list is empty; the old slot capacity,
+ *   location quantity and inventory switch are not read (#4172)
  *
  * Callers pass only the day's non-cancelled bookings of the location.
  */

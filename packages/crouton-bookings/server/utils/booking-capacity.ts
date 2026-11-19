@@ -19,21 +19,20 @@ import { FULL_DAY_ID, fullDayConflict } from '../../app/utils/full-day'
 import { parseLocationProducts } from '../../app/utils/capacity'
 
 /** Columns the guard needs from a location row */
-export const LOCATION_COLS = { id: bookingsLocations.id, teamId: bookingsLocations.teamId, inventoryMode: bookingsLocations.inventoryMode, slots: bookingsLocations.slots, offerFullDay: bookingsLocations.offerFullDay, products: bookingsLocations.products }
+export const LOCATION_COLS = { id: bookingsLocations.id, teamId: bookingsLocations.teamId, slots: bookingsLocations.slots, offerFullDay: bookingsLocations.offerFullDay, products: bookingsLocations.products }
 
 export interface GuardLocation {
-  inventoryMode?: boolean | number | null
   slots?: unknown
   offerFullDay?: boolean | number | null
   products?: unknown
 }
 
 export interface Selection {
-  /** Slot ids to store; `null` for inventory (stored as JSON null) */
-  slot: string[] | null
+  /** Slot ids to store — always a list; `['all-day']` at a location without slots (#4172) */
+  slot: string[]
   /** How many units of the product — a whole number ≥ 1 (#4061) */
   quantity: number
-  /** Slot ids the booking holds; `[all-day]` at a slotless or inventory location */
+  /** Slot ids the booking holds; `[all-day]` at a location without slots */
   slotIds: string[]
   /** Slot ids the guard checks: a full-day request at a slot location expands to every slot */
   guardIds: string[]
@@ -41,7 +40,7 @@ export interface Selection {
   product: string
 }
 
-export function parseSlots(slots: unknown): { id: string, capacity?: number | null }[] {
+export function parseSlots(slots: unknown): { id: string }[] {
   if (Array.isArray(slots)) return slots
   if (typeof slots === 'string') {
     try { const p = JSON.parse(slots); return Array.isArray(p) ? p : [] } catch { return [] }
@@ -101,11 +100,6 @@ export function validateSelection(location: GuardLocation, slotIdsIn: unknown, q
   const quantity = quantityIn ?? 1
   if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) {
     bad(400, 'Quantity must be a whole number of at least 1')
-  }
-
-  // An inventory location counts as slotless: its stored slot is JSON null (= full day)
-  if (location.inventoryMode) {
-    return { slot: null, quantity, slotIds: [FULL_DAY_ID], guardIds: [FULL_DAY_ID], product }
   }
 
   const slots = parseSlots(location.slots)

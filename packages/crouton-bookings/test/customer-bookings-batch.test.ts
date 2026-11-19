@@ -103,10 +103,10 @@ describe('customer-bookings-batch (#3139)', () => {
     expect(rows()).toHaveLength(1)
   })
 
-  it('stock booking stores JSON text null in the NOT NULL slot column', async () => {
+  it('a booking at a location without slots stores ["all-day"] in the NOT NULL slot column (#4172)', async () => {
     loc('inv', { inventoryMode: 1, quantity: 1 }, 5)
     await call([item('inv', { quantity: 2 })])
-    expect(rows()[0].slot).toBe('null')
+    expect(rows()[0].slot).toBe('["all-day"]')
   })
 
   // covers: T4
@@ -220,7 +220,7 @@ describe('customer-bookings-batch (#3139)', () => {
     it('the SQL guard alone aborts the whole batch (pre-check bypassed)', async () => {
       loc('inv', { inventoryMode: 1, quantity: 3 }, 1)
       const { guardSql, guardedInsert, runAtomic, dayRange, validateSelection } = await import('../server/utils/booking-capacity')
-      const sel = validateSelection({ inventoryMode: 1, products: [{ product: 'loc-inv', stock: 1 }] }, [], 1)
+      const sel = validateSelection({ products: [{ product: 'loc-inv', stock: 1 }] }, [], 1)
       const range = dayRange(DATE, 'Europe/Brussels')!
       const mk = (id: string) => guardedInsert({ id, teamId: 't1', owner: 'u', location: 'inv', storedTs: range.storedTs, slot: null, group: null, quantity: 1, status: 'active', product: sel.product, by: 'u', nowTs: 1 }, guardSql({ teamId: 't1', locationId: 'inv', range, selection: sel }))
       await expect(runAtomic(db, [mk('a'), mk('b')])).rejects.toMatchObject({ status: 409 })
