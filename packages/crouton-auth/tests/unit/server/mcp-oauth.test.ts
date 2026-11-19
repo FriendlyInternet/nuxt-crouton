@@ -24,7 +24,7 @@ import { generateSQLiteDrizzleJson, generateSQLiteMigration } from 'drizzle-kit/
 import { decodeJwt } from 'jose'
 import * as authSchema from '../../../server/database/schema/auth'
 import { createAuth, buildMcpOAuthOptions } from '../../../server/lib/auth'
-import { cleanupStaleMcpClients, mcpDiscoveryRoute } from '../../../server/lib/mcp-oauth'
+import { cleanupStaleMcpClients, mcpDiscoveryRoute, STALE_CLIENT_AGE_MS } from '../../../server/lib/mcp-oauth'
 import fr from '../../../i18n/locales/fr.json'
 
 vi.mock('nitropack/runtime', () => ({
@@ -160,7 +160,12 @@ describe('MCP sign-in (#4096)', () => {
   })
 
   describe('T11 — stale-client cleanup', () => {
-    const old = () => new Date(Date.now() - 25 * 60 * 60 * 1000).getTime() / 1000 | 0
+    const HOUR = 60 * 60 * 1000
+    it('the stale-client cutoff is 24 h', () => {
+      expect(STALE_CLIENT_AGE_MS).toBe(24 * HOUR)
+    })
+    // One hour past the cutoff (25 h old).
+    const old = () => new Date(Date.now() - STALE_CLIENT_AGE_MS - HOUR).getTime() / 1000 | 0
     const insertClient = (clientId: string, createdAt: number, userId: string | null = null) =>
       sqlite.prepare('insert into oauthClient (id, clientId, redirectUris, createdAt, userId) values (?, ?, ?, ?, ?)')
         .run(`row-${clientId}`, clientId, '["https://claude.example/cb"]', createdAt, userId)

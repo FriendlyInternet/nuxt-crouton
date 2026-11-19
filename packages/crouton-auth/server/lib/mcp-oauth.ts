@@ -28,7 +28,7 @@ export function mcpDiscoveryRoute(pathname: string): 'metadata' | 'handler' | nu
   return null
 }
 
-const STALE_CLIENT_AGE_MS = 24 * 60 * 60 * 1000
+export const STALE_CLIENT_AGE_MS = 24 * 60 * 60 * 1000
 const BATCH_LIMIT = 100
 
 type Where = { field: string, value: unknown, operator?: string }
