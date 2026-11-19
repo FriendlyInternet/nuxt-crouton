@@ -1,5 +1,6 @@
 // POST /api/cards/sync — read GitHub live and upsert one inbox card per ask that waits on the owner.
 // → { created, updated, stale, answered, stuck: { quiet, draft, epicSync }, throttled?, error?, skipped? }
+// A failed save or D1 read never answers 500: it lands in `error`, and the counts cover successful saves only.
 // Owner-only. Run by the inbox page on load; the clock runs the same `runCardsSync` at :00/:30
 // (server/utils/cards-sync-clock.ts). Skips the GitHub read when the last sync of this team was
 // < 60 s ago. The sync itself: server/utils/cards-sync-run.ts.

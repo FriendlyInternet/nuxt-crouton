@@ -46,7 +46,7 @@ function applyLoad(patch: Partial<InboxLoadState>) {
 function refresh() {
   return refreshInbox({
     list: () => $fetch<InboxCard[]>(listUrl),
-    sync: async () => { await $fetch('/api/cards/sync', { method: 'POST' }) },
+    sync: () => $fetch<unknown>('/api/cards/sync', { method: 'POST' }),
     update: applyLoad
   })
 }

@@ -14,9 +14,10 @@ let sessionEmail: string | null
 let kv: ReturnType<typeof createStorage>
 
 const createInboxCard = vi.fn(async (c: unknown) => c)
-const updateInboxCard = vi.fn(async () => ({}))
+const updateInboxCard = vi.fn(async (..._a: unknown[]) => ({}))
+const getAllInboxCards = vi.fn(async (..._a: unknown[]) => gh.existingCards)
 vi.mock('../layers/inbox/collections/cards/server/database/queries', () => ({
-  getAllInboxCards: vi.fn(async () => gh.existingCards),
+  getAllInboxCards: (...a: unknown[]) => (getAllInboxCards as any)(...a),
   createInboxCard: (...a: unknown[]) => (createInboxCard as any)(...a),
   updateInboxCard: (...a: unknown[]) => (updateInboxCard as any)(...a)
 }))
@@ -56,9 +57,17 @@ beforeEach(() => {
   waited = []
   kv = createStorage({ driver: memory() })
   fetchSpy.mockClear()
-  createInboxCard.mockClear()
-  updateInboxCard.mockClear()
+  createInboxCard.mockReset()
+  createInboxCard.mockImplementation(async (c: unknown) => c)
+  updateInboxCard.mockReset()
+  updateInboxCard.mockImplementation(async () => ({}))
+  getAllInboxCards.mockReset()
+  getAllInboxCards.mockImplementation(async () => gh.existingCards)
 })
+
+/** A stored waiting card whose ask left GitHub (it goes stale on a complete sync). */
+const goneCard = (id: string, n: number, askedAt: string = OLD) =>
+  ({ id, kind: 'issue', sourceType: 'issue', sourceNumber: n, sourceCommentId: 'gone', title: 'x', ask: 'x', link: 'x', state: 'waiting', askedAt })
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('POST /api/cards/sync', () => {
@@ -168,6 +177,64 @@ describe('POST /api/cards/sync', () => {
     const quiz = createInboxCard.mock.calls.map(c => (c as any[])[0]).filter(c => c.kind === 'quiz')
     expect(quiz.find(c => c.sourceNumber === 50)).toMatchObject({ sourceType: 'pr' })
     expect(quiz.find(c => c.sourceNumber === 51)).toMatchObject({ sourceType: 'issue' })
+  })
+
+  // covers: T1 (#4253)
+  it('#4253: a stored waiting card with askedAt "not a date" → 200, left alone, the good ones still go stale', async () => {
+    gh.existingCards = [goneCard('bad', 70, 'not a date'), goneCard('c1', 71), goneCard('c2', 72)]
+    const out = await run()
+    expect(out.status).toBe(200)
+    expect(out.body.stale).toBe(2)
+    const ids = updateInboxCard.mock.calls.map(c => c[0])
+    expect(ids).toEqual(expect.arrayContaining(['c1', 'c2']))
+    expect(ids).not.toContain('bad')
+  })
+
+  // covers: T3 (#4253)
+  it('#4253: one card save fails → 200, every save still tried, error names it, counts cover successful saves only', async () => {
+    gh.existingCards = [goneCard('c1', 71), goneCard('c2', 72), goneCard('c3', 73)]
+    updateInboxCard.mockRejectedValueOnce(new Error('D1 limit'))
+    const out = await run()
+    expect(out.status).toBe(200)
+    expect(updateInboxCard).toHaveBeenCalledTimes(3)
+    expect(out.body.error).toContain('D1 limit')
+    expect(out.body.error).toContain('1 card save(s) failed')
+    expect(out.body.stale).toBe(2)
+  })
+
+  // covers: T4 (#4253)
+  it('#4253: the stored-cards read fails → 200 with error, never a 500', async () => {
+    getAllInboxCards.mockRejectedValueOnce(new Error('D1 read failed'))
+    const out = await run()
+    expect(out.status).toBe(200)
+    expect(out.body.error).toContain('D1 read failed')
+    expect(out.body).toMatchObject({ created: 0, updated: 0, stale: 0, answered: 0 })
+    expect(createInboxCard).not.toHaveBeenCalled()
+  })
+
+  // covers: T5 (#4253)
+  it('#4253: 202 creates + 50 stale updates with every 10th create failing → every write tried, no cap', async () => {
+    const quiz = (n: number) => [{
+      id: 50_000 + n, user: BOT, created_at: OLD, html_url: `https://github.com/o/r/issues/${n}#issuecomment-${50_000 + n}`,
+      body: `Quick check — PR #${n} reached main.\n\n<!-- owner-quiz:v1 pr=${n} sha=abc key=k1 -->`
+    }]
+    gh.quizHits.issue = Array.from({ length: 100 }, (_, k) => ({ number: 2000 + k, title: `Issue ${2000 + k}`, html_url: `https://github.com/o/r/issues/${2000 + k}` }))
+    gh.quizHits.pr = Array.from({ length: 100 }, (_, k) => ({ number: 3000 + k, title: `PR ${3000 + k}`, html_url: `https://github.com/o/r/pull/${3000 + k}`, pull_request: {} }))
+    for (const i of [...gh.quizHits.issue, ...gh.quizHits.pr]) gh.quizComments[i.number] = quiz(i.number)
+    gh.existingCards = Array.from({ length: 50 }, (_, k) => goneCard(`s${k}`, 6000 + k))
+    let n = 0
+    createInboxCard.mockImplementation(async (c: unknown) => {
+      if (++n % 10 === 0) throw new Error('D1 busy')
+      return c
+    })
+    const out = await run()
+    expect(out.status).toBe(200)
+    expect(createInboxCard).toHaveBeenCalledTimes(202)
+    expect(updateInboxCard).toHaveBeenCalledTimes(50)
+    expect(out.body.error).toContain('20 card save(s) failed')
+    expect(out.body.created).toBe(182)
+    expect(out.body.stale).toBe(50)
+    expect(out.body).not.toHaveProperty('deferred')
   })
 
   // covers: T1

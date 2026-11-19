@@ -159,7 +159,10 @@ async function readEpic(gh: GhSource, i: GhIssue, note: Note): Promise<EpicSyncI
 async function readGone(gh: GhSource, cards: ExistingCard[], note: Note) {
   const gone: Record<string, { comments: GhComment[] }> = {}
   await Promise.all(cards.map(async (card) => {
-    const at = new Date(card.askedAt).toISOString()
+    // An unreadable askedAt (#4253): no entry → the card is left alone, instead of a RangeError.
+    const t = new Date(card.askedAt)
+    if (Number.isNaN(t.getTime())) return
+    const at = t.toISOString()
     const r = await ghGetAll<GhComment>(gh, `/repos/${REPO}/issues/${card.sourceNumber}/comments?since=${encodeURIComponent(at)}&per_page=100`)
     if (r.error) { note(r.error); return } // no entry → the card is left alone
     gone[cardKey(card)] = { comments: r.data ?? [] }
@@ -225,10 +228,26 @@ export interface CardsSyncOut {
   skipped?: number[]
 }
 
-/** One sync of `teamId`'s inbox, reading GitHub with `token`; cards are owned by `userId`. No throttle here. */
-export async function runCardsSync({ token, teamId, userId }: { token: string | undefined, teamId: string, userId: string }): Promise<CardsSyncOut> {
-  const gh: GhSource = { token }
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e)) || 'unknown error'
+
+/**
+ * One sync of `teamId`'s inbox, reading GitHub with `token`; cards are owned by `userId`. No throttle here.
+ * Never throws (#4253): a failed card save is logged and counted while the others still run, and any
+ * other throw (a D1 read, a JS error) answers zero counts — both land in `error`. Counts cover
+ * successful saves only; a failed save is tried again by the next sync (the plan is rebuilt each time).
+ */
+export async function runCardsSync(args: { token: string | undefined, teamId: string, userId: string }): Promise<CardsSyncOut> {
   const errors: string[] = []
+  try {
+    return await syncOnce(args, errors)
+  } catch (e) {
+    console.error('[cards-sync]', e)
+    return { created: 0, updated: 0, stale: 0, answered: 0, stuck: { ...NO_STUCK }, error: [...new Set([...errors, message(e)])].join('; ') }
+  }
+}
+
+async function syncOnce({ token, teamId, userId }: { token: string | undefined, teamId: string, userId: string }, errors: string[]): Promise<CardsSyncOut> {
+  const gh: GhSource = { token }
   const note: Note = (e) => { if (e) errors.push(e) }
 
   const [collected, byTicket] = await Promise.all([collectFromGitHub(gh, note), readClaims(gh, note)])
@@ -239,14 +258,35 @@ export async function runCardsSync({ token, teamId, userId }: { token: string | 
   const gone = await readGone(gh, goneCandidates({ asks, unreadable, existing, listsComplete }), note)
 
   const plan = planSync({ asks, unreadable, existing, gone, listsComplete })
+  const counts = { ...plan.counts }
+  let failed = 0
+  let firstFailure = ''
+  const saveFailed = (what: string, e: unknown) => {
+    console.error('[cards-sync] save failed', what, e)
+    if (!failed) firstFailure = message(e)
+    failed++
+  }
   for (const c of plan.create) {
-    await createInboxCard({ ...c, teamId, owner: userId, createdBy: userId, updatedBy: userId } as unknown as Parameters<typeof createInboxCard>[0])
+    try {
+      await createInboxCard({ ...c, teamId, owner: userId, createdBy: userId, updatedBy: userId } as unknown as Parameters<typeof createInboxCard>[0])
+    } catch (e) {
+      saveFailed(cardKey(c), e)
+      counts.created--
+    }
   }
   for (const u of plan.update) {
-    await updateInboxCard(u.id, teamId, userId, u.patch as unknown as Parameters<typeof updateInboxCard>[3], { role: 'owner' })
+    try {
+      await updateInboxCard(u.id, teamId, userId, u.patch as unknown as Parameters<typeof updateInboxCard>[3], { role: 'owner' })
+    } catch (e) {
+      saveFailed(u.id, e)
+      if (u.patch.state === 'stale') counts.stale--
+      else if (u.patch.state === 'answered') counts.answered--
+      else counts.updated--
+    }
   }
+  if (failed) errors.push(`${failed} card save(s) failed: ${firstFailure}`)
 
-  const out: CardsSyncOut = { ...plan.counts, stuck: stuckCounts(asks) } as CardsSyncOut
+  const out: CardsSyncOut = { ...counts, stuck: stuckCounts(asks) } as CardsSyncOut
   if (errors.length) out.error = [...new Set(errors)].join('; ')
   if (unreadable.length) out.skipped = unreadable
   return out

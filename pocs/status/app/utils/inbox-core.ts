@@ -139,18 +139,23 @@ export async function loadInbox<T extends InboxCard>(args: InboxSources<T>): Pro
 }
 
 /**
- * The background half of `loadInbox`: refresh from GitHub, then list again. The page calls this
+ * The background half of `loadInbox`: refresh from GitHub, then list again. A sync that answers
+ * `{ error }` sets `syncError` to "Refreshed with problems: …" and still lists again. The page calls this
  * after it already rendered the stored cards on the server, so nothing on screen waits on GitHub.
  */
 export async function refreshInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
   const { sync, update } = args
   update({ refreshing: true, syncError: null })
+  let body: unknown
   try {
-    await sync()
+    body = await sync()
   } catch (e) {
     update({ syncError: `Could not refresh from GitHub: ${errorText(e, 'sync failed')}`, refreshing: false })
     return
   }
+  // A partial refresh (#4253): the sync answered 200 but names what went wrong in `error`.
+  const problem = (body as { error?: unknown } | null | undefined)?.error
+  if (typeof problem === 'string' && problem) update({ syncError: `Refreshed with problems: ${problem}` })
   await fetchListInto(args)
   update({ refreshing: false })
 }
