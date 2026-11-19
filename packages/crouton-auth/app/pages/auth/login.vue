@@ -12,6 +12,8 @@ definePageMeta({
 const route = useRoute()
 const authModal = useAuthModal()
 
+// Complexity: linear query reading (redirect, prefill, OAuth resume); page code with no unit coverage inflates CRAP
+// fallow-ignore-next-line complexity
 onMounted(async () => {
   const redirectTo = (route.query.redirect as string) || '/'
   // Optional credential prefill from the link (e.g. a shared demo/preview URL

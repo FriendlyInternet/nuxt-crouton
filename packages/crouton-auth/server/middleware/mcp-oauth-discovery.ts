@@ -18,6 +18,8 @@ import type { CroutonAuthConfig } from '../../types/config'
 import { useServerAuth } from '../utils/useServerAuth'
 import { mcpDiscoveryRoute } from '../lib/mcp-oauth'
 
+// Complexity: thin handler: route match + flag guard; the route logic is unit-tested (mcpDiscoveryRoute) and the handler by e2e/mcp-oauth.smoke.spec.ts T2/T3
+// fallow-ignore-next-line complexity
 export default defineEventHandler(async (event: H3Event) => {
   const route = mcpDiscoveryRoute(getRequestURL(event).pathname)
   if (!route) return

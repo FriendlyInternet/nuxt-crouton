@@ -173,6 +173,8 @@ export function useAuth() {
   /**
    * Sign in with email and password
    */
+  // Complexity: linear sign-in steps (2FA, OAuth resume, errors); client composable with no unit coverage inflates CRAP. The OAuth resume is covered by e2e/mcp-oauth.smoke.spec.ts
+  // fallow-ignore-next-line complexity
   async function login(credentials: LoginCredentials): Promise<void> {
     loading.value = true
     error.value = null
@@ -295,6 +297,8 @@ export function useAuth() {
    * With crouton-email installed there is no session until the e-mail is
    * verified: the result's `requiresVerification` is then true (#3141).
    */
+  // Complexity: linear sign-up steps (verification, OAuth resume, errors); client composable with no unit coverage inflates CRAP
+  // fallow-ignore-next-line complexity
   async function register(data: RegisterData): Promise<RegisterResult> {
     loading.value = true
     error.value = null

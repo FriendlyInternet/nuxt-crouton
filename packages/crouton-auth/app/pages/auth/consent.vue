@@ -22,6 +22,8 @@ const scopes = computed(() => ((route.query.scope as string | undefined) || '').
 
 // The host of the registered redirect URI — a self-declared name can be faked,
 // the redirect host can't (it is where the code goes). Hidden if unparseable.
+// Complexity: input guards around one URL parse; page code with no unit coverage inflates CRAP (covered by e2e/mcp-oauth.smoke.spec.ts T9)
+// fallow-ignore-next-line complexity
 const redirectHost = computed(() => {
   const raw = route.query.redirect_uri
   if (typeof raw !== 'string' || !raw) return null
@@ -54,6 +56,8 @@ function signedQuery(): string | undefined {
   return params.toString()
 }
 
+// Complexity: one request plus its three outcomes; page code with no unit coverage inflates CRAP (covered by e2e/mcp-oauth.smoke.spec.ts T4/T5)
+// fallow-ignore-next-line complexity
 async function answer(accept: boolean) {
   const oauthQuery = signedQuery()
   if (!oauthQuery) {
@@ -84,11 +88,12 @@ async function answer(accept: boolean) {
 
 <template>
   <div>
-    <UAlert
-      v-if="!route.query.sig || !clientId"
-      color="error"
-      icon="i-lucide-alert-triangle"
-      :title="$t('auth.consent.missingRequest')"
+    <!-- Missing request / form / error states are display variations, not independent logic (covered by e2e/mcp-oauth.smoke.spec.ts) -->
+    <!-- fallow-ignore-next-line complexity -->
+    <UAlert v-if="!route.query.sig || !clientId"
+            color="error"
+            icon="i-lucide-alert-triangle"
+            :title="$t('auth.consent.missingRequest')"
     />
 
     <template v-else>

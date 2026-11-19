@@ -853,6 +853,18 @@ jobs:
       # A plan Test line that starts a Nuxt app (nuxt prepare in a POC) needs every @fyit/* dist (#4074).
       - uses: ./.github/actions/warm-packages
         if: steps.plan.outputs.needs_install == 'true'
+      # A plan Test line that runs `pnpm test:e2e` needs a Chromium; without it the run dies in
+      # e2e/auth.setup.ts ("Executable doesn't exist") before the spec starts (#4096). Only
+      # installed when the plan has such a line, so other plans don't pay for the download.
+      # No --with-deps: the apt step is recorded as flaky (e2e.yml), same as preview-screenshot.yml.
+      - name: Install the Playwright browser (plans with an e2e Test line)
+        if: steps.plan.outputs.needs_install == 'true'
+        run: |
+          if grep -qE 'test:e2e|playwright test' "$RUNNER_TEMP/plan.json"; then
+            pnpm exec playwright install chromium
+          else
+            echo "no e2e Test line in the plan — skipping the browser install"
+          fi
       - name: Run the plan's Test lines (no token)
         if: steps.plan.outputs.has_plan == 'true'
         run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
