@@ -200,7 +200,7 @@ async function approvedSection({ io, repo, issue, tmp }, planId) {
 }
 
 async function workerPrompt(ctx) {
-  const out = ctx.renderPrompt('pi-worker', { issue: ctx.issue, branch_instr: branchInstr(ctx.env.EPIC_BRANCH) })
+  const out = ctx.renderPrompt('pi-worker', { issue: ctx.issue, branch_instr: branchInstr(ctx.env.EPIC_BRANCH), question_file: join(ctx.tmp, 'worker-question.md') })
   const planId = ctx.env.APPROVED_PLAN_ID
   return planId ? out + await approvedSection(ctx, planId) : out
 }

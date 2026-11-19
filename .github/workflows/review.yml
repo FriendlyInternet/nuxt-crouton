@@ -97,7 +97,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+      - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
         # The VERDICT FILE is the gate, not this step's exit code (#499, #602, #603): no verdict ⇒
         # red check (the reviewer did not run, #3070); a high/critical in the verdict ⇒ fail.
@@ -232,7 +232,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+      - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
         # Verdict file is the gate, not the exit code (see red-team above).
         continue-on-error: true
@@ -240,6 +240,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
           allowed_bots: "nuxt-harness[bot],github-actions[bot]"
+          # v1.0.282+ denies node/npx/pnpm on PRs by a [bot] author (epic→main PRs are
+          # app/nuxt-harness); this prompt runs `npx eslint` in-session, so keep today's behaviour (#4169).
+          restrict_untrusted_prs: "false"
           # --allowedTools REQUIRED (#834). Haiku (light tier, #1272/#823): ARIA/label/alt/tabindex
           # pattern-matching.
           claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
@@ -372,7 +375,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+      - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
         # Verdict file is the gate, not the exit code (see red-team above).
         continue-on-error: true
@@ -517,7 +520,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+      - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
         # Advisory: keep continue-on-error so a flake can't turn the run red.
         continue-on-error: true

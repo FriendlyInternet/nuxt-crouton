@@ -23,7 +23,8 @@
   "reply": {
     "body": "ok — plan and mockup approved, build it",
     "authorAssociation": "COLLABORATOR",
-    "userType": "User"
+    "userType": "User",
+    "userLogin": "pmcp"
   },
   "want": "comment",
   "today": "comment",

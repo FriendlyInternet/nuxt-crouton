@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection } from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
@@ -249,6 +249,16 @@ test('deriveSurfaces: a POC page only maps for its own app (#3794)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'kassa', changedFiles: ['apps/velo/app/pages/about.vue'] }), [])
 })
 
+test('deriveSurfaces: a fixtures/ or e2e/ page gives no surface for any app (#4084)', () => {
+  const changedFiles = [
+    'fixtures/with-relations/app/pages/admin/[team]/relations-check.vue',
+    'e2e/x/app/pages/foo.vue'
+  ]
+  for (const app of ['pins', 'velo', 'gallery']) {
+    assert.deepEqual(deriveSurfaces({ app, changedFiles }), [])
+  }
+})
+
 test('deriveSurfaces: a [slug] segment is not the team (#3886)', () => {
   assert.deepEqual(deriveSurfaces({ app: 'crouton-builder', changedFiles: ['pocs/crouton-builder/app/pages/site/[slug].vue'] }), [])
 })
@@ -487,4 +497,57 @@ test('waitForHydration: real predicate exits early on a loader, waits on a short
 
   const drawn = await runHydrationPredicate({ outerHTML: '<div id="__nuxt">x</div>', rootText: 'x'.repeat(60), nuxtApp: { isHydrating: false } })
   assert.equal(drawn.result, true, 'a 60-char hydrated #__nuxt is done')
+})
+
+// ── #4201: shoot the changed screen, or go red ────────────────────────────────
+
+test('resolveSurfaces: a PR that changes a screen and names no page gets no start-page shot (#4201)', () => {
+  const vue = ['packages/crouton-core/app/components/X.vue']
+  const none = resolveSurfaces({ manifest: {}, prBody: '', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(none.surfaces, [])
+  assert.ok(none.reason.startsWith('no screenshot of the changed screen'), none.reason)
+
+  const scripts = resolveSurfaces({ manifest: {}, prBody: '', app: 'kassa', changedFiles: ['scripts/x.mjs'] })
+  assert.deepEqual(scripts.surfaces.map(s => s.path), ['/'])
+  assert.equal(scripts.reason, 'start page — this PR changes no screen')
+
+  const optedOut = resolveSurfaces({ manifest: {}, prBody: 'x <!-- review-surface-none -->', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(optedOut.surfaces.map(s => s.path), ['/'])
+
+  const declared = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface: kassa /admin/test1/x -->', app: 'kassa', changedFiles: vue })
+  assert.deepEqual(declared.surfaces.map(s => s.path), ['/admin/test1/x'])
+  assert.equal(declared.reason, 'declared on the PR')
+})
+
+test('changesScreen: VISUAL_PATH files outside fixtures/ and e2e/ (#4201)', () => {
+  assert.equal(changesScreen(['a/b.vue']), true)
+  assert.equal(changesScreen(['fixtures/x/app/pages/a.vue', 'e2e/a.vue', 'scripts/a.mjs']), false)
+  assert.equal(changesScreen(undefined), false)
+})
+
+test('deriveSurfaces: a package page only for apps that use its package (#4151, #4201)', () => {
+  const changedFiles = ['packages/crouton-assets/app/pages/admin/[team]/media.vue', 'packages/crouton-events/app/pages/admin/[team]/activity.vue']
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'kassa', packages: ['crouton-core'] }), [])
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'velo', packages: ['crouton-core', 'crouton-assets'] }).map(s => s.path), ['/admin/test1/media'])
+  assert.deepEqual(deriveSurfaces({ changedFiles, app: 'kassa' }).map(s => s.path), ['/admin/test1/media', '/admin/test1/activity'])
+  assert.ok(!appPackages('kassa', 'apps').includes('crouton-assets'))
+  assert.ok(appPackages('velo', 'apps').includes('crouton-assets'))
+  assert.equal(appPackages('no-such-app', 'apps'), undefined)
+})
+
+test('pickSurfaces: reads the app\'s package list from the manifest\'s workspace (#4151, #4201)', async () => {
+  const env = { PR_BODY: 'body', CHANGED_FILES: 'packages/crouton-assets/app/pages/admin/[team]/media.vue' }
+  const kassa = await pickSurfaces({ env, args: { pr: 1, app: 'kassa', manifest: 'apps/kassa/deploy.config.json' }, manifest: {} })
+  assert.deepEqual(kassa.surfaces, [])
+  const velo = await pickSurfaces({ env, args: { pr: 1, app: 'velo', manifest: 'apps/velo/deploy.config.json' }, manifest: {} })
+  assert.deepEqual(velo.surfaces.map(s => s.path), ['/admin/test1/media'])
+})
+
+test('landingRejection: named/guessed pages must stay put, the start page may redirect (#4201)', () => {
+  const [declared] = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface: velo /admin/test1/media -->', app: 'velo', changedFiles: [] }).surfaces
+  assert.equal(landingRejection(declared, 'https://h/auth/login?redirect=x'), 'landed on /auth/login instead of /admin/test1/media')
+  const [start] = resolveSurfaces({ manifest: {}, prBody: '', app: 'crate', changedFiles: [] }).surfaces
+  assert.equal(landingRejection(start, 'https://h/crate/test1'), null)
+  const [guessed] = resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: ['apps/velo/app/pages/admin/[team]/media.vue'] }).surfaces
+  assert.equal(landingRejection(guessed, 'https://h/admin/test1/media/'), null)
 })

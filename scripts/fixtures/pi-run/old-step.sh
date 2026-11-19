@@ -37,7 +37,7 @@
                 --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
             fi
           else
-            node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
+            node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" --var "question_file=$RUNNER_TEMP/worker-question.md" > "$PROMPT_FILE"
             # #2757: BUILD FROM AN APPROVED PLAN — label-router.yml passes the plan comment id.
             # The worker implements exactly that plan, (the ledger row is written by record-outcome, #3457).
             if [ -n "${APPROVED_PLAN_ID:-}" ]; then

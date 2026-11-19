@@ -56,7 +56,7 @@ export function parseCommentLines(raw = '') {
 
 /** The reviewer-approved header of the build prompt (was inline in work-issue-pidev.yml, #2757). */
 export function approvedHeader(planId) {
-  return `\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment ${planId}, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n`
+  return `\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment ${planId}, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: ask the way this prompt says above (your question file), saying what differs and why, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n`
 }
 
 const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
@@ -93,8 +93,8 @@ export async function holdFacts({ github, repo, issue }) {
   const labels = labelNames(issue?.labels)
   if (!issue || issue.pull_request || !labels.includes('status:blocked')) return { planHeld: false, record: null }
   const raw = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
-  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type }))
-  return { planHeld: isRejectedTwice({ comments, labels }), record: openRecord({ comments, labels }) }
+  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type, userLogin: c.user && c.user.login }))
+  return { planHeld: isRejectedTwice({ comments, labels }), record: openRecord({ comments, labels, owner: process.env.OWNER_LOGIN }) }
 }
 
 /** The parent epic of a ticket: `epic=N` in the hidden marker, else the GitHub sub-issue parent (0 = none). */
@@ -121,7 +121,7 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
   const c = context.payload.comment
   const issue = context.payload.issue
   const issue_number = issue.number
-  const reason = parseOverride({ body: c.body, authorAssociation: c.author_association, userType: c.user?.type })
+  const reason = parseOverride({ body: c.body, userLogin: c.user?.login, owner: process.env.OWNER_LOGIN, userType: c.user?.type })
   if (!reason) return core.setFailed('routed to approve-plan but no ok: <reason> found')
   await github.rest.issues.createComment({ ...context.repo, issue_number, body: overrideComment({ reason, date: c.created_at, url: c.html_url }) })
   const epic = await parentEpic({ github, context, core, issue })
