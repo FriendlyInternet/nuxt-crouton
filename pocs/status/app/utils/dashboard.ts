@@ -25,3 +25,29 @@ export interface OpenQuestion { number: number, title: string, url: string }
 export interface ChangelogRow { date: string, number: number, title: string, area: string, url: string }
 
 export const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
+
+/** One clock job's row on the Clock tab (mirrors JobStatus in server/utils/clock-status-core.ts). */
+export interface ClockRow {
+  workflow: string
+  schedule: string
+  about: string
+  lastDue: string | null
+  nextDue: string | null
+  lastRun: { id: number, url: string, createdAt: string, status: string | null, conclusion: string | null } | null
+  state: 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'before-clock' | 'unknown'
+  error?: string | null
+}
+
+const RED: ClockRow['state'][] = ['missed', 'failed', 'unknown']
+/** Red rows (missed / failed / unknown) first, then by when they run next. */
+export function sortClockRows(rows: ClockRow[]): ClockRow[] {
+  const red = (r: ClockRow) => (RED.includes(r.state) ? 0 : 1)
+  const next = (r: ClockRow) => (r.nextDue ? Date.parse(r.nextDue) : Infinity)
+  return [...rows].sort((a, b) => red(a) - red(b) || next(a) - next(b))
+}
+
+/** A time in the owner's zone (Europe/Brussels), e.g. "Thu 19 Nov, 14:10". */
+export function ownerTime(iso?: string | null): string {
+  if (!iso) return '—'
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
