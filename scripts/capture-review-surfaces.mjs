@@ -99,29 +99,38 @@ export function landingRejection(surface, finalUrl) {
   return `landed on ${landed} instead of ${surface.path}`
 }
 
-/** True for a sign-in page (`/auth` or `/auth/…`), which is photographed signed out (#4235). */
-export function needsSignedOut(path) {
+/** True for a page under `/auth` (`/auth` or `/auth/…`) — only these get a signed-out second try (#4235, #4248). */
+export function isAuthPath(path) {
   let p = String(path ?? '').split(/[?#]/)[0]
   if (!p.startsWith('/')) p = `/${p}`
   return p === '/auth' || p.startsWith('/auth/')
 }
 
-/** Split surfaces into the signed-in and signed-out lists, each in input order (#4235). */
-export function splitBySession(surfaces) {
-  const signedIn = []
-  const signedOut = []
-  for (const s of surfaces || []) (needsSignedOut(s?.path) ? signedOut : signedIn).push(s)
-  return { signedIn, signedOut }
+function pathOf(url) {
+  try { return new URL(url, 'http://x').pathname } catch { return String(url) }
 }
 
 /**
- * The one allowance for a sign-in page that, by design, opens as a pop-up on `/` (#4235): a
- * `/auth/…` surface that ended exactly on `/` AND shows a form inside a dialog. Anything else
- * stays rejected by landingRejection.
+ * Decide what to do with a surface after its signed-in try, or after both tries (#4248).
+ * `tries` is `[{ url, dialogForm }]` (signed in) or `[signedIn, signedOut]`; `dialogForm` says
+ * whether a `[role="dialog"] form` was visible. Returns `{ keep: 'signed-in' }`,
+ * `{ retry: 'signed-out' }`, `{ keep: 'signed-out', popup? }` or `{ reject: <reason> }`.
+ * A sign-in pop-up on `/` counts only for a real sign-in page: one that, signed in, sent the
+ * visitor outside `/auth/` and showed them no sign-in form.
  */
-export function signInModalLanding(surface, finalUrl, dialogFormShown) {
-  if (!needsSignedOut(surface?.path) || dialogFormShown !== true) return false
-  try { return new URL(finalUrl).pathname === '/' } catch { return false }
+export function authTryDecision(surface, tries) {
+  const [first, second] = tries || []
+  const off1 = landingRejection(surface, first?.url)
+  if (!off1) return { keep: 'signed-in' }
+  if (!isAuthPath(surface?.path)) return { reject: off1 }
+  if (!second) return { retry: 'signed-out' }
+  const off2 = landingRejection(surface, second.url)
+  if (!off2) return { keep: 'signed-out' }
+  const path1 = pathOf(first.url)
+  const popupShape = pathOf(second.url) === '/' && second.dialogForm === true
+  if (popupShape && !isAuthPath(path1) && first.dialogForm !== true) return { keep: 'signed-out', popup: true }
+  if (popupShape) return { reject: `a sign-in pop-up on / is not ${surface.path} (signed in it landed on ${path1})` }
+  return { reject: off2 }
 }
 
 /**
@@ -417,21 +426,16 @@ async function main() {
 }
 
 /**
- * Open the signed-in context (with cookies) and the signed-out one, each only when a surface
- * needs it, and warm up once — on the first signed-in surface, else the first signed-out (#4235).
+ * Open the signed-in context (with cookies when signed in) and warm up once on the first
+ * surface. The signed-out context is made lazily, on the first `/auth/` retry (#4248).
  */
 async function openContexts({ browser, viewport, origin, surfaces, cookies }) {
-  const { signedIn, signedOut } = splitBySession(surfaces)
-  let inContext = null
+  const inContext = await browser.newContext({ viewport, deviceScaleFactor: 2 })
+  if (cookies) await inContext.addCookies(cookies)
+  if (surfaces.length) await warmUp(inContext, origin, surfaces[0])
   let outContext = null
-  if (signedIn.length) {
-    inContext = await browser.newContext({ viewport, deviceScaleFactor: 2 })
-    if (cookies) await inContext.addCookies(cookies)
-  }
-  if (signedOut.length) outContext = await browser.newContext({ viewport, deviceScaleFactor: 2 })
-  if (signedIn.length) await warmUp(inContext, origin, signedIn[0])
-  else if (signedOut.length) await warmUp(outContext, origin, signedOut[0])
-  return { inContext, outContext }
+  const signedOut = async () => (outContext ??= await browser.newContext({ viewport, deviceScaleFactor: 2 }))
+  return { inContext, signedOut }
 }
 
 /** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
@@ -446,11 +450,11 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
   try {
-    // Sign-in pages send a signed-in visitor away, so they get their own no-cookie context (#4235).
-    const { inContext, outContext } = await openContexts({ browser, viewport, origin, surfaces, cookies: loggedIn && jar.size ? jarToContextCookies(jar, origin) : null })
+    // Every page is tried signed in first; an `/auth/` page that sends you away gets one
+    // signed-out try, since a sign-in page sends a signed-in visitor elsewhere (#4235, #4248).
+    const { inContext, signedOut } = await openContexts({ browser, viewport, origin, surfaces, cookies: loggedIn && jar.size ? jarToContextCookies(jar, origin) : null })
     for (const surface of surfaces) {
-      const context = needsSignedOut(surface.path) ? outContext : inContext
-      const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
+      const file = await captureWithTries(inContext, signedOut, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
       if (file) kept.push(file)
     }
   } finally {
@@ -460,47 +464,82 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
 }
 
 /**
- * Drive one surface (navigate → interact → screenshot → validate). Returns the kept file, or
- *  null when the capture is missing, an error page, or blank. Never throws.
+ * Open one surface in `context` and let it settle (navigate → loader wait → hydrate → idle).
+ * Returns `{ page, status, url, dialogForm }`, or null (page closed) after reporting a page stuck
+ * on Nuxt's loading screen. May throw; the caller closes `page` on success.
  */
-async function captureSurface(context, origin, surface, file) {
-  let page
+async function openSettled(context, origin, surface) {
+  const page = await context.newPage()
   try {
-    page = await context.newPage()
     const url = origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`)
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
     // The dev server serves Nuxt's loading template until its first build finishes (#2526):
     // wait for the draw, then reload only while still loading (#4134). The budget is per run.
     const settled = await settlePage(page, { deadline: warmDeadline, status: resp ? resp.status() : 0 })
-    const status = settled.status
     if (settled.loading) {
       log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
       report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
+      await page.close().catch(() => {})
       return null
     }
     await waitForHydration(page)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
+    const dialogForm = await page.locator('[role="dialog"] form').first().isVisible().catch(() => false)
+    return { page, status: settled.status, url: page.url(), dialogForm }
+  } catch (e) {
+    await page.close().catch(() => {})
+    throw e
+  }
+}
+
+/**
+ * Drive one surface: signed-in try, maybe one signed-out try (authTryDecision), then
+ * interact → screenshot → validate. Returns the kept file, or null when the capture is
+ * missing, elsewhere, an error page, or blank. Never throws.
+ */
+async function captureWithTries(inContext, signedOut, origin, surface, file) {
+  const opened = []
+  try {
     // Before the interactions: a `click:` step may navigate on purpose (#4201).
-    let off = landingRejection(surface, page.url())
-    if (off && needsSignedOut(surface.path)) {
-      const shown = await page.locator('[role="dialog"] form').first().isVisible().catch(() => false)
-      if (signInModalLanding(surface, page.url(), shown)) {
-        log(`✓ ${surface.name}: sign-in page opens as a pop-up on / — keeping`)
-        off = null
-      }
+    const t1 = await openSettled(inContext, origin, surface)
+    if (!t1) return null
+    opened.push(t1.page)
+    let decision = authTryDecision(surface, [t1])
+    let kept = t1
+    if (decision.retry) {
+      await t1.page.close().catch(() => {})
+      const t2 = await openSettled(await signedOut(), origin, surface)
+      if (!t2) return null
+      opened.push(t2.page)
+      decision = authTryDecision(surface, [t1, t2])
+      kept = t2
     }
-    if (off) {
-      log(`✗ ${surface.name}: ${off} — discarding`)
-      report(surface.name, 'rejected', off)
+    if (decision.reject) {
+      log(`✗ ${surface.name}: ${decision.reject} — discarding`)
+      report(surface.name, 'rejected', decision.reject)
       return null
     }
+    if (decision.popup) log(`✓ ${surface.name}: sign-in page opens as a pop-up on / — keeping`)
+    return await finishCapture(kept.page, kept.status, surface, file)
+  } catch (e) {
+    log(`⚠ ${surface.name}: capture failed (non-fatal): ${e.message.split('\n')[0]}`)
+    report(surface.name, 'error', `capture failed: ${e.message.split('\n')[0]}`)
+    return null
+  } finally {
+    for (const p of opened) await p.close().catch(() => {})
+  }
+}
+
+/** Interact → screenshot → validate a page already where it should be. Never throws. */
+async function finishCapture(page, status, surface, file) {
+  try {
     await runInteractions(page, surface, log)
     await page.waitForTimeout(600)
     const title = await page.title().catch(() => '')
     const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
-    const rejection = await captureRejection({ status, text: bodyText, title, file, browser: context.browser() })
+    const rejection = await captureRejection({ status, text: bodyText, title, file, browser: page.context().browser() })
     if (rejection) {
       log(`✗ ${surface.name}: ${rejection} — discarding`)
       report(surface.name, 'rejected', rejection)
@@ -513,8 +552,6 @@ async function captureSurface(context, origin, surface, file) {
     log(`⚠ ${surface.name}: capture failed (non-fatal): ${e.message.split('\n')[0]}`)
     report(surface.name, 'error', `capture failed: ${e.message.split('\n')[0]}`)
     return null
-  } finally {
-    await page?.close().catch(() => {})
   }
 }
 
