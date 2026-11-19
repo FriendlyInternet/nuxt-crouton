@@ -35,6 +35,10 @@
     "required": true,
     "reads": [
       {
+        "path": "/api/teams/{teamId}/email-logs",
+        "expectStatus": [200]
+      },
+      {
         "path": "/api/teams/{teamId}/crouton-layouts/default",
         "expectStatus": [200, 204]
       },

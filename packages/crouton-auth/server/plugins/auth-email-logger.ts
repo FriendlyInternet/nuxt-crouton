@@ -17,6 +17,8 @@ interface AuthEmailPayload {
   organizationName?: string
   role?: string
   invitationId?: string
+  /** The team an invitation belongs to; the team email log scopes on it (#3546). */
+  organizationId?: string
   inviterEmail?: string
   expiresAt?: Date
 }
@@ -55,6 +57,8 @@ export default defineNitroPlugin((nitroApp) => {
 
       await db.insert(tables.authEmailLog).values({
         id: logId,
+        // Only invitations belong to a team; the rest stay null (#3546)
+        organizationId: payload.type === 'invitation' ? payload.organizationId ?? null : null,
         emailType: payload.type,
         recipientEmail: payload.to,
         status: 'pending',
