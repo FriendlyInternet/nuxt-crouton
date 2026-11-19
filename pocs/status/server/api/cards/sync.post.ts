@@ -56,15 +56,17 @@ async function readLists(event: H3Event, note: Note) {
   const q = `repo:${REPO} "Quick check" "reached main" in:comments updated:>=${since}`
   // Stuck rule `epic-sync` (#3880): open epics whose sync posted the conflict comment.
   const eq = `repo:${REPO} "${EPIC_SYNC_TEXT}" in:comments is:issue is:open label:epic`
-  const [quiz, epicSearch] = await Promise.all([
-    ghFetch<{ items?: GhIssue[] }>(event, `/search/issues?q=${encodeURIComponent(q)}&per_page=100`, { fresh: true }),
+  // GitHub refuses an untyped issue search (422, #4233): one typed search for issues, one for PRs.
+  const [quizIssues, quizPulls, epicSearch] = await Promise.all([
+    ghFetch<{ items?: GhIssue[] }>(event, `/search/issues?q=${encodeURIComponent(`${q} is:issue`)}&per_page=100`, { fresh: true }),
+    ghFetch<{ items?: GhIssue[] }>(event, `/search/issues?q=${encodeURIComponent(`${q} is:pull-request`)}&per_page=100`, { fresh: true }),
     ghFetch<{ items?: GhIssue[] }>(event, `/search/issues?q=${encodeURIComponent(eq)}&per_page=100`, { fresh: true })
   ])
-  const all = [blocked, toTest, pulls, ...pipeline, quiz, epicSearch]
+  const all = [blocked, toTest, pulls, ...pipeline, quizIssues, quizPulls, epicSearch]
   for (const r of all) note(r.error)
   return {
     blocked: blocked.data ?? [], toTest: toTest.data ?? [], pulls: pulls.data ?? [],
-    pipeline: pipeline.flatMap(r => r.data ?? []), quiz: quiz.data?.items ?? [], epics: epicSearch.data?.items ?? [],
+    pipeline: pipeline.flatMap(r => r.data ?? []), quiz: [...(quizIssues.data?.items ?? []), ...(quizPulls.data?.items ?? [])], epics: epicSearch.data?.items ?? [],
     complete: all.every(r => !r.error)
   }
 }
