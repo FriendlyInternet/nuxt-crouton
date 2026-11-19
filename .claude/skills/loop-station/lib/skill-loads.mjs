@@ -59,6 +59,30 @@ export function skillLoadsFromSession(text) {
 }
 
 /**
+ * Every tool call in a pi session log → `{ ts, kind: 'tool', name, parent: 'root', depth: 0 }`
+ * (#4161) — the same shape the Claude parser emits, so a run that loads no skill and starts no
+ * helper still traces its work. The name is kept EXACTLY as recorded; arguments are never read
+ * (same privacy rule as above). Tolerates blank/invalid lines.
+ */
+export function toolCallsFromSession(text) {
+  const out = []
+  if (!text) return out
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    let rec
+    try { rec = JSON.parse(t) } catch { continue }
+    const ts = typeof rec?.timestamp === 'string' ? rec.timestamp : null
+    const content = rec?.message?.content
+    if (!Array.isArray(content)) continue
+    for (const c of content) {
+      if (c?.type === 'toolCall' && typeof c.name === 'string') out.push({ ts, kind: 'tool', name: c.name, parent: 'root', depth: 0 })
+    }
+  }
+  return out
+}
+
+/**
  * Tool-call stats from a pi session log (#2548) — answers "did the worker call `read` on a
  * skill, or is the telemetry miscounting?". Counts every `toolCall` by `name` EXACTLY as
  * recorded (no lowercasing: the raw name is the evidence). `claudeReads` = repo-relative
