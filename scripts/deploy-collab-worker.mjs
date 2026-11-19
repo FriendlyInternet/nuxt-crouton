@@ -46,15 +46,7 @@ const wrangler = (args, opts = {}) =>
   execFileSync('npx', ['wrangler', ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], ...opts })
 
 // 1. Worker (provisions the D1 on first run)
-// A brand-new Worker can fail its first deploy with "This Worker does not exist" (Cloudflare
-// API code 10007 — the upload lands, the follow-up call races it). The upload is idempotent, so
-// retry once; any other failure still throws.
-const deploy = () => wrangler(['deploy', '--config', cfgPath])
-let out
-try { out = deploy() } catch (e) {
-  console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying once.`)
-  out = deploy()
-}
+const out = wrangler(['deploy', '--config', cfgPath])
 process.stdout.write(out)
 let url
 try { url = extractWorkerUrl(out, name) } catch (e) {
