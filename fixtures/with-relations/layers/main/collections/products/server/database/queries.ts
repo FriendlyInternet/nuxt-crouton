@@ -133,16 +133,16 @@ export async function updateMainProduct(
   teamId: string,
   userId: string,
   updates: Partial<MainProduct>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainProducts.id, recordId),
     eq(tables.mainProducts.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainProducts.owner, userId))
   }
 
@@ -169,16 +169,16 @@ export async function deleteMainProduct(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainProducts.id, recordId),
     eq(tables.mainProducts.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainProducts.owner, userId))
   }
 

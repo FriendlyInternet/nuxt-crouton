@@ -2,16 +2,17 @@
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { getAllMainMembernotes, getMainMembernotesByIds } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
-  // list: 'own' — admins/owners see the whole team, members only their own rows
-  const ownerId = membership.role === 'admin' || membership.role === 'owner' ? undefined : user.id
+  // list: 'own' — members with 'collections:manage' see the whole team, others only their own rows
+  const ownerId = (await can(team.id, user.id, 'collections:manage', event)) ? undefined : user.id
 
   const query = getQuery(event)
 

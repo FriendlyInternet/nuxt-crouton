@@ -1,13 +1,13 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { reorderSiblingsMainAdmindocs } from '../../../../database/queries'
-import { requireTeamRole } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  const { team } = await requireTeamRole(event, 'admin')
+  const { team } = await requireCan(event, 'collections:manage')
   authTimer.end()
 
   const body = await readBody(event)
