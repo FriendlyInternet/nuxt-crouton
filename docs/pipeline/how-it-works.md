@@ -50,7 +50,10 @@ exact word they reply.
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
-   (`scripts/epic-base.mjs`). If the approved plan has a `### Split`, `handoff-exec.mjs` first
+   (`scripts/epic-base.mjs`). If the worker has to ask something, it writes the question to a
+   file; the step after the build posts it with `status:blocked` and, when the PR is open, a reply
+   record, so the owner's first answer (typed or relayed) re-runs the worker on that PR
+   (`scripts/lib/worker-question.mjs`, #4192). If the approved plan has a `### Split`, `handoff-exec.mjs` first
    files the moved part as a new ticket (`Blocked-by:` this one, same epic) and notes it on the
    issue; it starts once this one closes.
 5. **Checks and build review.** `ci.yml` (the `CI Gate` check) plus `build-review.yml`
@@ -84,7 +87,7 @@ exact word they reply.
    sets `status:to-test`. Above the checks left for the owner, the card lists what the pipeline
    already checked: each finished child's merged PR and the first line of its last ✅ closing note.
 
-A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
+A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`). Each reply to an open question also gets one plain line at the end of that question saying how it was read (for example "read as **yes** → re-planning with your yes"); a newer reply replaces it (the `receipt` job, `scripts/lib/reply-receipt.mjs`, #4207).
 
 **Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`). It refuses a branch whose name does not start with `epic/<N>-` (a child epic is pointed to its parent) and refuses when it cannot list what the branch holds.
 

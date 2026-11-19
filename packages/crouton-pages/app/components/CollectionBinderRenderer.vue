@@ -42,7 +42,7 @@ const route = useRoute()
 const { locale } = useT()
 const collections = useCollections()
 const { getTeamId, teamSlug } = useTeamContext()
-const { hideTeamInUrl, hideLocaleInUrl } = useDomainContext()
+const { hideTeamInLinks, hideLocaleInUrl } = useDomainContext()
 
 // Which collection is bound
 const collectionName = computed(() => props.page.config?.collection as string | undefined)
@@ -72,7 +72,7 @@ const isPublicContext = computed(() => {
 // Build base path for item links (e.g. /acme/en/locations)
 const binderBasePath = computed(() => {
   return buildBinderBasePath({
-    hideTeamInUrl: hideTeamInUrl.value,
+    hideTeamInUrl: hideTeamInLinks.value,
     hideLocaleInUrl: hideLocaleInUrl.value,
     team: teamSlug?.value,
     locale: locale.value || 'en',

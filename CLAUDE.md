@@ -73,7 +73,7 @@ Work lands via a PR on a feature branch (`/commit`, `(#NN)`, `Closes #NN` in the
 - interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · chat <id> · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping; `<id>` is the chat id printed at session start (the hook requires it, #3996).
 - pipeline (bot account): `> 🤖 **Claude Code** · agent pipeline (CI) · _<context>_` — no human disclaimer.
 
-**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop.
+**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop — except the owner's first answer to a worker's open question (a `worker-question` reply record, #4192), which re-runs the worker whether typed or relayed by a chat whose header says `owner answer`/`owner decision`.
 
 ### Task Decomposition Pipeline (`/task-decompose`)
 

@@ -36,6 +36,8 @@
     // Nuxt conventions: file-based page routes, app.config, Nitro server/utils auto-imports
     "**/app/pages/**/*.vue",
     "**/app/app.config.ts",
+    // Nuxt loads app/router.options.ts by convention (#4175)
+    "**/app/router.options.ts",
     "**/server/utils/**/*.ts",
     // Loaded dynamically by crouton-core at boot ("Loaded N package manifests")
     "**/crouton.manifest.ts",

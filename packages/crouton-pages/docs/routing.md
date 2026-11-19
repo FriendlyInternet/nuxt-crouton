@@ -67,10 +67,14 @@ In locale mode, crouton-pages:
 A verified custom domain resolves to a team. URLs omit the team slug.
 
 ```
-booking.acme.com/en/about → domain-resolver rewrites to /acme/en/about
-                          → [team]/[locale]/[...slug].vue → render page
-(hideTeamInUrl hides team in nav links; with hideLocaleInUrl on,
- booking.acme.com/about → /acme/about → [team]/[...slug].vue → render page)
+booking.acme.com/about → domain-resolver rewrites to /acme/about
+                       → [team]/[locale]/[...slug].vue sees an unknown locale and,
+                         on a connected domain only, forwards 302 to /en/about
+                       → rewritten to /acme/en/about (the team never shows in the address)
+                       → render page (nav links keep the team — `hideTeamInLinks` is false —
+                         and the team-host history hides it from the address bar and every href)
+(with hideLocaleInUrl on, booking.acme.com/about → /acme/about → [team]/[...slug].vue
+ → render page directly; no locale forward)
 ```
 
 ## Request Lifecycle (Team Mode)
@@ -164,16 +168,14 @@ Browser: GET /nl/about
 
 ## Navigation Links
 
-`useNavigation()` builds paths based on `useDomainContext().hideTeamInUrl`:
+`useNavigation()` builds paths based on `useDomainContext().hideTeamInLinks`:
 
 ```
-hideTeamInUrl = true  → /nl/about
-hideTeamInUrl = false → /acme/nl/about
+hideTeamInLinks = true  → /nl/about
+hideTeamInLinks = false → /acme/nl/about
 ```
 
-`hideTeamInUrl` is `true` when:
-- Locale routing mode is active (`routingMode === 'locale'`), OR
-- Request came from a custom domain (`isCustomDomain`)
+`hideTeamInLinks` is `true` only when locale/custom routing mode is active. On a custom domain (team mode) links keep the team and `app/router.options.ts` strips it from the address bar and every `href`. `hideTeamInUrl` (locale mode OR custom domain) still drives canonical URLs and team UI.
 
 ## Nitro Plugins
 
@@ -194,13 +196,13 @@ Rewrites custom domain requests by prepending the team slug.
 
 | Action | Details |
 |---|---|
-| Skip | Localhost, IP, app domains, static files, paths with existing team segment |
+| Skip | Localhost, IP, app domains, static files, /api, /auth, /admin, /dashboard, /_* (no domain lookup) — and no rewrite for the app's own top-level pages (read from the page tree at build time: e.g. /account, /onboarding, /super-admin, plus any page the app adds at the top level) or paths already starting with this team's own slug (team mode; locale/custom mode keeps the old slug-shape rule) |
 | Lookup | Query `domain` table for verified domain |
 | Check | `publicSiteEnabled` in team settings |
-| Rewrite | `/about` → `/acme/about` |
-| Set flags | `resolvedDomain`, `resolvedDomainTeamId`, `isCustomDomain` |
+| Rewrite | `/about` → `/acme/about`, `/en/about` → `/acme/en/about`, `/` → `/acme` |
+| Set flags | `resolvedDomain`, `resolvedDomainTeamId`, `isCustomDomain`, `resolvedDomainTeamSlug`, `resolvedDomainAppSegments` |
 
-> Domain rewriting is safe because both server and client see the rewritten URL (the browser URL is the custom domain, and both sides resolve the same team).
+> The server sees the rewritten URL; the browser keeps the plain address. On a connected domain (team mode) the package builds links with the team (`hideTeamInLinks` is false) so the router and the page `validate` match the team route, and `app/router.options.ts` installs `teamHostHistory`, which adds the team when reading the address bar and strips it when writing or building an `href`. A hand-typed internal link without the team (e.g. a button's raw URL `/fr/contact`) does not work on click there — use a page link.
 
 ## Validate Behavior
 
@@ -216,8 +218,10 @@ Rewrites custom domain requests by prepending the team slug.
 | `app/utils/public-routes.ts` | `applyPublicRouteOptions` / `assertSingleLocale` — the `pages:extend` route logic (remove in locale/custom mode, pin the locale for `hideLocaleInUrl`) |
 | `server/plugins/single-team-rewrite.ts` | Context flags + root redirect (locale mode) |
 | `server/plugins/domain-resolver.ts` | Custom domain URL rewriting |
-| `app/composables/useDomainContext.ts` | `hideTeamInUrl`, `isLocaleMode`, `isCustomDomain` |
-| `app/composables/useNavigation.ts` | Navigation link building (respects hideTeamInUrl) |
+| `app/composables/useDomainContext.ts` | `hideTeamInUrl`, `hideTeamInLinks`, `hideLocaleInUrl`, `isTeamHost`, `isLocaleMode`, `isCustomDomain`, `resolvedTeamSlug`, `appSegments` |
+| `app/composables/useNavigation.ts` | Navigation link building (respects hideTeamInLinks + hideLocaleInUrl) |
+| `app/router.options.ts` | Installs the team-host history on a connected domain (team mode) |
+| `app/utils/team-host-history.ts` / `app/utils/custom-domain-path.ts` | Address-bar and rewrite rules |
 | `nuxt.config.ts` | `pages:extend` hook, `routingMode` + `hideLocaleInUrl` config |
 
 ## Gotchas

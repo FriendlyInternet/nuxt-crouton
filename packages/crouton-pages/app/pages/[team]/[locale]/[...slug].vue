@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { localeLessTarget, stripTeamPrefix } from '../../../utils/custom-domain-path'
+
 /**
  * Public Page Route with Locale
  *
@@ -43,30 +45,52 @@ definePageMeta({
 
 // Cache public pages for 1 hour (SWR: serve stale while regenerating in background)
 // Nuxt 4.3: payload extraction means SPA navigation also uses cached payload
-defineRouteRules({ swr: 3600 })
+// The cache varies by host: the app host and a connected domain render the same
+// path with different hrefs (with and without the team, #4175).
+defineRouteRules({ swr: 3600, cache: { varies: ['host', 'x-forwarded-host'] } })
 
 const route = useRoute()
-const { hideTeamInUrl, hideLocaleInUrl } = useDomainContext()
+const { hideTeamInLinks, hideLocaleInUrl, isTeamHost, resolvedTeamSlug } = useDomainContext()
+const { locales, defaultLocale: i18nDefaultLocale } = useI18n()
 const urlLocale = computed(() => route.params.locale as string)
 
+// On a connected domain the server writes the Location header verbatim, so the
+// team prefix is stripped there; on the client the team-host history hides it (#4175).
+const forward = (p: string) => (import.meta.server && isTeamHost.value) ? stripTeamPrefix(p, resolvedTeamSlug.value!) : p
+
+const slugParts = route.params.slug
+const slugPath = !slugParts || (Array.isArray(slugParts) && slugParts.length === 0)
+  ? ''
+  : Array.isArray(slugParts) ? slugParts.join('/') : slugParts
+
+const validLocales = locales.value.map((l: { code: string }) => l.code)
+// Connected domain: an address without a language (/about → /acme/about,
+// team=acme locale=about) forwards to the default locale (#4175).
+const forwardsLocaleLess = !hideLocaleInUrl.value && isTeamHost.value && !validLocales.includes(urlLocale.value)
+
 if (hideLocaleInUrl.value) {
-  const slugParts = route.params.slug
-  const slugPath = !slugParts || (Array.isArray(slugParts) && slugParts.length === 0)
-    ? ''
-    : Array.isArray(slugParts) ? slugParts.join('/') : slugParts
   // 302, not 301: the setting can be turned off again, and a cached 301 would
   // pin visitors to an address that then 404s.
-  await navigateTo(buildPagePath({
-    hideTeamInUrl: hideTeamInUrl.value,
+  await navigateTo(forward(buildPagePath({
+    hideTeamInUrl: hideTeamInLinks.value,
     hideLocaleInUrl: true,
     team: route.params.team as string,
     locale: urlLocale.value,
     slugPath
-  }), { redirectCode: 302 })
+  })), { redirectCode: 302 })
+}
+else if (forwardsLocaleLess) {
+  const defaultLoc = validLocales.length === 1
+    ? validLocales[0]!
+    : ((i18nDefaultLocale as string) || validLocales[0]!)
+  await navigateTo(
+    forward(localeLessTarget(route.params.team as string, urlLocale.value, slugPath, defaultLoc)),
+    { redirectCode: 302 }
+  )
 }
 </script>
 
 <template>
-  <div v-if="hideLocaleInUrl" />
+  <div v-if="hideLocaleInUrl || forwardsLocaleLess" />
   <CroutonPagesPublicPage v-else :locale="urlLocale" />
 </template>

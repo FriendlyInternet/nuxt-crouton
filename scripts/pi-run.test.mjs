@@ -38,7 +38,8 @@ function runnerTemp(c) {
   return rt
 }
 const filesIn = (dir, skip = []) => Object.fromEntries(readdirSync(dir).filter((f) => !skip.includes(f)).map((f) => [f, readFileSync(join(dir, f), 'utf8')]))
-const expectedPrompt = (g) => renderPrompt(g.agent, Object.fromEntries(Object.entries(g.vars).map(([k, v]) => [k, v.startsWith('@') ? read(v.slice(1)) : v]))) + g.tail
+// `$RUNNER_TEMP` in a var value is the case's own temp dir `rt` (the worker's question file, #4192).
+const expectedPrompt = (g, rt) => renderPrompt(g.agent, Object.fromEntries(Object.entries(g.vars).map(([k, v]) => [k, v.startsWith('@') ? read(v.slice(1)) : rt ? v.replaceAll('$RUNNER_TEMP', rt) : v]))) + g.tail
 /** The files with a reader after the step: approved-plan.txt (finish step), feedback.txt in plan mode. */
 const handoff = (files, agent) => Object.fromEntries(Object.entries(files).filter(([f]) => f === 'approved-plan.txt' || (f === 'feedback.txt' && agent === 'pi-planner')))
 const envFor = (c, rt) => ({ GITHUB_REPOSITORY: REPO, RUNNER_TEMP: rt, ...c.env })
@@ -140,10 +141,22 @@ for (const [name, c] of Object.entries(cases)) {
     const rt = runnerTemp(c)
     const out = await buildPrompt(envFor(c, rt), { gh: fakeGh(ghData, c.fail) })
     const g = golden[name]
-    assert.equal(out, expectedPrompt(g))
+    assert.equal(out, expectedPrompt(g, rt))
     assert.deepEqual(handoff(filesIn(rt), g.agent), g.files)
   })
 }
+
+// covers: T8
+test('buildPrompt [worker cases] tells the worker to write its question to <RUNNER_TEMP>/worker-question.md (#4192)', async () => {
+  for (const name of ['worker', 'worker-epic', 'worker-approved']) {
+    const c = cases[name]
+    const rt = runnerTemp(c)
+    const out = await buildPrompt(envFor(c, rt), { gh: fakeGh(ghData, c.fail) })
+    assert.ok(out.includes(join(rt, 'worker-question.md')), name)
+    assert.ok(!out.includes('{{question_file}}'), name)
+  }
+  assert.ok(!golden['worker-approved'].tail.includes('post a top-level issue comment'))
+})
 
 test('the golden owner-screen case really carries the OWNER wording, the other-app case the reviewer wording', () => {
   assert.ok(golden['plan-owner-screen'].tail.includes(`SENT BACK (${OWNER_WHO})`))
@@ -206,9 +219,10 @@ test('stepOutputs: success only for rc 0; 1, empty, missing or non-numeric is a 
 })
 
 test('CLI prompt prints the prompt; a throw exits non-zero (the step fails under bash -e)', () => {
-  const ok = runCli(['prompt'], procEnv(cases.worker, runnerTemp(cases.worker)))
+  const okRt = runnerTemp(cases.worker)
+  const ok = runCli(['prompt'], procEnv(cases.worker, okRt))
   assert.equal(ok.status, 0, ok.stderr)
-  assert.equal(ok.stdout, expectedPrompt(golden.worker))
+  assert.equal(ok.stdout, expectedPrompt(golden.worker, okRt))
   const bad = runCli(['prompt'], procEnv(cases['fail-approved'], runnerTemp(cases['fail-approved'])))
   assert.notEqual(bad.status, 0)
   assert.match(bad.stderr, /pi-run:/)
@@ -259,7 +273,8 @@ for (const [name, c] of Object.entries(cases)) {
     }
     assert.equal(old.status, 0, old.stderr)
     assert.equal(neu.status, 0, neu.stderr)
-    assert.equal(neu.stdout, readFileSync(join(rtOld, 'PROMPT'), 'utf8'))
+    // Each side has its own temp dir, and the worker prompt names a file in it (#4192).
+    assert.equal(neu.stdout.replaceAll(rtNew, '<RT>'), readFileSync(join(rtOld, 'PROMPT'), 'utf8').replaceAll(rtOld, '<RT>'))
     const agent = golden[name].agent
     assert.deepEqual(handoff(filesIn(rtNew), agent), handoff(filesIn(rtOld, ['PROMPT']), agent))
   })
@@ -325,7 +340,7 @@ test('a revise round works on a branch with no scripts/pi-run.mjs: the copy, run
     const crt = runnerTemp(c)
     const r = spawnSync(process.execPath, [copied, 'prompt'], { cwd: ws, env: procEnv(c, crt), encoding: 'utf8' })
     assert.equal(r.status, 0, `${name}: ${r.stderr}`)
-    assert.equal(r.stdout, expectedPrompt(golden[name]), name)
+    assert.equal(r.stdout, expectedPrompt(golden[name], crt), name)
     assert.deepEqual(handoff(filesIn(crt), golden[name].agent), golden[name].files, name)
   }
 })

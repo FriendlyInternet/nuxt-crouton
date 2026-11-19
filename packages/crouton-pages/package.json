@@ -23,6 +23,7 @@
     "seed",
     "i18n",
     "nuxt.config.ts",
+    "app-page-segments.ts",
     "README.md",
     "docs/llms.txt",
     "docs/components.md"

@@ -185,22 +185,24 @@ export const listMarkers = async (d, issue, token) =>
     .map((c) => ({ id: c.id, step: parseHandoff(c.body) }))
     .filter((c) => c.step)
 
-// Save the step as pending. App token first, then the workflow token; both failing is loud (throws).
+// Save the step as pending: label first, then the note (#4202) — a note the sweep can't find is lost.
+// App token first, then the workflow token; if both fail, throw one error naming each token's failure.
 export async function recordPending(step, c, d) {
   const since = step.since || floorSec(d.now())
-  let lastErr
-  for (const token of d.tokens.length ? d.tokens : [undefined]) {
+  const tokens = d.tokens.length ? d.tokens : [undefined]
+  const parts = []
+  for (const [i, token] of tokens.entries()) {
     try {
+      await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${PENDING_LABEL}`], { token })
       const existing = (await listMarkers(d, step.issue, token)).find((m) => handoffKey(m.step) === handoffKey(step))
       const rec = { ...step, since: existing?.step.since || since, reason: c.reason, attempts: (existing?.step.attempts || 0) + (existing ? 1 : 0) }
       const body = `${handoffMarker(rec)}\n${pendingLine(c)}`
       if (existing) await d.gh(['api', '-X', 'PATCH', `repos/${d.repo}/issues/comments/${existing.id}`, '-f', `body=${body}`], { token })
       else await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/comments`, '-f', `body=${body}`], { token })
-      await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${PENDING_LABEL}`], { token })
       return rec
-    } catch (e) { lastErr = e }
+    } catch (e) { parts.push(`token ${i + 1} of ${tokens.length}: ${String(e.stderr || e.message).trim()}`) }
   }
-  throw lastErr
+  throw new Error(`could not save the put-off hand-off — ${parts.join('; ')}`)
 }
 
 // First attempt. Limit / 5xx → saved + green; anything else rethrown.
