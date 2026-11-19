@@ -78,6 +78,13 @@
       "when": 1794860604086,
       "tag": "0010_products_per_location",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081100791,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
     }
   ]
 }

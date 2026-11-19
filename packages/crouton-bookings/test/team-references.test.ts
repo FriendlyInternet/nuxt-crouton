@@ -36,7 +36,7 @@ vi.mock('../collections/emaillogs/server/database/queries', async (orig) => ({
 
 const DDL = `
 CREATE TABLE bookings_emailtemplates (id text primary key, teamId text not null);
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 CREATE TABLE catalog_products (id text primary key, teamId text not null);
 INSERT INTO catalog_products VALUES ('prod-t1','t1'), ('prod-t2','t2');
@@ -45,7 +45,7 @@ INSERT INTO catalog_products VALUES ('prod-t1','t1'), ('prod-t2','t2');
 const makeDb = (withLocation: boolean) => {
   const client = new Database(':memory:')
   client.exec(DDL)
-  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('l1','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'prod-t1', stock: 1 }]))
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('l1','t1','s',?,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'prod-t1', stock: 1 }]))
   client.exec(`insert into bookings_bookings (id,teamId,owner,"order",location,date,slot,quantity,status,createdAt,updatedAt,createdBy,updatedBy) values ('b-other','t2','u',0,'l1',0,'a',1,'x',0,0,'u','u')`)
   return drizzle(client) as any
 }

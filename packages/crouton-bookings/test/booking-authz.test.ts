@@ -29,7 +29,7 @@ vi.mock('../server/utils/email-service', () => ({
 const client = new Database(':memory:')
 client.exec(`
 CREATE TABLE user (id text primary key, name text, email text, image text);
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text, "order" integer, title text, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, inventoryMode integer, quantity integer, maxBookingsPerMonth integer, translations text, createdAt integer, updatedAt integer, createdBy text, updatedBy text, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text, "order" integer, title text, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, maxBookingsPerMonth integer, translations text, createdAt integer, updatedAt integer, createdBy text, updatedBy text, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text, "order" integer, location text, date integer, slot text, "group" text, quantity integer, status text, createdAt integer, updatedAt integer, createdBy text, updatedBy text, product text);
 INSERT INTO user VALUES ('u1','Me','me@x',null), ('u2','Other','other@x',null);
 INSERT INTO bookings_locations (id, teamId, title) VALUES ('loc','t1','Loc');

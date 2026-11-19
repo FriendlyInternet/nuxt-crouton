@@ -59,8 +59,6 @@ collections/locations/
 | openDays | array | No |
 | slotSchedule | json | No |
 | blockedDates | repeater | No |
-| inventoryMode | boolean | No |
-| quantity | number | No |
 | maxBookingsPerMonth | number | No |
 | createdAt | timestamp | Auto |
 | updatedAt | timestamp | Auto |

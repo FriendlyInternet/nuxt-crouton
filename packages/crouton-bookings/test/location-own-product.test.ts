@@ -15,7 +15,7 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
 }))
 
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text not null, "order" integer not null, title text not null, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, products text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, inventoryMode integer, quantity integer, maxBookingsPerMonth integer, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text not null, "order" integer not null, title text not null, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, products text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, maxBookingsPerMonth integer, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
 CREATE TABLE catalog_products (id text primary key, teamId text not null, owner text not null, "order" integer not null, title text not null, description text, active integer, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
 INSERT INTO catalog_products VALUES ('prod-t1','t1','u1',0,'Court',null,1,null,1,1,'u1','u1');
 `
@@ -44,8 +44,7 @@ afterEach(() => { db.$client.close(); vi.unstubAllGlobals() })
 describe('a location saved without products gets its own product (#4044)', () => {
   // covers: T2
   it('L1 POST without products stores [{ product: loc-<id>, stock: 1 }] and creates that catalog product in the same team', async () => {
-    // #4172: the old `quantity` no longer decides the stock
-    body = { title: 'Kayak Rental', inventoryMode: true, quantity: 6, translations: { nl: { title: 'Kajakverhuur' } } }
+    body = { title: 'Kayak Rental', translations: { nl: { title: 'Kajakverhuur' } } }
     const res = await run(`${L}/index.post`)
     const stored = locRow(res.id)
     expect(JSON.parse(stored.products)).toEqual([{ product: `loc-${res.id}`, stock: 1 }])
@@ -65,14 +64,27 @@ describe('a location saved without products gets its own product (#4044)', () =>
 
   // covers: T2
   it('L3 PATCH sending products: null gets the own product back', async () => {
-    body = { title: 'Court', slots: [{ id: 'a', label: 'A', capacity: 3 }], products: [{ product: 'prod-t1', stock: 1 }] }
+    body = { title: 'Court', slots: [{ id: 'a', label: 'A' }], products: [{ product: 'prod-t1', stock: 1 }] }
     const created = await run(`${L}/index.post`)
     params = { locationId: created.id }
     body = { products: null }
     const res = await run(`${L}/[locationId].patch`)
-    // #4172: the old slot `capacity: 3` no longer decides the stock
     expect(JSON.parse(locRow(created.id).products)).toEqual([{ product: `loc-${created.id}`, stock: 1 }])
     expect(res.products).toEqual([{ product: `loc-${created.id}`, stock: 1 }])
     expect(products().some((p: any) => p.id === `loc-${created.id}` && p.teamId === 't1')).toBe(true)
+  })
+})
+
+describe('the old inventory fields are gone from a location save (#4182)', () => {
+  // covers: T4
+  it('V1 POST and PATCH that still send inventoryMode, quantity and slot capacity save, with capacity stripped from the slots', async () => {
+    body = { title: 'Court', inventoryMode: true, quantity: 5, slots: [{ id: 'a', label: 'A', capacity: 3 }], products: [{ product: 'prod-t1', stock: 1 }] }
+    const created = await run(`${L}/index.post`)
+    expect(JSON.parse(locRow(created.id).slots)).toEqual([{ id: 'a', label: 'A' }])
+
+    params = { locationId: created.id }
+    body = { inventoryMode: false, quantity: 2, slots: [{ id: 'a', label: 'A', capacity: 3 }] }
+    await run(`${L}/[locationId].patch`)
+    expect(JSON.parse(locRow(created.id).slots)).toEqual([{ id: 'a', label: 'A' }])
   })
 })

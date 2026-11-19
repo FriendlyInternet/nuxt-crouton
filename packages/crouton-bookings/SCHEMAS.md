@@ -43,8 +43,6 @@ Venues, resources, or bookable items.
 | `name` | text | Yes | Display name |
 | `description` | textarea | No | Description |
 | `address` | text | No | Physical address (for venues) |
-| `inventoryMode` | boolean | No | True for inventory-based, false for slot-based |
-| `quantity` | number | No | Total quantity (inventory mode only) — no longer counted (#4061); the product's `stock` is; field goes in step 4 |
 | `maxBookingsPerMonth` | number | No | Max bookings per user per calendar month (null = unlimited) |
 | `slots` | json/array | No | Available time slots (slot mode only) |
 | `products` | repeater | No | Products this location offers, each with its own stock (`[{ product, stock }]`); saved without products → the server gives it one product of its own (`loc-<id>`); each product's `stock` is what the counting uses, per day and per slot |
@@ -152,48 +150,6 @@ export default {
 }
 ```
 
-## Inventory Mode vs Slot Mode
+## Locations with and without slots
 
-### Slot Mode (Default)
-
-Location with fixed time slots:
-
-```json
-{
-  "name": "Tennis Court A",
-  "inventoryMode": false,
-  "slots": ["08:00", "09:00", "10:00", "11:00", "12:00"]
-}
-```
-
-Bookings reference specific slots:
-
-```json
-{
-  "location": "court-a",
-  "date": "2024-01-15",
-  "slot": ["09:00"]
-}
-```
-
-### Inventory Mode
-
-Location with quantity-based availability:
-
-```json
-{
-  "name": "Rental Bikes",
-  "inventoryMode": true,
-  "quantity": 20
-}
-```
-
-Bookings specify quantity:
-
-```json
-{
-  "location": "rental-bikes",
-  "date": "2024-01-15",
-  "quantity": 3
-}
-```
+A location with named `slots` is booked per slot; with an empty `slots` list it is booked for the whole day. How many fit is each product's `stock` (see `products`).
