@@ -3,6 +3,59 @@
     "title": "Activiteit",
     "admin": {
       "activity": "Activiteit"
+    },
+    "log": {
+      "empty": "Nog geen activiteit",
+      "error": "Activiteit kon niet worden geladen",
+      "retry": "Opnieuw proberen",
+      "refresh": "Vernieuwen",
+      "export": "Exporteren",
+      "exportCsv": "Exporteren als CSV",
+      "exportJson": "Exporteren als JSON",
+      "byUser": "{action} door {name}",
+      "unknownUser": "Onbekende gebruiker",
+      "fieldsChanged": "{n} veld | {n} velden"
+    },
+    "operation": {
+      "create": "Aangemaakt",
+      "update": "Gewijzigd",
+      "delete": "Verwijderd"
+    },
+    "filters": {
+      "collection": "Collectie",
+      "action": "Actie",
+      "person": "Persoon",
+      "period": "Periode",
+      "allCollections": "Alle collecties",
+      "allActions": "Alle acties",
+      "everyone": "Iedereen",
+      "clear": "Wissen",
+      "open": "Filters",
+      "clearAll": "Filters wissen",
+      "activeCount": "{n} actieve filter | {n} actieve filters"
+    },
+    "period": {
+      "all": "Alles",
+      "today": "Vandaag",
+      "last7": "7 dagen",
+      "last30": "30 dagen",
+      "last90": "90 dagen"
+    },
+    "detail": {
+      "action": "Actie",
+      "when": "Wanneer",
+      "who": "Wie",
+      "itemId": "ID",
+      "changes": "Wijzigingen",
+      "copy": "ID kopiëren",
+      "copied": "ID gekopieerd"
+    },
+    "changes": {
+      "field": "Veld",
+      "before": "Voor",
+      "after": "Na",
+      "value": "Waarde",
+      "empty": "Geen wijzigingen vastgelegd"
     }
   }
 }
