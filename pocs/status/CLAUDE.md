@@ -64,7 +64,9 @@ the owner's `GITHUB_TOKEN` (not the App token), before and independent of the di
 input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
 The **Clock** tab (`components/dashboard/ClockTab.vue`, fed by `GET /api/status/clock`) shows each job's last due slot,
 whether a clock run (workflow_dispatch by `nuxt-harness[bot]`, titled the workflow's name) started within 20 min of it
-and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A 403 on the runs list means the
+and how it ended, and the next due slot; rules in `server/utils/clock-status-core.ts`. A clock run cancelled before it
+started a job counts as ran when a run of the same workflow (any actor or event) created within 20 min after it
+succeeded; its link then opens that run. A 403 on the runs list means the
 status token needs Actions: read (every row shows `unknown`). A 14th row, `inbox stuck check`, is built from that KV
 record (`cardsSyncStatus` in `clock-status-core.ts`): ok < 40 min, failed when `ok` is false, missed when older, grey
 `before-clock` with no record before `CARDS_SYNC_SINCE` or on a Worker without the clock; its read errors are row text,
