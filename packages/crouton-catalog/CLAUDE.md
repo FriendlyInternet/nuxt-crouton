@@ -33,6 +33,10 @@ the app id is `products` (`useCroutonApps().hasApp('products')`).
 
 Every query is scoped by `teamId`; a wrong-team PATCH/DELETE answers 404 and changes nothing.
 POST/PATCH bodies go through zod with `.strip()`; `teamId`/`owner` never come from the body.
+DELETE first calls the Nitro hook `crouton:catalog:before-delete-product` (`{ teamId, productId, blockers }`,
+typed in `server/crouton-hooks.d.ts`, #4278); any blocker → 409 with `message` = the blockers joined, a
+listener that throws → 409 'Could not check whether this product is still in use. Nothing was deleted.';
+nothing is deleted in either case.
 No public query registry and no plugin: products are not offered to public pages.
 
 ## How a consuming package uses it
@@ -42,6 +46,10 @@ Extend it from the package's `nuxt.config.ts` and depend on it in `package.json`
 bookings then get the table (migration via `db:generate`), the admin menu entry and the seed rows
 with no app change. Server code may import the queries from
 `@fyit/crouton-catalog/collections/products/server/database/queries`.
+
+A package that stores product ids should guard deletes: listen on `crouton:catalog:before-delete-product`
+from a server plugin (reference `../../../crouton-catalog/server/crouton-hooks.d.ts`) and push one
+plain-language sentence per reason onto `blockers` — see `crouton-bookings/server/plugins/catalog-delete-guard.ts`.
 
 ## Testing
 

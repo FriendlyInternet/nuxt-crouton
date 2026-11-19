@@ -20,8 +20,12 @@ export interface RequestState {
   query: Record<string, string>
 }
 
+/** Listeners the `useNitroApp().hooks.callHook` stand-in runs, in order. Tests fill and clear it. */
+export const listeners: Array<(p: any) => any> = []
+
 export function installGlobals(db: any, req: RequestState) {
   const g = globalThis as any
+  g.useNitroApp = () => ({ hooks: { callHook: async (_name: string, p: any) => { for (const fn of listeners) await fn(p) } } })
   g.useDB = () => db
   g.defineEventHandler = (fn: any) => fn
   g.createError = (e: any) => Object.assign(new Error(e.statusText), e)
