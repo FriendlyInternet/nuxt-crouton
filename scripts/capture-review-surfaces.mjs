@@ -21,7 +21,9 @@
 // package (#4201). A PR that changes a screen and names/guesses no page gets NO capture (the check
 // goes red); only a PR that changes no screen (or carries `<!-- review-surface-none -->`) falls
 // back to a single surface at reviewLogin.landing (or "/"). A named or guessed page must stay on
-// its path: a redirect elsewhere (e.g. to login) is rejected (#4201).
+// its path: a redirect elsewhere (e.g. to login) is rejected (#4201). Sign-in pages (`/auth`, `/auth/…`)
+// are opened in a second browser with no session; one that opens as a sign-in pop-up (a form in a
+// dialog) over `/` counts as shown (#4235).
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
@@ -95,6 +97,31 @@ export function landingRejection(surface, finalUrl) {
   let landed
   try { landed = new URL(finalUrl).pathname } catch { landed = String(finalUrl) }
   return `landed on ${landed} instead of ${surface.path}`
+}
+
+/** True for a sign-in page (`/auth` or `/auth/…`), which is photographed signed out (#4235). */
+export function needsSignedOut(path) {
+  let p = String(path ?? '').split(/[?#]/)[0]
+  if (!p.startsWith('/')) p = `/${p}`
+  return p === '/auth' || p.startsWith('/auth/')
+}
+
+/** Split surfaces into the signed-in and signed-out lists, each in input order (#4235). */
+export function splitBySession(surfaces) {
+  const signedIn = []
+  const signedOut = []
+  for (const s of surfaces || []) (needsSignedOut(s?.path) ? signedOut : signedIn).push(s)
+  return { signedIn, signedOut }
+}
+
+/**
+ * The one allowance for a sign-in page that, by design, opens as a pop-up on `/` (#4235): a
+ * `/auth/…` surface that ended exactly on `/` AND shows a form inside a dialog. Anything else
+ * stays rejected by landingRejection.
+ */
+export function signInModalLanding(surface, finalUrl, dialogFormShown) {
+  if (!needsSignedOut(surface?.path) || dialogFormShown !== true) return false
+  try { return new URL(finalUrl).pathname === '/' } catch { return false }
 }
 
 /**
@@ -389,6 +416,24 @@ async function main() {
   if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
 }
 
+/**
+ * Open the signed-in context (with cookies) and the signed-out one, each only when a surface
+ * needs it, and warm up once — on the first signed-in surface, else the first signed-out (#4235).
+ */
+async function openContexts({ browser, viewport, origin, surfaces, cookies }) {
+  const { signedIn, signedOut } = splitBySession(surfaces)
+  let inContext = null
+  let outContext = null
+  if (signedIn.length) {
+    inContext = await browser.newContext({ viewport, deviceScaleFactor: 2 })
+    if (cookies) await inContext.addCookies(cookies)
+  }
+  if (signedOut.length) outContext = await browser.newContext({ viewport, deviceScaleFactor: 2 })
+  if (signedIn.length) await warmUp(inContext, origin, signedIn[0])
+  else if (signedOut.length) await warmUp(outContext, origin, signedOut[0])
+  return { inContext, outContext }
+}
+
 /** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
 async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   // A link-only app has no password: it trades a derived preview-only token for a session (#2700).
@@ -401,10 +446,10 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
   try {
-    const context = await browser.newContext({ viewport, deviceScaleFactor: 2 })
-    if (loggedIn && jar.size) await context.addCookies(jarToContextCookies(jar, origin))
-    if (surfaces.length) await warmUp(context, origin, surfaces[0])
+    // Sign-in pages send a signed-in visitor away, so they get their own no-cookie context (#4235).
+    const { inContext, outContext } = await openContexts({ browser, viewport, origin, surfaces, cookies: loggedIn && jar.size ? jarToContextCookies(jar, origin) : null })
     for (const surface of surfaces) {
+      const context = needsSignedOut(surface.path) ? outContext : inContext
       const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
       if (file) kept.push(file)
     }
@@ -437,7 +482,14 @@ async function captureSurface(context, origin, surface, file) {
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
     // Before the interactions: a `click:` step may navigate on purpose (#4201).
-    const off = landingRejection(surface, page.url())
+    let off = landingRejection(surface, page.url())
+    if (off && needsSignedOut(surface.path)) {
+      const shown = await page.locator('[role="dialog"] form').first().isVisible().catch(() => false)
+      if (signInModalLanding(surface, page.url(), shown)) {
+        log(`✓ ${surface.name}: sign-in page opens as a pop-up on / — keeping`)
+        off = null
+      }
+    }
     if (off) {
       log(`✗ ${surface.name}: ${off} — discarding`)
       report(surface.name, 'rejected', off)
