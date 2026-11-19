@@ -82,7 +82,23 @@ File: `app/components/Layout/List.vue`
 
 | Prop | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
-| `scope` | `"team" \| "personal"` | `"team"` | no | 'personal' = my bookings, 'team' = all team bookings. |
+| `bookings` | `Booking[]` | `[]` | no |  |
+| `loading` | `boolean` | `false` | no |  |
+| `error` | `unknown` | `null` | no |  |
+| `highlightedBookingId` | `string \| null` | `null` | no |  |
+| `selectedDate` | `Date \| null` | `null` | no |  |
+| `scrollTarget` | `Date \| null` | `null` | no |  |
+| `hasActiveFilters` | `boolean` | `false` | no |  |
+| `activeLocationFilter` | `string[]` | `[]` | no |  |
+| `creatingAt` | `Date \| null` | `null` | no |  |
+| `isDayFullyBooked` | `((date: Date) => boolean)` | `undefined` | no |  |
+
+| Event | Payload |
+| --- | --- |
+| `dateClick` | `[date: Date]` |
+| `newBooking` | `[date: Date]` |
+| `created` | `[]` |
+| `cancel` | `[]` |
 
 ## CroutonBookingsList
 
@@ -107,13 +123,13 @@ File: `app/components/List.vue`
 
 | Event | Payload |
 | --- | --- |
+| `dateClick` | `[date: Date]` |
+| `newBooking` | `[date: Date]` |
 | `created` | `[]` |
 | `cancelCreate` | `[]` |
 | `topVisibleDateChange` | `[date: Date]` |
-| `dateClick` | `[date: Date]` |
 | `updated` | `[]` |
 | `emailSent` | `[]` |
-| `newBooking` | `[date: Date]` |
 
 ## CroutonBookingsPanel
 
