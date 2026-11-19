@@ -109,7 +109,8 @@
   "reply": {
     "body": "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner answer in chat 2026-11-17_\n\n**A** — set `aiReady: { mcp: { tools: false, resources: false } }` as a default inside the toolkit module (with `defu`, so an app can still override it). Then finish: `pnpm --filter velo typecheck` and the rest of the plan.",
     "authorAssociation": "COLLABORATOR",
-    "userType": "User"
+    "userType": "User",
+    "userLogin": "pmcp"
   },
   "want": "choice:A",
   "today": "dropped",

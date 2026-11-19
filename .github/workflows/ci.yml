@@ -52,6 +52,8 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       # docs/** or packages/** changed (#3166): runs the doc checks, even on a docs-only PR.
       docs: ${{ steps.filter.outputs.docs }}
+      # Run the scripts/*.test.mjs suites: code changes or any CI-file change (#4139).
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,6 +65,7 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
@@ -73,7 +76,7 @@ jobs:
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
-            files="$(git show --name-only --pretty=format: HEAD)"
+            files="$(node scripts/ci-detect.mjs --list-files)"
           fi
           echo "changed files:"; echo "$files" | sed 's/^/  /'
           FILES="$files" node scripts/ci-detect.mjs
@@ -562,7 +565,8 @@ jobs:
       # The pure scripts/*.mjs helpers carry `node --test` contracts next to them — most
       # load-bearingly the #1685 WS4 loop-guard. Node core only, so no install.
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
-        if: env.IS_CODE == 'true'
+        # Also on a workflow-only PR (#4139): #4135 broke a scripts/lib suite with nothing red.
+        if: needs.changes.outputs.scripts == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
         run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 

@@ -15,9 +15,10 @@
  *
  * Two layers, so a lenient model cannot wave a bad PR through:
  *  - `precheck(diff, ticket)` is DETERMINISTIC, read from `git diff -C --find-copies-harder`:
- *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits), item 3 fails on
+ *    item 2 fails on a copy whose original is left behind (source named in the ticket or in a package the diff also edits)
+ *    — except a copy into a scope the diff creates from an untouched scope (#4143); item 3 fails on
  *    an edit to a quality gate (`.fallow*`, lint/test config, the CI workflow) or a newly skipped
- *    test — unless the ticket names that file. Exemptions (#3550): a workflow file when the ticket
+ *    test — unless the ticket names that file. A copied (new) file is not a gate edit (#4143). Exemptions (#3550): a workflow file when the ticket
  *    says `Workflow-change: yes`; a copied drizzle `meta/NNNN_snapshot.json`; skip-like text inside a
  *    same-line string literal.
  *  - `decide(diff, ticket, verdict)` merges both: a precheck FAIL overrides the model's PASS.
@@ -105,19 +106,28 @@ export function precheck(diff, ticket = '') {
   const fails = {}
   // --find-copies-harder reports a copy of ANY tracked file, so a copy only means "original left
   // behind" when its source is named in the ticket or sits in a package the diff also edits (#3160).
+  // #4143: a copy's destination is always a new file, so it is never a gate edit; and a copy into a
+  // scope the diff CREATES (its own package.json new, every file in it new) from an untouched scope
+  // is a scaffold mirroring a starter file, not a move.
+  const isNew = (f) => f.status === 'added' || f.status === 'copied'
   const scopeOf = (p) => {
     const seg = p.split('/')
     if (['packages', 'apps', 'pocs'].includes(seg[0]) && seg.length > 2) return `${seg[0]}/${seg[1]}`
     if (['scripts', '.github'].includes(seg[0])) return seg[0]
     return null
   }
-  const touched = new Set(files.filter((f) => f.status !== 'copied' && f.status !== 'added').map((f) => scopeOf(f.from)).filter(Boolean))
-  const copies = files.filter((f) => f.status === 'copied' && !MIGRATION_SNAPSHOT.test(f.path) && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
+  const touched = new Set(files.filter((f) => !isNew(f)).map((f) => scopeOf(f.from)).filter(Boolean))
+  const created = new Set(files
+    .filter((f) => isNew(f) && scopeOf(f.path) && f.path === `${scopeOf(f.path)}/package.json`)
+    .map((f) => scopeOf(f.path))
+    .filter((s) => files.every((f) => scopeOf(f.path) !== s || isNew(f))))
+  const scaffold = (f) => created.has(scopeOf(f.path)) && scopeOf(f.from) !== scopeOf(f.path) && !touched.has(scopeOf(f.from))
+  const copies = files.filter((f) => f.status === 'copied' && !MIGRATION_SNAPSHOT.test(f.path) && !scaffold(f) && (ticket.includes(f.from) || touched.has(scopeOf(f.from))))
   if (copies.length) {
     fails['2'] = { pass: false, evidence: `copied, original left behind: ${copies.map((f) => `${f.from} → ${f.path}`).join('; ')}` }
   }
   const named = (p) => ticket.includes(p) || ticket.includes(p.split('/').pop())
-  const gates = files.filter((f) => f.status !== 'added' && GATE_PATTERNS.some((re) => re.test(f.path)) && !named(f.path) && !(WORKFLOW_FILE.test(f.path) && WORKFLOW_CHANGE.test(ticket)))
+  const gates = files.filter((f) => !isNew(f) && GATE_PATTERNS.some((re) => re.test(f.path)) && !named(f.path) && !(WORKFLOW_FILE.test(f.path) && WORKFLOW_CHANGE.test(ticket)))
   const skips = files.filter((f) => TEST_FILE.test(f.path) && f.added.some((l) => SKIP.test(stripStrings(l))))
   const bits = []
   if (gates.length) bits.push(`quality gate edited: ${gates.map((f) => f.path).join(', ')}`)
