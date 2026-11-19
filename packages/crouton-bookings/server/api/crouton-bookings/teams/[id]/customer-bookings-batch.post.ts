@@ -18,6 +18,7 @@
  */
 import { eq, and, gte, lte, sum, sql, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
@@ -346,6 +347,9 @@ export default defineEventHandler(async (event) => {
         body.bookings.map(item => [item.locationId, item])
       )
       const teamMetadata = (team.metadata || {}) as Record<string, string>
+      // App default language: location fields fall back to it (#4244)
+      const i18nCfg = (useRuntimeConfig(event) as any)?.croutonI18n ?? {}
+      const defaultLocale = requiredLocale(i18nCfg.supportedLocales ?? [], i18nCfg.defaultLocale)
 
       // Send emails in background - don't block checkout
       const emailPromises = created.map(async (booking: any) => {
@@ -354,10 +358,10 @@ export default defineEventHandler(async (event) => {
         // Build booking context with DB location data — resolve translations
         const dbLocation = dbLocationMap.get(booking.location) as any
         const tr = dbLocation?.translations as Record<string, Record<string, string>> | null
-        const locationTitle = resolveTranslatedField(dbLocation?.title, tr, 'title', locale) || cartItem?.locationTitle || 'Location'
-        const locationStreet = resolveTranslatedField(dbLocation?.street, tr, 'street', locale)
-        const locationCity = resolveTranslatedField(dbLocation?.city, tr, 'city', locale)
-        const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale)
+        const locationTitle = resolveTranslatedField(dbLocation?.title, tr, 'title', locale, defaultLocale) || cartItem?.locationTitle || 'Location'
+        const locationStreet = resolveTranslatedField(dbLocation?.street, tr, 'street', locale, defaultLocale)
+        const locationCity = resolveTranslatedField(dbLocation?.city, tr, 'city', locale, defaultLocale)
+        const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale, defaultLocale)
 
         // Resolve slot IDs to human-readable labels
         const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any, locale)
