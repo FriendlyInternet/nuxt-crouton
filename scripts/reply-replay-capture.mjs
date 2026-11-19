@@ -51,7 +51,7 @@ const c = {
   source: reply.html_url,
   labels: labelsAt(events, reply.created_at),
   comments: prior,
-  reply: { body: reply.body, authorAssociation: reply.author_association, userType: reply.user?.type },
+  reply: { body: reply.body, authorAssociation: reply.author_association, userType: reply.user?.type, userLogin: reply.user?.login },
   want: values.want,
   today: '',
   note: values.note,
