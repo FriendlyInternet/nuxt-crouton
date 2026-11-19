@@ -26,6 +26,23 @@ export function colorsAreFlat(samples, tolerance = 2) {
   )
 }
 
+/**
+ * True when the browser ended on the path it was asked for (#4201): a redirect to the login page
+ * or the start page is not a screenshot of the requested screen. Compares pathnames only (query
+ * and hash ignored), a trailing `/` removed (a bare `/` stays `/`).
+ */
+export function landedWhereAsked(requested, final) {
+  const norm = (x) => {
+    const p = new URL(String(x ?? ''), 'http://x').pathname
+    return p.length > 1 ? p.replace(/\/+$/, '') || '/' : p
+  }
+  try {
+    return norm(requested) === norm(final)
+  } catch {
+    return false
+  }
+}
+
 // Text fragments that show up on pages we must never mistake for real UI:
 // Nitro/Nuxt error responses, the dev-server error overlay, generic HTTP
 // error bodies.
