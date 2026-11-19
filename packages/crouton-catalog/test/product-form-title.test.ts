@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { catalogProductsConfig } from '../collections/products/app/composables/useCatalogProducts'
-import { applyEnglishProductTitle } from '../collections/products/app/utils/applyEnglishProductTitle'
+import { applyDefaultLocaleProductFields } from '../collections/products/app/utils/applyDefaultLocaleProductFields'
 
 // The form starts from the config's default values (title: ''), which the server
-// rejects. The form copies the English title into `title` on the translation
-// input's update:english event — this checks the two fit together.
+// rejects. The form copies the default language's title into `title` on the
+// translation input's update:english event — this checks the two fit together.
 const hoisted = vi.hoisted(() => ({
   member: { team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } },
   create: vi.fn(async (d: any) => d)
@@ -36,16 +36,31 @@ describe('product form → POST title', () => {
 
   it('after the English title is copied in, the product is created with it', async () => {
     const state: Record<string, any> = { ...catalogProductsConfig.defaultValues, translations: { en: { title: 'Court' } } }
-    applyEnglishProductTitle(state, { field: 'title', value: 'Court' })
+    applyDefaultLocaleProductFields(state, { field: 'title', value: 'Court' })
     body = state
     await run()
     expect(hoisted.create).toHaveBeenCalledTimes(1)
     expect(hoisted.create.mock.calls[0]![0].title).toBe('Court')
   })
 
+  it('after a French-only title and description are copied in, the product is created with them (#4236)', async () => {
+    const state: Record<string, any> = { ...catalogProductsConfig.defaultValues, translations: { fr: { title: 'Vélo', description: 'Un vélo cargo' } } }
+    applyDefaultLocaleProductFields(state, { field: 'title', value: 'Vélo' })
+    applyDefaultLocaleProductFields(state, { field: 'description', value: 'Un vélo cargo' })
+    body = state
+    await run()
+    expect(hoisted.create.mock.calls[0]![0]).toMatchObject({ title: 'Vélo', description: 'Un vélo cargo' })
+  })
+
   it('an update to another field leaves the title alone', () => {
     const state: Record<string, any> = { title: 'Court' }
-    applyEnglishProductTitle(state, { field: 'description', value: 'x' })
+    applyDefaultLocaleProductFields(state, { field: 'active', value: 'x' })
     expect(state.title).toBe('Court')
+  })
+
+  it('the description is copied into the main column (#4236)', () => {
+    const state: Record<string, any> = { title: 'Court', description: '' }
+    applyDefaultLocaleProductFields(state, { field: 'description', value: 'x' })
+    expect(state).toEqual({ title: 'Court', description: 'x' })
   })
 })

@@ -55,6 +55,7 @@
         show-ai-translate
         field-type="emailtemplates"
         :label="$t('bookings.fields.translations')"
+        @update:english="(data: { field: string, value: string }) => applyDefaultLocaleEmailtemplateFields(state, data)"
       />
       </div>
       </template>
@@ -113,6 +114,7 @@
 <script setup lang="ts">
 import type { BookingsEmailtemplateFormProps, BookingsEmailtemplateFormData } from '../../types'
 import useBookingsEmailtemplates from '../composables/useBookingsEmailtemplates'
+import { applyDefaultLocaleEmailtemplateFields } from '../utils/applyDefaultLocaleEmailtemplateFields'
 
 const props = defineProps<BookingsEmailtemplateFormProps>()
 const { defaultValue, schema, collection } = useBookingsEmailtemplates()

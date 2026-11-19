@@ -36,7 +36,7 @@ collections/products/
 │   ├── composables/
 │   │   └── useCatalogProducts.ts # Schema, columns, config
 │   └── utils/
-│       └── applyEnglishProductTitle.ts  # Mirrors the English title into `title`
+│       └── applyDefaultLocaleProductFields.ts  # Mirrors the default language's title + description into the main columns
 ├── server/
 │   ├── api/teams/[id]/catalog-products/
 │   │   ├── index.get.ts          # GET all / by IDs (?ids=) — any team member

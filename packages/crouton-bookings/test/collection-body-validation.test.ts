@@ -108,13 +108,13 @@ describe('package collection body validation (#3377)', () => {
   })
 
   it('locations POST accepts what the packaged form sends once English title is entered', async () => {
-    const { applyEnglishTitle } = await import('../collections/locations/app/utils/applyEnglishTitle')
+    const { applyDefaultLocaleLocationFields } = await import('../collections/locations/app/utils/applyDefaultLocaleLocationFields')
     // defaultValues of useBookingsLocations (title starts as '')
     const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, maxBookingsPerMonth: 0, translations: {} }
     body = { ...state }
     await expect(run(`../${L}/index.post`)).rejects.toThrow()
     state.translations = { en: { title: 'Studio' } }
-    applyEnglishTitle(state, { field: 'title', value: 'Studio' })
+    applyDefaultLocaleLocationFields(state, { field: 'title', value: 'Studio' })
     body = { ...state }
     await run(`../${L}/index.post`)
     expect(hoisted.create.mock.calls[0]![0]).toMatchObject({ title: 'Studio' })

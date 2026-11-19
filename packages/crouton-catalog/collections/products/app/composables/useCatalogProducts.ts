@@ -11,11 +11,15 @@
  * - Fields: title, description, active
  */
 
+import { unref } from 'vue'
 import { z } from 'zod'
+import { localeCodes, requiredLocale } from '../../../../required-locale'
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
-// Keep schema outside of objects that might be serialized/cloned during SSR
-export const catalogProductSchema = z.object({
+// Keep schema outside of objects that might be serialized/cloned during SSR.
+// The required translation is the app's default language (same rule as the
+// translation input), so the form schema is built per language.
+export const catalogProductSchemaFor = (locale: string) => z.object({
   title: z.string().optional(),
   description: z.string().nullish(),
   active: z.boolean().optional(),
@@ -26,10 +30,12 @@ export const catalogProductSchema = z.object({
       description: z.string().optional()
     })
   ).refine(
-    translations => translations.en && translations.en.title,
-    { message: 'English translations for title are required' }
+    translations => !!translations[locale]?.title,
+    { message: `Translations for title (${locale}) are required` }
   )
 })
+
+export const catalogProductSchema = catalogProductSchemaFor('en')
 
 export const catalogProductsColumns = [
   { accessorKey: 'title', header: 'Title' },
@@ -84,9 +90,15 @@ export const useCatalogProducts = () => catalogProductsConfig
 
 // Default export for auto-import compatibility
 export default function () {
+  // `useI18n` is a Nuxt auto-import in the app. This file is also type-checked
+  // from server/shared code (via types.ts), where it isn't declared — and a local
+  // `declare` would stop the auto-import, so only the type check is silenced.
+  // @ts-ignore
+  const { locales, defaultLocale } = useI18n()
+  const locale = requiredLocale(localeCodes(locales.value as any), unref(defaultLocale) as string | undefined)
   return {
     defaultValue: catalogProductsConfig.defaultValues,
-    schema: catalogProductSchema,
+    schema: catalogProductSchemaFor(locale),
     columns: catalogProductsConfig.columns,
     collection: catalogProductsConfig.name
   }

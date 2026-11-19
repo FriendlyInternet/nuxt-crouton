@@ -22,11 +22,15 @@
  * Safe to modify - regeneration requires --force flag
  */
 
+import { unref } from 'vue'
 import { z } from 'zod'
+import { localeCodes, requiredLocale } from '@fyit/crouton-catalog/required-locale'
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
-// Keep schema outside of objects that might be serialized/cloned during SSR
-export const bookingsEmailtemplateSchema = z.object({
+// Keep schema outside of objects that might be serialized/cloned during SSR.
+// The required translation is the app's default language (same rule as the
+// translation input), so the form schema is built per language.
+export const bookingsEmailtemplateSchemaFor = (locale: string) => z.object({
   fromEmail: z.string().min(1, 'fromEmail is required'),
   triggerType: z.string().min(1, 'triggerType is required'),
   recipientType: z.string().min(1, 'recipientType is required'),
@@ -44,10 +48,12 @@ export const bookingsEmailtemplateSchema = z.object({
       body: z.string().min(1, 'Body is required')
     })
   ).refine(
-    (translations) => translations.en && translations.en.name && translations.en.subject && translations.en.body,
-    { message: 'English translations for name, subject, body are required' }
+    translations => !!(translations[locale]?.name && translations[locale]?.subject && translations[locale]?.body),
+    { message: `Translations for name, subject, body (${locale}) are required` }
   )
 })
+
+export const bookingsEmailtemplateSchema = bookingsEmailtemplateSchemaFor('en')
 
 export const bookingsEmailtemplatesColumns = [
   { accessorKey: 'name', header: 'Name' },
@@ -154,9 +160,15 @@ export const useBookingsEmailtemplates = () => bookingsEmailtemplatesConfig
 
 // Default export for auto-import compatibility
 export default function () {
+  // `useI18n` is a Nuxt auto-import in the app. This file is also type-checked
+  // from server/shared code (via types.ts), where it isn't declared — and a local
+  // `declare` would stop the auto-import, so only the type check is silenced.
+  // @ts-ignore
+  const { locales, defaultLocale } = useI18n()
+  const locale = requiredLocale(localeCodes(locales.value as any), unref(defaultLocale) as string | undefined)
   return {
     defaultValue: bookingsEmailtemplatesConfig.defaultValues,
-    schema: bookingsEmailtemplateSchema,
+    schema: bookingsEmailtemplateSchemaFor(locale),
     columns: bookingsEmailtemplatesConfig.columns,
     collection: bookingsEmailtemplatesConfig.name
   }
