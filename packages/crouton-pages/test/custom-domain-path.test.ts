@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { appPageSegments } from '../app-page-segments'
 import {
-  appPageSegments,
   isAppOwnedSegment,
   localeLessTarget,
   rewriteForTeamHost,

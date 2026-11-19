@@ -3,7 +3,8 @@
  *
  * Pure path rules shared by the server domain resolver, the browser router
  * history (team-host-history.ts) and the public page forwards. No Nuxt globals,
- * so the Nitro plugin and nuxt.config.ts can import this file by relative path.
+ * so the Nitro plugin can import this file by relative path. nuxt.config.ts
+ * must NOT import it (see ../../app-page-segments.ts).
  *
  * On a connected domain in team routing mode every non-app path belongs to that
  * host's team: `/about` → `/acme/about`, `/en/about` → `/acme/en/about`. The
@@ -12,20 +13,6 @@
  */
 import { buildPagePath } from './page-path'
 import { RESERVED_PREFIXES } from './reserved-prefixes'
-
-/**
- * The sorted, de-duplicated first segment of each page path that is non-empty
- * and not a `:param` — the addresses the app itself owns.
- * `/account` → `account`, `/admin/:team()` → `admin`; `/` and `/:team()/…` are skipped.
- */
-export function appPageSegments(pages: ReadonlyArray<{ path: string }>): string[] {
-  const segments = new Set<string>()
-  for (const page of pages) {
-    const first = (page.path || '').split('/').filter(Boolean)[0]
-    if (first && !first.includes(':')) segments.add(first)
-  }
-  return [...segments].sort()
-}
 
 /** True when the domain lookup itself can be skipped (reserved prefixes, `_*`). */
 export function skipsDomainLookup(seg?: string): boolean {

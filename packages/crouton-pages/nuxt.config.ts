@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { LocaleObject } from '@nuxtjs/i18n'
 import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
-import { appPageSegments } from './app/utils/custom-domain-path'
+import { appPageSegments } from './app-page-segments'
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url))
 
