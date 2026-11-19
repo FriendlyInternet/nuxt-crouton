@@ -280,7 +280,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
       # #3105: start the CI fix-bot (workflow_dispatch) when the PR is red.
       actions: write
     steps:
@@ -432,7 +432,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     steps:
       # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
       # `nuxt-harness[bot]`. That makes the dispatched decompose run App-actored, which passes
