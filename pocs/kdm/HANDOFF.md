@@ -48,8 +48,15 @@ the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.d
 - `<title>` = page title alone: the layout sets `titleTemplate: '%s'`, dropping core's `| <team>`.
 - Light mode is pinned in `nuxt.config.ts` (`colorMode`).
 - **Check cases:** 1–4 → `node pocs/kdm/scripts/check-public-routes.mjs <baseUrl>` (needs the
-  seeded `welcome` page: `crouton-seed --db kdm-db` from `pocs/kdm`). 5–7 need a real browser and a
-  signed-in session (Playwright, see the PR). Local dev needs `BETTER_AUTH_SECRET` in the environment.
+  seeded `welcome` page: `crouton-seed --db kdm-db` from `pocs/kdm`). 5–7 →
+  `REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs <baseUrl> --key pr<N>`
+  (Playwright, real browser, signed in as the review login; screenshots to `screenshots/4153-case<N>.png`).
+  Local dev needs `BETTER_AUTH_SECRET` in the environment.
+- **Run on the PR #4166 preview (2026-11-19):** 1 ✅, 2 ❌ (package gap below), 3 ✅, 4 ✅, 5 ✅
+  (`/auth/login` ends on `/` with the sign-in form), 6 ✅ (the editor's "Open" goes to
+  `/test1/en/welcome`, 200, `h1` "Welkom"), 7 partly: the pencil shows for the review login and opens
+  the editing drawer, but the save step is not run, because the drawer's editor shows the seeded body as
+  empty (package gap below) and saving would wipe the page.
 - **Package gaps found (not fixed here — `packages/*` is out of scope for this step):**
   - `/test1/welcome` (no language) is a **404**, not a forward: crouton-pages only forwards `/test1`
     and `/test1/` to `/test1/en/`; a one-segment `/test1/<slug>` matches `[team]/[locale]/[...slug]`
