@@ -37,7 +37,9 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const { inviteMember, canInviteMembers, isOwner } = useTeam()
+const { inviteMember, isOwner } = useTeam()
+// Inviting is the `team:manage` action (#4105)
+const canInviteMembers = useCan('team:manage')
 const notify = useNotify()
 
 // Form state

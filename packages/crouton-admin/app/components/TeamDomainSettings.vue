@@ -10,7 +10,8 @@
  * 4. DNS instructions for pending domains
  */
 const { teamSlug, teamId } = useTeamContext()
-const { isAdmin } = useTeam()
+// Managing custom domains is the `team:domains` action (#4105)
+const isAdmin = useCan('team:domains')
 const { t } = useT()
 const notify = useNotify()
 

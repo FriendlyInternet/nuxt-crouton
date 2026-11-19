@@ -38,7 +38,9 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useT()
 const route = useRoute()
 const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
-const { currentTeam, currentRole, isAdmin } = useTeam()
+const { currentTeam, currentRole } = useTeam()
+// "See all" activity opens the activity page: `activity:view` (#4105); browser-only (cached public pages)
+const canViewActivity = useCan('activity:view', { server: false })
 const { current, recent, unread, markAllSeen, dismiss, refreshTeamEvents } = useCroutonStatus()
 const { hasApp } = useCroutonApps()
 const { teamSlug } = useTeamContext()
@@ -145,7 +147,7 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
       } as DropdownMenuItem))
     : []
 
-  const seeAll: DropdownMenuItem | null = hasApp('events') && teamSlug.value && isAdmin.value
+  const seeAll: DropdownMenuItem | null = hasApp('events') && teamSlug.value && canViewActivity.value
     ? { label: t('userPill.seeAll'), icon: 'i-lucide-list', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem
     : null
 

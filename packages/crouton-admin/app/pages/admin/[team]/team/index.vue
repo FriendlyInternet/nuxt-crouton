@@ -6,6 +6,11 @@
  *
  * @route /admin/[team]/team
  */
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
+})
+
 const { t } = useT()
 
 // Invite modal state

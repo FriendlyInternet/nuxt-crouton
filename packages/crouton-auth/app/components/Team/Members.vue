@@ -37,11 +37,15 @@ const {
   loadMembers,
   updateMemberRole,
   removeMember,
-  canManageMembers,
-  canInviteMembers,
   isOwner,
   loading: teamLoading
 } = useTeam()
+
+// Managing and inviting members is the `team:manage` action (#4105); the
+// owner-protection checks below stay role-based (they are about ownership).
+const canManageTeam = useCan('team:manage')
+const canManageMembers = canManageTeam
+const canInviteMembers = canManageTeam
 
 const {
   sendPasswordReset,
