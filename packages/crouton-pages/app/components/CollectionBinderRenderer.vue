@@ -41,7 +41,7 @@ const route = useRoute()
 const { locale } = useT()
 const collections = useCollections()
 const { getTeamId, teamSlug } = useTeamContext()
-const { hideTeamInUrl } = useDomainContext()
+const { hideTeamInLinks } = useDomainContext()
 
 // Which collection is bound
 const collectionName = computed(() => props.page.config?.collection as string | undefined)
@@ -72,7 +72,7 @@ const isPublicContext = computed(() => {
 const binderBasePath = computed(() => {
   const team = teamSlug?.value
   const loc = locale.value || 'en'
-  if (hideTeamInUrl.value) return `/${loc}/${props.page.slug}`
+  if (hideTeamInLinks.value) return `/${loc}/${props.page.slug}`
   return `/${team}/${loc}/${props.page.slug}`
 })
 
