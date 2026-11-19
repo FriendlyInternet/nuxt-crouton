@@ -1,4 +1,5 @@
-// Start the conflict resolver for an epic → main PR that conflicts with main (#2875, #3227).
+// Start the conflict resolver for an epic → main PR, or a single-ticket work-<N> → main PR (#4260),
+// that conflicts with main (#2875, #3227).
 // ONE place for the sweep (automerge-epic-subpr.yml) and the owner-`ok` job (on-comment.yml
 // approve-epic), so the marker, the 30-minute guard and the dispatch cannot drift apart.
 // GitHub runs no checks on a conflicting PR, so without this an `ok` waits forever.
@@ -25,20 +26,26 @@ export const PIPELINE_BOTS = ['claude[bot]', 'nuxt-harness[bot]']
  */
 export async function startConflictResolver({ github, owner, repo, pull_number, pr, state, handoffGuard, now = Date.now() }) {
   if (state !== 'dirty') return { status: 'not-dirty' }
-  // The branch name goes into a worker shell line: only a pipeline-authored `epic/…` PR may start it.
-  if (!PIPELINE_BOTS.includes(pr.user?.login) || !/^epic\/\d+-[\w.\/-]*$/.test(pr.head.ref)) return { status: 'not-pipeline' }
+  // The branch name goes into a worker shell line: only a pipeline-authored `epic/…` PR, or a
+  // single-ticket `work-<N>` PR straight into main (#4260), may start it.
+  const ref = String(pr.head?.ref ?? '')
+  const epicIssue = Number(/^epic\/(\d+)-[\w.\/-]*$/.exec(ref)?.[1]) || 0
+  const leafIssue = pr.base?.ref === 'main' ? Number(/^work-(\d+)$/.exec(ref)?.[1]) || 0 : 0
+  if (!PIPELINE_BOTS.includes(pr.user?.login) || (!epicIssue && !leafIssue)) return { status: 'not-pipeline' }
   const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
   const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
   // Concurrent callers all see "no marker yet" for the same head (#2914), so also hold off
   // while ANY resolver note on this PR is under 30 minutes old: one run per branch at a time.
   if (prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:') && now - Date.parse(x.created_at) < 30 * 60 * 1000)) return { status: 'recent' }
   if (prior.some(x => (x.body || '').includes(marker))) return { status: 'already' }
-  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
   try {
     const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-      body: `${marker}\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
+      body: `${marker}\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _PR conflicts with main (#2875)_\n\n`
         + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
-    const inputs = { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
+    // A work-<N> PR takes the normal revise path: no `branch` input means work-<issue>, base = the PR's own.
+    const inputs = epicIssue
+      ? { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref }
+      : { issue: String(leafIssue), feedback: String(note.data.id) }
     await handoffGuard({ kind: 'dispatch', issue: pull_number, workflow: 'work-issue-pidev.yml', inputs },
       () => github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main', inputs }))
     return { status: 'started' }
