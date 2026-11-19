@@ -8,8 +8,10 @@ Nuxt auto-generates these routes from the file system:
 
 | Route Name | Pattern | Source | Purpose |
 |---|---|---|---|
-| `team-locale-slug` | `/:team/:locale/:slug(.*)*` | `[team]/[locale]/[...slug].vue` | Main page renderer |
-| `team-slug` | `/:team/:slug(.*)*` | `[team]/[...slug].vue` | Locale-less redirect |
+| `team-locale-slug` | `/:team/:locale/:slug(.*)*` | `[team]/[locale]/[...slug].vue` | Main page renderer (renders `CroutonPagesPublicPage`); forwards to the plain address when `hideLocaleInUrl` is on |
+| `team-slug` | `/:team/:slug(.*)*` | `[team]/[...slug].vue` | Locale-less redirect for the bare team address (`/acme`); renders the page at `/acme/<slug>` when `hideLocaleInUrl` is on |
+
+> With `hideLocaleInUrl: true` (team mode, exactly one locale) the `team-locale-slug` pattern becomes `/:team/:locale(<code>)/:slug(.*)*` at build time, so `/acme/about` falls through to `team-slug`, and `/acme/<code>/about` forwards (302) to the plain address. The build fails when the app has more than one locale.
 
 > In **locale mode** (`routingMode: 'locale'`), both routes are removed by the `pages:extend` hook. The app provides its own page routes (e.g., `[locale]/[...slug].vue`).
 
@@ -22,8 +24,16 @@ URLs include the team slug: `/acme/en/about`
 No special config needed. The `team-locale-slug` route handles everything.
 
 ```
-/acme/about     → [team]/[...slug].vue → redirect to /acme/en/about
+/acme           → [team]/[...slug].vue → redirect to /acme/en
 /acme/en/about  → [team]/[locale]/[...slug].vue → render page
+/acme/about     → [team]/[locale]/[...slug].vue (locale="about") → 404
+```
+
+With `hideLocaleInUrl: true` (one-locale apps):
+
+```
+/acme/about     → [team]/[...slug].vue → render page
+/acme/en/about  → [team]/[locale]/[...slug].vue → 302 to /acme/about
 ```
 
 ### 2. Locale Mode
@@ -57,9 +67,10 @@ In locale mode, crouton-pages:
 A verified custom domain resolves to a team. URLs omit the team slug.
 
 ```
-booking.acme.com/about → domain-resolver rewrites to /acme/about
-                       → [team]/[...slug].vue → redirect to /acme/en/about
-                       → render page (hideTeamInUrl hides team in nav links)
+booking.acme.com/en/about → domain-resolver rewrites to /acme/en/about
+                          → [team]/[locale]/[...slug].vue → render page
+(hideTeamInUrl hides team in nav links; with hideLocaleInUrl on,
+ booking.acme.com/about → /acme/about → [team]/[...slug].vue → render page)
 ```
 
 ## Request Lifecycle (Team Mode)
@@ -200,12 +211,14 @@ Rewrites custom domain requests by prepending the team slug.
 | File | Purpose |
 |---|---|
 | `app/pages/[team]/[locale]/[...slug].vue` | Main page renderer (team mode only) |
-| `app/pages/[team]/[...slug].vue` | Locale-less redirect route (team mode only) |
+| `app/pages/[team]/[...slug].vue` | Locale-less redirect route (team mode only); renders pages when `hideLocaleInUrl` is on |
+| `app/components/PublicPage.vue` | `CroutonPagesPublicPage` — the one public page renderer both routes use (prop `locale`) |
+| `app/utils/public-routes.ts` | `applyPublicRouteOptions` / `assertSingleLocale` — the `pages:extend` route logic (remove in locale/custom mode, pin the locale for `hideLocaleInUrl`) |
 | `server/plugins/single-team-rewrite.ts` | Context flags + root redirect (locale mode) |
 | `server/plugins/domain-resolver.ts` | Custom domain URL rewriting |
 | `app/composables/useDomainContext.ts` | `hideTeamInUrl`, `isLocaleMode`, `isCustomDomain` |
 | `app/composables/useNavigation.ts` | Navigation link building (respects hideTeamInUrl) |
-| `nuxt.config.ts` | `pages:extend` hook, `routingMode` config |
+| `nuxt.config.ts` | `pages:extend` hook, `routingMode` + `hideLocaleInUrl` config |
 
 ## Gotchas
 

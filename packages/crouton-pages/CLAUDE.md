@@ -692,6 +692,8 @@ export default defineNuxtConfig({
         debug: false,
         // Routing mode: 'team' (default) or 'locale'
         routingMode: 'team',
+        // Team mode, one-locale apps only: drop the locale from public URLs (/acme/about). Build fails if more than one locale.
+        hideLocaleInUrl: false,
         // Default locale for root redirect in locale mode
         defaultLocale: 'en'
       }

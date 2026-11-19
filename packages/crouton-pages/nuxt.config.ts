@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { LocaleObject } from '@nuxtjs/i18n'
 import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
+import { applyPublicRouteOptions } from './app/utils/public-routes'
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url))
 
@@ -78,6 +79,10 @@ export default defineNuxtConfig({
         // 'locale'  — /[locale]/[slug], app provides own routes, root redirects to /{defaultLocale}/
         // 'custom'  — app provides all its own routes, no prefix, no redirect
         routingMode: 'team',
+        // Team mode, one-locale apps only: drop the locale from public URLs
+        // (/acme/about instead of /acme/en/about). The build fails when the app
+        // has more than one locale; ignored (with a warning) outside team mode.
+        hideLocaleInUrl: false,
         // Default locale for root redirect in locale mode (/ → /{defaultLocale}/)
         defaultLocale: 'en'
       }
@@ -86,19 +91,16 @@ export default defineNuxtConfig({
 
   modules: [
     // In locale/custom mode, remove crouton-pages public page routes so the app
-    // can provide its own routes without conflicts.
+    // can provide its own routes without conflicts. In team mode with
+    // hideLocaleInUrl, pin the locale route to the app's one locale.
     function (_options, nuxt) {
       nuxt.hook('pages:extend', (pages) => {
-        const routingMode = (nuxt.options.runtimeConfig?.public as any)?.croutonPages?.routingMode || 'team'
-        if (routingMode === 'locale' || routingMode === 'custom') {
-          const publicRouteNames = new Set(['team-locale-slug', 'team-slug'])
-          for (let i = pages.length - 1; i >= 0; i--) {
-            const name = pages[i]?.name
-            if (name && publicRouteNames.has(name)) {
-              pages.splice(i, 1)
-            }
-          }
-        }
+        const pagesConfig = (nuxt.options.runtimeConfig?.public as any)?.croutonPages
+        applyPublicRouteOptions(pages, {
+          routingMode: pagesConfig?.routingMode || 'team',
+          hideLocaleInUrl: pagesConfig?.hideLocaleInUrl === true,
+          locales: croutonLocales.map(l => l.code)
+        })
       })
     }
   ],

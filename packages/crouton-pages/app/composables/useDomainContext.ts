@@ -58,6 +58,11 @@ export function useDomainContext() {
     return isCustomDomain.value || isLocaleMode.value
   })
 
+  // Team mode, one-locale apps: public URLs carry no locale segment.
+  const hideLocaleInUrl = computed(() =>
+    routingMode.value === 'team' && !!(config.public?.croutonPages as any)?.hideLocaleInUrl
+  )
+
   // Get the current hostname
   const hostname = computed(() => {
     if (import.meta.server) {
@@ -90,6 +95,8 @@ export function useDomainContext() {
     resolvedTeamId,
     /** Whether to hide team slug in URLs (true on custom domains or locale mode) */
     hideTeamInUrl,
+    /** Whether to omit the locale segment in public URLs (team mode + croutonPages.hideLocaleInUrl) */
+    hideLocaleInUrl,
     /** Current hostname */
     hostname,
     /** Whether current hostname is a known app domain */

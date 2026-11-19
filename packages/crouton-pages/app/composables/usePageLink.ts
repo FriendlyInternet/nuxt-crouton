@@ -26,7 +26,7 @@ export function usePageLink(teamSlug?: MaybeRef<string | null>) {
   const route = useRoute()
   const { locale: i18nLocale } = useT()
   const { teamId } = useTeamContext()
-  const { hideTeamInUrl } = useDomainContext()
+  const { hideTeamInUrl, hideLocaleInUrl } = useDomainContext()
 
   const runtimeConfig = useRuntimeConfig()
   const pagesConfig = runtimeConfig.public?.croutonPages as { defaultLocale?: string } | undefined
@@ -116,6 +116,7 @@ export function usePageLink(teamSlug?: MaybeRef<string | null>) {
     if (!page) return undefined
     return buildPagePath({
       hideTeamInUrl: hideTeamInUrl.value,
+      hideLocaleInUrl: hideLocaleInUrl.value,
       team: team.value,
       locale: locale.value,
       slugPath: buildSlugPath(page, pagesById.value, locale.value)
