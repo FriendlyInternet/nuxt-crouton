@@ -75,7 +75,7 @@ export function resolutionPaths({ modified, conflicted }) {
   return [...new Set(keep)].sort()
 }
 
-const MARKER = /^(<<<<<<<|=======|>>>>>>>)(\s|$)/m
+export const MARKER = /^(<<<<<<<|=======|>>>>>>>)(\s|$)/m
 
 /** Files (path → text) that still carry a conflict marker. */
 export function withMarkers(contents) {

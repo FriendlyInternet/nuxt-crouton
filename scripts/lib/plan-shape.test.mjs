@@ -5,11 +5,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parsePlan, parseAssumptions, parseDocs, PLAN_MARKER } from './plan-shape.mjs'
+import { parsePlan, parseAssumptions, parseDocs, parseSplit, PLAN_MARKER } from './plan-shape.mjs'
 
 const A_OK = '- The bug is in foo — Why: the stack trace ends there — Evidence: https://github.com/o/r/blob/abc/foo.ts#L10 — Status: verified'
 
@@ -232,6 +232,65 @@ test('Test checklist: valid checklist exits 0', () => {
 test('Test checklist: lone T0 line exits 0', () => {
   const r = cli({ Test: '- [ ] T0 — no runnable test — Manual: config only' })
   assert.equal(r.status, 0, r.verdict.errors.join('; '))
+})
+
+// #4184 T1 — the optional `### Split` section.
+const SPLIT_OK = 'yes — Browser tests for the OAuth flow\n- Moves: "7 e2e tests on fixtures/with-mcp-oauth"\n- Moves: "the new fixture app"\n- Tests moved: T4, T5\n- Why: a new test app plus 7 browser tests do not fit one run'
+const splitErr = (r) => r.errors.filter((e) => e.startsWith('Split:'))
+
+test('#4184 T1: a plan without ### Split is valid with split: null', () => {
+  const r = parsePlan(plan())
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.equal(r.split, null)
+})
+
+test('#4184 T1: "no — fits one run" → split: null, still valid', () => {
+  const r = parsePlan(plan({ Split: 'no — fits one run' }))
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.equal(r.split, null)
+})
+
+test('#4184 T1: a full yes Split is parsed (title, moves, tests, why)', () => {
+  const r = parsePlan(plan({ Split: SPLIT_OK }))
+  assert.equal(r.ok, true, r.errors.join('; '))
+  assert.deepEqual(r.split, {
+    title: 'Browser tests for the OAuth flow',
+    moves: ['"7 e2e tests on fixtures/with-mcp-oauth"', '"the new fixture app"'],
+    tests: ['T4', 'T5'],
+    why: 'a new test app plus 7 browser tests do not fit one run',
+  })
+  // `Tests moved:` is optional
+  assert.deepEqual(parseSplit('yes — X\n- Moves: "a"\n- Why: big').split.tests, [])
+})
+
+test('#4184 T1: yes without title / Moves / Why, or a first line that is neither → a Split: error', () => {
+  const noTitle = parsePlan(plan({ Split: 'yes\n- Moves: "a"\n- Why: big' }))
+  assert.equal(noTitle.ok, false); assert.ok(splitErr(noTitle).some((e) => /title/.test(e)))
+  const noMoves = parsePlan(plan({ Split: 'yes — X\n- Why: big' }))
+  assert.equal(noMoves.ok, false); assert.ok(splitErr(noMoves).some((e) => /Moves/.test(e)))
+  const noWhy = parsePlan(plan({ Split: 'yes — X\n- Moves: "a"' }))
+  assert.equal(noWhy.ok, false); assert.ok(splitErr(noWhy).some((e) => /Why/.test(e)))
+  const neither = parsePlan(plan({ Split: 'maybe later' }))
+  assert.equal(neither.ok, false); assert.equal(splitErr(neither).length, 1)
+  // the reproduced case from the plan: a broken split no longer passes silently
+  assert.equal(parsePlan(plan({ Split: 'yes\n- Moves: "e2e tests"' })).ok, false)
+})
+
+test('#4184 T1: a moved T-id still in ### Test is an error', () => {
+  const r = parsePlan(plan({ Split: 'yes — X\n- Moves: "a"\n- Tests moved: T1\n- Why: big' }))
+  assert.equal(r.ok, false)
+  assert.ok(splitErr(r).some((e) => /T1/.test(e) && /### Test/.test(e)), r.errors.join('; '))
+})
+
+test('#4184 T5: the plan-review fixtures (approved plans with no Split) parse with split: null and the same ok', () => {
+  const dir = new URL('../fixtures/plan-review/', import.meta.url)
+  const files = readdirSync(dir).filter((f) => f.endsWith('.plan.md'))
+  assert.ok(files.length > 0)
+  for (const f of files) {
+    const r = parsePlan(readFileSync(new URL(f, dir), 'utf8'))
+    assert.equal(r.split, null, f)
+    assert.equal(r.ok, true, `${f}: ${r.errors.join('; ')}`)
+  }
 })
 
 // covers: T3

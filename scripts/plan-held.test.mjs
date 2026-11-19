@@ -61,10 +61,12 @@ const section = (gh) => {
   return { text, warnings }
 }
 
-test('header matches what work-issue-pidev.yml printed inline before (no override ⇒ prompt unchanged)', () => {
-  // The old printf format, with %s → the plan id and \n → newline.
-  const old = '\\n\\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\\n\\n--- APPROVED PLAN ---\\n'
+// covers: T3
+test('header matches what work-issue-pidev.yml printed inline before, but asks through the question file (#4192)', () => {
+  // The old printf format, with %s → the plan id and \n → newline; the STOP sentence now points at the question file.
+  const old = '\\n\\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: ask the way this prompt says above (your question file), saying what differs and why, and do NOT improvise a different change.\\n\\n--- APPROVED PLAN ---\\n'
   assert.equal(approvedHeader('123'), old.replace('%s', '123').replaceAll('\\n', '\n'))
+  assert.ok(!approvedHeader('123').includes('post a top-level issue comment'))
 })
 test('approvedPromptSection: bot override after the newest plan ⇒ header + plan + OVERRIDE block', () => {
   const calls = []
@@ -122,6 +124,16 @@ test('holdFacts: the final no-go carries its record ⇒ planHeld true and the re
   assert.deepEqual(await holdFacts({ github, repo: {}, issue }), { planHeld: true, record: REJECTED_RECORD })
   assert.equal(github.calls.length, 1)
 })
+// covers: T3
+test('holdFacts: reads the login, so an owner answer already given closes a worker question (#4192)', async () => {
+  const WQ = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+  const q = { body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n## 🔀 Blocked — A or B?`, user: { type: 'Bot', login: 'nuxt-harness[bot]' } }
+  const answer = { body: 'A', user: { type: 'User', login: 'pmcp' } }
+  const issue = { number: 7, labels: [{ name: 'status:blocked' }, { name: 'plan:approved' }] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer]), repo: {}, issue }), { planHeld: false, record: WQ }, 'the first answer still reads the record')
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer, { body: 'ok', user: { type: 'User', login: 'pmcp' } }]), repo: {}, issue }), { planHeld: false, record: null })
+})
+
 test('holdFacts: no status:blocked, or a PR ⇒ nothing, no API call', async () => {
   const github = fakeGithub(thread)
   assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: [] } }), { planHeld: false, record: null })
