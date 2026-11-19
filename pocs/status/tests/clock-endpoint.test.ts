@@ -15,6 +15,7 @@ function fakeGh(_event: unknown, path: string) {
   const wf = path.match(/actions\/workflows\/([^/?]+)/)?.[1] as string
   if (fail[wf]) return Promise.resolve({ data: null, error: fail[wf] })
   if (!path.includes('/runs')) return Promise.resolve({ data: { name: `name of ${wf}` }, error: null })
+  if (wf === 'e2e.yml') return Promise.resolve({ data: { workflow_runs: [] }, error: null }) // never run by the clock yet
   const created = wf === 'automerge-epic-subpr.yml' ? '2026-11-19T10:13:00Z' : '2026-11-19T10:22:00Z'
   return Promise.resolve({
     data: {
@@ -56,6 +57,9 @@ describe('GET /api/status/clock', () => {
     const by = (wf: string) => res.data.find((r: any) => r.workflow === wf)
     expect(by('automerge-epic-subpr.yml').state).toBe('ok')
     expect(by('pipeline-metrics.yml').state).toBe('ok')
+    // e2e was last due 04:00, before it moved to the clock at 07:45, and has no clock run — not a miss.
+    expect(by('e2e.yml').state).toBe('before-clock')
+    expect(by('e2e.yml').about).toBe(CLOCK_JOBS.find(j => j.workflow === 'e2e.yml')?.about)
     expect(paths).toContain('/repos/FriendlyInternet/nuxt-crouton/actions/workflows/e2e.yml/runs?event=workflow_dispatch&actor=nuxt-harness%5Bbot%5D&per_page=10')
   })
 

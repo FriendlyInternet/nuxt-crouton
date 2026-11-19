@@ -6,13 +6,20 @@ import type { AppRow, ChangelogRow, ClockRow, Decision, OpenQuestion, ToTestGrou
 
 definePageMeta({ middleware: 'auth' })
 
-const tabs = [
+const TABS = [
   { label: 'Apps', slot: 'apps', icon: 'i-lucide-layout-grid' },
   { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
   { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
   { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' },
   { label: 'Clock', slot: 'clock', icon: 'i-lucide-clock' }
 ]
+// On a phone (below sm) the tabs show their icon only, plus the label on the selected tab.
+const activeTab = ref('apps')
+const tabs = computed(() => TABS.map(t => ({
+  ...t,
+  value: t.slot,
+  ui: { label: t.slot === activeTab.value ? '' : 'hidden sm:inline' }
+})))
 
 const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
@@ -67,7 +74,7 @@ const filteredRows = computed(() => {
 <template>
   <UContainer class="py-4 sm:py-6">
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left" label="Inbox" class="mb-2" />
-    <UTabs :items="tabs" class="w-full">
+    <UTabs v-model="activeTab" :items="tabs" class="w-full">
       <template #apps>
         <DashboardAppsTab :error="appsRes?.error" :pending="appsStatus === 'pending'" :cards="appCards" />
       </template>

@@ -144,6 +144,43 @@ describe('jobStatus', () => {
   })
 })
 
+describe('jobStatus before the job moved to the clock', () => {
+  const EPIC_DIGEST = job('epic-digest.yml') // daily 05:00, on the clock since 19 Nov 07:45 UTC
+  const clockRun = (wf: string, created_at: string): GhRun => ({
+    id: 1, html_url: 'u', event: 'workflow_dispatch', status: 'completed', conclusion: 'success',
+    created_at, display_title: wf, actor: { login: 'nuxt-harness[bot]' }
+  })
+
+  it('weekly, lastDue Mon 16 Nov 06:30 UTC (before its move) → before-clock, never missed', () => {
+    const s = jobStatus(WEEKLY, at('2026-11-19T12:00:00Z'), [], 'Weekly')
+    expect(s.lastDue).toBe('2026-11-16T06:30:00.000Z')
+    expect(s.state).toBe('before-clock')
+  })
+
+  it('daily, lastDue 19 Nov 05:00 UTC (before its move) → before-clock', () => {
+    const s = jobStatus(EPIC_DIGEST, at('2026-11-19T12:00:00Z'), [], 'Epic digest')
+    expect(s.lastDue).toBe('2026-11-19T05:00:00.000Z')
+    expect(s.state).toBe('before-clock')
+  })
+
+  it('the same daily job on 20 Nov 05:30 UTC with no clock run → missed', () => {
+    expect(jobStatus(EPIC_DIGEST, at('2026-11-20T05:30:00Z'), [], 'Epic digest').state).toBe('missed')
+  })
+
+  it('a clock run since the move means an old slot is the clock\'s again → missed', () => {
+    const runs = [clockRun('Weekly', '2026-11-19T08:00:00Z')]
+    expect(jobStatus(WEEKLY, at('2026-11-19T12:00:00Z'), runs, 'Weekly').state).toBe('missed')
+  })
+
+  it('every job carries its about line and a valid since', () => {
+    for (const j of CLOCK_JOBS) {
+      expect(j.about.length).toBeGreaterThan(20)
+      expect(Number.isNaN(Date.parse(j.since))).toBe(false)
+      expect(jobStatus(j, at('2026-11-19T12:00:00Z'), [], 'x').about).toBe(j.about)
+    }
+  })
+})
+
 describe('readError', () => {
   it('a 403 means the token lacks Actions: read', () => {
     expect(readError('GitHub 403 Forbidden')).toBe('the status token needs Actions: read')

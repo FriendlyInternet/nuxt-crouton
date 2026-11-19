@@ -30,10 +30,11 @@ export const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
 export interface ClockRow {
   workflow: string
   schedule: string
+  about: string
   lastDue: string | null
   nextDue: string | null
   lastRun: { id: number, url: string, createdAt: string, status: string | null, conclusion: string | null } | null
-  state: 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'unknown'
+  state: 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'before-clock' | 'unknown'
   error?: string | null
 }
 

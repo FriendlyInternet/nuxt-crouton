@@ -41,13 +41,18 @@ const ui = (tag: string) => defineComponent({
   inheritAttrs: false,
   setup: (_, { slots, attrs }) => () => h(tag, { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant }, [label(attrs), ...Object.values(slots).map(s => s?.())])
 })
-// UTabs prints each tab's label (data-tab) before every slot.
+// UTabs prints each tab's label (data-tab) and its label class (data-tab-label) before every slot.
 const tabsStub = defineComponent({
   inheritAttrs: false,
   setup: (_, { slots, attrs }) => () => h('div', [
-    ...((attrs.items ?? []) as Array<{ label: string }>).map(i => h('span', { 'data-tab': i.label })),
+    ...((attrs.items ?? []) as Array<{ label: string, ui?: { label?: string } }>).map(i => h('span', { 'data-tab': i.label, 'data-tab-label': i.ui?.label ?? '' })),
     ...Object.values(slots).map(s => s?.())
   ])
+})
+// UCollapsible renders its content only while open, like the real one (unmountOnHide is on by default).
+const collapsibleStub = defineComponent({
+  inheritAttrs: false,
+  setup: (_, { slots, attrs }) => () => h('div', { 'data-open': String(!!attrs.open) }, [slots.default?.(), attrs.open ? slots.content?.() : null])
 })
 const replyButtons = defineComponent({ props: ['kind', 'number'], setup: p => () => h('reply', `${p.kind}:${p.number}`) })
 
@@ -81,8 +86,9 @@ const FIXTURES: Record<string, unknown> = {
   },
   '/api/status/clock': {
     data: [
-      { workflow: 'pipeline-metrics.yml', schedule: 'every hour, :20–:30', lastDue: '2026-11-19T10:20:00Z', nextDue: '2026-11-19T11:20:00Z', lastRun: { id: 5, url: 'https://gh/runs/5', createdAt: '2026-11-19T10:22:00Z', status: 'completed', conclusion: 'success' }, state: 'ok' },
-      { workflow: 'housekeeping.yml', schedule: 'daily 06:00 UTC', lastDue: '2026-11-19T06:00:00Z', nextDue: '2026-11-20T06:00:00Z', lastRun: null, state: 'missed' }
+      { workflow: 'pipeline-metrics.yml', schedule: 'every hour, :20–:30', about: 'Copies the run history.', lastDue: '2026-11-19T10:20:00Z', nextDue: '2026-11-19T11:20:00Z', lastRun: { id: 5, url: 'https://gh/runs/5', createdAt: '2026-11-19T10:22:00Z', status: 'completed', conclusion: 'success' }, state: 'ok' },
+      { workflow: 'housekeeping.yml', schedule: 'daily 06:00 UTC', about: 'Emails the weekly drift report.', lastDue: '2026-11-19T06:00:00Z', nextDue: '2026-11-20T06:00:00Z', lastRun: null, state: 'missed' },
+      { workflow: 'weekly.yml', schedule: 'Mondays 06:30 UTC', about: 'Monday chores in order.', lastDue: '2026-11-16T06:30:00Z', nextDue: '2026-11-23T06:30:00Z', lastRun: null, state: 'before-clock' }
     ],
     error: null
   }
@@ -98,6 +104,7 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
   for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput']) app.component(n, ui('div'))
   app.component('UTabs', tabsStub)
+  app.component('UCollapsible', collapsibleStub)
   app.component('ReplyButtons', replyButtons)
   for (const f of readdirSync(dashboardDir).filter(f => f.endsWith('.vue'))) {
     app.component(`Dashboard${basename(f, '.vue')}`, await compile(join(dashboardDir, f)))
@@ -176,5 +183,27 @@ describe('apps dashboard page server render', () => {
     expect(html).toContain('>ran<')
     expect(html).toContain('href="https://gh/runs/5"')
     expect(html).toContain('Thu 19 Nov, 11:22') // last run in Europe/Brussels (UTC+1)
+  })
+
+  it('Clock tab: a job before its move to the clock is a grey "not on the clock yet", after the red rows', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('>not on the clock yet<')
+    expect(html.indexOf('>housekeeping<')).toBeLessThan(html.indexOf('>weekly<'))
+    expect(html).not.toMatch(/data-color="error"[^>]*>not on the clock yet</)
+  })
+
+  it('Clock tab: each row is closed by default — the job description only shows after a tap', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).toContain('data-open="false"')
+    expect(html).not.toContain('data-open="true"')
+    expect(html).not.toContain('Emails the weekly drift report.')
+    expect(html).not.toContain('Copies the run history.')
+  })
+
+  it('tabs: below sm only the selected tab (Apps, at first) shows its label; from sm all do', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('data-tab="Apps" data-tab-label>') // empty class: label always shown
+    for (const t of ['To test', 'Decisions', 'Changelog', 'Clock']) expect(html).toContain(`data-tab="${t}" data-tab-label="hidden sm:inline"`)
   })
 })

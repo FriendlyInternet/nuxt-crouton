@@ -10,7 +10,7 @@ const GRACE_MS = 20 * 60_000
 const MAX_SLOTS = 32 * 24 * 6
 const CLOCK_ACTOR = 'nuxt-harness[bot]'
 
-export type ClockState = 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'unknown'
+export type ClockState = 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'before-clock' | 'unknown'
 
 /** The fields of a GitHub workflow run the Clock tab reads (`/actions/workflows/<wf>/runs`). */
 export interface GhRun {
@@ -29,6 +29,7 @@ export interface LastRun { id: number, url: string, createdAt: string, status: s
 export interface JobStatus {
   workflow: string
   schedule: string
+  about: string
   lastDue: string | null
   nextDue: string | null
   lastRun: LastRun | null
@@ -100,6 +101,7 @@ export function jobStatus(job: ClockJob, now: Date, runs: GhRun[], workflowName:
   const base = {
     workflow: job.workflow,
     schedule: scheduleWords(job),
+    about: job.about,
     lastDue: due?.toISOString() ?? null,
     nextDue: next?.toISOString() ?? null,
     lastRun: clockRuns[0] ? toLastRun(clockRuns[0]) : null
@@ -117,6 +119,9 @@ export function jobStatus(job: ClockJob, now: Date, runs: GhRun[], workflowName:
       : inSlot.conclusion === 'success' || inSlot.conclusion === 'skipped' ? 'ok' : 'failed'
     return { ...base, lastRun: toLastRun(inSlot), state }
   }
+  // A slot from before the job moved to the clock, and no clock run since then: not the clock's miss.
+  const since = Date.parse(job.since)
+  if (from < since && !clockRuns.some(r => Date.parse(r.created_at) >= since)) return { ...base, state: 'before-clock' }
   return { ...base, state: now.getTime() - from > GRACE_MS ? 'missed' : 'due' }
 }
 
@@ -125,6 +130,7 @@ export function unknownStatus(job: ClockJob, now: Date, error: string): JobStatu
   return {
     workflow: job.workflow,
     schedule: scheduleWords(job),
+    about: job.about,
     lastDue: lastDue(job, now)?.toISOString() ?? null,
     nextDue: nextDue(job, now)?.toISOString() ?? null,
     lastRun: null,
