@@ -25,7 +25,7 @@ withDefaults(defineProps<{
 }>(), {
   bookings: () => [],
   loading: false,
-  error: null,
+  error: undefined,
   highlightedBookingId: null,
   selectedDate: null,
   scrollTarget: null,
@@ -50,7 +50,7 @@ const scrollEl = ref<HTMLElement | null>(null)
     <CroutonBookingsList
       :bookings="bookings"
       :loading="loading"
-      :error="(error as Error | null)"
+      :error="(error as Error | null | undefined)"
       :has-active-filters="hasActiveFilters"
       :active-location-filter="activeLocationFilter"
       :selected-date="selectedDate"
