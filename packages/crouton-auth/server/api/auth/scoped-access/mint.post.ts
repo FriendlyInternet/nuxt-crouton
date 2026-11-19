@@ -10,6 +10,7 @@
 import { createScopedToken } from '../../../utils/scoped-access'
 import { getTeamById, getTeamBySlug, getMembership } from '../../../utils/team'
 import { requireServerSession } from '../../../utils/useServerAuth'
+import { can } from '../../../utils/permissions'
 
 export default defineEventHandler(async (event) => {
   const session = await requireServerSession(event)
@@ -43,9 +44,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Minting a delegation token is an administrative act: it stamps a trusted
-  // resource `role` onto the token. Restrict to admins/owners so a plain member
-  // cannot mint a token carrying an elevated role for the resource.
-  if (!['admin', 'owner'].includes(membership.role)) {
+  // resource `role` onto the token. Restrict to `team:manage` (owner/admin by
+  // default) so a plain member cannot mint a token carrying an elevated role.
+  if (!(await can(team.id, session.user.id, 'team:manage', event))) {
     throw createError({ status: 403, statusText: 'Only team admins can mint scoped tokens' })
   }
 

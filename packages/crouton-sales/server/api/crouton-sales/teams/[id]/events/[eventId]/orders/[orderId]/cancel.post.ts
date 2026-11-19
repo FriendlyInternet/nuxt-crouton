@@ -14,12 +14,12 @@
  * (`test/cancel-order.test.ts`); this handler stays a thin auth → delegate →
  * map-to-HTTP, matching the delete endpoint.
  */
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { salesOrders } from '../../../../../../../../../collections/orders/server/database/schema'
 import { actorLabel, cancelOrder } from '../../../../../../../../utils/cancel-order'
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'sales:manage')
   const eventId = getRouterParam(event, 'eventId')
   const orderId = getRouterParam(event, 'orderId')
 

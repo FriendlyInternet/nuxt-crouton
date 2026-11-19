@@ -1,6 +1,6 @@
 import { useNitroApp } from 'nitropack/runtime'
 import { requireServerSession } from '@fyit/crouton-auth/server/utils/useServerAuth'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   // Auth check - require authenticated user
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Ownership: own user prefix, or the active team's prefix as team admin
+  // Ownership: own user prefix, or the active team's prefix with `collections:manage`
   let decoded = pathname
   try { decoded = decodeURIComponent(pathname) } catch { /* keep raw */ }
   if (decoded.split('/').some(seg => seg === '..' || seg === '.') || pathname.includes('..')) {
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   if (decoded.startsWith(`users/${userId}/`)) {
     // own file
   } else if (activeTeamId && decoded.startsWith(`teams/${activeTeamId}/`)) {
-    await requireTeamAdmin(event)
+    await requireCan(event, 'collections:manage')
   } else {
     throw createError({ status: 403, statusText: 'Forbidden' })
   }

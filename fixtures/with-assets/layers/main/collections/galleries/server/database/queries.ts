@@ -133,16 +133,16 @@ export async function updateMainGallery(
   teamId: string,
   userId: string,
   updates: Partial<MainGallery>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainGalleries.id, recordId),
     eq(tables.mainGalleries.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainGalleries.owner, userId))
   }
 
@@ -169,16 +169,16 @@ export async function deleteMainGallery(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainGalleries.id, recordId),
     eq(tables.mainGalleries.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainGalleries.owner, userId))
   }
 

@@ -3,21 +3,23 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 // #3135: run the REAL route handlers over an in-memory SQLite. Only the auth helpers
-// (switchable role) and the Nitro globals are stand-ins. requireTeamAdmin mirrors the
-// real one: 403 unless admin/owner.
+// (switchable role) and the Nitro globals are stand-ins. requireCan / can (#4108) mirror
+// the real ones with no site config: owner/admin may every action, member none.
 vi.mock('~~/server/db/schema', async () => {
   const { sqliteTable, text } = await import('drizzle-orm/sqlite-core')
   return { user: sqliteTable('user', { id: text('id'), name: text('name'), email: text('email'), image: text('image') }) }
 })
-const h = vi.hoisted(() => ({ role: 'member', patch: null as any }))
+const h = vi.hoisted(() => ({ role: 'member', patch: null as any, asked: [] as string[] }))
 const ctx = () => ({ team: { id: 't1', metadata: {} }, user: { id: 'u1' }, membership: { role: h.role } })
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ctx(),
-  requireTeamAdmin: async () => {
-    if (h.role !== 'admin' && h.role !== 'owner') throw Object.assign(new Error('Forbidden'), { status: 403 })
-    return ctx()
-  },
 }))
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthStub } = await import('./stubs/team-auth')
+  const stub = teamAuthStub(() => ctx())
+  h.asked = stub.asked
+  return stub.module
+})
 vi.mock('../server/utils/booking-capacity', async orig => ({ ...(await orig() as object), patchBookingGuarded: (...a: any[]) => h.patch(...a) }))
 vi.mock('../server/utils/booking-emails', () => ({ isBookingEmailEnabled: () => true, resolveTranslatedField: () => '', resolveSlotLabels: () => '' }))
 vi.mock('../server/utils/email-service', () => ({
@@ -55,6 +57,7 @@ beforeAll(async () => {
 })
 beforeEach(() => {
   h.role = 'member'
+  h.asked.length = 0
   params = { bookingId: 'theirs', emailtemplateId: 'x', settingId: 'x', locationId: 'x' }
   h.patch = vi.fn(async () => ({ id: 'x' }))
 })
@@ -64,7 +67,7 @@ const A = '../collections'
 const S = '../server/api/crouton-bookings/teams/[id]'
 const status = (p: Promise<any>) => p.then(() => 200, (e: any) => e.status)
 
-// [label, module, body]
+// [label, module, body] — every one asks bookings:manage, except bookings-bookings POST (bookings:create)
 const adminOnly: [string, string, any][] = [
   ['admin-bookings GET', `${S}/admin-bookings.get`, undefined],
   ['emaillogs GET', `${A}/emaillogs/server/api/teams/[id]/bookings-emaillogs/index.get`, undefined],
@@ -85,6 +88,7 @@ describe('admin-only routes (#3135)', () => {
     it(`${label}: member → 403`, async () => {
       body = {}
       expect(await status((await route(mod))({}))).toBe(403)
+      expect(h.asked[0]).toBe(label === 'bookings-bookings POST' ? 'bookings:create' : 'bookings:manage')
     })
   }
   it('admin-bookings GET: admin → 200', async () => {
@@ -110,6 +114,7 @@ describe('bookings-bookings list', () => {
   it('admin sees all rows', async () => {
     h.role = 'admin'
     expect((await list()).map((r: any) => r.id).sort()).toEqual(['mine', 'theirs'])
+    expect(h.asked).toEqual(['bookings:manage'])
   })
 })
 
@@ -129,6 +134,7 @@ describe('PATCH bookings/[bookingId]', () => {
     h.role = 'admin'
     expect(await status(patch())).toBe(200)
     expect(h.patch.mock.calls[0][1].ownerId).toBeUndefined()
+    expect(h.asked).toEqual(['bookings:manage'])
   })
 })
 

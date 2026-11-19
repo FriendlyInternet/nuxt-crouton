@@ -1,8 +1,8 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The requireTeamAdmin utility handles team resolution and auth
+// The requireCan utility handles team resolution and auth
 import { z } from 'zod'
 import { updateBookingsLocation, getBookingsLocationsByIds } from '../../../../database/queries'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 // Hand-added body validation (#3377). `locale` is a transient merge hint, not a column.
 const bodySchema = z.object({
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   if (!locationId) {
     throw createError({ status: 400, statusText: 'Missing location ID' })
   }
-  const { team, user, membership } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
@@ -75,5 +75,5 @@ export default defineEventHandler(async (event) => {
     quantity: body.quantity,
     maxBookingsPerMonth: body.maxBookingsPerMonth,
     translations: body.translations
-  } as Parameters<typeof updateBookingsLocation>[3], { role: membership.role })
+  } as Parameters<typeof updateBookingsLocation>[3], { seesAll: await can(team.id, user.id, 'bookings:manage', event) })
 })

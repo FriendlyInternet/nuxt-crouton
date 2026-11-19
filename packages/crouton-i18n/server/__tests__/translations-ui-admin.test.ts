@@ -6,6 +6,11 @@ vi.mock('@fyit/crouton-auth/server/utils/useServerAuth', () => ({
   requireServerSession: async () => ({ user: fixture.user, session: { activeOrganizationId: null } }),
   useServerAuth: () => ({})
 }))
+// requireCan (#4108): real team check, action answered like can() with no site config
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthModule } = await import('./helpers/teamFixture')
+  return teamAuthModule()
+})
 
 installTeamFixture()
 const writes = vi.fn(async () => ({ id: 't1' }))
@@ -44,9 +49,11 @@ for (const [method, path] of Object.entries(routes)) {
     })
     it('admin -> writes', async () => {
       fixture.roles = { 'team-a': 'admin' }
+      fixture.asked.length = 0
       const h = (await import(/* @vite-ignore */ path)).default as any
       await h(ev())
       expect(writes).toHaveBeenCalled()
+      expect(fixture.asked).toEqual(['translations:manage'])
     })
   })
 }

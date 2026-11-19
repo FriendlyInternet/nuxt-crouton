@@ -168,16 +168,16 @@ export async function updateSalesOrder(
   teamId: string,
   userId: string,
   updates: Partial<SalesOrder>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesOrders.id, recordId),
     eq(tables.salesOrders.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesOrders.owner, userId))
   }
 
@@ -204,16 +204,16 @@ export async function deleteSalesOrder(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesOrders.id, recordId),
     eq(tables.salesOrders.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesOrders.owner, userId))
   }
 

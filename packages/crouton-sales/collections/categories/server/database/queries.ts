@@ -130,16 +130,16 @@ export async function updateSalesCategory(
   teamId: string,
   userId: string,
   updates: Partial<SalesCategory>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesCategories.id, recordId),
     eq(tables.salesCategories.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesCategories.owner, userId))
   }
 
@@ -166,16 +166,16 @@ export async function deleteSalesCategory(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesCategories.id, recordId),
     eq(tables.salesCategories.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesCategories.owner, userId))
   }
 

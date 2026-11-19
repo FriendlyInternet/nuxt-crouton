@@ -142,16 +142,16 @@ export async function updateSalesKdsbump(
   teamId: string,
   userId: string,
   updates: Partial<SalesKdsbump>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesKdsbumps.id, recordId),
     eq(tables.salesKdsbumps.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesKdsbumps.owner, userId))
   }
 
@@ -178,16 +178,16 @@ export async function deleteSalesKdsbump(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesKdsbumps.id, recordId),
     eq(tables.salesKdsbumps.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesKdsbumps.owner, userId))
   }
 
