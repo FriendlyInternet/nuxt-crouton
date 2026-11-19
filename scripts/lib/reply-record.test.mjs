@@ -85,7 +85,15 @@ test('#4145 openRecord: null when a newer verdict has no record, with plan:appro
   assert.equal(openRecord(), null)
 })
 
-const owner = (body) => ({ body, authorAssociation: 'OWNER', userType: 'User' })
+const owner = (body) => ({ body, authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp' })
+
+// covers: T5
+test('#4168 readReply: the owner is matched by login, not role', () => {
+  const want = { form: 'ok: <reason>', starts: 'approve-plan' }
+  assert.deepEqual(readReply(REJECTED_RECORD, { body: 'ok: reason', authorAssociation: 'COLLABORATOR', userType: 'User', userLogin: 'pmcp' }), want)
+  assert.notDeepEqual(readReply(REJECTED_RECORD, { body: 'ok: reason', authorAssociation: 'OWNER', userType: 'User', userLogin: 'someone-else' }), want)
+  assert.deepEqual(readReply(REJECTED_RECORD, { body: 'ok: reason', userType: 'User', userLogin: 'alice', owner: 'alice' }), want)
+})
 
 // covers: T1
 test('#4145 readReply on a plan-question record', () => {
