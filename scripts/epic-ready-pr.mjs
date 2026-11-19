@@ -129,16 +129,17 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
   const existing = await github.paginate(github.rest.pulls.list,
     { owner, repo, state: 'open', head: `${owner}:${epicBranch}`, base: 'main', per_page: 100 })
 
-  // 3) commits the epic branch is ahead of main
-  let aheadCount = 0
+  // 3) files that differ between the epic branch and main (what a PR would show). Not `ahead_by`:
+  //    the bot's "merge main into epic" commits are ahead with an empty diff.
+  let changedFiles = 0
   try {
     const cmp = (await github.rest.repos.compareCommitsWithBasehead(
       { owner, repo, basehead: `main...${epicBranch}` })).data
-    aheadCount = cmp.ahead_by || 0
+    changedFiles = (cmp.files || []).length
   } catch (e) { core.warning(`compare main...${epicBranch}: ${e.message}`); return }
 
   const pendingSteps = stepsPending({ labels: (epic.labels || []).map(l => (typeof l === 'string' ? l : l.name)), comments: epicComments, subIssues })
-  const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, aheadCount, pendingSteps })
+  const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, changedFiles, pendingSteps })
   core.info(`epic #${epicNumber} (${epicBranch}): ${open ? 'OPEN' : 'skip'} — ${reason}`)
   if (!open) return
 
