@@ -7,8 +7,7 @@ name: Pipeline metrics (collect + roll up run history)
 # Workflow-change: new hourly metrics collector (owner merges).
 
 on:
-  schedule:
-    - cron: '23 * * * *'
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_dispatch:
     inputs:
       max_calls:

@@ -2,7 +2,7 @@
 // URL builder. Run: node --test scripts/app-preview.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveApp, readLanding, findDevUrl, waitFor } from './app-preview.mjs'
+import { resolveApp, readLanding, findDevUrl, waitFor, seedCommand } from './app-preview.mjs'
 import { buildLoginUrl } from './seed-review-login.mjs'
 
 test('resolveApp finds an app in either workspace, apps/ first', () => {
@@ -17,6 +17,15 @@ test('readLanding reads reviewLogin.landing, and is silent when absent or unread
   assert.equal(readLanding('apps/kassa', withLanding), '/admin/test1/x')
   assert.equal(readLanding('apps/velo', () => JSON.stringify({ stagingUrl: 'x' })), '')
   assert.equal(readLanding('apps/gone', () => { throw new Error('ENOENT') }), '')
+})
+
+test('#4141 seedCommand: test1 keeps db:seed; another team seeds it through crouton-seed --team', () => {
+  assert.deepEqual(seedCommand('kassa', 'test1', { 'db:seed': 'pnpm db:seed:local' }), ['--filter', 'kassa', 'db:seed'])
+  assert.deepEqual(seedCommand('kassa', 'kdm', { 'db:seed': 'pnpm db:seed:local', 'db:seed:local': 'crouton-seed --db kassa-db' }),
+    ['--filter', 'kassa', 'exec', 'crouton-seed', '--db', 'kassa-db', '--team', 'kdm'])
+  assert.deepEqual(seedCommand('b', 'kdm', { 'db:seed': 'crouton-seed --db b-db' }),
+    ['--filter', 'b', 'exec', 'crouton-seed', '--db', 'b-db', '--team', 'kdm'])
+  assert.deepEqual(seedCommand('x', 'kdm', { 'db:seed': 'node seed.mjs' }), ['--filter', 'x', 'db:seed', '--team', 'kdm'])
 })
 
 test('findDevUrl picks the localhost URL out of a Nuxt boot chunk', () => {

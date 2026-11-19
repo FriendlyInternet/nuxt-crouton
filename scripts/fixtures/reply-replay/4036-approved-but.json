@@ -1,0 +1,43 @@
+{
+  "issue": 4036,
+  "source": "https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6947793038",
+  "labels": [
+    "pkg:crouton-events",
+    "app:velo",
+    "type:feat",
+    "work-this",
+    "status:blocked"
+  ],
+  "comments": [
+    {
+      "body": "<!-- work-run:4036 -->\n<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI · ubuntu-latest) · _single-use worker_\n\n🏗️ **Working this now** — follow the run live: https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44177079169\n\nIts PR + preview land here when it finishes.",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    },
+    {
+      "body": "<!-- flow-checklist:4036 -->\n> 🤖 **pi.dev harness** · ticket flow · _edited in place_\n\n**Latest reviews**\n- Plan review — go (round 1) · https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6958488839\n\n- [x] Routed — build (names a shared-package path (packages/crouton-events)) · https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44177079169\n- [x] Plan + mockup posted — https://github.com/FriendlyInternet/nuxt-crouton/issues/4036#issuecomment-6958413018\n- [ ] Owner ok\n- [x] Build PR opened — https://github.com/FriendlyInternet/nuxt-crouton/pull/4083\n- [ ] Build review\n- [ ] Merged",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    },
+    {
+      "body": "<!-- pipeline-plan:v1 -->\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_\n\n### Reproduced\nyes — on the PR #4018 preview (https://velo-pr4018.cloudflare-e53.workers.dev/admin/test1/activity), signed in as the review login with headless Chrome (Playwright), 2026-11-17 11:30 UTC. The page body reads, word for word: `Activity Log · 1 events · +0 · ~1 · -0 · Export · Collection · Operation · User · All Time · Today · Last 7 Days · Last 30 Days · Last 90 Days · Refresh · TODAY · 11:18:29 · UPDATE · pagesPages · #seed:pag... · Review Tester · 5 fields changed · Show changes · Showing 1 - 1 of 1 · Previous · Next`. That is every complaint in the ticket: English text on a French (`<html lang=\"fr\">`) admin, the raw table key plus a cut-off id, the hand-built list, and the counters.\nOn staging (velo.pmcp.dev, i.e. main) the same page still shows **only the title bar**: `staging-get.mjs velo /api/teams/<team>/crouton-events?pageSize=5` → HTTP 200 · 0 rows, and the rendered panel holds just \"Activité\". The blank-page fix (#4018) is **still open, waiting for the owner's ok**, not merged. The ticket's \"works again\" is true only on that preview.\nFound while reading the code: **the filters do nothing today.** `CroutonActivityLog` passes a frozen copy of its query (`useCroutonEvents(queryOptions.value)`), and `useCroutonEvents` builds its query once. Changing collection, person or period just re-fetches the same unfiltered list. A redesign that leaves this alone would ship good-looking filters that still do",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    },
+    {
+      "body": "<!-- plan-review:v1 --><!-- plan-review-verdict:needs-owner -->\n\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review on `claude-opus-5-5`_\n\n🔀 **Needs your call** — Do you approve the mockup in the plan as the new Activité design? That includes the plural label \"Pages · Accueil\", \"Modification par X\" instead of \"modifiée par X\", and no counters. Recommendation: yes. These choices read correctly for every collection in French and are easy to change later.\n\nyes/no\n**Needs:** answer\n\n<details><summary>Review checklist</summary>\n\n- ✅ **1. Reproduced? (observed, not reasoned)** — The planner opened the page in a real browser on the PR #4018 preview (Playwright is installed in run 44073278085, log line 359). The text they quote matches the code exactly: the raw table name and an id cut to 8 characters at `CroutonActivityTimelineItem.vue:90-97`, \"fields changed\" at `:44`, and \"Showing … of …\" at `CroutonActivityLog.vue:220`. I could not reopen that preview myself because it returns 404 now that #4018 has merged.\n- ✅ **1b. Every assumption has a reason and a working evidence link** — The commit the plan links to, 34ac0309, exists (it is the merge of #4032). The linked lines say what the plan claims: AdminSidebar `tLabel` at L55, `adminNav.label || displayName` at useCroutonCollectionsNav L54, pages `adminNav.label` at app.config L7, \"Pages\" at fr.json L1151-1153, and `@nuxt/ui ^4.11.3` at pnpm-workspace.yaml:29. One note: the plan says #4018 is still open, but `gh pr view 4018` shows it merged at 11:30:07Z (c00d7474a is on main). This d",
+      "userType": "Bot",
+      "authorAssociation": "CONTRIBUTOR"
+    }
+  ],
+  "reply": {
+    "body": "approved, but keep the column",
+    "authorAssociation": "COLLABORATOR",
+    "userType": "User",
+    "userLogin": "pmcp"
+  },
+  "want": "comment",
+  "today": "comment",
+  "note": "Synthetic (copies the #4036 thread before the first ok): an approval with a condition is not a bare ok, so it is passed on as feedback (since PR #4086).",
+  "synthetic": true
+}
