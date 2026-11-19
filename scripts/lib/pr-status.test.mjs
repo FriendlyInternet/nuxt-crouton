@@ -122,3 +122,14 @@ test('sign-off bodies carry their one-shot markers', () => {
   assert.ok(signoffPingBody({ epicNumber: 3, owner: 'o', title: 'T' }).startsWith('<!-- signoff-ping:3 -->'))
   assert.ok(withheldBody({ epicNumber: 3, prNumber: 8, title: 'T' }).startsWith('<!-- signoff-withheld-nocapture:3 -->'))
 })
+
+// 7 of 16 red notes on 18–19 Nov said only "<check>: Process completed with exit code 1." under
+// "what failed" (PRs #4148, #4149, #4150, #4152, #4203, #4144). That line is in every failed job
+// and names nothing; the log-tail block below it carries the real cause.
+test('failureExcerpts: the runner\'s "exit code" line alone is not "what failed"', () => {
+  const exit = { annotation_level: 'failure', message: 'Process completed with exit code 1.' }
+  assert.equal(failureExcerpts([{ name: 'Node checks', annotations: [exit] }]), '')
+  const out = failureExcerpts([{ name: 'frontend-review', annotations: [exit, { annotation_level: 'failure', message: 'frontend-review did not run — failing closed.' }] }])
+  assert.ok(out.includes('frontend-review: frontend-review did not run — failing closed.'))
+  assert.ok(!out.includes('exit code 1'))
+})

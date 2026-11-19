@@ -306,6 +306,16 @@ export function deleteReviewerSessionsSql(email) {
     `(SELECT "id" FROM "user" WHERE lower("email") = ${sqlStr(String(email).toLowerCase())});`
 }
 
+/**
+ * #4141: SQL that makes the seeded membership `memberId` the user's ONLY membership.
+ * Matches on the member id, not the org id, so a same-team row a `defaultTeamSlug`
+ * sign-up created (random id, same seeded org) goes too — otherwise the account
+ * would hold two memberships in one team. Other teams' rows go exactly as before.
+ */
+export function pruneOtherMembershipsSql(userId, memberId) {
+  return `DELETE FROM "member" WHERE "userId"=${sqlStr(userId)} AND "id"<>${sqlStr(memberId)};`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -576,12 +586,8 @@ async function main() {
       // also mints a personal workspace that wins as trySetDefaultOrg's "first org",
       // leaving the reviewer in an empty team while the seeded data sits in test1 (#1185).
       // Scoped to this throwaway review user; the orphaned personal org is harmless.
-      const pruneSql =
-        `DELETE FROM "member" WHERE "userId"=${sqlStr(userId)} AND "organizationId"<>${sqlStr(orgId)};`
-      execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${pruneSql}`, '--yes'], {
-        stdio: 'inherit',
-        env: process.env
-      })
+      // Pruned by member id (#4141), through execSeedSql so the local --sqlite path works too.
+      execSeedSql(args, pruneOtherMembershipsSql(userId, memberId))
       info(`pruned ${email}'s other memberships — seeded team is now sole/active.`)
       const { res: sa } = await post('/api/auth/organization/set-active', { organizationId: orgId })
       if (sa.ok) {

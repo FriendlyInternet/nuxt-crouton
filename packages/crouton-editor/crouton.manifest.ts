@@ -19,11 +19,11 @@ export default defineCroutonManifest({
   provides: {
     composables: ['useEditorVariables'],
     components: [
-      { name: 'CroutonEditorSimple', description: 'Full-featured TipTap editor wrapper with image upload and AI translation support', props: ['modelValue', 'placeholder', 'contentType', 'editable', 'enableImageUpload', 'enableTranslationAI'] },
-      { name: 'CroutonEditorBlocks', description: 'Block-based editor with NodeView blocks and property panel slot', props: ['modelValue', 'placeholder', 'contentType', 'editable', 'extensions', 'showToolbar'] },
-      { name: 'CroutonEditorVariables', description: 'Variable insertion menu triggered by {{ — for email templates and dynamic content', props: ['editor', 'variables', 'groups', 'char'] },
-      { name: 'CroutonEditorPreview', description: 'Live preview with variable interpolation', props: ['content', 'title', 'values', 'variables', 'mode', 'expandable'] },
-      { name: 'CroutonEditorWithPreview', description: 'Editor and preview side-by-side with responsive layout (tabs on mobile)', props: ['modelValue', 'variables', 'previewValues', 'previewTitle', 'contentType', 'editable', 'showVariableChips'] },
+      { name: 'CroutonEditorSimple', description: 'Full-featured TipTap editor wrapper with image upload and AI translation support' },
+      { name: 'CroutonEditorBlocks', description: 'Block-based editor with NodeView blocks and property panel slot' },
+      { name: 'CroutonEditorVariables', description: 'Variable insertion menu triggered by {{ — for email templates and dynamic content' },
+      { name: 'CroutonEditorPreview', description: 'Live preview with variable interpolation' },
+      { name: 'CroutonEditorWithPreview', description: 'Editor and preview side-by-side with responsive layout (tabs on mobile)' },
     ],
   },
 

@@ -144,6 +144,13 @@ test('a placeholder branch value reads as absent', () => {
   assert.equal(parsePipelineBlock('<!-- pipeline: epic_branch=epic/12-a.b_c -->').epic_branch, 'epic/12-a.b_c')
 })
 
+test('step=<k> parses and formats only when present (#3846 rolling tickets)', () => {
+  assert.equal(parsePipelineBlock('<!-- pipeline: epic=9 depth=1 step=2 dispatch=work-this -->').step, 2)
+  assert.equal('step' in parsePipelineBlock('<!-- pipeline: epic=9 depth=1 -->'), false)
+  assert.equal(formatPipelineBlock({ epic: 9, depth: 1, step: 0 }), '<!-- pipeline: epic=9 depth=1 step=0 -->')
+  assert.equal(formatPipelineBlock({ epic: 9, depth: 1 }), '<!-- pipeline: epic=9 depth=1 -->')
+})
+
 test('base=main parses and formats (#3504)', () => {
   assert.equal(parsePipelineBlock('<!-- pipeline: epic=1 base=main -->').base, 'main')
   assert.equal(formatPipelineBlock({ epic: 1, base: 'main' }), '<!-- pipeline: epic=1 base=main -->')

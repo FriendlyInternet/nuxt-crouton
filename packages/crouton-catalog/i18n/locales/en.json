@@ -1,0 +1,16 @@
+{
+  "products": {
+    "title": "Products",
+    "form": {
+      "translations": "Title and description",
+      "active": "Active"
+    }
+  },
+  "catalog": {
+    "collections": {
+      "products": {
+        "title": "Products"
+      }
+    }
+  }
+}

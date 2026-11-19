@@ -1,8 +1,9 @@
 // #3141 — turning on e-mail verification would lock out every existing password user
 // (the column defaults to false and sign-up never sent a verification e-mail). Each
 // app/POC/fixture migration history therefore carries a data-only backfill that marks
-// existing users verified. This test proves (1) every folder has exactly one, as its
-// newest migration, and (2) the real SQL, run on a real sqlite DB, verifies everyone.
+// existing users verified. This test proves (1) every folder has exactly one, journaled
+// with a chained data-only snapshot (later schema migrations may follow it), and (2) the
+// real SQL, run on a real sqlite DB, verifies everyone.
 //
 // Run: node --test scripts/verify-existing-users-migration.test.mjs
 import { test } from 'node:test'
@@ -20,7 +21,7 @@ const FOLDERS = [
   'pocs/alexdeforce', 'pocs/booking-demo', 'pocs/crate', 'pocs/crouton-builder', 'pocs/gallery',
   'pocs/kvr', 'pocs/notes', 'pocs/pins', 'pocs/sintlukas', 'pocs/snippets', 'pocs/status',
   'fixtures/minimal', 'fixtures/with-assets', 'fixtures/with-bookings', 'fixtures/with-collab',
-  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-pages', 'fixtures/with-sales'
+  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-pages', 'fixtures/with-relations', 'fixtures/with-sales'
 ]
 
 const migrationsDir = folder => path.join(ROOT, folder, 'server/db/migrations/sqlite')
@@ -42,13 +43,22 @@ test('the list covers every sqlite migration folder in the repo', () => {
 })
 
 for (const folder of FOLDERS) {
-  test(`${folder}: the backfill is the newest migration, with a chained snapshot`, () => {
+  test(`${folder}: the backfill is a journal entry, with a chained snapshot`, () => {
     const file = backfillFile(folder)
     const dir = migrationsDir(folder)
     const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8'))
-    const last = journal.entries.at(-1)
-    assert.equal(last.tag, file.replace(/\.sql$/, ''), `${folder}: backfill must be the last journal entry`)
-    assert.equal(last.idx, journal.entries.at(-2).idx + 1)
+    // The backfill was the newest migration when it landed (#3141); schema migrations added
+    // later (e.g. pocs/status 0005_thin_the_spike #3776, kassa/velo #3956) may follow it.
+    // What must hold: it is a journal entry, directly after its predecessor, and data-only.
+    const pos = journal.entries.findIndex(e => e.tag === file.replace(/\.sql$/, ''))
+    assert.ok(pos !== -1, `${folder}: backfill must be a journal entry`)
+    assert.ok(pos > 0, `${folder}: backfill must be in the journal, after the schema migrations`)
+    const last = journal.entries[pos]
+    assert.ok(last.idx > 0)
+    assert.equal(last.idx, journal.entries[pos - 1].idx + 1)
+    if (pos < journal.entries.length - 1) {
+      assert.equal(journal.entries[pos + 1].idx, last.idx + 1, `${folder}: journal idx must stay contiguous`)
+    }
 
     const nnnn = String(last.idx).padStart(4, '0')
     const prevNnnn = String(last.idx - 1).padStart(4, '0')

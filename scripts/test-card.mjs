@@ -6,8 +6,9 @@
 // The reply side (`ok` / `not ok: …`) is parsed by scripts/approval.mjs (#2540).
 
 import { fileMatchesAny } from './deploy-detect.mjs'
+import { closesNumbers } from './epic-ready.mjs'
 
-/** Hidden marker that makes the card idempotent — one card per epic, ever. */
+/** Hidden marker that makes the card idempotent — one card per epic, plus one re-test card per landed `not ok` fix (#4039). */
 export const CARD_MARKER = '<!-- test-card -->'
 
 /**
@@ -17,13 +18,24 @@ export const CARD_MARKER = '<!-- test-card -->'
  *   labels:     string[]      the epic's labels
  *   comments:   [{ body }]    the epic's comments (looked at for the marker)
  *   deployed:   boolean       the epic's merged result is contained in a successful staging deploy
+ *   fixDeployed: boolean      (status:failed only) the latest `not ok` fix's merge commit is in the
+ *                             deployed staging sha (#4039)
+ *   fixClosedAt: string|null  (status:failed only) ISO close time of that fix issue; a card newer
+ *                             than it means the re-test card was already posted
  */
-export function decideTestCard({ subIssues = [], labels = [], comments = [], deployed = false } = {}) {
-  if (comments.some(c => (c.body || '').includes(CARD_MARKER))) return { post: false, reason: 'card already posted' }
+export function decideTestCard({ subIssues = [], labels = [], comments = [], deployed = false, fixDeployed = false, fixClosedAt = null } = {}) {
   if (labels.includes('status:to-test')) return { post: false, reason: 'already status:to-test' }
-  if (labels.includes('status:verified') || labels.includes('status:failed')) {
-    return { post: false, reason: 'already answered' }
+  if (labels.includes('status:failed')) {
+    const openKids = subIssues.filter(s => s.state !== 'closed').length
+    if (openKids > 0) return { post: false, reason: `not ok fix still open — ${openKids} child issue(s) open` }
+    if (fixClosedAt && comments.some(c => (c.body || '').includes(CARD_MARKER) && Date.parse(c.created_at) > Date.parse(fixClosedAt))) {
+      return { post: false, reason: 'fresh card already posted for this fix' }
+    }
+    if (!fixDeployed) return { post: false, reason: 'not ok fix not on staging yet' }
+    return { post: true, reason: 'fix landed after a not ok — fresh card', retest: true }
   }
+  if (comments.some(c => (c.body || '').includes(CARD_MARKER))) return { post: false, reason: 'card already posted' }
+  if (labels.includes('status:verified')) return { post: false, reason: 'already answered' }
   if (subIssues.length === 0) return { post: false, reason: 'epic has no sub-issues' }
   const open = subIssues.filter(s => s.state !== 'closed').length
   if (open > 0) return { post: false, reason: `${open} child issue(s) still open` }
@@ -109,8 +121,93 @@ export function decideAppNotice({ kind, comments = [] } = {}) {
 
 export const NOT_CHECKED_LINE = 'Saving was not checked automatically for this app.'
 
+// ── What the pipeline already checked (#3882) ─────────────────────────────────────
+export const EVIDENCE_HEADING = '**Already checked by the pipeline**'
+export const EVIDENCE_MAX = 8
+/** Whose ✅ comments count as a closing note. `github-actions[bot]` posts "✅ Resumed from your reply" — left out. */
+export const NOTE_AUTHORS = ['pmcp', 'nuxt-harness[bot]', 'nuxt-harness']
+const NOTE_RE = /^\s*(?:#{1,6}\s+)?✅\s*/
+const BOILERPLATE_RE = /^Built to the plan\b/i
+const PLAN_REVIEW_MARKER = '<!-- plan-review:v1 -->'
+
+/** Wrap every `@handle` not already inside a code span in backticks, so a note can never ping anyone. */
+export function defangMentions(s = '') {
+  return String(s).replace(/(`[^`]*`)|(?<!\w)@([A-Za-z0-9-]+(?:\[bot\])?)/g, (m, code, handle) => code || `\`@${handle}\``)
+}
+
+/** Escape the Markdown link-label characters (`\`, `[`, `]`) so a title can't break `[title](url)`. */
+export function escapeLinkLabel(s = '') {
+  return String(s).replace(/[\\[\]]/g, '\\$&')
+}
+
+/** The first real line of a comment (skips blanks, `<!--` markers, `>` quotes) if it is a ✅ note, else ''. */
+export function noteLine(body = '') {
+  const line = String(body || '').split('\n').find(l => l.trim() && !/^\s*<!--/.test(l) && !/^\s*>/.test(l)) || ''
+  return NOTE_RE.test(line) ? line : ''
+}
+
+/**
+ * Strip heading/✅/bold, cut to 140 chars, then defang mentions. Anything with `password=` is
+ * dropped. The cut comes BEFORE the defang (and never leaves an unclosed code span), so a
+ * handle near the cut can't lose its closing backtick and ping — and a second pass is safe.
+ */
+export function cleanNote(line = '') {
+  const s = String(line || '').replace(/^\s*#{1,6}\s+/, '').replace(/^\s*✅\s*/, '').replace(/\*\*/g, '').trim()
+  if (/password=/i.test(s)) return ''
+  let cut = s.slice(0, 140)
+  if ((cut.match(/`/g) || []).length % 2) cut = cut.slice(0, cut.lastIndexOf('`'))
+  return defangMentions(cut.trimEnd())
+}
+
+/**
+ * A child's closing note. PURE. comments: [{ login, body, created_at }]. The newest ✅ note by
+ * the owner/harness (plan-review comments skipped); a "Built to the plan" note only when nothing
+ * better exists.
+ */
+export function closingNote(comments = []) {
+  const notes = comments
+    .filter(c => NOTE_AUTHORS.includes(c.login) && !String(c.body || '').includes(PLAN_REVIEW_MARKER))
+    .slice()
+    .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0))
+    .map(c => cleanNote(noteLine(c.body)))
+    .filter(Boolean)
+  return notes.find(n => !BOILERPLATE_RE.test(n)) || notes[0] || ''
+}
+
+/**
+ * One entry per completed child: its merged sub-PR (or the child itself) + its closing note. PURE.
+ *   subIssues: [{ number, title, html_url, state, state_reason }]
+ *   mergedPrs: [{ body, html_url, merged_at }]   commentsByIssue: { [n]: [{ login, body, created_at }] }
+ */
+export function buildEvidence({ subIssues = [], mergedPrs = [], commentsByIssue = {} } = {}) {
+  const prFor = new Map()
+  for (const pr of mergedPrs) {
+    for (const n of closesNumbers(pr.body)) {
+      const prev = prFor.get(n)
+      if (!prev || Date.parse(pr.merged_at || 0) > Date.parse(prev.merged_at || 0)) prFor.set(n, pr)
+    }
+  }
+  return subIssues
+    .filter(s => s.state === 'closed' && s.state_reason === 'completed')
+    .map(child => ({
+      title: child.title,
+      url: prFor.get(child.number)?.html_url || child.html_url,
+      note: closingNote(commentsByIssue[child.number] || [])
+    }))
+}
+
+/** Render evidence lines (max 8, then "and N more"); notes re-guarded so a caller can't ping or leak. */
+export function evidenceLines(evidence = [], fmt) {
+  const lines = evidence.slice(0, EVIDENCE_MAX).map(e => {
+    const note = e.note ? cleanNote(e.note) : ''
+    return fmt({ title: defangMentions(e.title || ''), url: e.url, note })
+  })
+  if (evidence.length > EVIDENCE_MAX) lines.push(`- and ${evidence.length - EVIDENCE_MAX} more`)
+  return lines
+}
+
 /** Build the card comment. No password is ever included — only the account to log in as. */
-export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [], crudChecked } = {}) {
+export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [], crudChecked, fixIssue, evidence = [] } = {}) {
   const list = checks.length ? checks : [app ? `Open the app and try what "${title}" changed` : `Read the epic and check "${title}" did what it says`]
   const where = !app
     ? [NO_APP_LINE]
@@ -124,9 +221,13 @@ export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', r
   return [
     CARD_MARKER,
     `## 🧪 Test card — ${title || `epic #${epicNumber}`}`,
+    ...(fixIssue ? ['', `Re-test after the fix in #${fixIssue}.`] : []),
     '',
     ...where,
     '',
+    ...(evidence.length
+      ? [EVIDENCE_HEADING, '', ...evidenceLines(evidence, e => `- [${escapeLinkLabel(e.title)}](${e.url})${e.note ? ` — ${e.note}` : ''}`), '']
+      : []),
     ...list.map(c => `- Check: ${c}`),
     ...(app && crudChecked === false ? ['', NOT_CHECKED_LINE] : []),
     '',
@@ -144,7 +245,7 @@ export function extractSummary(body = '', max = 400) {
  * The one mail per epic that is ready to test (#2518): app name first, what changed, numbered
  * steps, the one-click sign-in link (email-only, #2358). Plain text, no emojis. PURE.
  */
-export function buildTestMail({ epicNumber, title = '', app = '', staging = true, summary = '', checks = [], loginUrl = '', epicUrl = '' } = {}) {
+export function buildTestMail({ epicNumber, title = '', app = '', staging = true, summary = '', checks = [], loginUrl = '', epicUrl = '', evidence = [] } = {}) {
   const fallback = app ? `Try what "${title}" changed.` : `Check "${title}" on the epic.`
   const steps = [...(app ? ['Open the link below and sign in.'] : []), ...(checks.length ? checks : [fallback])]
   const subject = `${app ? `[${app}] ` : ''}Test: ${title || `epic #${epicNumber}`}`
@@ -154,6 +255,9 @@ export function buildTestMail({ epicNumber, title = '', app = '', staging = true
     'What changed:',
     summary || title,
     '',
+    ...(evidence.length
+      ? ['Already checked by the pipeline:', ...evidenceLines(evidence, e => `- ${e.title}: ${e.url}${e.note ? ` — ${e.note}` : ''}`), '']
+      : []),
     'What to test:',
     ...steps.map((s, i) => `${i + 1}. ${s}`),
     '',

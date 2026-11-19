@@ -153,6 +153,8 @@ jobs:
           PR_NUMBER: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+        # --team is the team the deploy seeded (preview-meta `team`, #4141) — this checkout is main, so its
+        # manifest can miss a reviewTeam the PR adds. Empty (older record) → the capture falls back to the manifest.
         run: |
           set -o pipefail
           # Changed files drive which page is shot when the PR declares no review-surface (#2698).
@@ -175,7 +177,7 @@ jobs:
               AUTH=(--preview-token "$TOKEN")
             fi
             node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
-              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
+              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --team "$(jq -r '.team // ""' "$META")" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
           done < <(find "$RUNNER_TEMP/records" -name meta.json)
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
           shopt -s nullglob; PNGS=("$OUT"/*.png)

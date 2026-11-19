@@ -90,6 +90,13 @@ Write it as:
 - **Steps** — a short numbered walk-through, each step an action + the expected result. Include the **before/after contrast** where it matters ("previously the kassa still showed; now you land on the access-code screen").
 - **Test data** — any PINs, logins, or seed URLs needed to reproduce (e.g. `/test1/nl/vlaamsekermis`, helper PIN `1234`).
 
+**Plain steps (#3301)** — write each step like instructions to a friend holding your phone:
+1. **One action + what you should see** — the action on one line, `→ <what you should see>` on the next.
+2. **Start from the preview URL** — name the link, and any login or data the step needs.
+3. **Only needs what the preview has** — if the step needs data, the change seeds it, or the step says exactly how to make it in the app (e.g. "tap ⬆ and upload two songs").
+4. **No repo jargon** — no file names, script names, CLI commands or internal terms, unless explained in ≤3 plain words.
+5. **No owner homework off the phone** — no scripts, Mac or terminal. If something truly can't be tested on the preview, say so in one line instead of writing a step for it.
+
 Keep it tight and skimmable. A `mermaid` flow is welcome when the steps branch or the state change is the point — never for decoration.
 
 ### Epic acceptance rollup (the epic is the verification unit)
@@ -161,7 +168,9 @@ If the design lives in a canvas the pipeline can't open, don't re-describe it in
 
 ## Naming the screen to shoot (`review-surface` marker)
 
-A ticket that changes something you LOOK at ends with one marker: `<!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->`, e.g. `<!-- review-surface: kassa /admin/{team}/crouton/salesCategories -->` (`{team}` becomes the seeded `test1`). The PR body inherits it (#2433) and, once the PR's preview Worker deploys, `deploy-app.yml` screenshots that page and commits `pr<N>-<app>-<name>.png` (`scripts/capture-review-surfaces.mjs`, #2173). Without a marker the preview shoots the app's start page — name the page that shows the change.
+A ticket that changes something you LOOK at ends with one marker: `<!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->`, e.g. `<!-- review-surface: kassa /admin/{team}/crouton/salesCategories -->` (`{team}` becomes the app's review team: `reviewTeam` in its `deploy.config.json`, else the seeded `test1`). The PR body inherits it (#2433) and, once the PR's preview Worker deploys, `preview-screenshot.yml` screenshots that page and posts `pr<N>-<app>-<name>.png` on the PR (`scripts/capture-review-surfaces.mjs`, #2173; the body is read from the GitHub API, #3957). Without a marker the page is guessed from the changed files (a package page only on apps that use that package); a PR that changes a screen and names no page gets no shot and the check goes red; only a PR that changes no screen (or says `<!-- review-surface-none -->`) gets the start page. A named or guessed page that redirects elsewhere (e.g. to login) is rejected — name the page that shows the change. Pages under `/auth/…` are photographed signed in first; only if that page sends you elsewhere is it tried once signed out (a sign-in page). A sign-in form shown as a pop-up on the home page counts for a sign-in page, never for one that needs you signed in, like consent (#4235, #4248).
+
+**No screen to check?** Write `<!-- review-surface-none: <reason> -->` (#4252). Only the form with a reason beats a page guessed from the changed files; the check then shoots the start page and names the pictures `no-screen-…`. The marker without a reason only counts when no page can be guessed. The worker writes the reason itself from the plan's `👁 What to look at: none — <reason>` line.
 
 A PR opened by hand that touches only `packages/**` gets no preview Worker unless its body also carries `<!-- deploy-preview: full-watch -->` (the pipeline adds it automatically to held UI PRs; `scripts/deploy-detect.mjs`, #2140) — without a preview there is nothing to screenshot. Adding it to an open PR's body needs a new `pull_request` event (push, or close + reopen) before a preview builds.
 

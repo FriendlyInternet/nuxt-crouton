@@ -429,7 +429,7 @@ jobs:
       # (copied from the default branch above). Round 1 of the review loop (#3668).
       - name: Diagnose the repeat red
         if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -694,7 +694,7 @@ jobs:
           echo "model: $MODEL (from .claude/pipeline-models.json)"
       - name: Diagnose round 2
         if: steps.route1.outputs.next == 'redo'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -1042,11 +1042,11 @@ jobs:
 
       # ── The fix attempt ─────────────────────────────────────────────────────────
       # AUTH: headless/unattended → MUST use an API key (never a subscription OAuth token;
-      # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
+      # Anthropic terms). Pinned to the same SHA as every other claude-code-action step (scripts/workflow-action-pins.test.mjs checks it) — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - name: Fix attempt
         if: steps.fixgo.outputs.go == 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           # Pipeline PRs are pushed by the harness bot, and the action refuses a bot-initiated
           # run unless the bot is allow-listed — without this the fixer never ran on any

@@ -3,6 +3,59 @@
     "title": "Activité",
     "admin": {
       "activity": "Activité"
+    },
+    "log": {
+      "empty": "Aucune activité pour l'instant",
+      "error": "Impossible de charger l'activité",
+      "retry": "Réessayer",
+      "refresh": "Actualiser",
+      "export": "Exporter",
+      "exportCsv": "Exporter en CSV",
+      "exportJson": "Exporter en JSON",
+      "byUser": "{action} par {name}",
+      "unknownUser": "Utilisateur inconnu",
+      "fieldsChanged": "{n} champ | {n} champs"
+    },
+    "operation": {
+      "create": "Création",
+      "update": "Modification",
+      "delete": "Suppression"
+    },
+    "filters": {
+      "collection": "Collection",
+      "action": "Action",
+      "person": "Personne",
+      "period": "Période",
+      "allCollections": "Toutes les collections",
+      "allActions": "Toutes les actions",
+      "everyone": "Tout le monde",
+      "clear": "Effacer",
+      "open": "Filtres",
+      "clearAll": "Effacer les filtres",
+      "activeCount": "{n} filtre actif | {n} filtres actifs"
+    },
+    "period": {
+      "all": "Tout",
+      "today": "Aujourd'hui",
+      "last7": "7 jours",
+      "last30": "30 jours",
+      "last90": "90 jours"
+    },
+    "detail": {
+      "action": "Action",
+      "when": "Quand",
+      "who": "Qui",
+      "itemId": "ID",
+      "changes": "Modifications",
+      "copy": "Copier l'ID",
+      "copied": "ID copié"
+    },
+    "changes": {
+      "field": "Champ",
+      "before": "Avant",
+      "after": "Après",
+      "value": "Valeur",
+      "empty": "Aucune modification enregistrée"
     }
   }
 }

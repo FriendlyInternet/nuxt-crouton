@@ -43,14 +43,23 @@ function world({ labels = ['epic'], kids = [{ number: 1, state: 'closed' }], com
     },
   }
   const context = { repo: { owner: 'o', repo: 'r' } }
-  const core = { info: () => {}, warning: () => {}, setOutput: (k, v) => { outputs[k] = v } }
-  return { ctx: { github, context, core }, calls, outputs }
+  const summary = []
+  const core = {
+    info: () => {}, warning: () => {}, setOutput: (k, v) => { outputs[k] = v },
+    summary: { addHeading(h) { summary.push(h); return this }, addRaw(t) { summary.push(t); return this }, async write() {} }
+  }
+  return { ctx: { github, context, core }, calls, outputs, summary }
 }
-const modelFile = text => {
-  const f = join(mkdtempSync(join(tmpdir(), 'pm-')), 'postmortem.md')
+// The model's file, plus (#3253) the numbers files the `write` job leaves next to it.
+const modelFile = (text, files = {}) => {
+  const d = mkdtempSync(join(tmpdir(), 'pm-'))
+  const f = join(d, 'postmortem.md')
   if (text != null) writeFileSync(f, text)
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(d, name), body)
   return f
 }
+const NUMBERS = { 'numbers.md': '### 📊 Numbers\n\n**8 runs** · **1 silent**\n', 'numbers.json': JSON.stringify({ epic: 7, runs: 8 }) }
+const recordingStore = () => { const writes = []; const store = async a => { writes.push(a); return a.path }; return { writes, store } }
 const GOOD = '## What went well\n' + 'Evidence-backed retro line. '.repeat(12) + '\n## 🔭 Next\nnext epic'
 
 test('target: a closed sub-issue resolves to its epic; done epic → go', async () => {
@@ -148,6 +157,110 @@ test('postmortem.yml wiring: write re-checks after the queue, a hung model fails
   assert.match(post_, /WRITE_RESULT: \$\{\{ needs\.write\.result \}\}/)
   assert.match(post_, /writeResult: process\.env\.WRITE_RESULT/)
 })
+// #3253 — the numbers: appended + stored after posting, never blocking the post or the close.
+test('T3. post appends the numbers and stores epics/<n>.json with the App token, after the labels and close', async () => {
+  const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  const { writes, store } = recordingStore()
+  const order = []
+  const wrapped = async a => { order.push('store'); return store(a) }
+  const realUpdate = w.ctx.github.rest.issues.update
+  w.ctx.github.rest.issues.update = async p => { order.push('close'); return realUpdate(p) }
+  await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD, NUMBERS), runUrl: 'https://run/1', dataToken: 'app-tok', store: wrapped })
+  const c = w.calls.find(x => x[0] === 'comment')[1]
+  assert.match(c, /\*\*8 runs\*\*/)
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].path, 'epics/7.json')
+  assert.equal(writes[0].token, 'app-tok')
+  assert.equal(writes[0].repo, 'o/r')
+  assert.equal(writes[0].overwrite, true)
+  assert.equal(writes[0].record.runs, 8)
+  assert.equal(writes[0].record.run, 'https://run/1')
+  assert.deepEqual(order, ['close', 'store'])
+  assert.equal(w.outputs.numbers_stored, 'true')
+})
+test('T3. a throwing store still posts, flips the labels and closes; the summary says "Numbers not stored"', async () => {
+  const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD, NUMBERS), runUrl: 'u', dataToken: 't', store: async () => { throw new Error('HTTP 403') } })
+  assert.ok(w.calls.some(x => x[0] === 'comment' && /postmortem:done/.test(x[1])))
+  assert.ok(w.calls.some(x => x.join(':') === 'addLabels:status:ready-to-close'))
+  assert.deepEqual(w.calls.find(x => x[0] === 'update'), ['update', 'closed', 'completed'])
+  assert.equal(w.outputs.numbers_stored, 'false')
+  assert.ok(w.summary.some(s => /📊 Numbers not stored — HTTP 403/.test(s)))
+})
+test('T3. a missing numbers file posts the postmortem with the "didn\'t run" line and still closes', async () => {
+  const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  const { writes, store } = recordingStore()
+  await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD), runUrl: 'https://run/1', dataToken: 't', store })
+  const c = w.calls.find(x => x[0] === 'comment')[1]
+  assert.match(c, /postmortem:done/)
+  assert.match(c, /📊 \*\*Numbers didn't run\*\* — the numbers step wrote nothing/)
+  assert.deepEqual(w.calls.find(x => x[0] === 'update'), ['update', 'closed', 'completed'])
+  assert.equal(writes.length, 0)
+  assert.equal(w.outputs.numbers_stored, 'false')
+})
+test('T3. a failed numbers step (numbers-failed.txt) is named in the post, and the failed model run still carries it', async () => {
+  const w = world()
+  await post(w.ctx, { epic: '7', modelFile: modelFile(null, { 'numbers-failed.txt': 'simulate_numbers_failure set\n' }), runUrl: 'u', writeResult: 'failure', store: async () => {} })
+  const c = w.calls.find(x => x[0] === 'comment')[1]
+  assert.match(c, /postmortem:skipped/)
+  assert.match(c, /Numbers didn't run\*\* — simulate_numbers_failure set/)
+})
+test('T3. alreadyPosted: a trusted done marker + dryRun → done=false (the model runs); without dryRun → true', async () => {
+  const w = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro')] })
+  assert.equal(await alreadyPosted(w.ctx, { epic: '7', dryRun: true }), false)
+  assert.equal(w.outputs.done, 'false')
+  assert.equal(await alreadyPosted(w.ctx, { epic: '7' }), true)
+  assert.equal(w.outputs.done, 'true')
+})
+test('T3. target: dryRun goes on an epic that already has a postmortem', async () => {
+  const w = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro')] })
+  await target(w.ctx, { epic: '7', manual: true, dryRun: true })
+  assert.deepEqual(w.outputs, { go: 'true', epic: '7' })
+  const w2 = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro')] })
+  await target(w2.ctx, { epic: '7', manual: true })
+  assert.equal(w2.outputs.go, 'false')
+})
+test('T3. post dryRun on an epic with a postmortem: the body goes to the summary; no comment, label, close or store', async () => {
+  const w = world({ comments: [harness('<!-- postmortem:done epic=#7 -->\nretro'), harness(renderPending({ epic: 7, via: 'close-epic' }))] })
+  const { writes, store } = recordingStore()
+  await post(w.ctx, { epic: '7', modelFile: modelFile(GOOD, NUMBERS), runUrl: 'u', dryRun: true, dataToken: 't', store })
+  assert.deepEqual(w.calls, [])
+  assert.equal(writes.length, 0)
+  assert.equal(w.summary[0], 'Dry run — nothing was posted')
+  assert.match(w.summary[1], /postmortem:done epic=#7/)
+  assert.match(w.summary[1], /\*\*8 runs\*\*/)
+  // no model output → the skipped body, still with the numbers
+  const w2 = world()
+  await post(w2.ctx, { epic: '7', modelFile: modelFile(null, NUMBERS), runUrl: 'u', dryRun: true, store })
+  assert.deepEqual(w2.calls, [])
+  assert.match(w2.summary[1], /Postmortem didn't run[\s\S]*8 runs/)
+})
+test('T3. postmortem.yml wiring: the numbers step never blocks, dry_run reaches target/check/post, auto-close skips a dry run', () => {
+  const y = readFileSync(new URL('../.github/workflows/postmortem.yml', import.meta.url), 'utf8')
+  const job = (name, next) => y.slice(y.indexOf(`\n  ${name}:`), next ? y.indexOf(`\n  ${next}:`) : undefined)
+  const step = (src, marker) => { const i = src.indexOf(marker); assert.ok(i > 0, `step ${marker}`); const j = src.indexOf('\n      - ', i + 1); return src.slice(i, j < 0 ? undefined : j) }
+  const write = job('write', 'post')
+  const numbers = step(write, '- name: Epic numbers (never blocks)')
+  assert.match(numbers, /continue-on-error: true/)
+  assert.match(numbers, /timeout-minutes: 5/)
+  assert.match(numbers, /if: steps\.check\.outputs\.done != 'true'/)
+  assert.match(numbers, /SIMULATE_NUMBERS_FAILURE: \$\{\{ inputs\.simulate_numbers_failure \}\}/)
+  assert.match(numbers, /node scripts\/epic-numbers-run\.mjs "\$EPIC" "\$D" --records-dir/)
+  assert.ok(write.indexOf('- name: Epic numbers') < write.indexOf('- name: Write the postmortem'), 'numbers before the model')
+  assert.match(step(write, '- name: Write the postmortem'), /--numbers "\$D\/numbers\.md" --steps "\$D\/steps\.md" \$DRY/)
+  for (const f of ['numbers.md', 'numbers.json', 'steps.md', 'numbers-failed.txt']) assert.ok(write.includes(`/postmortem/${f}`), `artifact has ${f}`)
+  const DRY = /DRY_RUN: \$\{\{ inputs\.dry_run == true \}\}/
+  assert.match(step(job('target', 'write'), '- id: t'), DRY)
+  assert.match(step(write, '- id: check'), DRY)
+  assert.match(step(write, '- id: check'), /dryRun: process\.env\.DRY_RUN === 'true'/)
+  const postStep = step(job('post', 'auto-close'), '- name: Post the postmortem')
+  assert.match(postStep, DRY)
+  assert.match(postStep, /DATA_TOKEN: \$\{\{ steps\.app-token\.outputs\.token \}\}/)
+  assert.match(postStep, /dryRun: process\.env\.DRY_RUN === 'true', dataToken: process\.env\.DATA_TOKEN/)
+  assert.match(job('auto-close'), /if: always\(\) && .*&& inputs\.dry_run != true/)
+  assert.match(y, /dry_run:\n\s+description:[^\n]*\n\s+type: boolean/)
+})
+
 test('post: a GitHub error while posting still records skipped and closes (never blocks)', async () => {
   const w = world({ comments: [harness(renderPending({ epic: 7, via: 'close-epic' }))] })
   const real = w.ctx.github.rest.issues.createComment

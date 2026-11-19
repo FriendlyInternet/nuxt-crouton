@@ -19,6 +19,7 @@ export default defineNuxtConfig({
   devServer: { port: 3006 },
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-assets',
     '@fyit/crouton-pages',
@@ -27,7 +28,17 @@ export default defineNuxtConfig({
     '@fyit/crouton-maps',
     '@fyit/crouton-events',
     '@fyit/crouton-collab',
+    '@fyit/crouton-mcp-toolkit',
   ],
+
+  // Claude edits a page live (#3982): only the /mcp/pages tools, never the generic
+  // collection CRUD + token tools at /mcp. Connect with a pages token
+  // (POST /api/teams/:id/mcp-tokens { scope: 'pages' } → url).
+  croutonMcpToolkit: {
+    enabled: true,
+    genericTools: false,
+    pages: true
+  },
   hub: {
     blob: true,
     db: 'sqlite'

@@ -327,8 +327,6 @@ function locationRow(ctx: SeedContext, loc: { slug: string }, frParsed: ParsedMd
     openDays,
     slotSchedule: {},
     blockedDates: null,
-    inventoryMode: false,
-    quantity: 0,
     maxBookingsPerMonth: 0,
     translations: {
       en: locationTranslationFr(frParsed, loc),
@@ -370,6 +368,8 @@ async function seedLocations(ctx: SeedContext): Promise<{ locationIdMap: Record<
     ]
 
     await (db as any).insert(bookingsLocations).values(locationRow(ctx, loc, frParsed, nlParsed, locationId, slots))
+    // Every location lists a product: its own `loc-<id>` (#4044, crouton-bookings layer util)
+    await ensureLocationProducts(db, ctx.orgId, locationId)
 
     log.push(`Created location: ${frParsed.data.title} (${locationId})`)
   }
@@ -579,6 +579,7 @@ async function seedBookings(
       group: groupId,
       quantity: 1,
       status: 'confirmed',
+      product: 'loc-' + locationId,
       createdAt,
       updatedAt: createdAt,
       createdBy: ownerId,

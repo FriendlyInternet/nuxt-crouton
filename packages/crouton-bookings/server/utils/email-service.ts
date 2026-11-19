@@ -15,6 +15,7 @@
  */
 import { eq, and, inArray } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import { bookingsEmailtemplates } from '../../collections/emailtemplates/server/database/schema'
 import { bookingsEmaillogs } from '../../collections/emaillogs/server/database/schema'
 import {
@@ -426,6 +427,10 @@ export async function sendBookingEmails(
     }
   }
 
+  // The app's default language — the one a template is required to have (#4236/#4244)
+  const i18nCfg = (useRuntimeConfig() as any).croutonI18n ?? {}
+  const defaultLocale = requiredLocale(i18nCfg.supportedLocales ?? [], i18nCfg.defaultLocale)
+
   // Build email variables (locale-aware date formatting)
   const variables = buildEmailVariables(booking, locale)
 
@@ -436,10 +441,10 @@ export async function sendBookingEmails(
 
   // Process each matching template
   for (const template of templates) {
-    // Resolve translated subject/body when locale is provided
+    // Resolve subject/body: customer language → default language → main field → any translation
     const tr = template.translations as Record<string, Record<string, string>> | null
-    const resolvedSubject = locale ? resolveTranslatedField(template.subject, tr, 'subject', locale) : template.subject
-    const resolvedBody = locale ? resolveTranslatedField(template.body, tr, 'body', locale) : template.body
+    const resolvedSubject = resolveTranslatedField(template.subject, tr, 'subject', locale ?? defaultLocale, defaultLocale)
+    const resolvedBody = resolveTranslatedField(template.body, tr, 'body', locale ?? defaultLocale, defaultLocale)
 
     const { subject, body } = renderBookingEmail(
       { subject: resolvedSubject, body: resolvedBody },
@@ -447,6 +452,51 @@ export async function sendBookingEmails(
     )
 
     const recipientType = template.recipientType || 'customer'
+
+    // Never send a blank email: log it failed for each intended recipient (#4244)
+    if (!subject.trim() || !body.trim()) {
+      const EMPTY = 'Template has no subject or body in any language'
+      console.warn(`[booking-email] Not sending ${triggerType} (template ${template.id}): ${EMPTY}`)
+      const recipients: Array<{ email: string, type: 'customer' | 'admin' }> = []
+      const customerEmail = options.recipientEmail || variables.customer_email
+      if ((recipientType === 'customer' || recipientType === 'both') && customerEmail) {
+        recipients.push({ email: customerEmail, type: 'customer' })
+      }
+      if ((recipientType === 'admin' || recipientType === 'both') && adminEmail) {
+        recipients.push({ email: adminEmail, type: 'admin' })
+      }
+      for (const r of recipients) {
+        const logId = await logEmailSend({
+          teamId,
+          userId,
+          bookingId: booking.id,
+          templateId: template.id,
+          recipientEmail: r.email,
+          triggerType,
+          status: 'failed',
+          error: EMPTY
+        })
+        nitroApp.hooks.callHook('crouton:operation', {
+          type: 'booking:email-failed',
+          source: 'crouton-bookings',
+          teamId,
+          userId,
+          metadata: {
+            bookingId: booking.id,
+            recipient: r.email,
+            recipientType: r.type,
+            template: triggerType,
+            status: 'failed',
+            templateId: template.id,
+            emailLogId: logId || undefined,
+            error: EMPTY,
+          },
+        }).catch(() => {})
+      }
+      results.success = false
+      results.errors?.push(EMPTY)
+      continue
+    }
 
     // Send to customer
     if (recipientType === 'customer' || recipientType === 'both') {

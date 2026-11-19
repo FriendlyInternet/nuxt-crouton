@@ -13,7 +13,9 @@
   "files": [
     "app",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
@@ -44,6 +46,7 @@
     "nuxt": "^4.0.0"
   },
   "dependencies": {
-    "@tiptap/extension-collaboration": "^3.15.3"
+    "@tiptap/extension-collaboration": "^3.15.3",
+    "@tiptap/y-tiptap": "^3.0.1"
   }
 }

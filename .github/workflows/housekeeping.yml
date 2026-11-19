@@ -5,14 +5,19 @@ name: housekeeping
 # built-in GITHUB_TOKEN, renders Markdown, delivers per .github/digests.yml. REPORT-ONLY — it
 # never deletes a branch or edits a label/issue. See .claude/skills/housekeeping/.
 #
-# Cadence-as-data (#637): the cron fires DAILY (cheap wake-up); the `gate` step reads
-# .github/digests.yml via schedule.mjs and exits the run early on non-send days. Change the
-# cadence in digests.yml — never this cron. A manual workflow_dispatch always sends (FORCE).
+# Cadence-as-data (#637): the status app's clock starts this DAILY at 06:00 UTC (cheap wake-up,
+# `clock: true`); the `gate` step reads .github/digests.yml via schedule.mjs and exits the run
+# early on non-send days. Change the cadence in digests.yml — never the clock row. A manual
+# workflow_dispatch (no `clock`) always sends (FORCE).
 
 on:
-  schedule:
-    - cron: '0 6 * * *'   # daily wake-up; digests.yml decides the real send day
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_dispatch:
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,7 +51,7 @@ jobs:
       - name: Schedule gate
         id: gate
         env:
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && !inputs.clock && '1' || '0' }}
         run: node .claude/skills/housekeeping/schedule.mjs housekeeping
 
       # Bring every remote branch into refs/remotes/origin so the stale-branch scan sees them.

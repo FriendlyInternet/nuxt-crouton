@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createInterface } from 'node:readline'
-import { PROD_ENVS, resolveAppDb, runWrangler, queryD1Json, isUserTable } from './lib/wrangler-d1.mjs'
+import { PROD_ENVS, resolveAppDb, runWrangler, queryD1Json, isUserTable, LIST_TABLES_SQL, dropTablesSql } from './lib/wrangler-d1.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -94,8 +94,7 @@ function printCmd(args) {
 
 /** List the db's user tables (so we can drop them for a clean mirror). */
 function listTables(dbName) {
-  const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-  return queryD1Json(dbName, sql, { cwd: repoRoot }).map(r => r.name).filter(isUserTable)
+  return queryD1Json(dbName, LIST_TABLES_SQL, { cwd: repoRoot }).map(r => r.name).filter(isUserTable)
 }
 
 function confirmTyped(expected) {
@@ -188,8 +187,7 @@ async function main() {
   console.log(`  Resetting target ${target.name} …`)
   const tables = listTables(target.name)
   if (tables.length > 0) {
-    const dropSql = 'PRAGMA defer_foreign_keys = TRUE;\n'
-      + tables.map(t => `DROP TABLE IF EXISTS "${t}";`).join('\n') + '\n'
+    const dropSql = dropTablesSql(tables)
     const dropPath = join(tmpdir(), `db-clone-drop-${target.name}-${stamp}.sql`)
     writeFileSync(dropPath, dropSql)
     wrangler(['d1', 'execute', target.name, '--remote', '--file', dropPath])

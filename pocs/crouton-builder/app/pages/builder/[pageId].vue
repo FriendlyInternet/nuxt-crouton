@@ -228,7 +228,7 @@ async function viewPage() {
 
 <template>
   <div class="flex h-dvh flex-col bg-default">
-    <header class="flex items-center gap-2 border-b border-default px-2 py-1.5">
+    <header class="flex items-center gap-2 overflow-x-auto border-b border-default px-2 py-1.5 [scrollbar-width:none]">
       <UButton icon="i-lucide-arrow-left" color="neutral" variant="ghost" size="sm" to="/builder" aria-label="Back to site" />
       <span class="min-w-0 truncate text-sm font-medium" data-handoff="page-badge">{{ page?.title ?? 'Page' }}</span>
       <UInput v-if="renaming" v-model="renameDraft" size="xs" autofocus class="w-28" data-handoff="variant-rename" @keyup.enter="finishRename" @blur="finishRename" />
@@ -241,7 +241,6 @@ async function viewPage() {
       <UBadge v-if="activeBp !== null" color="primary" variant="subtle" size="xs" data-handoff="bp-badge">≥ {{ activeBp }}</UBadge>
       <UButton v-if="hiddenItems.length" size="xs" color="neutral" variant="soft" icon="i-lucide-eye-off" :label="String(hiddenItems.length)" aria-label="Hidden blocks" data-handoff="hidden-count" @click="sheetOpen = true" />
       <span class="flex-1" />
-      <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
       <UButton icon="i-lucide-save" size="sm" :label="dirty ? 'Save' : 'Saved'" :loading="saveState === 'saving'" :disabled="!dirty && saveState !== 'saving'" data-handoff="board-save" @click="saveBoard" />
       <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="sm" aria-label="View page" :disabled="!page?.slug || saveState === 'saving'" data-handoff="view-page" @click="viewPage" />
     </header>

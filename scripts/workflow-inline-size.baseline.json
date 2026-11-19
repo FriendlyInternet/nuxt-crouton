@@ -20,7 +20,6 @@
     ".github/workflows/on-comment.yml › dispatch › #2 › script": 54,
     ".github/workflows/on-comment.yml › interpret-act › Act on the decision (one action) › script": 54,
     ".github/workflows/on-comment.yml › resume › gate › script": 91,
-    ".github/workflows/on-comment.yml › resume › mergegate › script": 103,
     ".github/workflows/preview-screenshot.yml › capture › capture › run": 53,
     ".github/workflows/release-venue-bundle.yml › bundle › Add the arm64 native addon (#1680) › run": 50,
     ".github/workflows/report-failed-deploy.yml › report › #1 › script": 62,
@@ -30,8 +29,7 @@
     ".github/workflows/teardown-on-removal.yml › teardown › Delete branches + comment on the removing PR › script": 64,
     ".github/workflows/warn-closes-blocked.yml › warn › #0 › script": 64,
     ".github/workflows/work-issue-pidev.yml › work-pi › conflict › run": 59,
-    ".github/workflows/work-issue-pidev.yml › work-pi › finish › run": 566,
-    ".github/workflows/work-issue-pidev.yml › work-pi › pi › run": 123,
+    ".github/workflows/work-issue-pidev.yml › work-pi › finish › run": 555,
     ".github/workflows/work-issue-pidev.yml › work-pi › revise › run": 73
   }
 }

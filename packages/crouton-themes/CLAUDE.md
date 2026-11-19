@@ -427,8 +427,7 @@ export default defineNuxtConfig({
 ### Add a custom component
 
 1. Create `{theme}/components/ComponentName.vue`
-2. Use `<script setup lang="ts">` with Composition API
-3. Component auto-imports as `{Prefix}ComponentName` (e.g., `KoLed`)
+2. Component auto-imports as `{Prefix}ComponentName` (e.g., `KoLed`)
 
 ## CSS Class Naming
 
@@ -861,7 +860,6 @@ retired in the same change that added the playground.
 **Workspace glob:** `packages/*` in `pnpm-workspace.yaml` is one level only — the
 playground is registered via an extra `packages/*/playground` entry, or `pnpm install`
 won't pick it up.
->>>>>>> origin/epic/1303-crouton-themes-2
 
 ## Dependencies
 

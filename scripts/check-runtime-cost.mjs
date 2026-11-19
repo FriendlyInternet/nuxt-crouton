@@ -1,20 +1,31 @@
 #!/usr/bin/env node
 /**
- * Runtime-cost check, part 1 (#3910, epic #3896).
+ * Runtime-cost check (#3910 part 1, #3936 part 2, epic #3896).
  *
- * Counts two patterns in every `.vue` template under packages/, apps/, pocs/:
+ * Counts five patterns in every `.vue` template under packages/, apps/, pocs/. "Per item"
+ * means under a `v-for` (on itself or an ancestor) or under a per-item slot (`#…-cell`,
+ * `#day`, `#week-day`, `#item…`, `#option…`, `#row…`, `#cell…`).
  *   A · overlay per item — a UPopover/UTooltip/UModal/USlideover/UDrawer/UDropdownMenu/
- *       UContextMenu under a `v-for` (on itself or an ancestor) or under a per-item slot
- *       (`#…-cell`, `#day`, `#week-day`, `#item…`, `#option…`, `#row…`, `#cell…`).
+ *       UContextMenu per item.
  *   B · hover-only — a static class list that hides an element and reveals it only on
  *       hover (no matching `pointer-coarse:` reveal), or `<UPopover mode="hover">` without
- *       `enable-touch`.
+ *       `enable-touch` (`:enable-touch="false"` counts as without).
+ *   C · heavy component per item — an editor, map, calendar, layout renderer or chart
+ *       (see HEAVY; a leading `Lazy` is ignored) per item.
+ *   D · rebuilding key — a bound `:key` on an element that is not the `v-for` element, not a
+ *       direct child of a `<template v-for>`, and not a direct child of Transition /
+ *       TransitionGroup / KeepAlive. A changing key rebuilds the whole subtree.
+ *   E · composable in the template — `useXxx(` in an interpolation or a directive
+ *       expression (event handlers `@…` excluded). One hit per expression.
  *
  * On a PR (`--base-ref <branch>`) it fails when a changed `.vue` file has more hits of a
  * kind at HEAD than the same file (or its pre-rename path) had at the merge-base. Without
- * a base ref it only prints totals. Always prints `[runtime-cost] files=… A=… B=… allowed=…`.
+ * a base ref it only prints totals. Always prints
+ * `[runtime-cost] files=… A=… B=… C=… D=… E=… allowed=… unparsable=…`.
  *
- * Allow comment: `<!-- runtime-cost-ok: <reason, ≥10 chars> -->` as the hit's previous sibling.
+ * Allow comment: `<!-- runtime-cost-ok: <reason, ≥10 chars> -->` as the hit's previous
+ * sibling (for an E hit in an interpolation: the previous sibling of its parent element,
+ * or of the interpolation itself at the template's top level).
  *
  * Only `node:` imports at the top; `@vue/compiler-sfc` is loaded inside main() so the pure
  * helpers stay importable (same pattern as verify-touched-compiles.mjs).
@@ -25,9 +36,18 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const OVERLAYS = new Set(['UPopover', 'UTooltip', 'UModal', 'USlideover', 'UDrawer', 'UDropdownMenu', 'UContextMenu'])
+const HEAVY = new Set([
+  'CroutonEditorPreview', 'CroutonEditorSimple', 'CroutonPagesEditorBlockEditor', 'CroutonPagesEditorBlockEditorWithPreview',
+  'CroutonMapsMap', 'CroutonMapsPreview', 'UCalendar', 'CroutonCalendarMonth', 'CroutonCalendarWeek',
+  'CroutonLayoutRenderer', 'CroutonChartsWidget',
+])
+const KEY_PARENTS_OK = new Set(['Transition', 'TransitionGroup', 'KeepAlive'])
+const COMPOSABLE_RE = /\buse[A-Z]\w*\(/
+export const KINDS = ['A', 'B', 'C', 'D', 'E']
 const NODE_ELEMENT = 1
 const NODE_TEXT = 2
 const NODE_COMMENT = 3
+const NODE_INTERPOLATION = 5
 const PROP_ATTR = 6
 const PROP_DIR = 7
 
@@ -45,6 +65,18 @@ const ALLOW_RE = /^runtime-cost-ok:(.*)$/s
 
 export const A_HINT = 'Use one shared overlay, or add <!-- runtime-cost-ok: <reason> --> on the line above if the list is short and capped.'
 export const B_HINT = 'Add a pointer-coarse: class or a tap/focus path.'
+export const C_HINT = 'Create one shared instance, or show a light preview per item, or add <!-- runtime-cost-ok: <reason> --> on the line above.'
+export const D_HINT = 'A changing key rebuilds this element and everything under it. Update it in place, or add <!-- runtime-cost-ok: <what changes the key and why a rebuild is needed> --> on the line above.'
+export const E_HINT = 'Call the composable once in <script setup> and use its result in the template.'
+const HINTS = { A: A_HINT, B: B_HINT, C: C_HINT, D: D_HINT, E: E_HINT }
+/** The text after `<file>:<line> ` in a failure's hit list, per kind. */
+const HIT_LINE = {
+  A: h => `${h.tag} under ${h.under}`,
+  B: h => `${h.tag} ${h.why}`,
+  C: h => `${h.tag} under ${h.under}`,
+  D: h => `${h.tag} :key="${h.key}"`,
+  E: h => `${h.tag} ${h.call}()`,
+}
 export const GENERATED_HINT = 'generated file: change the generator template, then regenerate'
 
 /** True when a static slot name looks like it renders once per item. */
@@ -56,10 +88,18 @@ function staticAttr(node, name) {
   return node.props.find(p => p.type === PROP_ATTR && p.name === name)
 }
 
-function hasProp(node, name) {
+/** True when the node has `enable-touch`, static or bound — a bound literal `false` counts as absent. */
+function enablesTouch(node) {
   return node.props.some(p =>
-    (p.type === PROP_ATTR && p.name === name)
-    || (p.type === PROP_DIR && p.name === 'bind' && p.arg?.isStatic && p.arg.content === name))
+    (p.type === PROP_ATTR && p.name === 'enable-touch')
+    || (p.type === PROP_DIR && p.name === 'bind' && p.arg?.isStatic && p.arg.content === 'enable-touch'
+      && p.exp?.content.trim() !== 'false'))
+}
+
+/** The composable an expression calls (`useX(` at a word start, first match), or null. */
+function composableCall(expr) {
+  const m = expr ? expr.match(COMPOSABLE_RE) : null
+  return m ? m[0].slice(0, -1) : null
 }
 
 /** The scope label a node opens (v-for or per-item slot), or null. */
@@ -91,7 +131,7 @@ export function hoverOnlyReason(node) {
       return `${hider} revealed only by ${list.find(c => HOVER_PREFIX.test(c) && reveal.test(c.replace(HOVER_PREFIX, '')))}`
     }
   }
-  if (node.tag === 'UPopover' && staticAttr(node, 'mode')?.value?.content === 'hover' && !hasProp(node, 'enable-touch')) {
+  if (node.tag === 'UPopover' && staticAttr(node, 'mode')?.value?.content === 'hover' && !enablesTouch(node)) {
     return 'mode="hover" without enable-touch'
   }
   return null
@@ -109,12 +149,49 @@ function isAllowed(siblings, index) {
   return false
 }
 
+function hasFor(node) {
+  return node.props.some(p => p.type === PROP_DIR && p.name === 'for')
+}
+
+/** The bound `:key` text when it rebuilds the element (D), or null. `parent` as in countHits' walk. */
+function rebuildingKey(node, parent) {
+  const key = node.props.find(p => p.type === PROP_DIR && p.name === 'bind' && p.arg?.isStatic && p.arg.content === 'key')
+  if (!key || hasFor(node) || KEY_PARENTS_OK.has(parent.tag)) return null
+  if (parent.tag === 'template' && parent.hasFor) return null
+  return (key.exp?.content ?? '').slice(0, 60)
+}
+
+/** The composables called from the element's directive expressions (event handlers excluded). */
+function directiveCalls(node) {
+  return node.props
+    .filter(p => p.type === PROP_DIR && p.name !== 'on' && p.exp?.content)
+    .map(p => composableCall(p.exp.content))
+    .filter(Boolean)
+}
+
+/** Every [kind, entry] hit one element carries itself (its children are walked separately). */
+function elementHits(node, scope, parent) {
+  const line = node.loc.start.line
+  const tag = node.tag
+  const hits = []
+  if (OVERLAYS.has(tag) && scope) hits.push(['A', { line, tag, under: scope }])
+  const why = hoverOnlyReason(node)
+  if (why) hits.push(['B', { line, tag, why }])
+  if (HEAVY.has(tag.replace(/^Lazy/, '')) && scope) hits.push(['C', { line, tag, under: scope }])
+  const key = rebuildingKey(node, parent)
+  if (key !== null) hits.push(['D', { line, tag, key }])
+  for (const call of directiveCalls(node)) hits.push(['E', { line, tag, call }])
+  return hits
+}
+
 /**
  * Count one file's hits. `parse` is `@vue/compiler-sfc`'s parse.
- * @returns {{ A: {line:number,tag:string,under:string}[], B: {line:number,tag:string,why:string}[], allowed: number, unparsable: boolean }}
+ * @returns {{ A: {line:number,tag:string,under:string}[], B: {line:number,tag:string,why:string}[],
+ *   C: {line:number,tag:string,under:string}[], D: {line:number,tag:string,key:string}[],
+ *   E: {line:number,tag:string,call:string}[], allowed: number, unparsable: boolean }}
  */
 export function countHits(source, parse) {
-  const out = { A: [], B: [], allowed: 0, unparsable: false }
+  const out = { A: [], B: [], C: [], D: [], E: [], allowed: 0, unparsable: false }
   const { descriptor, errors } = parse(source, { templateParseOptions: { comments: true } })
   if (errors && errors.length > 0) {
     out.unparsable = true
@@ -122,37 +199,39 @@ export function countHits(source, parse) {
   }
   const ast = descriptor?.template?.ast
   if (!ast) return out
-  const walk = (children, under) => {
+  const hit = (kind, allowed, entry) => {
+    if (allowed) out.allowed++
+    else out[kind].push(entry)
+  }
+  // `parent` = { tag, hasFor, allowed, root } of the element whose children these are.
+  const walk = (children, under, parent) => {
     children.forEach((node, i) => {
+      if (node.type === NODE_INTERPOLATION) {
+        const call = composableCall(node.content?.content)
+        const allowed = parent.root ? isAllowed(children, i) : parent.allowed
+        if (call) hit('E', allowed, { line: node.loc.start.line, tag: parent.tag, call })
+        return
+      }
       if (node.type !== NODE_ELEMENT) return
       const scope = scopeLabel(node) || under
-      const line = node.loc.start.line
       const allowed = isAllowed(children, i)
-      if (OVERLAYS.has(node.tag) && scope) {
-        if (allowed) out.allowed++
-        else out.A.push({ line, tag: node.tag, under: scope })
-      }
-      const why = hoverOnlyReason(node)
-      if (why) {
-        if (allowed) out.allowed++
-        else out.B.push({ line, tag: node.tag, why })
-      }
-      walk(node.children || [], scope)
+      for (const [kind, entry] of elementHits(node, scope, parent)) hit(kind, allowed, entry)
+      walk(node.children || [], scope, { tag: node.tag, hasFor: hasFor(node), allowed, root: false })
     })
   }
-  walk(ast.children || [], null)
+  walk(ast.children || [], null, { tag: 'template', hasFor: false, allowed: false, root: true })
   return out
 }
 
 /**
- * Files whose A or B count went up. `baseCounts`/`headCounts` map path → countHits result;
+ * Files whose count of any kind (KINDS) went up. `baseCounts`/`headCounts` map path → countHits result;
  * `renames` maps new path → old path. A missing base means 0.
  */
 export function compare(baseCounts, headCounts, renames = {}) {
   const regressions = []
   for (const [file, head] of Object.entries(headCounts)) {
     const base = baseCounts[renames[file] ?? file]
-    for (const kind of ['A', 'B']) {
+    for (const kind of KINDS) {
       const b = base ? base[kind].length : 0
       const h = head[kind].length
       if (h > b) regressions.push({ file, kind, base: b, head: h, hits: head[kind] })
@@ -195,10 +274,10 @@ function isGenerated(source) {
 
 /** Totals over every head file's counts. */
 export function summarize(headCounts) {
-  const totals = { A: 0, B: 0, allowed: 0, unparsable: [] }
+  const totals = { allowed: 0, unparsable: [] }
+  for (const k of KINDS) totals[k] = 0
   for (const [file, c] of Object.entries(headCounts)) {
-    totals.A += c.A.length
-    totals.B += c.B.length
+    for (const k of KINDS) totals[k] += c[k].length
     totals.allowed += c.allowed
     if (c.unparsable) totals.unparsable.push(file)
   }
@@ -218,12 +297,18 @@ export function classifyChange({ path, old }, head, readBase, parse) {
   return { head, base, old }
 }
 
-/** The output lines for one regression (header, each new hit, the hint). */
+/**
+ * The output lines for one regression: the header with the counts, a label, every hit of
+ * that kind now in the file (a hit has no stable identity across base and head, so the new
+ * one is not singled out), the hint, and the generated-file note when it applies.
+ */
 export function formatRegression(r, source = '') {
-  const hit = r.kind === 'A'
-    ? h => `  ${r.file}:${h.line} ${h.tag} under ${h.under}`
-    : h => `  ${r.file}:${h.line} ${h.tag} ${h.why}`
-  const lines = [`${r.file}: ${r.kind} ${r.base} → ${r.head}`, ...r.hits.map(hit), `  ${r.kind === 'A' ? A_HINT : B_HINT}`]
+  const lines = [
+    `${r.file}: ${r.kind} ${r.base} → ${r.head}`,
+    `  all ${r.kind} hits now in this file:`,
+    ...r.hits.map(h => `  ${r.file}:${h.line} ${HIT_LINE[r.kind](h)}`),
+    `  ${HINTS[r.kind]}`,
+  ]
   if (isGenerated(source)) lines.push(`  ${GENERATED_HINT}`)
   return lines
 }
@@ -259,7 +344,7 @@ async function main() {
   const files = git('ls-files', '-z', '--', 'packages/*.vue', 'apps/*.vue', 'pocs/*.vue').split('\0').filter(isScanned)
   const headCounts = readHeadCounts(root, files, parse)
   const totals = summarize(headCounts)
-  console.log(`[runtime-cost] files=${files.length} A=${totals.A} B=${totals.B} allowed=${totals.allowed} unparsable=${totals.unparsable.length}`)
+  console.log(`[runtime-cost] files=${files.length} ${KINDS.map(k => `${k}=${totals[k]}`).join(' ')} allowed=${totals.allowed} unparsable=${totals.unparsable.length}`)
   if (!baseRef) return printUnparsable(totals.unparsable)
 
   const base = git('merge-base', `origin/${baseRef}`, 'HEAD').trim()
@@ -301,7 +386,7 @@ function printUnparsable(files) {
 }
 
 function fail(lines) {
-  console.log('[runtime-cost] FAILED — this PR adds per-item overlays or hover-only controls:')
+  console.log('[runtime-cost] FAILED — this PR adds hits a file did not have before:')
   for (const l of lines) console.log(l)
   process.exit(1)
 }

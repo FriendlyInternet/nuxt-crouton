@@ -35,11 +35,11 @@ export default defineCroutonManifest({
       'useFormCollabPresence',
     ],
     components: [
-      { name: 'CollabStatus', description: 'Connection status indicator with colored dot and optional label', props: ['connected', 'synced', 'error', 'showLabel'] },
-      { name: 'CollabPresence', description: 'Stacked user avatars with overflow indicator (+N)', props: ['users', 'maxVisible', 'size', 'showTooltip'] },
-      { name: 'CollabCursors', description: 'Remote cursor overlay rendering for canvas/editor content', props: ['users', 'showLabels', 'offsetX', 'offsetY'] },
-      { name: 'CollabIndicator', description: 'Combined status and presence for toolbars — status dot plus user avatars', props: ['connected', 'synced', 'error', 'users', 'maxVisibleUsers'] },
-      { name: 'CollabEditingBadge', description: '"X editing" badge for collection list items via HTTP poll', props: ['roomId', 'roomType', 'currentUserId', 'pollInterval', 'showAvatars'] },
+      { name: 'CollabStatus', description: 'Connection status indicator with colored dot and optional label' },
+      { name: 'CollabPresence', description: 'Stacked user avatars with overflow indicator (+N)' },
+      { name: 'CollabCursors', description: 'Remote cursor overlay rendering for canvas/editor content' },
+      { name: 'CollabIndicator', description: 'Combined status and presence for toolbars — status dot plus user avatars' },
+      { name: 'CollabEditingBadge', description: '"X editing" badge for collection list items via HTTP poll' },
     ],
     apiRoutes: [
       // WebSocket upgrade endpoint — ?type=page|flow|document|sync|generic

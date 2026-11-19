@@ -8,10 +8,10 @@
  *   GITHUB_TOKEN=... APPLY=true node scripts/label-ready-epics.mjs # actually mutate labels
  *
  * For every `is:issue is:open label:epic`:
- *   - all sub-issues closed (total > 0) AND a `postmortem:done` (or `postmortem:skipped`,
+ *   - all sub-issues closed (total > 0, and for a `tickets:rolling` epic also no pending step) AND a `postmortem:done` (or `postmortem:skipped`,
  *     #3425 — a failed run never blocks) marker exists on a TRUSTED comment (pipeline bot or
  *     owner/member/collaborator; postmortemState in postmortem.mjs)  → `status:ready-to-close`
- *   - all sub-issues closed (total > 0) AND no postmortem marker
+ *   - all sub-issues closed (total > 0, and for a `tickets:rolling` epic also no pending step) AND no postmortem marker
  *                                            → `status:needs-postmortem`
  *   - ≥1 sub-issue is `status:in-progress`   → `status:in-progress`  (opening side, #980)
  *   - otherwise (open-but-idle children, or no children)
@@ -29,6 +29,7 @@
  */
 
 import { postmortemState } from './postmortem.mjs'
+import { stepsPending } from './lib/epic-steps.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -70,16 +71,18 @@ async function subIssues(number) {
   }
 }
 
-// Has a trusted comment on the epic carried the postmortem marker (done or skipped)? (HTML-comment
-// marker the postmortem skill leads with — invisible when rendered, present in the raw body.)
-async function hasPostmortem(number) {
+// The epic's comments, loaded once for both checks below ([] on a failed read).
+async function epicComments(number) {
   try {
-    const comments = await gh(`/repos/${OWNER}/${NAME}/issues/${number}/comments?per_page=100`)
-    return postmortemState(comments || []) !== null
+    return (await gh(`/repos/${OWNER}/${NAME}/issues/${number}/comments?per_page=100`)) || []
   } catch {
-    return false
+    return []
   }
 }
+
+// Has a trusted comment on the epic carried the postmortem marker (done or skipped)? (HTML-comment
+// marker the postmortem skill leads with — invisible when rendered, present in the raw body.)
+const hasPostmortem = (comments) => postmortemState(comments || []) !== null
 
 // Decide the target managed label for an epic from its children + postmortem state.
 //   • all children closed → ready-to-close (postmortem done) | needs-postmortem (not)
@@ -88,8 +91,11 @@ async function hasPostmortem(number) {
 // The closing side wins by construction: an all-closed epic has no in-progress child.
 async function targetLabel(epic) {
   const kids = await subIssues(epic.number)
-  if (kids.length > 0 && kids.every((k) => k.state === 'closed')) {
-    return (await hasPostmortem(epic.number)) ? READY : NEEDS
+  const comments = await epicComments(epic.number)
+  // #3846: a rolling epic with pending steps is not "all closed" — its later tickets don't exist yet.
+  const pending = stepsPending({ labels: labelNames(epic), comments, subIssues: kids })
+  if (kids.length > 0 && pending === 0 && kids.every((k) => k.state === 'closed')) {
+    return hasPostmortem(comments) ? READY : NEEDS
   }
   const active = kids.some((k) => k.state === 'open' && labelNames(k).includes(INPROGRESS))
   return active ? INPROGRESS : null

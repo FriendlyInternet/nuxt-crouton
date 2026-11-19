@@ -40,9 +40,10 @@ export function epicIssueFromRef(ref) {
  * @param {string} [c.appSlug]           performed_via_github_app.slug
  * @param {string} [c.userLogin]         the comment author's login
  * @param {string[]} [c.labels]          the waiting item's labels (an owner-screen comment needs status:blocked)
+ * @param {string} [c.starts]            what the router's reply record started (`answer-worker`, #4192)
  * @returns {{ revise: boolean, reason: string, reply?: boolean }}
  */
-export function shouldRevise({ body, authorAssociation, userType, appSlug, userLogin, labels } = {}) {
+export function shouldRevise({ body, authorAssociation, userType, appSlug, userLogin, labels, starts } = {}) {
   const text = String(body || '').trim()
   // A 🎯/📐 comment from our own screens on a waiting item is the owner's feedback (#3691).
   // `labels` are the WAITING item's: the issue's own, or a PR's source issue (routePrComment).
@@ -50,6 +51,9 @@ export function shouldRevise({ body, authorAssociation, userType, appSlug, userL
     return { revise: true, reason: 'an owner-screen comment on a waiting item' }
   }
   if (userType === 'Bot') return { revise: false, reason: 'posted by a bot' }
+  // The router read this as the owner's answer to the worker's open question (#4192): typed, or
+  // relayed by a chat. It only sets `answer-worker` for the owner speaking (reply-record readReply).
+  if (starts === 'answer-worker') return { revise: true, reason: "the owner's answer to the worker's question" }
   if (!COLLABORATOR.has(authorAssociation)) return { revise: false, reason: 'not a repo collaborator' }
   if (!text) return { revise: false, reason: 'empty comment' }
   // Agent comments post from the owner's account (interactive sessions), so `userType` can't

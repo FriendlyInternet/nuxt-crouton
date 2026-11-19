@@ -110,6 +110,30 @@ export interface CollabAwarenessState {
   ghostNode?: { id: string; position: { x: number; y: number } } | null
 
   /**
+   * Yjs client id of the sending editor (#3984). Rich-text editors set it so peers can
+   * key carets per client; states without it (crouton-flow, scripts) are not drawn.
+   */
+  clientId?: number
+
+  /**
+   * Rich-text caret as Yjs relative-position JSON (`Y.relativePositionToJSON`), so a
+   * peer can resolve it in its own copy of the doc. Distinct from the mouse `cursor`.
+   */
+  caret?: { anchor: unknown; head: unknown } | null
+
+  /**
+   * Root name of the Yjs fragment the focused editor is bound to, e.g. `content-fr`
+   * — tells a reader which language field `selection`/`block` refer to.
+   */
+  fragment?: string | null
+
+  /** Top-level block the selection starts in (index in the doc, node type name). */
+  block?: { index: number; type: string } | null
+
+  /** Selected text (capped at 500 characters), or null for an empty selection. */
+  text?: string | null
+
+  /**
    * Index signature for custom awareness properties.
    * Add domain-specific data as needed.
    */

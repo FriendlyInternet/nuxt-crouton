@@ -3,8 +3,10 @@ import assert from 'node:assert/strict'
 import { routeComment, KINDS } from './comment-route.mjs'
 import { sourceIssueFor } from './lib/owner-screens.mjs'
 import { isRejectedTwice } from './plan-hold.mjs'
+import { QUESTION_RECORD, REJECTED_RECORD } from './lib/plan-verdict.mjs'
 
-const c = (body, authorAssociation = 'OWNER', userType = 'User') => ({ body, authorAssociation, userType })
+// The owner is a login (#4168): an OWNER/MEMBER fixture is the owner's account `pmcp`, any other role is someone else.
+const c = (body, authorAssociation = 'OWNER', userType = 'User', userLogin = ['OWNER', 'MEMBER'].includes(authorAssociation) ? 'pmcp' : 'someone-else') => ({ body, authorAssociation, userType, userLogin })
 const issue = (labels = []) => ({ number: 7, isPr: false, labels })
 const pr = (o = {}) => ({ headRef: 'work-7', baseRef: 'epic/1-x', draft: false, state: 'open', ...o })
 const prIssue = { number: 7, isPr: true, labels: [] }
@@ -221,7 +223,8 @@ test('#3272 owner override on a plan held after two rejections', () => {
   assert.equal(kind({ comment: c('ok: the reviewer point is cosmetic', 'MEMBER'), issue: held }), 'approve-plan')
   assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
   assert.equal(kind({ comment: c('lgtm'), issue: held }), 'plan-needs-reason')
-  assert.equal(kind({ comment: c('ok: why', 'CONTRIBUTOR'), issue: held }), 'resume')
+  // a non-owner's reply on a held issue counts for nothing (#4168)
+  assert.equal(kind({ comment: c('ok: why', 'CONTRIBUTOR'), issue: held }), 'none')
   assert.equal(kind({ comment: c('please also cover the mobile case'), issue: held }), 'resume')
   assert.equal(kind({ comment: c('ok: why'), issue: { ...held, planHeld: false } }), 'resume')
   assert.equal(kind({ comment: c('1B 2A 3C'), issue: held }), 'quiz-reply')
@@ -239,7 +242,133 @@ test('#3272 planHeld worked out from a real thread (plan, no-go, plan, no-go)', 
   assert.equal(kind({ comment: c('ok'), issue: held }), 'plan-needs-reason')
 })
 
+// ── #4145: the router reads the reply against the open reply record ─────────────────────────────────────────────────
+const QREC = QUESTION_RECORD('Keep the legacy path?')
+const asked = { ...issue(['status:blocked', 'work-this']), planHeld: false }
+const rejected = { ...issue(['status:blocked', 'work-this']), planHeld: true }
+const pick = (d) => ({ kind: d.kind, starts: d.starts })
+
+// covers: T2
+test('#4145 record: plan-question replies resume with the starts readReply gives; record-less twin = today, no starts', () => {
+  const cases = [
+    ['ok', 'replan-with-yes'], ['✅', 'replan-with-yes'], ['lgtm', 'replan-with-yes'],
+    ['ok — build it', 'replan-with-feedback'], ['approved, but keep the column', 'replan-with-feedback'],
+    ['ok:', 'replan-with-feedback'], ['drop it, keep the new one', 'replan-with-feedback'],
+  ]
+  for (const [body, starts] of cases) {
+    assert.deepEqual(pick(routeComment({ comment: c(body), issue: asked, record: QREC })), { kind: 'resume', starts }, body)
+    const today = routeComment({ comment: c(body), issue: asked, record: null })
+    assert.equal(today.kind, 'resume', body)
+    assert.equal('starts' in today, false, body)
+  }
+})
+
+// covers: T2
+test('#4145 record: plan-rejected replies — owner ok: <reason> / approval decided by the record, same kind as today', () => {
+  const cases = [
+    ['ok: the reviewer point is cosmetic', 'OWNER', { kind: 'approve-plan', starts: undefined }],
+    ['> quoted\nok: the reviewer point is cosmetic', 'OWNER', { kind: 'approve-plan', starts: undefined }],
+    ['ok: cosmetic', 'MEMBER', { kind: 'approve-plan', starts: undefined }],
+    ['ok', 'OWNER', { kind: 'plan-needs-reason', starts: undefined }],
+    ['approved, but keep the column', 'OWNER', { kind: 'plan-needs-reason', starts: undefined }],
+    ['change X', 'OWNER', { kind: 'resume', starts: 'replan-with-feedback' }],
+    // a non-owner's reply on a held issue counts for nothing (#4168)
+    ['ok: cosmetic', 'COLLABORATOR', { kind: 'none', starts: undefined }],
+    // `ok : x` is no accepted form → today's result
+    ['ok : x', 'OWNER', { kind: 'resume', starts: undefined }],
+  ]
+  for (const [body, assoc, want] of cases) {
+    const got = routeComment({ comment: c(body, assoc), issue: rejected, record: REJECTED_RECORD })
+    assert.deepEqual(pick(got), want, `${assoc} ${body}`)
+    assert.equal(routeComment({ comment: c(body, assoc), issue: rejected, record: null }).kind, want.kind, `today: ${assoc} ${body}`)
+  }
+})
+
+// covers: T2
+test('#4145 record: the resume gate is kept and a record never acts on a non-blocked issue', () => {
+  const notOwned = { ...issue(['status:blocked']), planHeld: false }
+  // not pipeline-owned, not an approval → falls through to today's interpret
+  assert.deepEqual(pick(routeComment({ comment: c('drop it'), issue: notOwned, record: QREC })), { kind: 'interpret', starts: undefined })
+  // an approval passes the gate
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: notOwned, record: QREC })), { kind: 'resume', starts: 'replan-with-yes' })
+  // not blocked → the record is ignored
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: issue(['work-this']), record: QREC })), { kind: 'resume', starts: undefined })
+  // a bot reply is still dropped
+  assert.equal(routeComment({ comment: c('ok', 'OWNER', 'Bot'), issue: asked, record: QREC }).kind, 'none')
+})
+
 test('quiz-reply: `ok` on a blocked epic still resumes, as before (case 7)', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'epic']) }), 'resume')
   assert.equal(kind({ comment: c('ok'), issue: issue() }), 'resume')
+})
+
+// ── #4168: the owner is a LOGIN, not a role ─────────────────────────────────────────────────────────────────────────────
+// covers: T2
+test('#4168 the owner arriving as COLLABORATOR (workflow token) still approves a held plan', () => {
+  const held = { ...issue(['status:blocked', 'delegate-pi']), planHeld: true }
+  assert.equal(kind({ comment: c('ok: x', 'COLLABORATOR', 'User', 'pmcp'), issue: held }), 'approve-plan')
+  assert.equal(kind({ comment: c('ok: x', 'COLLABORATOR', 'User', 'pmcp'), issue: held, record: REJECTED_RECORD }), 'approve-plan')
+  // a custom owner login is honoured, and the default no longer applies
+  assert.equal(kind({ comment: c('ok: x', 'COLLABORATOR', 'User', 'alice'), issue: held, owner: 'alice' }), 'approve-plan')
+  assert.notEqual(kind({ comment: c('ok: x', 'OWNER', 'User', 'pmcp'), issue: held, owner: 'alice' }), 'approve-plan')
+})
+
+// covers: T2
+test('#4168 a MEMBER with another login is not the owner', () => {
+  const held = { ...issue(['status:blocked', 'delegate-pi']), planHeld: true }
+  assert.notEqual(kind({ comment: c('ok: x', 'MEMBER', 'User', 'someone-else'), issue: held }), 'approve-plan')
+  assert.notEqual(kind({ comment: c('ok: x', 'MEMBER', 'User', 'someone-else'), issue: held, record: REJECTED_RECORD }), 'approve-plan')
+})
+
+// covers: T2
+test("#4168 a non-owner's reply on a blocked issue → none, with or without an open reply record", () => {
+  const owned = { ...issue(['status:blocked', 'work-this']), body: '<!-- pipeline: epic=1 -->', planHeld: false }
+  for (const [assoc, login] of [['NONE', 'someone-else'], ['COLLABORATOR', 'someone-else'], ['OWNER', 'someone-else']]) {
+    for (const record of [null, QREC]) {
+      for (const body of ['ok', 'lgtm', 'please change X']) {
+        const d = routeComment({ comment: c(body, assoc, 'User', login), issue: owned, record })
+        assert.equal(d.kind, 'none', `${assoc}/${login} ${body} record=${!!record}`)
+        assert.equal('starts' in d, false)
+      }
+    }
+  }
+  // the owner's own `ok` on the same issue still resumes
+  assert.equal(kind({ comment: c('ok', 'COLLABORATOR', 'User', 'pmcp'), issue: owned, record: QREC }), 'resume')
+  assert.equal(kind({ comment: c('ok', 'COLLABORATOR', 'User', 'pmcp'), issue: owned }), 'resume')
+})
+
+// covers: T2
+test('#4168 a 📐 owner-screen comment from the Harness app on a blocked pipeline-owned issue still resumes', () => {
+  assert.equal(kind({ comment: app(SAVE), issue: heldIssue }), 'resume')
+})
+
+// ── #4192: only the owner's first answer to the worker's question starts the worker ────────────────────────────────────────────────
+const WREC = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+const building = { ...issue(['status:blocked', 'work-this', 'plan:approved']), planHeld: false }
+const chat = (ctx, text = 'x') => c(`> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\n${text}`, 'COLLABORATOR', 'User', 'pmcp')
+
+// covers: T4
+test('#4192 record: the owner\'s answer (typed or relayed) on an open worker question resumes with answer-worker', () => {
+  assert.deepEqual(pick(routeComment({ comment: c('A'), issue: building, record: WREC })), { kind: 'resume', starts: 'answer-worker' })
+  assert.deepEqual(pick(routeComment({ comment: chat('owner answer in chat 2026-11-17', '**A** — default it off.'), issue: building, record: WREC })), { kind: 'resume', starts: 'answer-worker' })
+})
+
+// covers: T4
+test("#4192 record: a chat's status note from the owner's account (🪪 claim, ✅ FYI) starts nothing", () => {
+  for (const note of [chat('claim', '🪪 claimed by chat 1be68d'), chat('FYI', '✅ done: merged the sibling')]) {
+    const d = routeComment({ comment: note, issue: building, record: WREC })
+    assert.deepEqual(pick(d), pick(routeComment({ comment: note, issue: building, record: null })), 'same as today')
+    assert.equal(d.starts, undefined)
+  }
+})
+
+// covers: T4
+test('#4192 record: a non-owner reply → none; a second owner ok (record closed) → today', () => {
+  assert.equal(kind({ comment: c('A', 'COLLABORATOR', 'User', 'someone-else'), issue: building, record: WREC }), 'none')
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: building, record: null })), { kind: 'resume', starts: undefined })
+})
+
+// covers: T2
+test("#4168 a collaborator's pipeline command on a blocked issue still dispatches", () => {
+  assert.equal(kind({ comment: c('/build', 'COLLABORATOR', 'User', 'someone-else'), issue: issue(['status:blocked']) }), 'dispatch')
 })

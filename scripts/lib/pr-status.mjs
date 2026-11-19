@@ -74,6 +74,8 @@ export function failureList(causes) {
   return { names, list }
 }
 
+const EXIT_MESSAGE = /^Process completed with exit code \d+\.?$/
+
 /**
  * The distilled failure (#2015). Takes [{name, annotations}] and keeps FAILURE-level ones (#2029):
  * `listAnnotations` returns notice/warning/failure together, noise first. Falls back to any level
@@ -82,7 +84,10 @@ export function failureList(causes) {
 export function failureExcerpts(entries) {
   const excerpts = []
   for (const { name, annotations } of entries) {
-    const hard = annotations.filter(a => a.annotation_level === 'failure')
+    // The runner's closing "Process completed with exit code N." is in every failed job and names
+    // nothing; the log-tail block carries the real cause.
+    const hard = annotations.filter(a => a.annotation_level === 'failure' && !EXIT_MESSAGE.test(String(a.message || '').trim()))
+    if (!hard.length && annotations.some(a => a.annotation_level === 'failure')) continue
     const use = hard.length ? hard : annotations
     const label = hard.length ? name : `${name} (no error annotation — showing context)`
     for (const a of use.slice(0, 2)) {

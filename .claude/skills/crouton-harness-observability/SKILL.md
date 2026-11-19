@@ -79,7 +79,7 @@ Full operating runbooks for the app-facing ones are in **crouton-run-and-operate
 | "the DEPLOY actually works" (not just built) | `node scripts/smoke-deployed.mjs --url <url> --email <e> --password <pw> [--app <n>] [--manifest <app>/deploy.config.json]` | Login proof via `/api/auth/get-session` → optional CRUD round-trip from `deploy.config.json` `smoke.crud` → screenshot. Built because "typecheck + boot" twice masqueraded as done (#293, per its header). Report-only in CI unless `smoke.required: true` |
 | "a generated app still boots/auths/CRUDs" | e2e fixture harness — see **crouton-validation-reality** and the **e2e-smoke** skill | Trace/video/screenshots land in `playwright-report/`; CI artifact `visual-qa-<fixture>` (14-day) |
 | "types still hold" | `pnpm typecheck` (never `npx nuxt typecheck` from root) | Necessary, never sufficient — AGENTS.md "Done is signed off, not asserted"; the story behind it: `crouton-failure-archaeology` (#988) |
-| "what data is on a remote DB" (read-only) | `node scripts/db-counts.mjs --app <app> --env staging\|prod [--dry-run]` | SELECTs only; discovers db name from `wrangler.jsonc`; real run needs CF creds, `--dry-run` needs none |
+| "what data is on a remote DB" (read-only) | `node scripts/db-counts.mjs --app <app> --env staging\|prod [--dry-run] [--check booking-quantity]` | SELECTs only; discovers db name from `wrangler.jsonc`; real run needs CF creds, `--dry-run` needs none |
 | "which gates apply to this path" | `node scripts/harness-stages.mjs <path>` | e.g. `packages/crouton-core/x.ts` → `stage: package, gates(required): test-first` |
 | "layer tags are honest" | `node scripts/harness-layers.mjs --check` | ⚠️ Despite its own header it is wired into **no** CI workflow, and it can be red for pre-existing untagged skills — a failure here may not be yours (re-verify block; #1098) |
 | "generated docs aren't stale" | `node scripts/gen-skills-doc.mjs --check` · `node scripts/gen-routing.mjs --check` · `node scripts/gen-package-catalog.mjs --check` | skills-doc: a skill missing from `META` only warns; stale HTML fails — new skills trip it until registered + regenerated |
@@ -111,19 +111,34 @@ rule:** a prior session's (or a task brief's) claimed limitation is a
 same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
 don't trust a stale assertion.
 
-**The sandbox can BOTH run a crouton app locally AND reach the live staging preview.**
-Local: `pnpm dev` + this chromium. Deployed: `*.pmcp.dev` staging egress is now
-**allowlisted** (#760), so from a web session you can `curl`/`$fetch`-drive the **real
-deployed build** — log in with the review creds, hit the live API, and observe
-deploy-only state (remote D1, a seed that actually ran) that local dev cannot show
-(verified: signup → set-active → create round-trips against a live `*.pmcp.dev`).
+**Every sandbox can run a crouton app locally; only some can reach live staging.**
+Local: `pnpm dev` + this chromium. Deployed (`*.pmcp.dev`, allowlisted in #760,
+regressed for web sessions: #2662) depends on where you run:
+
+- **CI runners (GitHub Actions / the pipeline) reach `*.pmcp.dev`** — verified
+  2026-11-16 (`gallery-staging.pmcp.dev/__review` → 200). There you can drive the
+  **real deployed build** — `node scripts/staging-get.mjs <app> <path>` signs in as the
+  review login and hits the live API; `scripts/smoke-deployed.mjs` runs the smoke reads.
+  That shows deploy-only state (remote D1, a seed that actually ran) local dev cannot.
+- **Interactive web sessions currently do NOT reach `*.pmcp.dev`, `*.workers.dev` PR
+  previews, or `*.blob.core.windows.net` CI log blobs** — they get
+  `CONNECT tunnel failed, response 403` (#2662; seen 2026-10-26 and 2026-11-16). Probe
+  once before planning on it:
+  `curl -sS -o /dev/null -w '%{http_code}' https://gallery-staging.pmcp.dev/__review`.
+- **How to get it back:** the owner adds `*.pmcp.dev`, `*.workers.dev` and
+  `*.blob.core.windows.net` to the allowed hosts in the web environment's network
+  settings — no repo change grants it. Until then a web session hands a staging check to
+  a CI run (the pipeline's plan/worker runs use `staging-get.mjs`), not to the owner's phone.
+
+(The signup → set-active → create round-trip against a live `*.pmcp.dev` was verified
+from a session that had the allowlist, #760.)
 Match the bug to the right rung of the **fidelity ladder** (`typecheck → local dev →
 deployed staging → the user's device`): a **runtime** bug (reload loop, 500, broken
 interaction) reproduce + verify **locally** first (the #988 board-reload lesson: three
 blind pushes vs one local repro), but a **deploy-only / production-build** bug must be
 checked against the **live** preview, not local. **Two residual gaps:** (a) **iOS/WebKit**
 — no Safari engine here, so a device-specific crash stays the user's call to confirm;
-(b) live **screenshots** — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
+(b) live **screenshots**, where staging is reachable — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
 egress proxy's re-terminated TLS, so pixel capture of a `*.pmcp.dev` page needs the proxy
 CA trusted in a chromium NSS profile first (**#1172**; functional/API drive already works).
 Never push an unverified guess and wait ~15 min for a deploy to learn it was wrong. The

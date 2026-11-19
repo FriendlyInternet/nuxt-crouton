@@ -24,7 +24,9 @@
     "assets-schema.json",
     "crouton.manifest.ts",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

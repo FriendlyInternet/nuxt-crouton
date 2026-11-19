@@ -3,7 +3,7 @@ import { scaffoldApp } from '../../lib/scaffold-app.ts'
 
 const find = (files: Array<{ path: string, content: string }>, p: string) => files.find(f => f.path === p)?.content ?? ''
 
-describe('scaffoldApp layout opt-in (#2282)', () => {
+describe('scaffoldApp layout feature (#2282, #3956)', () => {
   it('--features layout extends and depends on crouton-layout', async () => {
     const { files } = await scaffoldApp('demo', { features: ['layout'], dryRun: true, outDir: '/tmp/crouton-layout-optin' })
     expect(find(files, 'nuxt.config.ts')).toContain('@fyit/crouton-layout')

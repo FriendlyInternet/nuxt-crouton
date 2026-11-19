@@ -30,6 +30,7 @@ export const META = {
   'task-decompose': { group: 'build', triggers: ['ask', 'flow'] },
   'provider-swap': { group: 'build', triggers: ['ask'] },
   'block-authoring': { group: 'build', triggers: ['ask', 'flow'] },
+  'crouton-ui': { group: 'build', triggers: ['ask', 'flow'] },
   spec: { group: 'build', triggers: ['flow', 'ask'] },
   graduate: { group: 'build', triggers: ['ask', 'flow'] },
   'github-tasks': { group: 'plan', triggers: ['ask', 'flow'] },
@@ -117,7 +118,7 @@ export const FLOWS = [
     id: 'build', icon: '🔨', kind: 'flow',
     trigger: 'You build a feature',
     when: 'The sign-off gates fire first (agree the model / look / test), then you generate.',
-    skills: ['schema-review', 'ui-proposal', 'test-review', 'crouton', 'block-authoring']
+    skills: ['schema-review', 'ui-proposal', 'test-review', 'crouton', 'block-authoring', 'crouton-ui']
   },
   {
     id: 'commit', icon: '💾', kind: 'auto',
