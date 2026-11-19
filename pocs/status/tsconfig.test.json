@@ -1,0 +1,12 @@
+{
+  // Test-only tsconfig for vitest (see vitest.config.ts). No `extends`: the app's
+  // tsconfig.json extends the generated .nuxt/tsconfig.json, which doesn't exist in
+  // a --ignore-scripts install (CI plan-checks) and makes vite's oxc transform fail.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false
+  }
+}
