@@ -96,7 +96,12 @@ async function domainContextFor(context: FakeEvent['context']) {
 const Empty = { render: () => null }
 
 /** The package's public routes as Nuxt generates them, pinned for the setting. */
-function publicRouter(teamSlug: string, appSegments: string[], locales: string[]) {
+function publicRouter(
+  teamSlug: string,
+  appSegments: string[],
+  locales: string[],
+  history = teamHostHistory(createMemoryHistory(), teamSlug, appSegments)
+) {
   const pages = [
     { name: 'account', path: '/account' },
     { name: 'team-locale-slug', path: '/:team()/:locale()/:slug(.*)*' },
@@ -104,7 +109,7 @@ function publicRouter(teamSlug: string, appSegments: string[], locales: string[]
   ]
   applyPublicRouteOptions(pages, { routingMode: 'team', hideLocaleInUrl: pagesConfig.hideLocaleInUrl, locales })
   return createRouter({
-    history: teamHostHistory(createMemoryHistory(), teamSlug, appSegments),
+    history,
     routes: pages.map(p => ({ name: p.name, path: p.path, component: Empty }))
   })
 }
@@ -115,6 +120,7 @@ describe('connected domain + one-language setting on', () => {
     ssrState = null
   })
 
+  // covers: T1
   it('/<slug> opens the page: rewritten to the team and matched by the no-language route', async () => {
     const { url, context } = await serve('/about')
     expect(url).toBe('/acme/about')
@@ -129,7 +135,50 @@ describe('connected domain + one-language setting on', () => {
 
     const home = await serve('/')
     expect(home.url).toBe('/acme')
-    expect(router.resolve(home.url)).toMatchObject({ name: 'team-slug', params: { team: 'acme' } })
+    // The home page: same rendering route ([...slug].vue L103-115 renders when
+    // the setting is on). vue-router leaves `slug` out for an empty catch-all.
+    const homeRoute = router.resolve(home.url)
+    expect(homeRoute.name).toBe('team-slug')
+    expect(homeRoute.params).toEqual({ team: 'acme' })
+  })
+
+  // covers: T1
+  it('/en and /en/ forward to / (the language route, home page)', async () => {
+    for (const path of ['/en', '/en/']) {
+      const { url, context } = await serve(path)
+      expect(url).toBe(`/acme${path}`)
+      const ctx = await domainContextFor(context)
+      const router = publicRouter(ctx.resolvedTeamSlug.value!, ctx.appSegments.value, ['en'])
+      const r = router.resolve(url)
+      expect(r.name).toBe('team-locale-slug')
+      expect(r.params).toEqual({ team: 'acme', locale: 'en' })
+
+      // [team]/[locale]/[...slug].vue's server-side forward; slug is undefined here
+      const target = buildPagePath({
+        hideTeamInUrl: ctx.hideTeamInLinks.value,
+        hideLocaleInUrl: true,
+        team: r.params.team as string,
+        locale: r.params.locale as string,
+        slugPath: ((r.params.slug as string[] | undefined) ?? []).join('/')
+      })
+      expect(stripTeamPrefix(target, 'acme')).toBe('/')
+    }
+  })
+
+  // covers: T1
+  it('links built on the home page carry neither the team nor the language', async () => {
+    const ctx = await domainContextFor((await serve('/')).context)
+    const router = publicRouter(ctx.resolvedTeamSlug.value!, ctx.appSegments.value, ['en'])
+    const link = (slugPath: string) => buildPagePath({
+      hideTeamInUrl: ctx.hideTeamInLinks.value,
+      hideLocaleInUrl: ctx.hideLocaleInUrl.value,
+      team: 'acme',
+      locale: 'en',
+      slugPath
+    })
+    expect(router.resolve(link('about')).href).toBe('/about')
+    expect(router.resolve(link('events/fair')).href).toBe('/events/fair')
+    expect(router.resolve(link('')).href).toBe('/')
   })
 
   it('links carry neither the team nor the language', async () => {
@@ -200,5 +249,44 @@ describe('connected domain + one-language setting on', () => {
       slugPath: 'about'
     })).href
     expect(href).toBe('/en/about')
+  })
+
+  // covers: T1
+  it('setting off: / still forwards to /en/ (#4175 unchanged)', async () => {
+    pagesConfig.hideLocaleInUrl = false // before building the router: publicRouter reads it
+    const { url, context } = await serve('/')
+    expect(url).toBe('/acme')
+    const ctx = await domainContextFor(context)
+    expect(ctx.hideLocaleInUrl.value).toBe(false)
+    const router = publicRouter(ctx.resolvedTeamSlug.value!, ctx.appSegments.value, ['en', 'fr'])
+    const r = router.resolve(url)
+    expect(r.name).toBe('team-slug')
+    expect(r.params).toEqual({ team: 'acme' })
+
+    // [team]/[...slug].vue L104: `/${team}/${localeCode}/` with an empty slug
+    const targetUrl = '/acme/en/'
+    expect(stripTeamPrefix(targetUrl, ctx.resolvedTeamSlug.value!)).toBe('/en/')
+  })
+
+  // covers: T1
+  it("the app's own host is unchanged: /acme and /acme/en → /acme", async () => {
+    const { url, context } = await serve('/acme', 'pmcp.dev')
+    expect(url).toBe('/acme')
+    expect(context.isCustomDomain).toBeUndefined()
+
+    const router = publicRouter('acme', [], ['en'], createMemoryHistory())
+    expect(router.resolve('/acme')).toMatchObject({ name: 'team-slug' })
+    expect(router.resolve('/acme').params).toEqual({ team: 'acme' })
+    const withLang = router.resolve('/acme/en')
+    expect(withLang.name).toBe('team-locale-slug')
+    expect(withLang.params).toEqual({ team: 'acme', locale: 'en' })
+
+    expect(buildPagePath({
+      hideTeamInUrl: false,
+      hideLocaleInUrl: true,
+      team: 'acme',
+      locale: 'en',
+      slugPath: ''
+    })).toBe('/acme')
   })
 })
