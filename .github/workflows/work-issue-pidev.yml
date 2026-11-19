@@ -1348,6 +1348,17 @@ jobs:
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
 
+      # #4192: the worker writes its question to a file instead of posting it; this posts it with
+      # status:blocked and, when its work-<issue> PR is open, a reply record so the owner's first
+      # answer re-runs the worker on that PR. Before the artifact gate, which counts the hold.
+      - id: question
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+        run: node "$RUNNER_TEMP/pi-run/scripts/lib/worker-question.mjs" "$RUNNER_TEMP/worker-question.md"
+
       # #3583: held=1 when the PR is a draft AFTER the whole create/re-dispatch logic in `finish`
       # (new draft AND re-dispatch). Own step so the frozen `finish` block does not grow.
       - id: held
