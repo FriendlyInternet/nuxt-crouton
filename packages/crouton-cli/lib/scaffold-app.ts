@@ -111,6 +111,8 @@ interface ScaffoldVars {
   poc: boolean
   /** The `assets` feature is on (resolved) — the app needs R2 buckets bound as BLOB. */
   blob: boolean
+  /** `--site` (#4263): one team (`test1`), one locale (`en`) with plain addresses. */
+  site: boolean
   modules: Record<string, any>
 }
 
@@ -222,6 +224,33 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 `
     : ''
 
+  // --site (#4263): both fragments are '' without it, so a plain scaffold is unchanged.
+  const teamsBlock = vars.site
+    ? `,
+    // One site, one team. \`test1\` is the team every preview deploy seeds and
+    // attaches the review login to (scripts/seed-review-login.mjs), so the
+    // app's single team must be that same team. The slug never shows publicly.
+    teams: {
+      defaultTeamSlug: 'test1',
+      allowCreate: false,
+      showSwitcher: false,
+      showManagement: false
+    }`
+    : ''
+  const pagesRuntimeBlock = vars.site
+    ? `
+  // One-language public site: plain addresses (/about, not /en/about).
+  runtimeConfig: {
+    public: {
+      croutonPages: {
+        hideLocaleInUrl: true,
+        // Domains this app itself runs on (not treated as a team's connected domain), e.g. ['myapp.com']
+        appDomains: []
+      }
+    }
+  },`
+    : ''
+
   return `${cfImports}// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@fyit/crouton-devtools'],
@@ -243,19 +272,27 @@ ${emailBlock}
   croutonAuth: {
     methods: {
       passkeys: false
-    }
-  },
+    }${teamsBlock}
+  },${pagesRuntimeBlock}
 ${nitroBlock}
 })
 `
 }
 
 function tmplCroutonConfig(vars: ScaffoldVars): string {
+  const localesBlock = vars.site
+    ? `  // One language: the site is not translated, so the editor shows no language
+  // selector and, with hideLocaleInUrl, public addresses carry no locale.
+  locales: ['en'],
+  defaultLocale: 'en',
+
+`
+    : ''
   return `export default {
   // Which crouton packages this app uses is decided by \`extends\` in nuxt.config.ts
   // (#2286). A package's prompted configuration lands under \`features.<alias>\`.
 
-  // Collections to generate (add your collections here)
+${localesBlock}  // Collections to generate (add your collections here)
   // Example:
   // collections: [
   //   { name: 'products', fieldsFile: './schemas/products.json' }
@@ -584,7 +621,7 @@ export const passkeyClient = () => ({
 
 export async function scaffoldApp(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, dryRun?: boolean, outDir?: string, cwd?: string } = {}
+  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, site?: boolean, dryRun?: boolean, outDir?: string, cwd?: string } = {}
 ): Promise<{ files: ScaffoldFile[], appDir: string, cf: boolean, standalone: boolean }> {
   const { dryRun = false, outDir, cwd = process.cwd() } = options
   // Outside the crouton monorepo the app installs from npm (#3392): `./<name>`,
@@ -612,14 +649,16 @@ interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], fea
 // fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
 async function resolveScaffoldContext(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, outDir?: string }
+  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, site?: boolean, outDir?: string }
 ): Promise<ScaffoldContext> {
-  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain, outDir } = options
+  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain, site, outDir } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
   const modules = await loadModules()
-  const features = resolveFeatures(featureNames, modules)
+  // --site needs crouton-pages (#4263); without it the feature list is untouched.
+  const names = site && !featureNames.includes('pages') ? [...featureNames, 'pages'] : featureNames
+  const features = resolveFeatures(names, modules)
   // Core always; every other resolved feature by its manifest's package name, unless
   // core already bundles it (#2286 — the manifest is the package's self-description).
   const frameworkPackages = ['@fyit/crouton-core']
@@ -634,7 +673,7 @@ async function resolveScaffoldContext(
   }
   const poc = (outDir || '').startsWith('pocs/')
   const blob = features.includes('assets')
-  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, modules }
+  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, site: !!site, modules }
   return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
 }
 

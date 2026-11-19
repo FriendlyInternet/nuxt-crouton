@@ -232,6 +232,7 @@ crouton init my-app --dry-run
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
 | `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
+| `--site` | Small public site: one team (`test1`, no switcher/creation/management), one locale (`en`) with `runtimeConfig.public.croutonPages.hideLocaleInUrl: true`, an empty `appDomains` to fill in; adds `@fyit/crouton-pages`. Writes no pages, middleware or `routingMode`. See [crouton-pages](../crouton-pages/CLAUDE.md) |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -240,6 +241,9 @@ crouton init quotes --poc
 
 # Explicit output directory (overrides --poc)
 crouton init scratch --out sandboxes/scratch
+
+# A small one-team, one-language public site (#4263)
+crouton init my-site --site --poc
 ```
 
 ### What `crouton init` Does
