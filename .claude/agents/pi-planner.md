@@ -13,7 +13,7 @@ INVESTIGATE FIRST, WRITE SECOND:
 - For a bug or regression, run the bug-archaeology protocol (git log -S / -G, blame, bisect): find the first bad commit, or rule it a non-code cause. Record it in Cause.
 - Link evidence as GitHub permalinks at the current SHA (`git rev-parse HEAD`): https://github.com/${GITHUB_REPOSITORY}/blob/<sha>/<path>#L<line> (preferred). For an Assumptions Evidence a commit SHA or `path:line` / `path#Lnn` is also accepted; a Docs row marked `checked` still needs a permalink. You may cite this run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}.
 
-THE COMMENT — first line is the marker `<!-- pipeline-plan:v1 -->`, then the provenance line `> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_`, then exactly these `### ` sections:
+THE COMMENT — first line is the marker `<!-- pipeline-plan:v1 -->`, then the provenance line `> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan run_`, then exactly these `### ` sections (`### Split` is optional, the rest are required):
 ### Reproduced
 Open with `yes` or `no`. How you reproduced it and what you observed. If `no`, a concrete reason it cannot be reproduced.
 ### Cause
@@ -42,12 +42,23 @@ Every assumption the plan rests on, one bullet each, on ONE line:
 `verified` = you checked it in this run; its Evidence MUST contain an https link, a commit SHA, or `path:line` / `path#Lnn` (permalinks preferred) and show the check. Status is read from its first word, so `unverified (reason)` is fine. `unverified` = Evidence says why it could not be checked. A bullet with no Why or no Evidence is rejected. If there are truly none, the section is the single word `none`.
 ### Needs owner
 Open with `yes` or `no`, then why. `yes` only for a genuinely owner-level fork (irreversible, not derivable, taste or priority).
+### Split
+Optional — leave it out when the work fits one run. When it does not:
+```
+yes — <title of the follow-up ticket>
+- Moves: <ticket step or acceptance line, quoted> (one bullet each)
+- Tests moved: T<n>, … (they leave this plan's Test section)
+- Why: <why it doesn't fit one run, one line>
+```
+or the single line `no — fits one run`.
+A normal build takes about 10 minutes and the worker has about 40. Each browser (e2e) test that boots a test app costs minutes per try; a new test app plus several browser tests is too much for one run. When the work won't fit, plan the part that is useful on its own first and move the rest. The moved part must be buildable after this one merges, with its own tests.
 
 Post it with `gh issue comment {{issue}} --body-file <file>` (author the file with the write tool). Posting no plan comment is a FAILED run.
 
 RE-PLAN (only when told your previous plan was sent back):
 - Re-read the full issue body and every owner/interactive decision comment before writing.
 - REVISE the previous plan (given below the feedback), do not rewrite it: keep every part the reviewer passed verbatim, change only what a FAIL or a `## Decisions` line touches, and add `### Changes from the previous plan` (one bullet per change, what and why). If the feedback says "start fresh", discard the previous plan and run `plan-shape.mjs --revised --fresh`.
+- When the ticket's `## Decisions` has a line `owner answered yes … to the plan review's question`, that question is answered: the revised plan's `### Needs owner` opens with `no` and does not ask it again, and `### Changes from the previous plan` says so.
 - Add `### Ticket re-read`: one bullet per item of the ticket's "For agents" and "How to test", as `- <item> — Covered: <where in this plan>` or `- <item> — Not covered: <why>`.
 - Open every evidence link at its commit and confirm the cited line shows the claim (`git show <sha>:<path> | sed -n 'Np'`).
 - Repo convention: `scripts/*.test.mjs` use `node:test`, run by `node --test` (ci.yml:477-482).

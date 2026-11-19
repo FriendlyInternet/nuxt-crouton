@@ -8,6 +8,7 @@
     ".": "./nuxt.config.ts",
     "./app/utils/layout-compose": "./app/utils/layout-compose.ts",
     "./app/utils/layout-viability": "./app/utils/layout-viability.ts",
+    "./app/utils/layout-placement-check": "./app/utils/layout-placement-check.ts",
     "./app/utils/layout-edit": "./app/utils/layout-edit.ts",
     "./app/utils/layout-serialize": "./app/utils/layout-serialize.ts",
     "./app/utils/layout-responsive": "./app/utils/layout-responsive.ts",
@@ -26,7 +27,9 @@
     "server",
     "crouton.manifest.ts",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

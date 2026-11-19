@@ -226,7 +226,8 @@ function teamDb({ locations, bookings }) {
   for (let i = 0; i < locations; i++) d.exec(`INSERT INTO "bookings_locations" VALUES ('l${i}', '${ORG}')`)
   for (let i = 0; i < bookings; i++) d.exec(`INSERT INTO "bookings_bookings" VALUES ('b${i}', '${ORG}')`)
   d.close()
-  // The membership prune shells out to wrangler; a failing `npx` keeps the test offline.
+  // Every --sqlite write (the prune too, #4141) goes through node:sqlite; a failing `npx`
+  // still guards against any stray wrangler call reaching the network.
   writeFileSync(join(dir, 'npx'), '#!/bin/sh\nexit 1\n')
   chmodSync(join(dir, 'npx'), 0o755)
   return { file, bin: dir }
@@ -294,6 +295,65 @@ test('#3751 teamDataCountSql refuses a non-identifier table name', () => {
 test('#3751 missingTeamData: zero and failed counts are missing', () => {
   assert.deepEqual(missingTeamData({ a: 1, b: 0, c: null }), ['b', 'c'])
   assert.deepEqual(missingTeamData({ a: 4 }), [])
+})
+
+// #4141 case 3: a `defaultTeamSlug` app's sign-up already joined the seeded team with a
+// random member id; the seeded upsert adds a second row in the SAME team. The prune keeps
+// only the seeded row — the account ends with exactly one membership.
+import { pruneOtherMembershipsSql } from './seed-review-login.mjs'
+
+const KDM_ORG = 'seed:org:kdm'
+const KDM_MEMBER = 'seed:member:kdm:review-t-example-com'
+const memberRows = file => {
+  const d = new DatabaseSync(file)
+  try { return d.prepare('SELECT "id","userId","organizationId" FROM "member" ORDER BY "id"').all().map(r => ({ ...r })) } finally { d.close() }
+}
+
+test('#4141 pruneOtherMembershipsSql keeps only the seeded row, same-team sign-up row included', () => {
+  const d = new DatabaseSync(':memory:')
+  d.exec(`
+    CREATE TABLE "member" ("id" TEXT PRIMARY KEY, "userId" TEXT, "organizationId" TEXT);
+    INSERT INTO "member" VALUES
+      ('rand-signup', 'u1', '${KDM_ORG}'),
+      ('rand-other',  'u1', 'personal-org'),
+      ('${KDM_MEMBER}', 'u1', '${KDM_ORG}'),
+      ('theirs',      'u2', '${KDM_ORG}');
+  `)
+  d.exec(pruneOtherMembershipsSql('u1', KDM_MEMBER))
+  const left = d.prepare('SELECT "id","userId" FROM "member" ORDER BY "id"').all().map(r => ({ ...r }))
+  assert.deepEqual(left, [{ id: KDM_MEMBER, userId: 'u1' }, { id: 'theirs', userId: 'u2' }])
+  assert.match(pruneOtherMembershipsSql("a'b", 'm'), /"userId"='a''b'/)
+})
+
+test('#4141 --seed-team kdm on --sqlite leaves the review user exactly one membership', async () => {
+  const db = teamDb({ locations: 0, bookings: 0 })
+  const d = new DatabaseSync(db.file)
+  d.exec(`INSERT INTO "member" VALUES
+    ('rand-signup', 'u1', '${KDM_ORG}', 'member', 1),
+    ('rand-other',  'u1', 'personal-org', 'owner', 1),
+    ('theirs',      'u2', '${KDM_ORG}', 'member', 1);`)
+  d.close()
+  const server = createServer((req, res) => {
+    let body = {}
+    if (req.url === '/api/auth/get-session') body = { user: { id: 'u1' }, session: {} }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${server.address().port}`
+  const r = await new Promise((resolve) => {
+    execFile(process.execPath, [SCRIPT, '--url', url, '--email', 'review+t@example.com', '--password', 'pw',
+      '--seed-team', 'kdm', '--sqlite', db.file],
+    { env: { ...process.env, PATH: `${db.bin}:${process.env.PATH}`, SEED_SIGNUP_RETRY_DELAYS_MS: '0,0' } },
+    (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }))
+  })
+  await new Promise(r => server.close(r))
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /pruned .* other memberships/)
+  assert.deepEqual(memberRows(db.file), [
+    { id: KDM_MEMBER, userId: 'u1', organizationId: KDM_ORG },
+    { id: 'theirs', userId: 'u2', organizationId: KDM_ORG }
+  ])
 })
 
 // The deploy step must pass the app's `reviewLogin.requireData` through, and booking-demo

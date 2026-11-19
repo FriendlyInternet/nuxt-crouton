@@ -13,7 +13,6 @@
 //
 // Node core only. Pure except `sourceIssueFor` (takes the issue fetcher) and `readDiagramScene` (runs git).
 
-import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
 
 /** The screens. `reserved` ones are recognised now so a later screen needs no filter change. */
@@ -115,18 +114,4 @@ export function readDiagramScene({ sha, path } = {}, { cwd = process.cwd(), remo
     try { git('cat-file', '-e', `${sha}^{commit}`) } catch { git('fetch', '--depth=1', '--no-tags', remote, sha) }
     return git('show', `${sha}:${path}`)
   } catch { return null }
-}
-
-// CLI: `node scripts/lib/owner-screens.mjs --is-source <body-file> <app-slug>` → exit 0 when the
-// comment is an owner-screen comment from an allowed app, else 1 (used by work-issue-pidev.yml).
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  const [flag, file, slug] = process.argv.slice(2)
-  if (flag !== '--is-source' || !file) {
-    console.error('usage: owner-screens.mjs --is-source <body-file> <app-slug>')
-    process.exit(2)
-  }
-  const { readFileSync } = await import('node:fs')
-  let body = ''
-  try { body = readFileSync(file, 'utf8') } catch { process.exit(1) }
-  process.exit(isOwnerScreenSource({ comment: { body, appSlug: slug || null } }) ? 0 : 1)
 }

@@ -42,6 +42,8 @@ export const ALLOW = [
   ['loop-station-refresh.yml', 'workflow run', 'deploy dispatch, not a pipeline hand-off'],
   ['apply-decompose-plan.mjs', 'ghAddLabel(exec, repo, a.issue, a.label)', 'ensure-label: the descriptive `epic` label; adding it twice is the wanted no-op'],
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
+  ['claim.mjs', "'--add-label', 'claimed'", 'the descriptive `claimed` label (#3996); it starts no stage and a missed add only hides the ticket from a filter'],
+  ['chat-claim.mjs', "flagHasLabel(rest, '--add-label', 'work-this')", 'parses a command the require-unclaimed hook is judging (#3996); it adds no label'],
   ['epic-version.mjs', '--add-label', 'stamps the pipeline:v1 version marker on an epic; it starts no stage and a missed stamp is re-derived from the default'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
@@ -134,6 +136,52 @@ test("merge check's outer catch goes through deferMergeCheck", () => {
 test('build-review safety net defers the limit', () => {
   const a = readFileSync(join(ROOT, '.github/workflows/automerge-epic-subpr.yml'), 'utf8')
   assert.ok(a.slice(a.indexOf('Sweep — dispatch build review')).includes('deferOrThrow(e, core.warning)'))
+})
+// #4202: the fallback token is useless if it can't write labels/comments. Indentation scan, no YAML library.
+function permsBlock(L, start, indent) { // the `permissions:` lines at `indent`, from `start` to the next shallower line
+  const out = []
+  for (let i = start + 1; i < L.length; i++) {
+    if (!L[i].trim() || /^\s*#/.test(L[i])) continue
+    if (L[i].search(/\S/) <= indent) break
+    out.push(L[i].replace(/#.*$/, '').trim())
+  }
+  return out
+}
+export function fallbackJobsWithoutIssuesWrite(name, text) {
+  const L = text.split('\n'); const jobs = []
+  const top = L.findIndex((l) => /^permissions:\s*$/.test(l))
+  const topWrite = top >= 0 && permsBlock(L, top, 0).includes('issues: write')
+  const jobsAt = L.findIndex((l) => /^jobs:\s*$/.test(l))
+  if (jobsAt < 0) return { scanned: 0, missing: [] }
+  for (let i = jobsAt + 1; i < L.length; i++) {
+    const m = /^  ([\w-]+):\s*$/.exec(L[i])
+    if (m) jobs.push({ name: m[1], start: i })
+  }
+  let scanned = 0; const missing = []
+  jobs.forEach((j, k) => {
+    const body = L.slice(j.start, jobs[k + 1]?.start ?? L.length)
+    if (!body.some((l) => /^\s*HANDOFF_FALLBACK_TOKEN:/.test(l))) return
+    scanned++
+    const p = body.findIndex((l) => /^    permissions:\s*$/.test(l))
+    const ok = p >= 0 ? permsBlock(body, p, 4).includes('issues: write') : topWrite
+    if (!ok) missing.push(`${name}:${j.name}`)
+  })
+  return { scanned, missing }
+}
+// covers: T6
+test('H4: every job that sets HANDOFF_FALLBACK_TOKEN gets issues: write', () => {
+  let scanned = 0; const missing = []
+  for (const f of readdirSync(join(ROOT, '.github/workflows')).filter((n) => n.endsWith('.yml')).sort()) {
+    const r = fallbackJobsWithoutIssuesWrite(f, readFileSync(join(ROOT, '.github/workflows', f), 'utf8'))
+    scanned += r.scanned; missing.push(...r.missing)
+  }
+  assert.ok(scanned > 0, 'the scan found no job setting HANDOFF_FALLBACK_TOKEN')
+  assert.deepEqual(missing, [])
+  // the scan itself: a job-level read-only block is caught; a top-level write covers a job with no block
+  const ro = 'jobs:\n  a:\n    permissions:\n      issues: read\n    env:\n      HANDOFF_FALLBACK_TOKEN: x\n'
+  assert.deepEqual(fallbackJobsWithoutIssuesWrite('x.yml', ro).missing, ['x.yml:a'])
+  const top = 'permissions:\n  issues: write\njobs:\n  a:\n    env:\n      HANDOFF_FALLBACK_TOKEN: x\n'
+  assert.deepEqual(fallbackJobsWithoutIssuesWrite('x.yml', top), { scanned: 1, missing: [] })
 })
 test('hand-off sweep does not depend on cron alone', () => {
   const h = readFileSync(join(ROOT, '.github/workflows/handoff-sweep.yml'), 'utf8')

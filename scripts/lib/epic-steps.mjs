@@ -159,6 +159,25 @@ export function ticketsByStep(steps = [], subIssues = []) {
 }
 
 /**
+ * PURE (#4184). Every issue of step k: the step list's `ticket` plus each issue whose `step` (or
+ * body `step=<k>`) is k — a split ticket shares its original's step. A listed ticket that is not
+ * among `issues` counts as open. issues = `[{ number, state, step?, body? }]`.
+ */
+function ticketsOfStep(k, steps = [], issues = []) {
+  const listed = (steps || []).find((s) => s.step === k)?.ticket || null
+  const mine = (issues || []).filter((i) => i.number === listed || (i.step ?? stepOf(i.body)) === k)
+  const open = mine.filter((i) => i.state !== 'closed').map((i) => i.number)
+  if (listed && !mine.some((i) => i.number === listed)) open.unshift(listed)
+  return { count: mine.length + (listed && !mine.some((i) => i.number === listed) ? 1 : 0), open }
+}
+
+/** PURE (#4184). Step k is closed only when it has at least one issue and every issue of it is closed. */
+export function stepClosed(k, steps = [], issues = []) {
+  const { count, open } = ticketsOfStep(k, steps, issues)
+  return count > 0 && open.length === 0
+}
+
+/**
  * PURE. How many steps of a rolling epic are not finished (no ticket yet, or its ticket is open)?
  * 0 for an epic without `tickets:rolling` (nothing changes there), and 0 for a rolling epic with no
  * bot step list (fail open: an existing epic opted in by label has all its tickets already, so
@@ -174,9 +193,7 @@ export function pendingDetail({ labels = [], comments = [], subIssues = [] } = {
   // An unreadable step list never counts as finished: no epic → main PR, no postmortem.
   if (error) return { pending: 1, reason: `the step-list comment cannot be read: ${error}` }
   if (!steps) return { pending: 0, reason: 'rolling epic with no bot step list — every sub-issue closed is the finish line' }
-  const byStep = ticketsByStep(steps, subIssues)
-  const state = new Map((subIssues || []).map((i) => [i.number, i.state]))
-  const pending = steps.filter((s) => !byStep[s.step] || state.get(byStep[s.step]) !== 'closed').length
+  const pending = steps.filter((s) => !stepClosed(s.step, steps, subIssues)).length
   return { pending, reason: `${pending} of ${steps.length} step(s) not finished` }
 }
 
@@ -301,10 +318,15 @@ function blockerWaits(steps, tickets, entries) {
   if (!steps) return waits
   const byStep = ticketsByStep(steps, entries.map((t) => ({ number: t.n, step: t.step ?? null })))
   const stepOfTicket = new Map(Object.entries(byStep).map(([k, n]) => [n, Number(k)]))
+  const issues = entries.map((t) => ({ number: t.n, state: t.state, step: t.step ?? null }))
   for (const t of entries) {
     const k = t.step ?? stepOfTicket.get(t.n)
     const blockers = steps[k]?.blockedBy || []
-    const open = blockers.map((b) => byStep[b] || 0).filter((n) => !n || tickets[n]?.state !== 'closed')
+    // #4184: a blocker step waits on EVERY open ticket of it (a split ticket too); `0` = no ticket yet.
+    const open = blockers.filter((b) => !stepClosed(b, steps, issues)).flatMap((b) => {
+      const o = ticketsOfStep(b, steps, issues).open
+      return o.length ? o : [0]
+    })
     if (open.length) waits.set(t.n, open)
   }
   return waits
@@ -328,7 +350,8 @@ function ticketAction(t, waits = new Map()) {
 /** Steps whose blockers are closed and that have no ticket yet, and whether every step is closed. */
 function stepProgress(steps, tickets, entries) {
   const byStep = ticketsByStep(steps, entries.map((t) => ({ number: t.n, step: t.step ?? null })))
-  const closed = (k) => byStep[k] && tickets[byStep[k]]?.state === 'closed'
+  const issues = entries.map((t) => ({ number: t.n, state: t.state, step: t.step ?? null }))
+  const closed = (k) => stepClosed(k, steps, issues)
   const write = steps.filter((s) => !byStep[s.step] && s.blockedBy.every(closed)).map((s) => ({ type: 'write-ticket', step: s.step }))
   return { done: steps.every((s) => closed(s.step)), write }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-bookings",
   "version": "0.1.0",
-  "description": "Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations",
+  "description": "Booking system layer for Nuxt Crouton - locations with or without time slots, each offering products with a stock",
   "type": "module",
   "main": "./nuxt.config.ts",
   "files": [
@@ -15,7 +15,9 @@
     "nuxt.config.ts",
     "crouton.manifest.ts",
     "README.md",
-    "SCHEMAS.md"
+    "SCHEMAS.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",
@@ -67,6 +69,7 @@
   },
   "dependencies": {
     "@fyit/crouton-calendar": "workspace:*",
+    "@fyit/crouton-catalog": "workspace:*",
     "@fyit/crouton-editor": "workspace:*"
   },
   "peerDependencies": {

@@ -38,8 +38,10 @@ run-name: "#${{ inputs.issue || github.event.issue.number }} · ${{ inputs.mode 
 #
 # TWO LOAD-BEARING pi FACTS (verified on the mac-mini this WS):
 #   • NO TURN-CAP FLAG. `pi --help` exposes only model-cycling "Limit" options, not a
-#     claude-style `--max-turns`. The ONLY cost/safety bound is the job `timeout-minutes`
-#     (45, below) — do NOT assume a per-turn cap exists.
+#     claude-style `--max-turns`. The cost/safety bounds are the job `timeout-minutes`
+#     (45, below) and, in build mode, the pi step's own computed limit (45 − setup − 5, step
+#     `budget`, #4183) so a timeout fails the step and the finish step still saves the work —
+#     do NOT assume a per-turn cap exists.
 #   • SINGLE-MODEL. pi runs the whole orchestrator→decomposer→worker pipeline on ONE
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
@@ -123,6 +125,10 @@ jobs:
       conflict: ${{ steps.revise.outputs.conflict }}
       held: ${{ steps.held.outputs.held }}
     steps:
+      # #4183: the job's start time, so the pi step's own limit can leave room for finish.
+      - id: job-start
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
@@ -387,7 +393,7 @@ jobs:
       # stashed copy, not the (possibly-switched) working tree. (#1764/#1782, Pattern B.)
       - id: baseline
         run: |
-          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
+          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out|pi-session-out'
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
@@ -405,10 +411,16 @@ jobs:
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
           cp scripts/preexisting-type-tickets.mjs "$RUNNER_TEMP/"  # imports ./pi-finish.mjs beside it (#3249)
+          # The pi step runs pi-run.mjs (all modes) from this copy (#3620): a revise round checks out a PR
+          # branch that may predate it. scripts/ keeps the layout its relative imports need; .claude links
+          # to the working tree so the personas are read from there, exactly as before.
+          rm -rf "$RUNNER_TEMP/pi-run" && mkdir -p "$RUNNER_TEMP/pi-run" && cp -r scripts "$RUNNER_TEMP/pi-run/scripts" && ln -s "$PWD/.claude" "$RUNNER_TEMP/pi-run/.claude"
           # Push retry (#3306): one GitHub server error must not throw away a finished build.
           cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
           cp scripts/run-record.mjs "$RUNNER_TEMP/run-record.mjs"
+          # Session-record redactor (#4161) — runs after pi, on whatever branch pi left checked out.
+          cp scripts/pi-session-redact.mjs "$RUNNER_TEMP/pi-session-redact.mjs"
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
           # can predate the current scripts (an epic branch cut earlier) — the first run printed an
           # old error instead of the tool line. Run it from a copy taken now, like pi-finish.
@@ -519,8 +531,19 @@ jobs:
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade.
-      - id: pi
+      # #4183: pi's own limit (45 − minutes used − 5). A step that hits its own limit FAILS (the
+      # job is not cancelled), so `finish` still saves the work as a draft PR.
+      - id: budget
+        if: ${{ inputs.mode != 'plan' }}
         env:
+          JOB_START: ${{ steps.job-start.outputs.ts }}
+        run: node scripts/lib/pi-time-budget.mjs minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
+
+      - id: pi
+        timeout-minutes: ${{ inputs.mode == 'plan' && 45 || fromJSON(steps.budget.outputs.pi_minutes || '40') }}
+        env:
+          # #4183: epoch seconds the pi step is killed at — .pi/extensions/finish-check.ts skips a late round.
+          PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
@@ -549,110 +572,30 @@ jobs:
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -uo pipefail
-          # The Harness App identity for any commits pi makes (so they're attributable
-          # and not a masquerading human — the #862 lesson).
+          # Harness App identity for pi's commits (#862). The step's decisions — mode, prompt,
+          # hand-off files, outputs — live in scripts/pi-run.mjs (#3620; rationale in its header).
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
-          START=$(date +%s)
-          # Front-load the CANONICAL operating contract (#1022) so pi does not stall-and-ask
-          # while headless (the #839 failure) and follows the same non-negotiable rules a Claude
-          # task-worker does. The contract text lives in ONE place — .claude/agents/pi-operating-
-          # contract.md — and is `cat` into the prompt verbatim here AND in decompose-on-issue-
-          # pidev.yml, so the two flows can't drift (they were byte-identical hand-maintained
-          # copies before). That file is PURE PROSE by contract: no frontmatter/headers — raw-injected.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
-          # The persona lives in .claude/agents/ (#2431): pi-worker.md (implement) or pi-reviser.md
-          # (revise an open PR from an owner comment, #2446), each + the shared operating contract +
-          # _worker-checks.md (visual evidence #1748, compile self-check #2182). Rendered by
-          # scripts/pipeline-prompt.mjs; its golden test pins the output byte-for-byte.
-          # The integration branch comes OFF the issue's pipeline block via the `ctx` step (#1695).
-          BRANCH_INSTR="branch off main and target the PR at main"
-          if [ -n "${EPIC_BRANCH:-}" ]; then
-            BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
-          fi
-          if [ -n "${PLAN:-}" ]; then
-            node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" > "$PROMPT_FILE"
-            # #2756: a plan REVIEW sent the plan back — `feedback` is the review comment id. Append
-            # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
-            if [ -n "${FEEDBACK_ID:-}" ]; then
-              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
-              if [ "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .user.type)" != "Bot" ] || node scripts/lib/owner-screens.mjs --is-source "$RUNNER_TEMP/feedback.txt" "$(gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq '.performed_via_github_app.slug // ""')"; then
-                WHO='the OWNER replied with guidance on a held plan - treat their comment as authoritative direction'
-              else
-                WHO='by the plan reviewer'
-              fi
-              # #3341: hand over the BEST earlier plan (the one whose review passed the most checks,
-              # newest on a tie) and the ticket's Decisions, so the planner revises instead of
-              # rewriting. "start fresh" in the feedback or a Decision skips the old plan.
-              gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}/comments" --paginate | jq -s -r --argjson fb "${FEEDBACK_ID}" 'add' | jq -r --argjson fb "${FEEDBACK_ID}" -f scripts/lib/best-plan.jq > "$RUNNER_TEMP/prev-plan.txt" || : > "$RUNNER_TEMP/prev-plan.txt"
-              gh issue view "$ISSUE" --json body -q .body | awk '/^## Decisions[ \t]*$/{f=1;print;next} /^## /{f=0} f' > "$RUNNER_TEMP/decisions.txt" || : > "$RUNNER_TEMP/decisions.txt"
-              FRESH=""; cat "$RUNNER_TEMP/feedback.txt" "$RUNNER_TEMP/decisions.txt" | grep -qi 'start fresh' && FRESH=1
-              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK (%s). REVISE the previous plan below: keep every part that passed verbatim, change only what a FAIL or a Decisions line touches, and add a `### Changes from the previous plan` section (what changed and why). Fix each FAIL by actually investigating, not by rewording. Add a `### Ticket re-read` section (one bullet per item of the ticket For agents and How to test: `- <item> — Covered: <where>` or `— Not covered: <why>`) and run `node scripts/lib/plan-shape.mjs --revised <draft>` before posting:\n\n' "$WHO"; cat "$RUNNER_TEMP/feedback.txt"
-                if [ -n "$FRESH" ]; then printf '\n\nThe feedback says START FRESH: discard the previous plan, write a new one, and check it with `--revised --fresh`.\n'
-                elif [ -s "$RUNNER_TEMP/prev-plan.txt" ]; then printf '\n\nPREVIOUS PLAN (revise this):\n\n'; cat "$RUNNER_TEMP/prev-plan.txt"; fi
-                if [ -s "$RUNNER_TEMP/decisions.txt" ]; then printf '\n\nTICKET DECISIONS (binding; no change may contradict them):\n\n'; cat "$RUNNER_TEMP/decisions.txt"; fi
-              } >> "$PROMPT_FILE"
-            fi
-          elif [ -n "${REVISE:-}" ]; then
-            PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            if [ "${REV_CONFLICT:-}" = "1" ]; then
-              # #3002: the base merge conflicted — the task is the merge, with its own persona (the
-              # reviser's "work-<issue>" / "owner comment" framing made pi stop on epic PRs).
-              node scripts/pipeline-prompt.mjs pi-conflict-resolver --var "pr=$PRN" --var "issue=$ISSUE" --var "branch=${REV_BRANCH:-work-${ISSUE}}" \
-                --var-file "task=$RUNNER_TEMP/conflict-task.txt" > "$PROMPT_FILE"
-            else
-              node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
-                --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
-            fi
-          else
-            node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
-            # #2757: BUILD FROM AN APPROVED PLAN — label-router.yml passes the plan comment id.
-            # The worker implements exactly that plan, (the ledger row is written by record-outcome, #3457).
-            if [ -n "${APPROVED_PLAN_ID:-}" ]; then
-              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
-              node scripts/plan-held.mjs --approved-prompt --plan-id "$APPROVED_PLAN_ID" --plan-file "$RUNNER_TEMP/approved-plan.txt" --issue "$ISSUE" > "$RUNNER_TEMP/approved-section.txt"
-              cat "$RUNNER_TEMP/approved-section.txt" >> "$PROMPT_FILE"
-            fi
-          fi
-          # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
-          # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
-          # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
-          # RC/conclusion/exec_log are written — the artifact-gate then has no exec_log to
-          # read and posts the generic "no deliverable" instead of naming the cause (the
-          # #1299 billing case). Disable errexit around JUST this pipeline; PIPESTATUS[0]
-          # still carries pi's real exit code. (NB: a trailing `|| true` does NOT work — it
-          # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
-          # failure as success. Verified empirically, #1299.)
-          set +e
-          # --approve: trust the project so pi loads the lean .pi/settings.json CI profile AND the
-          # .pi/extensions/ completion-enforcer (#1782/#1764). Without it the untrusted runner path
-          # silently falls back to the global 28-extension profile (incl pi-ask-user) + ~2min startup.
-          # --session-dir: write pi's session to a PER-RUN isolated dir so the finish step reads it
-          # deterministically. ~/.pi/agent/sessions is shared across all 5 self-hosted runners, so a
-          # "find the newest session" heuristic grabs the wrong run's session under concurrency (#1764).
+          START=$(date +%s)
+          node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" prompt > "$PROMPT_FILE"
           PI_SESSION_DIR="$RUNNER_TEMP/pi-session"; mkdir -p "$PI_SESSION_DIR"
+          # bash -e would abort on a failing `pi | tee` before RC is recorded, and `|| true` would
+          # clobber PIPESTATUS[0] (#1299) — so errexit is off around just the pipeline.
+          set +e
           pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             < "$PROMPT_FILE" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
 
-          # ── COMPILE SELF-HEAL (#2182) — did pi's edits actually compile? ──────────────
-          # The finish gate only typechecks the touched APP, so a packages/-only change that does
-          # not even parse (an unbalanced .vue tag) used to open a PR as "acceptance: not verified"
-          # and fail CI only INDIRECTLY (an E2E dev-server 500 → auth-setup timeout), with the
-          # packages/-barred fix-bot unable to touch it — so a human had to notice (#2179/#2180).
-          # Compile the TOUCHED .vue right here (deterministic, ~ms, no app boot) and, if any fails,
-          # re-drive pi ONCE — same session, so it has the context — to fix EXACTLY that. This is the
-          # "fix during the flow": the break is closed in the same run, not hours later by a human.
-          # Reuses the in-scope pi env (PI_MODEL/PI_PROVIDER/PI_SESSION_DIR) — no second env block.
+          # Compile self-heal (#2182): touched .vue that do not compile → re-drive pi once, same session.
           HEAL_ERRS="$RUNNER_TEMP/compile-errors.txt"
           if ! node scripts/verify-touched-compiles.mjs > "$HEAL_ERRS" 2>&1; then
             echo "::warning::touched .vue do not compile — re-driving pi once to fix (#2182)"
             cat "$HEAL_ERRS" || true
             HEAL_PROMPT="$RUNNER_TEMP/heal-prompt.txt"
-            printf 'The Vue file(s) you just edited DO NOT COMPILE. This is a BROKEN build, not a typecheck nitpick — fix ONLY these compile errors and change nothing else. Most are an unbalanced/unclosed tag: every <tag> you opened needs its matching close. Do NOT run git commit and do NOT open a PR. The exact errors:\n\n' > "$HEAL_PROMPT"
-            cat "$HEAL_ERRS" >> "$HEAL_PROMPT"
+            node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" heal "$HEAL_ERRS" > "$HEAL_PROMPT"
             set +e
             pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
               < "$HEAL_PROMPT" 2>&1 | tee -a "$LOG"
@@ -664,13 +607,8 @@ jobs:
               cat "$HEAL_ERRS" || true
             fi
           fi
-
           END=$(date +%s)
-          echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
-          echo "conclusion=$([ "$RC" -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
-          # Piece 3 (exec-log adapter): hand the plain-text run log to the artifact-gate so it can
-          # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
-          echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
+          node "$RUNNER_TEMP/pi-run/scripts/pi-run.mjs" outputs --rc "$RC" --start "$START" --end "$END" --log "$LOG" >> "$GITHUB_OUTPUT"
 
       # ── CONFLICT CONCLUSION (#2848) — assert pi's resolution, then commit it as ONE merge ──
       # Runs only when the revise base-merge conflicted. Three outcomes, each visible on the PR:
@@ -822,8 +760,13 @@ jobs:
         # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
         # nothing to finish, and the step's own failure then fed the artifact-gate a false
         # "the harness crashed" signal. Plan mode (#2755) never commits, so it skips this.
+        # — including a pi step killed by its own time limit (#4183), which is a failure, not a cancel.
         if: ${{ !cancelled() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' && inputs.mode != 'plan' }}
         env:
+          # #4183: a pi step that failed at its deadline ran out of time → draft PR + the ⏱️ note.
+          PI_OUTCOME: ${{ steps.pi.outcome }}
+          PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
+          PI_MINUTES: ${{ steps.budget.outputs.pi_minutes }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -856,7 +799,7 @@ jobs:
           # surface the tail as an annotation (job logs are unreachable from an agent session).
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
-          git config user.name  "nuxt-harness[bot]"
+          rm -f .git/index.lock; git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
 
@@ -1284,8 +1227,8 @@ jobs:
             # all three are "don't land this yet". The visual case is a HOLD, not a failure: the
             # owner reviews from a phone and cannot judge a layout change from a diff, so the PR
             # waits for an `lgtm` reply exactly like the claude lane's UI gate (#307/#572).
-            DRAFT_FLAG=""
-            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$SIGNOFF_HOLD" = "1" ]; } && DRAFT_FLAG="--draft"
+            DV="$(node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" draft --outcome "${PI_OUTCOME:-}" --deadline "${PI_DEADLINE:-}" --minutes "${PI_MINUTES:-}" --accept "$ACCEPT" --tests-missing "$TESTS_MISSING" --signoff "$SIGNOFF_HOLD")" || DV="DRAFT=--draft"
+            DRAFT_FLAG="$(sed -n 's/^DRAFT=//p' <<<"$DV")"; HOLD_NOTE="$(sed -n 's/^NOTE_B64=//p' <<<"$DV" | base64 -d 2>/dev/null)${HOLD_NOTE}"
             # #3411: say WHICH files lack a test on the ticket too, not just in the run record.
             if [ "$TESTS_MISSING" = "1" ]; then
               gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _tests gate (#3411)_\n\n🧪 **Drafted: no test for** `%s`. Build review skips drafts, so it will not run until a test is added (comment on the PR asking for one) or the PR is marked ready by hand.' "${PKG_LOGIC_FILES//,/\`, \`}")" || true
@@ -1407,6 +1350,17 @@ jobs:
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
           fi
 
+      # #4192: the worker writes its question to a file instead of posting it; this posts it with
+      # status:blocked and, when its work-<issue> PR is open, a reply record so the owner's first
+      # answer re-runs the worker on that PR. Before the artifact gate, which counts the hold.
+      - id: question
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && inputs.mode != 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+        run: node "$RUNNER_TEMP/pi-run/scripts/lib/worker-question.mjs" "$RUNNER_TEMP/worker-question.md"
+
       # #3583: held=1 when the PR is a draft AFTER the whole create/re-dispatch logic in `finish`
       # (new draft AND re-dispatch). Own step so the frozen `finish` block does not grow.
       - id: held
@@ -1414,7 +1368,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BR: ${{ steps.ctx.outputs.rev_branch || format('work-{0}', inputs.issue || github.event.issue.number) }}
+          PI_OUTCOME: ${{ steps.pi.outcome }}
+          PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
         run: |
+          # #4183: a round that finished in time removes an earlier round's ⏱️ line (kept if this one timed out too).
+          # `|| true`: the line is cosmetic — a failure to remove it must not stop the held check below.
+          node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" clear --branch "$BR" --outcome "$PI_OUTCOME" --deadline "$PI_DEADLINE" || true
           D="$(gh pr list --head "$BR" --state open --json isDraft -q '.[0].isDraft' 2>/dev/null || true)"
           [ "$D" != "true" ] || echo "held=1" >> "$GITHUB_OUTPUT"
 
@@ -1434,6 +1393,31 @@ jobs:
           name: worker-screenshots-${{ inputs.issue || github.event.issue.number }}
           path: screenshots/*.png
           retention-days: 14
+          if-no-files-found: ignore
+
+      # #4161: keep pi's session record on EVERY outcome — a run killed at its time limit used to
+      # lose everything it did. The repo is public and artifact contents are not log-masked, so
+      # the record is redacted first. `always()` (not `!cancelled()`): it must fire on a timeout.
+      - name: Redact pi session record
+        if: always()
+        env:
+          REDACT_VARS: GH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN,REVIEW_SEED_SECRET,GITHUB_TOKEN_DEFAULT
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          GITHUB_TOKEN_DEFAULT: ${{ github.token }}
+        # `|| true` — best effort: a failed redaction must not fail the job (the record is a debug
+        # aid, not the deliverable). Only already-redacted files are ever written to pi-session-out,
+        # so a failure means fewer files get uploaded, never an unredacted one.
+        run: node "$RUNNER_TEMP/pi-session-redact.mjs" "$RUNNER_TEMP/pi-session" pi-session-out || true
+
+      - name: Upload pi session record
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pi-session-${{ github.run_id }}
+          path: pi-session-out/
+          retention-days: 3
           if-no-files-found: ignore
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
@@ -1530,9 +1514,21 @@ jobs:
           # paging "produced nothing" on the ticket too would be a false alarm.
           CONFLICT_FAILED: ${{ steps.conflict.outputs.failed }}
           CONFLICT_ASKED: ${{ steps.conflict.outputs.asked }}
+          # #4161: a cancelled job (time limit, person, newer run) is named as such, not "NO run log".
+          JOB_STATUS: ${{ job.status }}
+          JOB_TIMEOUT_MIN: '45'  # keep equal to timeout-minutes at L114
+          # #4183: the pi step failed at its own limit → name "ran out of time", not "upstream of pi".
+          PI_OUTCOME: ${{ steps.pi.outcome }}
+          PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
+          PI_MINUTES: ${{ steps.budget.outputs.pi_minutes }}
         with:
           script: |
-            const { artifactGate } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')).href)
+            // #4078: only the `baseline` step makes the $RUNNER_TEMP copy. When setup fails before it,
+            // fall back to the checkout's scripts/lib so the gate names the cause instead of crashing.
+            const path = require('path'), fs = require('fs')
+            const tmp = path.join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')
+            const gate = fs.existsSync(tmp) ? tmp : path.join(process.env.GITHUB_WORKSPACE, 'scripts/lib/artifact-gate.mjs')
+            const { artifactGate } = await import(require('url').pathToFileURL(gate).href)
             await artifactGate({ github, context, core })
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────

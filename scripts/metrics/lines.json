@@ -66,6 +66,7 @@
       "loop-station-refresh.yml",
       "pi-key-canary.yml",
       "pipeline-metrics.yml",
+      "pipeline-review.yml",
       "quality-digest.yml",
       "skills-digest.yml",
       "sync-changelogs.yml",

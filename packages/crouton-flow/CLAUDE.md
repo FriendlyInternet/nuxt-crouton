@@ -355,5 +355,5 @@ Components auto-import with `CroutonFlow` prefix:
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

@@ -20,7 +20,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | Flag | Purpose | Default |
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
-| `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
+| `defaultTeamSlug` | Everyone joins this team on sign-up and on every sign-in, so accounts made before the setting join too (first member → `owner`, rest → `member`) | undefined |
 | `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
@@ -98,7 +98,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 - `AuthSidebar`, `TeamSection`
 
 ### Pill
-- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
+- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; recent status entries + "See all activity" sit in one "Recent" slide-out (`buildRecentMenuItem`, `app/utils/userPillRecent.ts`); marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
 
 ## Server Utilities
 
@@ -248,7 +248,7 @@ E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.
 | `/api/teams/[id]/email-logs` | GET | Admin | List email logs (filter by `type`, `status`; paginate with `limit`, `offset`) |
 | `/api/teams/[id]/email-logs/stats` | GET | Admin | Aggregate stats (total, sent, failed, pending, by type) |
 
-Logs are scoped to team member email addresses. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission.
+Both endpoints scope with `teamEmailLogScope()` (`server/utils/email-log-scope.ts`, #3546): a team sees rows with its own `organizationId` (invitations, even to non-members), never another team's, and team-less rows (verification, password reset, magic link, pre-#3546 rows) only when the recipient is a current member. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission, storing `organizationId` for invitations (both send sites pass it: `lib/auth.ts` and the resend endpoint).
 
 ### Team Settings Table
 

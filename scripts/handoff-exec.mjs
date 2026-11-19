@@ -12,6 +12,8 @@ import {
   handoffRunTitle, labelHandoffDone, dispatchHandoffDone, automergeRetryStep,
 } from './lib/handoff.mjs'
 import { deferOrThrow } from './lib/rate-limit.mjs'
+import { parsePlan } from './lib/plan-shape.mjs'
+import { SPLIT_MARKER, NOTE_MARKER, splitBody, splitLabels } from './lib/plan-split.mjs'
 
 const run = promisify(execFile)
 
@@ -70,9 +72,50 @@ async function resolveRevisePr(step, d) { // PR comment → its worker branch; t
   return { workflow: 'work-issue-pidev.yml', inputs: { issue: String(r.issue), feedback: String(step.feedback), branch: r.branch } }
 }
 
+// The parent epic's number, or null when the issue has none (GitHub answers 404 "No parent issue found").
+async function parentOf(d, n) {
+  try {
+    const out = String(await d.gh(['api', `repos/${d.repo}/issues/${n}/parent`, '--jq', '.number'])).trim()
+    return out ? Number(out) : null
+  } catch (e) {
+    if (/HTTP 404|No parent issue found/.test(e.stderr || e.message || '')) return null
+    throw e // anything else is real (a limit / 5xx is deferred and replayed)
+  }
+}
+
+// #4184: an approved plan with a `yes` `### Split` files the moved part as its own ticket, exactly once.
+// Replay-safe: the new ticket is found again by its marker on the original's timeline (no search),
+// the epic link is ensured on both paths, and the note on the original carries its own marker.
+async function fileSplit(step, d, planId) {
+  const plan = JSON.parse(await d.gh(['api', `repos/${d.repo}/issues/comments/${planId}`, '--jq', '{body, html_url}']))
+  const { split } = parsePlan(String(plan.body || ''))
+  if (!split) return
+  const n = step.issue
+  const orig = JSON.parse(await d.gh(['api', `repos/${d.repo}/issues/${n}`, '--jq', '{body, labels: [.labels[].name]}']))
+  const marker = SPLIT_MARKER(n, planId)
+  const found = await pageJson(d, `repos/${d.repo}/issues/${n}/timeline?per_page=100`,
+    `.[] | select(.event == "cross-referenced") | .source.issue | select((.body // "") | contains("${marker}")) | {number, id}`)
+  let made = found[0]
+  if (!made) {
+    const body = splitBody({ original: { number: n, body: orig.body }, split, planUrl: plan.html_url, planId })
+    const args = ['api', '-X', 'POST', `repos/${d.repo}/issues`, '-f', `title=${split.title}`, '-f', `body=${body}`]
+    for (const l of splitLabels(orig.labels)) args.push('-f', `labels[]=${l}`)
+    made = JSON.parse(await d.gh([...args, '--jq', '{number, id}']))
+  }
+  const parent = await parentOf(d, n)
+  if (parent && !(await parentOf(d, made.number))) {
+    await d.gh(['api', '--method', 'POST', `repos/${d.repo}/issues/${parent}/sub_issues`, '-F', `sub_issue_id=${made.id}`])
+  }
+  if (!(await lastCommentWith(d, n, NOTE_MARKER(made.number)))) {
+    const note = `${NOTE_MARKER(made.number)}\nSplit: the rest moved to #${made.number}, which starts when this one closes.`
+    await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${n}/comments`, '-f', `body=${note}`])
+  }
+}
+
 async function resolvePlanBuild(step, d) {
   const id = await lastCommentWith(d, step.issue, '<!-- pipeline-plan:v1 -->')
   if (!id) throw new Error(`plan:approved on #${step.issue} but no plan comment found — nothing to build from`)
+  await fileSplit(step, d, id)
   return { workflow: 'work-issue-pidev.yml', inputs: { issue: step.issue, mode: 'build', plan: id } }
 }
 
@@ -142,22 +185,24 @@ export const listMarkers = async (d, issue, token) =>
     .map((c) => ({ id: c.id, step: parseHandoff(c.body) }))
     .filter((c) => c.step)
 
-// Save the step as pending. App token first, then the workflow token; both failing is loud (throws).
+// Save the step as pending: label first, then the note (#4202) — a note the sweep can't find is lost.
+// App token first, then the workflow token; if both fail, throw one error naming each token's failure.
 export async function recordPending(step, c, d) {
   const since = step.since || floorSec(d.now())
-  let lastErr
-  for (const token of d.tokens.length ? d.tokens : [undefined]) {
+  const tokens = d.tokens.length ? d.tokens : [undefined]
+  const parts = []
+  for (const [i, token] of tokens.entries()) {
     try {
+      await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${PENDING_LABEL}`], { token })
       const existing = (await listMarkers(d, step.issue, token)).find((m) => handoffKey(m.step) === handoffKey(step))
       const rec = { ...step, since: existing?.step.since || since, reason: c.reason, attempts: (existing?.step.attempts || 0) + (existing ? 1 : 0) }
       const body = `${handoffMarker(rec)}\n${pendingLine(c)}`
       if (existing) await d.gh(['api', '-X', 'PATCH', `repos/${d.repo}/issues/comments/${existing.id}`, '-f', `body=${body}`], { token })
       else await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/comments`, '-f', `body=${body}`], { token })
-      await d.gh(['api', '-X', 'POST', `repos/${d.repo}/issues/${step.issue}/labels`, '-f', `labels[]=${PENDING_LABEL}`], { token })
       return rec
-    } catch (e) { lastErr = e }
+    } catch (e) { parts.push(`token ${i + 1} of ${tokens.length}: ${String(e.stderr || e.message).trim()}`) }
   }
-  throw lastErr
+  throw new Error(`could not save the put-off hand-off — ${parts.join('; ')}`)
 }
 
 // First attempt. Limit / 5xx → saved + green; anything else rethrown.

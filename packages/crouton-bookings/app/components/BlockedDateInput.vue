@@ -5,12 +5,10 @@ import { parseLocationSlots } from '../composables/useBookingSlots'
 interface Props {
   modelValue: BlockedDateItem
   slots?: SlotItem[] | string | null
-  inventoryMode?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   slots: null,
-  inventoryMode: false,
 })
 
 const emit = defineEmits<{
@@ -149,8 +147,8 @@ function getSlotLabel(slot: SlotItem): string {
       </UFormField>
     </div>
 
-    <!-- Slot restriction toggle (hidden in inventory mode) -->
-    <div v-if="!inventoryMode && parsedSlots.length > 0">
+    <!-- Slot restriction toggle (only when the location has slots) -->
+    <div v-if="parsedSlots.length > 0">
       <UButton
         size="xs"
         variant="ghost"

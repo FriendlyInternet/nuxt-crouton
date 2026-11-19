@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import {
   normalizeSteps, renderSteps, parseSteps, stepsPending, narrowToSubject, splitVerdict, nextAction,
   countRounds, planWrongOnRecord, stepOf, subjectMarker, PlanError, isHarnessBot, HARNESS_BOT,
-  PLAN_WRONG_MARKER, PLAN_GO_MARKER, ROLLING_LABEL,
+  PLAN_WRONG_MARKER, PLAN_GO_MARKER, ROLLING_LABEL, stepClosed,
 } from './epic-steps.mjs'
 import { isHarnessBot as reExported } from '../ticket-revise.mjs'
 
@@ -155,6 +155,35 @@ test('9. nextAction reports done only when every step has a closed ticket', () =
   const s = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])
   assert.notDeepEqual(nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets: { 11: { state: 'closed' } } }), [{ type: 'done' }])
   assert.deepEqual(nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets: { 11: { state: 'closed' }, 12: { state: 'closed', step: 1 } } }), [{ type: 'done' }])
+})
+
+// #4184 T4: a plan's `### Split` files a second ticket on the SAME step; the next step waits for it.
+test('#4184 T4: step k original closed, its split open → the go ticket of step k+1 is parked on the split', () => {
+  const s = normalizeSteps([STEP(0, { ticket: 10 }), STEP(1)])
+  const tickets = { 10: { state: 'closed', step: 0 }, 11: { state: 'open', step: 0, verdict: 'go', started: true }, 12: { state: 'open', step: 1, verdict: 'go' } }
+  assert.deepEqual(nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets }), [{ type: 'park', n: 12, waitingOn: [11] }])
+  // no ticket for step 1 yet → no write-ticket comes back for it while the split is open
+  const noNext = nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets: { 10: tickets[10], 11: tickets[11] } })
+  assert.ok(!noNext.some((a) => a.type === 'write-ticket'), JSON.stringify(noNext))
+  assert.ok(!noNext.some((a) => a.type === 'done'))
+})
+
+test('#4184 T4: original and split both closed → step k+1 starts (and is written when it has no ticket)', () => {
+  const s = normalizeSteps([STEP(0, { ticket: 10 }), STEP(1)])
+  const closed = { 10: { state: 'closed', step: 0 }, 11: { state: 'closed', step: 0 } }
+  assert.deepEqual(nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets: { ...closed, 12: { state: 'open', step: 1, verdict: 'go' } } }), [{ type: 'start', n: 12, label: 'work-this' }])
+  assert.deepEqual(nextAction({ rolling: true, plan: { verdict: 'go' }, steps: s, tickets: closed }), [{ type: 'write-ticket', step: 1 }])
+})
+
+test('#4184 T4: pendingDetail counts step k open until both its original and its split close; stepClosed', () => {
+  const labels = ['epic', ROLLING_LABEL]
+  const s = normalizeSteps([STEP(0, { ticket: 10 })])
+  const c = [listComment(s)]
+  assert.equal(stepsPending({ labels, comments: c, subIssues: [sub(10, 'closed'), sub(11, 'open', 0)] }), 1)
+  assert.equal(stepsPending({ labels, comments: c, subIssues: [sub(10, 'closed'), sub(11, 'closed', 0)] }), 0)
+  assert.equal(stepClosed(0, s, [{ number: 10, state: 'closed' }, { number: 11, state: 'open', step: 0 }]), false)
+  assert.equal(stepClosed(0, s, [{ number: 11, state: 'closed', step: 0 }]), false) // the listed ticket missing counts as open
+  assert.equal(stepClosed(0, normalizeSteps([STEP(0)]), []), false) // no ticket at all is not closed
 })
 
 test('stepOf reads step=<k> from the pipeline block only', () => {

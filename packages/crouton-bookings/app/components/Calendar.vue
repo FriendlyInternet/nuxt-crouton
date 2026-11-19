@@ -2,6 +2,7 @@
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { isDayFullyBooked as isDayFull } from '../utils/day-availability'
 import { createHoverCard } from '../utils/hover-card'
+import { slotMarks } from '../utils/slot-marks'
 import type { Booking, LocationData, SettingsData, SlotItem } from '../types/booking'
 
 interface FilterState {
@@ -195,9 +196,6 @@ interface IndicatorData {
   cancelledSlotIds: string[]
   bookings: Booking[]
   slotStatuses: SlotStatus[]
-  isInventoryMode: boolean
-  inventoryQuantity: number
-  inventoryBookedCount: number
 }
 
 // Locations to show (respect location filter)
@@ -222,93 +220,40 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
   const indicators: IndicatorData[] = []
 
   for (const location of visibleLocations.value) {
-    const isInventoryMode = !!location.inventoryMode
-    // Inventory mode ignores named slots — treat as single all-day unit
-    const locationSlots = isInventoryMode ? [] : parseLocationSlots(location)
+    // No named slots = slotless, like the server (#4111, #4172)
+    const locationSlots = parseLocationSlots(location)
     const effectiveSlots = locationSlots.length > 0
       ? locationSlots
       : [{ id: 'all-day', label: t('bookings.allDay') }]
 
     const locationBookings = byLocation.get(location.id) || []
 
-    // For inventory mode, capacity is the location quantity
-    const inventoryQuantity = location.quantity ?? 1
-
-    // Build per-slot statuses with capacity awareness
-    const slotStatuses: SlotStatus[] = []
-    const bookedSlotIds: string[] = []
-    const partialSlotIds: string[] = []
-    const cancelledSlotIds: string[] = []
-
-    for (const slot of effectiveSlots) {
-      // For inventory mode, capacity comes from location quantity
-      const capacity = isInventoryMode ? inventoryQuantity : (slot.capacity ?? 1)
-
-      let activeCount = 0
-      let cancelledCount = 0
-
-      for (const booking of locationBookings) {
-        // Inventory mode: slot is null, all bookings match; sum quantity
-        if (isInventoryMode) {
-          const qty = booking.quantity ?? 1
-          if (booking.status === 'cancelled') {
-            cancelledCount += qty
-          } else {
-            activeCount += qty
-          }
-          continue
-        }
-
-        const slotIds = parseSlotIds(booking.slot)
-        const matchesSlot = slotIds.includes(slot.id) || slotIds.includes('all-day')
-        if (!matchesSlot) continue
-
-        if (booking.status === 'cancelled') {
-          cancelledCount++
-        } else {
-          activeCount++
-        }
-      }
-
-      const isFull = activeCount >= capacity
-
-      slotStatuses.push({
-        id: slot.id,
-        label: slot.label || slot.id,
-        bookedCount: activeCount,
-        cancelledCount,
-        capacity,
-        isFull,
-      })
-
-      if (isFull) {
-        bookedSlotIds.push(slot.id)
-      } else if (activeCount > 0) {
-        partialSlotIds.push(slot.id)
-      }
-
-      if (cancelledCount > 0) {
-        cancelledSlotIds.push(slot.id)
-      }
-    }
-
-    const totalActiveBookings = locationBookings
-      .filter(b => b.status !== 'cancelled')
-      .reduce((sum, b) => sum + (b.quantity ?? 1), 0)
+    // Per-slot marks by the product rule: booked / summed stock, full only when
+    // every listed product is at 0 in that slot (#4111)
+    const marks = slotMarks(
+      { slots: locationSlots, products: location.products },
+      locationBookings.map(b => ({
+        product: b.product,
+        quantity: b.quantity,
+        slotIds: parseSlotIds(b.slot),
+        cancelled: b.status === 'cancelled',
+      })),
+    )
+    const slotStatuses: SlotStatus[] = marks.statuses.map((s, i) => ({
+      ...s,
+      label: effectiveSlots[i]?.label || s.id,
+    }))
 
     indicators.push({
       locationId: location.id,
       locationTitle: getLocationTitle(location),
       color: location.color || '#3b82f6',
       slots: effectiveSlots,
-      bookedSlotIds,
-      partialSlotIds,
-      cancelledSlotIds,
+      bookedSlotIds: marks.bookedSlotIds,
+      partialSlotIds: marks.partialSlotIds,
+      cancelledSlotIds: marks.cancelledSlotIds,
       bookings: locationBookings,
       slotStatuses,
-      isInventoryMode,
-      inventoryQuantity,
-      inventoryBookedCount: totalActiveBookings,
     })
   }
 
@@ -369,8 +314,8 @@ const maxIndicatorCount = computed(() => visibleLocations.value.length)
 const maxSlotCount = computed(() => {
   let max = 0
   for (const location of visibleLocations.value) {
-    // Inventory mode locations have a single all-day slot (count as 1)
-    const slotCount = location.inventoryMode ? 1 : Math.max(parseLocationSlots(location).length, 1)
+    // A location without slots has a single all-day slot (count as 1)
+    const slotCount = Math.max(parseLocationSlots(location).length, 1)
     if (slotCount > max) max = slotCount
   }
   return max
@@ -614,16 +559,8 @@ onBeforeUnmount(card.close)
             {{ getLocationAddress(cardState.data.locationId) }}
           </p>
 
-          <!-- Inventory mode summary -->
-          <div v-if="cardState.data.isInventoryMode" class="mt-2 flex items-center justify-between text-xs">
-            <span class="text-muted">{{ t('bookings.calendar.units') }}</span>
-            <span class="tabular-nums" :class="cardState.data.inventoryBookedCount >= cardState.data.inventoryQuantity ? 'text-red-400' : 'text-dimmed'">
-              {{ cardState.data.inventoryBookedCount }} / {{ cardState.data.inventoryQuantity }}
-            </span>
-          </div>
-
-          <!-- Slot mode: per-slot breakdown -->
-          <div v-else-if="cardState.data.slotStatuses.length > 1 || (cardState.data.slotStatuses[0]?.capacity ?? 0) > 1" class="mt-2 flex flex-col gap-0.5">
+          <!-- Per-slot breakdown: booked / stock summed over the listed products -->
+          <div v-if="cardState.data.slotStatuses.length > 1 || (cardState.data.slotStatuses[0]?.capacity ?? 0) > 1" class="mt-2 flex flex-col gap-0.5">
             <div
               v-for="slot in cardState.data.slotStatuses"
               :key="slot.id"

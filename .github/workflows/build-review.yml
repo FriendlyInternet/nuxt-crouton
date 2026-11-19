@@ -39,6 +39,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     outputs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       held: ${{ steps.post.outputs.held }}
@@ -229,9 +230,8 @@ jobs:
           D="$RUNNER_TEMP/build-review"
           DEF="origin/${{ github.event.repository.default_branch }}"
           # Persona, prompt renderer, verdict parser and pi settings (.pi/, see review-checkout.mjs) come from the default branch, not the PR head.
-          mkdir -p "$RUNNER_TEMP/trusted/scripts/lib"
-          git show "$DEF:scripts/lib/build-review-prompt.mjs" > "$RUNNER_TEMP/trusted/scripts/lib/build-review-prompt.mjs"
-          git show "$DEF:scripts/pipeline-prompt.mjs" > "$RUNNER_TEMP/trusted/scripts/pipeline-prompt.mjs"
+          # Whole scripts/ tree (#4206): a hand-kept file list breaks silently on the next new import.
+          mkdir -p "$RUNNER_TEMP/trusted" && git archive "$DEF" scripts | tar -x -C "$RUNNER_TEMP/trusted"
           git show "$DEF:.claude/agents/build-reviewer.md" > "$D/persona.md"
           ISSUE="$ISSUE" PR="$PR" D="$D" node -e 'const e=process.env; process.stdout.write(JSON.stringify({ issue: e.ISSUE, pr: e.PR, verdict_file: e.D + "/verdict.md", issue_file: e.D + "/issue.md", plan_file: e.D + "/plan.md", diff_file: e.D + "/diff.patch" }))' > "$D/vars.json"
           # The reviewer takes CI's plan-checks table for this sha as fact (#3196).
@@ -256,32 +256,25 @@ jobs:
         run: |
           set -uo pipefail
           D="$RUNNER_TEMP/build-review"
-          # The parser is trusted code from the default branch (the checkout is the PR head).
-          mkdir -p "$RUNNER_TEMP/trusted"
-          git show "origin/${{ github.event.repository.default_branch }}:scripts/lib/build-verdict.mjs" > "$RUNNER_TEMP/trusted/build-verdict.mjs"
-          # Hand-off helper (#3306) — also trusted: the checkout is the PR head, which must not run with the write token.
-          mkdir -p "$RUNNER_TEMP/trusted/scripts/lib"
-          for f in handoff-exec.mjs lib/handoff.mjs lib/rate-limit.mjs; do
-            git show "origin/${{ github.event.repository.default_branch }}:scripts/$f" > "$RUNNER_TEMP/trusted/scripts/$f"
-          done
+          # The parser and the hand-off helper (#3306) are trusted code from the default branch: the checkout is
+          # the PR head, which must not run with the write token. Copy the whole scripts/ tree (#4206) so every
+          # import resolves — a hand-kept file list broke silently each time a script gained an import.
+          DEF="origin/${{ github.event.repository.default_branch }}"
+          mkdir -p "$RUNNER_TEMP/trusted" && git archive "$DEF" scripts | tar -x -C "$RUNNER_TEMP/trusted"
           PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
           fail() {
             echo "::error::$1"
             gh pr comment "$PR" --body "$(printf '<!-- pipeline-note -->\n<!-- build-review-failed -->\n<!-- build-review-failed-sha:%s -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$SHA" "$1" "$RUN_URL")" || true
             exit 1
           }
-          [ -s "$D/verdict.md" ] || fail "produced no verdict$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" stop-line "$D/pi.log")"
-          DECISION="$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
+          [ -s "$D/verdict.md" ] || fail "produced no verdict$(node "$RUNNER_TEMP/trusted/scripts/lib/build-verdict.mjs" stop-line "$D/pi.log")"
+          DECISION="$(node "$RUNNER_TEMP/trusted/scripts/lib/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
           VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
           # #3173: on the final hold, tell the owner if their earlier `ok` came too early. Trusted default-branch
-          # copies only (mirrored tree so ../approval.mjs resolves); any failure just means no extra line.
+          # copies only (the whole tree copied above, so ../approval.mjs resolves); any failure just means no extra line.
           OKAGAIN=""
           if [ "$VERDICT" = "no-go" ] && [ "$ROUND" -ge 2 ]; then
             T="$RUNNER_TEMP/trusted/scripts"
-            for F in approval.mjs comment-command.mjs lib/earlier-owner-ok.mjs lib/ok-reply.mjs; do
-              mkdir -p "$T/$(dirname "$F")"
-              git show "origin/${{ github.event.repository.default_branch }}:scripts/$F" > "$T/$F" 2>/dev/null || rm -f "$T/$F"
-            done
             gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments" --jq '.[]' > "$D/comments.ndjson" 2>/dev/null || true
             OKAGAIN="$(T="$T" CF="$D/comments.ndjson" node --input-type=module -e '
               import { readFileSync } from "node:fs"
@@ -295,14 +288,13 @@ jobs:
               if (r) process.stdout.write(r.text)
             ' 2>/dev/null)" || OKAGAIN=""
           fi
-          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; [ -n "$BODY_KEY" ] && printf '<!-- build-review-body:%s:%s -->\n' "$SHA" "$BODY_KEY"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
+          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; [ -n "$BODY_KEY" ] && printf '<!-- build-review-body:%s:%s -->\n' "$SHA" "$BODY_KEY"; node "$RUNNER_TEMP/trusted/scripts/lib/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL" "$OKAGAIN"; } > "$D/comment.md"
           # remove-then-add: re-adding a label the PR already carries fires no event.
           gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
           COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
           # #3210 — tick "Build review" from the trusted default-branch copy (the checkout is the PR head). Cosmetic.
-          git show "origin/${{ github.event.repository.default_branch }}:scripts/flow-checklist.mjs" > "$RUNNER_TEMP/trusted/flow-checklist.mjs" 2>/dev/null \
-            && GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" --verdict build "$VERDICT" --round "$ROUND" || true
+          GITHUB_REPOSITORY="${{ github.repository }}" node "$RUNNER_TEMP/trusted/scripts/flow-checklist.mjs" "$ISSUE" review --note "$VERDICT (round $ROUND)" --link "$COMMENT_URL" --verdict build "$VERDICT" --round "$ROUND" || true
           case "$VERDICT" in
             go) node "$RUNNER_TEMP/trusted/scripts/handoff-exec.mjs" label "$(jq -nc --argjson i "$PR" '{issue:$i,label:"build:approved"}')" ;;
             needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked"; echo "held=1" >> "$GITHUB_OUTPUT" ;;
