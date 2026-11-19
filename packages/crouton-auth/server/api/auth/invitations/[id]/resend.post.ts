@@ -70,6 +70,7 @@ export default defineEventHandler(async (event) => {
     type: 'invitation',
     to: result.email,
     invitationId: result.id,
+    organizationId: result.organizationId,
     organizationName: result.organizationName,
     inviterName: result.inviterName || 'A team member',
     inviterEmail: result.inviterEmail,

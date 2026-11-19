@@ -35,7 +35,7 @@ Booking system layer for Nuxt applications: bookings for locations with or witho
 ```
 CroutonBooking
 ├── Slot/
-│   └── Indicator.vue   - Visual slot indicator
+│   └── Indicator.vue   - Visual slot indicator; its hover highlight (hoverBooking) reacts to mouse/pen only — touch is ignored (#4302)
 ├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot to PanelFilters
 ├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520, minHeight 480, fill). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
 ├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key per team + `dedupe: 'defer'` ⇒ one call per key; see *useFetch keys carry the team* below) + coordinates cross-pane via useBookingsLayoutFilters.
