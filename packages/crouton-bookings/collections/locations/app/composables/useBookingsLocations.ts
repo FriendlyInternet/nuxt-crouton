@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/bookings-locations
  * - Form component: BookingsLocationsForm (the package's own form; the generated _Form.vue was removed in #2278 — it depended on crouton-maps composables)
  * - List component: BookingsLocationsList
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, products, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, products, openDays, slotSchedule, blockedDates, offerFullDay, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -26,8 +26,7 @@ import { z } from 'zod'
 
 export const bookingsLocationsSlotItemSchema = z.object({
   id: z.string(),
-  label: z.string(),
-  capacity: z.number().optional()
+  label: z.string()
 })
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
@@ -43,8 +42,6 @@ export const bookingsLocationSchema = z.object({
   blockedDates: z.array(z.any()).nullish(),
   // .nullish(): stored rows (seed, migration, API) hold null here; the server accepts it too (#4087)
   offerFullDay: z.boolean().nullish(),
-  inventoryMode: z.boolean().nullish(),
-  quantity: z.number().nullish(),
   maxBookingsPerMonth: z.number().nullish(),
   title: z.string().optional(),
   street: z.string().nullish(),
@@ -79,8 +76,6 @@ export const bookingsLocationsColumns = [
   { accessorKey: 'openDays', header: 'OpenDays' },
   { accessorKey: 'slotSchedule', header: 'SlotSchedule' },
   { accessorKey: 'blockedDates', header: 'BlockedDates' },
-  { accessorKey: 'inventoryMode', header: 'InventoryMode' },
-  { accessorKey: 'quantity', header: 'Quantity' },
   { accessorKey: 'maxBookingsPerMonth', header: 'MaxBookingsPerMonth' },
   { accessorKey: 'translations', header: 'Translations' }
 ]
@@ -105,16 +100,13 @@ const _bookingsLocationsConfig = {
     slotSchedule: {},
     blockedDates: [],
     offerFullDay: false,
-    inventoryMode: false,
-    quantity: 0,
     maxBookingsPerMonth: 0,
     translations: {}
   },
   columns: bookingsLocationsColumns,
   dependentFieldComponents: {
     slots: 'BookingsLocationsSlotSelect',
-    blockedDates: 'BookingsLocationsBlockedDateSelect',
-    quantity: 'BookingsLocationsQuantitySelect'
+    blockedDates: 'BookingsLocationsBlockedDateSelect'
   },
   fields: [
       {
@@ -194,18 +186,6 @@ const _bookingsLocationsConfig = {
           "type": "boolean",
           "label": "Offer a full-day option",
           "area": "main"
-      },
-      {
-          "name": "inventoryMode",
-          "type": "boolean",
-          "label": "Inventory Mode",
-          "area": "sidebar"
-      },
-      {
-          "name": "quantity",
-          "type": "number",
-          "label": "Available Units",
-          "area": "sidebar"
       },
       {
           "name": "maxBookingsPerMonth",

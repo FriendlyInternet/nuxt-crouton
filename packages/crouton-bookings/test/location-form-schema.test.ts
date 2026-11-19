@@ -15,14 +15,12 @@ const centerCourt = {
   location: null,
   content: null,
   allowedMemberIds: null,
-  slots: [{ id: 's1', label: 'Morning', capacity: 2 }],
+  slots: [{ id: 's1', label: 'Morning' }],
   products: [{ product: 'court', stock: 2 }],
   openDays: null,
   slotSchedule: null,
   blockedDates: null,
   offerFullDay: null,
-  inventoryMode: null,
-  quantity: null,
   maxBookingsPerMonth: null,
   translations: { en: { title: 'Center Court' } }
 }

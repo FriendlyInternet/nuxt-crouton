@@ -23,14 +23,14 @@ vi.mock('../collections/emailtemplates/server/database/queries', () => ({ assert
 vi.mock('../collections/emaillogs/server/database/queries', () => ({ assertBookingsEmaillogReferences: hoisted.assertRef, createBookingsEmaillog: hoisted.create, updateBookingsEmaillog: hoisted.update }))
 
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 // Real in-memory DB: the bookings POST writes through the capacity guard, not create()
 const makeDb = (withLocation: boolean) => {
   const client = new Database(':memory:')
   client.exec(DDL)
-  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('l1','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'p1', stock: 1 }]))
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('l1','t1','s',?,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'p1', stock: 1 }]))
   return drizzle(client) as any
 }
 const bookingRows = (db: any) => db.$client.prepare('select * from bookings_bookings').all()
@@ -110,7 +110,7 @@ describe('package collection body validation (#3377)', () => {
   it('locations POST accepts what the packaged form sends once English title is entered', async () => {
     const { applyEnglishTitle } = await import('../collections/locations/app/utils/applyEnglishTitle')
     // defaultValues of useBookingsLocations (title starts as '')
-    const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, inventoryMode: false, quantity: 0, maxBookingsPerMonth: 0, translations: {} }
+    const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, maxBookingsPerMonth: 0, translations: {} }
     body = { ...state }
     await expect(run(`../${L}/index.post`)).rejects.toThrow()
     state.translations = { en: { title: 'Studio' } }

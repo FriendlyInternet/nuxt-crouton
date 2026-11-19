@@ -28,7 +28,7 @@ beforeEach(() => {
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
   g.useFetch = (url: any) => ({
     data: ref(String(url?.() ?? '').includes('customer-locations')
-      ? [{ id: 'kayak', title: 'Kayak', inventoryMode: true, quantity: 8, slots: [], products: [{ product: 'K', stock: 8 }] }]
+      ? [{ id: 'kayak', title: 'Kayak', slots: [], products: [{ product: 'K', stock: 8 }] }]
       : null),
     status: ref('success'),
     refresh: async () => {},

@@ -511,7 +511,6 @@
       "openDays": "Open Days",
       "slotSchedule": "Slot Schedule",
       "blockedDates": "Blocked Dates",
-      "inventoryMode": "Inventory Mode",
       "maxBookingsPerMonth": "Max Bookings Per Month",
       "allowedMemberIds": "Allowed Members",
       "translations": "Translations",

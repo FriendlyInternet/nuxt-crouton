@@ -36,9 +36,8 @@ describe('isDayFullyBooked', () => {
     expect(isDayFullyBooked(DAY, loc, [booking()])).toBe(true)
   })
 
-  it('slot mode: every slot must reach its capacity', () => {
-    // now: every slot must reach the product's stock (2); slot capacity is ignored
-    const loc = [{ id: 'loc', slots: JSON.stringify([{ id: 'am', capacity: 5 }, { id: 'pm', capacity: 1 }]), products: JSON.stringify(P(2)) }] as any
+  it('slot mode: every slot must reach the product stock', () => {
+    const loc = [{ id: 'loc', slots: JSON.stringify([{ id: 'am' }, { id: 'pm' }]), products: JSON.stringify(P(2)) }] as any
     const am = booking({ slot: '["am"]' })
     const pm = booking({ slot: ['pm'] })
     expect(isDayFullyBooked(DAY, loc, [am, pm, pm])).toBe(false)
@@ -51,16 +50,9 @@ describe('isDayFullyBooked', () => {
   })
 
   it('no slots: summed quantity reaches the product stock', () => {
-    // summed quantity reaches the product's stock (3); location quantity 1 is ignored
-    const loc = [{ id: 'loc', slots: [], quantity: 1, products: P(3) }] as any
+    const loc = [{ id: 'loc', slots: [], products: P(3) }] as any
     expect(isDayFullyBooked(DAY, loc, [booking({ quantity: 2 })])).toBe(false)
     expect(isDayFullyBooked(DAY, loc, [booking({ quantity: 2 }), booking({ quantity: 1 })])).toBe(true)
-  })
-
-  // covers: T3b (#4172)
-  it('inventoryMode no longer decides: a location with slots am/pm and one am booking is not full', () => {
-    const loc = [{ id: 'loc', inventoryMode: true, slots: [{ id: 'am' }, { id: 'pm' }], products: P(1) }] as any
-    expect(isDayFullyBooked(DAY, loc, [booking({ slot: ['am'] })])).toBe(false)
   })
 
   it('every location must be full', () => {

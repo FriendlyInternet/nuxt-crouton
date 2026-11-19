@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { sql } from 'drizzle-orm'
 
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 
@@ -25,10 +25,10 @@ const book = (id: string, over: Record<string, unknown> = {}) =>
   db.$client.prepare(`insert into bookings_bookings values (@id,'t1','u1',0,@location,@date,@slot,null,@quantity,@status,1,1,'u1','u1',@product)`)
     .run({ id, location: 's', date: DAY, slot: '["am"]', quantity: 1, status: 'active', product: 'loc-s', ...over })
 
-/** A location `id` with slots (none = slotless) and products (old slot capacity 1 kept to show it no longer counts) */
-const mkLoc = (id: string, slotIds: string[], products: { product: string, stock: number }[], over: { inventoryMode?: number, offerFullDay?: number } = {}) =>
-  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay,products) values (?,?,?,?,?,?,?,?)`)
-    .run(id, 't1', id, JSON.stringify(slotIds.map(s => ({ id: s, capacity: 1 }))), 1, over.inventoryMode ?? 0, over.offerFullDay ?? 1, JSON.stringify(products))
+/** A location `id` with slots (none = slotless) and products */
+const mkLoc = (id: string, slotIds: string[], products: { product: string, stock: number }[], over: { offerFullDay?: number } = {}) =>
+  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,offerFullDay,products) values (?,?,?,?,?,?)`)
+    .run(id, 't1', id, JSON.stringify(slotIds.map(s => ({ id: s }))), over.offerFullDay ?? 1, JSON.stringify(products))
 
 type Handler = (e: any) => Promise<any>
 const handlers: Record<string, Handler> = {}
@@ -37,7 +37,7 @@ beforeEach(async () => {
   const client = new Database(':memory:')
   client.exec(DDL)
   db = drizzle(client)
-  client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('s','t1','s',?,0,?)`).run(JSON.stringify([{ id: 'am' }, { id: 'pm' }]), JSON.stringify([{ product: 'loc-s', stock: 1 }]))
+  client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('s','t1','s',?,?)`).run(JSON.stringify([{ id: 'am' }, { id: 'pm' }]), JSON.stringify([{ product: 'loc-s', stock: 1 }]))
   hoisted.role = 'admin'
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)
   vi.stubGlobal('createError', (e: any) => Object.assign(new Error(e.statusText), e, { statusCode: e.status }))
@@ -112,8 +112,8 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
   })
 
   // covers: T3
-  it('C4 no slots, stock 8, 2 booked → 6 (inventory and plain slotless; old quantity 1 ignored)', async () => {
-    mkLoc('inv', [], [{ product: 'P', stock: 8 }], { inventoryMode: 1, offerFullDay: 0 })
+  it('C4 no slots, stock 8, 2 booked → 6 (stored slot null or all-day)', async () => {
+    mkLoc('inv', [], [{ product: 'P', stock: 8 }], { offerFullDay: 0 })
     mkLoc('day', [], [{ product: 'P', stock: 8 }], { offerFullDay: 0 })
     book('i', { location: 'inv', product: 'P', slot: 'null', quantity: 2 })
     book('d', { location: 'day', product: 'P', slot: '["all-day"]', quantity: 2 })
@@ -192,20 +192,6 @@ describe('SQL guard counts stock per product, per slot (#4061)', () => {
     const r = await send('post', { location: 'c', date: '2026-11-10', slot: ['am'], quantity: 1, status: 'active', group: '' })
     expect(r).toMatchObject({ location: 'c', quantity: 1, product: 'P' })
     await expect(send('post', { location: 'c', date: '2026-11-10', slot: ['am'], quantity: 0, status: 'active' })).rejects.toMatchObject({ status: 400 })
-  })
-
-  // covers: T1 (#4172)
-  it('inventoryMode no longer decides: a location with inventoryMode 1 and slots am/pm books the slot that was sent', async () => {
-    mkLoc('x', ['am', 'pm'], [{ product: 'P', stock: 1 }], { inventoryMode: 1, offerFullDay: 0 })
-    const { LOCATION_COLS, validateSelection } = await import('../server/utils/booking-capacity')
-    const { bookingsLocations } = await import('../collections/locations/server/database/schema')
-    const { eq } = await import('drizzle-orm')
-    const [l] = await db.select(LOCATION_COLS).from(bookingsLocations).where(eq(bookingsLocations.id as any, 'x'))
-    expect(validateSelection(l, ['am'], 1)).toMatchObject({ slot: ['am'], slotIds: ['am'], guardIds: ['am'] })
-    const r = await send('post', { location: 'x', date: '2026-11-10', slot: ['am'], quantity: 1, status: 'active' })
-    expect(r.slot).toEqual(['am'])
-    expect(await left('x', 'am')).toBe(0)
-    expect(await left('x', 'pm')).toBe(1)
   })
 
   // covers: T3

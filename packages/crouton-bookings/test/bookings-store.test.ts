@@ -150,8 +150,8 @@ describe('starting a new booking on a date', () => {
   })
 
   it('refuses a day that is fully booked everywhere — counting the whole team, not just mine', () => {
-    // the location's product stock (1) is what counts since #4061; slot capacity no longer does
-    const slots = [{ id: 'am', capacity: 3 }, { id: 'pm', capacity: 3 }]
+    // the location's product stock (1) is what counts (#4061)
+    const slots = [{ id: 'am' }, { id: 'pm' }]
     const products = [{ product: 'loc-a', stock: 1 }]
     const team = [booking('x', '2026-11-02', { slot: '["am"]', product: 'loc-a' }), booking('y', '2026-11-02', { slot: '["pm"]', product: 'loc-a' })]
     const s = setup({ bookings: [], calendar: team, locations: [loc('a', { slots, products })] })

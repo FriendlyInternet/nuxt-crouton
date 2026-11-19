@@ -7,7 +7,7 @@ import { editBookingBody } from '../app/utils/booking-form'
 // bookings/[bookingId]/index.patch.ts must store it, re-checked against the
 // product's stock (409 when it doesn't fit). Harness copied from booking-product.test.ts.
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 
@@ -30,11 +30,11 @@ beforeEach(async () => {
   const client = new Database(':memory:')
   client.exec(DDL)
   db = drizzle(client)
-  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('one','t1','one',?,0,?)`)
+  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('one','t1','one',?,?)`)
     .run(SLOTS, JSON.stringify([{ product: 'p-one', stock: 2 }]))
   db.$client.prepare(`insert into bookings_bookings values ('b1','t1','u1',0,'one',?,'["am"]',null,1,'active',1,1,'u1','u1','p-one')`).run(DAY)
   // A slotless location: its bookings are full-day
-  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values ('day','t1','day','[]',0,?)`)
+  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('day','t1','day','[]',?)`)
     .run(JSON.stringify([{ product: 'p-day', stock: 2 }]))
   db.$client.prepare(`insert into bookings_bookings values ('b2','t1','u1',0,'day',?,'["all-day"]',null,1,'active',1,1,'u1','u1','p-day')`).run(DAY)
   vi.stubGlobal('defineEventHandler', (fn: any) => fn)

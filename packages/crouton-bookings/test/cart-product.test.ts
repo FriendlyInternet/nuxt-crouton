@@ -15,8 +15,8 @@ function baseLocations() {
     { id: 'single', title: 'Single', slots: [{ id: 'am', label: 'Morning' }, { id: 'pm', label: 'Afternoon' }], products: [{ product: 'P', stock: 3 }] },
     // an empty slots list → no slots
     { id: 'kayak', title: 'Kayak', slots: [], products: [{ product: 'K', stock: 8 }] },
-    // #4172: the old inventoryMode switch no longer decides — it still lists a slot, so it has slots
-    { id: 'legacy', title: 'Legacy', inventoryMode: true, quantity: 8, slots: [{ id: 'am', label: 'Morning' }], products: [{ product: 'K', stock: 8 }] },
+    // one named slot → it has slots
+    { id: 'one-slot', title: 'One slot', slots: [{ id: 'am', label: 'Morning' }], products: [{ product: 'K', stock: 8 }] },
     // no named slots → no slots
     { id: 'plain', title: 'Plain', slots: [], products: [{ product: 'K', stock: 2 }] },
   ]
@@ -193,8 +193,8 @@ describe('cart items carry a product and an amount (#4110 S5)', () => {
   })
 
   // covers: T3 (#4172)
-  it('a location with inventoryMode that still lists a slot asks for the slot', async () => {
-    const c = await cartAt('legacy')
+  it('a location with one slot asks for the slot', async () => {
+    const c = await cartAt('one-slot')
     expect(c.hasSlots.value).toBe(true)
     expect(c.canAddToCart.value).toBe(false)
     c.formState.slotIds = ['am']

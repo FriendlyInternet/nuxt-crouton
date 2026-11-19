@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 // routes (generic POST, both PATCH routes, the cart batch) over an in-memory SQLite,
 // set up like booking-capacity.test.ts.
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer, products text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
 CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 
@@ -28,7 +28,7 @@ const row = (id: string) => db.$client.prepare('select * from bookings_bookings 
 const DAY = Date.parse('2026-11-09T23:00:00Z') / 1000
 const SLOTS = JSON.stringify([{ id: 'am' }, { id: 'pm' }])
 const loc = (id: string, products: unknown) =>
-  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode,products) values (?,'t1',?,?,0,?)`).run(id, id, SLOTS, JSON.stringify(products))
+  db.$client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values (?,'t1',?,?,?)`).run(id, id, SLOTS, JSON.stringify(products))
 const book = (id: string, over: Record<string, unknown> = {}) =>
   db.$client.prepare(`insert into bookings_bookings values (@id,'t1','u1',0,@location,@date,@slot,null,1,@status,1,1,'u1','u1',@product)`)
     .run({ id, location: 'one', date: DAY, slot: '["am"]', status: 'active', product: 'p-one', ...over })

@@ -23,16 +23,13 @@ const bodySchema = z.object({
   allowedMemberIds: z.array(z.string()).nullish(),
   slots: z.array(z.object({
     id: z.string(),
-    label: z.string(),
-    capacity: z.number().optional()
+    label: z.string()
   })).nullish(),
   products: productsSchema,
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
   offerFullDay: z.boolean().nullish(),
-  inventoryMode: z.boolean().nullish(),
-  quantity: z.number().int().nullish(),
   maxBookingsPerMonth: z.number().int().nullish(),
   translations: z.record(z.string(), z.object({
     title: z.string().optional(),
@@ -81,8 +78,6 @@ export default defineEventHandler(async (event) => {
     openDays: (body.openDays) as unknown as string[] | undefined,
     slotSchedule: body.slotSchedule,
     blockedDates: body.blockedDates,
-    inventoryMode: body.inventoryMode,
-    quantity: body.quantity,
     maxBookingsPerMonth: body.maxBookingsPerMonth,
     translations: body.translations
   } as Parameters<typeof updateBookingsLocation>[3], { role: membership.role })
