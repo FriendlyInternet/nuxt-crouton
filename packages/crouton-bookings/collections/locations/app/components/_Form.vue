@@ -113,24 +113,85 @@
 
         <!-- Bookings -->
         <div v-show="activeSection === 'bookings'" class="flex flex-col gap-6 p-1">
+          <!-- Products (#4087) -->
+          <fieldset class="flex flex-col gap-4">
+            <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.products') }}</legend>
+            <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.productsHint') }}</p>
+            <UFormField name="products">
+              <div class="flex flex-col gap-3">
+                <p v-if="state.products == null" class="text-sm text-muted">
+                  {{ t('bookings.locationForm.productsNone') }}
+                </p>
+                <UAlert
+                  v-else-if="productRows.length === 0"
+                  color="warning"
+                  variant="subtle"
+                  icon="i-lucide-triangle-alert"
+                  :title="t('bookings.locationForm.productsEmpty')"
+                />
+                <ul v-else class="flex flex-col gap-2">
+                  <li
+                    v-for="row in productRows"
+                    :key="row.product"
+                    class="flex flex-wrap items-center gap-2"
+                  >
+                    <span class="flex-1 min-w-0 truncate text-sm font-medium">
+                      {{ row.teamProduct ? entityT(row.teamProduct, 'title') : row.product }}
+                    </span>
+                    <UBadge v-if="row.removed" color="error" variant="subtle" size="sm">
+                      {{ t('bookings.locationForm.productRemoved') }}
+                    </UBadge>
+                    <UBadge v-else-if="row.inactive" color="neutral" variant="subtle" size="sm">
+                      {{ t('bookings.locationForm.productInactive') }}
+                    </UBadge>
+                    <UInputNumber
+                      :model-value="row.stock"
+                      :min="1"
+                      :step="1"
+                      class="w-28"
+                      :aria-label="t('bookings.locationForm.stock')"
+                      @update:model-value="(v: number | null) => updateStock(row.product, v)"
+                    />
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      color="neutral"
+                      variant="ghost"
+                      :aria-label="t('bookings.locationForm.removeProduct')"
+                      @click="removeRow(row.product)"
+                    />
+                  </li>
+                </ul>
+                <div class="flex flex-wrap items-end gap-2">
+                  <UFormField :label="t('bookings.locationForm.product')" class="flex-1 min-w-40">
+                    <USelectMenu
+                      v-model="newProduct"
+                      :items="pickableItems"
+                      value-key="id"
+                      label-key="label"
+                      :placeholder="t('bookings.locationForm.pickProduct')"
+                      class="w-full"
+                    />
+                  </UFormField>
+                  <UFormField :label="t('bookings.locationForm.stock')" class="w-28">
+                    <UInputNumber v-model="newStock" :min="1" :step="1" class="w-full" />
+                  </UFormField>
+                  <UButton
+                    icon="i-lucide-plus"
+                    :disabled="!newProduct"
+                    @click="addRow"
+                  >
+                    {{ t('bookings.locationForm.addProduct') }}
+                  </UButton>
+                </div>
+              </div>
+            </UFormField>
+          </fieldset>
+
+          <USeparator />
+
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.bookingRules') }}</legend>
             <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.bookingRulesHint') }}</p>
-            <UFormField :label="t('bookings.locationForm.bookingMode')" name="inventoryMode">
-              <URadioGroup
-                :model-value="state.inventoryMode ? 'inventory' : 'slots'"
-                orientation="horizontal"
-                variant="card"
-                :items="[
-                  { label: t('bookings.locationForm.timeSlots'), description: t('bookings.locationForm.timeSlotsDescription'), value: 'slots' },
-                  { label: t('bookings.locationForm.inventory'), description: t('bookings.locationForm.inventoryDescription'), value: 'inventory' },
-                ]"
-                @update:model-value="(v: string) => state.inventoryMode = v === 'inventory'"
-              />
-            </UFormField>
-            <UFormField v-show="state.inventoryMode" :label="t('bookings.locationForm.availableUnits')" name="quantity" :help="t('bookings.locationForm.availableUnitsHelp')">
-              <UInputNumber v-model="state.quantity" class="w-full" />
-            </UFormField>
             <UFormField :label="t('bookings.locationForm.maxBookingsPerMonth')" name="maxBookingsPerMonth" :help="t('bookings.locationForm.maxBookingsPerMonthHelp')">
               <UInputNumber v-model="state.maxBookingsPerMonth" class="w-full" :min="0" :placeholder="t('bookings.locationForm.unlimited')" />
             </UFormField>
@@ -141,7 +202,7 @@
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.scheduling') }}</legend>
             <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.schedulingHint') }}</p>
-            <UFormField v-if="!state.inventoryMode" :label="t('bookings.locationForm.slots')" name="slots">
+            <UFormField :label="t('bookings.locationForm.slots')" name="slots">
               <CroutonFormRepeater
                 v-model="(state.slots as any)"
                 component-name="BookingsLocationsSlotInput"
@@ -150,7 +211,7 @@
               />
             </UFormField>
             <UFormField
-              v-if="!state.inventoryMode && state.slots?.length"
+              v-if="state.slots?.length"
               name="offerFullDay"
             >
               <USwitch
@@ -162,7 +223,7 @@
             <UFormField :label="t('bookings.schedule.openDays')" name="openDays">
               <CroutonBookingsOpenDaysPicker v-model="state.openDays" />
             </UFormField>
-            <UFormField v-if="!state.inventoryMode && state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
+            <UFormField v-if="state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
               <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" :open-days="state.openDays" />
             </UFormField>
             <UFormField :label="t('bookings.schedule.blockedDates')" name="blockedDates">
@@ -190,7 +251,7 @@
             }"
             show-ai-translate
             field-type="locations"
-            @update:english="(data: { field: string, value: string }) => applyEnglishTitle(state, data)"
+            @update:english="(data: { field: string, value: string }) => applyDefaultLocaleLocationFields(state, data)"
             :label="$t('bookings.locationForm.translations')"
           />
         </div>
@@ -218,14 +279,17 @@
 
 <script setup lang="ts">
 import type { LocationData } from '../../../../app/types/booking'
-import { applyEnglishTitle } from '../utils/applyEnglishTitle'
-
-// useBookingsLocations is auto-imported from the generated collection layer at runtime
-declare function useBookingsLocations(): {
-  defaultValue: Record<string, any>
-  schema: any
-  collection: string
-}
+import { applyDefaultLocaleLocationFields } from '../utils/applyDefaultLocaleLocationFields'
+import useBookingsLocationsForm from '../composables/useBookingsLocations'
+import {
+  addProduct,
+  normaliseProducts,
+  pickable,
+  removeProduct,
+  rowsFor,
+  setStock,
+  type TeamProduct
+} from '../../../../app/utils/location-products-edit'
 
 interface LocationFormProps {
   action: 'create' | 'update' | 'delete'
@@ -234,7 +298,13 @@ interface LocationFormProps {
 }
 
 const props = defineProps<LocationFormProps>()
-const { defaultValue, schema, collection } = useBookingsLocations()
+// The default export (form object), imported explicitly: the auto-imported
+// named `useBookingsLocations` is the config, not the form object.
+const locationsForm = useBookingsLocationsForm(useI18n())
+const { defaultValue, collection } = locationsForm
+// Kept untyped as before: the stored row's nullable columns don't match the
+// zod output type UForm would otherwise infer for `state`.
+const schema: any = locationsForm.schema
 const { t } = useT()
 
 // Optional maps integration — gracefully degrades when crouton-maps is not installed
@@ -281,8 +351,7 @@ const fieldToGroup: Record<string, string> = {
   location: 'location',
   allowedMemberIds: 'settings',
   offerFullDay: 'bookings',
-  inventoryMode: 'bookings',
-  quantity: 'bookings',
+  products: 'bookings',
   maxBookingsPerMonth: 'bookings',
   slots: 'bookings',
   openDays: 'bookings',
@@ -322,6 +391,39 @@ const initialValues = props.action === 'update' && props.activeItem?.id
   : { ...defaultValue }
 
 const state = ref<LocationData & { id?: string | null }>(initialValues as any)
+
+// --- Products (#4087) ---
+// Normalise once: a JSON string becomes a list; null stays null ("never had a product" —
+// the server gives it an own product on save). An untouched location saves what it had.
+state.value.products = normaliseProducts(state.value.products)
+
+const { t: entityT } = useEntityTranslations()
+const { items: teamProducts } = await useCollectionQuery('catalogProducts')
+
+const listedProducts = computed(() => normaliseProducts(state.value.products))
+const productRows = computed(() => rowsFor(listedProducts.value, teamProducts.value as TeamProduct[]))
+const pickableItems = computed(() =>
+  pickable(teamProducts.value as TeamProduct[], listedProducts.value)
+    .map(p => ({ id: p.id, label: entityT(p, 'title') || p.id }))
+)
+
+const newProduct = ref<string | undefined>(undefined)
+const newStock = ref<number>(1)
+
+const addRow = () => {
+  if (!newProduct.value) return
+  state.value.products = addProduct(listedProducts.value, newProduct.value, newStock.value)
+  newProduct.value = undefined
+  newStock.value = 1
+}
+
+const updateStock = (product: string, stock: number | null) => {
+  state.value.products = setStock(listedProducts.value, product, stock)
+}
+
+const removeRow = (product: string) => {
+  state.value.products = removeProduct(listedProducts.value, product)
+}
 
 // --- Map & Geocoding (only active when @fyit/crouton-maps is installed) ---
 

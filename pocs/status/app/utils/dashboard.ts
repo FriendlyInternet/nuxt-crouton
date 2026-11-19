@@ -33,7 +33,8 @@ export interface ClockRow {
   about: string
   lastDue: string | null
   nextDue: string | null
-  lastRun: { id: number, url: string, createdAt: string, status: string | null, conclusion: string | null } | null
+  /** The inbox stuck check's row has only `createdAt` (it is no workflow run, so no link). */
+  lastRun: { id?: number, url?: string, createdAt: string, status?: string | null, conclusion?: string | null } | null
   state: 'ok' | 'running' | 'failed' | 'missed' | 'due' | 'before-clock' | 'unknown'
   error?: string | null
 }

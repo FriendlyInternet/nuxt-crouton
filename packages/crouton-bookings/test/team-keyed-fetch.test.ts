@@ -13,9 +13,9 @@ vi.mock('../app/composables/useBookingCartStorage', () => ({
 }))
 vi.mock('../app/composables/useBookingAvailability', () => ({
   useBookingAvailability: () => ({
-    loading: ref(false), availabilityData: ref(null), isInventoryMode: ref(false), inventoryQuantity: ref(0),
+    loading: ref(false), availabilityData: ref({}), hasSlots: ref(true),
     allSlots: ref([]), locationSlots: ref([]), fetchAvailability() {},
-    getBookedSlotsForDate: () => [], getBookedCountForDate: () => 0, isDateUnavailable: () => false,
+    getBookedSlotsForDate: () => [], isDateUnavailable: () => false,
     isSlotAvailableByRules: () => true, getBlockedReason: () => null, getRuleBlockedSlotIds: () => [],
   }),
 }))

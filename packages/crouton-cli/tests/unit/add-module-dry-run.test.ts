@@ -33,8 +33,8 @@ let lines: string[]
 
 beforeEach(async () => {
   dir = await mkdtemp(join(cliDir, 'tests', '.tmp-add-'))
-  // core + auth installed, so packages that depend on them (bookings) get past the dependency check.
-  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: { '@fyit/crouton-core': '*', '@fyit/crouton-auth': '*' } }))
+  // core, auth and catalog installed, so packages that depend on them (bookings) get past the dependency check.
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: { '@fyit/crouton-core': '*', '@fyit/crouton-auth': '*', '@fyit/crouton-catalog': '*' } }))
   await writeFile(join(dir, 'nuxt.config.ts'), "export default defineNuxtConfig({ extends: ['@fyit/crouton-core'] })\n")
   cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(dir)
   lines = []

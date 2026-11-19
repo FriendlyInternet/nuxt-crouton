@@ -188,6 +188,29 @@ export async function artifactGate({ github, context, core, env = process.env, f
       + 'Do not edit the issue; fix the workflow, delete the branch, and re-apply the label'
   }
 
+  // #4161 — the job was CANCELLED (its time limit, a person, or a newer run). pi never wrote its
+  // step outputs, so PI_EXEC_LOG is empty and the no-log branch below would blame the harness.
+  // Name the stop instead, with how long pi ran and how much it did, and point at the record.
+  if (!why && env.JOB_STATUS === 'cancelled') {
+    const minutes = Math.round((now() - sinceMs) / 60000)
+    const limit = Number(env.JOB_TIMEOUT_MIN) || 0
+    let steps = 0
+    try {
+      steps = Number(String(execFileSync('node',
+        [`${env.RUNNER_TEMP}/run-record.mjs`, 'tool-calls', `${env.RUNNER_TEMP}/pi-session`],
+        { encoding: 'utf8' })).trim()) || 0
+    } catch (e) { steps = 0 }
+    const artifact = `pi-session-${context.runId}`
+    // Setup before t0 takes a few minutes, so a kill within 10 minutes of the limit is the limit.
+    if (limit && minutes >= limit - 10) {
+      why = `the job hit its ${limit}-minute time limit — pi ran about ${minutes} minutes and made ${steps} tool calls before it was stopped`
+      action = `nothing is broken in the harness or the ticket. Download the \`${artifact}\` artifact from the run page to see where the time went, then narrow the ticket or re-dispatch`
+    } else {
+      why = `the run was cancelled after about ${minutes} minutes (${steps} tool calls)`
+      action = `re-dispatch when ready; the record is in the run's \`${artifact}\` artifact`
+    }
+  }
+
   // #4183: the pi step FAILED at its own time limit (the job was not cancelled — a cancelled job
   // is #4161's case). Its outputs are empty after a kill, so without this the `!hadLog` branch
   // below blamed "upstream of pi, in the workflow".
