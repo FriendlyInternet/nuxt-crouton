@@ -886,9 +886,23 @@ jobs:
           echo "✗ email probe (${APP}): ${REASON}" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
+      # The ONE seeded team the demo seed creates and the review login joins (#4141):
+      # `reviewTeam` in deploy.config.json, default `test1`. Fails the deploy when the key
+      # disagrees with croutonAuth.teams.defaultTeamSlug (the reviewer would land in two teams).
+      - name: Resolve review team (staging only, #4141)
+        id: review_team
+        if: ${{ inputs.environment != 'production' }}
+        env:
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+        run: |
+          TEAM="$(node "$GITHUB_WORKSPACE/scripts/review-team.mjs" "$WORKSPACE/$APP")"
+          echo "review team for ${APP}: ${TEAM}"
+          echo "team=$TEAM" >> "$GITHUB_OUTPUT"
+
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
-      # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
+      # review team (default `test1`, seed:org:<team>) the review login below attaches to. Runs BEFORE the
       # review-login step for exactly that reason — the login lands in a populated team, not a
       # phantom one. The ONLY place staging seeds — apps don't seed in their own cf:staging (#2366).
       # Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
@@ -907,7 +921,7 @@ jobs:
             exit 0
           fi
           DB="${{ steps.deploy.outputs.preview_db }}"; [ -n "$DB" ] || DB="${{ inputs.app }}-staging-db"
-          if pnpm exec crouton-seed --db "$DB" --remote; then
+          if pnpm exec crouton-seed --db "$DB" --remote --team "${{ steps.review_team.outputs.team }}"; then
             echo "✓ seeded $DB (collection fixtures + demo team)"
           else
             echo "::warning title=Staging seed failed::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
@@ -935,6 +949,8 @@ jobs:
           # Per-PR preview: attach the review login's team membership to the preview's OWN
           # DB (#2169), not shared staging — else the account exists but has no team/data.
           PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
+          # The seeded team to join (#4141): the review team resolved above.
+          REVIEW_TEAM: ${{ steps.review_team.outputs.team }}
         run: |
           set -o pipefail
           # An app without sign-in (e.g. pocs/loop-station) sets "reviewLogin": false — no account
@@ -965,7 +981,7 @@ jobs:
           SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
-          # Attach the login to the SEEDED demo team test1 (#832), not an empty fresh org. #1369: never
+          # Attach the login to the SEEDED review team (default test1, #832/#4141), not an empty fresh org. #1369: never
           # advertise creds for a failed seed (no `|| true`) — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
           # #3751: an app can name the tables its seeded team must have rows in
@@ -974,7 +990,7 @@ jobs:
           REQUIRE_DATA="$(jq -r '(.reviewLogin.requireData // []) | join(",")' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo '')"
           REQUIRE_ARGS=(); [ -z "$REQUIRE_DATA" ] || REQUIRE_ARGS=(--require-data "$REQUIRE_DATA")
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-               --seed-team test1 --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
+               --seed-team "$REVIEW_TEAM" --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
             # One-click link: crouton-auth prefills the form from ?email=&password= (never auto-submits,
@@ -1013,10 +1029,13 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The team this deploy actually seeded (#4141): the screenshot job checks out main, so it
+          # must read the team from here, not from a deploy.config.json that may predate the PR.
+          REVIEW_TEAM: ${{ steps.review_team.outputs.team }}
         run: |
           mkdir -p "$RUNNER_TEMP/preview-meta"
-          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
-            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" --arg team "$REVIEW_TEAM" \
+            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber), team:$team}' > "$RUNNER_TEMP/preview-meta/meta.json"
           echo "recorded=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload preview record

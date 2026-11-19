@@ -2,31 +2,33 @@
 // Reply replay (#4102): today's reading of a recorded owner reply, for the replay tests in
 // scripts/reply-replay.test.mjs. Pure — no network, Node core only.
 //
-// This copies the router (`routeComment`) and the resume job's re-plan step (`isPlanHold` +
+// This copies the route job (`openRecord` → `routeComment` with that record, #4145) and the resume
+// job's re-plan step (`replanFromReply`: follows the router's `starts`, else `isPlanHold` +
 // `answerDecision`) only. The resume job's revise step (an open `work-<issue>` PR plus a
 // collaborator's change request) and its design-hold step run first and are NOT copied: none of
 // the recorded cases reaches them. A later case that does reach them needs those facts added to
 // the case format first. `meaningToday` never returns `choice:<X>` today (no path reads a
 // choice); the step that routes a worker's answer extends it.
 import { routeComment } from './comment-route.mjs'
-import { isPlanHold, answerDecision } from './plan-hold.mjs'
+import { replanFromReply } from './plan-hold.mjs'
+import { openRecord } from './lib/reply-record.mjs'
 
 /**
  * The router + re-plan outcome for one recorded case.
- * @param {{issue: number, labels: string[], comments: object[], reply: {body: string, authorAssociation?: string, userType?: string}}} c
+ * @param {{issue: number, labels: string[], comments: object[], reply: {body: string, authorAssociation?: string, userType?: string, userLogin?: string}}} c
  * @returns {{kind: string, replan: boolean, decision: boolean}}
  */
 export function todayOutcome(c) {
   const issue = { number: c.issue, isPr: false, labels: c.labels, body: '' }
-  const { kind } = routeComment({ comment: c.reply, issue })
-  const replan = isPlanHold({ comments: c.comments, labels: c.labels, replyBody: c.reply.body })
-  const decision = answerDecision({
+  const record = openRecord({ comments: c.comments, labels: c.labels })
+  const d = routeComment({ comment: c.reply, issue, record })
+  const r = replanFromReply({
+    starts: d.starts || '',
     comments: c.comments,
-    replyBody: c.reply.body,
-    authorAssociation: c.reply.authorAssociation,
-    userType: c.reply.userType,
-  }) !== null
-  return { kind, replan, decision }
+    labels: c.labels,
+    comment: { body: c.reply.body, authorAssociation: c.reply.authorAssociation, userType: c.reply.userType, userLogin: c.reply.userLogin },
+  })
+  return { kind: d.kind, replan: r.replan, decision: r.replan && r.line !== null }
 }
 
 /**
