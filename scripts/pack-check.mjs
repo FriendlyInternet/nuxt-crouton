@@ -167,10 +167,25 @@ export function undeclaredImports(pkg, sources) {
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
+// A job with only setup-node has no `pnpm` on PATH; Node's bundled corepack provides it.
+let pnpmCmd
+function pnpm() {
+  if (pnpmCmd) return pnpmCmd
+  try {
+    execFileSync('pnpm', ['--version'], { stdio: 'ignore' })
+    pnpmCmd = ['pnpm', []]
+  }
+  catch {
+    pnpmCmd = ['corepack', ['pnpm']]
+  }
+  return pnpmCmd
+}
+
 function packOne(dir) {
   const dest = mkdtempSync(join(tmpdir(), 'pack-check-'))
   try {
-    execFileSync('pnpm', ['pack', '--pack-destination', dest], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+    const [cmd, pre] = pnpm()
+    execFileSync(cmd, [...pre, 'pack', '--pack-destination', dest], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' } })
     const tgz = readdirSync(dest).find(f => f.endsWith('.tgz'))
     if (!tgz) throw new Error('pnpm pack produced no tarball')
     const path = join(dest, tgz)
