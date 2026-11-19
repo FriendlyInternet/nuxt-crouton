@@ -131,6 +131,25 @@ const fetchListInto = async <T extends InboxCard>({ list, update }: InboxSources
   }
 }
 
+/** How often an open, visible inbox re-reads its stored cards (#4309). */
+export const REREAD_MS = 30_000
+
+/** Re-read the stored cards now? Only while the tab is visible and no load or sync is running. */
+export function rereadDue(s: { visible: boolean, busy: boolean }): boolean {
+  return s.visible && !s.busy
+}
+
+/**
+ * Re-read the stored cards only (never syncs from GitHub): the clock syncs after a webhook marked a
+ * change, and this picks the new cards up without a reload. Sets `loading`, so overlapping re-reads
+ * are guarded by `rereadDue`'s `busy`.
+ */
+export async function relistInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
+  args.update({ loading: true })
+  await fetchListInto(args)
+  args.update({ loading: false })
+}
+
 export async function loadInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
   args.update({ loading: true, refreshing: true, loadError: null, syncError: null })
   await fetchListInto(args)
