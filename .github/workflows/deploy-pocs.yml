@@ -214,8 +214,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # No `|| true`: a failed rebuild stops here with its own error (same as ci.yml, #1880).
       - name: Rebuild native build deps skipped by --ignore-scripts
-        run: pnpm rebuild better-sqlite3 2>/dev/null || true
+        run: pnpm rebuild better-sqlite3
 
       # Ensure EVERY @fyit/* dist is present before the build — same action every
       # other build path uses (#1222). This job used to hand-roll a subset build
