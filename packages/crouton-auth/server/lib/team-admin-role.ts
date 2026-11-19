@@ -81,7 +81,6 @@ export async function readTeamAdminRole(db: RawDb | null | undefined, orgId: str
 
 interface Adapter {
   findOne<T>(input: { model: string, where: Array<{ field: string, value: unknown }> }): Promise<T | null>
-  create<T>(input: { model: string, data: Record<string, unknown> }): Promise<T>
 }
 
 interface HookCtx {
@@ -90,19 +89,6 @@ interface HookCtx {
   query?: Record<string, unknown> | null
   headers?: Headers
   context: { adapter: Adapter }
-}
-
-/** Without crouton's raw db (tests on a memory adapter): read-then-create through Better Auth's adapter. */
-async function ensureViaAdapter(adapter: Adapter, orgId: string, access: Access): Promise<void> {
-  const existing = await adapter.findOne({
-    model: 'organizationRole',
-    where: [{ field: 'organizationId', value: orgId }, { field: 'role', value: ADMIN_ROLE_NAME }]
-  })
-  if (existing) return
-  await adapter.create({
-    model: 'organizationRole',
-    data: { organizationId: orgId, role: ADMIN_ROLE_NAME, permission: JSON.stringify(adminRolePermission(access)), createdAt: new Date() }
-  })
 }
 
 async function sessionOf(ctx: HookCtx) {
@@ -200,8 +186,10 @@ async function guardRoleCall(ctx: HookCtx, orgId: string | null): Promise<void> 
  * Better Auth's global `hooks` for `createAuth` (#4130). On every
  * `/organization/*` call: give the team its admin row when it has none (teams
  * made outside the four creation paths, e.g. the content seed), then guard the
- * role endpoints. Without `db` (tests on a memory adapter) the seed goes
- * through Better Auth's adapter instead.
+ * role endpoints. The seed is the single conditional INSERT in
+ * `ensureTeamAdminRole` — there is no read-then-create path. Without `db`
+ * (tests on a memory adapter) nothing is seeded: those tests seed the row
+ * themselves; the guard still runs.
  */
 export function buildAuthHooks(access: Access, db?: RawDb | null) {
   return {
@@ -210,10 +198,7 @@ export function buildAuthHooks(access: Access, db?: RawDb | null) {
       if (!ctx.path?.startsWith('/organization/')) return
       const orgId = await orgOf(ctx)
       // A failed seed (e.g. an unknown team id) never fails the call: Better Auth answers it.
-      if (orgId) {
-        if (db) await seedTeamAdminRole(db, orgId, access)
-        else await ensureViaAdapter(ctx.context.adapter, orgId, access).catch(() => {})
-      }
+      if (orgId && db) await seedTeamAdminRole(db, orgId, access)
       await guardRoleCall(ctx, orgId)
     })
   }

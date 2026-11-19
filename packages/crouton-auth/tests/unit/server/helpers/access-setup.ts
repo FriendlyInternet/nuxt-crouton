@@ -17,7 +17,8 @@ import {
   buildAccessControl,
   setAccessControl,
   type BaseRolesConfig,
-  type CroutonActionRegistry
+  type CroutonActionRegistry,
+  adminRolePermission
 } from '../../../../server/lib/access'
 import { buildAuthHooks } from '../../../../server/lib/team-admin-role'
 
@@ -54,6 +55,19 @@ export function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = 
   })
   setAuthInstance(auth as never)
   return { access, auth }
+}
+
+/**
+ * The seed step for a memory-adapter Better Auth: give `orgId` its admin row,
+ * as `ensureTeamAdminRole` does in production (#4130). `buildAuthHooks` only
+ * seeds through crouton's raw db, so tests without one seed here.
+ */
+export async function seedAdminRow(auth: { $context: Promise<unknown> }, orgId: string, access: ReturnType<typeof buildAccessControl>): Promise<void> {
+  const ctx = await auth.$context as { adapter: { create: (input: { model: string, data: Record<string, unknown> }) => Promise<unknown> } }
+  await ctx.adapter.create({
+    model: 'organizationRole',
+    data: { organizationId: orgId, role: 'admin', permission: JSON.stringify(adminRolePermission(access)), createdAt: new Date() }
+  })
 }
 
 /**

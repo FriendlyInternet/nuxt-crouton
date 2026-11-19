@@ -23,7 +23,7 @@ import { buildAccessControl, setAccessControl } from '../../../server/lib/access
 import { buildAuthHooks } from '../../../server/lib/team-admin-role'
 import { can } from '../../../server/utils/permissions'
 import { actionsToRolePermission } from '../../../shared/utils/team-roles'
-import { DECLARED } from './helpers/access-setup'
+import { DECLARED, seedAdminRow } from './helpers/access-setup'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
@@ -31,8 +31,9 @@ vi.mock('nitropack/runtime', () => ({
 
 const ORIGIN = 'https://velo.pmcp.dev'
 
+const access = buildAccessControl({ actions: DECLARED })
+
 function makeAuth() {
-  const access = buildAccessControl({ actions: DECLARED })
   setAccessControl(access)
   const auth = betterAuth({
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
@@ -125,6 +126,9 @@ describe('team roles (#4106)', () => {
     const y = await auth.api.createOrganization({ body: { name: 'Team Y', slug: 'team-y' }, headers: owner.headers })
     orgY = y!.id
     mirror(orgY, owner, 'owner')
+    // What createAuth's team-creation hooks do in production (#4130): each team gets its admin row.
+    await seedAdminRow(auth, orgX, access)
+    await seedAdminRow(auth, orgY, access)
 
     const owners = await auth.api.listMembers({ query: { organizationId: orgX }, headers: owner.headers })
     memberIds.owner = owners.members.find(m => m.userId === owner.userId)!.id
