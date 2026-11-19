@@ -94,7 +94,8 @@ for (const folder of FOLDERS) {
     const { entry, journal } = dropEntry(folder)
     const prevEntry = journal.entries.find(e => e.idx === entry.idx - 1)
     assert.ok(prevEntry, `${folder}: there must be a migration before it`)
-    assert.equal(entry.idx, Math.max(...journal.entries.map(e => e.idx)), `${folder}: it must be the newest migration`)
+    // Not "the newest": later migrations (e.g. #4096's OAuth tables) land after it. What must hold
+    // is that nothing after it brings the dropped columns back.
     assert.ok(dropFile(folder).startsWith(String(entry.idx).padStart(4, '0') + '_'))
 
     const dir = migrationsDir(folder)
@@ -110,6 +111,13 @@ for (const folder of FOLDERS) {
     delete expected.tables.bookings_locations.columns.quantity
     // deepEqual, not a string compare: drizzle-kit may write keys in another order.
     assert.deepEqual({ ...snap, id: 0, prevId: 0 }, { ...expected, id: 0, prevId: 0 })
+
+    const newest = journal.entries.reduce((a, e) => (e.idx > a.idx ? e : a))
+    if (newest.idx !== entry.idx) {
+      const latest = readJson(path.join(dir, `meta/${String(newest.idx).padStart(4, '0')}_snapshot.json`))
+      const cols = latest.tables.bookings_locations.columns
+      assert.ok(!cols.inventoryMode && !cols.quantity, `${folder}: a later migration must not bring the columns back`)
+    }
   })
 
   // covers: T2

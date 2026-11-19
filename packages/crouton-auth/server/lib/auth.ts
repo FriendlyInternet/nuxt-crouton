@@ -16,8 +16,11 @@
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization, twoFactor, magicLink, admin, haveIBeenPwned, type TwoFactorOptions } from 'better-auth/plugins'
+import { organization, twoFactor, magicLink, admin, haveIBeenPwned, jwt, type TwoFactorOptions } from 'better-auth/plugins'
 import { i18n } from '@better-auth/i18n'
+import { mcp } from '@better-auth/mcp'
+import { mcpScopes } from './mcp-scopes'
+import { mcpClientCleanup } from './mcp-oauth'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
@@ -841,7 +844,43 @@ function buildPlugins(
     }))
   }
 
+  // Sign-in for Claude and other MCP apps (#4096). `mcp()` IS the OAuth
+  // provider (no separate oauthProvider()); jwt() signs its access tokens and
+  // serves /jwks. No cimd(): its pinned fetch can't run on Workers (#4120),
+  // so clients register through open DCR, rate-limited to 10/min per IP and
+  // cleaned up by mcpClientCleanup(). No postLogin / consentReferenceId and
+  // no team claim: the token names the user + scopes only; /mcp checks the
+  // team on every call.
+  if (config.mcpOAuth) {
+    plugins.push(
+      jwt(),
+      mcp(buildMcpOAuthOptions(baseURL)),
+      mcpClientCleanup()
+    )
+  }
+
   return plugins
+}
+
+/**
+ * Options for the `mcp()` sign-in provider (#4096). Exported for tests.
+ */
+export function buildMcpOAuthOptions(baseURL: string) {
+  const base = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL
+  return {
+    resource: `${base}/mcp`,
+    loginPage: '/auth/login',
+    consentPage: '/auth/consent',
+    // Replaces the library defaults. offline_access is needed for a refresh
+    // token (without it the connection dies after the 1-hour access token).
+    scopes: ['offline_access', ...mcpScopes],
+    allowDynamicClientRegistration: true,
+    // Claude is a public client: it registers without a login.
+    allowUnauthenticatedClientRegistration: true,
+    // 10 registrations per minute per IP (crouton's '/**' rule keeps this
+    // per cf-connecting-ip).
+    rateLimit: { register: { window: 60, max: 10 } }
+  }
 }
 
 // ============================================================================

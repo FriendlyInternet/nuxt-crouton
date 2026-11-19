@@ -1,0 +1,4 @@
+{
+  "packages": ["crouton-auth", "crouton-mcp-toolkit"],
+  "collections": []
+}

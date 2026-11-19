@@ -71,6 +71,13 @@
       "when": 1795081103808,
       "tag": "0009_drop_inventory_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795099395165,
+      "tag": "0006_daily_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }
