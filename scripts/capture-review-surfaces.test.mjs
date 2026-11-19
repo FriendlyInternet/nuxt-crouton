@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, isAuthPath, authTryDecision } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, isAuthPath, authTryDecision, noneReason } from './capture-review-surfaces.mjs'
 import * as captureModule from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
@@ -616,3 +616,43 @@ test('T8: the old fixed "/auth/ ⇒ signed out" rule is gone; isAuthPath only sa
   assert.equal(isAuthPath('/'), false)
 })
 
+
+// ── #4252: "no screen to check" wins over guessed pages, but only with a reason ──────────────
+
+test('noneReason: only the marker that carries a reason (#4252)', () => {
+  assert.equal(noneReason('x <!-- review-surface-none: the consent screen only shows mid sign-in --> y'), 'the consent screen only shows mid sign-in')
+  assert.equal(noneReason('<!--review-surface-none:   spaced   out  -->'), 'spaced out')
+  assert.equal(noneReason('<!-- review-surface-none -->'), '')
+  assert.equal(noneReason('<!-- review-surface-none:    -->'), '')
+  assert.equal(noneReason('<!-- review-surface: kassa /x -->'), '')
+  assert.equal(noneReason(''), '')
+  assert.equal(noneReason(undefined), '')
+})
+
+test('resolveSurfaces: a reasoned "no screen to check" beats guessed pages; a bare one does not (#4252)', () => {
+  const changedFiles = ['packages/crouton-auth/app/pages/auth/login.vue']
+  const guessed = resolveSurfaces({ manifest: {}, prBody: '', app: 'kassa', changedFiles })
+  assert.deepEqual(guessed.surfaces.map(s => s.path), ['/auth/login'])
+
+  const bare = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface-none -->', app: 'kassa', changedFiles })
+  assert.deepEqual(bare.surfaces.map(s => s.path), ['/auth/login'], 'no reason: the guess still counts')
+
+  const reasoned = resolveSurfaces({ manifest: {}, prBody: '<!-- review-surface-none: only shows mid sign-in -->', app: 'kassa', changedFiles })
+  assert.deepEqual(reasoned.surfaces.map(s => s.path), ['/'])
+  assert.equal(reasoned.reason, 'no screen to check: only shows mid sign-in')
+  assert.ok(reasoned.surfaces.every(s => s.name.startsWith('no-screen-')), 'the picture name says why it is the start page')
+  assert.ok(reasoned.surfaces.every(s => !s.checkLanding), 'the start page may redirect, as for a PR that changes no screen')
+})
+
+test('resolveSurfaces: a page the PR names beats a reasoned "no screen to check" (#4252)', () => {
+  const body = '<!-- review-surface: kassa /admin/test1/x -->\n<!-- review-surface-none: nothing to see -->'
+  const r = resolveSurfaces({ manifest: {}, prBody: body, app: 'kassa', changedFiles: ['packages/crouton-auth/app/pages/auth/login.vue'] })
+  assert.deepEqual(r.surfaces.map(s => s.path), ['/admin/test1/x'])
+  assert.equal(r.reason, 'declared on the PR')
+})
+
+test('resolveSurfaces: a reasoned "no screen to check" keeps the manifest\'s own pages (#4252)', () => {
+  const manifest = { reviewSurfaces: [{ name: 'home', path: '/dashboard' }] }
+  const r = resolveSurfaces({ manifest, prBody: '<!-- review-surface-none: scripts only -->', app: 'kassa', changedFiles: ['packages/crouton-core/app/components/X.vue'] })
+  assert.deepEqual(r.surfaces.map(s => [s.name, s.path]), [['no-screen-home', '/dashboard']])
+})

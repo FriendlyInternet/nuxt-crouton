@@ -77,7 +77,11 @@ export function decideSignoff({ uiTouched, planText = '', issueBody = '', previe
 export function surfaceLine(decision, previews = []) {
   if (!decision || decision.reason === 'not-visual') return ''
   const lookAt = decision.lookAt
-  if (lookAt?.none) return '<!-- review-surface-none -->'
+  if (lookAt?.none) {
+    // With the plan's reason the marker beats guessed pages (#4252); cut so it cannot close the comment early.
+    const why = String(lookAt.why || '').split(/-->|[\r\n]/)[0].replace(/\s+/g, ' ').trim()
+    return why ? `<!-- review-surface-none: ${why} -->` : '<!-- review-surface-none -->'
+  }
   if (lookAt?.app && previews.includes(lookAt.app)) return `<!-- review-surface: ${lookAt.app} ${lookAt.path} -->`
   return ''
 }
