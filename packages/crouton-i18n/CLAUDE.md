@@ -198,7 +198,7 @@ defaultLocale: 'nl',
 
 ### Override system translation for team
 1. Insert into `translations_ui` with `teamId` set
-2. Or use admin UI at `/admin/translations`
+2. Or use the admin UI at `/admin/[team]/translations` — it loads every configured language first (`loadLocaleMessages`), since `@nuxtjs/i18n` 10 only loads the current language's file.
 
 ## Common Pitfalls
 
