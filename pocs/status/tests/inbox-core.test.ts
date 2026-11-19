@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { cardView, loadInbox, nothingWaits, submitAnswer, validateAnswer, waitingCards, type InboxCard, type InboxLoadState } from '../app/utils/inbox-core'
+import { cardView, loadInbox, nothingWaits, refreshInbox, submitAnswer, validateAnswer, waitingCards, type InboxCard, type InboxLoadState } from '../app/utils/inbox-core'
 
 const card = (over: Partial<InboxCard> & { id: string }): InboxCard => ({
   kind: 'review',
@@ -193,5 +193,21 @@ describe('loadInbox', () => {
     const { state, update } = harness()
     await loadInbox({ list: async () => [], sync: () => Promise.reject(new Error('x')), update })
     expect(nothingWaits(state)).toBe(true)
+  })
+
+  // covers: T6 (#4253)
+  it('a sync that answers { error } says "Refreshed with problems" and still lists again; { created } sets no error', async () => {
+    const a = harness()
+    const listA = vi.fn().mockResolvedValue(fresh)
+    await refreshInbox({ list: listA, sync: async () => ({ error: 'x' }), update: a.update })
+    expect(a.state.syncError).toContain('x')
+    expect(a.state.syncError).toBe('Refreshed with problems: x')
+    expect(listA).toHaveBeenCalledTimes(1)
+    expect(a.state.cards.map(c => c.id)).toEqual(['b', 'a'])
+    expect(a.state.refreshing).toBe(false)
+
+    const b = harness()
+    await refreshInbox({ list: vi.fn().mockResolvedValue(fresh), sync: async () => ({ created: 1 }), update: b.update })
+    expect(b.state.syncError).toBeNull()
   })
 })

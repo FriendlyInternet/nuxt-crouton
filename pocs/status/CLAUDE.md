@@ -11,7 +11,9 @@ Cards are filled by `runCardsSync` (`server/utils/cards-sync-run.ts`), run by `P
 inbox page on load) and by the clock at :00 and :30 UTC (`server/utils/cards-sync-clock.ts`; owner =
 `NUXT_STATUS_OWNER_EMAIL`, team `test1`; both share the 60 s throttle key `cards-sync:last:<team>`): it reads GitHub live,
 upserts one card per waiting ask under the owner's team, never changes a card answered from the inbox, and leaves an
-item's cards untouched when its GitHub read fails. Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
+item's cards untouched when its GitHub read fails. A failed card save never stops the others or answers 500: the sync
+answers 200 with `error` (how many saves failed and the first message), and the inbox shows it as "Refreshed with
+problems". Rules live in `server/utils/cards-sync-core.ts` (copies of `scripts/`
 logic — keep in step).
 A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
 closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
