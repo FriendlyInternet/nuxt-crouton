@@ -87,7 +87,34 @@ const requestFetch = vi.fn(async (url: string, opts: { query: { actions: string 
   return await canMany(teamId, currentUser.id, opts.query.actions.split(','))
 })
 
-let middleware: (to: unknown) => Promise<unknown>
+/**
+ * Nuxt's instance is only reachable while the middleware runs SYNCHRONOUSLY
+ * (callWithNuxt sets it, calls the function, unsets it on return) or inside
+ * `nuxtApp.runWithContext`. A composable reached after an `await` in a plain
+ * helper throws on the server — that is what made every velo admin page 401
+ * on the PR #4151 preview. The stubs below enforce the same rule.
+ */
+let nuxtActive = false
+function inNuxt<T>(fn: () => T): T {
+  const prev = nuxtActive
+  nuxtActive = true
+  try {
+    return fn()
+  }
+  finally {
+    nuxtActive = prev
+  }
+}
+function composable<A extends unknown[], R>(name: string, fn: (...args: A) => R) {
+  return (...args: A): R => {
+    if (!nuxtActive) throw new Error(`[nuxt] instance unavailable (${name} called outside the Nuxt context)`)
+    return fn(...args)
+  }
+}
+
+let loadedMiddleware: (to: unknown) => Promise<unknown>
+/** The middleware as Nuxt calls it: inside the context for its synchronous part only. */
+const middleware = (to: unknown) => inNuxt(() => loadedMiddleware(to))
 
 function config(roles?: BaseRolesConfig) {
   const access = buildAccessControl({ actions: DECLARED, roles })
@@ -103,16 +130,17 @@ function config(roles?: BaseRolesConfig) {
 function stubRuntime() {
   vi.stubGlobal('defineNuxtRouteMiddleware', (fn: unknown) => fn)
   vi.stubGlobal('watch', watch)
-  vi.stubGlobal('useSession', () => ({
+  vi.stubGlobal('useSession', composable('useSession', () => ({
     data: ref(currentUser ? { user: currentUser } : null),
     isPending: ref(false),
     isAuthenticated: ref(!!currentUser)
-  }))
-  vi.stubGlobal('useTeam', () => ({ switchTeamBySlug }))
-  vi.stubGlobal('navigateTo', navigateTo)
+  })))
+  vi.stubGlobal('useTeam', composable('useTeam', () => ({ switchTeamBySlug })))
+  vi.stubGlobal('useNuxtApp', composable('useNuxtApp', () => ({ runWithContext: inNuxt })))
+  vi.stubGlobal('navigateTo', composable('navigateTo', navigateTo))
   vi.stubGlobal('createError', (o: { status: number, statusText?: string, message?: string }) =>
     Object.assign(new Error(o.message), { statusCode: o.status, statusMessage: o.statusText }))
-  vi.stubGlobal('useRequestFetch', () => requestFetch)
+  vi.stubGlobal('useRequestFetch', composable('useRequestFetch', () => requestFetch))
   vi.stubGlobal('$fetch', plainFetch)
 }
 
@@ -129,7 +157,7 @@ async function outcome(name: string, user: string, extra?: Record<string, unknow
 
 beforeAll(async () => {
   stubRuntime()
-  middleware = (await import('../../app/middleware/can')).default as never
+  loadedMiddleware = (await import('../../app/middleware/can')).default as never
 })
 
 beforeEach(() => {
@@ -220,6 +248,25 @@ describe('can middleware (#4105)', () => {
     config()
     expect(await outcome('admin home', 'u-owner', { matched: [{ meta: {} }] })).toBe(403)
     expect(requestFetch).not.toHaveBeenCalled()
+  })
+
+  it('an owner and an admin pass even though the check awaits the session first (no 401 from a lost Nuxt context)', async () => {
+    config()
+    // A session still loading forces a real await before the fetch, like a first load.
+    const isPending = ref(true)
+    vi.stubGlobal('useSession', composable('useSession', () => ({
+      data: ref({ user: currentUser }),
+      isPending,
+      isAuthenticated: ref(true)
+    })))
+    for (const user of ['u-owner', 'u-admin']) {
+      isPending.value = true
+      currentUser = { id: user }
+      const run = middleware(route('team/domains'))
+      isPending.value = false
+      await expect(run, user).resolves.toBeUndefined()
+    }
+    expect(requestFetch).toHaveBeenCalledTimes(2)
   })
 
   it('signed out → sent to login with a redirect back', async () => {

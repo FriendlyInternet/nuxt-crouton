@@ -12,6 +12,13 @@
  * `useRequestFetch()` (forwards the cookie during server rendering). It does
  * NOT use `useCan()`: that computed reads `false` while loading, so a guard
  * built on it would refuse everyone on the first pass.
+ *
+ * Every Nuxt composable is taken at the top of `checkRouteCan`, BEFORE its first
+ * `await`. This is a plain helper, not the middleware body, so Nuxt's
+ * await-context transform does not cover it: on the server a `useRequestFetch()`
+ * called after an `await` throws (no Nuxt instance), and the catch below turned
+ * that into a 401 for every signed-in owner (#4151 review — velo preview).
+ * `navigateTo` after an await runs inside `nuxtApp.runWithContext` for the same reason.
  */
 import type { Ref } from 'vue'
 import type { RouteLocationNormalized } from 'vue-router'
@@ -69,9 +76,11 @@ async function switchTeamOnClient(switchTeamBySlug: (slug: string) => Promise<un
 }
 
 /** Ask the can endpoint; 403 → not a member, any other failure → 401. */
-async function fetchAllowed(teamSlug: string, actions: string[]): Promise<Record<string, boolean>> {
+type RequestFetch = ReturnType<typeof useRequestFetch>
+
+async function fetchAllowed(requestFetch: RequestFetch, teamSlug: string, actions: string[]): Promise<Record<string, boolean>> {
   try {
-    return await useRequestFetch()<Record<string, boolean>>(`/api/teams/${teamSlug}/can`, {
+    return await requestFetch<Record<string, boolean>>(`/api/teams/${teamSlug}/can`, {
       query: { actions: actions.join(',') }
     })
   } catch (e) {
@@ -90,11 +99,14 @@ async function fetchAllowed(teamSlug: string, actions: string[]): Promise<Record
 export async function checkRouteCan(to: RouteLike | RouteLocationNormalized, actions: string[]) {
   const { data: sessionData, isPending, isAuthenticated } = useSession()
   const { switchTeamBySlug } = useTeam()
+  // Taken before any await — see the header comment.
+  const requestFetch = useRequestFetch()
+  const nuxtApp = useNuxtApp()
 
   await waitForSession(isPending)
 
   if (!isAuthenticated.value) {
-    return navigateTo({ path: '/auth/login', query: { redirect: to.fullPath } })
+    return nuxtApp.runWithContext(() => navigateTo({ path: '/auth/login', query: { redirect: to.fullPath } }))
   }
 
   const teamSlug = to.params.team as string | undefined
@@ -114,7 +126,7 @@ export async function checkRouteCan(to: RouteLike | RouteLocationNormalized, act
     throw createError({ status: 403, statusText: 'Forbidden', message: 'Not allowed: no action declared' })
   }
 
-  const allowed = await fetchAllowed(teamSlug, actions)
+  const allowed = await fetchAllowed(requestFetch, teamSlug, actions)
 
   const refused = actions.find(a => allowed?.[a] !== true)
   if (refused) {
