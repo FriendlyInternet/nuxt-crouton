@@ -50,9 +50,13 @@ It does nothing unless the Worker has `CLOCK_ENABLED=1`; then it mints one Harne
 (`server/utils/github-app.ts`, a copy of crouton-feedback's `githubApp.ts`; env `HARNESS_APP_ID`,
 `HARNESS_APP_PRIVATE_KEY`, `HARNESS_APP_INSTALLATION_ID`, pushed by deploy-app.yml on staging only — never
 the owner's `GITHUB_TOKEN`) and starts each job due in that 10-minute slot (`dueJobs` in
-`server/utils/clock-jobs.ts`) with `workflow_dispatch` on `main`, logging `clock: <workflow> → <status>`.
+`server/utils/clock-jobs.ts`) with `workflow_dispatch` on `main` and input `clock: 'true'` (so a gated
+workflow behaves as its timed run, not a hand start), logging `clock: <workflow> → <status>`.
+A row has `every` (`hour` | `day` | `week` | `month`) and `minute`, plus `hour` for day/week/month,
+`weekday` for week (0 = Sunday, as cron) and `day` for month; all times UTC.
 A tick that never arrives is skipped, with no catch-up. The clock only starts workflows; it does not sync
-cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch`, and remove its `schedule:`.
+cards. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch` with a boolean `clock`
+input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
 
 ## Owner email
 
