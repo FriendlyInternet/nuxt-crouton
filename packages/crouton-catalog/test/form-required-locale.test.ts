@@ -2,14 +2,13 @@
  * #4236 — the product form requires the app's default language (same rule as
  * the translation input), not always English; the seed writes that language.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import Database from 'better-sqlite3'
 import { collectSeedSql } from '@fyit/crouton-core/shared/seed'
 import useCatalogProductsForm, { catalogProductSchema, catalogProductSchemaFor } from '../collections/products/app/composables/useCatalogProducts'
 import { localeCodes, requiredLocale } from '../required-locale'
 import { provider as catalogProvider } from '../seed'
 
-afterEach(() => vi.unstubAllGlobals())
 
 const fr = { title: 'Vélo', translations: { fr: { title: 'Vélo' } } }
 const en = { title: 'Bike', translations: { en: { title: 'Bike' } } }
@@ -44,8 +43,7 @@ describe('product form schema per language', () => {
   })
 
   it('the form object in a fr-default app accepts fr-only', () => {
-    vi.stubGlobal('useI18n', () => ({ locales: { value: [{ code: 'fr' }, { code: 'nl' }, { code: 'en' }] }, defaultLocale: { value: 'fr' } }))
-    const { schema } = useCatalogProductsForm()
+    const { schema } = useCatalogProductsForm({ locales: { value: [{ code: 'fr' }, { code: 'nl' }, { code: 'en' }] }, defaultLocale: { value: 'fr' } })
     expect(schema.safeParse(fr).success).toBe(true)
     expect(schema.safeParse(en).success).toBe(false)
   })

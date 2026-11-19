@@ -300,7 +300,7 @@ interface LocationFormProps {
 const props = defineProps<LocationFormProps>()
 // The default export (form object), imported explicitly: the auto-imported
 // named `useBookingsLocations` is the config, not the form object.
-const locationsForm = useBookingsLocationsForm()
+const locationsForm = useBookingsLocationsForm(useI18n())
 const { defaultValue, collection } = locationsForm
 // Kept untyped as before: the stored row's nullable columns don't match the
 // zod output type UForm would otherwise infer for `state`.

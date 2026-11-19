@@ -117,7 +117,7 @@ import useBookingsEmailtemplates from '../composables/useBookingsEmailtemplates'
 import { applyDefaultLocaleEmailtemplateFields } from '../utils/applyDefaultLocaleEmailtemplateFields'
 
 const props = defineProps<BookingsEmailtemplateFormProps>()
-const { defaultValue, schema, collection } = useBookingsEmailtemplates()
+const { defaultValue, schema, collection } = useBookingsEmailtemplates(useI18n())
 
 // Form layout configuration
 const tabs = ref(false)

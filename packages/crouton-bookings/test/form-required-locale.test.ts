@@ -1,10 +1,10 @@
 /**
  * #4236 — the standard location and email-template forms require the app's
  * default language (same rule as the translation input), not always English.
- * The default export is what the form calls in setup; `useI18n` is the Nuxt
- * auto-import it reads, stubbed here.
+ * The default export is what the form calls in setup, passing its `useI18n()`
+ * result; here that result is a plain object.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import useBookingsLocationsForm, { bookingsLocationSchema, bookingsLocationSchemaFor } from '../collections/locations/app/composables/useBookingsLocations'
 import useBookingsEmailtemplatesForm, { bookingsEmailtemplateSchema, bookingsEmailtemplateSchemaFor } from '../collections/emailtemplates/app/composables/useBookingsEmailtemplates'
 
@@ -17,7 +17,6 @@ const enTemplate = { ...templateBase, translations: { en: { name: 'Confirmation'
 
 const messages = (r: { success: boolean, error?: { issues: { message: string }[] } }) => (r.error?.issues ?? []).map(i => i.message).join(' | ')
 
-afterEach(() => vi.unstubAllGlobals())
 
 describe('location form schema per language (#4236)', () => {
   it('fr: accepts fr-only and refuses en-only, naming the language', () => {
@@ -35,8 +34,7 @@ describe('location form schema per language (#4236)', () => {
   })
 
   it('the form object in a fr-default app accepts fr-only', () => {
-    vi.stubGlobal('useI18n', () => ({ locales: { value: [{ code: 'fr' }, { code: 'nl' }, { code: 'en' }] }, defaultLocale: 'fr' }))
-    const { schema } = useBookingsLocationsForm()
+    const { schema } = useBookingsLocationsForm({ locales: { value: [{ code: 'fr' }, { code: 'nl' }, { code: 'en' }] }, defaultLocale: 'fr' })
     expect(schema.safeParse(frLocation).success).toBe(true)
     expect(schema.safeParse(enLocation).success).toBe(false)
   })
@@ -57,8 +55,7 @@ describe('email-template form schema per language (#4236)', () => {
   })
 
   it('the form object in a fr-default app accepts fr-only', () => {
-    vi.stubGlobal('useI18n', () => ({ locales: { value: ['fr', 'nl', 'en'] }, defaultLocale: 'fr' }))
-    const { schema } = useBookingsEmailtemplatesForm()
+    const { schema } = useBookingsEmailtemplatesForm({ locales: { value: ['fr', 'nl', 'en'] }, defaultLocale: 'fr' })
     expect(schema.safeParse(frTemplate).success).toBe(true)
     expect(schema.safeParse(enTemplate).success).toBe(false)
   })

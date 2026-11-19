@@ -13,6 +13,28 @@ export function requiredLocale(codes: string[], defaultLocale?: string | null): 
   return defaultLocale || 'en'
 }
 
+type LocaleList = ReadonlyArray<string | { code: string }>
+
+/**
+ * The part of `useI18n()` a form needs. The form component (where `useI18n`
+ * is a typed Nuxt auto-import) passes its `useI18n()` result in, so the form
+ * composables never call `useI18n` themselves — they are also type-checked
+ * from server code, where it doesn't exist.
+ */
+export interface FormI18n {
+  locales?: LocaleList | { value: LocaleList } | null
+  defaultLocale?: string | { value?: string | null } | null
+}
+
+/** The required language for a form, from its `useI18n()` (none → `'en'`). */
+export function formRequiredLocale(i18n?: FormI18n | null): string {
+  const list = i18n?.locales
+  const locales = list && 'value' in list ? list.value : (list as LocaleList | null | undefined)
+  const def = i18n?.defaultLocale
+  const defaultLocale = def && typeof def === 'object' ? def.value : def
+  return requiredLocale(localeCodes(locales), defaultLocale)
+}
+
 /** Normalise i18n locales (strings or `{ code }` objects) to their codes. */
 export function localeCodes(locales: ReadonlyArray<string | { code: string }> | null | undefined): string[] {
   return (locales ?? []).map(l => (typeof l === 'string' ? l : l.code))

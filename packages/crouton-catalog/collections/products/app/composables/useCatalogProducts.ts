@@ -11,9 +11,8 @@
  * - Fields: title, description, active
  */
 
-import { unref } from 'vue'
 import { z } from 'zod'
-import { localeCodes, requiredLocale } from '../../../../required-locale'
+import { formRequiredLocale, type FormI18n } from '../../../../required-locale'
 
 // Schema exported separately - Zod 4 schemas cannot survive deep cloning
 // Keep schema outside of objects that might be serialized/cloned during SSR.
@@ -89,13 +88,10 @@ export const catalogProductsConfig = _catalogProductsConfig as typeof _catalogPr
 export const useCatalogProducts = () => catalogProductsConfig
 
 // Default export for auto-import compatibility
-export default function () {
-  // `useI18n` is a Nuxt auto-import in the app. This file is also type-checked
-  // from server/shared code (via types.ts), where it isn't declared — and a local
-  // `declare` would stop the auto-import, so only the type check is silenced.
-  // @ts-ignore
-  const { locales, defaultLocale } = useI18n()
-  const locale = requiredLocale(localeCodes(locales.value as any), unref(defaultLocale) as string | undefined)
+// The form passes its `useI18n()` in; the schema requires that app's default
+// language (no i18n passed → English).
+export default function (i18n?: FormI18n) {
+  const locale = formRequiredLocale(i18n)
   return {
     defaultValue: catalogProductsConfig.defaultValues,
     schema: catalogProductSchemaFor(locale),

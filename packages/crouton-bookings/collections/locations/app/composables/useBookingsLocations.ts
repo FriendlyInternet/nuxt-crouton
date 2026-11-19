@@ -22,9 +22,8 @@
  * Safe to modify - regeneration requires --force flag
  */
 
-import { unref } from 'vue'
 import { z } from 'zod'
-import { localeCodes, requiredLocale } from '@fyit/crouton-catalog/required-locale'
+import { formRequiredLocale, type FormI18n } from '@fyit/crouton-catalog/required-locale'
 
 export const bookingsLocationsSlotItemSchema = z.object({
   id: z.string(),
@@ -215,13 +214,10 @@ export const bookingsLocationsConfig = _bookingsLocationsConfig as typeof _booki
 export const useBookingsLocations = () => bookingsLocationsConfig
 
 // Default export for auto-import compatibility
-export default function () {
-  // `useI18n` is a Nuxt auto-import in the app. This file is also type-checked
-  // from server/shared code (via types.ts), where it isn't declared — and a local
-  // `declare` would stop the auto-import, so only the type check is silenced.
-  // @ts-ignore
-  const { locales, defaultLocale } = useI18n()
-  const locale = requiredLocale(localeCodes(locales.value as any), unref(defaultLocale) as string | undefined)
+// The form passes its `useI18n()` in; the schema requires that app's default
+// language (no i18n passed → English).
+export default function (i18n?: FormI18n) {
+  const locale = formRequiredLocale(i18n)
   return {
     defaultValue: bookingsLocationsConfig.defaultValues,
     schema: bookingsLocationSchemaFor(locale),

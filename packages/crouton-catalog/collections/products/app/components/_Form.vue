@@ -57,7 +57,7 @@ interface ProductFormProps {
 }
 
 const props = defineProps<ProductFormProps>()
-const { defaultValue, schema, collection } = useCatalogProducts()
+const { defaultValue, schema, collection } = useCatalogProducts(useI18n())
 
 const { create, update, deleteItems } = useCollectionMutation(collection)
 const { close, loading } = useCrouton()
