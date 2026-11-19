@@ -70,11 +70,6 @@ jobs:
       - name: Build packages (drizzle configs import their dist/ schemas)
         run: pnpm build:packages
 
-      # #3076: the #2850 replay runs kassa's real db:generate, so it needs the install above
-      # (ci.yml's node-checks job has none and skips it). Not a PR verdict — a guard self-test.
-      - name: Self-test — replay #2850 through real db:generate
-        run: node --test --test-name-pattern 'real db:generate|guard checks kassa' scripts/migration-guard.test.mjs
-
       - name: Run each app's db:generate
         run: node scripts/migration-guard.mjs generate --root . --out /tmp/results.json
 
@@ -98,3 +93,10 @@ jobs:
             if (v.status === 'not-involved') return
             if (prev) await github.rest.issues.updateComment({ ...context.repo, comment_id: prev.id, body: v.commentBody })
             else if (v.status !== 'pass') await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body: v.commentBody })
+
+      # #3076: the #2850 replay runs kassa's real db:generate, so it needs the install above
+      # (ci.yml's node-checks job has none and skips it). Not a PR verdict — a guard self-test.
+      # LAST, and only when the real check passed: its control is "this PR's kassa needs no
+      # migration", so on a PR that lacks one it failed first and hid the comment above (PR #4213).
+      - name: Self-test — replay #2850 through real db:generate
+        run: node --test --test-name-pattern 'real db:generate|guard checks kassa' scripts/migration-guard.test.mjs
