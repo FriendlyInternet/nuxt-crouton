@@ -22,13 +22,24 @@ function matchPrefix(line, held) {
   return [OK_REASON, NOT_OK].find(r => r.test(line)) || null
 }
 
+/**
+ * PURE. Is this comment the owner speaking (#4192)? The owner's login, and either no leading 🤖
+ * header (typed by the owner) or a 🤖 header that says "owner decision" or relays the owner's
+ * answer (`RELAYED`). A chat's status note from the owner's account (🪪 claim, FYI, ✅ done) is not.
+ * @param {{body?: string, userLogin?: string, userType?: string}} c
+ * @param {string} [owner]
+ */
+export function isOwnerVoice({ body, userLogin, userType } = {}, owner) {
+  if (!isOwner({ userLogin, userType }, owner)) return false
+  const header = stripGeneratedTrailer(String(body || '')).split('\n').find(l => l.trim())
+  const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')
+  return !(isAgent && !/owner decision/i.test(header) && !RELAYED.test(header))
+}
+
 /** @returns {string|null} the decision text (single line, verbatim words), or null */
 export function parseDecision({ body, userLogin, owner, userType, held = false } = {}) {
-  if (!isOwner({ userLogin, userType }, owner)) return null
+  if (!isOwnerVoice({ body, userLogin, userType }, owner)) return null
   const lines = stripGeneratedTrailer(String(body || '')).split('\n')
-  const header = lines.find(l => l.trim())
-  const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')
-  if (isAgent && !/owner decision/i.test(header) && !RELAYED.test(header)) return null
   const rest = lines.filter(l => !/^\s*>/.test(l))
   const first = rest.findIndex(l => l.trim())
   if (first < 0) return null
