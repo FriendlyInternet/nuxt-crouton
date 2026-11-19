@@ -64,6 +64,11 @@ export function useDomainContext() {
     return isCustomDomain.value || isLocaleMode.value
   })
 
+  // Team mode, one-locale apps: public URLs carry no locale segment.
+  const hideLocaleInUrl = computed(() =>
+    routingMode.value === 'team' && !!(config.public?.croutonPages as any)?.hideLocaleInUrl
+  )
+
   // A connected domain in team routing mode: the router keeps team-ful paths and
   // the team-host history (app/router.options.ts) hides the team in the address bar.
   const isTeamHost = computed(() => isCustomDomain.value && !!resolvedTeamSlug.value && !isLocaleMode.value)
@@ -108,6 +113,8 @@ export function useDomainContext() {
     appSegments,
     /** Whether the team is implicit (custom domains or locale mode) — canonical URLs, team UI, not router links */
     hideTeamInUrl,
+    /** Whether to omit the locale segment in public URLs (team mode + croutonPages.hideLocaleInUrl) */
+    hideLocaleInUrl,
     /** True on a connected domain in team routing mode */
     isTeamHost,
     /** Whether router links omit the team (true only in locale/custom mode) */

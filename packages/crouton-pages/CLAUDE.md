@@ -22,6 +22,7 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/composables/usePageBlocks.ts` | Block manipulation utilities |
 | `app/composables/useFooterPage.ts` | Fetch singleton footer page for current team |
 | `app/composables/useNavPill.ts` | `useCroutonNavPill()` — the **floating-nav action slot**. A shared-state registry (`crouton:navPillActions`, same cross-layer decoupling as `crouton:themePreferenceItems`) any package pushes icon buttons into: `register(action)` → unregister fn; `visibleActions` (filtered by reactive `show`, `order`-sorted). Register **client-side** (actions carry functions — not SSR-serializable). `Nav.vue` renders them in both pills; the pages package is the first consumer (the edit-page pencil, registered in `[...slug].vue`) |
+| `app/components/PublicPage.vue` | `CroutonPagesPublicPage` - The one public-page renderer (fetch, SEO, layout, inline edit) shared by `[team]/[locale]/[...slug].vue` and, when `hideLocaleInUrl` is on, `[team]/[...slug].vue`. Takes the page's `locale` as a prop; the routes own their meta |
 | `app/components/Renderer.vue` | `CroutonPagesRenderer` - Renders page based on type |
 | `app/components/CollectionPageRenderer.vue` | `CroutonPagesCollectionPageRenderer` - Bridge for publishable collection pages |
 | `app/components/RegularContent.vue` | `CroutonPagesRegularContent` - Rich text content display |
@@ -394,6 +395,7 @@ locale files (keep en/nl/fr at parity).
 ## Component Naming
 
 Components auto-import with `CroutonPages` prefix:
+- `PublicPage.vue` → `<CroutonPagesPublicPage :locale="..." />`
 - `Renderer.vue` → `<CroutonPagesRenderer />`
 - `CollectionPageRenderer.vue` → `<CroutonPagesCollectionPageRenderer />`
 - `RegularContent.vue` → `<CroutonPagesRegularContent />`
@@ -673,6 +675,7 @@ const {
   hideTeamInUrl,     // true on custom domains OR locale mode (canonical URLs, team UI — not router links)
   isTeamHost,        // true on a connected domain in team routing mode
   hideTeamInLinks,   // true only in locale/custom mode — drives router links
+  hideLocaleInUrl,   // true when croutonPages.hideLocaleInUrl is on in team mode — links and pages drop the locale (/acme/about)
   hostname,          // Current hostname
   isAppDomain        // Whether hostname is known app domain
 } = useDomainContext()
@@ -706,6 +709,8 @@ export default defineNuxtConfig({
         debug: false,
         // Routing mode: 'team' (default) or 'locale'
         routingMode: 'team',
+        // Team mode, one-locale apps only: drop the locale from public URLs (/acme/about). Build fails if more than one locale.
+        hideLocaleInUrl: false,
         // Default locale for root redirect in locale mode
         defaultLocale: 'en'
       }

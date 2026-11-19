@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageRecord, usePageRecordDeps } from '../../composables/usePageRecord'
+import { buildEditorFallbackPath } from '../../utils/page-path'
 /**
  * Workspace Editor - Inline Page Editor
  *
@@ -395,6 +396,7 @@ const previewPage = computed(() => {
 // leaf-slug URL when the page isn't in the resolver's list yet (e.g. just
 // published and not refetched).
 const { resolve: resolvePageUrl } = usePageLink()
+const { hideLocaleInUrl } = useDomainContext()
 const publicUrl = computed(() => {
   const teamSlug = teamSlugRef.value
   if (!teamSlug || action.value === 'create') return null
@@ -407,7 +409,7 @@ const publicUrl = computed(() => {
     || (translations ? Object.values(translations)[0]?.slug : null)
   if (!slug && slug !== '') return null
   const loc = locale.value || 'en'
-  return slug ? `/${teamSlug}/${loc}/${slug}` : `/${teamSlug}/${loc}/`
+  return buildEditorFallbackPath({ team: teamSlug, locale: loc, slug, hideLocaleInUrl: hideLocaleInUrl.value })
 })
 
 // Expose state for parent components (e.g., InlineEditor live preview)
