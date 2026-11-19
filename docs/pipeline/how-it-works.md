@@ -42,14 +42,17 @@ exact word they reply.
      lists live in `.claude/plan-routing.json`.
    - d. Anything else → `work-issue-pidev.yml` builds directly, with no plan step (step 4).
 2. **Plan.** The planner posts one `<!-- pipeline-plan:v1 -->` comment on the issue, shape-checked
-   by `scripts/lib/plan-shape.mjs`.
+   by `scripts/lib/plan-shape.mjs`. A plan too big for one run may add an optional `### Split`
+   that moves part of the ticket to a follow-up.
 3. **Plan review.** The `plan-review` job in `on-comment.yml` (`scripts/lib/plan-verdict.mjs`)
    judges the plan. `go` → the bot adds `plan:approved` and the build starts. `needs-owner` →
    `status:blocked` plus one yes/no question: **owner answers here — any reply re-plans; the owner's bare `ok` is recorded in the ticket's `## Decisions` as "yes" and re-plans from it**. `no-go` →
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
-   (`scripts/epic-base.mjs`).
+   (`scripts/epic-base.mjs`). If the approved plan has a `### Split`, `handoff-exec.mjs` first
+   files the moved part as a new ticket (`Blocked-by:` this one, same epic) and notes it on the
+   issue; it starts once this one closes.
 5. **Checks and build review.** `ci.yml` (the `CI Gate` check) plus `build-review.yml`
    (`scripts/build-review-pick.mjs`). The build review has three answers: `go` → the reviewer adds
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
