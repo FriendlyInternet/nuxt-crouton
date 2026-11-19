@@ -2,7 +2,7 @@
 
 ## Package Purpose
 
-Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
+Booking system layer for Nuxt applications: bookings for locations with or without time slots, each offering team products (`@fyit/crouton-catalog`) with a stock. Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
 
 ## Key Files
 
@@ -10,8 +10,8 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 |------|---------|
 | `nuxt.config.ts` | Layer configuration, component registration, i18n setup |
 | `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, `calendarView` (week/month), and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one (or takes the page's via its `store` prop — `provideBookingsStore(src, existing?)` — so inline + full-screen Panels on the admin page share it); the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
-| `app/composables/useBookingAvailability.ts` | Check slot/inventory availability |
-| `app/composables/useBookingCart.ts` | Shopping cart for bookings |
+| `app/composables/useBookingAvailability.ts` | Fetch availability (per-date bookings per product), slots (`hasSlots`), schedule rules |
+| `app/composables/useBookingCart.ts` | Shopping cart for bookings — counts per product, cart-aware (`productLeft`); items carry `productId` + `quantity` (#4110) |
 | `app/composables/useBookingsSettings.ts` | Team booking settings |
 | `app/composables/useBookingEmail.ts` | Email functionality (opt-in) |
 | `app/composables/useBookingEmailVariables.ts` | Email template variables + demo data for previews |
@@ -19,12 +19,12 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | `app/types/booking.ts` | TypeScript type definitions |
 | `server/api/crouton-bookings/` | API endpoints |
 | `server/utils/booking-emails.ts` | Email utilities |
-| `server/utils/email-service.ts` | Sends + logs booking emails. Reads `bookings_emailtemplates`/`bookings_emaillogs` from this package (not the app's `~~/server/db/schema`); a booking email is never sent without a log row, and a missing table is a `[booking-email]` console error |
-| `collections/<name>/` | **The 5 bookings collections, owned end to end (#2278)** — `bookings`, `locations`, `settings`, `emailtemplates`, `emaillogs`: `server/database/{schema,queries}.ts`, `server/api/teams/[id]/bookings-<plural>/*`, `types.ts`, `app/composables/useBookings<Plural>.ts`, `app/components/List.vue` (+ `_Form.vue`, repeater inputs). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate. Moved verbatim from velo's generated layer, hand edits included. Create/edit routes validate the body with hand-added zod schemas (#3377; unknown keys stripped, wrong types 400) — `scripts/check-collection-body-validation.mjs` catches drift. POST/PATCH of `bookings`, `emailtemplates`, `emaillogs` call `assertBookings<X>References` (queries.ts → crouton-core `assertRefsInTeam`) so a reference to another team's record is a 400 (#3378). Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Importable: `@fyit/crouton-bookings/collections/<name>/types` and `…/server/database/{schema,queries}` |
+| `server/utils/email-service.ts` | Sends + logs booking emails. Reads `bookings_emailtemplates`/`bookings_emaillogs` from this package (not the app's `~~/server/db/schema`); a booking email is never sent without a log row, and a missing table is a `[booking-email]` console error; subject/body fall back customer language → app default language (`requiredLocale`) → main field → any other translation, and a template that still renders an empty subject or body is not sent: one `failed` log row per recipient with "Template has no subject or body in any language" (#4244). Tests: `test/booking-emails.test.ts`, `test/email-service.test.ts` |
+| `collections/<name>/` | **The 5 bookings collections, owned end to end (#2278)** — `bookings`, `locations`, `settings`, `emailtemplates`, `emaillogs`: `server/database/{schema,queries}.ts`, `server/api/teams/[id]/bookings-<plural>/*`, `types.ts`, `app/composables/useBookings<Plural>.ts`, `app/components/List.vue` (+ `_Form.vue`, repeater inputs). Each is a Nuxt layer extended by `nuxt.config.ts`; `app/app.config.ts` registers them under `croutonCollections`. Table names, API paths and registry keys are byte-identical to what apps used to generate. Moved verbatim from velo's generated layer, hand edits included. Create/edit routes validate the body with hand-added zod schemas (#3377; unknown keys stripped, wrong types 400) — `scripts/check-collection-body-validation.mjs` catches drift. POST/PATCH of `bookings`, `emailtemplates`, `emaillogs` call `assertBookings<X>References` (queries.ts → crouton-core `assertRefsInTeam`) so a reference to another team's record is a 400 (#3378). The `locations` and `emailtemplates` forms require the app's default language, not always English (#4236): `_Form.vue` passes `useI18n()` into the composable's default export, which builds `bookingsLocationSchemaFor(locale)` / `bookingsEmailtemplateSchemaFor(locale)` (rule from `@fyit/crouton-catalog/required-locale`; the old `…Schema` exports are the `en` ones), and as that translation is edited `app/utils/applyDefaultLocaleLocationFields.ts` / `applyDefaultLocaleEmailtemplateFields.ts` copy that language's `title`/`content` and `name`/`subject`/`body` into the main columns. Apps must **not** generate these: the CLI refuses (`ownsCollections: true` in the manifest). Importable: `@fyit/crouton-bookings/collections/<name>/types` and `…/server/database/{schema,queries}` |
 | Route access (#3135) | **Writes to `locations`, `settings`, `emailtemplates`, all `emaillogs` routes, `bookings-bookings` POST and `admin-bookings` need `requireTeamAdmin`.** Members: `bookings-bookings` list returns only their own rows (no user emails); `bookings/[id]` PATCH and `resend-email` are owner-or-admin (403 otherwise). The customer calendar reads `calendar-bookings` (member-safe: id/location/date/slot/quantity/status only). Template `fromEmail` must be on the domain of `runtimeConfig.email.from` (`server/utils/sender-domain.ts`). Tests: `test/booking-authz.test.ts` |
 | `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps pick up the 5 collection tables in `db:generate` (velo: "No schema changes" after the move) |
 | `schemas/` | Field descriptions of the collections, read by the manifest for AI hints. **Not** generated from any more (#2278): the source of truth is `collections/*/server/database/schema.ts`. Change both together |
-| `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two slot-mode courts, one inventory-mode rental) + a few bookings, so previews open populated |
+| `seed/index.ts` | Seed provider (`@fyit/crouton-bookings/seed`, #696) — one settings row (statuses + groups) + demo locations (two courts with time slots, one rental without slots (stock 8), and a Bike Shed (two slots, full day, three products)) + a few bookings, so previews open populated |
 
 **Note:** Since #2278 the collection composables (`useBookingsBookings()`, `useBookingsLocations()`, …), tables and CRUD routes ship from this package (`collections/*`). A consuming app only extends `@fyit/crouton-bookings`; it generates nothing for bookings and lists nothing in `crouton.config.js` for it. `features.bookings` in that file only carries the email configuration. Changing a column = edit `collections/<name>/server/database/schema.ts` here, then `db:generate` in each app.
 
@@ -56,30 +56,40 @@ CroutonBooking
 
 | Path | Method | Purpose |
 |------|--------|---------|
-| `/api/crouton-bookings/teams/[id]/availability` | GET | Get booked slots for date range |
+| `/api/crouton-bookings/teams/[id]/availability` | GET | Booked slots for a date range, plus each date's `bookings` (`product`, `quantity`, `slotIds`; full day = `['all-day']`) |
 | `/api/crouton-bookings/teams/[id]/customer-bookings` | GET | Get user's bookings with email stats |
 | `/api/crouton-bookings/teams/[id]/customer-bookings-batch` | POST | Submit cart (batch checkout). Refuses with 400 (bad/over-limit quantity), 404 (unknown or other team's location), 409 (no room left; earlier rows of the request are removed). Capacity is checked inside the INSERT so racing requests can't overbook |
 | `/api/crouton-bookings/teams/[id]/customer-locations` | GET | Get accessible locations |
 | `/api/crouton-bookings/teams/[id]/monthly-booking-count` | GET | Get user's monthly booking count for a location |
-| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status) |
-| `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (owner or team admin; others get 403) |
+| `/api/crouton-bookings/teams/[id]/calendar-bookings` | GET | Calendar view of bookings (no emails; every team member sees all the team's bookings, limited to id/location/date/slot/quantity/status/product) |
+| `/api/crouton-bookings/teams/[id]/bookings/[bookingId]` | PATCH | Update a booking (owner or team admin; others get 403); accepts `quantity` (whole number ≥ 1, re-checked against stock, 409 when it doesn't fit, #4112) |
 | `/api/crouton-bookings/teams/[id]/bookings/[bookingId]/resend-email` | POST | Resend email (if enabled) |
 
-### Booking Modes
+### Counting (#4061)
 
-1. **Slot Mode** (default): Named time slots with optional per-slot capacity
-   - Each slot has `{ id, label, capacity? }` — capacity defaults to 1
-   - `capacity: 4` means 4 people can book the same slot on the same date
-   - UI shows "X left" / "Full" badges when capacity > 1
-2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
+Free places are counted per product, per day, per slot:
+
+`left(product, day, slot) = stock − summed quantity of that product's non-cancelled bookings that day holding that slot or the full day`
+
+- A location with no named slots has one implicit full-day slot.
+- A full-day booking holds every slot; a full-day request needs room in every slot.
+- A booking with no `product` (old rows) counts against every product of its location; a stored quantity below 1 counts as 1.
+- A location is fully booked on a day only when every product it lists is at 0 in every slot; a location listing no products is left out of the day check.
+- The old slot `capacity`, location `quantity` and inventory switch are gone from the schema and the database (#4172 removed the readers, 5b.2 the columns). A location has no slots when its `slots` list is empty, and then books `['all-day']`.
+- The pure rule is `app/utils/capacity.ts` (`leftFor`, `fitsCapacity`, `isLocationFull`, `parseLocationProducts`); the calendar's `isDayFullyBooked` (`app/utils/day-availability.ts`) and the cart pre-check use it; `guardSql` is the same rule in SQL. The booking form counts with it too (#4110): `useBookingCart` counts per product, cart-aware, through `utils/product-left.ts` (`getSlotRemaining`, `maxQuantity` for the picked `formState.productId` — auto-picked when the location lists one, reset on a location change), and every cart item carries `productId` and `quantity` (default 1) at every location; a location without slots (an empty `slots` list, `hasSlots` false) books `['all-day']` by itself, never the old `inventory` id. `Calendar.vue` marks each slot full / partly booked / cancelled and shows `booked / stock` through `utils/slot-marks.ts` (built on `utils/slot-status.ts`, per-slot booked/stock over all listed products, #4111). The create card (`BookingCreateCard.vue`, #4112) shows locations as a `UTabs` row, product buttons when `showProductPicker` (`utils/product-picker.ts`) is true, slot buttons as `label (N free)` and a `UInputNumber` drawn `booked/free` capped at `maxQuantity`; an edit sends `product` + `quantity` (`editBookingBody` in `utils/booking-form.ts`).
+
+**Products (`products`, #3967).** A location lists the team products it offers as `[{ product, stock }]` (a `catalog_products` id, stock ≥ 1, each product once, own team only). The location form's Bookings tab edits this list (pick a team product, set its stock ≥ 1, add/remove; an emptied list saves as `[]`) through `app/utils/location-products-edit.ts`, tested in `test/location-products-edit.test.ts` (#4087). A booking carries `product`. Existing rows were converted by the `*_products_per_location.sql` migration (one `loc-<id>` product per location). A location saved without products gets the same own product with stock 1, named in the app's default language (`croutonI18n.defaultLocale`, #4236) (`ensureLocationProducts` in `server/utils/location-products.ts`, #4044; the location POST/PATCH routes and the velo/booking-demo seeds call it). A booking always carries a product of its own location (`resolveProduct` in `server/utils/booking-capacity.ts`, on every write): a named product must be listed (else 400 "Unknown product"), none named → the location's only product, two or more listed → 400 "Pick a product", none listed → 400. Counting uses `stock` per product (see Counting); stock is read from `bookings_locations.products` inside the guarded statement, so a product unlisted after validation is refused (409). Deleting a catalog product that a location of the team still lists is refused (409, 'Still offered by N location(s): …. Remove it there first.', ≤5 titles in the app's default language): `server/plugins/catalog-delete-guard.ts` → `productBlockers` in `server/utils/product-in-use.ts` (#4278). Bookings that carry the product never block it.
 
 **Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
 `all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
-offer it *next to* them. The full day is exclusive: it can't share a date with any other slot —
-booked, in the cart, or ticked in the same booking. The rules are pure and shared by the form
-and the create endpoint: `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
-`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
-(booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
+offer it *next to* them. In one booking the full day can't be combined with another slot (400).
+Across bookings it takes one unit from every slot (see Counting), so at stock 1 it can't share a
+date with another booking; at stock ≥ 2 it can. The booking form follows the stock rule too;
+it only refuses the full day combined with another slot in one booking, and a schedule-closed
+slot (closing any slot also closes the full day that date). The pure helpers:
+`app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
+`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart`'s `isSlotDisabled(id, [])`
+asks "booked/full/closed?" regardless of the current ticks.
 
 ## Configuration
 
@@ -127,9 +137,9 @@ export default defineNuxtConfig({
 
 ### Modify Availability Logic
 
-1. Edit `app/composables/useBookingAvailability.ts`
-2. Functions: `getSlotAvailability()`, `getInventoryAvailability()`
-3. Handles both slot and inventory modes
+1. Counting is `app/utils/capacity.ts` (+ `app/utils/product-left.ts` for the cart)
+2. `useBookingCart` (`getSlotRemaining`, `maxQuantity`, `canAddToCart`) wires it to the form
+3. `app/composables/useBookingAvailability.ts` only fetches the per-date bookings and parses slots/rules
 
 ### Customize Email Behavior
 
@@ -193,7 +203,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574)
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574), `@fyit/crouton-catalog` (extended by this layer; owns the shared team product list)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 
@@ -228,20 +238,22 @@ bookings.
 ## Demo Seeding (`@fyit/crouton-bookings/seed`)
 
 Part of the composable seeding system (epic #82, contract in
-`@fyit/crouton-core/shared/seed`). Provider id `bookings`, `dependsOn: ['auth']`:
+`@fyit/crouton-core/shared/seed`). Provider id `bookings`, `dependsOn: ['auth', 'catalog']`:
 
 - **Settings:** one `bookings_settings` row with three statuses
   (confirmed/pending/cancelled) and two age groups (adults/youth), each an
   option item (`{ id, value, label, translations }`) so booking `status`/`group`
   values resolve to readable, translated labels in the admin list.
-- **Locations:** three `bookings_locations` covering both modes — two slot-mode
-  courts (named time slots with capacity) and one inventory-mode rental (a
-  quantity pool). Titles carry `nl`/`en` translations.
-- **Bookings:** four `bookings_bookings` referencing those locations/slots,
-  dated `unixepoch() + N*86400` so they always sit in the near future. Slot-mode
-  rows store a JSON array of slot ids (`["slot-0900"]`); the inventory row stores
-  the JSON literal `null` — the exact shape the live batch-checkout endpoint
-  writes (the `slot` column is NOT-NULL JSON).
+- **Locations:** four `bookings_locations` — two courts with named time slots,
+  one rental without slots (its product's stock is 8), and a Bike Shed with two
+  slots, `offerFullDay` and three products (cargo-bike 3 / kids-bike 5 /
+  kayak 8). Titles carry `nl`/`en` translations.
+- **Bookings:** five `bookings_bookings` referencing those locations/slots,
+  dated `unixepoch() + N*86400` so they always sit in the near future (the Bike
+  Shed one names its product, cargo-bike; the others book their location's
+  first product). Rows with slots store a JSON array of slot ids (`["slot-0900"]`); the slotless row stores
+  the JSON literal `null` (read as full day; new live bookings store
+  `["all-day"]` since #4172; the `slot` column is NOT-NULL JSON).
 
 Pure module (references `bookings_*` table/columns by name, loads under jiti).
 Idempotent — stable `seedId(...)` ids upsert in place. Every NOT-NULL column is
@@ -290,4 +302,4 @@ Type: [Domain][Entity] (e.g., BookingWithRelations)
 Table: bookings[Collection] (e.g., bookingsBookings)
 ```
 
-**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement; the batch is all-or-nothing (`runAtomic`) (D1: one raw `$client.batch` of bound statements — drizzle's `db.batch` can't batch `db.run()` there, #3968; tested in `test/run-atomic-d1.test.ts`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.
+**Capacity guard (#3379):** every booking write (cart batch, `bookings-bookings` POST, both PATCH routes) goes through `server/utils/booking-capacity.ts` — `validateSelection` + one parameter-bounded SQL `guardSql` checked in the writing statement (quantity is a whole number ≥ 1 at every location, default 1; the guard sums quantity of the same product, or product NULL, per requested slot against that product's stock, #4061); the batch is all-or-nothing (`runAtomic`) (D1: one raw `$client.batch` of bound statements — drizzle's `db.batch` can't batch `db.run()` there, #3968; tested in `test/run-atomic-d1.test.ts`). The cart sends `day` (YYYY-MM-DD) so the booked day is the one picked, not the browser's UTC instant.

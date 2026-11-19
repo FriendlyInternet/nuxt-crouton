@@ -78,7 +78,12 @@ test('surfaceLine: the PR names its page whenever the plan does, held or not (#4
   assert.equal(noSight.hold, false)
   assert.equal(surfaceLine(noSight, ['velo']), '<!-- review-surface: velo /dashboard/test1 -->')
   const none = decideSignoff({ uiTouched: 1, planText: '👁 What to look at: none — scripts only', previewApps: ['velo'] })
-  assert.equal(surfaceLine(none, ['velo']), '<!-- review-surface-none -->')
+  assert.equal(surfaceLine(none, ['velo']), '<!-- review-surface-none: scripts only -->')
+  // #4252: no reason in the plan → the bare marker; a reason can never close the marker early.
+  const bare = decideSignoff({ uiTouched: 1, planText: '👁 What to look at: none', previewApps: ['velo'] })
+  assert.equal(surfaceLine(bare, ['velo']), '<!-- review-surface-none -->')
+  const sneaky = decideSignoff({ uiTouched: 1, planText: '👁 What to look at: none — a --> b', previewApps: ['velo'] })
+  assert.equal(surfaceLine(sneaky, ['velo']), '<!-- review-surface-none: a -->')
   const elsewhere = decideSignoff({ uiTouched: 1, planText: VELO, previewApps: ['kassa'] })
   assert.equal(surfaceLine(elsewhere, ['kassa']), '')
   const notVisual = decideSignoff({ uiTouched: 0, planText: VELO, previewApps: ['velo'] })

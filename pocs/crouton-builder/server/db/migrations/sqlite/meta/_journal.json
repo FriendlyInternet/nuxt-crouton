@@ -61,6 +61,34 @@
     {
       "idx": 8,
       "version": "6",
+      "when": 1794846020889,
+      "tag": "0008_bent_madame_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794860591722,
+      "tag": "0009_gray_scrambler",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794860604086,
+      "tag": "0010_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081100791,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
       "when": 1795096719154,
       "tag": "0008_normal_thanos",
       "breakpoints": true

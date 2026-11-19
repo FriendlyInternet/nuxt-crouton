@@ -44,6 +44,7 @@ export default defineCroutonManifest({
     ],
     components: [
       { name: 'CroutonPagesRenderer', description: 'Renders page based on type' },
+      { name: 'CroutonPagesPublicPage', description: 'Public page view (fetch, SEO, render) shared by both public routes' },
       { name: 'CroutonPagesRegularContent', description: 'Rich text content display' },
       { name: 'CroutonPagesBlockContent', description: 'Block-based content display' },
       { name: 'CroutonPagesEditorBlockEditor', description: 'Block-based page editor' },

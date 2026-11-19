@@ -181,6 +181,66 @@ describe('jobStatus before the job moved to the clock', () => {
   })
 })
 
+describe('jobStatus — a cancelled clock run replaced by a newer run (#4269)', () => {
+  const NAME = 'Automerge epic sub-PRs'
+  const NOW = '2026-11-19T10:45:00Z'
+  const cancelled: GhRun = {
+    id: 100, html_url: 'https://gh/runs/100', event: 'workflow_dispatch', status: 'completed', conclusion: 'cancelled',
+    created_at: '2026-11-19T10:13:00Z', display_title: NAME, actor: { login: 'nuxt-harness[bot]' }
+  }
+  const later = (over: Partial<GhRun>): GhRun => ({
+    id: 200, html_url: 'https://gh/runs/200', event: 'workflow_run', status: 'completed', conclusion: 'success',
+    created_at: '2026-11-19T10:14:00Z', display_title: 'something else', actor: { login: 'pmcp' }, ...over
+  })
+  const status = (runs: GhRun[], replacedBy?: GhRun[]) => jobStatus(HOURLY, at(NOW), runs, NAME, replacedBy)
+
+  // covers: T5
+  it('1. a later success by another actor/event at 10:14 → ok, lastRun is that run', () => {
+    const s = status([cancelled], [cancelled, later({})])
+    expect(s.state).toBe('ok')
+    expect(s.lastRun?.id).toBe(200)
+    expect(s.lastRun?.url).toBe('https://gh/runs/200')
+  })
+
+  // covers: T5
+  it('2. the later run still in progress → running', () => {
+    const s = status([cancelled], [later({ status: 'in_progress', conclusion: null })])
+    expect(s.state).toBe('running')
+    expect(s.lastRun?.id).toBe(200)
+  })
+
+  // covers: T5
+  it('3. the later run failed → failed', () => {
+    const s = status([cancelled], [later({ conclusion: 'failure' })])
+    expect(s.state).toBe('failed')
+    expect(s.lastRun?.id).toBe(100)
+  })
+
+  // covers: T5
+  it('4. the only later success is 21 min after → failed', () => {
+    expect(status([cancelled], [later({ created_at: '2026-11-19T10:34:00Z' })]).state).toBe('failed')
+  })
+
+  // covers: T5
+  it('5. no replacedBy (it started a job), a later success in runs → failed', () => {
+    const clockSuccess = later({ event: 'workflow_dispatch', display_title: NAME, actor: { login: 'nuxt-harness[bot]' }, created_at: '2026-11-19T10:14:00Z' })
+    // the cancelled run is the newer clock run in the slot here, so it is the slot run
+    const s = status([{ ...cancelled, created_at: '2026-11-19T10:15:00Z' }, clockSuccess])
+    expect(s.state).toBe('failed')
+  })
+
+  // covers: T5
+  it('6. a clock run that failed (not cancelled) with a later success → still failed', () => {
+    expect(status([{ ...cancelled, conclusion: 'failure' }], [later({})]).state).toBe('failed')
+  })
+
+  // covers: T5
+  it('several later successes → the earliest one is the lastRun', () => {
+    const s = status([cancelled], [later({ id: 300, created_at: '2026-11-19T10:20:00Z' }), later({})])
+    expect(s.lastRun?.id).toBe(200)
+  })
+})
+
 describe('readError', () => {
   it('a 403 means the token lacks Actions: read', () => {
     expect(readError('GitHub 403 Forbidden')).toBe('the status token needs Actions: read')

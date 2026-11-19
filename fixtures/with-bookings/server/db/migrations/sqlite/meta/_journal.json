@@ -47,6 +47,34 @@
     {
       "idx": 6,
       "version": "6",
+      "when": 1794846023938,
+      "tag": "0006_sturdy_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794860593911,
+      "tag": "0007_last_colonel_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794860606067,
+      "tag": "0008_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795081103808,
+      "tag": "0009_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
       "when": 1795099395165,
       "tag": "0006_daily_squadron_supreme",
       "breakpoints": true

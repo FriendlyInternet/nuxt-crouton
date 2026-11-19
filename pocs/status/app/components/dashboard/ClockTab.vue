@@ -44,7 +44,8 @@ const toggle = (workflow: string) => { open.value = { ...open.value, [workflow]:
             <UBadge variant="subtle" :color="BADGE[r.state].color">{{ BADGE[r.state].label }}</UBadge>
             <span>
               last:
-              <a v-if="r.lastRun" :href="r.lastRun.url" target="_blank" rel="noopener" class="relative z-10 text-primary">{{ ownerTime(r.lastRun.createdAt) }}</a>
+              <a v-if="r.lastRun?.url" :href="r.lastRun.url" target="_blank" rel="noopener" class="relative z-10 text-primary">{{ ownerTime(r.lastRun.createdAt) }}</a>
+              <template v-else-if="r.lastRun">{{ ownerTime(r.lastRun.createdAt) }}</template>
               <template v-else>{{ ownerTime(r.lastDue) }}</template>
               · next: {{ ownerTime(r.nextDue) }}
             </span>

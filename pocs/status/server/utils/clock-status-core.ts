@@ -2,10 +2,11 @@
 // slot and how the run ended, and when it is due next. Pure — the endpoint feeds it GitHub's runs list.
 // "Due" has one definition: `dueJobs` (clock-jobs.ts). lastDue / nextDue walk 10-minute slots with it.
 import { dueJobs, type ClockJob } from './clock-jobs'
+import type { CardsSyncRecord } from './cards-sync-clock'
 
 const SLOT_MS = 10 * 60_000
 /** A clock run must be created within this long after the slot start; also the grace before "missed". */
-const GRACE_MS = 20 * 60_000
+export const GRACE_MS = 20 * 60_000
 /** Month jobs repeat at most every 31 days; 32 days of slots covers every job. */
 const MAX_SLOTS = 32 * 24 * 6
 const CLOCK_ACTOR = 'nuxt-harness[bot]'
@@ -32,7 +33,8 @@ export interface JobStatus {
   about: string
   lastDue: string | null
   nextDue: string | null
-  lastRun: LastRun | null
+  /** The inbox stuck check's row has only `createdAt` (it is no workflow run). */
+  lastRun: (Partial<LastRun> & { createdAt: string }) | null
   state: ClockState
   error?: string | null
 }
@@ -91,8 +93,36 @@ export function isClockRun(run: GhRun, workflowName: string): boolean {
 
 const toLastRun = (r: GhRun): LastRun => ({ id: r.id, url: r.html_url, createdAt: r.created_at, status: r.status, conclusion: r.conclusion })
 
-/** Whether the clock ran `job` in its last due slot, and how that run ended. Never green on a missed slot or a failed run. */
-export function jobStatus(job: ClockJob, now: Date, runs: GhRun[], workflowName: string): JobStatus {
+/** How a slot's clock run ended: still going, ok (success / skipped), or failed. */
+const runState = (r: GhRun): ClockState => {
+  if (r.status !== 'completed') return 'running'
+  return r.conclusion === 'success' || r.conclusion === 'skipped' ? 'ok' : 'failed'
+}
+
+/**
+ * For a cancelled clock run: the run of the same workflow created within GRACE_MS after it that took its place —
+ * the earliest success (ok), else one still going (running). Null when there is none, or `replacedBy` is not given.
+ */
+function replacement(inSlot: GhRun, replacedBy?: GhRun[]): { run: GhRun, state: ClockState } | null {
+  if (!replacedBy || inSlot.status !== 'completed' || inSlot.conclusion !== 'cancelled') return null
+  const start = Date.parse(inSlot.created_at)
+  const later = replacedBy
+    .filter((r) => {
+      const t = Date.parse(r.created_at)
+      return r.id !== inSlot.id && t >= start && t <= start + GRACE_MS
+    })
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+  const won = later.find(r => r.status === 'completed' && r.conclusion === 'success')
+  if (won) return { run: won, state: 'ok' }
+  const pending = later.find(r => r.status !== 'completed')
+  return pending ? { run: pending, state: 'running' } : null
+}
+
+/**
+ * Whether the clock ran `job` in its last due slot, and how that run ended. Never green on a missed slot or a failed run;
+ * a cancelled run replaced by a later success counts as ran (`replacedBy`: runs of the same workflow, any actor/event).
+ */
+export function jobStatus(job: ClockJob, now: Date, runs: GhRun[], workflowName: string, replacedBy?: GhRun[]): JobStatus {
   const due = lastDue(job, now)
   const next = nextDue(job, now)
   const clockRuns = runs
@@ -114,10 +144,9 @@ export function jobStatus(job: ClockJob, now: Date, runs: GhRun[], workflowName:
     return t >= from && t < from + GRACE_MS
   })
   if (inSlot) {
-    const state: ClockState = inSlot.status !== 'completed'
-      ? 'running'
-      : inSlot.conclusion === 'success' || inSlot.conclusion === 'skipped' ? 'ok' : 'failed'
-    return { ...base, lastRun: toLastRun(inSlot), state }
+    const replaced = replacement(inSlot, replacedBy)
+    if (replaced) return { ...base, lastRun: toLastRun(replaced.run), state: replaced.state }
+    return { ...base, lastRun: toLastRun(inSlot), state: runState(inSlot) }
   }
   // A slot from before the job moved to the clock, and no clock run since then: not the clock's miss.
   const since = Date.parse(job.since)
@@ -137,6 +166,34 @@ export function unknownStatus(job: ClockJob, now: Date, error: string): JobStatu
     state: 'unknown',
     error
   }
+}
+
+/** When the inbox stuck check moved to the clock (#4234): before it, with no record, the row is grey. */
+export const CARDS_SYNC_SINCE = '2026-11-19T16:00:00Z'
+const SYNC_SLOT_MS = 30 * 60_000
+/** A clock sync record older than this is a miss (one :00/:30 slot + 10 min of grace). */
+const SYNC_FRESH_MS = 40 * 60_000
+
+/**
+ * The Clock tab's 14th row: the inbox stuck check, built from the clock sync's KV record
+ * (`clock:cards-sync:last`), not from a workflow's runs. `clockOn` = this Worker has CLOCK_ENABLED=1;
+ * without it no record can arrive, so no record is "not on the clock yet", never a miss.
+ */
+export function cardsSyncStatus(record: CardsSyncRecord | null, now: Date, clockOn: boolean): JobStatus {
+  const slot = Math.floor(now.getTime() / SYNC_SLOT_MS) * SYNC_SLOT_MS
+  const base = {
+    workflow: 'inbox stuck check',
+    schedule: 'every 30 min',
+    about: 'Checks GitHub for stuck tickets, idle drafts and other things waiting on you, and updates the inbox — even when you haven\'t opened it.',
+    lastDue: new Date(slot).toISOString(),
+    nextDue: new Date(slot + SYNC_SLOT_MS).toISOString(),
+    lastRun: record ? { createdAt: record.at } : null,
+    error: record?.ok ? (record.readErrors ?? null) : (record?.error ?? null)
+  }
+  if (!record && (!clockOn || now.getTime() < Date.parse(CARDS_SYNC_SINCE) + SYNC_FRESH_MS)) return { ...base, state: 'before-clock' }
+  if (record && !record.ok) return { ...base, state: 'failed' }
+  if (!record || now.getTime() - Date.parse(record.at) > SYNC_FRESH_MS) return { ...base, state: 'missed' }
+  return { ...base, state: 'ok' }
 }
 
 /** A GitHub read error in words the owner can act on (403 = the status token lacks Actions: read). */

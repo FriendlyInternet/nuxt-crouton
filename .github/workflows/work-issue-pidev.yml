@@ -393,7 +393,7 @@ jobs:
       # stashed copy, not the (possibly-switched) working tree. (#1764/#1782, Pattern B.)
       - id: baseline
         run: |
-          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
+          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out|pi-session-out'
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
@@ -419,6 +419,8 @@ jobs:
           cp scripts/git-push-retry.mjs "$RUNNER_TEMP/git-push-retry.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
           cp scripts/run-record.mjs "$RUNNER_TEMP/run-record.mjs"
+          # Session-record redactor (#4161) — runs after pi, on whatever branch pi left checked out.
+          cp scripts/pi-session-redact.mjs "$RUNNER_TEMP/pi-session-redact.mjs"
           # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
           # can predate the current scripts (an epic branch cut earlier) — the first run printed an
           # old error instead of the tool line. Run it from a copy taken now, like pi-finish.
@@ -1393,6 +1395,31 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # #4161: keep pi's session record on EVERY outcome — a run killed at its time limit used to
+      # lose everything it did. The repo is public and artifact contents are not log-masked, so
+      # the record is redacted first. `always()` (not `!cancelled()`): it must fire on a timeout.
+      - name: Redact pi session record
+        if: always()
+        env:
+          REDACT_VARS: GH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN,REVIEW_SEED_SECRET,GITHUB_TOKEN_DEFAULT
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          GITHUB_TOKEN_DEFAULT: ${{ github.token }}
+        # `|| true` — best effort: a failed redaction must not fail the job (the record is a debug
+        # aid, not the deliverable). Only already-redacted files are ever written to pi-session-out,
+        # so a failure means fewer files get uploaded, never an unredacted one.
+        run: node "$RUNNER_TEMP/pi-session-redact.mjs" "$RUNNER_TEMP/pi-session" pi-session-out || true
+
+      - name: Upload pi session record
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pi-session-${{ github.run_id }}
+          path: pi-session-out/
+          retention-days: 3
+          if-no-files-found: ignore
+
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
       # PR / sub-issues / status:blocked). Piece 3 (#1004) feeds it pi's PLAIN-TEXT run
@@ -1487,11 +1514,13 @@ jobs:
           # paging "produced nothing" on the ticket too would be a false alarm.
           CONFLICT_FAILED: ${{ steps.conflict.outputs.failed }}
           CONFLICT_ASKED: ${{ steps.conflict.outputs.asked }}
+          # #4161: a cancelled job (time limit, person, newer run) is named as such, not "NO run log".
+          JOB_STATUS: ${{ job.status }}
+          JOB_TIMEOUT_MIN: '45'  # keep equal to timeout-minutes at L114
           # #4183: the pi step failed at its own limit → name "ran out of time", not "upstream of pi".
           PI_OUTCOME: ${{ steps.pi.outcome }}
           PI_DEADLINE: ${{ steps.budget.outputs.deadline }}
           PI_MINUTES: ${{ steps.budget.outputs.pi_minutes }}
-          JOB_STATUS: ${{ job.status }}
         with:
           script: |
             const { artifactGate } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')).href)

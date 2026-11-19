@@ -64,7 +64,7 @@ describe('Calendar.vue — one shared hover card (#3895)', () => {
 
   it('writes the location card once', () => {
     const template = descriptor.template!.content
-    const count = template.split('bookings.calendar.units').length - 1
+    const count = template.split('bookings.calendar.noBookings').length - 1
     expect(count).toBe(1)
   })
 })

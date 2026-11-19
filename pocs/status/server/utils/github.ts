@@ -18,9 +18,18 @@ export function githubToken(event: H3Event): string | undefined {
   return env?.GITHUB_TOKEN || process.env.GITHUB_TOKEN
 }
 
+/**
+ * Where a GitHub read gets its token: the request (`GITHUB_TOKEN` from its Worker env), or a token
+ * worked out once by a caller with no request — the clock's card sync (#4234).
+ */
+export type GhSource = H3Event | { token: string | undefined }
+
+const tokenOf = (s: GhSource): string | undefined =>
+  ('token' in s && !('context' in s)) ? s.token : githubToken(s as H3Event)
+
 /** GET a GitHub API path (e.g. `/repos/o/r/issues`), cached ~5 min (`fresh: true` skips the cache). */
-export async function ghFetch<T = unknown>(event: H3Event, path: string, opts: { fresh?: boolean } = {}): Promise<GhResult<T>> {
-  const token = githubToken(event)
+export async function ghFetch<T = unknown>(src: GhSource, path: string, opts: { fresh?: boolean } = {}): Promise<GhResult<T>> {
+  const token = tokenOf(src)
   if (!token) return { data: null, error: 'GITHUB_TOKEN is not configured' }
   try {
     if (opts.fresh) return await ghGet(path, token) as GhResult<T> // bypass the cache: always live
