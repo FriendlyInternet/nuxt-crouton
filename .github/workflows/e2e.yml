@@ -7,7 +7,8 @@ name: E2E
 # Smart selection (#622): on a PR we run ONLY the fixtures a change can affect, computed
 # by the `detect` job from the changed paths + each fixture's e2e.manifest.json `packages`
 # list (mirrors deploy-pocs.yml's detect→matrix pattern). Backstops keep coverage honest:
-# push to `main` and the nightly schedule always run the FULL matrix.
+# push to `main` and the nightly clock run (04:00 UTC, started by the status app's clock) always
+# run the FULL matrix.
 on:
   push:
     branches: [main]
@@ -27,13 +28,18 @@ on:
   # The `changes` job re-implements the same path set; the heavy jobs skip on it and the
   # gate still reports (the ci.yml / #1698 shape).
   pull_request:
-  schedule:
-    - cron: '0 4 * * *'   # nightly full-matrix backstop (selection can't silently hide a regression)
-  workflow_dispatch:        # manual full-matrix run
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — nightly 04:00 UTC
+  # full-matrix backstop (selection can't silently hide a regression)
+  workflow_dispatch:        # manual or clock full-matrix run
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so the push→main backstop,
-# the nightly schedule, and manual dispatches are NEVER cancelled mid-flight. (#1523)
+# the nightly clock run, and manual dispatches are NEVER cancelled mid-flight. (#1523)
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -104,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           # CI fixtures.
-          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab"
+          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab with-relations"
           # Packages whose change can affect EVERY fixture (shared base + generator + harness inputs).
           UNIVERSAL="crouton crouton-core crouton-i18n crouton-cli crouton-auth"
 
@@ -112,7 +118,7 @@ jobs:
           add() { case " $pick " in *" $1 "*) ;; *) pick="$pick $1";; esac; }
 
           if [ "$EVENT" != "pull_request" ]; then
-            # push to main / schedule / manual → full matrix backstop.
+            # push to main / nightly clock / manual → full matrix backstop.
             pick="$ALL"
             echo "Non-PR event ($EVENT) → full matrix."
           else

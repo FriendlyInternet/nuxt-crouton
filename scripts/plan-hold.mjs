@@ -11,7 +11,8 @@
 
 import { isApproval, isBareApproval } from './approval.mjs'
 import { markerValue } from './lib/marker.mjs'
-import { OWNERS, decisionLine } from './lib/decision-line.mjs'
+import { decisionLine } from './lib/decision-line.mjs'
+import { isOwner } from './lib/owner.mjs'
 import { VERDICT, openRecord, readReply } from './lib/reply-record.mjs'
 
 // `ok: <reason>` is an approval with a reason (the #3041 override), never a re-plan.
@@ -73,12 +74,12 @@ const yesText = (q) => `owner answered yes (\`ok\`) to the plan review's questio
 
 /**
  * The `## Decisions` line for the owner's bare approval on a `needs-owner` hold, or null (#4082).
- * Only the owner (same trust check as `parseDecision`). `ok: <reason>` is null: the record-decision
+ * Only the owner, by login (same trust check as `parseDecision`, #4168). `ok: <reason>` is null: the record-decision
  * job already writes that one, and two writers must not race on the issue body.
- * @param {{comments?: object[], replyBody?: string, date?: string, url?: string, authorAssociation?: string, userType?: string}} input
+ * @param {{comments?: object[], replyBody?: string, date?: string, url?: string, userLogin?: string, owner?: string, userType?: string}} input
  */
-export function answerDecision({ comments, replyBody = '', date, url, authorAssociation, userType } = {}) {
-  if (userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
+export function answerDecision({ comments, replyBody = '', date, url, userLogin, owner, userType } = {}) {
+  if (!isOwner({ userLogin, userType }, owner)) return null
   if (verdicts(comments).at(-1) !== 'needs-owner') return null
   if (!isBareApproval(replyBody) || OK_REASON.test(replyBody)) return null
   return decisionLine({ text: yesText(needsOwnerQuestion(comments)), date, url })
@@ -87,10 +88,10 @@ export function answerDecision({ comments, replyBody = '', date, url, authorAsso
 /**
  * The `## Decisions` yes line when the router read the reply against the record (#4145), or null.
  * Only for `replan-with-yes`, and only from the owner (same rule as `answerDecision`).
- * @param {{record?: object|null, starts?: string, date?: string, url?: string, authorAssociation?: string, userType?: string}} input
+ * @param {{record?: object|null, starts?: string, date?: string, url?: string, userLogin?: string, owner?: string, userType?: string}} input
  */
-export function recordDecision({ record, starts, date, url, authorAssociation, userType } = {}) {
-  if (starts !== 'replan-with-yes' || userType === 'Bot' || !OWNERS.has(authorAssociation)) return null
+export function recordDecision({ record, starts, date, url, userLogin, owner, userType } = {}) {
+  if (starts !== 'replan-with-yes' || !isOwner({ userLogin, userType }, owner)) return null
   return decisionLine({ text: yesText(cleanQuestion(record?.question)), date, url })
 }
 
@@ -100,20 +101,20 @@ export function recordDecision({ record, starts, date, url, authorAssociation, u
  * same way: the resume job can run minutes after the router, and in between the plan may be
  * approved or a newer verdict posted. Otherwise (and with no `starts`) it is today's
  * `isPlanHold` / `answerDecision`. `line` only matters when `replan` is true.
- * @param {{starts?: string, comments?: object[], labels?: string[], comment?: {body?: string, date?: string, url?: string, authorAssociation?: string, userType?: string}}} input
+ * @param {{starts?: string, comments?: object[], labels?: string[], comment?: {body?: string, date?: string, url?: string, userLogin?: string, owner?: string, userType?: string}}} input
  * @returns {{replan: boolean, line: string|null, followed: boolean}}
  */
 export function replanFromReply({ starts, comments, labels = [], comment = {} } = {}) {
-  const { body = '', date, url, authorAssociation, userType } = comment
+  const { body = '', date, url, userLogin, owner, userType } = comment
   if (starts === 'replan-with-yes' || starts === 'replan-with-feedback') {
     const record = openRecord({ comments, labels })
-    if (record && readReply(record, { body, authorAssociation, userType }).starts === starts) {
-      return { replan: true, line: recordDecision({ record, starts, date, url, authorAssociation, userType }), followed: true }
+    if (record && readReply(record, { body, userLogin, owner, userType }).starts === starts) {
+      return { replan: true, line: recordDecision({ record, starts, date, url, userLogin, owner, userType }), followed: true }
     }
   }
   return {
     replan: isPlanHold({ comments, labels, replyBody: body }),
-    line: answerDecision({ comments, replyBody: body, date, url, authorAssociation, userType }),
+    line: answerDecision({ comments, replyBody: body, date, url, userLogin, owner, userType }),
     followed: false,
   }
 }

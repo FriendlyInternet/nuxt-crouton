@@ -6,13 +6,23 @@
  * resets event._path and event.node.req.url on each handler iteration,
  * silently discarding middleware URL rewrites.
  *
- * Example:
+ * Team routing mode (default, #4175):
  * - Request: booking.acme.com/about
  * - Domain lookup: booking.acme.com → team "acme"
- * - Rewrite: /about → /acme/about
- * - Result: [team]/[...slug].vue handles it normally
+ * - Rewrite: every non-app path gets the team prefix: /about → /acme/about,
+ *   /en/about → /acme/en/about, / → /acme. Another team's slug is read as a
+ *   page slug of this team (/b/en/x → /acme/b/en/x).
+ * - Left alone: the app's own top-level pages (read from the page tree at
+ *   build time: /admin, /auth, /account, /onboarding, …), /api, /_*, static
+ *   files and paths already starting with this team's slug (/acme/en/about).
+ * - No locale? [team]/[locale]/[...slug].vue forwards 302 to /<defaultLocale>/…
+ *
+ * Locale/custom routing mode: unchanged — any slug-shaped first segment is
+ * treated as already carrying a team and is not rewritten.
  */
 import { eq, and } from 'drizzle-orm'
+import { appPageSegments } from '#crouton-pages/app-segments'
+import { rewriteForTeamHost, skipsDomainLookup } from '../../app/utils/custom-domain-path'
 import * as authSchema from '@fyit/crouton-auth/server/database/schema/auth'
 import type { TeamSiteSettings } from '@fyit/crouton-auth/server/database/schema/auth'
 
@@ -25,6 +35,10 @@ declare module 'h3' {
     resolvedDomainTeamId?: string | null
     /** Whether this request came from a custom domain */
     isCustomDomain?: boolean
+    /** Team slug resolved from custom domain */
+    resolvedDomainTeamSlug?: string | null
+    /** The app's own top-level page segments, left untouched on a connected domain */
+    resolvedDomainAppSegments?: string[]
   }
 }
 
@@ -49,9 +63,21 @@ export default defineNitroPlugin((nitroApp) => {
 
   nitroApp.h3App.handler = defineEventHandler(async (event) => {
     const path = event.node.req.url || '/'
+    const config = useRuntimeConfig()
+    const routingMode = ((config.public?.croutonPages as { routingMode?: string } | undefined)?.routingMode) || 'team'
+    const isTeamMode = routingMode !== 'locale' && routingMode !== 'custom'
 
-    // Skip API routes and internal paths
-    if (SKIP_PATH_PREFIXES.some(prefix => path.startsWith(prefix))) {
+    if (isTeamMode) {
+      // Team mode: skip the lookup for reserved prefixes, _* segments and static files
+      const pathname = path.split(/[?#]/)[0] || '/'
+      const first = pathname.split('/').filter(Boolean)[0]
+      const last = pathname.split('/').pop() || ''
+      if (skipsDomainLookup(first) || last.includes('.')) {
+        return originalHandler(event)
+      }
+    }
+    // Skip API routes and internal paths (locale/custom mode: unchanged)
+    else if (SKIP_PATH_PREFIXES.some(prefix => path.startsWith(prefix))) {
       return originalHandler(event)
     }
 
@@ -81,7 +107,6 @@ export default defineNitroPlugin((nitroApp) => {
     }
 
     // Skip common app domains (configure via runtime config)
-    const config = useRuntimeConfig()
     const appDomains = (config.public?.croutonPages?.appDomains as string[] | undefined) || []
 
     if (appDomains.some(d => hostname === d || hostname.endsWith(`.${d}`))) {
@@ -150,9 +175,13 @@ export default defineNitroPlugin((nitroApp) => {
       event.context.resolvedDomain = hostname
       event.context.resolvedDomainTeamId = domainRecord.organizationId
       event.context.isCustomDomain = true
+      event.context.resolvedDomainTeamSlug = orgRecord.slug
+      event.context.resolvedDomainAppSegments = appPageSegments
 
       // Rewrite the URL before h3 processes it
-      const newPath = hasTeamSegment ? path : `/${orgRecord.slug}${path === '/' ? '' : path}`
+      const newPath = isTeamMode
+        ? (rewriteForTeamHost(path, orgRecord.slug, appPageSegments) ?? path)
+        : (hasTeamSegment ? path : `/${orgRecord.slug}${path === '/' ? '' : path}`)
       event.node.req.url = newPath
 
       if (config.public?.croutonPages?.debug) {

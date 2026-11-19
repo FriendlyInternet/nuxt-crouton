@@ -232,8 +232,10 @@ jobs:
       # collections into the local DB (the dump that's loaded into D1 at runtime).
       # Rebuild it so the build doesn't fail with "Could not locate the bindings file".
       # No-op for apps that don't have it in their graph.
+      # No `|| true`: a failed rebuild must stop here with its own error, not surface later as a
+      # build error about missing bindings (same as ci.yml, #1880).
       - name: Rebuild native build deps skipped by --ignore-scripts
-        run: pnpm rebuild better-sqlite3 2>/dev/null || true
+        run: pnpm rebuild better-sqlite3
 
       # Ensure EVERY @fyit/* dist is present before the app build. Content-addressed
       # cache + build-ALL-on-miss (warm-packages action, #1222) — replaces the old

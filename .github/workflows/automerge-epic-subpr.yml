@@ -102,6 +102,10 @@ on:
   # With `pr` it evaluates that PR; empty = sweep all.
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       pr:
         description: 'PR number to evaluate; empty = sweep all open sub-PRs'
         required: false

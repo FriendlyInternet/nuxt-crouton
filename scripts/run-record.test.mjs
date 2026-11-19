@@ -67,6 +67,17 @@ test('empty output still annotates, and the record carries issue/step/exit/tail'
   assert.deepEqual(r, { issue: 7, step: 'finish', exit: 128, tail: ['a', 'b'] })
 })
 
+test('#4183 T2: a finish check skipped for lack of time says so, not "not run"', () => {
+  const outcome = { ran: false, rounds: 0, last: 'skipped', reason: 'skipped: 5 min left' }
+  assert.equal(finishCheckLine(outcome), 'finish check: skipped: 5 min left')
+  // Real entry point: the outcome file the pi extension writes, read by the CLI the workflow runs.
+  const p = path.join(dir, 'skipped.json')
+  fs.writeFileSync(p, JSON.stringify(outcome))
+  const script = fileURLToPath(new URL('./run-record.mjs', import.meta.url))
+  const r = spawnSync(process.execPath, [script, 'finish-check-line', p], { encoding: 'utf8' })
+  assert.match(r.stdout, /finish check: skipped: 5 min left/)
+})
+
 test('#3762: the finish-check line says ran/rounds/last, or not run, and never throws', () => {
   assert.equal(finishCheckLine({ ran: true, rounds: 2, last: 'red' }), 'finish check: ran, 2 rounds, red')
   assert.equal(finishCheckLine({ ran: true, rounds: 1, last: 'green' }), 'finish check: ran, 1 round, green')

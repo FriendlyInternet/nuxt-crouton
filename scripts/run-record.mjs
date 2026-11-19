@@ -67,6 +67,8 @@ export function lastAssistantMessage(jsonlPath, max = 500) {
 
 // #3762: the run-record line for the finish-check outcome the pi extension writes.
 export function finishCheckLine(outcome) {
+  // #4183: skipped for lack of time — say so, not "not run".
+  if (outcome && typeof outcome === 'object' && outcome.last === 'skipped' && outcome.reason) return `finish check: ${outcome.reason}`;
   if (!outcome || typeof outcome !== 'object' || outcome.ran !== true) return 'finish check: not run';
   const n = Number(outcome.rounds) || 0;
   return `finish check: ran, ${n} ${n === 1 ? 'round' : 'rounds'}, ${outcome.last ?? 'not-run'}`;

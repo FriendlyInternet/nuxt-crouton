@@ -151,3 +151,35 @@ test('plan run with no plan comment: exactly one 🔴 comment', async () => {
   assert.equal(h.calls.created.length, 1)
   assert.match(h.calls.created[0], /produced nothing/)
 })
+
+// #4183 T6 — the pi step failed at its own time limit: name that, not "upstream of pi".
+const nowS = () => Math.floor(Date.now() / 1000)
+
+test('#4183 T6: pi step failed at its deadline, no log, nothing produced → "ran out of time" + the minutes', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() - 30), PI_MINUTES: '37' })
+  assert.equal(h.calls.created.length, 1)
+  assert.match(h.calls.created[0], /ran out of time/)
+  assert.match(h.calls.created[0], /37-minute/)
+  assert.doesNotMatch(h.calls.created[0], /upstream of pi/)
+})
+
+test('#4183 T6: pi step failed far before its deadline (a crash) → the old "upstream of pi" text', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() + 3600), PI_MINUTES: '37' })
+  assert.match(h.calls.created[0], /upstream of pi/)
+  assert.doesNotMatch(h.calls.created[0], /ran out of time/)
+})
+
+test('#4183 T6: plan-mode crash (no deadline, no log) → "upstream of pi", never "ran out of time"', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: '', PI_MINUTES: '' })
+  assert.match(h.calls.created[0], /upstream of pi/)
+  assert.doesNotMatch(h.calls.created[0], /ran out of time/)
+})
+
+test('#4183 T6: a cancelled job with a past deadline is not our "ran out of time" case (#4161 owns it)', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() - 30), PI_MINUTES: '37' })
+  assert.doesNotMatch(h.calls.created[0], /the worker ran out of time — the agent step hit its 37-minute limit/)
+})

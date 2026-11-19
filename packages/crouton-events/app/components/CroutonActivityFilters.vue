@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMediaQuery, useMounted } from '@vueuse/core'
 import type { FilterState } from '../types/events'
 
 const props = withDefaults(defineProps<{
@@ -12,61 +13,117 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: FilterState]
-  refresh: []
 }>()
 
-// Local state synced with v-model
-const filters = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
-})
+const { t } = useI18n()
+const appConfig = useAppConfig()
 
-// Operation options
-const operationOptions = [
-  { label: 'All Operations', value: '' },
-  { label: 'Create', value: 'create' },
-  { label: 'Update', value: 'update' },
-  { label: 'Delete', value: 'delete' }
-]
+const ALL = 'all'
 
-// Collection options
-const collectionOptions = computed(() => [
-  { label: 'All Collections', value: '' },
-  ...props.collections.map(c => ({ label: c, value: c }))
+function update(patch: Partial<FilterState>) {
+  emit('update:modelValue', { ...props.modelValue, ...patch })
+}
+
+const collectionItems = computed(() => [
+  { label: t('events.filters.allCollections'), value: ALL },
+  ...props.collections.map(name => ({
+    label: eventCollectionLabel(name, appConfig.croutonCollections as Record<string, any> | undefined, t),
+    value: name
+  }))
 ])
 
-// User options
-const userOptions = computed(() => [
-  { label: 'All Users', value: '' },
+const operationItems = computed(() => [
+  { label: t('events.filters.allActions'), value: ALL },
+  { label: t('events.operation.create'), value: 'create' },
+  { label: t('events.operation.update'), value: 'update' },
+  { label: t('events.operation.delete'), value: 'delete' }
+])
+
+const userItems = computed(() => [
+  { label: t('events.filters.everyone'), value: ALL },
   ...props.users.map(u => ({ label: u.name, value: u.id }))
 ])
 
-// Date range presets
-const datePresets = [
-  { label: 'All Time', value: null },
-  { label: 'Today', value: 0 },
-  { label: 'Last 7 Days', value: 7 },
-  { label: 'Last 30 Days', value: 30 },
-  { label: 'Last 90 Days', value: 90 }
-]
+// Nuxt UI menus refuse an empty-string item value (it throws on open), so "all" is 'all'
+// in the menu and `undefined` in the filter state.
+const fromAll = (value: string | undefined) => (!value || value === ALL ? undefined : value)
 
-const selectedDatePreset = ref<number | null>(null)
+const collectionName = computed({
+  get: () => props.modelValue.collectionName || ALL,
+  set: (value: string) => update({ collectionName: fromAll(value) })
+})
 
-function applyDatePreset(days: number | null) {
-  selectedDatePreset.value = days
-  if (days === null) {
-    filters.value = { ...filters.value, dateFrom: undefined, dateTo: undefined }
-  } else {
-    const now = new Date()
-    const from = new Date()
-    from.setDate(now.getDate() - days)
-    from.setHours(0, 0, 0, 0)
-    filters.value = { ...filters.value, dateFrom: from, dateTo: now }
+const operation = computed({
+  get: () => props.modelValue.operation || ALL,
+  set: (value: string) => update({ operation: fromAll(value) as FilterState['operation'] })
+})
+
+const userId = computed({
+  get: () => props.modelValue.userId || ALL,
+  set: (value: string) => update({ userId: fromAll(value) })
+})
+
+// Period: 'all' or a number of days back (0 = today). Set through the tab's update event,
+// not a watcher, so clearing filters can't re-emit a stale copy of the other filters.
+const periodItems = computed(() => [
+  { label: t('events.period.all'), value: 'all' },
+  { label: t('events.period.today'), value: '0' },
+  { label: t('events.period.last7'), value: '7' },
+  { label: t('events.period.last30'), value: '30' },
+  { label: t('events.period.last90'), value: '90' }
+])
+
+const period = ref<string>('all')
+
+function setPeriod(next: string | number) {
+  const value = String(next)
+  period.value = value
+  if (value === 'all') {
+    update({ dateFrom: undefined, dateTo: undefined })
+    return
   }
+  const now = new Date()
+  const from = new Date()
+  from.setDate(now.getDate() - Number(value))
+  from.setHours(0, 0, 0, 0)
+  update({ dateFrom: from, dateTo: now })
 }
 
-// Clear all filters
+const hasActiveFilters = computed(() => !!(
+  props.modelValue.collectionName
+  || props.modelValue.operation
+  || props.modelValue.userId
+  || props.modelValue.dateFrom
+  || props.modelValue.dateTo
+))
+
+// Below `sm` (640px) there are no inline selects: the page header's "Filtres" button calls the
+// exposed openDrawer(), and the three selects live in a bottom drawer.
+// The server can't know the width and renders the desktop branch; `useMediaQuery` already matches
+// on the client's first (hydrating) render, so Vue would hydrate the phone branch onto the
+// server's desktop <div> and keep its inline selects. Hold `isPhone` false until mounted so
+// hydration matches, then switch; meanwhile `hidden sm:flex` keeps the inline selects off phones.
+const phoneQuery = useMediaQuery('(max-width: 639px)')
+const mounted = useMounted()
+const isPhone = computed(() => mounted.value && phoneQuery.value)
+const drawerOpen = ref(false)
+
+const activeFilterCount = computed(() => [
+  props.modelValue.collectionName,
+  props.modelValue.operation,
+  props.modelValue.userId
+].filter(Boolean).length)
+
+function clearSelectFilters() {
+  update({ collectionName: undefined, operation: undefined, userId: undefined })
+}
+
+function openDrawer() {
+  drawerOpen.value = true
+}
+
 function clearFilters() {
+  period.value = 'all'
   emit('update:modelValue', {
     collectionName: undefined,
     operation: undefined,
@@ -74,119 +131,117 @@ function clearFilters() {
     dateFrom: undefined,
     dateTo: undefined
   })
-  selectedDatePreset.value = null
 }
 
-// Check if any filters are active
-const hasActiveFilters = computed(() => {
-  return !!(
-    props.modelValue.collectionName ||
-    props.modelValue.operation ||
-    props.modelValue.userId ||
-    props.modelValue.dateFrom ||
-    props.modelValue.dateTo
-  )
-})
+defineExpose({ openDrawer, activeFilterCount })
 </script>
 
 <template>
-  <div class="crouton-activity-filters space-y-4">
-    <!-- Main filters row -->
-    <div class="flex flex-wrap items-center gap-3">
-      <!-- Collection filter -->
-      <USelectMenu
-        v-model="filters.collectionName"
-        :items="collectionOptions"
-        value-key="value"
-        placeholder="Collection"
-        class="w-40"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-database"
-            class="size-4 text-muted"
+  <div class="crouton-activity-filters flex flex-col gap-3">
+    <UDrawer
+      v-model:open="drawerOpen"
+      direction="bottom"
+      :title="t('events.filters.open')"
+    >
+      <template #body>
+        <div class="flex flex-col gap-3">
+          <USelectMenu
+            v-model="collectionName"
+            :items="collectionItems"
+            value-key="value"
+            :search-input="false"
+            icon="i-lucide-database"
+            :aria-label="t('events.filters.collection')"
+            class="w-full"
           />
-        </template>
-      </USelectMenu>
-
-      <!-- Operation filter -->
-      <USelectMenu
-        v-model="filters.operation"
-        :items="operationOptions"
-        value-key="value"
-        placeholder="Operation"
-        class="w-36"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-zap"
-            class="size-4 text-muted"
+          <USelectMenu
+            v-model="operation"
+            :items="operationItems"
+            value-key="value"
+            :search-input="false"
+            icon="i-lucide-zap"
+            :aria-label="t('events.filters.action')"
+            class="w-full"
           />
-        </template>
-      </USelectMenu>
+          <USelectMenu
+            v-if="users.length"
+            v-model="userId"
+            :items="userItems"
+            value-key="value"
+            :search-input="false"
+            icon="i-lucide-user"
+            :aria-label="t('events.filters.person')"
+            class="w-full"
+          />
+          <UButton
+            v-if="activeFilterCount"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            :label="t('events.filters.clearAll')"
+            block
+            @click="clearSelectFilters"
+          />
+        </div>
+      </template>
+    </UDrawer>
 
-      <!-- User filter (if users provided) -->
+    <div
+      v-if="!isPhone"
+      class="crouton-activity-filters-inline hidden sm:flex flex-wrap items-center gap-2"
+    >
+      <USelectMenu
+        v-model="collectionName"
+        :items="collectionItems"
+        value-key="value"
+        :search-input="false"
+        icon="i-lucide-database"
+        :aria-label="t('events.filters.collection')"
+        class="w-52"
+      />
+      <USelectMenu
+        v-model="operation"
+        :items="operationItems"
+        value-key="value"
+        :search-input="false"
+        icon="i-lucide-zap"
+        :aria-label="t('events.filters.action')"
+        class="w-44"
+      />
       <USelectMenu
         v-if="users.length"
-        v-model="filters.userId"
-        :items="userOptions"
+        v-model="userId"
+        :items="userItems"
         value-key="value"
-        placeholder="User"
-        class="w-40"
-      >
-        <template #leading>
-          <UIcon
-            name="i-lucide-user"
-            class="size-4 text-muted"
-          />
-        </template>
-      </USelectMenu>
+        :search-input="false"
+        icon="i-lucide-user"
+        :aria-label="t('events.filters.person')"
+        class="w-48"
+      />
+    </div>
 
-      <!-- Date preset buttons -->
-      <div class="flex items-center gap-1 border rounded-lg p-1">
-        <UButton
-          v-for="preset in datePresets"
-          :key="preset.value ?? 'all'"
-          :color="selectedDatePreset === preset.value ? 'primary' : 'neutral'"
-          :variant="selectedDatePreset === preset.value ? 'solid' : 'ghost'"
-          size="xs"
-          @click="applyDatePreset(preset.value)"
-        >
-          {{ preset.label }}
-        </UButton>
-      </div>
-
-      <!-- Spacer -->
-      <div class="flex-1" />
-
-      <!-- Clear filters -->
+    <!-- Phone: the period bar is full width, its five segments share it equally (pill triggers grow) -->
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <UTabs
+        :model-value="period"
+        :items="periodItems"
+        :content="false"
+        size="xs"
+        :aria-label="t('events.filters.period')"
+        :ui="{ list: 'w-full', trigger: 'basis-0 sm:basis-auto' }"
+        class="crouton-activity-period w-full sm:w-auto"
+        @update:model-value="setPeriod"
+      />
       <UButton
-        v-if="hasActiveFilters"
+        v-if="hasActiveFilters && !isPhone"
         color="neutral"
         variant="ghost"
         size="sm"
+        icon="i-lucide-x"
+        :label="t('events.filters.clear')"
+        class="hidden sm:inline-flex"
         @click="clearFilters"
-      >
-        <UIcon
-          name="i-lucide-x"
-          class="size-4 mr-1"
-        />
-        Clear
-      </UButton>
-
-      <!-- Refresh -->
-      <UButton
-        color="neutral"
-        variant="outline"
-        size="sm"
-        @click="emit('refresh')"
-      >
-        <UIcon
-          name="i-lucide-refresh-cw"
-          class="size-4 mr-1"
-        />
-        Refresh
-      </UButton>
+      />
     </div>
   </div>
 </template>

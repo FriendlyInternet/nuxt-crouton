@@ -33,10 +33,11 @@
   "reply": {
     "body": "ok",
     "authorAssociation": "NONE",
-    "userType": "User"
+    "userType": "User",
+    "userLogin": "someone-else"
   },
   "want": "ignore",
-  "today": "comment",
-  "note": "Synthetic (copies the #4036 thread before the first ok): a bare ok from a non-owner must count for nothing; today any reply on a needs-owner hold re-plans — known gap, step 4.",
+  "today": "ignore",
+  "note": "Synthetic (copies the #4036 thread before the first ok): a bare ok from a non-owner must count for nothing; the router drops it since the owner is matched by login (#4168).",
   "synthetic": true
 }

@@ -860,7 +860,6 @@ retired in the same change that added the playground.
 **Workspace glob:** `packages/*` in `pnpm-workspace.yaml` is one level only — the
 playground is registered via an extra `packages/*/playground` entry, or `pnpm install`
 won't pick it up.
->>>>>>> origin/epic/1303-crouton-themes-2
 
 ## Dependencies
 

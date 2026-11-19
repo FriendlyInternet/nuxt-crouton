@@ -2,9 +2,47 @@
 // Hourly replay of pending pipeline hand-offs (#3306). Finds tickets by the `handoff:pending` label,
 // pages ALL their comments, replays each pending marker (checking its own proof first, so a step
 // that half-worked is finished, not redone) and closes it. Red if one is still pending after 24 h.
+// A labelled ticket with no saved step is skipped for 10 min, then reported as a failure unless a
+// done note newer than the label explains it (#4202).
 import { pathToFileURL } from 'node:url'
-import { PENDING_LABEL, classifyHandoffError, handoffMarker, isStale } from './lib/handoff.mjs'
-import { makeDeps, perform, listMarkers } from './handoff-exec.mjs'
+import { PENDING_LABEL, classifyHandoffError, handoffMarker, isStale, parseHandoff } from './lib/handoff.mjs'
+import { makeDeps, perform } from './handoff-exec.mjs'
+
+export const GRACE_MS = 10 * 60e3
+const DONE = '<!-- handoff-done:v1 -->'
+const jsonLines = (out) => String(out).split('\n').map((l) => l.trim()).filter(Boolean).map((l) => JSON.parse(l))
+
+// All comments on the ticket, split into pending markers and done notes.
+export async function listNotes(d, issue) {
+  const all = jsonLines(await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${issue}/comments?per_page=100`, '--jq', '.[] | {id, body, updated_at}']))
+  const pending = []; const done = []
+  for (const c of all) {
+    const step = parseHandoff(c.body)
+    if (step) pending.push({ id: c.id, step })
+    else if (String(c.body || '').startsWith(DONE)) done.push({ id: c.id, updated_at: c.updated_at })
+  }
+  return { pending, done }
+}
+
+// When `handoff:pending` was last added (ms), or null when no event says so.
+export async function pendingLabelSince(d, issue) {
+  const evs = jsonLines(await d.gh(['api', '--paginate', `repos/${d.repo}/issues/${issue}/events?per_page=100`, '--jq', '.[] | {event, created_at, label}']))
+  let t = null
+  for (const e of evs) {
+    if (e.event !== 'labeled' || e.label?.name !== PENDING_LABEL) continue
+    const ms = Date.parse(e.created_at)
+    if (Number.isFinite(ms) && (t === null || ms > t)) t = ms
+  }
+  return t
+}
+
+// A label with no saved step: wait out the grace period, drop it if a newer done note explains it, else report.
+async function labelWithoutNote(d, issue, done, out) {
+  const t = await pendingLabelSince(d, issue)
+  if (t !== null && d.now() - t < GRACE_MS) return
+  if (t !== null && done.some((n) => Date.parse(n.updated_at) >= t)) return dropPendingLabel(d, issue, out)
+  out.failures.push(`#${issue} handoff:pending without a saved step`)
+}
 
 const patchComment = (d, id, body) => d.gh(['api', '-X', 'PATCH', `repos/${d.repo}/issues/comments/${id}`, '-f', `body=${body}`])
 
@@ -40,9 +78,12 @@ export async function sweep(d = makeDeps()) {
     .split('\n').map((s) => s.trim()).filter(Boolean).map(Number)
   const out = { skipped: false, failures: [], stale: [], replayed: 0 }
   for (const issue of tickets) {
-    let stillPending = 0
-    for (const m of await listMarkers(d, issue)) if (await replayMarker(d, issue, m, out)) stillPending++
-    if (!stillPending) await dropPendingLabel(d, issue, out)
+    const { pending, done } = await listNotes(d, issue)
+    if (!pending.length) { await labelWithoutNote(d, issue, done, out); continue }
+    let closed = 0
+    for (const m of pending) if (!(await replayMarker(d, issue, m, out))) closed++
+    // List again before dropping the label: a new step may have been saved during the replay.
+    if (closed && !(await listNotes(d, issue)).pending.length) await dropPendingLabel(d, issue, out)
   }
   return out
 }

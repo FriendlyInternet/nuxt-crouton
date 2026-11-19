@@ -5,6 +5,7 @@ import nodeFs from 'node:fs'
 import { execFileSync as nodeExecFileSync } from 'node:child_process'
 import { parseRunStart } from './run-start.mjs'
 import { decideDeliverable, pushedThisRun } from './run-deliverable.mjs'
+import { ranOutOfTime } from './pi-time-budget.mjs'
 
 // fallow-ignore-next-line complexity -- the pi worker's artifact-gate moved verbatim out of work-issue-pidev.yml; each branch is a distinct deliverable check, covered by artifact-gate.test.mjs (#3382)
 export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync, now = Date.now }) {
@@ -208,6 +209,14 @@ export async function artifactGate({ github, context, core, env = process.env, f
       why = `the run was cancelled after about ${minutes} minutes (${steps} tool calls)`
       action = `re-dispatch when ready; the record is in the run's \`${artifact}\` artifact`
     }
+  }
+
+  // #4183: the pi step FAILED at its own time limit (the job was not cancelled — a cancelled job
+  // is #4161's case). Its outputs are empty after a kill, so without this the `!hadLog` branch
+  // below blamed "upstream of pi, in the workflow".
+  if (!why && env.JOB_STATUS !== 'cancelled' && ranOutOfTime({ outcome: env.PI_OUTCOME, deadline: env.PI_DEADLINE, now: now() / 1000 })) {
+    why = `the worker ran out of time — the agent step hit its ${env.PI_MINUTES}-minute limit and was stopped`
+    action = 'do not edit the ticket. Reply `**Worker:** continue` (or re-dispatch) to resume; if it keeps running out, split the ticket'
   }
 
   try {
