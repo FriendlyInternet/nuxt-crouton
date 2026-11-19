@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen } from './capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, landedWhereAsked } from './capture-validate.mjs'
 
 test('colorsAreFlat: uniform samples are flat', () => {
   const samples = Array.from({ length: 16 }, () => [255, 255, 255, 255])
@@ -50,6 +50,13 @@ test('looksLikeLoadingScreen: Nuxt dev loading template is rejected', () => {
   const html = '<!DOCTYPE html><html><head><title>Nuxt</title></head><body><div id="nuxt-loading"><p>generating types</p><span>step 4/7</span></div></body></html>'
   assert.equal(looksLikeLoadingScreen({ html }), true)
   assert.equal(looksLikeLoadingScreen({ text: 'Generating types · step 4/7' }), true)
+})
+
+test('landedWhereAsked: compares pathnames, ignores a trailing slash and the query (#4201)', () => {
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/admin/x/media/'), true)
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/auth/login?redirect=%2Fadmin'), false)
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/'), false)
+  assert.equal(landedWhereAsked('/?tab=a', 'https://h/'), true)
 })
 
 test('looksLikeLoadingScreen: a real app page is not a loading screen', () => {
