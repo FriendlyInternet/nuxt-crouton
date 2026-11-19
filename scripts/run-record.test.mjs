@@ -10,7 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile, finishCheckLine, readFinishCheckLine, appendFinishCheck } from './run-record.mjs'
+import { lastAssistantMessage, errorAnnotation, tailLines, buildRecord, newestSessionFile, finishCheckLine, readFinishCheckLine, appendFinishCheck, toolCallCount } from './run-record.mjs'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-record-'))
 const rec = (role, content) => JSON.stringify({ type: 'message', message: { role, content } })
@@ -129,6 +129,29 @@ test('#3762: append-finish-check is best effort — no PR, no comment, a failing
   assert.equal(appendFinishCheck({ outcomePath: '/nope', branch: 'b', repo: 'o/r', gh }).why, 'patch failed')
   const throws = () => { throw new Error('boom') }
   assert.equal(appendFinishCheck({ outcomePath: '/nope', branch: 'b', repo: 'o/r', gh: throws }).why, 'no PR')
+})
+
+test('#4161 T2: toolCallCount counts toolCalls across top-level jsonl; missing dir → 0; the CLI prints it', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tool-calls-'))
+  fs.writeFileSync(path.join(d, 'a.jsonl'), [
+    rec('assistant', [{ type: 'toolCall', name: 'bash' }, { type: 'text', text: 'x' }, { type: 'toolCall', name: 'read' }]),
+    'not json',
+    rec('toolResult', [{ type: 'text', text: 'out' }]),
+    '',
+  ].join('\n'))
+  fs.writeFileSync(path.join(d, 'b.jsonl'), rec('assistant', [{ type: 'toolCall', name: 'write' }]))
+  fs.mkdirSync(path.join(d, 'nested'))
+  fs.writeFileSync(path.join(d, 'nested', 'c.jsonl'), rec('assistant', [{ type: 'toolCall', name: 'bash' }]))
+  fs.writeFileSync(path.join(d, 'notes.txt'), rec('assistant', [{ type: 'toolCall', name: 'bash' }]))
+  assert.equal(toolCallCount(d), 3)
+  assert.equal(toolCallCount(path.join(d, 'absent')), 0)
+  const script = fileURLToPath(new URL('./run-record.mjs', import.meta.url))
+  const r = spawnSync(process.execPath, [script, 'tool-calls', d], { encoding: 'utf8' })
+  assert.equal(r.status, 0)
+  assert.equal(r.stdout.trim(), '3')
+  const r2 = spawnSync(process.execPath, [script, 'tool-calls', path.join(d, 'absent')], { encoding: 'utf8' })
+  assert.equal(r2.status, 0)
+  assert.equal(r2.stdout.trim(), '0')
 })
 
 test('#3762: the CLI subcommand runs real `gh` from PATH and exits 0 either way', () => {

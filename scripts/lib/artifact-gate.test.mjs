@@ -28,7 +28,7 @@ function harness({ comments = [], timeline = [], issue = {}, subs = [], branch =
       },
     },
   }
-  const run = (env) => artifactGate({ github, core, context: { repo: { owner: 'o', repo: 'r' }, runId: 1, serverUrl: 'https://x', payload: {} }, env: { ...BASE, ...env }, fs: { existsSync: () => false }, execFileSync: () => '' })
+  const run = (env, opts = {}) => artifactGate({ github, core, context: { repo: { owner: 'o', repo: 'r' }, runId: 1, serverUrl: 'https://x', payload: {} }, env: { ...BASE, ...env }, fs: { existsSync: () => false }, execFileSync: () => '', ...opts })
   return { calls, run }
 }
 
@@ -48,6 +48,35 @@ test('nothing produced: one failure and one pipeline-note comment', async () => 
   assert.match(h.calls.failed[0], /produced no deliverable/)
   assert.equal(h.calls.created.length, 1)
   assert.match(h.calls.created[0], /<!-- pipeline-note -->/)
+})
+
+// #4161: a cancelled job names the stop, not "NO run log". The stub answers only the
+// `tool-calls` subcommand, so the count must come from that exact call.
+const toolCallsStub = (n) => (cmd, args) => (cmd === 'node' && args[1] === 'tool-calls' && args[2].endsWith('/pi-session') ? `${n}\n` : '')
+const at = (min) => () => Date.parse(T0) + min * 60000
+
+test('#4161 T3: cancelled at the 45-minute limit names the limit, minutes, tool calls and the artifact', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', JOB_TIMEOUT_MIN: '45', RUNNER_TEMP: '/tmp/rt' }, { now: at(43), execFileSync: toolCallsStub(39) })
+  assert.equal(h.calls.created.length, 1)
+  const c = h.calls.created[0]
+  assert.match(c, /45-minute time limit/)
+  assert.match(c, /about 43 minutes/)
+  assert.match(c, /39 tool calls/)
+  assert.match(c, /pi-session-1/)
+  assert.doesNotMatch(c, /NO run log/)
+})
+
+test('#4161 T4: an early cancel says "cancelled after about N minutes"; not cancelled + no log keeps "NO run log"', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', JOB_TIMEOUT_MIN: '45', RUNNER_TEMP: '/tmp/rt' }, { now: at(5), execFileSync: toolCallsStub(4) })
+  assert.match(h.calls.created[0], /cancelled after about 5 minutes \(4 tool calls\)/)
+  assert.doesNotMatch(h.calls.created[0], /time limit/)
+  assert.match(h.calls.created[0], /pi-session-1/)
+  const h2 = harness()
+  await h2.run({}, { now: at(5) })
+  assert.match(h2.calls.created[0], /NO run log/)
+  assert.doesNotMatch(h2.calls.created[0], /cancelled after/)
 })
 
 test('conflict asked: OK without touching GitHub', async () => {
