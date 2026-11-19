@@ -21,14 +21,22 @@ function assertGolden(out, name) {
 
 test('pi-worker, off main', () => {
   assertGolden(renderPrompt('pi-worker', {
-    issue: '1932', branch_instr: 'branch off main and target the PR at main',
+    issue: '1932', branch_instr: 'branch off main and target the PR at main', question_file: '/tmp/rt/worker-question.md',
   }), 'pi-worker')
 })
 
 test('pi-worker, off an epic branch', () => {
   assertGolden(renderPrompt('pi-worker', {
-    issue: '1932', branch_instr: "branch off the integration branch 'epic/9-x' and target the PR THERE (not main)",
+    issue: '1932', branch_instr: "branch off the integration branch 'epic/9-x' and target the PR THERE (not main)", question_file: '/tmp/rt/worker-question.md',
   }), 'pi-worker-epic')
+})
+
+// covers: T7
+test('#4192 the worker writes its question to {{question_file}} instead of posting it', () => {
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main', question_file: '/tmp/rt/worker-question.md' })
+  assert.ok(out.includes('write it with the write tool to /tmp/rt/worker-question.md'))
+  assert.ok(!out.includes('post a top-level comment on the issue explaining the blocker'))
+  assert.throws(() => renderPrompt('pi-worker', { issue: '1', branch_instr: 'x' }), /missing --var question_file/)
 })
 
 test('pi-reviser passes the owner comment through verbatim (backticks, %s, {{…}}, trailing blank lines)', () => {
@@ -104,7 +112,7 @@ test('a missing variable is a hard error, not an empty string', () => {
 })
 
 test('pi-worker reuse search finds an existing helper (#3073)', () => {
-  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main' })
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main', question_file: '/tmp/rt/worker-question.md' })
   assert.ok(out.includes('REUSE BEFORE YOU WRITE'))
   assert.ok(out.includes('Maintaining AI Documentation'))
   const cmd = out.match(/`(grep -rniE '<verb\|noun>'[^`]*)`/)[1].replace('<verb|noun>', 'redirect')
