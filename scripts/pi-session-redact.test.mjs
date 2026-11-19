@@ -62,28 +62,39 @@ test('T5: env values and token shapes are redacted; nested paths kept; other tex
   assert.equal(fs.readFileSync(path.join(out, 'subagent-artifacts', 'deep', 'n.jsonl'), 'utf8'), plain)
 })
 
-test('wiring: the worker redacts then uploads the record on every outcome, and the gate gets the job status', async () => {
-  const { parse } = await import('yaml')
-  const wf = parse(fs.readFileSync(fileURLToPath(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url)), 'utf8'))
-  const job = Object.values(wf.jobs).find((j) => (j.steps || []).some((s) => s.id === 'baseline'))
-  const steps = job.steps
+// Reads the workflow as text (no YAML dependency — the root workspace does not list one, and the
+// other workflow-wiring tests read the file the same way): the job is cut out by its top-level
+// key, then split into steps at each `      - ` list item.
+function workerJob() {
+  const wf = fs.readFileSync(fileURLToPath(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url)), 'utf8')
+  const jobs = wf.slice(wf.indexOf('\njobs:\n')).split(/\n(?=  [A-Za-z0-9_-]+:\n)/)
+  const text = jobs.find((j) => /\n      - id: baseline\n/.test(j))
+  const steps = text.split(/\n(?=      - )/).slice(1)
+  return { timeout: Number(/\n    timeout-minutes: (\d+)/.exec(text)[1]), steps }
+}
+const field = (step, key) => (new RegExp(`^ {6}(?:- |  )${key}: (.+)$`, 'm').exec(step) || [])[1]
+const nested = (step, key) => (new RegExp(`^ {10}${key}: (.+?)(?: +#.*)?$`, 'm').exec(step) || [])[1]
+
+test('wiring: the worker redacts then uploads the record on every outcome, and the gate gets the job status', () => {
+  const { timeout, steps } = workerJob()
   const idx = (pred) => steps.findIndex(pred)
-  const baseline = steps.find((s) => s.id === 'baseline')
-  assert.match(baseline.run, /cp scripts\/pi-session-redact\.mjs "\$RUNNER_TEMP\/pi-session-redact\.mjs"/)
-  assert.match(baseline.run, /SCRATCH='[^']*\|pi-session-out'/)
-  const ri = idx((s) => s.name === 'Redact pi session record')
-  const ui = idx((s) => s.name === 'Upload pi session record')
-  const gi = idx((s) => /^Artifact-gate/.test(s.name || ''))
-  assert.ok(ri > idx((s) => s.id === 'pi') && ri < ui, 'redact runs after pi and before the upload')
-  assert.equal(steps[ri].if, 'always()')
-  assert.equal(steps[ui].if, 'always()')
-  assert.match(steps[ri].run, /pi-session-redact\.mjs" "\$RUNNER_TEMP\/pi-session" pi-session-out/)
-  for (const v of steps[ri].env.REDACT_VARS.split(',')) assert.ok(v in steps[ri].env, `REDACT_VARS names ${v} but the step does not set it`)
-  assert.equal(steps[ui].with.path, 'pi-session-out/')
-  assert.equal(steps[ui].with.name, 'pi-session-${{ github.run_id }}')
-  assert.equal(steps[ui].with['retention-days'], 3)
-  assert.equal(steps[gi].env.JOB_STATUS, '${{ job.status }}')
-  assert.equal(Number(steps[gi].env.JOB_TIMEOUT_MIN), job['timeout-minutes'], 'JOB_TIMEOUT_MIN must equal the job time limit')
+  const baseline = steps.find((s) => field(s, 'id') === 'baseline')
+  assert.match(baseline, /cp scripts\/pi-session-redact\.mjs "\$RUNNER_TEMP\/pi-session-redact\.mjs"/)
+  assert.match(baseline, /SCRATCH='[^']*\|pi-session-out'/)
+  const ri = idx((s) => field(s, 'name') === 'Redact pi session record')
+  const ui = idx((s) => field(s, 'name') === 'Upload pi session record')
+  const gi = idx((s) => /^Artifact-gate/.test(field(s, 'name') || ''))
+  assert.ok(ri > idx((s) => field(s, 'id') === 'pi') && ri < ui, 'redact runs after pi and before the upload')
+  assert.ok(gi > ui, 'the artifact gate runs after the upload')
+  assert.equal(field(steps[ri], 'if'), 'always()')
+  assert.equal(field(steps[ui], 'if'), 'always()')
+  assert.match(field(steps[ri], 'run'), /pi-session-redact\.mjs" "\$RUNNER_TEMP\/pi-session" pi-session-out/)
+  for (const v of nested(steps[ri], 'REDACT_VARS').split(',')) assert.ok(nested(steps[ri], v), `REDACT_VARS names ${v} but the step does not set it`)
+  assert.equal(nested(steps[ui], 'path'), 'pi-session-out/')
+  assert.equal(nested(steps[ui], 'name'), 'pi-session-${{ github.run_id }}')
+  assert.equal(Number(nested(steps[ui], 'retention-days')), 3)
+  assert.equal(nested(steps[gi], 'JOB_STATUS'), '${{ job.status }}')
+  assert.equal(Number(nested(steps[gi], 'JOB_TIMEOUT_MIN').replace(/'/g, '')), timeout, 'JOB_TIMEOUT_MIN must equal the job time limit')
 })
 
 test('T5: a missing src exits 0 and writes nothing', () => {

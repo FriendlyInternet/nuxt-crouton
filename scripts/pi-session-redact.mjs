@@ -48,26 +48,40 @@ export function redactText(text, secrets = []) {
   return { text: out, count }
 }
 
+/** Relative paths of every regular file under `src` (an unreadable directory is skipped). */
+function listFiles(src) {
+  const files = []
+  const stack = ['']
+  while (stack.length) {
+    const rel = stack.pop()
+    let entries = []
+    try { entries = fs.readdirSync(path.join(src, rel), { withFileTypes: true }) } catch { /* skip */ }
+    for (const e of entries) {
+      const r = path.join(rel, e.name)
+      if (e.isDirectory()) stack.push(r)
+      else if (e.isFile()) files.push(r)
+    }
+  }
+  return files
+}
+
+/** Redact one file from `src` into `out`. Returns the replacement count (0 if it is unreadable). */
+function redactFile(src, out, rel, secrets) {
+  try {
+    const { text, count } = redactText(fs.readFileSync(path.join(src, rel), 'utf8'), secrets)
+    fs.mkdirSync(path.dirname(path.join(out, rel)), { recursive: true })
+    fs.writeFileSync(path.join(out, rel), text)
+    return count
+  } catch { return 0 /* skip an unreadable file rather than fail the job */ }
+}
+
 /** Copy every regular file under `src` into `out` (same relative paths), redacted. */
 export function redactDir(src, out, secrets = []) {
   let values = 0, files = 0
   if (!src || !fs.existsSync(src)) return { values, files }
-  const stack = ['']
-  while (stack.length) {
-    const rel = stack.pop()
-    let entries
-    try { entries = fs.readdirSync(path.join(src, rel), { withFileTypes: true }) } catch { continue }
-    for (const e of entries) {
-      const r = path.join(rel, e.name)
-      if (e.isDirectory()) { stack.push(r); continue }
-      if (!e.isFile()) continue
-      try {
-        const { text, count } = redactText(fs.readFileSync(path.join(src, r), 'utf8'), secrets)
-        fs.mkdirSync(path.dirname(path.join(out, r)), { recursive: true })
-        fs.writeFileSync(path.join(out, r), text)
-        if (count) { values += count; files++ }
-      } catch { /* skip an unreadable file rather than fail the job */ }
-    }
+  for (const rel of listFiles(src)) {
+    const count = redactFile(src, out, rel, secrets)
+    if (count) { values += count; files++ }
   }
   return { values, files }
 }
