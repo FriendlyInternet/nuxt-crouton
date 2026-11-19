@@ -34,10 +34,11 @@ export function snippet(body) {
   return String(body ?? '').slice(0, 200).replace(/[\r\n]+/g, ' ')
 }
 
-const defaultSleep = ms => new Promise(r => setTimeout(r, ms))
-
-/** One pass over the candidates; resolves on the first page containing the flag. */
-async function probeOnce(base, paths, fetchImpl) {
+/**
+ * Probe each candidate; resolve on the first page containing the flag.
+ * @returns {Promise<{ ok: boolean, url?: string, attempts: object[] }>}
+ */
+export async function checkFlag(base, paths, fetchImpl = fetch) {
   const attempts = []
   for (const path of paths) {
     const url = base.replace(/\/$/, '') + path
@@ -52,23 +53,6 @@ async function probeOnce(base, paths, fetchImpl) {
     }
   }
   return { ok: false, attempts }
-}
-
-/**
- * Probe each candidate; resolve on the first page containing the flag. If EVERY candidate
- * answered 404 / nothing, the fresh Worker version may not serve yet (same race as #4062's
- * endpoint check): wait and probe again. Any other status (a real page without the flag)
- * is final, so a genuinely missing flag still fails fast.
- * @returns {Promise<{ ok: boolean, url?: string, attempts: object[] }>}
- */
-export async function checkFlag(base, paths, fetchImpl = fetch, { sleep = defaultSleep, waits = [5000, 10000, 15000, 20000] } = {}) {
-  let r = await probeOnce(base, paths, fetchImpl)
-  for (const wait of waits) {
-    if (r.ok || !r.attempts.every(a => a.status === 404 || a.status === 0)) break
-    await sleep(wait)
-    r = await probeOnce(base, paths, fetchImpl)
-  }
-  return r
 }
 
 async function main() {

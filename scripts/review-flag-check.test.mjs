@@ -44,20 +44,3 @@ test('fails with one attempt per URL, including thrown fetches', async () => {
   assert.deepEqual(r.attempts[0], { url: 'https://x.dev/', status: 302, finalUrl: 'https://x.dev/login', body: 'login page' })
   assert.match(r.attempts[1].body, /boom/)
 })
-
-test('retries when every page is 404 (Worker version not serving yet), then passes', async () => {
-  let calls = 0
-  const f = async (url) => (++calls <= 2 ? page(404, 'cf', url) : page(200, '{"croutonReview":true}', url))
-  const slept = []
-  const r = await checkFlag('https://x.dev', ['/', '/auth/login'], f, { sleep: async ms => slept.push(ms), waits: [1, 2] })
-  assert.equal(r.ok, true)
-  assert.deepEqual(slept, [1])
-})
-
-test('does not retry a real page that lacks the flag', async () => {
-  const slept = []
-  const f = async url => page(200, '<html></html>', url)
-  const r = await checkFlag('https://x.dev', ['/'], f, { sleep: async ms => slept.push(ms), waits: [1, 2] })
-  assert.equal(r.ok, false)
-  assert.deepEqual(slept, [])
-})
