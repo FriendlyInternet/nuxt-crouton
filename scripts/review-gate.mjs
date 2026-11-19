@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url'
 
 export const markerFor = reviewer => `<!-- review-gate:${reviewer} -->`
 
+// These reviewers only advise: nothing ties their verdict to the code (the same run has written
+// "1 high" in the file and "no findings" in its comment), so they never turn the check red.
+// frontend-review is the one reviewer decided by a text rule (scripts/frontend-gate.mjs).
+export const ADVISORY = new Set(['red-team', 'a11y', 'simplify'])
+
 export function decide({ reviewer, verdictPath, classification, logPath }) {
   let ok = false
   if (verdictPath && existsSync(verdictPath)) {
@@ -20,7 +25,9 @@ export function decide({ reviewer, verdictPath, classification, logPath }) {
   if (ok) return { pass: true, message: '' }
   return {
     pass: false,
-    message: `🔴 ${reviewer} did not run (refused, crashed or out of credit — the action reports no reason). This PR is not approved; open the run, fix the cause, re-run.\n\n${markerFor(reviewer)}`,
+    message: ADVISORY.has(reviewer)
+      ? `⚪ ${reviewer} did not run (refused, crashed or out of credit — the action reports no reason). It only advises, so this does not block the PR.\n\n${markerFor(reviewer)}`
+      : `🔴 ${reviewer} did not run (refused, crashed or out of credit — the action reports no reason). This PR is not approved; open the run, fix the cause, re-run.\n\n${markerFor(reviewer)}`,
   }
 }
 
