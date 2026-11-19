@@ -148,8 +148,9 @@ Two ways:
 
 ### Demo data on staging (#2366)
 Every **staging** and PR-preview deploy runs `crouton-seed` itself, once (the *Seed collection + demo data* (#1370)
-step in `deploy-app.yml`), so the app gets its packages' demo data and the `test1` team the
-review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
+step in `deploy-app.yml`), so the app gets its packages' demo data and the review team the
+review login joins (`test1`, or `"reviewTeam": "<slug>"` in `deploy.config.json`; it must equal
+`croutonAuth.teams.defaultTeamSlug` when that is set, else the deploy fails — `scripts/review-team.mjs`, #4141) — **no seed line in the app's `cf:staging` script**. The app only needs
 `@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
 
 **Live sync (collab):** add `extends: ['@fyit/crouton-collab']` + `"collab": true` in `deploy.config.json`; the deploy ships the collab Worker, migration and `NUXT_PUBLIC_COLLAB_WORKER_URL` for you (worker → migration → app). No manual worker setup. Without `"collab": true` the app is not opted in: crouton-collab opens no socket and shows no presence, even when crouton-flow loads it (#3810).
