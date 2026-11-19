@@ -9,18 +9,18 @@ const LOGS = `CREATE TABLE bookings_emaillogs (id text primary key, teamId text 
 
 let db: any
 const send = vi.fn()
-const tpl = (id: string, team: string, active: number) =>
-  db.$client.prepare(`insert into bookings_emailtemplates values (?,?,'u1',0,'n','Hi {{ customer_name }}','body','a@b.c','booking_created','customer',?,null,null,null,1,1,'u1','u1')`).run(id, team, active)
+const tpl = (id: string, team: string, active: number, subject = 'Hi {{ customer_name }}', body = 'body', translations: Record<string, Record<string, string>> | null = null) =>
+  db.$client.prepare(`insert into bookings_emailtemplates values (?,?,'u1',0,'n',?,?,'a@b.c','booking_created','customer',?,null,null,?,1,1,'u1','u1')`).run(id, team, subject, body, active, translations ? JSON.stringify(translations) : null)
 const logs = () => db.$client.prepare('select * from bookings_emaillogs').all()
 const booking = { id: 'b1', teamId: 't1', owner: 'u1', location: 'l1', date: '2026-11-09', slot: ['am'], status: 'active' }
 const opts = { booking, triggerType: 'booking_created', teamId: 't1', userId: 'u1', recipientEmail: 'a@example.com' } as any
 
-async function setup(ddl: string[]) {
+async function setup(ddl: string[], croutonI18n?: Record<string, unknown>) {
   const client = new Database(':memory:')
   ddl.forEach(d => client.exec(d))
   db = drizzle(client)
   vi.stubGlobal('useDB', () => db)
-  vi.stubGlobal('useRuntimeConfig', () => ({ croutonBookings: { email: { enabled: true } } }))
+  vi.stubGlobal('useRuntimeConfig', () => ({ croutonBookings: { email: { enabled: true } }, ...(croutonI18n ? { croutonI18n } : {}) }))
   const mod = await import('../server/utils/email-service')
   mod.registerEmailProvider({ send } as any)
   return mod
@@ -71,5 +71,58 @@ describe('booking email service reads the package tables', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await m.getActiveTemplatesForTrigger('t1', 'booking_created')).toEqual([])
     expect(err).toHaveBeenCalled()
+  })
+})
+
+const EMPTY = 'Template has no subject or body in any language'
+
+describe('a booking email is never sent blank (#4244)', () => {
+  // E2
+  it('FR-only template, customer en: sends the French text', async () => {
+    const m = await setup([TEMPLATES, LOGS])
+    tpl('a', 't1', 1, '', '', { fr: { subject: 'Bonjour', body: 'Corps' } })
+    const res = await m.sendBookingEmails({ ...opts, locale: 'en' })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ subject: 'Bonjour', html: 'Corps' })
+    expect(res.success).toBe(true)
+    const rows = logs()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ status: 'sent', templateId: 'a' })
+  })
+
+  // E3
+  it('empty template: not sent, one failed row, other templates still send', async () => {
+    const m = await setup([TEMPLATES, LOGS])
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tpl('empty', 't1', 1, '', '')
+    tpl('filled', 't1', 1)
+    const res = await m.sendBookingEmails({ ...opts, locale: 'en' })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(res.success).toBe(false)
+    expect(res.errors).toContain(EMPTY)
+    const rows = logs()
+    expect(rows.find((r: any) => r.templateId === 'empty')).toMatchObject({ status: 'failed', error: EMPTY, recipientEmail: 'a@example.com' })
+    expect(rows.find((r: any) => r.templateId === 'filled')).toMatchObject({ status: 'sent' })
+    expect(rows).toHaveLength(2)
+  })
+
+  it('whitespace subject and a body that renders empty: not sent, failed row', async () => {
+    const m = await setup([TEMPLATES, LOGS])
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tpl('a', 't1', 1, '  ', '{{ location_content }}')
+    const res = await m.sendBookingEmails({ ...opts, locale: 'en' })
+    expect(send).not.toHaveBeenCalled()
+    expect(res.success).toBe(false)
+    expect(logs()).toEqual([expect.objectContaining({ status: 'failed', error: EMPTY })])
+  })
+
+  // E4
+  it('no locale: uses the app default language before the empty main fields', async () => {
+    const m = await setup([TEMPLATES, LOGS], { supportedLocales: ['fr', 'nl', 'en'], defaultLocale: 'fr' })
+    tpl('a', 't1', 1, '', '', { fr: { subject: 'Bonjour', body: 'Corps' }, nl: { subject: 'Hallo', body: 'Tekst' } })
+    await m.sendBookingEmails(opts)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ subject: 'Bonjour', html: 'Corps' })
+    expect(logs()[0]).toMatchObject({ status: 'sent' })
   })
 })
