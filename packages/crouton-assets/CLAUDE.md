@@ -146,5 +146,5 @@ Query with `contentType` filter (e.g., `image/*`).
 ## Testing
 
 ```bash
-pnpm typecheck  # MANDATORY after changes (checks this package only)
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

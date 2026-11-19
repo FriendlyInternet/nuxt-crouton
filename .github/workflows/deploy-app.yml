@@ -232,8 +232,10 @@ jobs:
       # collections into the local DB (the dump that's loaded into D1 at runtime).
       # Rebuild it so the build doesn't fail with "Could not locate the bindings file".
       # No-op for apps that don't have it in their graph.
+      # No `|| true`: a failed rebuild must stop here with its own error, not surface later as a
+      # build error about missing bindings (same as ci.yml, #1880).
       - name: Rebuild native build deps skipped by --ignore-scripts
-        run: pnpm rebuild better-sqlite3 2>/dev/null || true
+        run: pnpm rebuild better-sqlite3
 
       # Ensure EVERY @fyit/* dist is present before the app build. Content-addressed
       # cache + build-ALL-on-miss (warm-packages action, #1222) — replaces the old
@@ -304,27 +306,18 @@ jobs:
           printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
           node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
 
-      # Production email key (#3437): CHECK ONLY. Before the deploy it passes if the key is in the
-      # WORKER_SECRETS_JSON bundle (synced after deploy) or already on the Worker; "Confirm email key
-      # on the production Worker" re-checks after the sync. Presence only (names, never values).
+      # Production email key (#3437): CHECK ONLY. The decision lives in scripts/email-key-check.mjs
+      # (#3441): before the deploy it passes if the key is in WORKER_SECRETS_JSON or already on the
+      # Worker; "Confirm email key on the production Worker" re-checks after the sync. Names only.
       - name: Require email key for production (before deploy)
         if: ${{ inputs.environment == 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
+          APP: ${{ inputs.app }}
         run: |
-          IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
-          if [ "$IS" = "true" ]; then
-            if printf '%s' "$SECRETS_JSON" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" bundle-has-key; then
-              echo "✓ email key is in WORKER_SECRETS_JSON (will be synced)"
-            else
-              LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
-              if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-                echo "::error::email key missing for PRODUCTION — ${{ inputs.app }} uses @fyit/crouton-email but NUXT_EMAIL_RESEND_API_KEY is neither in WORKER_SECRETS_JSON nor on its production Worker. Add the key to WORKER_SECRETS_JSON. Deploy stopped."
-                exit 1
-              fi
-            fi
-          fi
+          LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+          echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-key-check.mjs" before deploy.config.json
 
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
@@ -386,7 +379,7 @@ jobs:
               echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
               sleep 15
             done
-            # Fresh DB every time, so migrations are the whole schema — not incremental.
+            # The preview DB is kept between deploys (#2608); pr-preview-migrate.mjs empties it only when its recorded migrations no longer match the files (#4004).
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
             # <app>-staging-db and structurally cannot know about <app>-pr<n>-db. Without it
@@ -414,8 +407,7 @@ jobs:
               # (#2020). Remote D1 operations need the id, so resolve it by name now that it
               # exists. Without this the migrate fails "missing a database_id" (#2085).
               node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
-              npx wrangler d1 migrations apply "$PREVIEW_DB" \
-                --config .output/server/wrangler.json --remote
+              node "$GITHUB_WORKSPACE/scripts/pr-preview-migrate.mjs" "${{ inputs.app }}" "$PR_NUM" .output/server/wrangler.json
             fi
           else
             pnpm run cf:staging | tee deploy.log
@@ -510,22 +502,28 @@ jobs:
       - name: Confirm email key on the production Worker
         if: ${{ inputs.environment == 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          APP: ${{ inputs.app }}
         run: |
-          IS=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" detect "deploy.config.json" | sed -n 's/^is_email=//p')
-          if [ "$IS" = "true" ]; then
-            LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
-            if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
-              echo "::error::email key missing on PRODUCTION after secrets sync — ${{ inputs.app }} has no NUXT_EMAIL_RESEND_API_KEY. Add it to WORKER_SECRETS_JSON."
-              exit 1
-            fi
-            echo "✓ email key present on the production Worker"
-          fi
+          LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
+          echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-key-check.mjs" after deploy.config.json
 
       # The status app (pocs/status) derives every app's review-login password to offer one-tap
       # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
       # from GitHub, so push them to THAT Worker only — no other app ever receives them.
       # On a PR the Worker is the PR-scoped preview (`status-pr<N>`, via the built config);
       # `--env staging` there would write to shared staging instead. Values are never echoed.
+      # The status app's clock (#4133) dispatches the hourly jobs as the Harness App: shared staging
+      # only (never a PR preview), so mint just the installation id here. Not review-app-token (review-pr only).
+      - name: Mint Harness App installation id (status clock)
+        id: clock-app-token
+        if: ${{ inputs.app == 'status' && inputs.environment == 'staging' && !github.event.pull_request.number }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Push status-app secrets
         if: ${{ inputs.app == 'status' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
@@ -537,6 +535,9 @@ jobs:
           OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
           PR_NUM: ${{ github.event.pull_request.number }}
           DEPLOY_ENV: ${{ inputs.environment }}
+          CLOCK_INSTALLATION_ID: ${{ steps.clock-app-token.outputs.installation-id }}
+          HARNESS_APP_ID: ${{ secrets.HARNESS_APP_ID }}
+          HARNESS_APP_PRIVATE_KEY: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
         run: |
           if [ "$DEPLOY_ENV" = "production" ]; then
             TARGET=""
@@ -563,6 +564,14 @@ jobs:
           push NUXT_EMAIL_RESEND_API_KEY "$RESEND_API_KEY" RESEND_API_KEY
           push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
           push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
+          # The clock (#4133): shared staging only, never a PR preview or production.
+          if [ "$DEPLOY_ENV" = "staging" ] && [ -z "$PR_NUM" ]; then
+            [ -n "$CLOCK_INSTALLATION_ID" ] || { echo "::error::Harness App installation id is empty — the status clock cannot start jobs."; exit 1; }
+            push HARNESS_APP_ID "$HARNESS_APP_ID" HARNESS_APP_ID
+            push HARNESS_APP_PRIVATE_KEY "$HARNESS_APP_PRIVATE_KEY" HARNESS_APP_PRIVATE_KEY
+            push HARNESS_APP_INSTALLATION_ID "$CLOCK_INSTALLATION_ID" CLOCK_INSTALLATION_ID
+            push CLOCK_ENABLED 1 CLOCK_ENABLED
+          fi
 
       # Send the owner a sign-in link when status updates on staging, so they never have to type
       # an email on a phone. Owner address is never printed.
@@ -709,17 +718,8 @@ jobs:
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
           fail=0
 
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-                    -X POST -H 'content-type: application/json' -d '{}' \
-                    "$URL/api/_feedback" || echo 000)"
-          if [ "$code" = "404" ] || [ "$code" = "000" ]; then
-            echo "::error::No feedback endpoint at $URL (POST /api/_feedback → $code)."
-            echo "::error::The app does not install the overlay — add '@fyit/crouton-devtools'"
-            echo "::error::to its nuxt.config modules + dependencies (#2073)."
-            fail=1
-          else
-            echo "✓ feedback endpoint live (POST /api/_feedback → $code)"
-          fi
+          # retries a 404/no answer: the Worker version published by secret bulk may not serve yet (#4062)
+          node scripts/review-endpoint-check.mjs "$URL" || fail=1
 
           # -L FOLLOWS REDIRECTS (#2178). An auth-gated app answers `/` with a 302 to its
           # login route (kassa: `/` → `/auth/login`); without -L, curl returns the ~97-byte
@@ -834,6 +834,7 @@ jobs:
       # Proves a real send. The package swallows every send error, so the verdict is read from the
       # auth_email_log row (pending → sent/failed). Mails Resend's test inbox only. Report-only here;
       # "Gate on email probe" at the end turns anything but a recorded send into a red check.
+      # The probe user is inserted directly (invite-only apps refuse its sign-up silently, #3972).
       - name: Probe email send
         id: email-probe
         if: ${{ inputs.environment != 'production' && steps.email-app.outputs.is_email == 'true' && steps.deploy.outputs.url != '' }}
@@ -849,8 +850,7 @@ jobs:
           PR_NUM="${{ github.event.pull_request.number }}"
           KIND=staging; [ -n "$PR_NUM" ] && KIND=preview   # previews send nothing (#3586)
           if [ "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" outcome "$KIND")" = skip ]; then echo "result=skip" >> "$GITHUB_OUTPUT"; echo "✓ email probe skipped (preview)" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
-          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"
-          else TARGET="--env staging"; fi
+          TARGET="--env staging"; if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then TARGET="--config .output/server/wrangler.json"; fi
           START=$(date +%s)
           SECRETS=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
           if ! S=$(echo "$SECRETS" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" sender "$APP" .); then
@@ -858,6 +858,7 @@ jobs:
             echo "✗ email probe (${APP}): $S" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          npx wrangler d1 execute DB --remote $TARGET --command "$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" ensure-user-sql "$PROBE_EMAIL")" >/dev/null 2>&1 || echo "::warning::email probe: could not ensure the probe user"
           if ! OUT=$(node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" requests "$MODE" "$DEPLOY_URL" "$PROBE_EMAIL"); then
             echo "$OUT"
             echo "::error::email probe: request failed: $(echo "$OUT" | tail -1)"
@@ -887,9 +888,23 @@ jobs:
           echo "✗ email probe (${APP}): ${REASON}" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
+      # The ONE seeded team the demo seed creates and the review login joins (#4141):
+      # `reviewTeam` in deploy.config.json, default `test1`. Fails the deploy when the key
+      # disagrees with croutonAuth.teams.defaultTeamSlug (the reviewer would land in two teams).
+      - name: Resolve review team (staging only, #4141)
+        id: review_team
+        if: ${{ inputs.environment != 'production' }}
+        env:
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+        run: |
+          TEAM="$(node "$GITHUB_WORKSPACE/scripts/review-team.mjs" "$WORKSPACE/$APP")"
+          echo "review team for ${APP}: ${TEAM}"
+          echo "team=$TEAM" >> "$GITHUB_OUTPUT"
+
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
-      # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
+      # review team (default `test1`, seed:org:<team>) the review login below attaches to. Runs BEFORE the
       # review-login step for exactly that reason — the login lands in a populated team, not a
       # phantom one. The ONLY place staging seeds — apps don't seed in their own cf:staging (#2366).
       # Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
@@ -908,7 +923,7 @@ jobs:
             exit 0
           fi
           DB="${{ steps.deploy.outputs.preview_db }}"; [ -n "$DB" ] || DB="${{ inputs.app }}-staging-db"
-          if pnpm exec crouton-seed --db "$DB" --remote; then
+          if pnpm exec crouton-seed --db "$DB" --remote --team "${{ steps.review_team.outputs.team }}"; then
             echo "✓ seeded $DB (collection fixtures + demo team)"
           else
             echo "::warning title=Staging seed failed::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
@@ -936,6 +951,8 @@ jobs:
           # Per-PR preview: attach the review login's team membership to the preview's OWN
           # DB (#2169), not shared staging — else the account exists but has no team/data.
           PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
+          # The seeded team to join (#4141): the review team resolved above.
+          REVIEW_TEAM: ${{ steps.review_team.outputs.team }}
         run: |
           set -o pipefail
           # An app without sign-in (e.g. pocs/loop-station) sets "reviewLogin": false — no account
@@ -966,7 +983,7 @@ jobs:
           SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
-          # Attach the login to the SEEDED demo team test1 (#832), not an empty fresh org. #1369: never
+          # Attach the login to the SEEDED review team (default test1, #832/#4141), not an empty fresh org. #1369: never
           # advertise creds for a failed seed (no `|| true`) — a broken preview must look broken.
           SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
           # #3751: an app can name the tables its seeded team must have rows in
@@ -975,7 +992,7 @@ jobs:
           REQUIRE_DATA="$(jq -r '(.reviewLogin.requireData // []) | join(",")' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo '')"
           REQUIRE_ARGS=(); [ -z "$REQUIRE_DATA" ] || REQUIRE_ARGS=(--require-data "$REQUIRE_DATA")
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-               --seed-team test1 --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
+               --seed-team "$REVIEW_TEAM" --db "$SEED_DB" "${REQUIRE_ARGS[@]}"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
             # One-click link: crouton-auth prefills the form from ?email=&password= (never auto-submits,
@@ -1014,10 +1031,13 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The team this deploy actually seeded (#4141): the screenshot job checks out main, so it
+          # must read the team from here, not from a deploy.config.json that may predate the PR.
+          REVIEW_TEAM: ${{ steps.review_team.outputs.team }}
         run: |
           mkdir -p "$RUNNER_TEMP/preview-meta"
-          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
-            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" --arg team "$REVIEW_TEAM" \
+            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber), team:$team}' > "$RUNNER_TEMP/preview-meta/meta.json"
           echo "recorded=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload preview record

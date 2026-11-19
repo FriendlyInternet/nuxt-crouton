@@ -29,6 +29,7 @@ export const bookingsBookings = sqliteTable('bookings_bookings', {
 
   order: integer('order').notNull().$default(() => 0),
   location: text('location').notNull(),
+  product: text('product'),
   date: integer('date', { mode: 'timestamp' }).notNull().$default(() => new Date()),
   slot: jsonColumn('slot').notNull().$default(() => (null)),
   group: text('group'),

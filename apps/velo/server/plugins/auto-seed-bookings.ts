@@ -27,6 +27,7 @@
 import { defineNitroPlugin } from 'nitropack/runtime'
 import { sql, eq } from 'drizzle-orm'
 import { collectSeedSql } from '@fyit/crouton-core/shared/seed'
+import { provider as catalogProvider } from '@fyit/crouton-catalog/seed'
 import { provider as bookingsProvider } from '@fyit/crouton-bookings/seed'
 import { provider as pagesProvider, createPageWithBlocks } from '@fyit/crouton-pages/seed'
 import { organization } from '~~/server/db/schema'
@@ -58,7 +59,8 @@ export default defineNitroPlugin((nitroApp) => {
       // `createPageWithBlocks` is injected so block-contributing providers can
       // also seed a demo page (and the pages provider seeds its own demo page).
       const seedSql = await collectSeedSql({
-        providers: [bookingsProvider, pagesProvider],
+        // catalog first: the bookings seed points its locations at these products (#4044)
+        providers: [catalogProvider, bookingsProvider, pagesProvider],
         teamId: payload.teamId,
         teamSlug: slug,
         locale: 'nl',

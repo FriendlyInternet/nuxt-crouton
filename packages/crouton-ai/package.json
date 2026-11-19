@@ -21,7 +21,9 @@
     "server",
     "schemas",
     "dist",
-    "nuxt.config.ts"
+    "nuxt.config.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

@@ -1,15 +1,15 @@
 // node --test scripts/plan-held.test.mjs — the owner override of a twice-rejected plan (#3272).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
   currentOverrideDecision, overrideComment, parseCommentLines, approvedPromptSection, approvedHeader,
-  planHeldFor, approvePlan, NEEDS_REASON, BOT,
+  holdFacts, approvePlan, NEEDS_REASON, BOT,
 } from './plan-held.mjs'
+import { recordMarker } from './lib/reply-record.mjs'
+import { REJECTED_RECORD } from './lib/plan-verdict.mjs'
 
 const plan = (login = BOT) => ({ body: '<!-- pipeline-plan:v1 -->\nplan', user: { login } })
 const dec = (login, reason = 'cosmetic') => ({ body: overrideComment({ reason, date: '2026-11-10', url: 'u' }), user: { login } })
@@ -61,10 +61,12 @@ const section = (gh) => {
   return { text, warnings }
 }
 
-test('header matches what work-issue-pidev.yml printed inline before (no override ⇒ prompt unchanged)', () => {
-  // The old printf format, with %s → the plan id and \n → newline.
-  const old = '\\n\\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\\n\\n--- APPROVED PLAN ---\\n'
+// covers: T3
+test('header matches what work-issue-pidev.yml printed inline before, but asks through the question file (#4192)', () => {
+  // The old printf format, with %s → the plan id and \n → newline; the STOP sentence now points at the question file.
+  const old = '\\n\\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: ask the way this prompt says above (your question file), saying what differs and why, and do NOT improvise a different change.\\n\\n--- APPROVED PLAN ---\\n'
   assert.equal(approvedHeader('123'), old.replace('%s', '123').replaceAll('\\n', '\n'))
+  assert.ok(!approvedHeader('123').includes('post a top-level issue comment'))
 })
 test('approvedPromptSection: bot override after the newest plan ⇒ header + plan + OVERRIDE block', () => {
   const calls = []
@@ -95,23 +97,7 @@ test('approvedPromptSection: an override older than a newer plan ⇒ no OVERRIDE
   assert.equal(text.includes('OWNER OVERRIDE'), false)
 })
 
-test('CLI --approved-prompt: an unreadable plan file exits 1 and writes nothing', () => {
-  const r = runCli(['--approved-prompt', '--plan-id', '1', '--plan-file', '/nonexistent/plan.txt', '--issue', '7'], '')
-  assert.equal(r.status, 1)
-  assert.equal(r.stdout, '')
-})
-test('CLI --approved-prompt: gh unavailable ⇒ header + plan, warning on stderr, exit 0', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'plan-held-'))
-  const file = join(dir, 'approved-plan.txt')
-  writeFileSync(file, PLAN_TEXT)
-  const r = spawnSync(process.execPath, [CLI, '--approved-prompt', '--plan-id', '9', '--plan-file', file, '--issue', '7'],
-    { encoding: 'utf8', env: { ...process.env, PATH: dir, GITHUB_REPOSITORY: 'o/r' } })
-  assert.equal(r.status, 0, r.stderr)
-  assert.equal(r.stdout, approvedHeader('9') + PLAN_TEXT)
-  assert.match(r.stderr, /::warning::could not read the owner override for #7/)
-})
-
-// ── planHeldFor: the route step's fact ──────────────────────────────────────────────────────
+// ── holdFacts: the route step's facts (#4145) ─────────────────────────────────────────────
 const NOGO = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:no-go -->\n🔴 **Plan rejected**'
 const PLAN = '<!-- pipeline-plan:v1 -->\nplan'
 const fakeGithub = (comments = []) => {
@@ -123,27 +109,55 @@ const fakeGithub = (comments = []) => {
     paginate: async (fn, args) => { calls.push(['paginate', fn === listComments, args]); return comments },
   }
 }
-const thread = [PLAN, NOGO, PLAN, NOGO].map((body) => ({ body, user: { type: 'Bot' } }))
+const thread = [PLAN, NOGO, PLAN, NOGO].map((body, i) => ({ id: 100 + i, body, user: { type: 'Bot' } }))
 
-test('planHeldFor: twice-rejected blocked issue ⇒ true', async () => {
+test('holdFacts: twice-rejected blocked issue ⇒ planHeld true, no record, one paginate', async () => {
   const github = fakeGithub(thread)
   const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
-  assert.equal(await planHeldFor({ github, repo: { owner: 'o', repo: 'r' }, issue }), true)
+  assert.deepEqual(await holdFacts({ github, repo: { owner: 'o', repo: 'r' }, issue }), { planHeld: true, record: null, recordComment: null })
   assert.deepEqual(github.calls, [['paginate', true, { owner: 'o', repo: 'r', issue_number: 7, per_page: 100 }]])
 })
-test('planHeldFor: no status:blocked, or a PR ⇒ false, no API call', async () => {
+test('holdFacts: the final no-go carries its record ⇒ planHeld true and the record, still one paginate', async () => {
+  const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
+  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body, i) => ({ id: 200 + i, body, user: { type: 'Bot' } })))
+  const issue = { number: 7, labels: [{ name: 'status:blocked' }] }
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue }), { planHeld: true, record: REJECTED_RECORD, recordComment: 203 })
+  assert.equal(github.calls.length, 1)
+})
+// covers: T3
+test('holdFacts: reads the login, so an owner answer already given closes a worker question (#4192)', async () => {
+  const WQ = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+  const q = { id: 301, body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n## 🔀 Blocked — A or B?`, user: { type: 'Bot', login: 'nuxt-harness[bot]' } }
+  const answer = { id: 302, body: 'A', user: { type: 'User', login: 'pmcp' } }
+  const issue = { number: 7, labels: [{ name: 'status:blocked' }, { name: 'plan:approved' }] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer]), repo: {}, issue }), { planHeld: false, record: WQ, recordComment: 301 }, 'the first answer still reads the record')
+  assert.deepEqual(await holdFacts({ github: fakeGithub([q, answer, { id: 303, body: 'ok', user: { type: 'User', login: 'pmcp' } }]), repo: {}, issue }), { planHeld: false, record: null, recordComment: null })
+})
+
+test('holdFacts: no status:blocked, or a PR ⇒ nothing, no API call', async () => {
   const github = fakeGithub(thread)
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, labels: [] } }), false)
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), false)
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: [] } }), { planHeld: false, record: null, recordComment: null })
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, pull_request: {}, labels: ['status:blocked'] } }), { planHeld: false, record: null, recordComment: null })
   assert.deepEqual(github.calls, [])
 })
-test('planHeldFor: human-pasted verdicts ⇒ false', async () => {
-  const github = fakeGithub(thread.map((c) => ({ ...c, user: { type: 'User' } })))
-  assert.equal(await planHeldFor({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), false)
+test('holdFacts: human-pasted verdicts (even with a record) ⇒ nothing', async () => {
+  const withRecord = NOGO.replace('-->\n🔴', `-->\n${recordMarker(REJECTED_RECORD)}\n🔴`)
+  const github = fakeGithub([PLAN, NOGO, PLAN, withRecord].map((body) => ({ body, user: { type: 'User' } })))
+  assert.deepEqual(await holdFacts({ github, repo: {}, issue: { number: 7, labels: ['status:blocked'] } }), { planHeld: false, record: null, recordComment: null })
+})
+// covers: T4 (#4207)
+test('holdFacts: recordComment is the REST id of the comment carrying the open record, else null', async () => {
+  const Q = { kind: 'plan-question', question: 'A?', accepts: ['ok', 'other'], starts: { ok: 'replan-with-yes', other: 'replan-with-feedback' } }
+  const ask = '<!-- plan-review:v1 -->\n<!-- plan-review-verdict:needs-owner -->\n' + `${recordMarker(Q)}\n🔀 **Needs your call** — A?`
+  const comments = [{ id: 11, body: PLAN, user: { type: 'Bot' } }, { id: 12, body: ask, user: { type: 'Bot' } }, { id: 13, body: 'yes', user: { type: 'User', login: 'pmcp' } }]
+  const issue = { number: 7, labels: ['status:blocked'] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub(comments), repo: {}, issue }), { planHeld: false, record: Q, recordComment: 12 })
+  const approved = { number: 7, labels: ['status:blocked', 'plan:approved'] }
+  assert.deepEqual(await holdFacts({ github: fakeGithub(comments), repo: {}, issue: approved }), { planHeld: false, record: null, recordComment: null })
 })
 
 // ── approvePlan: the approve-plan job ───────────────────────────────────────────────────────
-function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer point is cosmetic', epicBody = '# Epic' } = {}) {
+function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer point is cosmetic', epicBody = '# Epic', login = 'pmcp', assoc = 'OWNER' } = {}) {
   const calls = []
   const failed = []
   const github = {
@@ -166,7 +180,7 @@ function fakeApprove({ issueBody = '', parent, commentBody = 'ok: the reviewer p
     repo: { owner: 'o', repo: 'r' },
     payload: {
       issue: { number: 7, body: issueBody },
-      comment: { body: commentBody, author_association: 'OWNER', user: { type: 'User' }, created_at: '2026-11-10T12:00:00Z', html_url: 'https://x/c1' },
+      comment: { body: commentBody, author_association: assoc, user: { type: 'User', login }, created_at: '2026-11-10T12:00:00Z', html_url: 'https://x/c1' },
     },
   }
   const core = { info: () => {}, warning: () => {}, setFailed: (m) => failed.push(m) }
@@ -202,6 +216,29 @@ test('approvePlan: no `ok: <reason>` ⇒ setFailed, no write', async () => {
   assert.equal(f.failed.length, 1)
 })
 
+// covers: T6
+test('#4168 approvePlan: only the owner login (OWNER_LOGIN unset ⇒ pmcp) approves, whatever the role', async () => {
+  const saved = process.env.OWNER_LOGIN
+  delete process.env.OWNER_LOGIN
+  try {
+    const other = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'someone-else', assoc: 'OWNER' })
+    await other.run()
+    assert.deepEqual(other.calls, [])
+    assert.equal(other.failed.length, 1)
+    const owner = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'pmcp', assoc: 'COLLABORATOR' })
+    await owner.run()
+    assert.deepEqual(owner.failed, [])
+    assert.equal(owner.calls.at(-1)[0], 'addLabels')
+    process.env.OWNER_LOGIN = 'alice'
+    const custom = fakeApprove({ issueBody: '<!-- pipeline: epic=1 -->', login: 'pmcp' })
+    await custom.run()
+    assert.equal(custom.failed.length, 1)
+  } finally {
+    if (saved === undefined) delete process.env.OWNER_LOGIN
+    else process.env.OWNER_LOGIN = saved
+  }
+})
+
 test('NEEDS_REASON asks for `ok: <why>` and carries the note marker + provenance header', () => {
   assert.match(NEEDS_REASON, /^<!-- pipeline-note -->\n> 🤖 \*\*pi\.dev harness\*\*/)
   assert.match(NEEDS_REASON, /`ok: </)
@@ -210,16 +247,26 @@ test('NEEDS_REASON asks for `ok: <why>` and carries the note marker + provenance
 // ── Wiring: the real workflow files call these, not inline logic ────────────────────────────
 const onComment = readFileSync(new URL('../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
 const build = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-test('on-comment.yml has a job per new router choice and passes planHeld from planHeldFor', () => {
+test('on-comment.yml has a job per new router choice and passes planHeld + record from holdFacts', () => {
   assert.match(onComment, /needs\.route\.outputs\.kind == 'approve-plan'/)
   assert.match(onComment, /needs\.route\.outputs\.kind == 'plan-needs-reason'/)
-  assert.match(onComment, /planHeld: await planHeldFor\(/)
+  assert.match(onComment, /await holdFacts\(/)
+  assert.match(onComment, /planHeld: facts\.planHeld/)
+  assert.match(onComment, /record: facts\.record/)
+  assert.match(onComment, /starts: \$\{\{ steps\.route\.outputs\.starts \}\}/)
+  assert.match(onComment, /core\.setOutput\('starts', d\.starts \|\| ''\)/)
   assert.match(onComment, /approvePlan\(\{ github, context, core \}\)/)
   assert.match(onComment, /NEEDS_REASON/)
 })
 test('work-issue-pidev.yml builds the approved section through plan-held.mjs', () => {
-  assert.match(build, /node scripts\/plan-held\.mjs --approved-prompt --plan-id "\$APPROVED_PLAN_ID" --plan-file "\$RUNNER_TEMP\/approved-plan\.txt" --issue "\$ISSUE" > "\$RUNNER_TEMP\/approved-section\.txt"/)
-  assert.match(build, /cat "\$RUNNER_TEMP\/approved-section\.txt" >> "\$PROMPT_FILE"/)
-  assert.match(build, /--jq \.body > "\$RUNNER_TEMP\/approved-plan\.txt"/)
+  // #3620: the step calls scripts/pi-run.mjs, which fetches the plan into approved-plan.txt and
+  // renders the section with plan-held.mjs's approvedPromptSection (no inline header text anywhere).
+  // Byte-equality with the old bash: scripts/pi-run.test.mjs [worker-approved].
+  const piRun = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
+  assert.match(build, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+  assert.match(piRun, /const \{ approvedPromptSection \} = await import\('\.\/plan-held\.mjs'\)/)
+  assert.match(piRun, /join\(tmp, 'approved-plan\.txt'\)/)
+  assert.match(piRun, /issues\/comments\/\$\{planId\}`, '--jq', '\.body'\]/)
   assert.equal(build.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
+  assert.equal(piRun.includes('AN INDEPENDENT REVIEWER APPROVED THIS PLAN'), false)
 })

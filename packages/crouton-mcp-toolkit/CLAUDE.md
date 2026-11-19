@@ -23,6 +23,10 @@ MCP Toolkit integration that automatically exposes all Crouton collections as MC
 | `server/mcp/resources/collections-registry.ts` | All collections metadata as MCP resource |
 | `server/mcp/resources/collection-schema.ts` | Per-collection field info (template resource) |
 | `server/mcp/prompts/data-entry.ts` | Guided data creation prompt |
+| `lib/pages-handler.ts` | `resolvePagesHandler` (the `pages` opt-in decision), `layerPackageNames`, `PAGES_MCP_DIR` |
+| `server/handlers/mcp-generic-gate.ts` | `isBlockedGenericMcpPath` + the 404 middleware registered when `genericTools: false` |
+| `server/mcp-pages/handlers/pages/` | The `/mcp/pages` handler (`index.ts`) and its five tools (`tools/*.ts`) |
+| `server/mcp-pages/lib/{auth,tools,deps}.ts` | Pages-token check, the tool logic (injected deps, tested), the real deps |
 
 ## Architecture
 
@@ -42,7 +46,7 @@ Collection Registry → $fetch → Existing API endpoints
 crouton-auth (team auth)
 ```
 
-All tools accept `collection` (string) and `teamId` (string) params. They call existing API endpoints via `$fetch`, which respects all auth, validation, and business logic.
+The generic collection tools accept `collection` (string) and `teamId` (string) params. They call existing API endpoints via `$fetch`, which respects all auth, validation, and business logic.
 
 ## Configuration
 
@@ -62,6 +66,19 @@ export default defineNuxtConfig({
 |--------|---------|-------------|
 | `name` | `'crouton'` | MCP server name shown to clients |
 | `enabled` | auto-detect | `true` in dev, `false` in prod (unless set) |
+| `genericTools` | `true` | `false` answers 404 on `/mcp` (generic CRUD + token tools) and keeps only named handlers such as `/mcp/pages` |
+| `pages` | `false` | `true` serves the live page tools at `/mcp/pages`; the build fails if crouton-pages or crouton-collab is not extended |
+
+## Pages handler (`/mcp/pages`)
+
+Lets Claude edit a page **live** (#3982): changes go into the page's live collab document, so they appear in the open editor without a reload. **The tools never save** — the owner reviews and clicks Save.
+
+- **Opt-in:** `croutonMcpToolkit: { enabled: true, pages: true }` (velo also sets `genericTools: false`). Needs `@fyit/crouton-pages` and `@fyit/crouton-collab` extended (optional peers, plus `@fyit/crouton-layout` for `add_layout`).
+- **Auth:** a team pages token in the URL (`/mcp/pages?token=…`) or `Authorization: Bearer`. Mint one as a team **admin** with `POST /api/teams/:id/mcp-tokens` `{ "scope": "pages" }` — the response's `url` is what you paste into the Claude app. 404 when the app has `pages` off. No session fallback; the team comes from the token, tools take no `teamId`.
+- **Separation:** a pages token cannot use the generic tools (`requireMcpAuth` accepts only `mcp-toolkit` tokens) and a general token cannot use the pages tools.
+- **Tools:** `list_pages` · `read_page { pageId, locale }` (live doc if any, else stored) · `edit_page { pageId, locale, action: insert|replace|delete, index, count?, blocks? }` · `list_layout_blocks` · `add_layout { pageId, locale, index, layout, height? }` (checked by crouton-layout's `checkLayoutForPlacement`: known blocks + viable at 1280, warnings at 768/375).
+- A first edit on a page whose live document is empty seeds it from the stored content with the editor's deterministic seed, so the two merge.
+- Live edits need collab (`"collab": true`): in production the server pushes through the collab worker's `POST /update`; velo's `wrangler.jsonc` sets `global_fetch_strictly_public` so the app Worker can reach it.
 
 ## Tools Reference
 
@@ -89,7 +106,7 @@ export default defineNuxtConfig({
 
 ## How MCP Toolkit Discovery Works
 
-The `@nuxtjs/mcp-toolkit` module uses `getLayerDirectories()` from `@nuxt/kit` to scan ALL Nuxt layers for `server/mcp/{tools,resources,prompts}/` directories. Since `crouton-mcp-toolkit` is a layer, its definitions are automatically discovered without specifying absolute paths.
+The `@nuxtjs/mcp-toolkit` module uses `getLayerDirectories()` from `@nuxt/kit` to scan ALL Nuxt layers for `server/mcp/{tools,resources,prompts}/` directories. Since `crouton-mcp-toolkit` is a layer, its definitions are automatically discovered without specifying absolute paths. The pages handler is deliberately outside that folder (`server/mcp-pages/`); the module adds it through the `mcp:definitions:paths` hook only when `pages: true`.
 
 ## Common Tasks
 
@@ -121,6 +138,7 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
+pnpm test           # vitest: pages opt-in, /mcp gate, pages tokens, tools, import boundary
 pnpm build          # Build module
 ```

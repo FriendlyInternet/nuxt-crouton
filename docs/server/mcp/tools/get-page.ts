@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { pageBodyText } from '../../utils/doc-text'
 
 export default defineMcpTool({
   name: 'get_page',
@@ -29,12 +30,7 @@ export default defineMcpTool({
 
     const doc = results[0]
 
-    // Extract text content from body if available
-    let bodyText = ''
-    const bodyValue = (doc.body as any)?.value
-    if (Array.isArray(bodyValue)) {
-      bodyText = extractText(bodyValue)
-    }
+    const bodyText = pageBodyText(doc)
 
     return {
       content: [{
@@ -44,20 +40,3 @@ export default defineMcpTool({
     }
   }
 })
-
-// Content v3 minimark: a node is a string or [tag, props, ...children]
-function extractText(nodes: any[]): string {
-  let text = ''
-  for (const node of nodes) {
-    if (typeof node === 'string') {
-      text += node
-    } else if (Array.isArray(node)) {
-      const [tag, , ...children] = node
-      text += extractText(children)
-      if (typeof tag === 'string' && (tag === 'p' || /^h[1-6]$/.test(tag))) {
-        text += '\n\n'
-      }
-    }
-  }
-  return text.trim()
-}

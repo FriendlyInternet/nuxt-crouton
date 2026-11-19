@@ -297,7 +297,7 @@ interface AdminStats {
 ## Testing
 
 ```bash
-pnpm typecheck  # Run type checking
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```
 
 ## Naming Conventions

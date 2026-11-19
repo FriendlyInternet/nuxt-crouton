@@ -18,24 +18,27 @@ export async function loadModules(): Promise<Record<string, Record<string, any>>
 }
 
 /**
+ * Find a module's registry key from a feature key (`editor`), a package name
+ * (`@fyit/crouton-editor`) or a bare package name (`crouton-editor`). The one
+ * lookup rule shared by `crouton add` and `crouton init --features` (#4291).
+ */
+export function findModuleKey(name: string, modules: Record<string, any>): string | undefined {
+  if (modules[name]) return name
+  const byPackage = (pkg: string) => Object.keys(modules).find(key => modules[key]?.package === pkg)
+  const key = byPackage(name)
+  if (key) return key
+  if (/^crouton-[a-z0-9-]+$/.test(name)) return byPackage(`@fyit/${name}`)
+  return undefined
+}
+
+/**
  * Get module info by alias or package name
  */
 export async function getModule(name: string): Promise<Record<string, any> | undefined> {
   const modules = await loadModules()
-
-  // Direct alias match
-  if (modules[name]) {
-    return modules[name]
-  }
-
-  // Search by package name
-  for (const [alias, module] of Object.entries(modules)) {
-    if (module.package === name) {
-      return { ...module, alias }
-    }
-  }
-
-  return undefined
+  const key = findModuleKey(name, modules)
+  if (!key) return undefined
+  return key === name ? modules[key] : { ...modules[key], alias: key }
 }
 
 /**

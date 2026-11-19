@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 
@@ -8,6 +9,8 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-email')
   console.log('🍞 crouton:email ✓ Layer loaded')
 }
 
+const currentDir = fileURLToPath(new URL('.', import.meta.url))
+
 export default defineNuxtConfig({
   // Layer metadata
   $meta: {
@@ -15,9 +18,11 @@ export default defineNuxtConfig({
     version: '0.1.0'
   },
 
-  // Components from the layer
+  // Components from the layer. Absolute path: a relative one resolves against the
+  // layer's srcDir (app/), so 'app/components' matched nothing (#2611). The Email/
+  // folder supplies the prefix, giving EmailInput, EmailResendButton, etc.
   components: [
-    { path: 'app/components', pathPrefix: false }
+    { path: join(currentDir, 'app/components') }
   ],
 
   // Auto-imports from the layer

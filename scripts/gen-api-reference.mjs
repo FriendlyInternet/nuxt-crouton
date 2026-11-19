@@ -465,7 +465,7 @@ function genServer() {
   return out
 }
 
-const PAGES = {
+export const PAGES = {
   'components.md': genComponents,
   'composables.md': genComposables,
   'field-types.md': genFieldTypes,

@@ -153,5 +153,5 @@ Components auto-import with the `CroutonThree` prefix:
 ## Testing
 
 ```bash
-pnpm typecheck   # per-app typecheck (MANDATORY after changes)
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

@@ -110,9 +110,6 @@ crouton add bookings i18n
 # Preview what would be done
 crouton add auth --dry-run
 
-# Skip migration generation
-crouton add auth --skip-migrations
-
 # Force reinstall
 crouton add auth --force
 
@@ -124,7 +121,6 @@ crouton add --list
 
 | Option | Description |
 |--------|-------------|
-| `--skip-migrations` | Skip running `npx nuxt db:generate` and `db:migrate` |
 | `--skip-install` | Skip `pnpm add` (assume already installed) |
 | `--dry-run` | Preview what would be done without making changes |
 | `--force` | Force reinstall even if already installed |
@@ -132,23 +128,21 @@ crouton add --list
 
 ### Available Modules
 
-| Module | Package | Has Schema | Description |
-|--------|---------|------------|-------------|
-| `auth` | `@fyit/crouton-auth` | ● | Authentication with Better Auth (**bundled in core**) |
-| `i18n` | `@fyit/crouton-i18n` | ● | Multi-language support (**bundled in core**) |
-| `admin` | `@fyit/crouton-admin` | ○ | Admin dashboard (**bundled in core**) |
-| `bookings` | `@fyit/crouton-bookings` | ○ | Booking system |
-| `editor` | `@fyit/crouton-editor` | ○ | Rich text editor |
-| `assets` | `@fyit/crouton-assets` | ○ | Asset management |
-| `events` | `@fyit/crouton-events` | ○ | Event tracking/audit trail |
-| `flow` | `@fyit/crouton-flow` | ○ | Vue Flow graphs |
-| `email` | `@fyit/crouton-email` | ○ | Email integration |
-| `maps` | `@fyit/crouton-maps` | ○ | Map integration |
-| `ai` | `@fyit/crouton-ai` | ○ | AI integration |
-| `devtools` | `@fyit/crouton-devtools` | ○ | Nuxt Devtools |
+| Module | Package | Description |
+|--------|---------|-------------|
+| `auth` | `@fyit/crouton-auth` | Authentication with Better Auth (**bundled in core**) |
+| `i18n` | `@fyit/crouton-i18n` | Multi-language support (**bundled in core**) |
+| `admin` | `@fyit/crouton-admin` | Admin dashboard (**bundled in core**) |
+| `bookings` | `@fyit/crouton-bookings` | Booking system |
+| `editor` | `@fyit/crouton-editor` | Rich text editor |
+| `assets` | `@fyit/crouton-assets` | Asset management |
+| `events` | `@fyit/crouton-events` | Event tracking/audit trail |
+| `flow` | `@fyit/crouton-flow` | Vue Flow graphs |
+| `email` | `@fyit/crouton-email` | Email integration |
+| `maps` | `@fyit/crouton-maps` | Map integration |
+| `ai` | `@fyit/crouton-ai` | AI integration |
+| `devtools` | `@fyit/crouton-devtools` | Nuxt Devtools |
 
-● = Has database schema (will update `server/db/schema.ts`)
-○ = No database tables
 **bundled in core** = Automatically included when using `@fyit/crouton-core`
 
 ⚠️ **WARNING**: Do NOT add bundled packages (`auth`, `i18n`, `admin`) to your
@@ -161,9 +155,7 @@ and SSR errors like `$setup.t is not a function`.
 1. **Validates** module exists and dependencies are installed
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
-4. **Updates** `server/db/schema.ts` - adds schema export (if applicable)
-5. **Generates** migrations **directly** — drizzle-kit, no Nuxt build (see below)
-6. **Applies** migrations with `npx nuxt db:migrate` (if applicable)
+4. **Prints one fixed block, for every package** (dry-run too): `crouton add does not create database tables. If this package brings tables, run next:` followed by the `manualMigrationSteps()` commands (`lib/utils/generate-migrations.ts`). It does not detect which packages have tables, touch `server/db/schema.ts`, or run migrations (#3998)
 
 #### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
@@ -173,8 +165,8 @@ same set NuxtHub globs), gates it for duplicate tables (`findDuplicateTables`,
 `duplicate-tables.ts`), then runs the app's own `db:generate` (drizzle-kit reads
 the runtime-resolving `drizzle.config.ts` and is resolved from the app dir). **No
 `nuxt build`, no `nuxt db generate`** — the old build-first dance (build →
-poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config`,
-`crouton add` (step 5), and `crouton init` (step 3).
+poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config` and
+`crouton init` (step 3).
 
 Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
 - **Duplicate table** (two DISTINCT defs share a name) → throws `DuplicateTableError`
@@ -212,6 +204,22 @@ crouton init my-app --features bookings,pages,editor --theme ko
 crouton init my-app --dry-run
 ```
 
+### Standalone vs monorepo
+
+`init` / `scaffold-app` detect where they run (#3392): `isCroutonMonorepo(cwd)` in
+`lib/scaffold-app.ts` uses `findPackagesDir` (walk up to a `pnpm-workspace.yaml` with a
+`packages/` dir) and checks `packages/crouton-core` is `@fyit/crouton-core`.
+
+| | Inside the crouton monorepo | Anywhere else (standalone) |
+|---|---|---|
+| Target dir | `apps/<name>` | `./<name>` |
+| `@fyit/*` deps + devDeps | `workspace:*` | `^<cli version>` |
+| Cloudflare (`wrangler.jsonc`, CF stubs) | on (`--no-cf` to skip) | off (`--cf` to add) |
+| Database | `hub.db: 'sqlite'` | `hub.db: 'sqlite'` (local SQLite via NuxtHub) |
+
+`--out` wins in both modes. Standalone: `npx @fyit/crouton-cli init my-app && cd my-app && pnpm install && pnpm dev`.
+`--noCf` is kept as a deprecated alias for `--no-cf`.
+
 ### Init Options
 
 | Option | Description |
@@ -220,10 +228,11 @@ crouton init my-app --dry-run
 | `--no-layout` | Leave out `@fyit/crouton-layout` (added by default, #3956) |
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
 | `-d, --dialect <type>` | `sqlite` (default; the only supported value — others exit non-zero) |
-| `--no-cf` | Skip Cloudflare-specific config |
-| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
+| `--cf` / `--no-cf` | Force Cloudflare Workers config on/off. Default: on inside the crouton monorepo, off in a standalone app |
+| `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
-| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` |
+| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
+| `--site` | Small public site: one team (`test1`, no switcher/creation/management), one locale (`en`) with `runtimeConfig.public.croutonPages.hideLocaleInUrl: true`, an empty `appDomains` to fill in; adds `@fyit/crouton-pages`. Writes no pages, middleware or `routingMode`. See [crouton-pages](../crouton-pages/CLAUDE.md) |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -232,6 +241,9 @@ crouton init quotes --poc
 
 # Explicit output directory (overrides --poc)
 crouton init scratch --out sandboxes/scratch
+
+# A small one-team, one-language public site (#4263)
+crouton init my-site --site --poc
 ```
 
 ### What `crouton init` Does
@@ -290,8 +302,8 @@ NOT Cloudflare Pages. Generated artifacts:
 
 | File | Purpose |
 |------|---------|
-| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
-| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
+| `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) + named R2 buckets `<name>-blob` / `<name>-staging-blob` (BLOB) when the `assets` feature is on (#4142), so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
+| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern) for apps; a `--poc` gets `stagingUrl: https://<name>.<zone>` and no `productionUrl`, matching its only route and what `scripts/scaffold-poc-deploy.mjs` writes (#4142). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
 | `scripts/sync-wrangler-ids.mjs` | After provisioning, queries `wrangler d1 list`/`kv namespace list` and writes the ids back into `wrangler.jsonc` (D1 by `database_name`, KV by the deterministic `<worker>-<binding>` title). Idempotent, comment-preserving |
 | `scripts/inject-wrangler-env.mjs` | Re-injects the `env` block Nitro strips from `.output/server/wrangler.json` (nitro#3429) + drops the redirect so `--env staging` deploys work |
 | `drizzle.config.ts` | Resolves the bundled schema path (`.nuxt/` or the cache buildDir) so `db:generate` works unedited |
@@ -307,7 +319,8 @@ re-inject-env → migrate staging. `nuxt.config` pins **no** nitro preset (suppl
 
 **Custom domains (`--domain <zone>`):** when passed, `wrangler.jsonc` also gets
 custom-domain `routes` — `<app>.<zone>` (top-level/prod) + `<app>-staging.<zone>`
-(`env.staging`). On deploy, wrangler binds them and creates the DNS record + cert
+(`env.staging`). A `--poc` (target under `pocs/`) has no production: only `env.staging`
+gets a route, `<app>.<zone>` (#4142). On deploy, wrangler binds them and creates the DNS record + cert
 (the zone must be in the same CF account). Nitro preserves top-level `routes`;
 `inject-wrangler-env` carries the `env.staging` ones. Without `--domain`, apps stay
 on id-less `*.workers.dev` (the CLI stays domain-agnostic for general use). Adding
@@ -875,7 +888,7 @@ reads that list instead:
 | Which packages' setup questions (manifest `configuration`) are asked | `lib/utils/manifest-configuration.ts` |
 | Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
 | Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
-| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package and, transitively, its manifest `dependencies` — named by feature key, package name `@fyit/crouton-x` or bare `crouton-x` — unless core bundles it; an unmatched dependency is skipped with a warning) | `lib/scaffold-app.ts` |
 
 The generator **never writes `extends`** from a features block any more (the hardcoded
 `framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with

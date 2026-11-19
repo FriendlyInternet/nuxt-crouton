@@ -9,7 +9,7 @@
  * - Form data type: BookingsLocationFormData
  * - New item type: NewBookingsLocation
  * - Form props: BookingsLocationFormProps
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, products, openDays, slotSchedule, blockedDates, offerFullDay, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -26,7 +26,6 @@ import type { bookingsLocationSchema } from './app/composables/useBookingsLocati
 export interface BookingsLocationsSlotItem {
   id: string
   label: string
-  capacity?: number
 }
 
 export interface BookingsLocation {
@@ -42,12 +41,11 @@ export interface BookingsLocation {
   content?: string
   allowedMemberIds?: string[]
   slots?: any[]
+  products?: Array<{ product: string, stock: number }> | null
   openDays?: string[]
   slotSchedule?: Record<string, any>
   blockedDates?: any[]
   offerFullDay?: boolean
-  inventoryMode?: boolean
-  quantity?: number
   maxBookingsPerMonth?: number
   translations?: Record<string, { title?: string; street?: string; zip?: string; city?: string; content?: string }>
   locale?: string

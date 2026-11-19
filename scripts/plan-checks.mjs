@@ -136,7 +136,6 @@ export function upsertSticky(repo, pr, body, { list = listComments, call = gh } 
 const arg = (a, k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undefined }
 const logLine = (s) => { console.log(s); if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`) }
 
-const NEEDS_INSTALL = /\b(pnpm|npx|vitest|nuxi|tsc)\b/
 const TOKEN_VARS = /^(GH_TOKEN|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|ACTIONS_ID_TOKEN_REQUEST_TOKEN)$/
 const readJson = (f) => JSON.parse(readFileSync(f, 'utf8'))
 
@@ -145,7 +144,7 @@ function fetchStep(argv, { env, comments, say }) {
   const issue = issueFromRef(ref)
   const all = issue ? (comments ?? listComments(env.GITHUB_REPOSITORY, issue)) : []
   const d = { ...decidePlan({ headRef: ref, comments: all }), pr: env.PR_NUMBER || null, sha: env.HEAD_SHA || null }
-  d.needsInstall = d.items.some((i) => i.type === 'run' && NEEDS_INSTALL.test(i.detail))
+  d.needsInstall = d.items.some((i) => i.type === 'run')
   writeFileSync(arg(argv, '--out'), JSON.stringify(d, null, 2))
   say(`plan-checks: ${d.error || d.summary}`)
   const hasPlan = Boolean(d.items.length || d.error)

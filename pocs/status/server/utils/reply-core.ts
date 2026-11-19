@@ -40,12 +40,16 @@ function permissionHint(kind: 'issue' | 'pr', status: number): string {
 /**
  * Post the reply unless an identical comment already exists on the target (double-post guard —
  * returns the existing comment's URL instead). PRs use the issue-comments endpoint.
+ * With `opts.since`, only comments created after that time count as duplicates, and the list asks
+ * GitHub for `since=` so a long thread's newest comments are read (GitHub's `since` filters by
+ * `updated_at`, so an old comment edited later is excluded by its `created_at`).
  */
 export async function postReply(
   repo: string,
   reply: ParsedReply,
   token: string | undefined,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  opts: { since?: string } = {}
 ): Promise<GhResult<{ url: string, existing: boolean }>> {
   if (!token) return { data: null, error: 'GITHUB_TOKEN is not configured' }
   const headers = {
@@ -56,10 +60,13 @@ export async function postReply(
   }
   const url = `${GH_API}/repos/${repo}/issues/${reply.number}/comments`
   try {
-    const list = await fetchImpl(`${url}?per_page=100`, { headers })
+    const query = opts.since ? `?since=${encodeURIComponent(opts.since)}&per_page=100` : '?per_page=100'
+    const sinceMs = opts.since ? Date.parse(opts.since) : null
+    const list = await fetchImpl(`${url}${query}`, { headers })
     if (!list.ok) return { data: null, error: list.status === 403 || list.status === 404 ? permissionHint(reply.kind, list.status) : `GitHub ${list.status}` }
-    const comments = (await list.json()) as Array<{ body?: string, html_url: string }>
-    const dup = comments.find(c => (c.body ?? '').trim() === reply.body)
+    const comments = (await list.json()) as Array<{ body?: string, html_url: string, created_at?: string }>
+    const dup = comments.find(c => (c.body ?? '').trim() === reply.body
+      && (sinceMs === null || Date.parse(c.created_at ?? '') > sinceMs))
     if (dup) return { data: { url: dup.html_url, existing: true }, error: null }
 
     const res = await fetchImpl(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ body: reply.body }) })

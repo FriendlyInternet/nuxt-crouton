@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen } from './capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, landedWhereAsked } from './capture-validate.mjs'
 
 test('colorsAreFlat: uniform samples are flat', () => {
   const samples = Array.from({ length: 16 }, () => [255, 255, 255, 255])
@@ -52,6 +52,32 @@ test('looksLikeLoadingScreen: Nuxt dev loading template is rejected', () => {
   assert.equal(looksLikeLoadingScreen({ text: 'Generating types · step 4/7' }), true)
 })
 
+test('landedWhereAsked: compares pathnames, ignores a trailing slash and the query (#4201)', () => {
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/admin/x/media/'), true)
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/auth/login?redirect=%2Fadmin'), false)
+  assert.equal(landedWhereAsked('/admin/x/media', 'https://h/'), false)
+  assert.equal(landedWhereAsked('/?tab=a', 'https://h/'), true)
+})
+
 test('looksLikeLoadingScreen: a real app page is not a loading screen', () => {
   assert.equal(looksLikeLoadingScreen({ html: '<div id="__nuxt"><main>Calendar</main></div>', text: 'Calendar', title: 'Velo' }), false)
+})
+
+// #4241: the gallery sends `/__review?file=<path>` on to `/__review/<ComponentName>` — the right page.
+test('landedWhereAsked: a component link lands on that component\'s gallery page (#4241)', () => {
+  const asked = '/__review?file=packages%2Fcrouton-core%2Fapp%2Fcomponents%2FAdminSidebar.vue'
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/CroutonAdminSidebar'), true)
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/CroutonAdminSidebar/'), true)
+  // The file is not known to the gallery: the browser stays on the list of all components.
+  assert.equal(landedWhereAsked(asked, `https://h${asked}`), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/'), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/auth/login'), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/A/B'), false)
+})
+
+test('landedWhereAsked: the gallery list and a named component page compare as before (#4241)', () => {
+  assert.equal(landedWhereAsked('/__review', 'https://h/__review'), true)
+  assert.equal(landedWhereAsked('/__review?q=side', 'https://h/__review?q=side'), true)
+  assert.equal(landedWhereAsked('/__review/CroutonAdminSidebar', 'https://h/__review/CroutonAdminSidebar'), true)
+  assert.equal(landedWhereAsked('/__review/CroutonAdminSidebar', 'https://h/__review'), false)
 })

@@ -4,6 +4,7 @@ import {
   claimDevice,
   listTeamDevices,
   revokeTeamDevice,
+  mintTeamPairingCode,
   REDEEM_FAILURE_STATUS
 } from '../server/utils/device-pairing'
 
@@ -38,12 +39,38 @@ vi.mock('@fyit/crouton-auth/server/utils/pairing-code', () => ({
   TILL_DEVICE_RESOURCE_TYPE: 'till-device'
 }))
 
+// The auth schema resolves to crouton-auth's built `dist/`, which isn't present
+// where only the sales tests run. Sentinel columns are all the fake db needs.
+vi.mock('@fyit/crouton-auth/server/database/schema/auth', () => ({
+  scopedAccessGrant: {
+    id: 'grant.id',
+    organizationId: 'grant.organizationId',
+    resourceType: 'grant.resourceType',
+    resourceId: 'grant.resourceId',
+    createdAt: 'grant.createdAt',
+    isActive: 'grant.isActive'
+  }
+}))
+
 // The app-owned collection schema is reached through the consuming app's `~~`
 // alias, which only resolves inside a Nuxt build. Sentinel columns are all the
 // fake db needs — identity, not behaviour.
 vi.mock('../collections/events/server/database/schema', () => ({
   salesEvents: { id: 'events.id', teamId: 'events.teamId', isCurrent: 'events.isCurrent' }
 }))
+
+// Record what each `where(...)` filtered on, so tests can assert a lookup is
+// team-scoped rather than only that it came back empty (#3992).
+const recordedWheres: unknown[] = []
+vi.mock('drizzle-orm', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('drizzle-orm')>()
+  return {
+    ...actual,
+    eq: (col: unknown, val: unknown) => ({ op: 'eq', col, val }),
+    and: (...conds: unknown[]) => ({ op: 'and', conds }),
+    inArray: (col: unknown, vals: unknown[]) => ({ op: 'inArray', col, vals })
+  }
+})
 
 const ORG = 'org-123'
 const EVENT = 'event-current'
@@ -55,7 +82,10 @@ const recordedUpdates: Array<{ set: Record<string, unknown> }> = []
 const makeDb = () => ({
   select: vi.fn(() => ({
     from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
+    where: vi.fn(function (this: unknown, c: unknown) {
+      recordedWheres.push(c)
+      return this
+    }),
     limit: vi.fn(async () => selectQueue.shift() ?? []),
     then: undefined
   })),
@@ -75,6 +105,7 @@ beforeEach(() => {
   db = makeDb()
   selectQueue = []
   recordedUpdates.length = 0
+  recordedWheres.length = 0
   vi.clearAllMocks()
 })
 
@@ -199,5 +230,50 @@ describe('revokeTeamDevice', () => {
 
     expect(ok).toBe(false)
     expect(recordedUpdates).toHaveLength(0)
+  })
+})
+
+// #3992 — a pairing code may only be tied to an event owned by the asking team.
+describe('mintTeamPairingCode', () => {
+  const teamFilter = { op: 'eq', col: 'events.teamId', val: ORG }
+  const idFilter = { op: 'eq', col: 'events.id', val: EVENT }
+
+  beforeEach(() => {
+    mintPairingCode.mockResolvedValue({ code: 'ABCD2345', expiresAt: new Date() })
+  })
+
+  // covers: T1
+  it('mints a code tied to the team\'s own event', async () => {
+    selectQueue = [[{ id: EVENT }]]
+
+    const result = await mintTeamPairingCode({ organizationId: ORG, eventId: EVENT })
+
+    expect(result.ok).toBe(true)
+    expect(mintPairingCode).toHaveBeenCalledWith({ organizationId: ORG, eventId: EVENT })
+    expect(recordedWheres[0]).toEqual({ op: 'and', conds: expect.arrayContaining([idFilter, teamFilter]) })
+  })
+
+  // covers: T1
+  it('refuses another team\'s event with 404 and mints nothing', async () => {
+    selectQueue = [[]] // the team-scoped lookup finds nothing
+
+    const result = await mintTeamPairingCode({ organizationId: ORG, eventId: EVENT })
+
+    expect(result).toEqual({ ok: false, status: 404 })
+    expect(mintPairingCode).not.toHaveBeenCalled()
+    expect(recordedWheres[0]).toEqual({ op: 'and', conds: expect.arrayContaining([idFilter, teamFilter]) })
+  })
+
+  // covers: T1
+  it('mints unchanged when no event id is given, without a lookup', async () => {
+    for (const eventId of [undefined, '  ']) {
+      mintPairingCode.mockClear()
+      const result = await mintTeamPairingCode({ organizationId: ORG, eventId })
+
+      expect(result.ok).toBe(true)
+      expect(mintPairingCode).toHaveBeenCalledWith({ organizationId: ORG, eventId: undefined })
+    }
+    expect(db.select).not.toHaveBeenCalled()
+    expect(recordedWheres).toHaveLength(0)
   })
 })

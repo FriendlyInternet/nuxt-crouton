@@ -1,0 +1,7 @@
+[
+  {
+    "package": "crouton-feedback",
+    "name": "app/changelog.json",
+    "reason": "optional file the module auto-detects in the consuming app (src/module.ts:110), not a path in this repo"
+  }
+]

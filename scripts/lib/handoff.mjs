@@ -46,7 +46,7 @@ export const RUN_NAME = {
   'ticket-review.yml': 'ticket-review #${{ inputs.epic }}',
   'ticket-revise.yml': 'ticket-revise #${{ inputs.epic }}',
   'automerge-epic-subpr.yml':
-    "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}",
+    "${{ github.event_name == 'workflow_dispatch' && inputs.pr && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}",
   'postmortem.yml':
     "${{ github.event_name == 'workflow_dispatch' && format('postmortem #{0}', inputs.epic) || 'Epic postmortem' }}",
 }

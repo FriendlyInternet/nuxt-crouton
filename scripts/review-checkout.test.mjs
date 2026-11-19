@@ -115,7 +115,7 @@ test('build-review.yml checks out the head only through review-checkout.mjs, pin
   assert.match(wf, /node scripts\/review-checkout\.mjs --base "\$BASE" --pr "\$PR" --sha "\$SHA" --trusted "origin\/\$\{\{ github\.event\.repository\.default_branch \}\}" --diff "\$D\/diff\.patch"/)
   assert.doesNotMatch(wf, /git checkout --detach/, 'a raw checkout would bring the head\'s .pi/ back')
   assert.ok(wf.indexOf('review-checkout.mjs --base') < wf.indexOf('pi --print --approve'), 'the pin happens before pi starts')
-  assert.match(wf, /fail "produced no verdict\$\(node "\$RUNNER_TEMP\/trusted\/build-verdict\.mjs" stop-line "\$D\/pi\.log"\)"/)
+  assert.match(wf, /fail "produced no verdict\$\(node "\$RUNNER_TEMP\/trusted\/scripts\/lib\/build-verdict\.mjs" stop-line "\$D\/pi\.log"\)"/)
 })
 
 // #3796 — GitHub does not always create refs/pull/<n>/head; the head is fetched by its sha first.

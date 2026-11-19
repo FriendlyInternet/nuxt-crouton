@@ -131,11 +131,20 @@ test('owner screen: the if: emoji set and app slug match scripts/lib/owner-scree
   assert.deepEqual(slugs, OWNER_SCREEN_APPS)
 })
 
-test('owner screen: the plan-mode "who wrote this" line in work-issue-pidev.yml asks the module', () => {
+test('owner screen: the plan-mode "who wrote this" decision (scripts/pi-run.mjs, #3620) asks the module', async () => {
+  // The pi step builds its prompt with scripts/pi-run.mjs; the Bot check lives in its feedbackWho.
   const pi = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
-  const line = pi.split('\n').find(l => l.includes('--jq .user.type)" != "Bot" ]'))
-  assert.ok(line, 'plan-mode Bot check not found')
-  assert.match(line, /\|\| node scripts\/lib\/owner-screens\.mjs --is-source "\$RUNNER_TEMP\/feedback\.txt"/)
+  assert.match(pi, /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+  const src = readFileSync(new URL('./pi-run.mjs', import.meta.url), 'utf8')
+  assert.match(src, /import\('\.\/lib\/owner-screens\.mjs'\)/)
+  assert.match(src, /userType !== 'Bot' \|\| [^\n]*isOwnerScreenSource\(\{ comment: \{ body, appSlug: appSlug \|\| null \} \}\)/)
+  // behaviour, with the real module: a 🎯 comment posted through the Harness App reads as the owner
+  const { feedbackWho, OWNER_WHO, REVIEWER_WHO } = await import('./pi-run.mjs')
+  const { isOwnerScreenSource } = await import('./lib/owner-screens.mjs')
+  const body = '🎯 preview feedback: the button sits off-screen\n'
+  assert.equal(feedbackWho({ userType: 'Bot', body, appSlug: 'nuxt-harness' }, isOwnerScreenSource), OWNER_WHO)
+  assert.equal(feedbackWho({ userType: 'Bot', body, appSlug: 'other-app' }, isOwnerScreenSource), REVIEWER_WHO)
+  // end to end through the real prompt builder: scripts/pi-run.test.mjs [plan-owner-screen]
 })
 
 test('record-outcome still tolerates a skipped rl-start', () => {

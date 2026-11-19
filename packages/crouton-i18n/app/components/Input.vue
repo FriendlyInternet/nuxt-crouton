@@ -146,6 +146,12 @@ const {
   emit as (event: 'update:modelValue' | 'update:english', ...args: any[]) => void,
 )
 
+// #4091 — in the tabs layout a block editor with preview fills the input's height instead of a
+// fixed 500px box, so the list and its form field must be able to grow.
+const FILL_COMPONENT = 'CroutonPagesEditorBlockEditorWithPreview'
+const fillsHeight = computed(() => (props.fields ?? []).some(f => getFieldComponent(f) === FILL_COMPONENT))
+const fillFieldUi = { root: 'flex flex-1 min-h-0 flex-col', container: 'flex flex-1 min-h-0 flex-col' }
+
 // ─── Field transforms (slug, uppercase, etc.) ────────────────────────────────
 
 const {
@@ -1038,11 +1044,12 @@ function previewText(field: string, locale: string): string {
       <!-- Multi-field mode: show inputs for each field -->
       <div
         v-if="isMultiField"
-        class="space-y-4"
+        :class="fillsHeight ? 'flex flex-1 min-h-0 flex-col gap-4' : 'space-y-4'"
       >
         <UFormField
           v-for="field in fields"
           :key="field"
+          :ui="getFieldComponent(field) === FILL_COMPONENT ? fillFieldUi : undefined"
           :label="`${field.charAt(0).toUpperCase() + field.slice(1)} (${editingLocale.toUpperCase()})`"
           :name="`translations.${editingLocale}.${field}`"
           :required="editingLocale === requiredLocale"
@@ -1078,10 +1085,10 @@ function previewText(field: string, locale: string): string {
             </div>
           </div>
 
-          <!-- CroutonPagesEditorBlockEditorWithPreview (block editor with preview toggle) -->
+          <!-- CroutonPagesEditorBlockEditorWithPreview (block editor with preview toggle) — fills the input's height, min 350px (#4091) -->
           <div
             v-else-if="getFieldComponent(field) === 'CroutonPagesEditorBlockEditorWithPreview'"
-            class="h-[500px] min-h-[350px] max-h-[600px]"
+            class="flex-1 min-h-[350px]"
           >
             <CroutonPagesEditorBlockEditorWithPreview
               :model-value="collab ? undefined : getFieldValue(field, editingLocale)"
