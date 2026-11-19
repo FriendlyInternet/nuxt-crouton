@@ -1,0 +1,38 @@
+{
+  "ts": "2026-11-19T08:53:19.905Z",
+  "flow": "fix-ci-on-failure.yml",
+  "skill": null,
+  "harness": "pi",
+  "model": "claude-sonnet-5-5",
+  "cost_usd": null,
+  "turns": null,
+  "wall_s": null,
+  "artifact_gate": "na",
+  "ci": "na",
+  "outcome": "pending",
+  "human": null,
+  "fix_rounds": null,
+  "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/44491042658",
+  "notes": null,
+  "pr": 4195,
+  "stage": "fix-ci",
+  "run_id": "44491042658",
+  "attempt": "1",
+  "workflow": "fix-ci-on-failure.yml",
+  "started_at": "2026-11-19T08:50:30Z",
+  "ended_at": "2026-11-19T08:53:19.905Z",
+  "conclusion": "success",
+  "attribution": "exact",
+  "source": "live",
+  "rule": "marker",
+  "api_calls_reason": "reset-window-changed",
+  "token": "app",
+  "produced": [
+    "commit"
+  ],
+  "produced_ids": [
+    "46723f7"
+  ],
+  "overlap": [],
+  "api_calls": null
+}
