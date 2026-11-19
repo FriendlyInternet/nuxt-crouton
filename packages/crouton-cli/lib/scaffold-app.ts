@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
-import { loadModules } from './module-registry.ts'
+import { findModuleKey, loadModules } from './module-registry.ts'
 import { findPackagesDir } from './utils/manifest-loader.ts'
 
 // crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
@@ -37,26 +37,32 @@ async function readTemplate(name: string): Promise<string> {
 
 /**
  * Resolve features list against module registry, validating each one
- * and resolving transitive dependencies.
+ * and resolving transitive dependencies to feature keys (#4291) — a manifest
+ * dependency may be a key, `@fyit/crouton-x` or bare `crouton-x`; one that
+ * matches no package is skipped with a warning.
  */
-// fallow-ignore-next-line complexity — pre-existing (unchanged by this PR); flagged only by diff-by-file scope
 function resolveFeatures(featureNames: string[], modules: Record<string, any>): string[] {
   const resolved = new Set<string>()
-  const errors: string[] = []
+  const visiting = new Set<string>()
+  const errors = featureNames.filter(name => !modules[name])
 
-  for (const name of featureNames) {
-    const mod = modules[name]
-    if (!mod) {
-      errors.push(name)
-      continue
-    }
-    // Add transitive dependencies first
-    if (mod.dependencies) {
-      for (const dep of mod.dependencies) {
-        resolved.add(dep)
+  const visit = (key: string): void => {
+    if (resolved.has(key) || visiting.has(key)) return
+    visiting.add(key)
+    for (const dep of modules[key].dependencies ?? []) {
+      const depKey = findModuleKey(dep, modules)
+      if (!depKey) {
+        consola.warn(`Feature "${key}": dependency "${dep}" matches no crouton package — skipped`)
+        continue
       }
+      visit(depKey)
     }
-    resolved.add(name)
+    visiting.delete(key)
+    resolved.add(key)
+  }
+
+  if (errors.length === 0) {
+    for (const name of featureNames) visit(name)
   }
 
   if (errors.length > 0) {

@@ -249,7 +249,7 @@ E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.
 | `/api/teams/[id]/email-logs` | GET | Admin | List email logs (filter by `type`, `status`; paginate with `limit`, `offset`) |
 | `/api/teams/[id]/email-logs/stats` | GET | Admin | Aggregate stats (total, sent, failed, pending, by type) |
 
-Logs are scoped to team member email addresses. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission.
+Both endpoints scope with `teamEmailLogScope()` (`server/utils/email-log-scope.ts`, #3546): a team sees rows with its own `organizationId` (invitations, even to non-members), never another team's, and team-less rows (verification, password reset, magic link, pre-#3546 rows) only when the recipient is a current member. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission, storing `organizationId` for invitations (both send sites pass it: `lib/auth.ts` and the resend endpoint).
 
 ### Team Settings Table
 
