@@ -66,6 +66,22 @@
         "path": "/api/teams/{teamId}/domains"
       },
       {
+        "path": "/api/teams/{teamId}/email-logs"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs/stats"
+      },
+      {
+        "path": "/api/teams/{teamId}/settings/email"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
         "path": "/api/webhooks/resend",
         "expectStatus": 405
       },
