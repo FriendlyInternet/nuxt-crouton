@@ -13,9 +13,11 @@ import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/la
 // `minWidth` so the viability gate keeps it in a roomy pane.
 //
 // Plus the ATOMIC blocks (#924 gap test): the Panel's sub-surfaces broken out so a
-// user can reassemble the native layout from blocks. They coordinate cross-pane via
-// the shared `useBookingsLayoutFilters` store (the layout tree can't wire pane↔pane
-// — see that composable + the #924 report). All take an optional `scope` config.
+// user can reassemble the native layout from blocks. List, Filters and Locations take
+// props and emit events, fed by the `bookings` layout store (#3651): a leaf names
+// `source: 'bookings'` and the scope is that source's option (`bookings#mine` with
+// `{ scope: 'personal' }`), not a block setting. Only `bookings-calendar-only` still
+// self-fetches, uses `useBookingsLayoutFilters` and takes a `scope` config (#3652).
 const layoutScopeConfig = [
   {
     name: 'scope',
@@ -66,7 +68,7 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   'bookings-list': {
     id: 'bookings-list',
     name: 'Bookings list',
-    description: 'Live list of bookings (respects the shared filter)',
+    description: 'Live list of bookings (fed by the bookings store)',
     icon: 'i-lucide-list',
     component: 'CroutonBookingsLayoutList',
     kind: 'atomic',
@@ -76,7 +78,6 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     minHeight: 240,
     sizing: { width: 'fill', height: 'fill' },
     defaultSize: 40,
-    configSchema: layoutScopeConfig,
   },
   // Atomic: the location picker (drives the shared location filter).
   'bookings-locations': {
@@ -92,9 +93,8 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     minHeight: 160,
     sizing: { width: 'fill', height: 'fill' },
     defaultSize: 25,
-    configSchema: layoutScopeConfig,
   },
-  // Atomic: the filter controls (status / location / cancelled → shared store).
+  // Atomic: the filter controls (location / cancelled → the bookings store).
   'bookings-filters': {
     id: 'bookings-filters',
     name: 'Filters',
@@ -108,7 +108,6 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     minHeight: 56,
     sizing: { width: 'fill', height: 'hug' },
     defaultSize: 25,
-    configSchema: layoutScopeConfig,
   },
 }
 
