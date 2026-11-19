@@ -67,7 +67,29 @@ test('review.yml gate steps are skipped on cancel, not run under always()', () =
 test('a no-verdict run gets the single fallback message', () => {
   const log = join(dir, 'agent-ok.log')
   writeFileSync(log, 'all good')
-  const res = spawnSync('node', [script, 'simplify', join(dir, 'nope.json'), 'no_verdict', log], { encoding: 'utf8' })
+  const res = spawnSync('node', [script, 'frontend-review', join(dir, 'nope.json'), 'no_verdict', log], { encoding: 'utf8' })
   assert.equal(res.status, 1)
   assert.match(res.stdout, /did not run \(refused, crashed or out of credit — the action reports no reason\)\. This PR is not approved; open the run, fix the cause, re-run\./)
+})
+
+// Advice never blocks: red-team, a11y and simplify only advise. frontend-review is decided by a
+// text rule (scripts/frontend-gate.mjs), so it is the only reviewer that may go red.
+test('advisory reviewers: "did not run" says it does not block; frontend-review says not approved', () => {
+  for (const r of ['red-team', 'a11y', 'simplify']) {
+    const out = run(r, join(dir, 'nope.json')).stdout
+    assert.match(out, /does not block/)
+    assert.doesNotMatch(out, /not approved/)
+  }
+  assert.match(run('frontend-review', join(dir, 'nope.json')).stdout, /not approved/)
+})
+
+test('review.yml: only frontend-review can turn the check red', () => {
+  const yml = readFileSync(new URL('../.github/workflows/review.yml', import.meta.url), 'utf8')
+  const job = name => yml.split(new RegExp(`\\n  ${name}:\\n`))[1].split(/\n  [a-z0-9-]+:\n/)[0]
+  for (const r of ['red-team', 'a11y', 'simplify']) {
+    const gate = job(r).split('\n      - ').find(s => s.includes('scripts/review-gate.mjs'))
+    assert.doesNotMatch(gate, /exit 1/, `${r} must not exit 1`)
+    assert.doesNotMatch(gate, /HIGHEST/, `${r} must not read the model's verdict line`)
+  }
+  assert.match(job('frontend-review'), /exit 1/)
 })
