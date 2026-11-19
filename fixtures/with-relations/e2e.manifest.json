@@ -1,0 +1,24 @@
+{
+  "packages": [],
+  "collections": [
+    {
+      "key": "mainCategories",
+      "heading": "Main Categories",
+      "create": { "title": "e2e category" },
+      "requiredField": "title"
+    },
+    {
+      "key": "mainProducts",
+      "heading": "Main Products",
+      "create": { "title": "e2e product" },
+      "requiredField": "title"
+    }
+  ],
+  "surfaces": [
+    {
+      "name": "relation reference-select mounts (loads options from the parent collection)",
+      "path": "/admin/{team}/relations-check",
+      "expect": { "visible": "[data-testid='relations-check'] button" }
+    }
+  ]
+}

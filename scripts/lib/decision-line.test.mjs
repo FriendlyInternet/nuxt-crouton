@@ -1,7 +1,7 @@
 // node --test scripts/lib/decision-line.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDecision, parseOverride, decisionLine, appendDecision } from './decision-line.mjs'
+import { parseDecision, parseOverride, decisionLine, appendDecision, isOwnerVoice } from './decision-line.mjs'
 
 // The owner is a login, not a role (#4168): `pmcp` unless `owner` says otherwise.
 const owner = { authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp' }
@@ -79,4 +79,18 @@ test('#3341 relayed owner answers (COLLABORATOR account) are recorded', () => {
   assert.equal(parseDecision({ ...c, body: ans + 'not ok: X' }), null)
   assert.equal(parseDecision({ ...c, userType: 'Bot', body: 'Decision: Y' }), null)
   assert.equal(parseDecision({ ...c, body: "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _status update_\n\nDecision: Y" }), null)
+})
+
+// covers: T9
+test('#4192 isOwnerVoice: the owner typed, or a chat relaying the owner\'s answer/decision; never a status note', () => {
+  const me = { userType: 'User', userLogin: 'pmcp' }
+  const head = (ctx) => `> 🤖 **Claude Code** · interactive agent · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\nA`
+  assert.equal(isOwnerVoice({ ...me, body: 'A — go' }), true, 'typed')
+  assert.equal(isOwnerVoice({ ...me, body: head('owner answer in chat 2026-11-17') }), true, 'relayed answer')
+  assert.equal(isOwnerVoice({ ...me, body: '> 🤖 **Claude Code** · owner decision\n\nA' }), true, 'owner decision header')
+  assert.equal(isOwnerVoice({ ...me, body: "> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from `@pmcp`'s account (not Maarten) · _claim_\n\n🪪" }), false, 'claim note')
+  assert.equal(isOwnerVoice({ ...me, body: head('status update') }), false, 'status note')
+  assert.equal(isOwnerVoice({ userType: 'User', userLogin: 'someone', body: 'A' }), false, 'non-owner')
+  assert.equal(isOwnerVoice({ userType: 'Bot', userLogin: 'pmcp', body: 'A' }), false, 'bot')
+  assert.equal(isOwnerVoice({ userType: 'User', userLogin: 'Boss', body: 'A' }, 'boss'), true, 'owner override, case-insensitive')
 })

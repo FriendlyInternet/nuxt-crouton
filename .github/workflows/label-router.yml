@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     env:
       ISSUE: ${{ github.event.issue.number }}
       LABEL: ${{ github.event.label.name }}
