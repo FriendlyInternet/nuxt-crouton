@@ -120,7 +120,7 @@ function config(roles?: BaseRolesConfig) {
   const access = buildAccessControl({ actions: DECLARED, roles })
   setAccessControl(access)
   setAuthInstance(betterAuth({
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: 'https://velo.pmcp.dev',
     plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)]

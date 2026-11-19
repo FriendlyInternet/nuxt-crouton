@@ -64,7 +64,7 @@ beforeAll(async () => {
   const access = buildAccessControl({ actions: { 'pages:edit': { label: 'permissions.pagesEdit' } } })
   setAccessControl(access)
   setAuthInstance(betterAuth({
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [] }),
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: 'https://velo.pmcp.dev',
     plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)]

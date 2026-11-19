@@ -34,6 +34,7 @@ export const TEAM_ADMIN_PAGES: readonly TeamAdminPageDef[] = [
   { key: 'settings', label: 'teams.teamSettings', fallback: 'Settings', icon: 'i-lucide-settings', path: '/team/settings', can: 'team:manage' },
   { key: 'members', label: 'teams.members', fallback: 'Members', icon: 'i-lucide-users', path: '/team', can: 'team:manage', match: 'exact' },
   { key: 'invitations', label: 'teams.invitations', fallback: 'Invitations', icon: 'i-lucide-mail', path: '/team/invitations', can: 'team:manage' },
+  { key: 'roles', label: 'teams.rolesScreen.tab', fallback: 'Roles', icon: 'i-lucide-shield-check', path: '/team/roles', can: 'team:manage' },
   { key: 'look-and-feel', label: 'teams.lookAndFeel', fallback: 'Look and feel', icon: 'i-lucide-palette', path: '/team/look-and-feel', can: 'site:manage' },
   { key: 'site-info', label: 'teams.siteInfo.tab', fallback: 'Site info', icon: 'i-lucide-info', path: '/team/site-info', can: 'site:manage' },
   { key: 'translations', label: 'navigation.translations', fallback: 'Translations', icon: 'i-lucide-languages', path: '/translations', can: 'translations:manage', match: 'prefix' },

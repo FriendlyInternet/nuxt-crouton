@@ -79,6 +79,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 | `useCan(action)` | May the signed-in member do `action` in the current team? `ComputedRef<boolean>`, SSR-safe (#4104) |
 | `useCan(action, { server: false })` | Same, browser only — for shared-cached public pages, so no visitor's answer lands in the cached HTML (#4105) |
 | `useCanAnswers()` | Shared state of every `useCan` answer (`{ [teamId]: { [action]: boolean } }`); `useTeam()`'s `isAdmin` / `canManageMembers` / `canInviteMembers` read `team:manage` from it, else the owner/admin default (#4105) |
+| `useTeamRoles()` | The current team's own roles (#4106): `roles` (`{ id, role, actions }`), `grantable` (actions you hold), `refresh` / `create(name, actions)` / `update(name, actions)` / `remove(name)`, each `{ data, error }` with Better Auth's `error.code`. Client-only (call `refresh` in `onMounted`) |
 
 ## Middleware
 
@@ -166,7 +167,7 @@ An action may not reuse one of Better Auth's own organization permission names (
 to `runtimeConfig.public.crouton.auth`): base role → actions. A role listed replaces that role's
 defaults; a role left out keeps them. Defaults: owner and admin get **every declared action** (a newly
 declared one too, no config needed), member none. The owner must keep `team:manage` — startup fails
-otherwise (`server/plugins/permissions-check.ts`). Only `owner` / `admin` / `member` are base roles.
+otherwise (`server/plugins/permissions-check.ts`). Only `owner` / `admin` / `member` are base roles; a team adds its own roles on top (see **Team roles** below).
 
 ```typescript
 // nuxt.config.ts
@@ -221,6 +222,19 @@ crouton-auth (`CROUTON_DEFAULT_ACTIONS`) is `team:manage` (the owner can never l
 `member` gets none by default. Ownership itself (demote/remove the owner, transfer/delete the team) stays
 role-based (`requireTeamOwner`). Package server routes ask `requireCan(event, action)` / `can()`, never a role name (#4108); `domains/*` uses `team:domains`, so admins may manage domains (`tests/unit/server/route-actions.test.ts` lists every route and its action). Tests: `tests/unit/server/permissions*.test.ts`, `can-endpoint.test.ts`,
 `tests/unit/composables/useCan.test.ts`.
+
+**Team roles** (#4106): Better Auth dynamic access control is on (`dynamicAccessControl: { enabled: true }`
+in `buildOrganizationConfig`, and on `organizationClient`). A team's own roles live in the `organizationRole`
+table (`server/database/schema/auth.ts`; every app with a `member` table has its own `NNNN_team_roles`
+migration, checked by `scripts/team-roles-migrations.test.mjs`) and count everywhere `can()` asks.
+`shared/utils/team-roles.ts` maps ticked actions ↔ the stored permission: `admin:access` is never stored
+(it comes with any other action), and a role with `team:manage` also stores Better Auth's
+`member`/`invitation`/`ac` rights so its own invite / change-role / role endpoints work. Better Auth enforces
+the rest: base roles can't be created, edited or deleted; a role a member still has can't be deleted
+(`ROLE_IS_ASSIGNED_TO_MEMBERS`); you can only give a role actions you hold; the last owner can't be demoted.
+The name can't change after creation (members hold it by name). `MemberRole` is a base role or any team role
+name (`BaseMemberRole` for the three). Screen: crouton-admin `/admin/[team]/team/roles`; the Members picker
+lists team roles too. Tests: `tests/unit/server/team-roles.test.ts`, `tests/unit/shared/team-roles.test.ts`.
 
 ### Public Team Resolution
 

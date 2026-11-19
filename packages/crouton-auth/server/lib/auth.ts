@@ -1271,7 +1271,10 @@ export function buildOrganizationConfig(
     // Roles carry crouton actions on top of Better Auth's own statements (#4104).
     // A custom `roles` map replaces Better Auth's defaults, so buildAccessControl
     // merges ownerAc/adminAc/memberAc into each role.
-    ...(access && { ac: access.ac, roles: access.roles }),
+    // Dynamic access control (#4106): each team can add its own roles (stored in
+    // `organizationRole`), which Better Auth's hasPermission — and so can() —
+    // loads per team. It needs `ac`, so it is tied to `access`.
+    ...(access && { ac: access.ac, roles: access.roles, dynamicAccessControl: { enabled: true } }),
 
     // Organization creation control
     allowUserToCreateOrganization: getAllowUserToCreateOrganization(),

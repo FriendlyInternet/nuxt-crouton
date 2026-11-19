@@ -57,7 +57,7 @@ beforeEach(() => {
   for (const key of Object.keys(db)) delete db[key]
   Object.assign(db, {
     user: [], session: [], account: [], verification: [],
-    organization: [], member: [], invitation: [], passkey: [], twoFactor: []
+    organization: [], member: [], invitation: [], organizationRole: [], passkey: [], twoFactor: []
   })
   sent.length = 0
 })
