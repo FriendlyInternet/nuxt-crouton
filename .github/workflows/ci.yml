@@ -50,6 +50,10 @@ jobs:
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
+      # docs/** or packages/** changed (#3166): runs the doc checks, even on a docs-only PR.
+      docs: ${{ steps.filter.outputs.docs }}
+      # Run the scripts/*.test.mjs suites: code changes or any CI-file change (#4139).
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,6 +65,7 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
@@ -71,7 +76,7 @@ jobs:
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
-            files="$(git show --name-only --pretty=format: HEAD)"
+            files="$(node scripts/ci-detect.mjs --list-files)"
           fi
           echo "changed files:"; echo "$files" | sed 's/^/  /'
           FILES="$files" node scripts/ci-detect.mjs
@@ -83,7 +88,8 @@ jobs:
   prepare:
     name: Build packages
     needs: changes
-    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
+    # Also on a docs-only PR (stage none): the doc checks below need installed packages (#3166).
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) || needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -104,6 +110,12 @@ jobs:
       # Needs installed packages, so it cannot live in the bare-Node set (scripts/bare-node-imports.test.mjs).
       - name: Run scripts/*.deps-test.mjs
         run: node --test scripts/*.deps-test.mjs
+
+      # #3166: names (CLI commands + flags, components, props), schema field types and code-block
+      # syntax in docs vs the code. Needs typescript, so it lives here; it exits non-zero if it cannot
+      # run. Report-only for now; add --strict once the rebuilt sections pass.
+      - name: Check doc claims (report-only)
+        run: node scripts/check-doc-claims.mjs
 
       - name: Check package dist ships no test files
         run: node scripts/check-dist-no-tests.mjs
@@ -553,7 +565,8 @@ jobs:
       # The pure scripts/*.mjs helpers carry `node --test` contracts next to them — most
       # load-bearingly the #1685 WS4 loop-guard. Node core only, so no install.
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
-        if: env.IS_CODE == 'true'
+        # Also on a workflow-only PR (#4139): #4135 broke a scripts/lib suite with nothing red.
+        if: needs.changes.outputs.scripts == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
         run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 
@@ -785,6 +798,85 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: node scripts/fallow-audit.mjs --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
 
+  # The approved plan's Test lines, run by CI itself (#3195, epic #3193). NO job-level `if:` — a
+  # skipped job reads as passing in the gate (#2089); the script decides inside and exits 0 with a
+  # summary when this is not a work-* PR or the issue has no approved plan. The judge (script +
+  # parser) comes from the DEFAULT branch, so a PR cannot edit what checks it; the commands run in
+  # the PR head checkout with no token in their environment. One sticky `<!-- plan-checks -->`.
+  plan-checks:
+    name: Plan checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      # Bootstrap only: until #3195 is on the default branch there is no trusted judge to run.
+      - name: Is the judge on the default branch?
+        id: judge
+        run: |
+          if [ -f trusted/scripts/plan-checks.mjs ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::plan-checks: no judge on the default branch yet (bootstrap) — nothing checked"; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Find the approved plan
+        id: plan
+        if: steps.judge.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node trusted/scripts/plan-checks.mjs fetch --out "$RUNNER_TEMP/plan.json"
+      - name: Setup pnpm
+        if: steps.plan.outputs.needs_install == 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Install dependencies
+        if: steps.plan.outputs.needs_install == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      # --ignore-scripts skips better-sqlite3's native build; a plan test that opens a real
+      # SQLite DB dies on "Could not locate the bindings file" without it (as in the test job).
+      - name: Build better-sqlite3's native binding
+        if: steps.plan.outputs.needs_install == 'true'
+        run: pnpm rebuild better-sqlite3
+      # A plan Test line that starts a Nuxt app (nuxt prepare in a POC) needs every @fyit/* dist (#4074).
+      - uses: ./.github/actions/warm-packages
+        if: steps.plan.outputs.needs_install == 'true'
+      - name: Run the plan's Test lines (no token)
+        if: steps.plan.outputs.has_plan == 'true'
+        run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
+      - name: Post the result table and judge
+        if: always() && steps.judge.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$RUNNER_TEMP/results.json" ] || echo '[]' > "$RUNNER_TEMP/results.json"
+          node trusted/scripts/plan-checks.mjs report --plan "$RUNNER_TEMP/plan.json" --results "$RUNNER_TEMP/results.json"
+
+  # (#4180) A stray conflict-marker line sat on main for months (#1373). No `if:` on purpose:
+  # node-checks skips docs/POC/root-file PRs, and a marker can land in any file.
+  conflict-markers:
+    name: Conflict markers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: node scripts/check-conflict-markers.mjs
+
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job
   # failed/was cancelled, and passes when every job either succeeded or was skipped.
@@ -794,7 +886,7 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, typecheck-packages, build-kassa, compile-check,
-            test, package-check, node-checks, removed-tests, actionlint, fallow-audit]
+            test, package-check, node-checks, removed-tests, actionlint, fallow-audit, plan-checks, conflict-markers]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

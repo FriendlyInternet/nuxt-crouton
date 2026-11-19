@@ -7,8 +7,8 @@
 // nothing could exercise it before merge. This module ports the DECISION logic (not the git/`gh`
 // side effects, which stay in the workflow) into pure, unit-testable functions.
 //
-// `session`/`plan` are wired via the CLI (#1904); the type-error functions (#3248) are not wired
-// yet (#3249, polish list).
+// `session`/`plan`/`typecheck` are wired via the CLI (#1904, #3249); ticketing the pre-existing
+// errors `typecheck` finds lives in preexisting-type-tickets.mjs (it has the `gh` side effects).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -190,8 +190,11 @@ export function readFileList(p) {
 //
 //   pi-finish.mjs session <dir>              → the newest *.jsonl path, or nothing
 //   pi-finish.mjs plan <committed-files.txt> → APP_DIR= / PKG_LOGIC= / TEST_FILES= / TESTS_MISSING=
+//   pi-finish.mjs typecheck <acc.log> <tc-exit> <app-dir> <committed.txt> <pr-files.txt> <groups.json>
+//     → ACCEPT= / ACCEPT_MSG= / IN_DIFF= / NOT_IN_DIFF=, and writes every not-in-diff group (uncapped,
+//       sorted) to <groups.json> — the 3-ticket cap applies later, to NEW tickets only (#3249).
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [cmd, arg, arg2] = process.argv.slice(2);
+  const [cmd, arg, arg2, arg3, arg4, arg5, arg6] = process.argv.slice(2);
   try {
     if (cmd === 'session') {
       process.stdout.write(`${resolveSession(arg) || ''}\n`);
@@ -206,14 +209,34 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         + `TESTS_MISSING=${missing ? 1 : 0}\n`
         + `PKG_LOGIC_FILES=${pkgLogic.join(',')}\n`
       );
+    } else if (cmd === 'typecheck') {
+      // A missing log is a fault (the typecheck was said to have run), never a silent pass.
+      if (!arg || !fs.existsSync(arg)) throw new Error(`typecheck log not found: ${arg || '<none>'}`);
+      const r = classifyTypeErrors({
+        logText: fs.readFileSync(arg, 'utf8'),
+        tcExit: arg2 === '' || arg2 === undefined ? undefined : Number(arg2),
+        appDir: arg3 || '',
+        committedFiles: readFileList(arg4),
+        prFiles: readFileList(arg5),
+      });
+      const { toOpen } = groupPreexisting(r.notInDiff, { maxTickets: Infinity });
+      if (arg6) fs.writeFileSync(arg6, `${JSON.stringify(toOpen, null, 2)}\n`);
+      process.stdout.write(
+        `ACCEPT=${r.acceptance}\n`
+        + `ACCEPT_MSG=${String(r.message).replace(/\n/g, ' ')}\n`
+        + `IN_DIFF=${r.inDiff.length}\n`
+        + `NOT_IN_DIFF=${r.notInDiff.length}\n`
+      );
+      for (const e of r.inDiff.slice(0, 15)) console.error(`${e.file}(${e.line},${e.col}): error ${e.code}: ${e.text}`);
     } else {
-      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt> [<pr-files.txt>]');
+      console.error('usage: pi-finish.mjs session <dir> | plan <committed-files.txt> [<pr-files.txt>] | typecheck <acc.log> <tc-exit> <app-dir> <committed.txt> <pr-files.txt> <groups.json>');
       process.exit(2);
     }
   } catch (e) {
     // Even an unexpected fault must not take the step down: warn, emit the safe defaults, exit 0.
     console.error(`::warning::pi-finish ${cmd}: ${e.message}`);
     if (cmd === 'plan') process.stdout.write('APP_DIR=\nPKG_LOGIC=0\nTEST_FILES=0\nTESTS_MISSING=0\n');
+    else if (cmd === 'typecheck') process.stdout.write('ACCEPT=neutral\nACCEPT_MSG=typecheck verdict unavailable — not verified\nIN_DIFF=0\nNOT_IN_DIFF=0\n');
     else process.stdout.write('\n');
   }
 }

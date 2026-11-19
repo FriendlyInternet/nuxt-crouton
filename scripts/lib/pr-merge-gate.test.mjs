@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly, changedPaths } from './pr-merge-gate.mjs'
+import { decideLeafMerge, skipBeforeReads, applySharedCodeHold, decideReview, decideV1, mergeDecisionCheck, withoutMergeDecision, shouldEnableAuto, canMergeNow, isIncubatorOnly, changedPaths, gateMergeDecision, checksHeldNote } from './pr-merge-gate.mjs'
 import { readFileSync } from 'node:fs'
 import { ownerMergeGo } from './owner-merge-go.mjs'
 
@@ -497,4 +497,59 @@ test('decideLeafMerge unchanged for owner hold on a non-v1 base', () => {
   const r = decideLeafMerge({ draft: false, authorIsPipeline: true, baseRef: 'epic/12-slug', headRef: 'work-5', labels: [], go: { go: false },
     ownerHold: { kind: 'final', at: HOLD_AT }, headReview: { kind: 'final', at: HOLD_AT }, headSha: SHA, files: ['scripts/a.mjs'], ciGate: 'success', mergeableState: 'clean' })
   assert.equal(r.code, 'no-review')
+})
+
+// ── #4038: the merge-on-approval gate waits for green ──────────────────────────
+const gatePr = (o = {}) => ({ number: 3942, state: 'open', merged: false, base: { ref: 'epic/3193-plan-tests-become-a-checklist-of-command' }, ...o })
+const gate = (o = {}) => gateMergeDecision({ pr: gatePr(), linkReason: 'body reference', ciGate: 'success', red: [], issue: 3195, ...o })
+
+test('#4038 T1: #3942 facts (CI Gate + Actionlint failed) → no merge, both checks named', () => {
+  const d = gate({ ciGate: 'pending', red: [{ name: 'CI Gate', conclusion: 'failure' }, { name: 'Actionlint workflows', conclusion: 'failure' }] })
+  assert.equal(d.merge, false)
+  assert.equal(d.checks, true)
+  assert.match(d.skip, /CI Gate is failure/)
+  assert.match(d.skip, /Actionlint workflows is failure/)
+})
+
+test('#4038 T1: CI Gate success and nothing red → merge', () => {
+  assert.deepEqual(gate(), { merge: true })
+})
+
+test('#4038 T1: CI Gate pending / missing / other with nothing red → no merge, says why', () => {
+  assert.match(gate({ ciGate: 'pending' }).skip, /CI Gate is still running/)
+  assert.match(gate({ ciGate: 'missing' }).skip, /CI Gate has not reported/)
+  assert.match(gate({ ciGate: 'neutral' }).skip, /CI Gate is neutral/)
+  for (const ciGate of ['pending', 'missing', 'neutral']) assert.equal(gate({ ciGate }).merge, false)
+})
+
+test('#4038 T1: CI Gate success but another check red → no merge naming it', () => {
+  const d = gate({ red: [{ name: 'Actionlint workflows', conclusion: 'failure' }] })
+  assert.equal(d.merge, false)
+  assert.match(d.skip, /Actionlint workflows is failure/)
+})
+
+test('#4038 T1: base main / no link → no merge, today\'s skip text, not a check hold', () => {
+  const main = gate({ pr: gatePr({ base: { ref: 'main' } }) })
+  assert.equal(main.merge, false)
+  assert.equal(main.skip, '#3942 — base `main` is not an `epic/*` branch')
+  assert.ok(!main.checks)
+  const nolink = gate({ linkReason: null })
+  assert.equal(nolink.merge, false)
+  assert.match(nolink.skip, /no link to this issue .*Refs #3195/)
+  assert.ok(!nolink.checks)
+})
+
+test('#4038 T1: a closed or merged PR is passed over silently', () => {
+  assert.deepEqual(gate({ pr: gatePr({ state: 'closed' }) }), { merge: false })
+  assert.deepEqual(gate({ pr: gatePr({ merged: true }) }), { merge: false })
+})
+
+test('#4038 T1: checksHeldNote keeps the ok, lists the checks, never @mentions', () => {
+  const b = checksHeldNote(3195, ['#3942 — CI Gate is still running'])
+  assert.match(b, /<!-- pipeline-note -->/)
+  assert.match(b, /pi\.dev harness/)
+  assert.match(b, /your `ok` is kept/)
+  assert.match(b, /- #3942 — CI Gate is still running/)
+  assert.match(b, /reply `ok` again once the checks are green/)
+  assert.doesNotMatch(b, /@\w/)
 })

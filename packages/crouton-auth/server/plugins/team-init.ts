@@ -35,7 +35,7 @@ export default defineNitroPlugin(async () => {
   // Log default team configuration
   if (teams.defaultTeamSlug) {
     console.log(`🍞 crouton:auth Default team enabled`)
-    console.log(`🍞 crouton:auth Default team "${appName}" (slug: ${teams.defaultTeamSlug}) will be created on first user signup`)
+    console.log(`🍞 crouton:auth Default team "${appName}" (slug: ${teams.defaultTeamSlug}) will be created on the first sign-up or sign-in`)
   }
 
   // Log combined behavior if both are set

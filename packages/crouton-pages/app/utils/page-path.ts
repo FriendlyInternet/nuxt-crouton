@@ -73,6 +73,12 @@ export function buildSlugPath(
 export interface BuildPagePathOptions {
   /** When true (custom domain / locale routing mode) the team slug is omitted. */
   hideTeamInUrl: boolean
+  /**
+   * When true (team mode, one-locale apps — `croutonPages.hideLocaleInUrl`) the
+   * locale segment is omitted: `/acme/about`, home `/acme` (or `/` with
+   * `hideTeamInUrl`). Off/undefined keeps today's `/{team}/{locale}/...`.
+   */
+  hideLocaleInUrl?: boolean
   team: string | null
   locale: string
   /** Nested slug path, e.g. "events/summer-fair" (no leading/trailing slash). */
@@ -80,11 +86,61 @@ export interface BuildPagePathOptions {
 }
 
 /**
- * Build the full public path: `/{team?}/{locale}/{slugPath}`.
- * Trailing slashes are trimmed; the locale prefix is always present.
+ * Build the full public path: `/{team?}/{locale?}/{slugPath}`.
+ * Trailing slashes are trimmed; the locale prefix is present unless
+ * `hideLocaleInUrl`. With both team and locale hidden, home is `/`.
  */
 export function buildPagePath(opts: BuildPagePathOptions): string {
   const teamPrefix = opts.hideTeamInUrl ? '' : `/${opts.team}`
-  const prefix = `${teamPrefix}/${opts.locale}`
-  return `${prefix}/${opts.slugPath || ''}`.replace(/\/+$/, '') || prefix
+  const prefix = opts.hideLocaleInUrl ? teamPrefix : `${teamPrefix}/${opts.locale}`
+  return `${prefix}/${opts.slugPath || ''}`.replace(/\/+$/, '') || prefix || '/'
+}
+
+/**
+ * The admin editor's fallback "open in public" link, used when the page isn't
+ * in the link resolver's list yet. With the setting off it is exactly the
+ * historic hand-built string — including the trailing slash for an empty slug
+ * (`/acme/en/`), which `buildPagePath` would trim.
+ */
+export function buildEditorFallbackPath(opts: {
+  team: string
+  locale: string
+  slug: string
+  hideLocaleInUrl?: boolean
+}): string {
+  if (!opts.hideLocaleInUrl) {
+    return opts.slug ? `/${opts.team}/${opts.locale}/${opts.slug}` : `/${opts.team}/${opts.locale}/`
+  }
+  return buildPagePath({
+    hideTeamInUrl: false,
+    hideLocaleInUrl: true,
+    team: opts.team,
+    locale: opts.locale,
+    slugPath: opts.slug,
+  })
+}
+
+/**
+ * Base path for a collection binder's item links (e.g. `/acme/en/locations`).
+ * With the setting off it is exactly the historic hand-built string (never
+ * trimmed).
+ */
+export function buildBinderBasePath(opts: {
+  hideTeamInUrl: boolean
+  hideLocaleInUrl?: boolean
+  team: string | null | undefined
+  locale: string
+  slug: string
+}): string {
+  if (!opts.hideLocaleInUrl) {
+    if (opts.hideTeamInUrl) return `/${opts.locale}/${opts.slug}`
+    return `/${opts.team}/${opts.locale}/${opts.slug}`
+  }
+  return buildPagePath({
+    hideTeamInUrl: opts.hideTeamInUrl,
+    hideLocaleInUrl: true,
+    team: opts.team ?? null,
+    locale: opts.locale,
+    slugPath: opts.slug,
+  })
 }

@@ -120,6 +120,7 @@ the run (`continue-on-error` + the script always exits 0).
 - **Storage:** orphan branch `pipeline-data`, one file per run: `records/<yyyy-mm-dd>/<run_id>-<attempt>.json`
   (contents API; distinct paths cannot conflict, 409/422 retried 3×). Nothing lands on main or epic branches.
 - **Also on `pipeline-data`:** `metrics/` — raw run/job history and `metrics/latest.json`, written hourly by `pipeline-metrics.yml` (#3679, see `scripts/metrics/README.md`).
+- **Also on `pipeline-data`:** `epics/<N>.json` — one numbers record per epic (runs, silent runs, rounds per child, time to main, owner touches), written by `postmortem.yml` `post` (#3253, `scripts/lib/epic-numbers.mjs`; overwritten on a hand retry via `writeRecord({ overwrite: true })`), read by the 10-epic review (#3254).
 - **What counts as output:** an agent-written comment, a review verdict, or a commit on the work branch
   inside the run's window. None → `produced: ["nothing"]` (never skipped).
 - **What does not:** the workflow's own notes. Every one carries the hidden marker
@@ -129,7 +130,10 @@ the run (`continue-on-error` + the script always exits 0).
 - **Overlap:** agent comments carry no run id, so two runs of the same workflow on the same issue/PR with
   intersecting windows are `attribution: "shared"` (listing each other in `overlap[]`); a comment that
   embeds `/actions/runs/<id>` is credited exactly to that run. Overlap is computed against records already
-  written, so the second run to finish sees the first.
+  written AND the workflow's runs still in flight, so both runs of a pair are flagged. A run counts as the
+  same ticket when its title names the issue/PR as `#N` (every dispatched run; not comment-triggered runs,
+  whose title is the issue's free text) or, for comment-triggered runs, equals the issue's title;
+  branch/PR-list matching is only a fallback, since agent runs all run on `main` (#3364).
 - **API usage:** `api_calls` = `GET /rate_limit` remaining at start minus at end (App token). `null` with
   `api_calls_reason` when the hourly window rolled over (`reset-window-changed`) or a read failed.
   Approximate — concurrent runs share the allowance. The start read is a step inside the agent job; the

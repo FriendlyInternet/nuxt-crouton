@@ -206,7 +206,7 @@ jobs:
                     hasOpenChildren = g.some((x) => x.state === 'open')
                   } catch (e) { core.warning(`grandchild probe #${s.number}: ${e.message}`) }
                 }
-                return { number: s.number, state: s.state, body: s.body || '', hasOpenChildren }
+                return { number: s.number, state: s.state, body: s.body || '', labels: (s.labels || []).map((l) => l.name), hasOpenChildren }
               }))
             } catch (e) {
               // Fail OPEN into normal classification — a gather glitch must not stop the pipeline.
@@ -312,6 +312,10 @@ jobs:
           echo "pipeline models — decompose=$DECOMPOSE (from .claude/pipeline-models.json)"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
+      # #3846: the decomposer prompt gets `epic_src` = the epic branch as a READ-ONLY second checkout
+      # (scripts/epic-checkout.mjs: a git worktree under $RUNNER_TEMP, resolved from the issue body,
+      # because this step runs before the context step below). This job itself stays on main; the
+      # value is blank for a brand-new epic (main is its code).
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade.
       - id: pi
@@ -357,7 +361,7 @@ jobs:
           if [ "${PIPELINE_MODE:-}" = "event-driven" ]; then
             # Persona: .claude/agents/pi-decomposer.md (+ contract + shared dedup rule in
             # _pipeline-rules.md), rendered by scripts/pipeline-prompt.mjs (#2431).
-            node scripts/pipeline-prompt.mjs pi-decomposer --var "issue=$ISSUE" > "$PROMPT_FILE"
+            node scripts/pipeline-prompt.mjs pi-decomposer --var "issue=$ISSUE" --var "epic_src=$(node scripts/epic-checkout.mjs --epic "$ISSUE" --dest "$RUNNER_TEMP/epic-src")" > "$PROMPT_FILE"
           else
             cat .claude/agents/pi-operating-contract.md > "$PROMPT_FILE"
             printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"

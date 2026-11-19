@@ -20,6 +20,7 @@ export function useCroutonEventTracker() {
   // which crouton doesn't install — so every app extending this package 500'd on SSR (#2602).
   const { user } = useSession()
   const config = useRuntimeConfig()
+  const appConfig = useAppConfig()
   // Get team context at setup time to avoid calling composables in async callbacks
   const { getTeamId } = useTeamContext()
 
@@ -152,7 +153,12 @@ export function useCroutonEventTracker() {
       changes,
       metadata: {
         // Optional: Add more context here
-        userAgent: import.meta.client ? navigator.userAgent : undefined
+        userAgent: import.meta.client ? navigator.userAgent : undefined,
+        // Readable record title, so the activity log can say "Pages · Accueil" instead of a raw id
+        itemTitle: pickRecordTitle(
+          result || data || beforeData,
+          (appConfig.croutonCollections as Record<string, any> | undefined)?.[collection]?.display?.title
+        )
       }
     }
 

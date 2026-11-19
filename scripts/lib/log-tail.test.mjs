@@ -135,3 +135,36 @@ test('logTail: strips ANSI colour codes, real and rendered', () => {
   const out = logTail(`${ts}\x1b[36;1mpnpm test\x1b[0m\n${ts}^[[36;1mrun\n${ts}##[error]x`)
   assert.equal(out.text, 'pnpm test\nrun\n##[error]x')
 })
+
+// PR #4148, Node checks job (run 44375947788): the note's summary read "stopped at: # Subtest: a
+// Stopped-at line not in the log → rejected; the real RollupError line → ok" — the NAME of a
+// passing test of this very file — and the real failure came third.
+const PR4148 = [
+  '2026-11-18T19:04:01.0000000Z # Subtest: a Stopped-at line not in the log → rejected; the real RollupError line → ok',
+  '2026-11-18T19:04:01.0000000Z ok 1013 - a Stopped-at line not in the log → rejected; the real RollupError line → ok',
+  '2026-11-18T19:04:02.0000000Z # Subtest: 7: run titles match the run-name in each workflow file',
+  '2026-11-18T19:04:02.0000000Z not ok 1217 - 7: run titles match the run-name in each workflow file',
+  '2026-11-18T19:04:03.0000000Z not ok 2361 - 3982-6957996134.json: want choice:A # TODO known gap',
+  '2026-11-18T19:04:03.0000000Z not ok 2369 - 4036-non-owner-ok.json: want ignore # TODO known gap',
+  '2026-11-18T19:04:04.0000000Z ok 2400 - skipped thing # SKIP no install',
+  '2026-11-18T19:04:05.0000000Z ##[error]Process completed with exit code 1.',
+].join('\n')
+
+test('failingLines: PR #4148 → the one failing test, not passing tests whose names mention an error', () => {
+  assert.deepEqual(failingLines(PR4148).map(l => l.text), ['not ok 1217 - 7: run titles match the run-name in each workflow file'])
+})
+
+test('failingLines: a known-gap (# TODO) or skipped test is not a cause', () => {
+  assert.deepEqual(failingLines('not ok 5 - x # TODO known gap\nnot ok 6 - y # SKIP\nnot ok 7 - z'), [{ line: 3, text: 'not ok 7 - z' }])
+})
+
+test('failingLines: a failing test whose NAME contains "# TODO" still counts (the runner prints it as \\#)', () => {
+  assert.equal(failingLines('not ok 8 - handles a \\# TODO marker in a title').length, 1)
+})
+
+// PR #4150, Node checks job (run 44401089717), step "Inline workflow block size": the only line
+// naming the failure starts with "FAIL: " — the note showed three passing tests instead.
+test('failingLines: PR #4150 → the "FAIL: …" line of a repo check script', () => {
+  const raw = 'compared against base d353253\nFAIL: .github/workflows/preview-screenshot.yml › capture › capture › run: grew from 53 to 56 lines — move logic out\nchecked 276 blocks, 29 baselined\n##[error]Process completed with exit code 1.'
+  assert.deepEqual(failingLines(raw).map(l => l.line), [2])
+})

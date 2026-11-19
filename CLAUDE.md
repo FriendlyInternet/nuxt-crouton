@@ -41,6 +41,7 @@ Use TodoWrite for 3+ step tasks *when the harness exposes it* (one `in_progress`
 See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
 
 - **Hand off** by labelling the ticket `work-this` — the one label a human applies; `delegate*` are bot-only hand-offs (#3208) (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Claim** what you drive (#3996): `node scripts/claim.mjs claim <epic> --name <nick>`; `who <n>` / `release <n>`. Your chat id is printed at session start (`CROUTON_CHAT_ID`). The `require-unclaimed` hook refuses `work-this`, removing `status:blocked`, and `**Worker:**` comments on another chat's claimed ticket (a child counts through its epic), and `work-this` on a ticket with an open `Blocked-by:`. A claim ends when the issue closes, on `release`, or after 24 h with nothing from that chat on it.
 - **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
 - **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
 
@@ -69,10 +70,10 @@ Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and fol
 Work lands via a PR on a feature branch (`/commit`, `(#NN)`, `Closes #NN` in the PR body). Issue rules, links, typed brief, mentions: `AGENTS.md` → *Issues* and the `owner-brief` skill (the `require-owner-brief` hook enforces the brief; it also holds the `@`-mention detail).
 
 **Agent comments LEAD with a 🤖 provenance header** (`require-comment-provenance` hook), by who the comment posts as:
-- interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping.
+- interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · chat <id> · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping; `<id>` is the chat id printed at session start (the hook requires it, #3996).
 - pipeline (bot account): `> 🤖 **Claude Code** · agent pipeline (CI) · _<context>_` — no human disclaimer.
 
-**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop.
+**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop — except the owner's first answer to a worker's open question (a `worker-question` reply record, #4192), which re-runs the worker whether typed or relayed by a chat whose header says `owner answer`/`owner decision`.
 
 ### Task Decomposition Pipeline (`/task-decompose`)
 
@@ -91,7 +92,7 @@ its sub-issues is one coherent PR with the commits kept separate.
 
 ### Issue Status Updates
 - Move the issue through its states: open → in-progress → closed (via the PR's `Closes #NN` on merge)
-- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856); an epic whose branch has drifted from main gets a fresh one with `/fresh-branch` (#3881).
+- **At epic close**: after the `## 🧪 Verify the whole thing` rollup and **before** closing, run the **`postmortem`** skill — a retro (what went well / what was hard / improvement proposals) that mints `workflow` issues so the loop tightens over time (epic #403). The pipeline now runs it itself when an epic is done (`postmortem.yml`, #3425) and adds the epic's run numbers plus the ticket steps the diff dropped (#3253); An epic then closes by itself once it is merged to main, its test card has your `ok` (or it never got one) and its postmortem is posted (`scripts/epic-auto-close.mjs`, the `auto-close` job in `postmortem.yml`, #3012); `/close-epic` stays as the fallback (#856); an epic whose branch has drifted from main gets a fresh one with `/fresh-branch` (#3881).
 - `writeups/PROGRESS_TRACKER.md` is an **optional** phase-level rollup, not the per-task tracker — update it only when keeping a phase summary current.
 
 ### Multi-Agent Continuity
@@ -209,15 +210,22 @@ session catches what the PR would, not after:
    --filter './apps/*' --filter @fyit/crouton-cli typecheck`; CI runs it in full only on a push
    or an infra change). Changed a package? Also run `pnpm typecheck:packages` — it lists every
    `packages/*` package as `run` or `skip (#ticket)` and checks the `gate` list in
-   `scripts/typecheck-packages.json` (6 packages today; the other 23 are skipped under #3871).
+   `scripts/typecheck-packages.json` (6 packages today; the other 24 are skipped under #3871).
    CI's `Type Check Packages` job runs the same script on every PR that touches a package.
    Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces
    thousands of false positives. Fix errors immediately. Never skip.
-2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
-   structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
-   dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
-   check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
-   dead-code` for a wider look.)
+2. **Fallow audit (always, it's fast + diff-scoped).** `git fetch origin <base> && npx fallow
+   audit --base origin/<base>`, where `<base>` is the branch your PR targets (`main` or its
+   `epic/*` branch). This is the same structural gate CI runs (`fallow-audit` in `ci.yml`, via
+   `scripts/fallow-audit.mjs`): dead code, duplication, complexity and dependency hygiene,
+   judged on **just your diff**. Always pass `--base`: without it fallow compares against your
+   branch's *upstream*, so a pushed branch is judged against itself and prints *No issues*
+   while CI fails. CI also feeds it test coverage (`--coverage coverage/coverage-final.json`,
+   from `pnpm test:coverage`), which changes the complexity (CRAP) scores. Read the *above
+   threshold* and *clone groups* sections, not only the summary line. Splitting a big file
+   creates **new** files, and everything in a new file counts as yours, so a split can fail on
+   complexity the old file was excused for. CI runs it only on app/package/infra PRs.
+   (`npx fallow health --score` / `npx fallow dead-code` for a wider look.)
 3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
    fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
    library's async state instead of deriving from the source event, an over-engineered

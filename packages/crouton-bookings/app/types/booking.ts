@@ -42,7 +42,6 @@ export interface SlotItem {
   label?: string
   value?: string
   color?: string
-  capacity?: number
   translations?: {
     label?: Record<string, string>
   }
@@ -77,9 +76,8 @@ export interface LocationData {
   blockedDates?: BlockedDateItem[] | string | null
   /** Offer the built-in full day next to named slots (#2261) */
   offerFullDay?: boolean | null
-  // Inventory mode fields
-  inventoryMode?: boolean
-  quantity?: number
+  /** Products on offer with their stock — what the counting uses (#4061) */
+  products?: { product: string, stock: number }[] | string | null
   // Monthly booking limit
   maxBookingsPerMonth?: number | null
   // Translations for i18n support
@@ -111,8 +109,9 @@ export interface CartItem {
   totalSlots?: number
   groupId?: string | null
   groupLabel?: string | null
-  // Inventory mode
-  isInventoryMode?: boolean
+  /** The catalog product booked (#4110) */
+  productId?: string | null
+  /** Amount, every location (default 1) */
   quantity?: number
 }
 
@@ -140,11 +139,23 @@ export interface BookingData {
  * Availability data from the API, keyed by date (YYYY-MM-DD).
  * Shared between useBookingAvailability and useBookingCart.
  */
+/** One non-cancelled booking of a date, as the availability endpoint returns it (#4109). */
+export interface AvailabilityBooking {
+  /** null = an old row with no product; counts against every product */
+  product: string | null
+  /** At least 1 */
+  quantity: number
+  /** Slot ids held; a full day is `['all-day']` */
+  slotIds: string[]
+}
+
 export interface AvailabilityData {
   [dateISO: string]: {
     bookedSlots: string[]
     bookedCount?: number // For inventory mode
     bookedGroupSlots?: Record<string, string[]> // slotId → groupIds that booked it
+    /** The date's bookings per product (always sent by the server) */
+    bookings?: AvailabilityBooking[]
   }
 }
 
@@ -164,6 +175,8 @@ export interface Booking {
   date: string | Date
   slot: string // JSON-encoded array: '["slot-1"]'
   quantity?: number
+  /** The product booked (#4044); null on old rows (counts against every product) */
+  product?: string | null
   group?: string | null
   status: string
   owner?: string | null

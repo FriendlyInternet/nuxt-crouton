@@ -8,7 +8,26 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isApproval, approvalKind } from './approval.mjs'
+import { isApproval, approvalKind, isBareApproval } from './approval.mjs'
+
+// ── isBareApproval: the whole reply is only an approval (#4082) ──────────────
+test('isBareApproval: only ok, only check marks, or only lgtm/approve/approved ⇒ true', () => {
+  for (const b of ['ok', 'OK!', 'ok 👍', '✅', '✅ ✅', '✔️', '☑️', 'lgtm', 'LGTM!', 'approve', 'approved 🎉', '  lgtm.\n']) {
+    assert.equal(isBareApproval(b), true, b)
+  }
+})
+
+test('isBareApproval: an approval plus any other text ⇒ false', () => {
+  for (const b of ['✅\nNo, keep the existing schema', 'approved, but keep the column', 'ok, change X first', 'Looks good to me.\n\n✅', 'lgtm but rename it', 'ok: fine', 'Use the existing helper instead.', '']) {
+    assert.equal(isBareApproval(b), false, b)
+  }
+})
+
+test('isBareApproval: agent comments and quoted approvals ⇒ false', () => {
+  assert.equal(isBareApproval('> 🤖 **bot** · ci\n\nlgtm'), false)
+  assert.equal(isBareApproval('`lgtm`'), false)
+  assert.equal(isBareApproval('> lgtm'), false)
+})
 
 // ── the check gesture ─────────────────────────────────────────────────────────
 test('a line of only check marks approves', () => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { collectionForms } from '#build/crouton-collection-forms.mjs'
+import { buildBinderBasePath } from '../utils/page-path'
 /**
  * Collection Binder Renderer
  *
@@ -41,7 +42,7 @@ const route = useRoute()
 const { locale } = useT()
 const collections = useCollections()
 const { getTeamId, teamSlug } = useTeamContext()
-const { hideTeamInUrl } = useDomainContext()
+const { hideTeamInLinks, hideLocaleInUrl } = useDomainContext()
 
 // Which collection is bound
 const collectionName = computed(() => props.page.config?.collection as string | undefined)
@@ -70,10 +71,13 @@ const isPublicContext = computed(() => {
 
 // Build base path for item links (e.g. /acme/en/locations)
 const binderBasePath = computed(() => {
-  const team = teamSlug?.value
-  const loc = locale.value || 'en'
-  if (hideTeamInUrl.value) return `/${loc}/${props.page.slug}`
-  return `/${team}/${loc}/${props.page.slug}`
+  return buildBinderBasePath({
+    hideTeamInUrl: hideTeamInLinks.value,
+    hideLocaleInUrl: hideLocaleInUrl.value,
+    team: teamSlug?.value,
+    locale: locale.value || 'en',
+    slug: props.page.slug
+  })
 })
 
 // ── LIST MODE ──────────────────────────────────────────────────────────────

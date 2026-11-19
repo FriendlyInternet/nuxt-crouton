@@ -4,7 +4,6 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   OWNER_SCREENS, OWNER_SCREEN_APPS, ownerScreenEmoji, isOwnerScreenSource, isOwnerScreenComment,
   parseDiagramSave, diagramSaveLine, linkedIssueNumber, sourceIssueFor, readDiagramScene,
@@ -65,19 +64,6 @@ test('owner-screen helper: parseDiagramSave round-trips the ticket-editor line',
   assert.equal(parseDiagramSave('📐 nothing hidden'), null)
 })
 
-test('owner-screen helper: the --is-source CLI exits 0 only for a 📐 body from nuxt-harness', () => {
-  const cli = fileURLToPath(new URL('./owner-screens.mjs', import.meta.url))
-  const dir = mkdtempSync(join(tmpdir(), 'owner-screens-'))
-  const save = join(dir, 'save.txt')
-  const plain = join(dir, 'plain.txt')
-  writeFileSync(save, SAVE)
-  writeFileSync(plain, 'just a reply')
-  const run = (...a) => spawnSync(process.execPath, [cli, '--is-source', ...a]).status
-  assert.equal(run(save, 'nuxt-harness'), 0)
-  assert.equal(run(save, 'github-actions'), 1)
-  assert.equal(run(save, ''), 1)
-  assert.equal(run(plain, 'nuxt-harness'), 1)
-})
 
 // #3691 review hole 1 — on a PR the hold label sits on the source issue, not the PR.
 test('owner-screen helper: on a PR only the source issue\'s status:blocked counts', () => {

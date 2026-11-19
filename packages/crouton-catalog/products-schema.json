@@ -1,0 +1,32 @@
+{
+  "title": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "translatable": true,
+      "label": "Title",
+      "maxLength": 200,
+      "area": "main",
+      "group": "basic"
+    }
+  },
+  "description": {
+    "type": "text",
+    "meta": {
+      "translatable": true,
+      "label": "Description",
+      "area": "main",
+      "group": "basic"
+    }
+  },
+  "active": {
+    "type": "boolean",
+    "meta": {
+      "label": "Active",
+      "default": true,
+      "area": "sidebar",
+      "group": "basic",
+      "help": "Switch a product off to stop offering it without deleting it"
+    }
+  }
+}

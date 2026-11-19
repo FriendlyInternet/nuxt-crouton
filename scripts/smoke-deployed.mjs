@@ -14,7 +14,9 @@
  *   1. LOGIN PROOF (always, when creds given) — sign in over the app's own HTTP auth
  *      and confirm /api/auth/get-session returns an authenticated user. This alone is
  *      already more than "it booted": it proves auth works end-to-end on the real Worker
- *      (D1 + secrets + better-auth), the thing typecheck can't see.
+ *      (D1 + secrets + better-auth), the thing typecheck can't see. A 5xx/network error
+ *      on sign-in is retried (SMOKE_LOGIN_RETRY_DELAYS_MS, default 2s,5s,10s); a 4xx fails
+ *      at once (#3654). The final failure carries a body excerpt so it names its cause.
  *   2. CRUD + PUBLIC READ (only when the app declares a `smoke.crud` block) — create a
  *      record via its API (authenticated), then read it back (publicly when asked) and
  *      assert the content is there. No declaration → skipped, not failed.
@@ -54,6 +56,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runCrud } from './lib/smoke-crud.mjs'
 import { runReads } from './lib/smoke-reads.mjs'
+import { loginRetryDecision, loginRetryDelays } from './lib/smoke-login.mjs'
 import { mergeCookies, cookieHeader } from './lib/review-login.mjs'
 
 // ── args ────────────────────────────────────────────────────────────────────
@@ -134,10 +137,29 @@ async function loginProof() {
     info('no creds passed — skipping login proof (anonymous screenshot only).')
     return false
   }
-  const { res } = await http('POST', '/api/auth/sign-in/email', { email: args.email, password: args.password })
-  if (!res.ok) {
-    failures.push(`login: sign-in returned HTTP ${res.status}`)
-    fail(`login: sign-in returned HTTP ${res.status}`)
+  const delays = loginRetryDelays()
+  const maxAttempts = delays.length + 1
+  for (let attempt = 1; ; attempt++) {
+    let res = null
+    let text = ''
+    let threw = null
+    try {
+      ;({ res, text } = await http('POST', '/api/auth/sign-in/email', { email: args.email, password: args.password }))
+    } catch (e) { threw = e }
+    const status = res?.status
+    const decision = loginRetryDecision({ status, threw, attempt, maxAttempts })
+    if (decision === 'ok') break
+    const what = threw ? `failed (${threw.message})` : `returned HTTP ${status}`
+    if (decision === 'retry') {
+      const wait = delays[attempt - 1]
+      info(`sign-in ${what} — retrying in ${wait / 1000}s (attempt ${attempt}/${maxAttempts})`)
+      await new Promise(r => setTimeout(r, wait))
+      continue
+    }
+    const excerpt = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200)
+    const msg = `login: sign-in ${what} after ${attempt} attempt(s)${excerpt ? `: ${excerpt}` : ''}`
+    failures.push(msg)
+    fail(msg)
     return false
   }
   const { json } = await http('GET', '/api/auth/get-session')

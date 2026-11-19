@@ -2,7 +2,7 @@
   "collab": true,
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab @fyit/crouton-mcp-toolkit",
   "smoke": {
     "crud": {
       "create": {
@@ -60,6 +60,10 @@
     "required": true,
     "reads": [
       {
+        "path": "/api/teams/{teamId}/crouton-layouts/default",
+        "expectStatus": [200, 204]
+      },
+      {
         "path": "/api/public/{teamId}/smoke-none",
         "expectStatus": [404]
       },
@@ -74,7 +78,13 @@
         "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
         "path": "/api/teams/{teamId}/bookings-emaillogs"
+      },
+      {
+        "path": "/api/teams/{teamId}/catalog-products"
       },
       {
         "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
@@ -96,6 +106,17 @@
       {
         "path": "/api/webhooks/resend",
         "expectStatus": 405
+      },
+      {
+        "path": "/mcp/pages",
+        "expectStatus": 401
+      },
+      {
+        "path": "/mcp",
+        "expectStatus": 404
+      },
+      {
+        "path": "/api/teams/{teamId}/mcp-tokens"
       }
     ]
   }

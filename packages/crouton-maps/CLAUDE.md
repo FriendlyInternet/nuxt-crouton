@@ -217,5 +217,5 @@ style URLs are no longer valid — use OpenFreeMap presets/URLs.
 ## Testing
 
 ```bash
-pnpm -r --filter './apps/*' typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

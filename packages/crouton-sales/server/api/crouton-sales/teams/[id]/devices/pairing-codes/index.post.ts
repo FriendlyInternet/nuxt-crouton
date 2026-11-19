@@ -7,20 +7,26 @@
  * Team-member scoped: minting a code grants the ability to add a device to
  * this org, so it must never be public (the *claim* side is the public one,
  * protected by the grant lockout).
+ *
+ * An optional `eventId` must be one of this team's events, else 404 (#3992).
  */
-import { mintPairingCode } from '@fyit/crouton-auth/server/utils/pairing-code'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { mintTeamPairingCode } from '../../../../../../utils/device-pairing'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
 
   const body = await readBody<{ eventId?: string }>(event).catch(() => null)
 
-  const { code, expiresAt } = await mintPairingCode({
+  const result = await mintTeamPairingCode({
     organizationId: team.id,
-    eventId: body?.eventId?.trim() || undefined
+    eventId: body?.eventId
   })
 
+  if (!result.ok) {
+    throw createError({ status: result.status, statusText: 'Event not found' })
+  }
+
   // The plaintext code exists only in this response — it is stored hashed.
-  return { code, expiresAt }
+  return { code: result.code, expiresAt: result.expiresAt }
 })

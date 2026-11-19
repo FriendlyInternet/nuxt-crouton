@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageRecord, usePageRecordDeps } from '../../composables/usePageRecord'
+import { buildEditorFallbackPath } from '../../utils/page-path'
 /**
  * Workspace Editor - Inline Page Editor
  *
@@ -70,6 +71,8 @@ const getCurrentUser = () => {
       if (sessionUser?.value) {
         const u = sessionUser.value as unknown as Record<string, unknown>
         return {
+          // The real user id rides along so the collab room names who is here (#3984)
+          ...(u.id != null ? { id: String(u.id) } : {}),
           name: String(u.name || u.email || t('pages.editor.anonymous')),
           color: undefined
         }
@@ -200,10 +203,15 @@ watch(
     if (collabLocalizedContent && pageData.translations) {
       const translations = pageData.translations as Record<string, { content?: string }>
 
-      watch(
+      // Fill once per load and never force: a reconnect must not refill or
+      // replace the room, or two open windows double the page (#3983).
+      let filled = false
+      let stopFill: (() => void) | undefined
+      stopFill = watch(
         () => collabLocalizedContent?.synced?.value,
         (synced) => {
-          if (synced) {
+          if (synced && !filled) {
+            filled = true
             for (const [loc, data] of Object.entries(translations)) {
               if (data?.content) {
                 try {
@@ -217,10 +225,12 @@ watch(
               }
             }
             contentReady.value = true
+            stopFill?.()
           }
         },
         { immediate: true }
       )
+      if (filled) stopFill()
     } else {
       contentReady.value = true
     }
@@ -386,6 +396,7 @@ const previewPage = computed(() => {
 // leaf-slug URL when the page isn't in the resolver's list yet (e.g. just
 // published and not refetched).
 const { resolve: resolvePageUrl } = usePageLink()
+const { hideLocaleInUrl } = useDomainContext()
 const publicUrl = computed(() => {
   const teamSlug = teamSlugRef.value
   if (!teamSlug || action.value === 'create') return null
@@ -398,7 +409,7 @@ const publicUrl = computed(() => {
     || (translations ? Object.values(translations)[0]?.slug : null)
   if (!slug && slug !== '') return null
   const loc = locale.value || 'en'
-  return slug ? `/${teamSlug}/${loc}/${slug}` : `/${teamSlug}/${loc}/`
+  return buildEditorFallbackPath({ team: teamSlug, locale: loc, slug, hideLocaleInUrl: hideLocaleInUrl.value })
 })
 
 // Expose state for parent components (e.g., InlineEditor live preview)

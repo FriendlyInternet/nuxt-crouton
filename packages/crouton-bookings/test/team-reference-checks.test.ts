@@ -16,7 +16,7 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
 vi.mock('../server/utils/booking-capacity', async orig => ({ ...(await orig() as object), patchBookingGuarded: (...a: any[]) => h.patch(...a) }))
 
 // Only the columns the checks read (id, teamId); drizzle selects nothing else.
-const DDL = ['bookings_locations', 'bookings_bookings', 'bookings_emailtemplates']
+const DDL = ['bookings_locations', 'bookings_bookings', 'bookings_emailtemplates', 'catalog_products']
   .map(t => `CREATE TABLE ${t} (id text primary key, teamId text not null${t === 'bookings_bookings' ? ', owner text' : ''});`).join('\n')
 
 const client = new Database(':memory:')
@@ -25,6 +25,7 @@ client.exec(`
 INSERT INTO bookings_locations VALUES ('loc-t1','t1'), ('loc-t2','t2');
 INSERT INTO bookings_bookings (id, teamId, owner) VALUES ('bk-t1','t1','u1'), ('bk-t2','t2','u1');
 INSERT INTO bookings_emailtemplates VALUES ('tpl-t1','t1'), ('tpl-t2','t2');
+INSERT INTO catalog_products VALUES ('prod-t1','t1'), ('prod-t2','t2');
 `)
 const db = drizzle(client) as any
 
@@ -60,6 +61,24 @@ describe('real assert…References checks (#3424)', () => {
     const { assertBookingsBookingReferences: check } = await import('../collections/bookings/server/database/queries')
     // `locationId` is not what the check reads, so an other-team id under it must NOT be what is validated
     await expect(check('t1', { location: 'loc-t2', locationId: 'loc-t1' })).rejects.toMatchObject(bad('location'))
+  })
+
+  // covers: T2
+  it('booking: product must be an own-team catalog product (#3967)', async () => {
+    const { assertBookingsBookingReferences: check } = await import('../collections/bookings/server/database/queries')
+    await expect(check('t1', { location: 'loc-t1', product: 'prod-t2' })).rejects.toMatchObject(bad('product'))
+    await expect(check('t1', { location: 'loc-t1', product: 'prod-t1' })).resolves.toBeUndefined()
+    await expect(check('t1', { location: 'loc-t1' })).resolves.toBeUndefined()
+  })
+
+  // covers: T2
+  it('location: listed products must be own-team catalog products (#3967)', async () => {
+    const { assertBookingsLocationReferences: check } = await import('../collections/locations/server/database/queries')
+    await expect(check('t1', { products: [{ product: 'prod-t1', stock: 1 }] })).resolves.toBeUndefined()
+    await expect(check('t1', { products: [{ product: 'prod-t2', stock: 1 }] })).rejects.toMatchObject(bad('products'))
+    await expect(check('t1', { products: [{ product: 'prod-t1', stock: 1 }, { product: 'prod-t2', stock: 1 }] })).rejects.toMatchObject(bad('products'))
+    await expect(check('t1', {})).resolves.toBeUndefined()
+    await expect(check('t1', { products: null })).resolves.toBeUndefined()
   })
 
   it('emaillog: bookingId and templateId are each checked against their own table', async () => {

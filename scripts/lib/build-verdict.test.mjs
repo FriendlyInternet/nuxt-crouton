@@ -157,6 +157,55 @@ test('#3160: no copies leaves item 2 untouched', () => {
   assert.equal(precheck(mod('packages/a/x.ts'), '')['2'], undefined)
 })
 
+const add = (p) => `diff --git a/${p} b/${p}
+new file mode 100644
+index 0..1
+--- /dev/null
++++ b/${p}
+@@ -0,0 +1 @@
++a
+`
+
+// covers: T1
+test('#4143: a new app scaffolded by mirroring starter files (replay #4129) passes items 2 and 3', () => {
+  const d = cp('pocs/snippets/package.json', 'pocs/kdm/package.json')
+    + cp('pocs/gallery/vitest.config.ts', 'pocs/kdm/vitest.config.ts')
+    + cp('pocs/snippets/nuxt.config.ts', 'pocs/kdm/nuxt.config.ts')
+    + cp('pocs/snippets/app/app.vue', 'pocs/kdm/app/app.vue')
+    + add('pocs/kdm/app/pages/index.vue')
+    + add('pocs/kdm/README.md')
+    + mod('scripts/seed-review-login.mjs')
+  const ticket = '# kdm scaffold\n\nAdd `pocs/kdm/package.json`, mirroring `pocs/snippets/package.json`.'
+  const r = precheck(d, ticket)
+  assert.equal(r['2'], undefined)
+  assert.equal(r['3'], undefined)
+})
+// covers: T1
+test('#4143: a move named in the ticket into an existing scope still fails item 2', () => {
+  const r = precheck(cp('scripts/a.mjs', 'scripts/lib/a.mjs'), 'move `scripts/a.mjs` to `scripts/lib/a.mjs`')
+  assert.equal(r['2'].pass, false)
+})
+// covers: T1
+test('#4143: a copy out of a package the diff also edits still fails item 2', () => {
+  const r = precheck(cp('packages/a/x.ts', 'packages/b/x.ts') + mod('packages/a/y.ts'), '')
+  assert.equal(r['2'].pass, false)
+})
+// covers: T1
+test('#4143: a real edit to a gate config the ticket does not name still fails item 3', () => {
+  const r = precheck(mod('apps/x/vitest.config.ts'), 'fix the list page')
+  assert.equal(r['3'].pass, false)
+})
+// covers: T1
+test('#4143: a new gate config reported as a copy of another app\'s passes item 3', () => {
+  const r = precheck(cp('pocs/gallery/vitest.config.ts', 'apps/x/vitest.config.ts') + mod('apps/x/a.ts'), 'add tests to apps/x')
+  assert.equal(r['3'], undefined)
+})
+// covers: T1
+test('#4143 guard: new files into a scope without its own new package.json are not a created scope', () => {
+  const r = precheck(cp('pocs/a/x.ts', 'apps/b/x.ts') + add('apps/b/y.ts'), 'move pocs/a/x.ts to apps/b')
+  assert.equal(r['2'].pass, false)
+})
+
 test('#3173: only the final hold carries the final marker, the ok wording and the optional ok-again line', () => {
   const d = decide(copiedDiff, TICKET, verdict('go', {}))
   const final = renderComment(d, { round: 2, okAgain: 'AGAIN-LINE' })
