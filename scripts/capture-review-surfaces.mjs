@@ -70,6 +70,16 @@ const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
 // The marker a PR carries when its plan says there is no page to look at (#4201).
 const NONE_MARKER = '<!-- review-surface-none -->'
 
+/**
+ * The reason a PR gives for "no screen to check" (#4252): the text of
+ * `<!-- review-surface-none: <reason> -->`, or '' for the bare marker, an empty reason or no marker.
+ * Only the form with a reason wins over pages guessed from the changed files.
+ */
+export function noneReason(prBody) {
+  const m = /<!--\s*review-surface-none:\s*(.*?)\s*-->/s.exec(String(prBody || ''))
+  return m ? m[1].replace(/\s+/g, ' ').trim() : ''
+}
+
 /** True when the PR changes a screen file (VISUAL_PATH), ignoring fixtures/ and e2e/ (#4201). */
 export function changesScreen(changedFiles) {
   return (changedFiles || []).some((raw) => {
@@ -205,6 +215,8 @@ export function deriveSurfaces({ changedFiles, app, team = DEFAULT_REVIEW_TEAM, 
 /**
  * What to capture for one app on one PR (#2433):
  *  - surfaces the PR declares for this app win;
+ *  - `<!-- review-surface-none: <reason> -->` comes next (#4252): the start page, named `no-screen-…`;
+ *    the marker without a reason does not beat a guessed page;
  *  - a PR held for visual sign-off that declares none gets NOTHING: the landing page would pass
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
  *  - a PR that changes a screen and names/guesses no page gets NOTHING either (#4201): the start
@@ -221,6 +233,9 @@ export function resolveSurfaces({ manifest, prBody, app, changedFiles, team: dep
   const declared = parsePrSurfaces(prBody, app, team)
   const tag = list => list.map(s => ({ ...s, checkLanding: true }))
   if (declared.length) return { surfaces: tag(declared), reason: 'declared on the PR' }
+  // A reasoned "no screen to check" beats the guesses below (#4252); the picture names say so.
+  const why = noneReason(prBody)
+  if (why) return { surfaces: parseSurfaces(manifest).map(sf => ({ ...sf, name: `no-screen-${sf.name}` })), reason: `no screen to check: ${why}` }
   const derived = deriveSurfaces({ changedFiles, app, team, packages })
   if (derived.length) return { surfaces: tag(derived), reason: 'derived from the changed files (#2698)' }
   const body = String(prBody || '')
