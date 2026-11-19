@@ -98,8 +98,14 @@ export function isUserTable(name) {
 /** Lists a D1 database's tables (filter the result with isUserTable). Shared by db-clone + pr-preview-migrate. */
 export const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
 
-/** Every foreign-key edge as `{ child, parent }` rows. */
-export const LIST_FKS_SQL = "SELECT m.name AS child, f.\"table\" AS parent FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type='table'"
+/**
+ * Every foreign-key edge between user tables as `{ child, parent }` rows. The name filter must be
+ * in SQL, not only in JS: remote D1 refuses any read of its internal `_cf_*` tables with
+ * "not authorized: SQLITE_AUTH [code: 7500]", and an unfiltered pragma_foreign_key_list(m.name)
+ * reaches `_cf_KV`. `ESCAPE '\'` makes `_` literal (it is a LIKE wildcard). Same filter drizzle-kit
+ * uses when it introspects D1.
+ */
+export const LIST_FKS_SQL = "SELECT m.name AS child, f.\"table\" AS parent FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type='table' AND m.name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND m.name NOT LIKE '\\_cf\\_%' ESCAPE '\\'"
 
 /**
  * Order tables so a child comes before the parent it references. Dropping a parent first makes the

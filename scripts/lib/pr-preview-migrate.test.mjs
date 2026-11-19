@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 import { decide, sortMigrationNames, guardDbName, migrate } from './pr-preview-migrate.mjs'
-import { dropTablesSql, isUserTable, LIST_TABLES_SQL, orderForDrop } from './wrangler-d1.mjs'
+import { dropTablesSql, isUserTable, LIST_FKS_SQL, LIST_TABLES_SQL, orderForDrop } from './wrangler-d1.mjs'
 
 const cfg = (name, extra = {}) => ({ d1_databases: [{ binding: 'DB', database_name: name, migrations_dir: '/abs/migrations', ...extra }] })
 
@@ -99,6 +99,20 @@ test('T3 — on a real sqlite file with foreign keys on, the drop empties every 
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('LIST_FKS_SQL never reaches Cloudflare/SQLite internal tables (D1 answers SQLITE_AUTH 7500 for _cf_KV)', () => {
+  // the filter has to be in the SQL itself — D1 refuses the query before JS could filter rows
+  assert.match(LIST_FKS_SQL, /m\.name NOT LIKE '\\_cf\\_%' ESCAPE '\\'/)
+  assert.match(LIST_FKS_SQL, /m\.name NOT LIKE 'sqlite\\_%' ESCAPE '\\'/)
+  const db = new DatabaseSync(':memory:')
+  db.exec('CREATE TABLE zparent (id INTEGER PRIMARY KEY);')
+  db.exec('CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES zparent(id));')
+  db.exec('CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, ref INTEGER REFERENCES zparent(id));')
+  db.exec('CREATE TABLE xcfy (id INTEGER PRIMARY KEY, ref INTEGER REFERENCES zparent(id));') // `_` must be literal
+  const edges = db.prepare(LIST_FKS_SQL).all().map(r => ({ ...r }))
+  assert.deepEqual(edges.sort((a, b) => a.child.localeCompare(b.child)), [{ child: 'child', parent: 'zparent' }, { child: 'xcfy', parent: 'zparent' }])
+  db.close()
 })
 
 test('orderForDrop puts children before the parents they reference', () => {
