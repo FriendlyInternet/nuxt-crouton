@@ -62,3 +62,22 @@ test('landedWhereAsked: compares pathnames, ignores a trailing slash and the que
 test('looksLikeLoadingScreen: a real app page is not a loading screen', () => {
   assert.equal(looksLikeLoadingScreen({ html: '<div id="__nuxt"><main>Calendar</main></div>', text: 'Calendar', title: 'Velo' }), false)
 })
+
+// #4241: the gallery sends `/__review?file=<path>` on to `/__review/<ComponentName>` — the right page.
+test('landedWhereAsked: a component link lands on that component\'s gallery page (#4241)', () => {
+  const asked = '/__review?file=packages%2Fcrouton-core%2Fapp%2Fcomponents%2FAdminSidebar.vue'
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/CroutonAdminSidebar'), true)
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/CroutonAdminSidebar/'), true)
+  // The file is not known to the gallery: the browser stays on the list of all components.
+  assert.equal(landedWhereAsked(asked, `https://h${asked}`), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/'), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/auth/login'), false)
+  assert.equal(landedWhereAsked(asked, 'https://h/__review/A/B'), false)
+})
+
+test('landedWhereAsked: the gallery list and a named component page compare as before (#4241)', () => {
+  assert.equal(landedWhereAsked('/__review', 'https://h/__review'), true)
+  assert.equal(landedWhereAsked('/__review?q=side', 'https://h/__review?q=side'), true)
+  assert.equal(landedWhereAsked('/__review/CroutonAdminSidebar', 'https://h/__review/CroutonAdminSidebar'), true)
+  assert.equal(landedWhereAsked('/__review/CroutonAdminSidebar', 'https://h/__review'), false)
+})
