@@ -1,0 +1,795 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scaffoldApp default output is unchanged by --site (#4263) > app scaffold (no --site) matches the committed snapshot 1`] = `
+[
+  [
+    "package.json",
+    "{
+  "name": "demo-plain",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply demo-plain-db --remote",
+    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote",
+    "sync:ids": "node scripts/sync-wrangler-ids.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npx wrangler d1 migrations apply demo-plain-db --local",
+    "db:migrate:prod": "npx wrangler d1 migrations apply demo-plain-db --remote",
+    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote"
+  },
+  "dependencies": {
+    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-i18n": "workspace:*",
+    "@libsql/client": "^0.17.0",
+    "drizzle-orm": "^0.45.1",
+    "nuxt": "^4.2.2",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@fyit/crouton-cli": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
+    "drizzle-kit": "^0.31.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.64.0"
+  }
+}
+",
+  ],
+  [
+    "tsconfig.json",
+    "{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json"
+}
+",
+  ],
+  [
+    "nuxt.config.ts",
+    "import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
+
+// https://nuxt.com/docs/api/configuration/nuxt-config
+export default defineNuxtConfig({
+  modules: ['@fyit/crouton-devtools'],
+  css: ['~/assets/css/main.css'],
+  compatibilityDate: '2025-07-15',
+  devtools: { enabled: true },
+  extends: [
+    '@fyit/crouton-core',
+    '@fyit/crouton-i18n'
+  ],
+  hub: {
+    db: 'sqlite',
+    kv: true
+  },
+
+  // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
+  ogImage: { enabled: false },
+
+  // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
+  croutonAuth: {
+    methods: {
+      passkeys: false
+    }
+  },
+
+  // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is
+  // incompatible with workerd). Preset comes from NITRO_PRESET at build time.
+  nitro: {
+    alias: {
+      '@better-auth/passkey/client': resolve(cfStubs, 'client'),
+      '@better-auth/passkey': cfStubs,
+      'tsyringe': cfStubs,
+      'reflect-metadata': cfStubs,
+      '@peculiar/x509': cfStubs,
+      '@simplewebauthn/server': cfStubs,
+      'papaparse': cfStubs
+    }
+  }
+})
+",
+  ],
+  [
+    "crouton.config.js",
+    "export default {
+  // Which crouton packages this app uses is decided by \`extends\` in nuxt.config.ts
+  // (#2286). A package's prompted configuration lands under \`features.<alias>\`.
+
+  // Collections to generate (add your collections here)
+  // Example:
+  // collections: [
+  //   { name: 'products', fieldsFile: './schemas/products.json' }
+  // ],
+  collections: [],
+
+  // Target layers (add after creating collections)
+  // Example:
+  // targets: [
+  //   { layer: 'shop', collections: ['products'] }
+  // ],
+  targets: [],
+
+  dialect: 'sqlite'
+}
+",
+  ],
+  [
+    ".crouton.json",
+    "{
+  "crouton": true,
+  "name": "demo-plain",
+  "kind": "app",
+  "cliVersion": "<masked>",
+  "scaffoldedAt": "<masked>"
+}
+",
+  ],
+  [
+    ".env",
+    "# Authentication (required)
+BETTER_AUTH_SECRET=<masked>
+BETTER_AUTH_URL=http://localhost:3000
+
+# OAuth (optional)
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+
+# Email (optional)
+# NUXT_RESEND_API_KEY=
+# NUXT_EMAIL_FROM=noreply@yourdomain.com
+
+# AI (optional)
+# NUXT_ANTHROPIC_API_KEY=
+",
+  ],
+  [
+    ".env.example",
+    "# Authentication (required)
+BETTER_AUTH_SECRET=your-secret-at-least-32-characters-long
+BETTER_AUTH_URL=http://localhost:3000
+
+# OAuth (optional)
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+
+# Email (optional)
+# NUXT_RESEND_API_KEY=
+# NUXT_EMAIL_FROM=noreply@yourdomain.com
+
+# AI (optional)
+# NUXT_ANTHROPIC_API_KEY=
+",
+  ],
+  [
+    ".gitignore",
+    "# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+.wrangler/
+",
+  ],
+  [
+    "app/app.config.ts",
+    "import { translationsUiConfig } from '@fyit/crouton-i18n/app/composables/useTranslationsUi'
+
+export default defineAppConfig({
+  croutonCollections: {
+    translationsUi: translationsUiConfig
+  }
+})
+",
+  ],
+  [
+    "app/assets/css/main.css",
+    "@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Scan Nuxt Crouton layers for Tailwind classes */
+@source "../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";
+",
+  ],
+  [
+    "server/db/schema.ts",
+    "// Database schema exports
+// This file is auto-managed by crouton-generate
+
+// Export auth schema from crouton-auth package (includes teamSettings)
+export * from '@fyit/crouton-auth/server/database/schema/auth'
+export * from './translations-ui'
+",
+  ],
+  [
+    "server/db/translations-ui.ts",
+    "import { nanoid } from 'nanoid'
+import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
+
+export const translationsUi = sqliteTable('translations_ui', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  userId: text('user_id').notNull(),
+  teamId: text('team_id'),
+  namespace: text('namespace').notNull().default('ui'),
+  keyPath: text('key_path').notNull(),
+  category: text('category').notNull(),
+  values: text('values', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+  description: text('description'),
+  isOverrideable: integer('is_overrideable', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+}, (table) => ({
+  uniqueTeamNamespaceKey: unique().on(table.teamId, table.namespace, table.keyPath)
+}))
+
+export type TranslationsUi = typeof translationsUi.$inferSelect
+export type NewTranslationsUi = typeof translationsUi.$inferInsert
+",
+  ],
+  [
+    "vitest.config.ts",
+    "import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    include: ['layers/**/*.test.ts', 'tests/**/*.test.ts'],
+    environment: 'node',
+  },
+})
+",
+  ],
+  [
+    "schemas/.gitkeep",
+    "",
+  ],
+  [
+    "wrangler.jsonc",
+    "{
+  // Cloudflare WORKERS (static assets) config for demo-plain.
+  //
+  // Nitro's \`cloudflare_module\` preset (NITRO_PRESET in cf:deploy) reads this
+  // file at build time and writes the deployable config to
+  // .output/server/wrangler.json, injecting \`main\` + the \`assets\` binding.
+  //
+  // Bootstrap → committed: bindings start id-LESS so the first deploy
+  // auto-provisions them; \`pnpm sync:ids\` then writes the ids back here.
+  "name": "demo-plain",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "demo-plain-db",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV" }
+  ],
+
+  // Staging environment — its OWN isolated D1 + KV, also id-less so they
+  // auto-provision on the first \`pnpm cf:staging\`. The env block is stripped
+  // from the generated .output config (nitro#3429), so cf:staging re-injects it
+  // via scripts/inject-wrangler-env.mjs before deploying.
+  "env": {
+    "staging": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "demo-plain-staging-db",
+          "migrations_dir": "server/db/migrations/sqlite"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "KV" }
+      ]
+    }
+  }
+}
+",
+  ],
+  [
+    "deploy.config.json",
+    "{
+  "stagingUrl": "",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n"
+}
+",
+  ],
+  [
+    "drizzle.config.ts",
+    "// Regenerated by crouton — do not hand-edit.
+import { defineConfig } from 'drizzle-kit'
+import { resolveSchemaSourcesSync } from '@fyit/crouton-cli/lib/utils/schema-sources.ts'
+
+export default defineConfig({
+  dialect: 'sqlite',
+  schema: resolveSchemaSourcesSync(process.cwd()),
+  out: 'server/db/migrations/sqlite',
+})
+",
+  ],
+  [
+    "scripts/inject-wrangler-env.mjs",
+    "sha256:c749c4e2073a7c278edb9b4e56e234666d2bf49cd8246f25d50be324b1e5d17d",
+  ],
+  [
+    "scripts/sync-wrangler-ids.mjs",
+    "sha256:178aaad9d258e50a27493b0763c5a5fbc94deff285d04ffbc3bf6a0969877853",
+  ],
+  [
+    "server/utils/_cf-stubs/index.ts",
+    "// Empty stubs for Cloudflare Workers incompatible packages
+// These packages are used by passkeys which are disabled for CF deployments
+export default {}
+
+// tsyringe stubs
+export const container = {}
+export const injectable = () => () => {}
+export const inject = () => () => {}
+export const singleton = () => () => {}
+
+// @better-auth/passkey stub
+export const passkey = () => ({
+  id: 'passkey',
+  endpoints: {},
+  middlewares: [],
+  hooks: {}
+})
+
+// @simplewebauthn/server stubs
+export const generateRegistrationOptions = () => Promise.resolve({})
+export const verifyRegistrationResponse = () => Promise.resolve({ verified: false })
+export const generateAuthenticationOptions = () => Promise.resolve({})
+export const verifyAuthenticationResponse = () => Promise.resolve({ verified: false })
+",
+  ],
+  [
+    "server/utils/_cf-stubs/client.ts",
+    "// Empty stub for Cloudflare Workers incompatible packages
+export default {}
+export const client = {}
+
+// @better-auth/passkey/client stub
+export const passkeyClient = () => ({
+  id: 'passkey-client',
+  $InferServerPlugin: {},
+  getAtoms: () => ({}),
+  pathMethods: {}
+})
+",
+  ],
+]
+`;
+
+exports[`scaffoldApp default output is unchanged by --site (#4263) > poc scaffold (no --site) matches the committed snapshot 1`] = `
+[
+  [
+    "package.json",
+    "{
+  "name": "demo-plain",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply demo-plain-db --remote",
+    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote",
+    "sync:ids": "node scripts/sync-wrangler-ids.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npx wrangler d1 migrations apply demo-plain-db --local",
+    "db:migrate:prod": "npx wrangler d1 migrations apply demo-plain-db --remote",
+    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote"
+  },
+  "dependencies": {
+    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-i18n": "workspace:*",
+    "@libsql/client": "^0.17.0",
+    "drizzle-orm": "^0.45.1",
+    "nuxt": "^4.2.2",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@fyit/crouton-cli": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
+    "drizzle-kit": "^0.31.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.64.0"
+  }
+}
+",
+  ],
+  [
+    "tsconfig.json",
+    "{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json"
+}
+",
+  ],
+  [
+    "nuxt.config.ts",
+    "import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
+
+// https://nuxt.com/docs/api/configuration/nuxt-config
+export default defineNuxtConfig({
+  modules: ['@fyit/crouton-devtools'],
+  css: ['~/assets/css/main.css'],
+  compatibilityDate: '2025-07-15',
+  devtools: { enabled: true },
+  extends: [
+    '@fyit/crouton-core',
+    '@fyit/crouton-i18n'
+  ],
+  hub: {
+    db: 'sqlite',
+    kv: true
+  },
+
+  // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
+  ogImage: { enabled: false },
+
+  // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
+  croutonAuth: {
+    methods: {
+      passkeys: false
+    }
+  },
+
+  // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is
+  // incompatible with workerd). Preset comes from NITRO_PRESET at build time.
+  nitro: {
+    alias: {
+      '@better-auth/passkey/client': resolve(cfStubs, 'client'),
+      '@better-auth/passkey': cfStubs,
+      'tsyringe': cfStubs,
+      'reflect-metadata': cfStubs,
+      '@peculiar/x509': cfStubs,
+      '@simplewebauthn/server': cfStubs,
+      'papaparse': cfStubs
+    }
+  }
+})
+",
+  ],
+  [
+    "crouton.config.js",
+    "export default {
+  // Which crouton packages this app uses is decided by \`extends\` in nuxt.config.ts
+  // (#2286). A package's prompted configuration lands under \`features.<alias>\`.
+
+  // Collections to generate (add your collections here)
+  // Example:
+  // collections: [
+  //   { name: 'products', fieldsFile: './schemas/products.json' }
+  // ],
+  collections: [],
+
+  // Target layers (add after creating collections)
+  // Example:
+  // targets: [
+  //   { layer: 'shop', collections: ['products'] }
+  // ],
+  targets: [],
+
+  dialect: 'sqlite'
+}
+",
+  ],
+  [
+    ".crouton.json",
+    "{
+  "crouton": true,
+  "name": "demo-plain",
+  "kind": "poc",
+  "cliVersion": "<masked>",
+  "scaffoldedAt": "<masked>"
+}
+",
+  ],
+  [
+    ".env",
+    "# Authentication (required)
+BETTER_AUTH_SECRET=<masked>
+BETTER_AUTH_URL=http://localhost:3000
+
+# OAuth (optional)
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+
+# Email (optional)
+# NUXT_RESEND_API_KEY=
+# NUXT_EMAIL_FROM=noreply@yourdomain.com
+
+# AI (optional)
+# NUXT_ANTHROPIC_API_KEY=
+",
+  ],
+  [
+    ".env.example",
+    "# Authentication (required)
+BETTER_AUTH_SECRET=your-secret-at-least-32-characters-long
+BETTER_AUTH_URL=http://localhost:3000
+
+# OAuth (optional)
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+
+# Email (optional)
+# NUXT_RESEND_API_KEY=
+# NUXT_EMAIL_FROM=noreply@yourdomain.com
+
+# AI (optional)
+# NUXT_ANTHROPIC_API_KEY=
+",
+  ],
+  [
+    ".gitignore",
+    "# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+.wrangler/
+",
+  ],
+  [
+    "app/app.config.ts",
+    "import { translationsUiConfig } from '@fyit/crouton-i18n/app/composables/useTranslationsUi'
+
+export default defineAppConfig({
+  croutonCollections: {
+    translationsUi: translationsUiConfig
+  }
+})
+",
+  ],
+  [
+    "app/assets/css/main.css",
+    "@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Scan Nuxt Crouton layers for Tailwind classes */
+@source "../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";
+",
+  ],
+  [
+    "server/db/schema.ts",
+    "// Database schema exports
+// This file is auto-managed by crouton-generate
+
+// Export auth schema from crouton-auth package (includes teamSettings)
+export * from '@fyit/crouton-auth/server/database/schema/auth'
+export * from './translations-ui'
+",
+  ],
+  [
+    "server/db/translations-ui.ts",
+    "import { nanoid } from 'nanoid'
+import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
+
+export const translationsUi = sqliteTable('translations_ui', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  userId: text('user_id').notNull(),
+  teamId: text('team_id'),
+  namespace: text('namespace').notNull().default('ui'),
+  keyPath: text('key_path').notNull(),
+  category: text('category').notNull(),
+  values: text('values', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+  description: text('description'),
+  isOverrideable: integer('is_overrideable', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+}, (table) => ({
+  uniqueTeamNamespaceKey: unique().on(table.teamId, table.namespace, table.keyPath)
+}))
+
+export type TranslationsUi = typeof translationsUi.$inferSelect
+export type NewTranslationsUi = typeof translationsUi.$inferInsert
+",
+  ],
+  [
+    "vitest.config.ts",
+    "import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    include: ['layers/**/*.test.ts', 'tests/**/*.test.ts'],
+    environment: 'node',
+  },
+})
+",
+  ],
+  [
+    "schemas/.gitkeep",
+    "",
+  ],
+  [
+    "wrangler.jsonc",
+    "{
+  // Cloudflare WORKERS (static assets) config for demo-plain.
+  //
+  // Nitro's \`cloudflare_module\` preset (NITRO_PRESET in cf:deploy) reads this
+  // file at build time and writes the deployable config to
+  // .output/server/wrangler.json, injecting \`main\` + the \`assets\` binding.
+  //
+  // Bootstrap → committed: bindings start id-LESS so the first deploy
+  // auto-provisions them; \`pnpm sync:ids\` then writes the ids back here.
+  "name": "demo-plain",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "demo-plain-db",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV" }
+  ],
+
+  // Staging environment — its OWN isolated D1 + KV, also id-less so they
+  // auto-provision on the first \`pnpm cf:staging\`. The env block is stripped
+  // from the generated .output config (nitro#3429), so cf:staging re-injects it
+  // via scripts/inject-wrangler-env.mjs before deploying.
+  "env": {
+    "staging": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "demo-plain-staging-db",
+          "migrations_dir": "server/db/migrations/sqlite"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "KV" }
+      ]
+    }
+  }
+}
+",
+  ],
+  [
+    "deploy.config.json",
+    "{
+  "stagingUrl": "",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n"
+}
+",
+  ],
+  [
+    "drizzle.config.ts",
+    "// Regenerated by crouton — do not hand-edit.
+import { defineConfig } from 'drizzle-kit'
+import { resolveSchemaSourcesSync } from '@fyit/crouton-cli/lib/utils/schema-sources.ts'
+
+export default defineConfig({
+  dialect: 'sqlite',
+  schema: resolveSchemaSourcesSync(process.cwd()),
+  out: 'server/db/migrations/sqlite',
+})
+",
+  ],
+  [
+    "scripts/inject-wrangler-env.mjs",
+    "sha256:c749c4e2073a7c278edb9b4e56e234666d2bf49cd8246f25d50be324b1e5d17d",
+  ],
+  [
+    "scripts/sync-wrangler-ids.mjs",
+    "sha256:178aaad9d258e50a27493b0763c5a5fbc94deff285d04ffbc3bf6a0969877853",
+  ],
+  [
+    "server/utils/_cf-stubs/index.ts",
+    "// Empty stubs for Cloudflare Workers incompatible packages
+// These packages are used by passkeys which are disabled for CF deployments
+export default {}
+
+// tsyringe stubs
+export const container = {}
+export const injectable = () => () => {}
+export const inject = () => () => {}
+export const singleton = () => () => {}
+
+// @better-auth/passkey stub
+export const passkey = () => ({
+  id: 'passkey',
+  endpoints: {},
+  middlewares: [],
+  hooks: {}
+})
+
+// @simplewebauthn/server stubs
+export const generateRegistrationOptions = () => Promise.resolve({})
+export const verifyRegistrationResponse = () => Promise.resolve({ verified: false })
+export const generateAuthenticationOptions = () => Promise.resolve({})
+export const verifyAuthenticationResponse = () => Promise.resolve({ verified: false })
+",
+  ],
+  [
+    "server/utils/_cf-stubs/client.ts",
+    "// Empty stub for Cloudflare Workers incompatible packages
+export default {}
+export const client = {}
+
+// @better-auth/passkey/client stub
+export const passkeyClient = () => ({
+  id: 'passkey-client',
+  $InferServerPlugin: {},
+  getAtoms: () => ({}),
+  pathMethods: {}
+})
+",
+  ],
+]
+`;

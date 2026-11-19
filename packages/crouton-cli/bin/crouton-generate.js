@@ -173,6 +173,7 @@ const initCmd = defineCommand({
     noCf: { type: 'boolean', description: 'Deprecated alias for --no-cf' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
+    site: { type: 'boolean', description: 'Small public site: one team (test1), one locale (en) with hideLocaleInUrl, an appDomains list to fill in; adds @fyit/crouton-pages' },
     out: { type: 'string', description: 'Explicit target directory (overrides --poc; default apps/<name> in the monorepo, ./<name> elsewhere)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
@@ -195,6 +196,7 @@ const initCmd = defineCommand({
       dialect: args.dialect,
       cf: args.noCf ? false : args.cf,
       domain: args.domain,
+      site: args.site,
       out,
       dryRun: args.dryRun,
     })
