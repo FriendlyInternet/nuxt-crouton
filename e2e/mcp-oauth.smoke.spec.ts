@@ -143,8 +143,10 @@ async function gotoConsent(page: Page, url: string) {
   await expect(page.getByTestId('consent-title')).toBeVisible({ timeout: 120000 })
 }
 
-test.describe('MCP sign-in (#4096)', () => {
-  test.skip(FIXTURE !== 'with-mcp-oauth', 'only the with-mcp-oauth fixture turns the MCP sign-in on')
+// Only the with-mcp-oauth fixture turns the MCP sign-in on; other fixtures don't register this suite
+// (same shape as bookings-fullscreen.smoke.spec.ts — no skipped tests).
+test.describe(FIXTURE === 'with-mcp-oauth' ? 'MCP sign-in (#4096)' : 'MCP sign-in (not this fixture)', () => {
+  if (FIXTURE !== 'with-mcp-oauth') return
   test.describe.configure({ mode: 'serial' })
 
   // Claim names of a one-team user's token (T4), compared with a two-team user's (T7).

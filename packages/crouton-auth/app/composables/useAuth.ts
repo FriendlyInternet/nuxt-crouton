@@ -297,8 +297,6 @@ export function useAuth() {
    * With crouton-email installed there is no session until the e-mail is
    * verified: the result's `requiresVerification` is then true (#3141).
    */
-  // Complexity: linear sign-up steps (verification, OAuth resume, errors); client composable with no unit coverage inflates CRAP
-  // fallow-ignore-next-line complexity
   async function register(data: RegisterData): Promise<RegisterResult> {
     loading.value = true
     error.value = null

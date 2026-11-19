@@ -90,8 +90,6 @@ function buildClientPlugins(config?: CroutonAuthConfig) {
 /**
  * Check if passkeys are enabled in the configuration
  */
-// Complexity: pre-existing (unchanged by this PR); flagged only by diff-by-file scope
-// fallow-ignore-next-line complexity
 function isPasskeyEnabled(config?: CroutonAuthConfig): boolean {
   if (!config) return false
 
@@ -108,8 +106,6 @@ function isPasskeyEnabled(config?: CroutonAuthConfig): boolean {
 /**
  * Check if 2FA is enabled in the configuration
  */
-// Complexity: pre-existing (unchanged by this PR); flagged only by diff-by-file scope
-// fallow-ignore-next-line complexity
 function isTwoFactorEnabled(config?: CroutonAuthConfig): boolean {
   if (!config) return false
 
