@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { stripTeamPrefix } from '../../utils/custom-domain-path'
+
 /**
  * Public Page Redirect Route
  *
@@ -88,7 +90,12 @@ const slug = !slugParts || (Array.isArray(slugParts) && slugParts.length === 0)
 // permanent — a 301 gets cached by browsers and pins the URL to a stale locale.
 const targetUrl = slug ? `/${team}/${localeCode}/${slug}` : `/${team}/${localeCode}/`
 
-await navigateTo(targetUrl, { redirectCode: 302 })
+// On a connected domain the server writes the Location header verbatim, so the
+// team prefix is stripped there; on the client the team-host history hides it (#4175).
+const { isTeamHost, resolvedTeamSlug } = useDomainContext()
+const forward = (p: string) => (import.meta.server && isTeamHost.value) ? stripTeamPrefix(p, resolvedTeamSlug.value!) : p
+
+await navigateTo(forward(targetUrl), { redirectCode: 302 })
 </script>
 
 <template>
