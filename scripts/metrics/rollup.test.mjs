@@ -85,6 +85,115 @@ test('rollup is byte-identical on the same data, whatever the input order', () =
   assert.equal(a, b)
 })
 
+// --- what happened after a failed job (#4270) ---
+const prRun = (o) => run({ workflow: 'ci.yml', event: 'pull_request', branch: 'work-1', sha: 'A', ...o })
+const jobLine = (r, conclusion, o = {}) => ({ run_id: r.id, attempt: r.attempt, jobs: [{ name: 'gate', conclusion, started: r.started, ...o }] })
+const outcomes = (pairs, week = '2026-W45') => {
+  const rows = pairs.map(([r]) => r)
+  const jobs = pairs.map(([r, c, o]) => jobLine(r, c, o))
+  return rollup({ runs: rows, jobs, lines: LINES }).weeks[week].jobs['ci.yml/gate']
+}
+const t = (h) => `2026-11-04T${String(h).padStart(2, '0')}:00:00Z`
+
+// covers: T1
+test('a failed job that later goes green on the same sha counts as green_same_sha', () => {
+  const e = outcomes([[prRun({ created: t(10), conclusion: 'failure' }), 'failure'], [prRun({ created: t(11) }), 'success']])
+  assert.equal(e.green_same_sha, 1); assert.equal(e.green_new_sha, 0); assert.equal(e.never_green, 0)
+})
+
+// covers: T2
+test('a failed job that later goes green on a new sha counts as green_new_sha', () => {
+  const e = outcomes([[prRun({ created: t(10) }), 'failure'], [prRun({ created: t(11), sha: 'B' }), 'success']])
+  assert.equal(e.green_new_sha, 1); assert.equal(e.green_same_sha, 0)
+})
+
+// covers: T3
+test('a later green on the same sha wins over one on a new sha', () => {
+  const e = outcomes([[prRun({ created: t(10) }), 'failure'], [prRun({ created: t(11), sha: 'B' }), 'success'], [prRun({ created: t(12) }), 'success']])
+  assert.equal(e.green_same_sha, 1); assert.equal(e.green_new_sha, 0)
+})
+
+// covers: T4
+test('a failed job with no later success counts as never_green', () => {
+  const e = outcomes([[prRun({ created: t(10) }), 'failure']])
+  assert.equal(e.never_green, 1)
+})
+
+// covers: T5
+test('an earlier success does not count', () => {
+  const e = outcomes([[prRun({ created: t(9) }), 'success'], [prRun({ created: t(10) }), 'failure']])
+  assert.equal(e.never_green, 1); assert.equal(e.green_same_sha, 0)
+})
+
+// covers: T6
+test('a later success of another job or on another branch does not count', () => {
+  const fail = prRun({ created: t(10) })
+  const other = prRun({ created: t(11), branch: 'work-2' })
+  const otherJob = prRun({ created: t(12) })
+  const jobs = [jobLine(fail, 'failure'), jobLine(other, 'success'), { run_id: otherJob.id, attempt: 1, jobs: [{ name: 'lint', conclusion: 'success' }] }]
+  const e = rollup({ runs: [fail, other, otherJob], jobs, lines: LINES }).weeks['2026-W45'].jobs['ci.yml/gate']
+  assert.equal(e.never_green, 1); assert.equal(e.green_same_sha, 0); assert.equal(e.green_new_sha, 0)
+})
+
+// covers: T7
+test('a job that succeeds in a re-run attempt counts as green_on_rerun', () => {
+  const r = prRun({ attempt: 2, created: t(10), started: t(12) })
+  const e = outcomes([[r, 'success', { started: '2026-11-04T12:01:00Z' }]])
+  assert.equal(e.green_on_rerun, 1); assert.equal(e.failed, 0)
+})
+
+// covers: T8
+test('a failed job of a run with no PR counts as failed_no_pr only', () => {
+  const e = outcomes([[run({ workflow: 'ci.yml', event: 'schedule', created: t(10) }), 'failure'], [run({ workflow: 'ci.yml', event: 'schedule', created: t(11) }), 'success']])
+  assert.deepEqual([e.failed_no_pr, e.green_same_sha, e.green_new_sha, e.never_green], [1, 0, 0, 0])
+})
+
+const mixed = () => {
+  const pairs = [
+    [prRun({ created: t(1) }), 'failure'], [prRun({ created: t(2) }), 'success'],
+    [prRun({ created: t(3), branch: 'work-2' }), 'failure'], [prRun({ created: t(4), branch: 'work-2', sha: 'B' }), 'success'],
+    [prRun({ created: t(5), branch: 'work-3' }), 'timed_out'],
+    [run({ workflow: 'ci.yml', event: 'push', created: t(6) }), 'failure'],
+    [prRun({ created: t(7), branch: 'work-4', attempt: 2, started: t(8) }), 'success', { started: t(9) }],
+    [prRun({ created: '2026-11-10T01:00:00Z', branch: 'work-5' }), 'failure'],
+  ]
+  return { runs: pairs.map(([r]) => r), jobs: pairs.map(([r, c, o]) => jobLine(r, c, o)) }
+}
+
+// covers: T9
+test('failed equals the sum of the four failure buckets on every job entry', () => {
+  const { runs, jobs } = mixed()
+  const out = rollup({ runs, jobs, lines: LINES })
+  let n = 0
+  for (const w of Object.values(out.weeks)) for (const e of Object.values(w.jobs)) {
+    assert.equal(e.failed, e.green_same_sha + e.green_new_sha + e.never_green + e.failed_no_pr)
+    n++
+  }
+  assert.ok(n >= 2)
+})
+
+// covers: T10
+test('outcome keys are byte-identical whatever the input order', () => {
+  const { runs, jobs } = mixed()
+  const a = serialize(rollup({ runs, jobs, lines: LINES }))
+  const b = serialize(rollup({ runs: [...runs].reverse(), jobs: [...jobs].reverse(), lines: LINES }))
+  assert.equal(a, b)
+  assert.match(a, /"green_new_sha": 1/)
+})
+
+// covers: T11
+test('a success carried over from an earlier attempt is not green_on_rerun', () => {
+  const r = prRun({ attempt: 2, created: t(10), started: t(12) })
+  const e = outcomes([[r, 'success', { started: t(10) }]])
+  assert.equal(e.green_on_rerun, 0)
+})
+
+// covers: T12
+test('a pull_request run with no PR number is linked by branch', () => {
+  const e = outcomes([[prRun({ created: t(10), prs: [] }), 'failure'], [prRun({ created: t(11), sha: 'B', prs: [] }), 'success']])
+  assert.equal(e.green_new_sha, 1); assert.equal(e.failed_no_pr, 0)
+})
+
 function fixtureDir() {
   const d = mkdtempSync(join(tmpdir(), 'metrics-'))
   cpSync(join(HERE, '__fixtures__', 'metrics'), join(d, 'metrics'), { recursive: true })

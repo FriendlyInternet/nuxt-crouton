@@ -142,6 +142,79 @@ function tallyJobs(runs, jobs, wk) {
   }
 }
 
+const OUTCOME_KEYS = ['green_same_sha', 'green_new_sha', 'never_green', 'failed_no_pr', 'green_on_rerun']
+
+/**
+ * PR identity of a run: its head branch when it belongs to a PR, else null. Keyed by branch, not
+ * PR number, because `prs` is empty once a PR has merged (the collector re-reads runs later).
+ */
+function prKey(r) {
+  const isPr = r.prs?.length > 0 || r.event === 'pull_request'
+  return isPr && r.branch ? r.branch : null
+}
+
+const inc = (e, k) => { e[k] = (e[k] || 0) + 1 }
+
+/** Job events of the kept attempt only (same filter as tallyJobs). */
+function keptJobs(runs, jobs) {
+  const byRun = new Map(runs.map(r => [r.id, r]))
+  const kept = []
+  for (const line of jobs) {
+    const r = byRun.get(line.run_id)
+    if (r && r.attempt === line.attempt) for (const j of line.jobs) kept.push({ r, j, key: `${r.workflow}/${j.name}` })
+  }
+  return kept
+}
+
+/** `${wf/job}|${branch}` → successes on a PR. */
+function indexGreens(kept) {
+  const greens = new Map()
+  for (const { r, j, key } of kept) {
+    const pr = j.conclusion === 'success' ? prKey(r) : null
+    if (pr === null) continue
+    const k = `${key}|${pr}`
+    if (!greens.has(k)) greens.set(k, [])
+    greens.get(k).push({ id: r.id, created: Date.parse(r.created), sha: r.sha })
+  }
+  return greens
+}
+
+/** Which bucket a failed job falls in. */
+function failureBucket(r, key, greens) {
+  const pr = prKey(r)
+  if (pr === null) return 'failed_no_pr'
+  const at = Date.parse(r.created)
+  const later = (greens.get(`${key}|${pr}`) || []).filter(s => s.id !== r.id && s.created > at)
+  if (later.some(s => s.sha === r.sha)) return 'green_same_sha'
+  return later.length ? 'green_new_sha' : 'never_green'
+}
+
+/** A success in a re-run attempt that actually ran again (not carried over from an earlier attempt). */
+function reranGreen(r, j) {
+  if (j.conclusion !== 'success' || r.attempt <= 1) return false
+  const carried = j.started && r.started && Date.parse(j.started) < Date.parse(r.started)
+  return !carried
+}
+
+/**
+ * Per failed job: did the same job on the same PR go green later — same sha, new sha, never —
+ * or was there no PR at all. Plus successes in a re-run attempt that actually ran again (#4270).
+ * Likely readings only. Adds the five keys to every jobs["wf/job"] entry, defaulting to 0.
+ */
+function tallyOutcomes(runs, jobs, wk) {
+  const kept = keptJobs(runs, jobs)
+  const greens = indexGreens(kept)
+  for (const { r, j, key } of kept) {
+    const e = wk(isoWeek(r.created)).jobs[key]
+    if (FAIL.has(j.conclusion)) inc(e, failureBucket(r, key, greens))
+    else if (reranGreen(r, j)) inc(e, 'green_on_rerun')
+  }
+}
+
+function fillOutcomeDefaults(weeks) {
+  for (const w of Object.values(weeks)) for (const e of Object.values(w.jobs)) for (const k of OUTCOME_KEYS) e[k] ??= 0
+}
+
 function tallySchedules(runs, snaps, asOfMs, weeks, wk) {
   const byWf = new Map()
   for (const r of runs) (byWf.get(r.workflow) ?? byWf.set(r.workflow, []).get(r.workflow)).push(r)
@@ -179,6 +252,8 @@ export function rollup({ runs, jobs, schedules = [], lines, dataCommit = null, a
   const wk = (k) => (weeks[k] ??= newWeekBucket())
   tallyRuns(runs, jobs, wk)
   tallyJobs(runs, jobs, wk)
+  tallyOutcomes(runs, jobs, wk)
+  fillOutcomeDefaults(weeks)
   tallySchedules(runs, sortedSnaps, asOfMs, weeks, wk)
   tallyLines(weeks, lines)
   return stable({ data_commit: dataCommit, as_of: asOfIso, weeks })
