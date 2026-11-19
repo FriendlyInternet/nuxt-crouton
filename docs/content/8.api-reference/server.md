@@ -863,7 +863,7 @@ _Source: `packages/crouton-auth/server/utils/team.ts`_
 Get organization membership directly from database
 
 ```ts
-getOrganizationMembershipDirect(organizationId: string, userId: string): Promise<{ role: 'owner' | 'admin' | 'member' } | null>
+getOrganizationMembershipDirect(organizationId: string, userId: string): Promise<{ role: string } | null>
 ```
 
 _Source: `packages/crouton-auth/server/utils/team.ts`_
