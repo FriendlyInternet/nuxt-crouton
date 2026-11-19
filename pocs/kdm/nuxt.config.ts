@@ -32,18 +32,6 @@ export default defineNuxtConfig({
     dataValue: 'light'
   },
 
-  // Plain public addresses (#4153): `custom` drops crouton-pages' own
-  // /[team]/[locale]/[slug] routes; app/pages/index.vue + [slug].vue serve
-  // `/` and `/<slug>` through the package's public read instead.
-  runtimeConfig: {
-    public: {
-      croutonPages: {
-        routingMode: 'custom',
-        defaultLocale: 'en'
-      }
-    }
-  },
-
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
   ogImage: { enabled: false },
 

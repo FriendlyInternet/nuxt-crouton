@@ -33,3 +33,32 @@
 .site-prose .prose {
   font-family: var(--font-mono);
 }
+
+/*
+ * The renderer adds its own padding (HTML bodies) and prose-lg size (HTML
+ * bodies and rich-text blocks); the source site is plain `prose` in a 65ch
+ * column, so drop both.
+ */
+.site-prose .page-content {
+  padding: 0;
+}
+
+.site-prose .page-content,
+.site-prose .prose-lg {
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+/*
+ * The page title is the first h1 of the body (content Kasper edits) — give it
+ * the source's spacing (`mb-20` under it, pmcp/kdm app/pages/[...slug].vue).
+ * Covers HTML bodies (first element of the v-html div) and block bodies
+ * (heading in the first block). Specific enough to beat the renderer's
+ * scoped `.page-content h1` rule.
+ */
+.site-prose .page-content > div > h1:first-child,
+.site-prose .block-content > :first-child h1:first-of-type {
+  margin-top: 0;
+  margin-bottom: 5rem;
+  color: var(--ui-text-highlighted);
+}

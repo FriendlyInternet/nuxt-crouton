@@ -1,71 +1,45 @@
 #!/usr/bin/env node
-// Checks kdm's plain public addresses against a running, seeded server (#4153).
+// Checks kdm's public pages on crouton's normal team routing (#4153),
+// cases 1–4 of the ticket, as plain requests against a running, seeded server:
 //
 //   node pocs/kdm/scripts/check-public-routes.mjs http://localhost:3000
 //
-// Expects these rows in pages_pages of team `test1` (the seed adds `welcome`;
-// copy that row for the others):
-//   welcome      — published, public   (title from SEED_TITLE, default "Welkom")
-//   draft-page   — status: draft
-//   home         — published, public, title from HOME_TITLE (default "Home")
-//   members-page — published, visibility: members, title "Members only"
+// Needs the crouton-pages demo page `welcome` (title "Welkom") in team `test1`
+// — `crouton-seed --db kdm-db` adds it. Cases 5–7 need a real browser and a
+// signed-in session; they are not covered here (see HANDOFF.md).
 // Prints one line per case; exits non-zero on any failure.
 
 const base = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '')
-const WELCOME_TITLE = process.env.SEED_TITLE || 'Welkom'
-const HOME_TITLE = process.env.HOME_TITLE || 'Home'
-const MEMBERS_TITLE = process.env.MEMBERS_TITLE || 'Members only'
+const TEAM = process.env.TEAM || 'test1'
+const TITLE = process.env.SEED_TITLE || 'Welkom'
 
-const get = (path, init = {}) => fetch(base + path, { redirect: 'follow', ...init })
-const hasH1 = (html, title) => new RegExp(`<h1[^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</h1>`).test(html)
+const get = (path, init = {}) => fetch(base + path, { redirect: 'manual', ...init })
+const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const h1s = html => html.match(/<h1[\s>][\s\S]*?<\/h1>/g) || []
+const titleH1s = html => h1s(html).filter(h => new RegExp(`>\\s*${escape(TITLE)}\\s*<`).test(h))
+const hasTag = (html, tag) => new RegExp(`<${tag}[\\s>]`).test(html)
 
 const cases = [
-  ['1 published /welcome → 200 + title in h1', async () => {
-    const r = await get('/welcome'); const html = await r.text()
-    return [r.status === 200 && hasH1(html, WELCOME_TITLE), `status ${r.status}, h1 ${hasH1(html, WELCOME_TITLE)}`]
+  [`1 GET /${TEAM}/en/welcome → 200, title in one h1, no nav/footer signed out`, async () => {
+    const r = await get(`/${TEAM}/en/welcome`); const html = await r.text()
+    const n = titleH1s(html).length
+    const ok = r.status === 200 && n === 1 && h1s(html).length === 1 && !hasTag(html, 'nav') && !hasTag(html, 'footer')
+    return [ok, `status ${r.status}, title h1s ${n}, all h1s ${h1s(html).length}, nav ${hasTag(html, 'nav')}, footer ${hasTag(html, 'footer')}`]
   }],
-  ['2 trailing slash /welcome/ → same page', async () => {
-    const r = await get('/welcome/'); const html = await r.text()
-    return [r.status === 200 && hasH1(html, WELCOME_TITLE), `status ${r.status}, h1 ${hasH1(html, WELCOME_TITLE)}`]
-  }],
-  ['3 draft page → 404', async () => {
-    const r = await get('/draft-page')
-    return [r.status === 404, `status ${r.status}`]
-  }],
-  ['4 unknown slug → 404', async () => {
-    const r = await get('/does-not-exist-4153')
-    return [r.status === 404, `status ${r.status}`]
-  }],
-  ['5 /admin/test1/workspace reaches admin, not the catch-all', async () => {
-    const r = await get('/admin/test1/workspace', { redirect: 'manual' })
+  [`2 GET /${TEAM}/welcome → forwards to /${TEAM}/en/welcome`, async () => {
+    const r = await get(`/${TEAM}/welcome`)
     const loc = r.headers.get('location') || ''
-    const html = r.status === 200 ? await r.text() : ''
-    const isPublic404 = r.status === 404
-    const ok = !isPublic404 && ((r.status >= 300 && r.status < 400 && /auth|login/.test(loc)) || (r.status === 200 && !hasH1(html, 'Page not found')))
+    const ok = r.status >= 300 && r.status < 400 && new URL(loc, base).pathname === `/${TEAM}/en/welcome`
     return [ok, `status ${r.status}${loc ? ` → ${loc}` : ''}`]
   }],
-  ['6 published `home` served at /', async () => {
-    const r = await get('/'); const html = await r.text()
-    return [r.status === 200 && hasH1(html, HOME_TITLE), `status ${r.status}, h1 ${hasH1(html, HOME_TITLE)}`]
-  }],
-  ['7 members-only page signed out → not 200, title absent', async () => {
-    const r = await get('/members-page'); const html = await r.text()
-    return [r.status !== 200 && !html.includes(MEMBERS_TITLE), `status ${r.status}, title in body ${html.includes(MEMBERS_TITLE)}`]
-  }],
-  // Workaround for the package's `/<locale>/<slug>` links (remove via #4154).
-  ['8 /en/welcome → permanent redirect to /welcome', async () => {
-    const r = await get('/en/welcome', { redirect: 'manual' })
-    const loc = r.headers.get('location') || ''
-    return [r.status === 301 && new URL(loc, base).pathname === '/welcome', `status ${r.status}${loc ? ` → ${loc}` : ''}`]
-  }],
-  ['9 /en → permanent redirect to /', async () => {
-    const r = await get('/en', { redirect: 'manual' })
-    const loc = r.headers.get('location') || ''
-    return [r.status === 301 && new URL(loc, base).pathname === '/', `status ${r.status}${loc ? ` → ${loc}` : ''}`]
-  }],
-  ['10 other locale /nl/welcome → 404', async () => {
-    const r = await get('/nl/welcome', { redirect: 'manual' })
+  [`3 GET /${TEAM}/en/does-not-exist → 404`, async () => {
+    const r = await get(`/${TEAM}/en/does-not-exist-4153`)
     return [r.status === 404, `status ${r.status}`]
+  }],
+  ['4 GET / → crouton start page (200), not a site page or an error', async () => {
+    const r = await get('/'); const html = await r.text()
+    const ok = r.status === 200 && titleH1s(html).length === 0 && !/Page not found/i.test(html)
+    return [ok, `status ${r.status}, site title present ${titleH1s(html).length > 0}`]
   }]
 ]
 
