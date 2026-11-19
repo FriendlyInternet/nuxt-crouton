@@ -33,7 +33,8 @@
   "reply": {
     "body": "ok",
     "authorAssociation": "COLLABORATOR",
-    "userType": "User"
+    "userType": "User",
+    "userLogin": "pmcp"
   },
   "want": "yes",
   "today": "yes",

@@ -121,7 +121,7 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
   const c = context.payload.comment
   const issue = context.payload.issue
   const issue_number = issue.number
-  const reason = parseOverride({ body: c.body, authorAssociation: c.author_association, userType: c.user?.type })
+  const reason = parseOverride({ body: c.body, userLogin: c.user?.login, owner: process.env.OWNER_LOGIN, userType: c.user?.type })
   if (!reason) return core.setFailed('routed to approve-plan but no ok: <reason> found')
   await github.rest.issues.createComment({ ...context.repo, issue_number, body: overrideComment({ reason, date: c.created_at, url: c.html_url }) })
   const epic = await parentEpic({ github, context, core, issue })

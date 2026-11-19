@@ -109,6 +109,8 @@ jobs:
           fetch-depth: 1
       - id: route
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
@@ -127,7 +129,7 @@ jobs:
             // One comments read gives both the twice-rejected fact and the open reply record (#4145).
             const facts = await holdFacts({ github, repo: context.repo, issue: i })
             const d = routeComment({
-              comment,
+              comment, owner: process.env.OWNER_LOGIN,
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
                 planHeld: facts.planHeld },
               pr,
@@ -490,6 +492,8 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -699,6 +703,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STARTS: ${{ needs.route.outputs.starts }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { pathToFileURL } = require('node:url')
@@ -710,7 +715,7 @@ jobs:
             // On a twice-rejected plan an `ok` is an approval (the router asks for a reason); on a needs-owner
             // question the owner's `ok` is the answer yes and re-plans (#4082). `plan:approved` = already passed.
             const c = context.payload.comment
-            const r = replanFromReply({ starts: process.env.STARTS, comments, labels, comment: { body: c.body, date: c.created_at, url: c.html_url, authorAssociation: c.author_association, userType: c.user && c.user.type } })
+            const r = replanFromReply({ starts: process.env.STARTS, comments, labels, comment: { body: c.body, date: c.created_at, url: c.html_url, authorAssociation: c.author_association, userType: c.user && c.user.type, userLogin: c.user && c.user.login, owner: process.env.OWNER_LOGIN } })
             core.info(r.followed ? `replan: followed route starts=${process.env.STARTS}` : "replan: no starts, today's check")
             if (!r.replan) { core.setOutput('replan', 'false'); core.info('Not a held plan — the claude resume path handles it.'); return }
             core.setOutput('replan', 'true')
@@ -1207,13 +1212,15 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { parseDecision, decisionLine, appendDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`)
             const c = context.payload.comment
             const number = context.payload.issue.number
             const held = (context.payload.issue.labels || []).some(l => (l.name ?? l) === 'status:blocked')
-            const text = parseDecision({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, held })
+            const text = parseDecision({ body: c.body, userLogin: c.user.login, owner: process.env.OWNER_LOGIN, userType: c.user.type, held })
             if (!text) return core.info('not a decision')
             // Re-read the body: the payload copy may be stale if two decisions land together.
             const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number: number })
