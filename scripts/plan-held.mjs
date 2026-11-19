@@ -18,7 +18,7 @@
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { isRejectedTwice } from './plan-hold.mjs'
-import { openRecord } from './lib/reply-record.mjs'
+import { openRecordAt } from './lib/reply-record.mjs'
 import { parseOverride, decisionLine, appendDecision } from './lib/decision-line.mjs'
 import { handoffGuard as defaultHandoffGuard } from './handoff-exec.mjs'
 
@@ -56,7 +56,7 @@ export function parseCommentLines(raw = '') {
 
 /** The reviewer-approved header of the build prompt (was inline in work-issue-pidev.yml, #2757). */
 export function approvedHeader(planId) {
-  return `\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment ${planId}, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n`
+  return `\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment ${planId}, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: ask the way this prompt says above (your question file), saying what differs and why, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n`
 }
 
 const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
@@ -85,16 +85,19 @@ const labelNames = (labels = []) => labels.map((l) => (typeof l === 'string' ? l
 
 /**
  * The route step's facts from one comments read (#4145): `planHeld` — held after two reviewer
- * rejections? — and `record` — the open reply record (reply-record.mjs openRecord), or null.
+ * rejections? — `record` — the open reply record (reply-record.mjs openRecord), or null — and
+ * `recordComment` — the REST id of the comment carrying that record, or null (the receipt, #4207).
  * No API call unless the issue is a plain issue carrying `status:blocked`.
- * @returns {Promise<{planHeld: boolean, record: object|null}>}
+ * @returns {Promise<{planHeld: boolean, record: object|null, recordComment: number|null}>}
  */
 export async function holdFacts({ github, repo, issue }) {
   const labels = labelNames(issue?.labels)
-  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return { planHeld: false, record: null }
+  if (!issue || issue.pull_request || !labels.includes('status:blocked')) return { planHeld: false, record: null, recordComment: null }
   const raw = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: issue.number, per_page: 100 })
-  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type }))
-  return { planHeld: isRejectedTwice({ comments, labels }), record: openRecord({ comments, labels }) }
+  const comments = raw.map((c) => ({ body: c.body, userType: c.user && c.user.type, userLogin: c.user && c.user.login }))
+  // `comments` is `raw.map(...)`, one per raw comment, so `hit.index` lines up with `raw`.
+  const hit = openRecordAt({ comments, labels, owner: process.env.OWNER_LOGIN })
+  return { planHeld: isRejectedTwice({ comments, labels }), record: hit ? hit.record : null, recordComment: hit ? raw[hit.index].id ?? null : null }
 }
 
 /** The parent epic of a ticket: `epic=N` in the hidden marker, else the GitHub sub-issue parent (0 = none). */

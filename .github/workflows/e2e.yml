@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           # CI fixtures.
-          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab"
+          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab with-relations"
           # Packages whose change can affect EVERY fixture (shared base + generator + harness inputs).
           UNIVERSAL="crouton crouton-core crouton-i18n crouton-cli crouton-auth"
 

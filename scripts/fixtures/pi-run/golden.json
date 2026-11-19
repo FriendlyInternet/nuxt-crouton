@@ -3,7 +3,8 @@
     "agent": "pi-worker",
     "vars": {
       "issue": "1",
-      "branch_instr": "branch off main and target the PR at main"
+      "branch_instr": "branch off main and target the PR at main",
+      "question_file": "$RUNNER_TEMP/worker-question.md"
     },
     "tail": "",
     "files": {}
@@ -12,7 +13,8 @@
     "agent": "pi-worker",
     "vars": {
       "issue": "1",
-      "branch_instr": "branch off the integration branch 'epic/1--x' and target the PR THERE (not main)"
+      "branch_instr": "branch off the integration branch 'epic/1--x' and target the PR THERE (not main)",
+      "question_file": "$RUNNER_TEMP/worker-question.md"
     },
     "tail": "",
     "files": {}
@@ -21,9 +23,10 @@
     "agent": "pi-worker",
     "vars": {
       "issue": "1",
-      "branch_instr": "branch off main and target the PR at main"
+      "branch_instr": "branch off main and target the PR at main",
+      "question_file": "$RUNNER_TEMP/worker-question.md"
     },
-    "tail": "\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment 200, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test\n",
+    "tail": "\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment 200, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: ask the way this prompt says above (your question file), saying what differs and why, and do NOT improvise a different change.\n\n--- APPROVED PLAN ---\n<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test\n",
     "files": {
       "approved-plan.txt": "<!-- pipeline-plan:v1 -->\n### Fix\nmove the glue into a script\n\n### Test\nnode --test\n"
     }
