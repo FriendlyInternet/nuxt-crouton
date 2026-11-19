@@ -51,70 +51,31 @@ jobs:
             }
 
   teardown-preview:
-    # (#2020) Delete the per-PR preview Worker + D1 + KV. Not gated on `merged`: a closed-unmerged
-    # PR leaks the same resources. Best-effort — must never fail the PR-close event.
-    # Fork PRs never got a preview (no secrets), so there is nothing to tear down.
+    # Delete the preview Worker + D1 + KV of EVERY PR that is no longer open (scripts/preview-sweep.mjs),
+    # not only of the PR that closed: GitHub starts no run for a PR closed while in conflict, so
+    # that PR's previews are picked up by the next close. Red when something it tried to delete is
+    # still there; it is its own job, so that never stops the other PR-close jobs.
+    # Fork PRs never got a preview (no secrets), so they don't start a sweep.
     if: ${{ !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: preview-sweep
+      cancel-in-progress: false
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
-
-      # Which apps could this PR have deployed? Same source of truth as the deploy side —
-      # an app opts in with a deploy.config.json, so anything without one never had a preview.
-      - id: apps
-        run: |
-          set -uo pipefail
-          APPS=""
-          for cfg in apps/*/deploy.config.json pocs/*/deploy.config.json; do
-            [ -f "$cfg" ] || continue
-            APPS="$APPS $(basename "$(dirname "$cfg")")"
-          done
-          echo "list=$(echo $APPS | xargs)" >> "$GITHUB_OUTPUT"
-          echo "candidate apps:$APPS"
-
-      - name: Delete preview Worker + D1 + KV
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts
+      - name: Delete previews of PRs that are no longer open
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PR: ${{ github.event.pull_request.number }}
-          APPS: ${{ steps.apps.outputs.list }}
-        run: |
-          set -uo pipefail
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo "::warning::No Cloudflare token — skipping teardown (previews were never deployed either)."
-            exit 0
-          fi
-          REMOVED=0
-          for APP in $APPS; do
-           # The app's preview Worker, then its live-sync one (<app>-pr<N>-collab, #2693).
-           for WORKER in "${APP}-pr${PR}" "${APP}-pr${PR}-collab"; do
-            # `wrangler delete` exits non-zero for a Worker that doesn't exist. For most apps on
-            # most PRs that is the NORMAL case (the PR didn't touch that app), so it is noise,
-            # not an error — count what actually went away instead of trusting exit codes.
-            if npx wrangler delete --name "$WORKER" --force 2>&1 | tee /tmp/del.log | tail -2; then
-              grep -qi "deleted\|success" /tmp/del.log && { echo "  ✓ worker $WORKER"; REMOVED=$((REMOVED+1)); }
-            fi
-            for BINDING in db kv; do
-              RES="${WORKER}-${BINDING}"
-              case "$BINDING" in
-                db) npx wrangler d1 delete "$RES" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ d1 $RES" || true ;;
-                # KV is deleted by ID — "$RES" is its title, which --namespace-id never matches, so
-                # this used to miss on every PR and leak the namespace (#2608).
-                kv)
-                  KV_ID="$(npx wrangler kv namespace list 2>/dev/null | jq -r --arg t "$RES" '.[] | select(.title == $t) | .id' | head -1 || true)"
-                  if [ -n "$KV_ID" ]; then
-                    npx wrangler kv namespace delete --namespace-id "$KV_ID" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ kv $RES" || true
-                  fi ;;
-              esac
-            done
-           done
-          done
-          echo "teardown for PR #${PR}: ${REMOVED} worker(s) removed"
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/preview-sweep.mjs
 
   cleanup-epic-branch:
     # The epic→main merge half of branch cleanup (#613/#2788): keep the branch while its epic is

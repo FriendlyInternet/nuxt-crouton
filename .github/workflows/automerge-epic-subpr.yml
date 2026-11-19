@@ -1,5 +1,5 @@
 name: Auto-merge epic sub-PRs
-run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}"
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.pr && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}"
 
 # The decompose pipeline's design (task-decompose SKILL): a NON-GATE sub-PR merges
 # into its epic branch automatically. The epic branch is a staging area — the only
@@ -82,8 +82,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('automerge #{0
 # green, presence, shared-code, App-token merge) applies identically, so a PR that should be
 # held is re-asked and held again, not waved through.
 on:
-  schedule:
-    - cron: '17 * * * *'   # hourly, off-the-hour so it doesn't pile onto :00 with everything else
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   pull_request:
     # #3229: `build:approved` IS the reviewer's approval and arrives as a label event — a PR green
     # before approval otherwise waits for an unrelated event. Other labels are filtered out in the script (scripts/lib/automerge-trigger.mjs).
@@ -99,9 +98,14 @@ on:
   # read `issue_comment` keep working unchanged.
   workflow_call:
   # #3361: GitHub drops many scheduled runs, so the merge check can be re-run by hand (or by the
-  # hand-off sweep replaying a saved retry). With `pr` it evaluates that PR; empty = sweep all.
+  # hand-off sweep replaying a saved retry), and the status app's clock starts the hourly sweep (#4133).
+  # With `pr` it evaluates that PR; empty = sweep all.
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       pr:
         description: 'PR number to evaluate; empty = sweep all open sub-PRs'
         required: false
@@ -115,7 +119,7 @@ jobs:
   automerge:
     # On a PR event, evaluate it directly; on a check_suite, only when it went green
     # (a red/again-pending suite will re-fire this when it next completes green).
-    # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
+    # `workflow_dispatch` (the hourly clock or a hand run) always runs — it IS the "ask again".
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
@@ -270,9 +274,9 @@ jobs:
               if (!BOTS.includes(pr.user.login) && !v1) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
-              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // An epic → main or work-<N> → main (#4260) PR that conflicts with main would otherwise sit forever with no checks
               // (#2875): start the conflict resolver once per head (marker carries the sha).
-              if (epicToMain && state === 'dirty') {
+              if ((epicToMain || leafToMain) && state === 'dirty') {
                 const { startConflictResolver } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
                 const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
                 const r = await startConflictResolver({ github, owner, repo, pull_number, pr, state, handoffGuard })
@@ -445,7 +449,7 @@ jobs:
             }
            } catch (e) {
             // GitHub API allowance exhausted (#3287): not a failure of the PR. End green with a warning;
-            // the hourly schedule re-evaluates every open PR. Any other error still goes red.
+            // the hourly clock sweep re-evaluates every open PR. Any other error still goes red.
             // With a PR in hand, a retry of this merge check is saved for the hand-off sweep (#3361).
             let deferMergeCheck
             try {

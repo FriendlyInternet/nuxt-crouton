@@ -28,7 +28,7 @@ function harness({ comments = [], timeline = [], issue = {}, subs = [], branch =
       },
     },
   }
-  const run = (env) => artifactGate({ github, core, context: { repo: { owner: 'o', repo: 'r' }, runId: 1, serverUrl: 'https://x', payload: {} }, env: { ...BASE, ...env }, fs: { existsSync: () => false }, execFileSync: () => '' })
+  const run = (env, opts = {}) => artifactGate({ github, core, context: { repo: { owner: 'o', repo: 'r' }, runId: 1, serverUrl: 'https://x', payload: {} }, env: { ...BASE, ...env }, fs: { existsSync: () => false }, execFileSync: () => '', ...opts })
   return { calls, run }
 }
 
@@ -48,6 +48,35 @@ test('nothing produced: one failure and one pipeline-note comment', async () => 
   assert.match(h.calls.failed[0], /produced no deliverable/)
   assert.equal(h.calls.created.length, 1)
   assert.match(h.calls.created[0], /<!-- pipeline-note -->/)
+})
+
+// #4161: a cancelled job names the stop, not "NO run log". The stub answers only the
+// `tool-calls` subcommand, so the count must come from that exact call.
+const toolCallsStub = (n) => (cmd, args) => (cmd === 'node' && args[1] === 'tool-calls' && args[2].endsWith('/pi-session') ? `${n}\n` : '')
+const at = (min) => () => Date.parse(T0) + min * 60000
+
+test('#4161 T3: cancelled at the 45-minute limit names the limit, minutes, tool calls and the artifact', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', JOB_TIMEOUT_MIN: '45', RUNNER_TEMP: '/tmp/rt' }, { now: at(43), execFileSync: toolCallsStub(39) })
+  assert.equal(h.calls.created.length, 1)
+  const c = h.calls.created[0]
+  assert.match(c, /45-minute time limit/)
+  assert.match(c, /about 43 minutes/)
+  assert.match(c, /39 tool calls/)
+  assert.match(c, /pi-session-1/)
+  assert.doesNotMatch(c, /NO run log/)
+})
+
+test('#4161 T4: an early cancel says "cancelled after about N minutes"; not cancelled + no log keeps "NO run log"', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', JOB_TIMEOUT_MIN: '45', RUNNER_TEMP: '/tmp/rt' }, { now: at(5), execFileSync: toolCallsStub(4) })
+  assert.match(h.calls.created[0], /cancelled after about 5 minutes \(4 tool calls\)/)
+  assert.doesNotMatch(h.calls.created[0], /time limit/)
+  assert.match(h.calls.created[0], /pi-session-1/)
+  const h2 = harness()
+  await h2.run({}, { now: at(5) })
+  assert.match(h2.calls.created[0], /NO run log/)
+  assert.doesNotMatch(h2.calls.created[0], /cancelled after/)
 })
 
 test('conflict asked: OK without touching GitHub', async () => {
@@ -121,4 +150,36 @@ test('plan run with no plan comment: exactly one 🔴 comment', async () => {
   assert.equal(h.calls.failed.length, 1)
   assert.equal(h.calls.created.length, 1)
   assert.match(h.calls.created[0], /produced nothing/)
+})
+
+// #4183 T6 — the pi step failed at its own time limit: name that, not "upstream of pi".
+const nowS = () => Math.floor(Date.now() / 1000)
+
+test('#4183 T6: pi step failed at its deadline, no log, nothing produced → "ran out of time" + the minutes', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() - 30), PI_MINUTES: '37' })
+  assert.equal(h.calls.created.length, 1)
+  assert.match(h.calls.created[0], /ran out of time/)
+  assert.match(h.calls.created[0], /37-minute/)
+  assert.doesNotMatch(h.calls.created[0], /upstream of pi/)
+})
+
+test('#4183 T6: pi step failed far before its deadline (a crash) → the old "upstream of pi" text', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() + 3600), PI_MINUTES: '37' })
+  assert.match(h.calls.created[0], /upstream of pi/)
+  assert.doesNotMatch(h.calls.created[0], /ran out of time/)
+})
+
+test('#4183 T6: plan-mode crash (no deadline, no log) → "upstream of pi", never "ran out of time"', async () => {
+  const h = harness()
+  await h.run({ PI_OUTCOME: 'failure', PI_DEADLINE: '', PI_MINUTES: '' })
+  assert.match(h.calls.created[0], /upstream of pi/)
+  assert.doesNotMatch(h.calls.created[0], /ran out of time/)
+})
+
+test('#4183 T6: a cancelled job with a past deadline is not our "ran out of time" case (#4161 owns it)', async () => {
+  const h = harness()
+  await h.run({ JOB_STATUS: 'cancelled', PI_OUTCOME: 'failure', PI_DEADLINE: String(nowS() - 30), PI_MINUTES: '37' })
+  assert.doesNotMatch(h.calls.created[0], /the worker ran out of time — the agent step hit its 37-minute limit/)
 })

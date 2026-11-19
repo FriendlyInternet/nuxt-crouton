@@ -68,6 +68,24 @@ export function decideSignoff({ uiTouched, planText = '', issueBody = '', previe
   }
 }
 
+/**
+ * The `SURFACE=` value the finish step appends to the PR body (#4201), or '' for none. The PR
+ * names its page whenever the plan's 👁 line names a page on an app this PR previews — held or
+ * not, with or without a sight — so the preview screenshot shoots the changed screen.
+ * `none` → its own marker (no colon after `review-surface`, so it is never read as an app).
+ */
+export function surfaceLine(decision, previews = []) {
+  if (!decision || decision.reason === 'not-visual') return ''
+  const lookAt = decision.lookAt
+  if (lookAt?.none) {
+    // With the plan's reason the marker beats guessed pages (#4252); cut so it cannot close the comment early.
+    const why = String(lookAt.why || '').split(/-->|[\r\n]/)[0].replace(/\s+/g, ' ').trim()
+    return why ? `<!-- review-surface-none: ${why} -->` : '<!-- review-surface-none -->'
+  }
+  if (lookAt?.app && previews.includes(lookAt.app)) return `<!-- review-surface: ${lookAt.app} ${lookAt.path} -->`
+  return ''
+}
+
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`)
   return i > -1 ? process.argv[i + 1] : undefined
@@ -82,13 +100,15 @@ function main() {
   try {
     const files = execFileSync('git', ['diff', '--name-only', `${arg('base')}..HEAD`], { encoding: 'utf8' })
       .split('\n').filter(Boolean)
+    const apps = previewApps(files)
     const d = decideSignoff({
-      uiTouched: arg('ui'), planText: read(arg('plan')), issueBody: read(arg('issue')), previewApps: previewApps(files)
+      uiTouched: arg('ui'), planText: read(arg('plan')), issueBody: read(arg('issue')), previewApps: apps
     })
     console.log(`HOLD=${d.hold ? 1 : 0}`)
     console.log(`REASON=${d.reason}`)
     console.log(`NOTE_B64=${Buffer.from(d.note).toString('base64')}`)
-    if (d.hold) console.log(`SURFACE=<!-- review-surface: ${d.lookAt.app} ${d.lookAt.path} -->`)
+    const line = surfaceLine(d, apps)
+    if (line) console.log(`SURFACE=${line}`)
   } catch (e) {
     console.error(`signoff-surface failed: ${e.message}`)
     const note = `\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft. Reply \`ok\` to release it, or \`not ok: what is wrong\`.\n\n${MARKER}`

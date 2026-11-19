@@ -31,7 +31,7 @@
     "task-decomposer":   { "tier": "medium", "why": "LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824." },
     "red-team":          { "tier": "medium", "why": "security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824." },
     "a11y":              { "tier": "small", "why": "template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings" },
-    "frontend-review":   { "tier": "small", "why": "convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names" },
+    "frontend-review":   { "tier": "review", "why": "convention review that can block a merge — moved to the review tier after the 17 Nov trial (#4071: the small model missed a plain button tag 6 of 6 runs and flapped red/green on the same file); plain form tags are decided by lint (eslint.frontend-gate.config.mjs)" },
     "simplify":          { "tier": "medium", "why": "simplification / code-smell review, reports-only + ADVISORY (never blocks). Judgment-heavy and false-positive-sensitive (a noisy taste call teaches people to mute the check), so Sonnet not Haiku — mirrors red-team's reports-but-judgment tier. Reversible via the #865 scoreboard if it proves noisy (#1576)." }
   },
 

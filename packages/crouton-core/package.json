@@ -45,7 +45,9 @@
     "i18n",
     "modules",
     "nuxt.config.ts",
-    "crouton-hooks.d.ts"
+    "crouton-hooks.d.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

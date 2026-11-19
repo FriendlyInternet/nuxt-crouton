@@ -15,7 +15,9 @@
     "nuxt.config.ts",
     "crouton.manifest.ts",
     "README.md",
-    "SCHEMAS.md"
+    "SCHEMAS.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",

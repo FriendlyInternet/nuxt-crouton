@@ -38,7 +38,9 @@
       ],
       "kv_namespaces": [
         { "binding": "KV" }
-      ]
+      ],
+      // The status app's clock (#4133) — staging only, never top level, so PR previews get no cron.
+      "triggers": { "crons": ["*/10 * * * *"] }
     }
   }
 }

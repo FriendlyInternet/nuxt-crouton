@@ -10,6 +10,7 @@
 //   run-record.mjs finish-check-line <outcome.json>     → "finish check: …" line (never throws)
 //   run-record.mjs append-finish-check <outcome.json> <branch> → append that line to the PR's
 //     run-record comment (best effort: no PR / no comment / API error → exit 0, no change)
+//   run-record.mjs tool-calls <session-dir>             → number of toolCall entries (0 on a missing dir)
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -66,6 +67,8 @@ export function lastAssistantMessage(jsonlPath, max = 500) {
 
 // #3762: the run-record line for the finish-check outcome the pi extension writes.
 export function finishCheckLine(outcome) {
+  // #4183: skipped for lack of time — say so, not "not run".
+  if (outcome && typeof outcome === 'object' && outcome.last === 'skipped' && outcome.reason) return `finish check: ${outcome.reason}`;
   if (!outcome || typeof outcome !== 'object' || outcome.ran !== true) return 'finish check: not run';
   const n = Number(outcome.rounds) || 0;
   return `finish check: ran, ${n} ${n === 1 ? 'round' : 'rounds'}, ${outcome.last ?? 'not-run'}`;
@@ -107,6 +110,26 @@ export function newestSessionFile(dir) {
   } catch { return null; }
 }
 
+// #4161: how many tool calls a run made — the artifact gate names it when the run is cancelled.
+// Counts `toolCall` content entries across the top-level *.jsonl of `dir`; never throws.
+export function toolCallCount(dir) {
+  let files;
+  try { files = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.jsonl')); } catch { return 0; }
+  let n = 0;
+  for (const f of files) {
+    let raw = '';
+    try { raw = fs.readFileSync(path.join(dir, f.name), 'utf8'); } catch { continue; }
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      const content = rec?.message?.content;
+      if (Array.isArray(content)) n += content.filter((c) => c && c.type === 'toolCall').length;
+    }
+  }
+  return n;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [cmd, a, b, c, d] = process.argv.slice(2);
   const readLog = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return ''; } };
@@ -123,8 +146,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const gh = (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const r = appendFinishCheck({ outcomePath: a, branch: b, repo: process.env.GITHUB_REPOSITORY, gh });
     console.log(r.done ? `run record: ${r.line}` : `run record: finish-check line skipped (${r.why})`);
+  } else if (cmd === 'tool-calls') {
+    console.log(toolCallCount(a));
   } else {
-    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit> | finish-check-line <outcome.json> | append-finish-check <outcome.json> <branch>');
+    console.error('usage: run-record.mjs last-message <dir> [max] | annotate <log> <title> | record <log> <issue> <step> <exit> | finish-check-line <outcome.json> | append-finish-check <outcome.json> <branch> | tool-calls <session-dir>');
     process.exit(2);
   }
 }

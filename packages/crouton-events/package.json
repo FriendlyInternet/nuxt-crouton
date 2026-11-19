@@ -16,7 +16,8 @@
     "server",
     "i18n",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt"
   ],
   "keywords": [
     "nuxt",

@@ -1,0 +1,4 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } },
+  "displayOrder": { "type": "integer", "meta": { "label": "Display order" } }
+}

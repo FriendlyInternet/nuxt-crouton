@@ -64,7 +64,9 @@
     "module.ts",
     "nuxt.config.ts",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
     "build": "unbuild",

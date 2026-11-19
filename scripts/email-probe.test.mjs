@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { probeOutcome, isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders } from './email-probe.mjs'
+import { probeOutcome, isEmailApp, probeMode, probeAddress, hasEmailKey, verdict, probeHeaders, probeUserSql } from './email-probe.mjs'
 
 test('isEmailApp', () => {
   const velo = JSON.parse(readFileSync(new URL('../apps/velo/deploy.config.json', import.meta.url), 'utf8'))
@@ -86,27 +86,28 @@ test('production: key check runs before deploy; staging steps and send stay non-
   assert.ok(wfText.indexOf(`- name: ${check}`) < wfText.indexOf(`- name: ${deploy}`), 'check must precede deploy')
   const blk = stepBlock(check)
   assert.ok(blk.includes("inputs.environment == 'production'"))
-  assert.ok(blk.includes('has-key') && blk.includes('exit 1'))
+  assert.ok(blk.includes('email-key-check.mjs" before deploy.config.json'), 'calls the tested check (#3441)')
   assert.ok(!blk.includes('secret put NUXT') || !/\|\s*npx wrangler secret put/.test(blk), 'never pushes a key')
   assert.ok(stepBlock('Ensure email key on the Worker').includes("inputs.environment != 'production'"))
   assert.ok(stepBlock('Probe email send').includes("inputs.environment != 'production'"))
 })
 
 test('bundleHasEmailKey: key only in WORKER_SECRETS_JSON → deploy proceeds', async () => {
+  // helper unit cases; the bundle-vs-Worker decision itself is tested in email-key-check.test.mjs (#3441)
   const { bundleHasEmailKey, hasEmailKey } = await import('./email-probe.mjs')
   assert.equal(bundleHasEmailKey('{"NUXT_EMAIL_RESEND_API_KEY":"x"}'), true)
-  assert.equal(bundleHasEmailKey('{"OTHER":"x"}'), false) // key nowhere (+ none on Worker) → stops
+  assert.equal(bundleHasEmailKey('{"OTHER":"x"}'), false)
   assert.equal(bundleHasEmailKey(''), false)
   assert.equal(bundleHasEmailKey('[1]'), false)
-  assert.equal(hasEmailKey('[{"name":"NUXT_EMAIL_RESEND_API_KEY"}]'), true) // Worker only → proceeds
+  assert.equal(hasEmailKey('[{"name":"NUXT_EMAIL_RESEND_API_KEY"}]'), true)
   assert.equal(hasEmailKey('[]'), false)
 })
 
 test('production: pre-deploy accepts bundle or Worker, post-sync confirms Worker', () => {
   const pre = stepBlock('Require email key for production (before deploy)')
-  assert.ok(pre.includes('bundle-has-key') && pre.includes('has-key') && pre.includes('WORKER_SECRETS_JSON') && pre.includes('exit 1'))
+  assert.ok(pre.includes('email-key-check.mjs" before') && pre.includes('WORKER_SECRETS_JSON'))
   const post = stepBlock('Confirm email key on the production Worker')
-  assert.ok(post.includes("inputs.environment == 'production'") && post.includes('has-key') && post.includes('exit 1'))
+  assert.ok(post.includes("inputs.environment == 'production'") && post.includes('email-key-check.mjs" after'))
   assert.ok(wfText.indexOf('- name: Sync explicit Worker secrets') < wfText.indexOf('- name: Confirm email key on the production Worker'))
 })
 
@@ -260,4 +261,30 @@ test('#3586 workflow wiring', () => {
   const b = stepBlock('Probe email send')
   assert.ok(b.includes('outcome "$KIND"') && b.includes('result=skip') && b.includes('::warning::'))
   assert.ok(b.indexOf('result=skip') < b.indexOf('wrangler'))
+})
+
+// #3972 — invite-only apps silently refuse the probe's sign-up, so the probe inserts its own user.
+test('#3972 T1 probeUserSql: one idempotent, lower-cased insert; quotes refused', () => {
+  const sql = probeUserSql('Delivered+Velo@resend.dev', 1_700_000_000_000)
+  assert.ok(sql.startsWith('INSERT OR IGNORE INTO "user"'))
+  assert.equal(sql.split(';').length, 1, 'exactly one statement')
+  assert.ok(sql.includes("'email-probe:delivered+velo@resend.dev'"))
+  assert.ok(sql.includes("'delivered+velo@resend.dev', 1, 1700000000, 1700000000"), 'emailVerified 1 + unix seconds')
+  assert.ok(!sql.includes('Velo'))
+  assert.throws(() => probeUserSql("x'@resend.dev"))
+  assert.throws(() => probeUserSql(undefined))
+  // the real CLI entry point the workflow calls
+  const r = spawnSync(process.execPath, [new URL('./email-probe.mjs', import.meta.url).pathname, 'ensure-user-sql', 'delivered+velo@resend.dev'], { encoding: 'utf8' })
+  assert.equal(r.status, 0)
+  assert.ok(r.stdout.trim().startsWith('INSERT OR IGNORE INTO "user"'))
+  const bad = spawnSync(process.execPath, [new URL('./email-probe.mjs', import.meta.url).pathname, 'ensure-user-sql', "x'@resend.dev"], { encoding: 'utf8' })
+  assert.notEqual(bad.status, 0)
+})
+
+test('#3972 T2 workflow ensures the probe user before the requests call', () => {
+  const b = stepBlock('Probe email send')
+  const ensure = b.indexOf('ensure-user-sql')
+  assert.notEqual(ensure, -1, 'Probe email send must run ensure-user-sql')
+  assert.ok(ensure < b.indexOf('requests "$MODE"'), 'ensure-user-sql must come before requests')
+  assert.ok(b.slice(b.lastIndexOf('\n', ensure), ensure).includes('wrangler d1 execute DB --remote $TARGET'))
 })

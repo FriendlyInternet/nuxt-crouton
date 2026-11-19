@@ -21,14 +21,22 @@ function assertGolden(out, name) {
 
 test('pi-worker, off main', () => {
   assertGolden(renderPrompt('pi-worker', {
-    issue: '1932', branch_instr: 'branch off main and target the PR at main',
+    issue: '1932', branch_instr: 'branch off main and target the PR at main', question_file: '/tmp/rt/worker-question.md',
   }), 'pi-worker')
 })
 
 test('pi-worker, off an epic branch', () => {
   assertGolden(renderPrompt('pi-worker', {
-    issue: '1932', branch_instr: "branch off the integration branch 'epic/9-x' and target the PR THERE (not main)",
+    issue: '1932', branch_instr: "branch off the integration branch 'epic/9-x' and target the PR THERE (not main)", question_file: '/tmp/rt/worker-question.md',
   }), 'pi-worker-epic')
+})
+
+// covers: T7
+test('#4192 the worker writes its question to {{question_file}} instead of posting it', () => {
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main', question_file: '/tmp/rt/worker-question.md' })
+  assert.ok(out.includes('write it with the write tool to /tmp/rt/worker-question.md'))
+  assert.ok(!out.includes('post a top-level comment on the issue explaining the blocker'))
+  assert.throws(() => renderPrompt('pi-worker', { issue: '1', branch_instr: 'x' }), /missing --var question_file/)
 })
 
 test('pi-reviser passes the owner comment through verbatim (backticks, %s, {{…}}, trailing blank lines)', () => {
@@ -77,6 +85,24 @@ test('the decomposer workflow passes epic_src and has no step input (#3846: late
   assert.ok(!/replan/i.test(wf))
 })
 
+// covers: T1
+test('plain test-step rule is in the skill and every step-writing prompt, same wording (#3301)', () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
+  const shared = 'PLAIN TEST STEPS (#3301, github-tasks § How to test → Plain steps): each step is one action + `→ what you should see` on the next line; start from the preview URL and name any login or data; only needs what the preview has (the change seeds it, or the step says how to make it in the app); no repo jargon (file/script names, CLI commands, internal terms) unless explained in ≤3 plain words; no owner homework off the phone (scripts, Mac, terminal) — if it can\'t be tested on the preview, say so in one line.'
+  const agents = {
+    'pi-decomposer (rendered)': renderPrompt('pi-decomposer', { issue: '1', epic_src: '' }),
+    'task-decomposer.md': read('../.claude/agents/task-decomposer.md'),
+    'task-worker.md': read('../.claude/agents/task-worker.md'),
+  }
+  const texts = { 'github-tasks SKILL.md': read('../.claude/skills/github-tasks/SKILL.md'), ...agents }
+  const phrases = ['one action', 'what you should see', 'preview url', 'only needs what the preview has', 'no repo jargon', '≤3 plain words', 'no owner homework off the phone']
+  for (const [name, text] of Object.entries(texts)) {
+    const lower = text.toLowerCase()
+    for (const p of phrases) assert.ok(lower.includes(p), `${name} is missing "${p}"`)
+  }
+  for (const [name, text] of Object.entries(agents)) assert.ok(text.includes(shared), `${name} carries the exact shared line`)
+})
+
 test('pi-planner (plan mode, #2755)', () => {
   assertGolden(renderPrompt('pi-planner', { issue: '1932' }), 'pi-planner')
 })
@@ -86,7 +112,7 @@ test('a missing variable is a hard error, not an empty string', () => {
 })
 
 test('pi-worker reuse search finds an existing helper (#3073)', () => {
-  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main' })
+  const out = renderPrompt('pi-worker', { issue: '1', branch_instr: 'branch off main', question_file: '/tmp/rt/worker-question.md' })
   assert.ok(out.includes('REUSE BEFORE YOU WRITE'))
   assert.ok(out.includes('Maintaining AI Documentation'))
   const cmd = out.match(/`(grep -rniE '<verb\|noun>'[^`]*)`/)[1].replace('<verb|noun>', 'redirect')

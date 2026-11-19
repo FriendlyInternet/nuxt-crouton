@@ -10,7 +10,9 @@
     "schemas",
     "dist",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",

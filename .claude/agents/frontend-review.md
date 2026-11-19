@@ -3,7 +3,7 @@ name: frontend-review
 layer: stack
 description: A front-end conventions prober for this monorepo's Vue surfaces. Given a scope and a depth, it reads `.vue` templates the way a Nuxt UI 4 reviewer would — checking we build on Nuxt UI 4 / crouton components (not raw HTML re-implementations), use the v4 component names and patterns, and don't drift to Options API or hardcoded colors — and returns structured, severity-rated findings. Reports only; it patches the working tree ONLY when called with fix=true.
 tools: Read, Grep, Glob, Bash, Edit
-model: haiku
+model: opus
 ---
 
 # Frontend-review — read our own UI as a Nuxt UI 4 reviewer would, then report what's off-convention
@@ -101,12 +101,20 @@ exceptions, listed below — those are not findings):
 
 | Raw element | Should usually be | Notes / legit exceptions |
 |-------------|-------------------|--------------------------|
-| `<button>` | `UButton` | except inside a component that intentionally renders an unstyled trigger |
-| `<input>` | `UInput` (or `UFormField` + `UInput`) | except `type="file"`/`type="hidden"` plumbing, or a deliberately headless control |
-| `<select>` | `USelect` / `USelectMenu` | — |
-| `<textarea>` | `UTextarea` | — |
+| `<button>` | `UButton` | decided by the lint rule (below) |
+| `<input>` | `UInput` (or `UFormField` + `UInput`; `UCheckbox` / `URadioGroup` / `UFileUpload`) | decided by the lint rule (below) |
+| `<select>` | `USelect` / `USelectMenu` | decided by the lint rule (below) |
+| `<textarea>` | `UTextarea` | decided by the lint rule (below) |
 | `<a href>` to an **internal** route | `NuxtLink` / `UButton :to` / `ULink` | external `http(s)://`/`mailto:` `<a>` is fine |
 | hand-rolled modal/dropdown markup | `UModal` / `UDropdownMenu` | — |
+
+**The four form tags are decided by a lint rule, not by judgement** (#4071):
+`vue/no-restricted-html-elements` in `eslint.frontend-gate.config.mjs`, applied in CI by
+`scripts/frontend-gate.mjs` to the lines a PR adds. An unstyled trigger or a
+`type="file"` / `type="hidden"` input is no longer excused by the reviewer — a tag that must
+stay needs `<!-- eslint-disable-next-line vue/no-restricted-html-elements -- <reason> -->` on
+the line above, allowed only when the PR's ticket asks for it (`.claude/agents/build-reviewer.md`).
+Report a plain form tag on an added line anyway; the lint makes the result repeatable.
 
 Use judgment: a raw `<div>` that does layout work is not a finding (one that only carries a class a `U*` prop would set is); a raw `<button class="…">` that
 re-implements what `UButton` gives is. When the repo has a crouton component for the
@@ -149,7 +157,7 @@ Not in scope: legitimate `nextTick` for **DOM measurement after render** (focus,
 
 | Finding | Level |
 |---------|-------|
-| v3 component name; `UCard` inside an overlay; Options API in a `.vue`; an overlay clearly missing the `#content` pattern; **hand-rolled where a Nuxt UI 4 component exists** (raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>`, home-made menu/modal/toggle/badge, arbitrary `[...]` Tailwind on a surface a `U*` prop covers, class-only wrapper `<div>`) | 🔴 **Critical** — a hard, documented convention break; **blocks** the CI gate |
+| v3 component name; `UCard` inside an overlay; Options API in a `.vue`; an overlay clearly missing the `#content` pattern; **hand-rolled where a Nuxt UI 4 component exists** (raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>`, home-made menu/modal/toggle/badge, arbitrary `[...]` Tailwind on a surface a `U*` prop covers, class-only wrapper `<div>`) | 🔴 **Critical** — a hard, documented convention break; **blocks** the CI gate. The four form tags are caught by the lint; every 🔴 must carry `file`, `line`, `quote` (the exact added line) or it is shown as a warning |
 | hardcoded brand/semantic color; a load-bearing `nextTick`/timer papering over an async-state race (a cleaner event/data-derived form exists) | 🟡 **Warning** — likely off-convention, advisory |
 | bare `export default {}` nit; one-off hardcoded color; benign `nextTick` smell; minor stylistic drift | 🔵 **Note** — polish |
 
