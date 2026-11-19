@@ -32,7 +32,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { costFromText, costForPiUsage } from '../../../scripts/lib/session-cost.mjs'
-import { skillLoadsFromSession, toolStatsFromSession, formatToolStats } from './lib/skill-loads.mjs'
+import { skillLoadsFromSession, toolCallsFromSession, toolStatsFromSession, formatToolStats } from './lib/skill-loads.mjs'
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null
@@ -212,6 +212,19 @@ export function readSubagentMetas(dir) {
  * and return the skill-load events across them (#2403). Local FS only; skips unreadable files.
  */
 export function readSessionSkillLoads(dir) {
+  return readSessionEvents(dir, skillLoadsFromSession)
+}
+
+/**
+ * Every tool call across the session JSONL under `dir` → `kind:'tool'` events, name only
+ * (#4161). Without these a run that loads no skill and starts no helper traced 0 events.
+ */
+export function readSessionToolCalls(dir) {
+  return readSessionEvents(dir, toolCallsFromSession)
+}
+
+/** Recursive walk of `dir`'s *.jsonl → `parse(text)` events, concatenated. Skips unreadable files (#2403, #4161). */
+function readSessionEvents(dir, parse) {
   const out = []
   if (!dir || !fs.existsSync(dir)) return out
   const stack = [dir]
@@ -223,7 +236,7 @@ export function readSessionSkillLoads(dir) {
       const full = path.join(cur, e.name)
       if (e.isDirectory()) { stack.push(full); continue }
       if (!e.name.endsWith('.jsonl')) continue
-      try { out.push(...skillLoadsFromSession(fs.readFileSync(full, 'utf8'))) } catch { /* skip bad file */ }
+      try { out.push(...parse(fs.readFileSync(full, 'utf8'))) } catch { /* skip bad file */ }
     }
   }
   return out
@@ -293,7 +306,7 @@ function priceRun(metas, sessionDir) {
 /**
  * One-shot: a pi telemetry directory (+ optionally the run's session dir) → WS2 trace events
  * (with the leading `meta` header line the data seam expects). Agent events come from the
- * subagent metas; skill events from the session JSONL (#2403). Returns { events, meta } or
+ * subagent metas; skill and tool-call events from the session JSONL (#2403, #4161). Returns { events, meta } or
  * null when neither surface yielded anything.
  */
 export function buildPiTrace(dir, opts = {}) {
@@ -301,6 +314,7 @@ export function buildPiTrace(dir, opts = {}) {
   const events = [
     ...subagentMetasToWs2Events(metas),
     ...readSessionSkillLoads(opts.sessionDir),
+    ...readSessionToolCalls(opts.sessionDir),
   ].sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0))
   const cost = priceRun(metas, opts.sessionDir)
   if (!events.length && cost.turns === 0) return null
