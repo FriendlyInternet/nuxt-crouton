@@ -2,6 +2,7 @@
 // slot and how the run ended, and when it is due next. Pure — the endpoint feeds it GitHub's runs list.
 // "Due" has one definition: `dueJobs` (clock-jobs.ts). lastDue / nextDue walk 10-minute slots with it.
 import { dueJobs, type ClockJob } from './clock-jobs'
+import type { CardsSyncRecord } from './cards-sync-clock'
 
 const SLOT_MS = 10 * 60_000
 /** A clock run must be created within this long after the slot start; also the grace before "missed". */
@@ -32,7 +33,8 @@ export interface JobStatus {
   about: string
   lastDue: string | null
   nextDue: string | null
-  lastRun: LastRun | null
+  /** The inbox stuck check's row has only `createdAt` (it is no workflow run). */
+  lastRun: (Partial<LastRun> & { createdAt: string }) | null
   state: ClockState
   error?: string | null
 }
@@ -137,6 +139,34 @@ export function unknownStatus(job: ClockJob, now: Date, error: string): JobStatu
     state: 'unknown',
     error
   }
+}
+
+/** When the inbox stuck check moved to the clock (#4234): before it, with no record, the row is grey. */
+export const CARDS_SYNC_SINCE = '2026-11-19T16:00:00Z'
+const SYNC_SLOT_MS = 30 * 60_000
+/** A clock sync record older than this is a miss (one :00/:30 slot + 10 min of grace). */
+const SYNC_FRESH_MS = 40 * 60_000
+
+/**
+ * The Clock tab's 14th row: the inbox stuck check, built from the clock sync's KV record
+ * (`clock:cards-sync:last`), not from a workflow's runs. `clockOn` = this Worker has CLOCK_ENABLED=1;
+ * without it no record can arrive, so no record is "not on the clock yet", never a miss.
+ */
+export function cardsSyncStatus(record: CardsSyncRecord | null, now: Date, clockOn: boolean): JobStatus {
+  const slot = Math.floor(now.getTime() / SYNC_SLOT_MS) * SYNC_SLOT_MS
+  const base = {
+    workflow: 'inbox stuck check',
+    schedule: 'every 30 min',
+    about: 'Checks GitHub for stuck tickets, idle drafts and other things waiting on you, and updates the inbox — even when you haven\'t opened it.',
+    lastDue: new Date(slot).toISOString(),
+    nextDue: new Date(slot + SYNC_SLOT_MS).toISOString(),
+    lastRun: record ? { createdAt: record.at } : null,
+    error: record?.ok ? (record.readErrors ?? null) : (record?.error ?? null)
+  }
+  if (!record && (!clockOn || now.getTime() < Date.parse(CARDS_SYNC_SINCE) + SYNC_FRESH_MS)) return { ...base, state: 'before-clock' }
+  if (record && !record.ok) return { ...base, state: 'failed' }
+  if (!record || now.getTime() - Date.parse(record.at) > SYNC_FRESH_MS) return { ...base, state: 'missed' }
+  return { ...base, state: 'ok' }
 }
 
 /** A GitHub read error in words the owner can act on (403 = the status token lacks Actions: read). */
