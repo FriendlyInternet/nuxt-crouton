@@ -35,7 +35,7 @@ const route = useRoute()
 const { teamId } = useTeamContext()
 const { t } = useT()
 const { getPageType } = usePageTypes()
-const { hideTeamInUrl, hideLocaleInUrl } = useDomainContext()
+const { hideTeamInUrl, hideTeamInLinks, hideLocaleInUrl } = useDomainContext()
 
 // i18n for locale handling and SEO
 const { locale: i18nLocale, locales, setLocale } = useI18n()
@@ -250,8 +250,9 @@ const localePrefixFor = (loc: string) => {
 const buildSeoUrl = (loc: string, path: string) =>
   `${siteUrl}${localePrefixFor(loc)}/${path}`.replace(/\/+$/, '') || `${siteUrl}${localePrefixFor(loc)}` || '/'
 
-// Home link on the not-found screen
-const homePath = computed(() => hideTeamInUrl.value
+// Home link on the not-found screen. A router link: it omits the team only in
+// locale/custom mode — on a connected domain the team-host history hides it (#4175).
+const homePath = computed(() => hideTeamInLinks.value
   ? '/'
   : buildPagePath({
       hideTeamInUrl: false,
