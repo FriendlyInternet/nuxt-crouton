@@ -50,6 +50,13 @@
       "when": 1794486197967,
       "tag": "0006_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795099378027,
+      "tag": "0007_cultured_synch",
+      "breakpoints": true
     }
   ]
 }

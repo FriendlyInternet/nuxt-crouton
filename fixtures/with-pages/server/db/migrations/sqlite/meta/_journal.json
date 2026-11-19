@@ -43,6 +43,13 @@
       "when": 1794486203357,
       "tag": "0005_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795099409414,
+      "tag": "0006_worried_slyde",
+      "breakpoints": true
     }
   ]
 }
