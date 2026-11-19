@@ -72,6 +72,10 @@
         "expectStatus": [404]
       },
       {
+        "path": "/api/teams/{teamId}/pages/smoke-none/access-code",
+        "expectStatus": [404]
+      },
+      {
         "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
       },
       {
