@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, needsSignedOut, splitBySession, signInModalLanding } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces, readPrBody, pickSurfaces, settlePage, waitForHydration, changesScreen, appPackages, landingRejection, isAuthPath, authTryDecision } from './capture-review-surfaces.mjs'
+import * as captureModule from './capture-review-surfaces.mjs'
 import { LOADING_MARKERS } from './lib/capture-validate.mjs'
 
 test('slug: safe stable filename fragment', () => {
@@ -552,27 +553,66 @@ test('landingRejection: named/guessed pages must stay put, the start page may re
   assert.equal(landingRejection(guessed, 'https://h/admin/test1/media/'), null)
 })
 
-test('needsSignedOut: sign-in pages only (#4235, cases 1-5)', () => {
-  assert.equal(needsSignedOut('/auth/login'), true)
-  assert.equal(needsSignedOut('/auth/consent'), true)
-  assert.equal(needsSignedOut('/admin/test1/team'), false)
-  assert.equal(needsSignedOut('/'), false)
-  assert.equal(needsSignedOut('/auth-ish/x'), false)
-})
-
-test('splitBySession: /auth pages go signed out, the rest signed in (#4235, case 6)', () => {
-  const { signedIn, signedOut } = splitBySession([{ path: '/auth/login' }, { path: '/admin/test1/team' }])
-  assert.deepEqual(signedOut, [{ path: '/auth/login' }])
-  assert.deepEqual(signedIn, [{ path: '/admin/test1/team' }])
-})
-
 test('landingRejection still rejects a signed-out /auth/login that lands on / (#4235, case 7)', () => {
   assert.equal(landingRejection({ path: '/auth/login', checkLanding: true }, 'https://h/'), 'landed on / instead of /auth/login')
 })
 
-test('signInModalLanding: only a sign-in form in a dialog on / counts (#4235)', () => {
-  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/', true), true)
-  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/', false), false)
-  assert.equal(signInModalLanding({ path: '/admin/test1/team' }, 'https://h/', true), false)
-  assert.equal(signInModalLanding({ path: '/auth/login' }, 'https://h/admin/test1/sales/events', true), false)
+// #4248 — every page is tried signed in first; an /auth/ page that is sent away gets one signed-out try.
+const consent = { name: 'auth-consent', path: '/auth/consent', checkLanding: true }
+const login = { name: 'auth-login', path: '/auth/login', checkLanding: true }
+
+test('authTryDecision T1: /auth/consent that stays put signed in is kept signed in, no retry (#4248 case 1)', () => {
+  assert.deepEqual(authTryDecision(consent, [{ url: 'https://h/auth/consent', dialogForm: false }]), { keep: 'signed-in' })
 })
+
+test('authTryDecision T2: /auth/login sent to / signed in is retried, then kept signed out (#4248 case 2)', () => {
+  const t1 = { url: 'https://h/', dialogForm: false }
+  assert.deepEqual(authTryDecision(login, [t1]), { retry: 'signed-out' })
+  assert.deepEqual(authTryDecision(login, [t1, { url: 'https://h/auth/login', dialogForm: false }]), { keep: 'signed-out' })
+})
+
+test('authTryDecision T3: a sign-in page shown as a pop-up on / is kept (#4248 case 3)', () => {
+  assert.deepEqual(
+    authTryDecision(login, [{ url: 'https://h/', dialogForm: false }, { url: 'https://h/', dialogForm: true }]),
+    { keep: 'signed-out', popup: true }
+  )
+})
+
+test('authTryDecision T4: a pop-up on / never counts for /auth/consent (#4248 case 4)', () => {
+  const d = authTryDecision(consent, [{ url: 'https://h/auth/login', dialogForm: false }, { url: 'https://h/', dialogForm: true }])
+  assert.ok(d.reject, 'rejected')
+  assert.match(d.reject, /\/auth\/consent/)
+  assert.equal(d.keep, undefined)
+})
+
+test('authTryDecision T5: a non-/auth page that lands on /auth/login is rejected with no retry (#4248 case 5)', () => {
+  const team = { name: 'team', path: '/admin/test1/team', checkLanding: true }
+  assert.deepEqual(authTryDecision(team, [{ url: 'https://h/auth/login?redirect=x', dialogForm: true }]), { reject: 'landed on /auth/login instead of /admin/test1/team' })
+})
+
+test('authTryDecision T6: in one run, /auth/login is kept signed out and /auth/consent signed in (#4248 case 6)', () => {
+  const decisions = [login, consent].map((s) => {
+    const landings = { '/auth/login': ['https://h/', 'https://h/auth/login'], '/auth/consent': ['https://h/auth/consent'] }[s.path]
+    const t1 = { url: landings[0], dialogForm: false }
+    const d = authTryDecision(s, [t1])
+    return d.retry ? authTryDecision(s, [t1, { url: landings[1], dialogForm: false }]) : d
+  })
+  assert.deepEqual(decisions, [{ keep: 'signed-out' }, { keep: 'signed-in' }])
+})
+
+test('authTryDecision T7: when the review login failed (signed-in try shows the pop-up too), consent is rejected (#4248 case 7)', () => {
+  const d = authTryDecision(consent, [{ url: 'https://h/', dialogForm: true }, { url: 'https://h/', dialogForm: true }])
+  assert.ok(d.reject, 'rejected')
+  assert.match(d.reject, /\/auth\/consent/)
+})
+
+test('T8: the old fixed "/auth/ ⇒ signed out" rule is gone; isAuthPath only says "under /auth" (#4248)', () => {
+  assert.equal(captureModule.splitBySession, undefined)
+  assert.equal(captureModule.signInModalLanding, undefined)
+  assert.equal(captureModule.needsSignedOut, undefined)
+  assert.equal(isAuthPath('/auth/consent'), true)
+  assert.equal(isAuthPath('/auth'), true)
+  assert.equal(isAuthPath('/auth-ish/x'), false)
+  assert.equal(isAuthPath('/'), false)
+})
+
