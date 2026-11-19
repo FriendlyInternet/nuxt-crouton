@@ -4,7 +4,7 @@
 // bindings file". This reads ci.yml and checks the wiring on the real workflow text.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 // Same slicer as scripts/plan-checks.test.mjs.
@@ -65,4 +65,14 @@ test('test job keeps its better-sqlite3 rebuild after pnpm install', () => {
   const rebuild = j.indexOf('run: pnpm rebuild better-sqlite3')
   assert.ok(install >= 0, 'test job installs')
   assert.ok(rebuild > install, 'test job rebuilds better-sqlite3 after install (#1880)')
+})
+
+// A failed native rebuild must stop its job with its own error. deploy-app.yml and deploy-pocs.yml
+// ran it as `… 2>/dev/null || true`, so a failure surfaced later as an unrelated build error.
+test('no workflow swallows a failed better-sqlite3 rebuild', () => {
+  const dir = new URL('../.github/workflows/', import.meta.url)
+  const hits = readdirSync(dir).filter(f => f.endsWith('.yml')).flatMap(f =>
+    readFileSync(new URL(f, dir), 'utf8').split('\n')
+      .filter(l => !l.trim().startsWith('#') && /pnpm rebuild better-sqlite3.*(\|\| true|2>\/dev\/null)/.test(l)).map(l => `${f}: ${l.trim()}`))
+  assert.deepEqual(hits, [])
 })
