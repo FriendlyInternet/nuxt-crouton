@@ -425,7 +425,8 @@ Components auto-import with `CroutonPages` prefix:
 - **Homepage**: `/[team]/[locale]/` (first published root page)
 
 **Building URLs:** always go through `app/utils/page-path.ts` (`buildSlugPath` walks
-the parentId chain → localized slug path; `buildPagePath` adds team/locale prefix).
+the parentId chain → localized slug path; `buildPagePath` adds team/locale prefix; `buildSeoUrl` builds the canonical/og:url/hreflang
+URLs from the team **slug** (`publicTeamSegment`: route param → slug → id), never the bare team id).
 The lookup endpoint returns `meta.fullPath` (canonical nested path) for SEO. Used by
 `useNavigation`, `usePageLink`, the public render route, and the admin "open in
 public" button — keep them all on these helpers so the format never drifts.

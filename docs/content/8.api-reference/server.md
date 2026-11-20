@@ -296,6 +296,14 @@ _Source: `packages/crouton-auth/server/utils/database.ts`_
 
 **Also exported from `packages/crouton-auth/server/utils/database.ts`:** `eq`, `and`, `or`, `ne`, `not`, `lt`, `gt`, `asc`, `desc`, `count`, `inArray`, `sql` (re-exported from `drizzle-orm`), `tables`
 
+## teamEmailLogScope
+
+```ts
+teamEmailLogScope(db: any, teamId: string): SQL
+```
+
+_Source: `packages/crouton-auth/server/utils/email-log-scope.ts`_
+
 ## mintPairingCode
 
 Mint a single-use pairing code for an org.
