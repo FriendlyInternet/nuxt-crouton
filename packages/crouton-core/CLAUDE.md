@@ -54,6 +54,7 @@ export default defineNuxtConfig({
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
 | `app/composables/useCollectionMutation.ts` | Create/update/delete with auto cache invalidation |
 | `app/composables/useCollections.ts` | Collection config registry from `app.config.croutonCollections` |
+| `app/theme/disabled-button.ts` | Shared disabled `UButton` look (#4329): `ui.button.compoundVariants` in `app/app.config.ts` make a disabled button of any colour neutral (`bg-elevated`, `text-muted`, grey ring) for the six standard variants only; loading buttons and themes' named variants keep their own look |
 | `app/composables/useCroutonShortcuts.ts` | Keyboard shortcuts for CRUD operations |
 | `app/composables/useCollectionSelection.ts` | Which record of a collection is open, and where (#2598). Pure `createCollectionSelections({ open, containerFor })` (one selection per collection: `itemId`/`mode`/`sessionKey`, `act`, `attachEditor`, `saved`/`deleted`/`cancelled`) + Nuxt glue: `provideCollectionSelections()` (call once per page), `useCollectionSelections()` (inject, or a private set = overlay behaviour), `provideSelectionItemActions(collection)` (route child rows' actions to it). A mounted editor `attachEditor()`s → rows open in it; none → the collection's overlay; delete always a modal. Used by `CollectionViewer` (inline mode) and crouton-layout's List/Form blocks |
 | `app/composables/useCollectionExport.ts` | CSV/JSON export for collection data |
