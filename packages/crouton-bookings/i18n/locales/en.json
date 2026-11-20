@@ -105,6 +105,9 @@
     "card": {
       "activity": "Activity",
       "on": "on {date}",
+      "editBooking": "Edit booking",
+      "showDayInCalendar": "Show {date} in the calendar",
+      "emailPanel": "Email status",
       "emailLabels": {
         "confirm": "Confirm",
         "reminder": "Reminder",
