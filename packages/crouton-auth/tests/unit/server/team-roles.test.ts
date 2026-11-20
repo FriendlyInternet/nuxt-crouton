@@ -20,9 +20,10 @@ import { organization } from 'better-auth/plugins'
 import * as authSchema from '../../../server/database/schema/auth'
 import { buildOrganizationConfig, setAuthInstance } from '../../../server/lib/auth'
 import { buildAccessControl, setAccessControl } from '../../../server/lib/access'
+import { buildAuthHooks } from '../../../server/lib/team-admin-role'
 import { can } from '../../../server/utils/permissions'
 import { actionsToRolePermission } from '../../../shared/utils/team-roles'
-import { DECLARED } from './helpers/access-setup'
+import { DECLARED, seedAdminRow } from './helpers/access-setup'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
@@ -30,15 +31,18 @@ vi.mock('nitropack/runtime', () => ({
 
 const ORIGIN = 'https://velo.pmcp.dev'
 
+const access = buildAccessControl({ actions: DECLARED })
+
 function makeAuth() {
-  const access = buildAccessControl({ actions: DECLARED })
   setAccessControl(access)
   const auth = betterAuth({
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: ORIGIN,
     emailAndPassword: { enabled: true },
-    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)]
+    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)],
+    // As createAuth() wires it: each team's admin row + its guard (#4130).
+    hooks: buildAuthHooks(access)
   })
   setAuthInstance(auth as never)
   return auth
@@ -122,6 +126,9 @@ describe('team roles (#4106)', () => {
     const y = await auth.api.createOrganization({ body: { name: 'Team Y', slug: 'team-y' }, headers: owner.headers })
     orgY = y!.id
     mirror(orgY, owner, 'owner')
+    // What createAuth's team-creation hooks do in production (#4130): each team gets its admin row.
+    await seedAdminRow(auth, orgX, access)
+    await seedAdminRow(auth, orgY, access)
 
     const owners = await auth.api.listMembers({ query: { organizationId: orgX }, headers: owner.headers })
     memberIds.owner = owners.members.find(m => m.userId === owner.userId)!.id
@@ -170,8 +177,12 @@ describe('team roles (#4106)', () => {
       body: { roleName: 'owner', organizationId: orgX }, headers: owner.headers
     }))).toBe('CANNOT_DELETE_A_PRE_DEFINED_ROLE')
     expect(await outcome(auth.api.updateOrgRole({
-      body: { roleName: 'admin', data: { permission: { pages: ['edit'] } }, organizationId: orgX }, headers: owner.headers
+      body: { roleName: 'member', data: { permission: { pages: ['edit'] } }, organizationId: orgX }, headers: owner.headers
     }))).toBe('ROLE_NOT_FOUND')
+    // admin is the team's own row (#4130): never deleted; only the owner edits it (team-admin-role.test.ts).
+    expect(await outcome(auth.api.deleteOrgRole({
+      body: { roleName: 'admin', organizationId: orgX }, headers: owner.headers
+    }))).toBe('ADMIN_ROLE_CANNOT_BE_DELETED')
   })
 
   it('the last owner can\'t be demoted, and an admin can\'t change the owner', async () => {
@@ -202,7 +213,8 @@ describe('team roles (#4106)', () => {
   // covers: T4 (rule)
   it('a role created in team X doesn\'t exist in team Y', async () => {
     const inY = await auth.api.listOrgRoles({ query: { organizationId: orgY }, headers: owner.headers })
-    expect(inY).toEqual([])
+    // Only Y's own admin row (#4130) — none of X's roles.
+    expect(inY.map(r => r.role)).toEqual(['admin'])
     expect(await outcome(auth.api.updateMemberRole({
       body: { memberId: memberIds.editorY!, role: 'éditeur', organizationId: orgY }, headers: owner.headers
     }))).toBe('ROLE_NOT_FOUND')

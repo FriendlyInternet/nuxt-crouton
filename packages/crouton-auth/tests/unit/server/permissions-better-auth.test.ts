@@ -17,6 +17,8 @@ import { memoryAdapter } from 'better-auth/adapters/memory'
 import { organization } from 'better-auth/plugins'
 import { buildOrganizationConfig } from '../../../server/lib/auth'
 import { buildAccessControl } from '../../../server/lib/access'
+import { buildAuthHooks } from '../../../server/lib/team-admin-role'
+import { seedAdminRow } from './helpers/access-setup'
 
 vi.mock('nitropack/runtime', () => ({
   useNitroApp: () => ({ hooks: { callHook: vi.fn().mockResolvedValue(undefined) } })
@@ -24,14 +26,17 @@ vi.mock('nitropack/runtime', () => ({
 
 const ORIGIN = 'https://velo.pmcp.dev'
 
+const access = buildAccessControl({ actions: { 'pages:edit': { label: 'permissions.pagesEdit' } } })
+
 function makeAuth() {
-  const access = buildAccessControl({ actions: { 'pages:edit': { label: 'permissions.pagesEdit' } } })
   return betterAuth({
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: ORIGIN,
     emailAndPassword: { enabled: true },
-    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)]
+    plugins: [organization(buildOrganizationConfig({}, undefined, access) as never)],
+    // As createAuth() wires it: admin is each team's own row (#4130).
+    hooks: buildAuthHooks(access)
   })
 }
 
@@ -73,6 +78,8 @@ describe('built roles keep Better Auth\'s own rights (T5)', () => {
     other = await signUp(auth, 'other@example.com')
     const org = await auth.api.createOrganization({ body: { name: 'Acme', slug: 'acme' }, headers: owner.headers })
     orgId = org!.id
+    // What createAuth's team-creation hooks do in production (#4130): the team gets its admin row.
+    await seedAdminRow(auth, orgId, access)
     await auth.api.addMember({ body: { userId: admin.userId, role: 'admin', organizationId: orgId } })
     await auth.api.addMember({ body: { userId: member.userId, role: 'member', organizationId: orgId } })
     const added = await auth.api.addMember({ body: { userId: other.userId, role: 'member', organizationId: orgId } })

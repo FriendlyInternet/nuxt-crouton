@@ -17,8 +17,10 @@ import {
   buildAccessControl,
   setAccessControl,
   type BaseRolesConfig,
-  type CroutonActionRegistry
+  type CroutonActionRegistry,
+  adminRolePermission
 } from '../../../../server/lib/access'
+import { buildAuthHooks } from '../../../../server/lib/team-admin-role'
 
 export const TEAM = 'team-1'
 export const OTHER_TEAM = 'team-2'
@@ -47,10 +49,25 @@ export function setup(roles?: BaseRolesConfig, actions: CroutonActionRegistry = 
     database: memoryAdapter({ user: [], session: [], account: [], verification: [], organization: [], member: [], invitation: [], organizationRole: [] }),
     secret: 'test-secret-test-secret-test-secret-123',
     baseURL: 'https://velo.pmcp.dev',
-    plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)]
+    plugins: [organization(buildOrganizationConfig({ teams: { roles } }, undefined, access) as never)],
+    // As createAuth() wires it: admin is each team's own row (#4130).
+    hooks: buildAuthHooks(access)
   })
   setAuthInstance(auth as never)
   return { access, auth }
+}
+
+/**
+ * The seed step for a memory-adapter Better Auth: give `orgId` its admin row,
+ * as `ensureTeamAdminRole` does in production (#4130). `buildAuthHooks` only
+ * seeds through crouton's raw db, so tests without one seed here.
+ */
+export async function seedAdminRow(auth: { $context: Promise<unknown> }, orgId: string, access: ReturnType<typeof buildAccessControl>): Promise<void> {
+  const ctx = await auth.$context as { adapter: { create: (input: { model: string, data: Record<string, unknown> }) => Promise<unknown> } }
+  await ctx.adapter.create({
+    model: 'organizationRole',
+    data: { organizationId: orgId, role: 'admin', permission: JSON.stringify(adminRolePermission(access)), createdAt: new Date() }
+  })
 }
 
 /**

@@ -97,6 +97,9 @@
       "adminAccessHint": "A role with any action also opens the admin area.",
       "notYoursHint": "You can only give actions you have yourself",
       "readOnlyRole": "This role has actions you do not have — only someone who has them can change it",
+      "adminOwnerOnly": "Only the owner can change this role",
+      "adminCannotDelete": "The admin role cannot be deleted",
+      "adminCannotRename": "The admin role cannot be renamed",
       "groups": {
         "team": "Team",
         "site": "Site",

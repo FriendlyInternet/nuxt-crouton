@@ -97,6 +97,9 @@
       "adminAccessHint": "Een rol met minstens één actie opent ook de beheeromgeving.",
       "notYoursHint": "Je kunt alleen acties geven die je zelf hebt",
       "readOnlyRole": "Deze rol heeft acties die jij niet hebt — alleen iemand die ze heeft kan hem wijzigen",
+      "adminOwnerOnly": "Alleen de eigenaar kan deze rol wijzigen",
+      "adminCannotDelete": "De rol admin kan niet worden verwijderd",
+      "adminCannotRename": "De rol admin kan niet worden hernoemd",
       "groups": {
         "team": "Team",
         "site": "Site",

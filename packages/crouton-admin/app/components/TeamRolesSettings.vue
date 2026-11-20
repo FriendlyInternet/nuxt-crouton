@@ -2,8 +2,9 @@
 /**
  * Team Roles Settings (#4106)
  *
- * Lists the fixed base roles (owner, admin, member — read-only) and the team's
- * own roles. A team role is a name plus ticked actions, grouped per package.
+ * Lists the fixed base roles (owner, member — read-only), the team's admin
+ * role (#4130: one row per team, edited by the owner only, read-only for
+ * everyone else, never deleted) and the team's own roles. A team role is a name plus ticked actions, grouped per package.
  * Create / edit (actions only — the name is fixed once members can hold it) /
  * delete (Better Auth refuses while a member still has the role).
  *
@@ -20,14 +21,17 @@ const {
   roleEditState,
   validateRoleName,
   roles,
+  adminRole,
   grantable,
   registeredActions,
   loading,
   refresh,
   create,
   update,
+  updateAdmin,
   remove
 } = useTeamRoles()
+const { isOwner } = useTeam()
 
 onMounted(async () => {
   const { error } = await refresh()
@@ -60,18 +64,24 @@ const groups = computed(() => {
   }))
 })
 
-/** What each base role gets: the site config, or the defaults (owner/admin all, member none). */
-const baseRoles = computed(() => {
-  const config = runtime.public?.crouton?.auth?.teams?.roles ?? {}
+/** What a base role gets from the site config, or the defaults (owner/admin all, member none). */
+function configuredActions(role: string): string[] {
+  const configured = runtime.public?.crouton?.auth?.teams?.roles?.[role]
   const all = registeredActions.value
-  return BASE_ROLES.map((role) => {
-    const configured = config[role]
-    const actions = configured
-      ? configured.filter(a => all.includes(a))
-      : role === 'member' ? [] : all
-    return { role, label: tr(`teams.${role}`, role), actions }
-  })
-})
+  return configured ? configured.filter(a => all.includes(a)) : role === 'member' ? [] : all
+}
+
+/** The fixed roles: owner and member. */
+const baseRoles = computed(() => BASE_ROLES
+  .filter(role => role !== 'admin')
+  .map(role => ({ role, label: tr(`teams.${role}`, role), actions: configuredActions(role) })))
+
+/** The team's admin role: its stored row, or the config template until the row loads. */
+const admin = computed(() => ({
+  role: 'admin',
+  label: tr('teams.admin', 'admin'),
+  actions: adminRole.value?.actions ?? configuredActions('admin')
+}))
 
 function summary(actions: string[]): string {
   if (actions.length === 0) return tr('teams.rolesScreen.noActions', 'No actions')
@@ -85,6 +95,12 @@ function errorText(code: string | undefined, fallback: string): string {
       return tr('teams.rolesScreen.deleteAssigned', 'This role is still given to a member — take it off them first')
     case 'ROLE_NAME_IS_ALREADY_TAKEN':
       return tr('teams.rolesScreen.nameTaken', 'That name already exists')
+    case 'ADMIN_ROLE_OWNER_ONLY':
+      return tr('teams.rolesScreen.adminOwnerOnly', 'Only the owner can change this role')
+    case 'ADMIN_ROLE_CANNOT_BE_DELETED':
+      return tr('teams.rolesScreen.adminCannotDelete', 'The admin role cannot be deleted')
+    case 'ADMIN_ROLE_CANNOT_BE_RENAMED':
+      return tr('teams.rolesScreen.adminCannotRename', 'The admin role cannot be renamed')
     case 'YOU_ARE_NOT_ALLOWED_TO_CREATE_A_ROLE':
     case 'YOU_ARE_NOT_ALLOWED_TO_UPDATE_A_ROLE':
       return tr('teams.rolesScreen.notYoursHint', 'You can only give actions you have yourself')
@@ -153,9 +169,11 @@ async function save() {
   nameTouched.value = true
   if (nameProblem.value) return
   saving.value = true
-  const result = editing.value
-    ? await update(editing.value, form.actions)
-    : await create(form.name, form.actions)
+  const result = editing.value === 'admin'
+    ? await updateAdmin(form.actions)
+    : editing.value
+      ? await update(editing.value, form.actions)
+      : await create(form.name, form.actions)
   saving.value = false
   if (result.error) {
     notify.error(t('errors.generic') || 'Error', { description: errorText(result.error.code, result.error.message) })
@@ -229,6 +247,37 @@ async function confirmDelete() {
         </p>
       </UCard>
     </div>
+
+    <!-- The team's admin role: the owner edits it, nobody deletes it (#4130) -->
+    <UCard :ui="{ body: 'p-3 sm:p-4' }">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+          <span class="font-medium capitalize">{{ admin.label }}</span>
+          <p class="mt-1 text-sm text-muted">
+            {{ summary(admin.actions) }}
+          </p>
+          <p
+            v-if="!isOwner"
+            class="mt-1 flex items-center gap-1 text-xs text-muted"
+          >
+            <UIcon
+              name="i-lucide-lock"
+              class="size-3"
+            />
+            {{ tr('teams.rolesScreen.adminOwnerOnly', 'Only the owner can change this role') }}
+          </p>
+        </div>
+        <UButton
+          v-if="isOwner"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-pencil"
+          :label="tr('teams.rolesScreen.edit', 'Edit')"
+          @click="openEdit(admin)"
+        />
+      </div>
+    </UCard>
 
     <!-- The team's own roles -->
     <div class="space-y-2">

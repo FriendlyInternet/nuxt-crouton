@@ -20,8 +20,10 @@
 import type { Ref, ComputedRef } from 'vue'
 import { requireAuthClient } from '../../types/auth-client'
 import {
+  ADMIN_ROLE,
   BASE_ROLES,
   actionsToRolePermission,
+  adminActionsToRolePermission,
   roleEditState,
   rolePermissionToActions,
   validateRoleName
@@ -85,7 +87,10 @@ export function useTeamRoles() {
     Object.keys(appConfig.croutonActions ?? {}).filter(a => a !== 'admin:access' && a.includes(':'))
   )
 
+  /** The team's own roles, without its admin row (that one is `adminRole`). */
   const roles: Ref<TeamRole[]> = useState<TeamRole[]>('crouton-team-roles', () => [])
+  /** The team's admin row (#4130): only the owner edits it, nobody deletes it. Null until loaded. */
+  const adminRole: Ref<TeamRole | null> = useState<TeamRole | null>('crouton-team-admin-role', () => null)
   /** Which actions the signed-in member holds (and so may give a role). */
   const grantable: Ref<Record<string, boolean>> = useState<Record<string, boolean>>('crouton-team-roles-grantable', () => ({}))
   const loading = ref(false)
@@ -112,7 +117,9 @@ export function useTeamRoles() {
     ])
     grantable.value = allowed ?? {}
     if (list.error) return fail(list.error)
-    roles.value = toRoles(list.data)
+    const all = toRoles(list.data)
+    adminRole.value = all.find(r => r.role === ADMIN_ROLE) ?? null
+    roles.value = all.filter(r => r.role !== ADMIN_ROLE)
     return { data: roles.value, error: null }
   }
 
@@ -158,25 +165,39 @@ export function useTeamRoles() {
     }))
   }
 
+  /**
+   * Change what the team's admins may do (owner only — the server refuses
+   * anyone else with `ADMIN_ROLE_OWNER_ONLY`). Admin's own team rights stay.
+   */
+  function updateAdmin(actions: string[]): Promise<TeamRoleResult> {
+    return mutate(organizationId => requireAuthClient().organization.updateRole({
+      organizationId,
+      roleName: ADMIN_ROLE,
+      data: { permission: adminActionsToRolePermission(actions) }
+    }))
+  }
+
   /** Delete a role. Better Auth refuses while a member still has it (`ROLE_IS_ASSIGNED_TO_MEMBERS`). */
   function remove(name: string): Promise<TeamRoleResult> {
     return mutate(organizationId => requireAuthClient().organization.deleteRole({ organizationId, roleName: name }))
   }
 
   return {
-    /** owner, admin, member — fixed, never editable. */
+    /** owner, admin, member. Owner and member are fixed; admin is `adminRole`. */
     baseRoles: BASE_ROLES,
     /** What the signed-in editor may change on a role (see shared/utils/team-roles). */
     roleEditState,
     /** Check a new role name: the problem, or null. */
     validateRoleName,
     roles,
+    adminRole,
     grantable,
     registeredActions,
     loading,
     refresh,
     create,
     update,
+    updateAdmin,
     remove
   }
 }
