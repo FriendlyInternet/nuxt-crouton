@@ -177,3 +177,85 @@ test('stale branch with base .gitattributes seeded in info/attributes: merge=uni
   const r = midMerge({ attrs: true })
   assert.equal(r.git('diff', '--name-only', '--diff-filter=U').stdout.trim(), '')
 })
+
+// ── #4320: migrations, end to end, from a lone copy of the script (as work-issue-pidev.yml runs it) ──
+import { copyFileSync, existsSync, rmSync } from 'node:fs'
+
+const MIG = 'apps/x/server/db/migrations/sqlite'
+const jrnl = (tags) => JSON.stringify({ version: '7', dialect: 'sqlite', entries: tags.map((tag, idx) => ({ idx, version: '6', when: idx, tag, breakpoints: true })) }, null, 2) + '\n'
+
+// Both sides add migration 0001 to apps/x: the snapshot (add/add) and the journal conflict.
+function migMerge() {
+  const lone = mkdtempSync(join(tmpdir(), 'lone-'))
+  copyFileSync(CLI, join(lone, 'conflict-resolution.mjs'))
+  const dir = mkdtempSync(join(tmpdir(), 'verify-mig-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  // its db:generate would leave a marker: it must never run in these cases
+  put('apps/x/package.json', JSON.stringify({ name: 'x', scripts: { 'db:generate': 'node -e "require(\'fs\').writeFileSync(\'GENERATED\', \'1\')"' } }) + '\n')
+  put('apps/x/notes.md', 'one\n')
+  put(`${MIG}/0000_a.sql`, 'a\n'); put(`${MIG}/meta/0000_snapshot.json`, '{"v":0}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a']))
+  git('add', '-A'); git('commit', '-qm', 'b0')
+  git('checkout', '-qb', 'work')
+  put(`${MIG}/0001_side.sql`, 'side\n'); put(`${MIG}/meta/0001_snapshot.json`, '{"v":"side"}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_side']))
+  git('add', '-A'); git('commit', '-qm', 'side')
+  git('checkout', '-q', 'main')
+  put(`${MIG}/0001_base.sql`, 'base\n'); put(`${MIG}/meta/0001_snapshot.json`, '{"v":"base"}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_base']))
+  git('add', '-A'); git('commit', '-qm', 'base')
+  git('checkout', '-q', 'work')
+  assert.notEqual(git('merge', '--no-edit', 'main').status, 0, 'expected a conflict')
+  const verify = () => spawnSync('node', [join(lone, 'conflict-resolution.mjs'), 'verify', join(dir, 'none.md')], { cwd: dir, encoding: 'utf8' })
+  return { dir, git, put, verify }
+}
+
+test('T2 verify (lone copy) refuses a hand-merged migration snapshot, naming it', () => {
+  const r = migMerge()
+  r.put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_base']))
+  r.put(`${MIG}/meta/0001_snapshot.json`, '{"v":"base","w":"side"}\n')
+  const v = r.verify()
+  assert.equal(v.status, 1, v.stderr)
+  assert.match(v.stderr, /hand-edited migration file: apps\/x\/server\/db\/migrations\/sqlite\/meta\/0001_snapshot\.json/)
+  assert.ok(!existsSync(join(r.dir, 'GENERATED')))
+})
+
+test('T2 verify (lone copy) refuses a hand-edited journal', () => {
+  const r = migMerge()
+  r.git('checkout', '--theirs', '--', `${MIG}/meta/0001_snapshot.json`)
+  r.put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_base', '0002_side']))
+  const v = r.verify()
+  assert.equal(v.status, 1, v.stderr)
+  assert.match(v.stderr, /hand-edited migration journal: apps\/x\/server\/db\/migrations\/sqlite\/meta\/_journal\.json/)
+})
+
+test('T2 verify (lone copy) refuses a leftover untracked .sql beside the base journal', () => {
+  const r = migMerge()
+  r.git('checkout', '--theirs', '--', `${MIG}/meta/0001_snapshot.json`, `${MIG}/meta/_journal.json`)
+  rmSync(join(r.dir, `${MIG}/0001_side.sql`))
+  r.put(`${MIG}/0001_old.sql`, 'old\n')
+  const v = r.verify()
+  assert.equal(v.status, 1, v.stderr)
+  assert.match(v.stderr, /migration file not in the journal: apps\/x\/server\/db\/migrations\/sqlite\/0001_old\.sql/)
+})
+
+test('T2 a conflict in notes.md next to an app runs no db:generate', () => {
+  const r = migMerge()
+  r.git('merge', '--abort')
+  r.git('checkout', '-q', 'main'); r.put('apps/x/notes.md', 'one\nbase\n'); r.git('commit', '-qam', 'n-base')
+  r.git('checkout', '-q', 'work'); r.git('reset', '-q', '--hard', 'HEAD~1'); r.put('apps/x/notes.md', 'one\nside\n'); r.git('commit', '-qam', 'n-side')
+  assert.notEqual(r.git('merge', '--no-edit', 'main').status, 0)
+  assert.equal(r.git('diff', '--name-only', '--diff-filter=U').stdout.trim(), 'apps/x/notes.md')
+  r.put('apps/x/notes.md', 'one\nbase\nside\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+  assert.ok(!existsSync(join(r.dir, 'GENERATED')), 'db:generate ran for a non-migration conflict')
+  assert.ok(!existsSync(join(r.dir, 'apps/x/GENERATED')), 'db:generate ran for a non-migration conflict')
+})
+
+test('T2 resolutionPaths keeps untracked generator output in the conflicted migration folder', () => {
+  const conflicted = [`${MIG}/meta/0001_snapshot.json`]
+  assert.deepEqual(
+    resolutionPaths({ modified: [`${MIG}/0001_side.sql`, 'x.md'], conflicted, untracked: [`${MIG}/0002_new.sql`, `${MIG}/meta/0002_snapshot.json`, 'stray.md'] }),
+    [`${MIG}/0001_side.sql`, `${MIG}/0002_new.sql`, `${MIG}/meta/0002_snapshot.json`],
+  )
+})
