@@ -78,7 +78,13 @@
         "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
         "path": "/api/teams/{teamId}/bookings-emaillogs"
+      },
+      {
+        "path": "/api/teams/{teamId}/catalog-products"
       },
       {
         "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"

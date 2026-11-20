@@ -232,6 +232,7 @@ crouton init my-app --dry-run
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
 | `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
+| `--site` | Small public site: one team (`test1`, no switcher/creation/management), one locale (`en`) with `runtimeConfig.public.croutonPages.hideLocaleInUrl: true`, an empty `appDomains` to fill in; adds `@fyit/crouton-pages`. Writes no pages, middleware or `routingMode`. See [crouton-pages](../crouton-pages/CLAUDE.md) |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -240,6 +241,9 @@ crouton init quotes --poc
 
 # Explicit output directory (overrides --poc)
 crouton init scratch --out sandboxes/scratch
+
+# A small one-team, one-language public site (#4263)
+crouton init my-site --site --poc
 ```
 
 ### What `crouton init` Does
@@ -884,7 +888,7 @@ reads that list instead:
 | Which packages' setup questions (manifest `configuration`) are asked | `lib/utils/manifest-configuration.ts` |
 | Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
 | Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
-| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package and, transitively, its manifest `dependencies` — named by feature key, package name `@fyit/crouton-x` or bare `crouton-x` — unless core bundles it; an unmatched dependency is skipped with a warning) | `lib/scaffold-app.ts` |
 
 The generator **never writes `extends`** from a features block any more (the hardcoded
 `framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with

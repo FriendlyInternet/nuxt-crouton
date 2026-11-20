@@ -29,11 +29,11 @@ vi.mock('../server/utils/email-service', () => ({
 const client = new Database(':memory:')
 client.exec(`
 CREATE TABLE user (id text primary key, name text, email text, image text);
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text, "order" integer, title text, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, inventoryMode integer, quantity integer, maxBookingsPerMonth integer, translations text, createdAt integer, updatedAt integer, createdBy text, updatedBy text);
-CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text, "order" integer, location text, date integer, slot text, "group" text, quantity integer, status text, createdAt integer, updatedAt integer, createdBy text, updatedBy text);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text, "order" integer, title text, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, maxBookingsPerMonth integer, translations text, createdAt integer, updatedAt integer, createdBy text, updatedBy text, products text);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text, "order" integer, location text, date integer, slot text, "group" text, quantity integer, status text, createdAt integer, updatedAt integer, createdBy text, updatedBy text, product text);
 INSERT INTO user VALUES ('u1','Me','me@x',null), ('u2','Other','other@x',null);
 INSERT INTO bookings_locations (id, teamId, title) VALUES ('loc','t1','Loc');
-INSERT INTO bookings_bookings VALUES ('mine','t1','u1',0,'loc',1000,'["a"]',null,1,'confirmed',1,1,'u1','u1'), ('theirs','t1','u2',0,'loc',2000,'["a"]',null,1,'confirmed',2,2,'u2','u2');
+INSERT INTO bookings_bookings VALUES ('mine','t1','u1',0,'loc',1000,'["a"]',null,1,'confirmed',1,1,'u1','u1',null), ('theirs','t1','u2',0,'loc',2000,'["a"]',null,1,'confirmed',2,2,'u2','u2',null);
 `)
 const db = drizzle(client) as any
 
@@ -143,7 +143,8 @@ describe('calendar-bookings (member-safe)', () => {
   it('member gets every booking but only the six calendar fields', async () => {
     const rows = await (await route(`${S}/calendar-bookings.get`))({})
     expect(rows).toHaveLength(2)
-    expect(Object.keys(rows[0]).sort()).toEqual(['date', 'id', 'location', 'quantity', 'slot', 'status'])
+    // + `product` since #4061: the calendar counts free stock per product (still no owner/email fields)
+    expect(Object.keys(rows[0]).sort()).toEqual(['date', 'id', 'location', 'product', 'quantity', 'slot', 'status'])
   })
 })
 

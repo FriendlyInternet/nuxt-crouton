@@ -5,8 +5,9 @@
  * opens with populated tables instead of `0–0 / 0` empties. Seeds
  * - one `bookings_settings` row (statuses + age groups), so booking
  *   `status`/`group` values resolve to readable labels in the admin list;
- * - three locations covering both booking modes — two slot-mode courts (named
- *   time slots) and one inventory-mode rental (a quantity pool);
+ * - four locations: two courts with time slots, one rental without slots, and a
+ *   bike shed with two slots, a full-day choice and three products — each
+ *   location lists the catalog seed's products it offers, with a stock each;
  * - a handful of bookings referencing those locations/slots, dated relative to
  *   seed time so the calendar always shows upcoming reservations.
  *
@@ -15,9 +16,9 @@
  * under jiti. Idempotent — stable `seedId(...)` ids upsert in place on re-run.
  *
  * Column notes (match the generator's Drizzle output):
- * - `slot` is a NOT-NULL JSON column; slot-mode bookings store an array of slot
- *   ids (`["slot-0900"]`), inventory bookings store the JSON literal `null`
- *   (`'null'` text) — the same shape the live batch-checkout endpoint writes.
+ * - `slot` is a NOT-NULL JSON column; bookings at a location with slots store an
+ *   array of slot ids (`["slot-0900"]`), the slotless booking stores the JSON
+ *   literal `null` (`'null'` text), read as the whole day.
  * - `date` is an integer timestamp (unix seconds); `unixepoch() + N*86400`
  *   keeps demo bookings in the near future on every (re-)seed.
  * - every NOT-NULL column is set explicitly: Drizzle `$default(...)` is an
@@ -48,8 +49,10 @@ const GROUPS: OptionItem[] = [
 interface SeedSlot {
   id: string
   label: string
-  capacity: number
 }
+
+/** The catalog seed's product keys (`packages/crouton-catalog/seed`). */
+type ProductKey = 'court' | 'kayak' | 'cargo-bike' | 'kids-bike'
 
 interface SeedLocation {
   key: string
@@ -57,9 +60,11 @@ interface SeedLocation {
   titleNl: string
   color: string
   city: string
-  inventoryMode: boolean
-  quantity?: number
   slots: SeedSlot[]
+  /** Offer a full-day choice next to the slots. */
+  offerFullDay: boolean
+  /** The catalog seed's products this location offers, with a stock each (#4044) */
+  products: { product: ProductKey, stock: number }[]
 }
 
 const LOCATIONS: SeedLocation[] = [
@@ -69,12 +74,13 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Centrumplein',
     color: '#3b82f6',
     city: 'Antwerpen',
-    inventoryMode: false,
     slots: [
-      { id: 'slot-0900', label: '09:00 – 10:00', capacity: 1 },
-      { id: 'slot-1000', label: '10:00 – 11:00', capacity: 1 },
-      { id: 'slot-1100', label: '11:00 – 12:00', capacity: 2 }
-    ]
+      { id: 'slot-0900', label: '09:00 – 10:00' },
+      { id: 'slot-1000', label: '10:00 – 11:00' },
+      { id: 'slot-1100', label: '11:00 – 12:00' }
+    ],
+    offerFullDay: false,
+    products: [{ product: 'court', stock: 2 }]
   },
   {
     key: 'park-court',
@@ -82,11 +88,12 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Parkzijde',
     color: '#22c55e',
     city: 'Gent',
-    inventoryMode: false,
     slots: [
-      { id: 'slot-1400', label: '14:00 – 15:00', capacity: 1 },
-      { id: 'slot-1500', label: '15:00 – 16:00', capacity: 1 }
-    ]
+      { id: 'slot-1400', label: '14:00 – 15:00' },
+      { id: 'slot-1500', label: '15:00 – 16:00' }
+    ],
+    offerFullDay: false,
+    products: [{ product: 'court', stock: 1 }]
   },
   {
     key: 'kayak-rental',
@@ -94,37 +101,68 @@ const LOCATIONS: SeedLocation[] = [
     titleNl: 'Kajakverhuur',
     color: '#f59e0b',
     city: 'Brugge',
-    inventoryMode: true,
-    quantity: 8,
-    slots: []
+    slots: [],
+    offerFullDay: false,
+    products: [{ product: 'kayak', stock: 8 }]
+  },
+  {
+    key: 'bike-shed',
+    title: 'Bike Shed',
+    titleNl: 'Fietsenstalling',
+    color: '#8b5cf6',
+    city: 'Leuven',
+    slots: [
+      { id: 'slot-morning', label: 'Morning' },
+      { id: 'slot-afternoon', label: 'Afternoon' }
+    ],
+    offerFullDay: true,
+    products: [
+      { product: 'cargo-bike', stock: 3 },
+      { product: 'kids-bike', stock: 5 },
+      { product: 'kayak', stock: 8 }
+    ]
   }
 ]
 
 interface SeedBooking {
   locationKey: string
-  /** Slot ids for slot-mode; empty for inventory bookings. */
+  /** Slot ids; empty at a location without slots (the whole day). */
   slotIds: string[]
   /** Days from seed time (keeps demo bookings upcoming). */
   inDays: number
   quantity: number
   status: string
   group: string | null
+  /** The booked product; defaults to the location's first product. */
+  product?: ProductKey
 }
 
 const BOOKINGS: SeedBooking[] = [
   { locationKey: 'center-court', slotIds: ['slot-0900'], inDays: 1, quantity: 1, status: 'confirmed', group: 'adults' },
   { locationKey: 'center-court', slotIds: ['slot-1100'], inDays: 1, quantity: 1, status: 'confirmed', group: 'youth' },
   { locationKey: 'park-court', slotIds: ['slot-1400'], inDays: 2, quantity: 1, status: 'pending', group: 'adults' },
-  { locationKey: 'kayak-rental', slotIds: [], inDays: 3, quantity: 2, status: 'confirmed', group: null }
+  { locationKey: 'kayak-rental', slotIds: [], inDays: 3, quantity: 2, status: 'confirmed', group: null },
+  // appended last: booking ids include the list index
+  { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' }
 ]
 
 function locationId(ctx: SeedContext, key: string): string {
   return seedId('bookings-location', ctx.teamSlug, key)
 }
 
+/** Same id the catalog seed gives its products (`packages/crouton-catalog/seed`). */
+function productId(ctx: SeedContext, key: string): string {
+  return seedId('catalog-product', ctx.teamSlug, key)
+}
+
+function locationProduct(ctx: SeedContext, key: string): string {
+  return productId(ctx, LOCATIONS.find(l => l.key === key)!.products[0]!.product)
+}
+
 export const provider: SeedProvider = {
   id: 'bookings',
-  dependsOn: ['auth'],
+  // catalog first: locations and bookings point at its products (#4044)
+  dependsOn: ['auth', 'catalog'],
   seed(ctx) {
     // Settings — one row per team (status + group option lists).
     ctx.upsert('bookings_settings', { id: seedId('bookings-settings', ctx.teamSlug) }, {
@@ -149,12 +187,12 @@ export const provider: SeedProvider = {
         color: loc.color,
         city: loc.city,
         content: null,
-        slots: loc.inventoryMode ? null : loc.slots,
+        slots: loc.slots,
+        products: loc.products.map(p => ({ product: productId(ctx, p.product), stock: p.stock })),
+        offerFullDay: loc.offerFullDay,
         openDays: null,
         slotSchedule: null,
         blockedDates: null,
-        inventoryMode: loc.inventoryMode,
-        quantity: loc.inventoryMode ? (loc.quantity ?? 0) : null,
         maxBookingsPerMonth: null,
         translations: {
           [ctx.locale]: { title: loc.titleNl, city: loc.city },
@@ -167,8 +205,9 @@ export const provider: SeedProvider = {
       })
     })
 
-    // Bookings — slot-mode store a JSON array of slot ids; inventory stores the
-    // JSON literal `null` (NOT-NULL column → `'null'` text, like the live app).
+    // Bookings — slot bookings store a JSON array of slot ids; the slotless row
+    // stores the JSON literal `null` (NOT-NULL column → `'null'` text; read as
+    // full day — new live bookings store `["all-day"]` since #4172).
     BOOKINGS.forEach((booking, index) => {
       ctx.upsert(
         'bookings_bookings',
@@ -183,6 +222,7 @@ export const provider: SeedProvider = {
           group: booking.group,
           quantity: booking.quantity,
           status: booking.status,
+          product: booking.product ? productId(ctx, booking.product) : locationProduct(ctx, booking.locationKey),
           createdAt: ctx.now,
           updatedAt: ctx.now,
           createdBy: 'seed',

@@ -69,13 +69,13 @@ const title = computed(() => {
     </span>
 
     <UBadge
-      v-if="slotCount > 0 || location.inventoryMode"
+      v-if="slotCount > 0"
       size="xs"
       color="neutral"
       variant="subtle"
       class="flex-shrink-0"
     >
-      {{ location.inventoryMode ? `×${location.quantity || 0}` : slotCount }}
+      {{ slotCount }}
     </UBadge>
 
     <UIcon
