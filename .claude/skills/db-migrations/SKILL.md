@@ -65,7 +65,9 @@ Key paths (per app, e.g. `apps/kassa`):
   `out: server/db/migrations/sqlite`.
 - `server/db/migrations/sqlite/` — generated `NNNN_*.sql` + `meta/` (journal +
   per-migration snapshots). **All committed.** wrangler applies the `.sql`;
-  drizzle-kit needs `meta/` to diff the next migration.
+  drizzle-kit needs `meta/` to diff the next migration. In a merge conflict they
+  are never hand-merged: take the base version and regenerate
+  (`scripts/conflict-resolution.mjs` refuses a hand edit).
 - `package.json` scripts: `db:generate` (drizzle-kit), `db:migrate` (wrangler,
   `--local`), `db:migrate:prod` / `db:migrate:staging` (`--remote`),
   `db:seed*` (crouton-seed). NB: never run `npx nuxt db generate` from repo root.
