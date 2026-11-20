@@ -36,6 +36,13 @@
       "when": 1795107728048,
       "tag": "0004_team_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795163574946,
+      "tag": "0005_admin_removed_actions",
+      "breakpoints": true
     }
   ]
 }
