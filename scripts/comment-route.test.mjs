@@ -34,6 +34,14 @@ test('fresh-branch (#3881): a whole-line /fresh-branch from the owner on an epic
   assert.equal(kind({ comment: c('/close-epic'), issue: issue(['epic']) }), 'close-epic')
 })
 
+// covers: T2
+test('suggestions:daily (#4308): no reply on the standing issue starts anything; ok elsewhere still resumes', () => {
+  const standing = issue(['suggestions:daily', 'meta:agents', 'status:blocked'])
+  assert.equal(kind({ comment: c('ok'), issue: standing }), 'none')
+  assert.equal(kind({ comment: c('I like the second one, can you do it?'), issue: standing }), 'none')
+  assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'delegate-pi']) }), 'resume')
+})
+
 test('close-epic: /close-epic on an issue', () => {
   assert.equal(kind({ comment: c('/close-epic'), issue: issue() }), 'close-epic')
   assert.equal(kind({ comment: c('use `/close-epic` later'), issue: issue() }), 'interpret')

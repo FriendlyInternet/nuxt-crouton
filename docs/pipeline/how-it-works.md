@@ -188,6 +188,7 @@ The table below is generated from the workflow files and the grouping in
 | [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `workflow_dispatch` |
 | [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `workflow_dispatch` |
 | [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `workflow_dispatch` |
+| [suggestions-daily.yml](../../.github/workflows/suggestions-daily.yml) | Suggestions — daily list | `workflow_call` |
 | [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `workflow_dispatch` |
 | [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `workflow_dispatch` |
 | [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `workflow_dispatch` |
