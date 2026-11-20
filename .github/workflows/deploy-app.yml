@@ -828,7 +828,13 @@ jobs:
               echo "::notice::No email key on the Worker — pushing NUXT_EMAIL_RESEND_API_KEY from the RESEND_API_KEY repo secret."
               printf '%s' "$RESEND_API_KEY" | npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY $TARGET
             fi
-            LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+            # The new secret can take a few seconds to show in the list — retry, keep stderr visible.
+            for attempt in 1 2 3 4 5; do
+              LIST=$(npx wrangler secret list --format json $TARGET || true)
+              if echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then break; fi
+              echo "::notice::email key not listed yet (attempt $attempt/5) — waiting"
+              sleep 4
+            done
           fi
           if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
             echo "::error::email key missing — ${{ inputs.app }} uses @fyit/crouton-email but its Worker has no NUXT_EMAIL_RESEND_API_KEY (set the RESEND_API_KEY repo secret, or add it to WORKER_SECRETS_JSON)"

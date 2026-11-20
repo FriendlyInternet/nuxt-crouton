@@ -154,6 +154,8 @@ import {
 } from '@crouton/auth/server'
 ```
 
+`canEditPages(teamId, userId)` (`server/utils/team.ts`) is the single page-edit rule — today team admin or owner; it becomes `can(…, 'pages:edit')` with #4103. `getUserTeamsDirect(userId)` lists a user's teams (`{ id, slug, name, role }`) with no session — both used by the MCP page tools (#4097).
+
 ## Middleware
 
 | Middleware | Purpose |
