@@ -8,7 +8,7 @@ The `state: 'waiting'` form default in `useInboxCards.ts` is a hand-edit (the ge
 `meta.default` for string fields) — keep it when regenerating.
 
 Cards are filled by `runCardsSync` (`server/utils/cards-sync-run.ts`), run by `POST /api/cards/sync` (owner-only, the
-inbox page on load) and by the clock at :00 and :30 UTC (`server/utils/cards-sync-clock.ts`; owner =
+inbox page on load) and by the clock at :00 and :30 UTC, and on any 10-minute tick after a GitHub webhook marked a change (`POST /api/github/webhook`, below) (`server/utils/cards-sync-clock.ts`; owner =
 `NUXT_STATUS_OWNER_EMAIL`, team `test1`; both share the 60 s throttle key `cards-sync:last:<team>`): it reads GitHub live,
 upserts one card per waiting ask under the owner's team, never changes a card answered from the inbox, and leaves an
 item's cards untouched when its GitHub read fails. A failed card save never stops the others or answers 500: the sync
@@ -58,7 +58,7 @@ the owner's `GITHUB_TOKEN`) and starts each job due in that 10-minute slot (`due
 workflow behaves as its timed run, not a hand start), logging `clock: <workflow> → <status>`.
 A row has `every` (`hour` | `day` | `week` | `month`) and `minute`, plus `hour` for day/week/month,
 `weekday` for week (0 = Sunday, as cron) and `day` for month; all times UTC.
-A tick that never arrives is skipped, with no catch-up. In the :00 and :30 slots it also runs the inbox card sync with
+A tick that never arrives is skipped, with no catch-up. In the :00 and :30 slots, or any slot where KV `cards-sync:dirty-at` is newer than `cards-sync:synced-from` minus 6 min, it also runs the inbox card sync (at most one a tick; only an ok, unthrottled run advances `synced-from`) with
 the owner's `GITHUB_TOKEN` (not the App token), before and independent of the dispatches, and writes
 `clock:cards-sync:last` = `{ at, ok, counts, readErrors, error? }` to KV. To add a job: add a row to `CLOCK_JOBS`, give the workflow `workflow_dispatch` with a boolean `clock`
 input, make any manual-only branch check `!inputs.clock`, and remove its `schedule:`.
@@ -71,6 +71,21 @@ status token needs Actions: read (every row shows `unknown`). A 14th row, `inbox
 record (`cardsSyncStatus` in `clock-status-core.ts`): ok < 40 min, failed when `ok` is false, missed when older, grey
 `before-clock` with no record before `CARDS_SYNC_SINCE` or on a Worker without the clock; its read errors are row text,
 not the tab banner.
+
+## GitHub webhook
+
+`POST /api/github/webhook` (#4309, rules in `server/utils/webhook-core.ts`) lets a GitHub change reach the inbox within
+~10 min instead of up to 30. It checks `X-Hub-Signature-256` against the Worker secret `GITHUB_WEBHOOK_SECRET` (pushed
+by deploy-app.yml from the repo secret `STATUS_WEBHOOK_SECRET`; bad/missing → 401, nothing stored), answers `ping` 200,
+ignores any repo but `runtimeConfig.githubRepo` and any event but issues / issue_comment / pull_request /
+pull_request_review (204), never calls GitHub, and only writes KV `cards-sync:dirty-at` (at most every 5 min) → 202.
+The next clock tick syncs when that mark is newer than `cards-sync:synced-from` − 6 min. Two never-cleared timestamps,
+not a flag the clock clears, because KV reads can be ~60 s stale: a cleared flag could make a webhook skip its write
+and lose the change. The inbox page (`/`) re-reads its stored cards (no GitHub sync) every 30 s while visible and when
+the tab becomes visible again (`rereadDue` / `relistInbox` in `app/utils/inbox-core.ts`).
+Owner step: set the repo secret `STATUS_WEBHOOK_SECRET`, redeploy, then add a repo webhook (Settings → Webhooks) at
+`https://status.pmcp.dev/api/github/webhook`, content type `application/json`, the same secret, events Issues,
+Issue comments, Pull requests, Pull request reviews.
 
 ## Owner email
 
