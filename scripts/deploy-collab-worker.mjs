@@ -48,18 +48,13 @@ const wrangler = (args, opts = {}) =>
 // 1. Worker (provisions the D1 on first run)
 // A brand-new Worker can fail its first deploy with "This Worker does not exist" (Cloudflare
 // API code 10007 — the upload lands, the follow-up call races it). The upload is idempotent, so
-// retry with a short pause (an immediate retry hit the same race, #4346). wrangler's stderr is
-// inherited (not captured), so we can't match the code: any failure is retried, the last throws.
+// retry once. wrangler's stderr is inherited (not captured), so we can't match the code: any
+// first failure is retried, and a second failure throws.
 const deploy = () => wrangler(['deploy', '--config', cfgPath])
-const RETRIES = 3
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 let out
-for (let attempt = 0; ; attempt++) {
-  try { out = deploy(); break } catch (e) {
-    if (attempt >= RETRIES) throw e
-    console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying in ${10 * (attempt + 1)}s.`)
-    sleep(10_000 * (attempt + 1))
-  }
+try { out = deploy() } catch (e) {
+  console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying once.`)
+  out = deploy()
 }
 process.stdout.write(out)
 let url
