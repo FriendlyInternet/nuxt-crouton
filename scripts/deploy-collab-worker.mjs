@@ -47,14 +47,20 @@ const wrangler = (args, opts = {}) =>
 
 // 1. Worker (provisions the D1 on first run)
 // A brand-new Worker can fail its first deploy with "This Worker does not exist" (Cloudflare
-// API code 10007 — the upload lands, the follow-up call races it). The upload is idempotent, so
-// retry once. wrangler's stderr is inherited (not captured), so we can't match the code: any
-// first failure is retried, and a second failure throws.
+// API code 10007) and then, on an immediate retry, with "Actor migration tag precondition
+// failed" (10079) — the upload lands but the follow-up call races Cloudflare's propagation.
+// The upload is idempotent, so retry with a short backoff (wrangler re-reads the Worker's real
+// state each time). wrangler's stderr is inherited, so we can't match the code: any failure is
+// retried, and the last one throws.
 const deploy = () => wrangler(['deploy', '--config', cfgPath])
+const ATTEMPTS = 4
 let out
-try { out = deploy() } catch (e) {
-  console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying once.`)
-  out = deploy()
+for (let attempt = 1; ; attempt++) {
+  try { out = deploy(); break } catch (e) {
+    if (attempt >= ATTEMPTS) throw e
+    console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying (${attempt}/${ATTEMPTS - 1}) after backoff.`)
+    execFileSync('sleep', [String(attempt * 10)])
+  }
 }
 process.stdout.write(out)
 let url
