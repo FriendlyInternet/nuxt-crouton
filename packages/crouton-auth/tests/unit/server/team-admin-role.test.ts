@@ -124,6 +124,31 @@ describe('the team\'s admin role (#4130)', () => {
     expectAdminRowOf(adminActionsToRolePermission(ALL))
   })
 
+  // covers: T2
+  it('a URL query naming another team (?organizationId=) can\'t get around the admin-row guard', async () => {
+    await ownerSetsAdmin(WITHOUT_DOMAINS)
+    const before = adminActionsToRolePermission(WITHOUT_DOMAINS)
+    const rowId = world.adminRows(A)[0]!.id
+    const api = world.auth.api
+
+    // A's admin owns another team, C, and is working in A (no organizationId in the body).
+    const C = (await api.createOrganization({ body: { name: 'Team C', slug: 'team-c' }, headers: adminA.headers }))!.id
+    await api.setActiveOrganization({ body: { organizationId: A }, headers: adminA.headers })
+    const pointAtC = { organizationId: C }
+
+    // Owning C doesn't make them owner of A's admin row.
+    expect(await outcome(api.updateOrgRole({ body: { roleName: 'admin', data: { permission: adminActionsToRolePermission(ALL) } }, query: pointAtC, headers: adminA.headers } as never))).toBe('ADMIN_ROLE_OWNER_ONLY')
+    expectAdminRowOf(before)
+    expect(await outcome(api.updateOrgRole({ body: { roleId: rowId, data: { permission: adminActionsToRolePermission(ALL) } }, query: pointAtC, headers: adminA.headers } as never))).toBe('ADMIN_ROLE_OWNER_ONLY')
+    expectAdminRowOf(before)
+
+    // Looking the id up in C finds nothing, but A's row is still never deleted.
+    expect(await outcome(api.deleteOrgRole({ body: { roleId: rowId }, query: pointAtC, headers: adminA.headers } as never))).toBe('ADMIN_ROLE_CANNOT_BE_DELETED')
+    expectAdminRowOf(before)
+    expect(await outcome(api.deleteOrgRole({ body: { roleName: 'admin' }, query: pointAtC, headers: adminA.headers } as never))).toBe('ADMIN_ROLE_CANNOT_BE_DELETED')
+    expectAdminRowOf(before)
+  })
+
   // covers: T3
   it('the owner takes team:manage from A\'s admins: they can\'t invite or change roles; B\'s still can', async () => {
     await ownerSetsAdmin(['pages:edit'])

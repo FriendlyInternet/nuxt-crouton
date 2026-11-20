@@ -86,7 +86,6 @@ interface Adapter {
 interface HookCtx {
   path?: string
   body?: Record<string, unknown> | null
-  query?: Record<string, unknown> | null
   headers?: Headers
   context: { adapter: Adapter }
 }
@@ -97,12 +96,15 @@ async function sessionOf(ctx: HookCtx) {
     { user: { id: string }, session: { activeOrganizationId?: string | null } } | null
 }
 
-/** The team a call is about: the body, then the query, then the caller's active team. */
+/**
+ * The team a call is about, resolved exactly as Better Auth's role endpoints
+ * do: `body.organizationId ?? session.activeOrganizationId`. Never the URL
+ * query — Better Auth ignores it, so trusting it would let a caller point the
+ * guard at another team than the one the call changes.
+ */
 async function orgOf(ctx: HookCtx): Promise<string | null> {
   const fromBody = ctx.body?.organizationId
   if (typeof fromBody === 'string' && fromBody) return fromBody
-  const fromQuery = ctx.query?.organizationId
-  if (typeof fromQuery === 'string' && fromQuery) return fromQuery
   return (await sessionOf(ctx))?.session?.activeOrganizationId ?? null
 }
 
