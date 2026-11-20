@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { classify, classifyComment, joinRuns, median, summarizeRuns, legacyClassifyComment, NOTE_MARKER } from './run-outcome.mjs'
 import { buildRecord, writeRecord, conclusionOf, runMatchesSubject } from '../eval-ledger/record-run.mjs'
 import { subjectFromLog } from '../eval-ledger/backfill.mjs'
+import { validate } from '../eval-ledger/schema.mjs'
 
 const win = { start: '2026-11-03T10:00:00Z', end: '2026-11-03T10:30:00Z' }
 const at = '2026-11-03T10:10:00Z'
@@ -390,4 +391,26 @@ test('buildRecord: the agent’s own reply without the marker is kept; with the 
   assert.deepEqual(kept.produced, ['comment'])
   const dropped = await buildC({ comments: [agent(6, `${NOTE_MARKER}\nAnswer to your question`)] })
   assert.deepEqual(dropped.produced, ['nothing'])
+})
+
+// #4317: a fix-ci record names why the run pushed no fix, and the precheck verdict.
+test('buildRecord (fix-ci): a guard refusal is recorded as no_commit_reason guard-refused, with the precheck', async () => {
+  const needs = {
+    fixbot: { result: 'success', outputs: { proceed: 'true', mode: 'fix', precheck: 'still-red' } },
+    fix: { result: 'success', outputs: { go: 'true', moved: 'false', refused: 'true', committed: 'true' } },
+  }
+  const env = { ...base, WORKFLOW_FILE: 'fix-ci-on-failure.yml', STAGE: 'fix-ci', PR: '42', ISSUE: '', NEEDS_JSON: JSON.stringify(needs) }
+  const rec = await buildRecord({ env, api: mkApi([]), listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+  assert.equal(rec.no_commit_reason, 'guard-refused')
+  assert.equal(rec.precheck, 'still-red')
+  // validate keeps both fields (the record is what validate returned)
+  assert.equal(validate(rec).record.no_commit_reason, 'guard-refused')
+  assert.equal(validate(rec).record.precheck, 'still-red')
+})
+
+test('buildRecord: a non-fix-ci stage writes neither no_commit_reason nor precheck', async () => {
+  const needs = { fixbot: { result: 'success', outputs: { proceed: 'false', skip_reason: 'blocked', precheck: 'still-red' } } }
+  const rec = await buildRecord({ env: { ...base, NEEDS_JSON: JSON.stringify(needs) }, api: mkApi([]), listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+  assert.ok(!('no_commit_reason' in rec))
+  assert.ok(!('precheck' in rec))
 })

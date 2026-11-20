@@ -2,6 +2,8 @@ THE TASK IS THE MERGE IN PROGRESS IN THE WORKING TREE. You are on the branch epi
 
 Resolve the conflict and nothing else. The owner's request runs as a separate step after the merge is committed.
 
+MIGRATION FILES ARE NEVER HAND-MERGED. If a conflicted path is under `server/db/migrations/` (`*.sql`, `meta/_journal.json`, `meta/*_snapshot.json`): (1) take the base version of every conflicted file in that folder (`git checkout --theirs -- <file>`); (2) delete this branch's own migration files that come after the base's last journal entry (its `.sql` and its `meta/NNNN_snapshot.json`), and use the base `_journal.json`; (3) run the app's generator, `pnpm --filter ./<app dir> db:generate` (never `npx nuxt db generate` from the repo root); (4) keep what it wrote, and do not touch the snapshot or the journal yourself; (5) if it fails, or writes nothing while this branch's schema differs from the base, stop and write `could not regenerate the migration: <reason>` to the choice file. The workflow refuses a snapshot or journal edited by hand, and any migration file the journal does not list.
+
 ----- conflict task -----
 RESOLVE THE MERGE CONFLICT with origin/main. Write the choice file if needed.
 ----- end conflict task -----
