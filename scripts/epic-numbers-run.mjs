@@ -10,6 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSy
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { epicNumbers, renderNumbers, extractTicketSteps } from './lib/epic-numbers.mjs'
+import { stepSummary } from './lib/epic-steps.mjs'
 
 const realGh = args => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 
@@ -62,9 +63,13 @@ export async function gatherEpic({ epic, repo, records, gh = realGh, ownerLogin 
   const epicPrs = epicBranch
     ? JSON.parse(gh(['pr', 'list', '--repo', repo, '--state', 'all', '--head', epicBranch, '--json', PR_FIELDS, '--limit', '20'])).map(prShape)
     : []
-  const threads = [epic, ...children.map(c => c.number), ...children.flatMap(c => c.prs.map(p => p.number)), ...epicPrs.map(p => p.number)]
-  const ownerComments = [...new Set(threads)].flatMap(n => pages(`repos/${repo}/issues/${n}/comments?per_page=100`))
-  const numbers = epicNumbers({ epic, epicCreatedAt: epicIssue.created_at, children, epicPrs, records, ownerComments, ownerLogin })
+  // The epic's own comments carry its step list (#4316) — fetched once, reused for owner touches.
+  const epicComments = pages(`repos/${repo}/issues/${epic}/comments?per_page=100`)
+  const threads = [...children.map(c => c.number), ...children.flatMap(c => c.prs.map(p => p.number)), ...epicPrs.map(p => p.number)]
+    .filter(n => n !== epic)
+  const ownerComments = [...epicComments, ...[...new Set(threads)].flatMap(n => pages(`repos/${repo}/issues/${n}/comments?per_page=100`))]
+  const summary = stepSummary({ labels: (epicIssue.labels || []).map(l => (typeof l === 'string' ? l : l.name)), comments: epicComments, subIssues: kids })
+  const numbers = epicNumbers({ epic, epicCreatedAt: epicIssue.created_at, children, epicPrs, records, ownerComments, ownerLogin, stepLine: summary.line })
   return { numbers, children }
 }
 

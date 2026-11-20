@@ -7,6 +7,7 @@ import { causesOf, redNoteAction, statusScope, rollupChildNote } from './red-not
 import { fixBotWillTry, redPingHeading } from './fix-bot-dispatch.mjs'
 import { uiTouchedFromFiles } from '../ui-touched.mjs'
 import { hasCaptureEvidence } from './review-captures.mjs'
+import { stepSummary, ticketOutcome } from './epic-steps.mjs'
 import {
   PR_STICKY, EPIC_ROLLUP, labelNames, stamp, tallyCi, renderSticky, failureList, failureExcerpts, logTailBlock,
   fixBotFailures, renderRedPing, signoffPingBody, withheldBody, epicCard, prSourceSha, epicFromIssue,
@@ -274,30 +275,43 @@ export async function runStatus({ github, context, core, owner: OWNER = 'pmcp' }
     for (const s of subs) {
       await pushChildLine(s)
     }
-    async function pushChildLine(s) {
-      let icon = '⏳', note = 'queued'
-      if (s.state === 'closed') { icon = '✅'; note = '' }
+    // A child's state from the issue alone (closed / held), or null when its PR decides it.
+    function issueChildNote(s) {
+      if (ticketOutcome(s) === 'not_planned') return { icon: '🚫', note: 'not planned' }
+      if (s.state === 'closed') return { icon: '✅', note: '' }
       // Two different holds, two different asks (#2083): `blocked` wants a reply,
       // `needs-merge` wants the merge button. A rollup that shows both as "held"
       // tells the owner to go find out which — the thing the split exists to avoid.
-      else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held — needs your reply' }
-      else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
-      else {
-        const pr = await childPr(s.number)
-        if (pr && pr.state === 'open') {
-          const cst = await ciState(pr.head.sha)
-          ;({ icon, note } = rollupChildNote({ pr, failing: cst.failure ? cst.failing : [] }))
-        } else {
-          const r = rollupChildNote({ pr })
-          if (r) ({ icon, note } = r)
-        }
+      if (names(s).includes('status:blocked')) return { icon: '⏸️', note: 'held — needs your reply' }
+      if (names(s).includes('status:needs-merge')) return { icon: '🔀', note: 'green — needs your merge' }
+      return null
+    }
+    // An open, unheld child: read from its work-<n> PR (and that PR's CI), else queued.
+    async function prChildNote(s) {
+      const pr = await childPr(s.number)
+      if (pr && pr.state === 'open') {
+        const cst = await ciState(pr.head.sha)
+        return rollupChildNote({ pr, failing: cst.failure ? cst.failing : [] })
       }
+      return rollupChildNote({ pr }) || { icon: '⏳', note: 'queued' }
+    }
+    async function pushChildLine(s) {
+      const { icon, note } = issueChildNote(s) || await prChildNote(s)
       lines.push(`- ${icon} #${s.number} ${s.title}${note ? ` — ${note}` : ''}`)
     }
 
     // Stage bar / headline / activity text come from epicCard() (pr-status.mjs): 0 children +
     // blocked ⇒ sign-off · 0 + open ⇒ decomposing · some open ⇒ build · all closed ⇒ assembled.
-    const card = epicCard({ title, epicBlocked, subs, childLines: lines, now })
+    // #4316: a rolling epic counts its STEPS (from the step-list comment), and a not-planned
+    // child is named as dropped — so the card and the finish rule (stepsPending) never disagree.
+    // A failed comments fetch falls back to [] (the children count, today's card).
+    let epicComments = []
+    try {
+      epicComments = await github.paginate(github.rest.issues.listComments,
+        { owner, repo, issue_number: epicNumber, per_page: 100 })
+    } catch (e) { core.warning(`comments for epic #${epicNumber}: ${e.message}`) }
+    const summary = stepSummary({ labels: names(epic), comments: epicComments, subIssues: subs })
+    const card = epicCard({ title, epicBlocked, subs, childLines: lines, now, summary })
     if (card.needsSignoffCheck) {
       await askForSignoff()
     }

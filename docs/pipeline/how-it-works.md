@@ -33,6 +33,9 @@ exact word they reply.
      the field that is wrong. To move an existing epic to
      per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
      epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
+     A step whose tickets were all closed as not planned counts as dropped: it does not hold the
+     epic, but it is never counted as built, and the epic's status comment, its PR into main and its
+     postmortem name it (built N, dropped M).
      For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
