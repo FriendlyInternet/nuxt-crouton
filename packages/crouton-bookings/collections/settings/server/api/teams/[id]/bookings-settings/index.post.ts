@@ -8,7 +8,8 @@ import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 // Hand-added body validation (#3377)
 const bodySchema = z.object({
   statuses: z.array(z.any()).nullish(),
-  groups: z.array(z.any()).nullish()
+  groups: z.array(z.any()).nullish(),
+  sendEmails: z.boolean().optional()
 }).strip()
 
 export default defineEventHandler(async (event) => {

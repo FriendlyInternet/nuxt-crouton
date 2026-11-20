@@ -9,7 +9,7 @@
   - Handles: create, update, delete actions
   - API endpoint: /api/teams/[id]/bookings-settings
   - Zod schema: useBookingsSettings() composable
-  - Fields: statuses, groups
+  - Fields: statuses, groups, sendEmails
 
   ## Common Modifications
   - Add field: Add UFormField in template, update schema in composable
@@ -40,6 +40,14 @@
     <CroutonFormLayout>
       <template #main>
       <div class="flex flex-col gap-4 p-1">
+        <UFormField
+          :label="$t('bookings.fields.sendEmails')"
+          :description="$t('bookings.fields.sendEmailsHint')"
+          name="sendEmails"
+          class="not-last:pb-4"
+        >
+          <USwitch v-model="state.sendEmails" />
+        </UFormField>
         <UFormField :label="$t('bookings.fields.statuses')" name="statuses" class="not-last:pb-4">
           <CroutonFormRepeater
             v-model="state.statuses as any"
