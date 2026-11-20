@@ -8,6 +8,9 @@
 //   { kind:'unlabel',  issue, label }               → gh issue edit --remove-label
 //   { kind:'block',    issue }                      → gh issue edit --add-label status:blocked
 //   { kind:'note',     text }                       → appended to the verdict comment + job summary
+//   { kind:'retitle',  issue, title, seenTitle }    → gh issue edit --title, only when the live title is
+//                                                    still seenTitle (`retitle-ok`); always printed FIRST, so a
+//                                                    go ticket is renamed before its worker reads the title (#4353)
 //
 // An epic WITHOUT `tickets:rolling` keeps today's whole-epic flow exactly (go → `tickets:approved` +
 // release the unblocked tickets; no-go → ticket-revise.yml under the 3-round cap, else hold;
@@ -31,6 +34,7 @@
 //   node scripts/ticket-review-actions.mjs <decision.json> <comments.json> <epic.json> <subs.json> [steps.json] [--subject S]
 //   node scripts/ticket-review-actions.mjs gather <comments.json> <epic.json> <tickets.json> <steps.json> [--subject S]
 //     → before the reviewer: hold the epic for an unreadable step list (`held=true` output), or fail on nothing to review
+//   node scripts/ticket-review-actions.mjs retitle-ok '<retitle line>' '<live title>'   → exit 0 rename, 1 skip
 //   epic.json = { number, labels: [names] } · subs.json = every sub-issue { number, state, body, labels }
 import { readFileSync, existsSync, appendFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -39,6 +43,7 @@ import { releasable, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { countRounds as legacyRounds, route } from './ticket-revise.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PIPELINE_LABELS } from './traffic-control.mjs'
+import { checkTitle } from './lib/title-rule.mjs'
 import {
   ROLLING_LABEL, STEPS_APPROVED_LABEL, PLAN_GO_MARKER, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
   verdictCommentsFor, readSteps,
@@ -106,8 +111,27 @@ function rollingTicketState(s, t, { comments, runnable }) {
   }
 }
 
-/** PURE. Verdict → handoff lines (see the header). */
-export function reviewActions({ epic, subject = '', labels = [], decision, comments = [], tickets = [], subIssues = [], steps = null }) {
+/**
+ * PURE. Rename lines (#4353): a go ticket whose title breaks the title rule, with a reviewer
+ * suggestion that follows it. A title that already follows the rule is never renamed.
+ */
+export function retitleActions(decision) {
+  return (decision?.tickets || [])
+    .filter((t) => t.verdict === 'go' && t.suggestedTitle && checkTitle(t.suggestedTitle).ok && !checkTitle(t.title).ok)
+    .map((t) => ({ kind: 'retitle', issue: t.number, title: t.suggestedTitle, seenTitle: t.title }))
+}
+
+/** PURE. Rename only if nobody changed the title while the review ran. */
+export function shouldRetitle(action, liveTitle) {
+  return String(liveTitle ?? '').trim() === String(action?.seenTitle ?? '').trim()
+}
+
+/** PURE. Verdict → handoff lines (see the header). Renames come first, before any label starts a worker. */
+export function reviewActions(args) {
+  return [...retitleActions(args.decision), ...flowActions(args)]
+}
+
+function flowActions({ epic, subject = '', labels = [], decision, comments = [], tickets = [], subIssues = [], steps = null }) {
   if (!names(labels).includes(ROLLING_LABEL)) return legacyActions({ epic, decision, comments, tickets })
   const subs = subIssues.length ? subIssues : tickets
   const state = rollingState({ subject, labels, decision, comments, subIssues: subs, steps })
@@ -215,6 +239,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const si = argv.indexOf('--subject')
   const subject = si >= 0 ? String(argv.splice(si, 2)[1] || '').trim() : ''
   if (argv[0] === 'gather') { runGather(argv.slice(1), subject); process.exit(0) }
+  if (argv[0] === 'retitle-ok') process.exit(shouldRetitle(JSON.parse(argv[1] || '{}'), argv[2] ?? '') ? 0 : 1)
   const [decisionF, commentsF, epicF, subsF, stepsF] = argv
   if (!subsF) { console.error('usage: ticket-review-actions.mjs <decision.json> <comments.json> <epic.json> <subs.json> [steps.json] [--subject S]'); process.exit(2) }
   const json = (f) => JSON.parse(readFileSync(f, 'utf8'))
