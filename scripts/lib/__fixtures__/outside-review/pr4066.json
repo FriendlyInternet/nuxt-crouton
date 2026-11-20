@@ -1,0 +1,24 @@
+[
+  {
+    "id": 6954476803,
+    "user": {
+      "login": "nuxt-harness[bot]",
+      "type": "Bot"
+    },
+    "created_at": "2026-11-17T16:41:49Z",
+    "updated_at": "2026-11-17T16:41:49Z",
+    "body": "/review\n\n<!-- qodo-asked-sha:e94b7fc93d23c40b14eea04e3f7540f7693e878b -->\n",
+    "html_url": "https://github.com/FriendlyInternet/nuxt-crouton/pull/4066#issuecomment-6954476803"
+  },
+  {
+    "id": 6954552568,
+    "user": {
+      "login": "qodo-code-review[bot]",
+      "type": "Bot"
+    },
+    "created_at": "2026-11-17T16:44:35Z",
+    "updated_at": "2026-11-17T16:49:00Z",
+    "body": "<h3>Code Review by Qodo</h3>\n\n<br/>\n\n<img src=\"https://img.shields.io/badge/High-634FD1?style=flat-square\" height=\"20px\" alt=\"Action required\">\n\n<details>\n<summary>  1.  Issue comments can alter build reviews <code>🐞 Bug</code></summary>\n\n<br/>\n\n> <details>\n><summary>Description</summary>\n><br/>\n>\n><pre>\n>Item 7(c) selects the newest issue comment containing <b><i>&lt;!-- doc-mentions --&gt;</i></b> without checking who\n>posted it or whether it belongs to the worker run. Anyone able to comment on the issue can post `Doc\n>mentions: none<b><i> to displace the worker’s report, or fabricate </i></b>fixed` lines to make the reviewer\n>fail a diff check.\n></pre>\n></details>\n\n> <details>\n><summary>Agent prompt</summary>\n><br/>\n>\n>```\n>The issue below was found during a code review. Follow the provided context and guidance below and implement a solution\n>\n>## Issue description\n>The reviewer treats the newest marked issue comment as the worker’s report, even if someone else posted it.\n>\n>## Fix Focus Areas\n>- .claude/agents/build-reviewer.md[19-19]\n>- .claude/agents/pi-worker.md[21-21]\n>\n>## Recommended Fix\n>Have the reviewer accept only a comment from the expected Harness App, associated with the relevant worker run or PR, before using its `fixed`, `Debt:` or `none` entries. Treat other marked comments as untrusted rather than allowing them to replace the worker’s report.\n>```\n> <code>ⓘ Copy this prompt and use it to remediate the issue with your preferred AI generation tools</code>\n></details>\n\n</details>\n\n\n<br/>\n\n<details><summary><ins><strong>View medium (1)</strong></ins></summary><br/>\n<img src=\"https://img.shields.io/badge/Medium-634FD1?style=flat-square\" height=\"20px\" alt=\"Remediation recommended\">\n\n<details>\n<summary>  2.  Older plans can skip the new docs check <code>🐞 Bug</code></summary>\n\n<br/>\n\n> <details>\n><summary>Description</summary>\n><br/>\n>\n><pre>\n>Item 7(c) adds a comment check but leaves item 7(b)’s instruction to judge only (a) when a plan\n>lacks <b><i>### Docs</i></b>. For an older plan without that section, the reviewer has conflicting directions\n>and can pass the Docs item without checking the worker’s <b><i>fixed</i></b> lines.\n></pre>\n></details>\n\n> <details>\n><summary>Agent prompt</summary>\n><br/>\n>\n>```\n>The issue below was found during a code review. Follow the provided context and guidance below and implement a solution\n>\n>## Issue description\n>The existing no-Docs-plan exception says to judge only part (a), contradicting the newly added part (c).\n>\n>## Fix Focus Areas\n>- .claude/agents/build-reviewer.md[19-19]\n>\n>## Recommended Fix\n>Change the exception to skip only part (b): when a plan has no `### Docs` section, judge both (a) and (c).\n>```\n> <code>ⓘ Copy this prompt and use it to remediate the issue with your preferred AI generation tools</code>\n></details>\n\n</details>\n\n\n</details>\n\n<br/>\n\n<!-- qodo-self-review-slot -->\n<!-- https://github.com/FriendlyInternet/nuxt-crouton/commit/e94b7fc93d23c40b14eea04e3f7540f7693e878b -->\n",
+    "html_url": "https://github.com/FriendlyInternet/nuxt-crouton/pull/4066#issuecomment-6954552568"
+  }
+]

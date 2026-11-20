@@ -21,6 +21,8 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, a
 
 The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
 
+Outside review: a second, outside code reviewer may have looked at this commit. {{outside_review}} For each finding, check the code: `fixed in <commit>` only when a commit on this PR really fixes it, else say why it is not a problem.
+
 Verdict: `no-go` if any item is FAIL; else `needs-owner` only if the change is correct but needs a product, data or cost decision from the owner; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 
 <!-- build-review:v1 -->
@@ -36,5 +38,9 @@ go | no-go | needs-owner
 - 7: PASS|FAIL — evidence
 ### Question
 (only for needs-owner: ONE yes/no question for the owner, with your recommendation)
+### Outside review
+(only when the outside reviewer has High findings: one line each)
+- Q1: fixed in <commit> — what fixed it
+- Q2: not a problem because <reason>
 
 Writing no verdict file is a FAILED run.
