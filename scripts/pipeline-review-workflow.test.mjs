@@ -26,8 +26,16 @@ const steps = body => body.split(/\n(?=      - )/).slice(1)
 const runsModel = s => /\bpi --print\b/.test(s)
 const J = jobs()
 
-test('the workflow has count, gather-and-write and post jobs', () => {
-  assert.deepEqual(Object.keys(J), ['count', 'gather-and-write', 'post'])
+test('the workflow has count, gather-and-write, post and suggestions jobs', () => {
+  assert.deepEqual(Object.keys(J), ['count', 'gather-and-write', 'post', 'suggestions'])
+})
+
+test('suggestions (#4308) calls the reusable workflow on every wake-up, with dry_run passed through', () => {
+  const body = J.suggestions
+  assert.match(body, /^    uses: \.\/\.github\/workflows\/suggestions-daily\.yml$/m)
+  assert.doesNotMatch(body, /^    needs:/m)
+  assert.match(body, /^    with:\n      dry_run: \$\{\{ inputs\.dry_run == true \}\}$/m)
+  assert.match(body, /^    secrets: inherit$/m)
 })
 
 test('T3 the model job has no write permission; the model step has no token in env', () => {
@@ -57,7 +65,10 @@ test('T3 post runs no model, runs always, and needs the model job', () => {
 })
 
 test('T3 every job has timeout-minutes; the model step times out before its job', () => {
-  for (const [id, body] of Object.entries(J)) assert.match(body, /^    timeout-minutes: \d+$/m, `${id} has no timeout`)
+  for (const [id, body] of Object.entries(J)) {
+    if (/^    uses:\s*\S/m.test(body)) continue // a reusable-workflow call can't carry timeout-minutes (workflow-timeouts.test.mjs)
+    assert.match(body, /^    timeout-minutes: \d+$/m, `${id} has no timeout`)
+  }
   const job = Number(J['gather-and-write'].match(/^    timeout-minutes: (\d+)$/m)[1])
   const step = Number(steps(J['gather-and-write']).find(runsModel).match(/timeout-minutes: (\d+)/)[1])
   assert.ok(step < job, `model step ${step} ≥ job ${job}`)
