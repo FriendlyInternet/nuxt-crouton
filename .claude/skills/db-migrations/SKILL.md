@@ -229,6 +229,10 @@ rm ./.check.mjs
   schema entry + local migrations). See root CLAUDE.md.
 - Migrations are **append-only and committed** — never edit an applied `NNNN_*.sql`;
   add a new one.
+- **Migrate-first deploys (pilot: `pocs/pins`, #4319):** when the database already
+  exists, migrations run before the new code goes live, so the old code briefly
+  runs on the new schema; never drop a table or column the live code still reads —
+  first ship code that stops reading it, then drop it in a later deploy.
 - `meta/` is required for correct future diffs — always commit it with the `.sql`.
 - Drizzle `$default`/`$onUpdate` are **app-level** defaults; they do NOT emit SQL
   `DEFAULT` clauses. If a column must have a value when written outside your code,
