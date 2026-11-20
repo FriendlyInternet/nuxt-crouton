@@ -167,8 +167,10 @@ An action may not reuse one of Better Auth's own organization permission names (
 to `runtimeConfig.public.crouton.auth`): base role → actions. A role listed replaces that role's
 defaults; a role left out keeps them. Defaults: owner and admin get **every declared action** (a newly
 declared one too, no config needed), member none — for admin this is the template a team's admin row is
-seeded with (and what `can()` answers until the row exists); an action declared later reaches teams created
-after it (existing teams: #4282). The owner must keep `team:manage` — startup fails
+seeded with (and what `can()` answers until the row exists); an action declared later reaches every team's admin
+row (synced on the team's next `/organization/*` call, and answered by `can()` at once), except in a team
+whose owner removed it — the row's `removedActions` records what the owner left unticked
+(`syncTeamAdminRole`, #4283). The owner must keep `team:manage` — startup fails
 otherwise (`server/plugins/permissions-check.ts`). `owner` and `member` are fixed roles; `admin` is one row
 per team (`organizationRole`), seeded from `teams.roles.admin` (the template, `adminRolePermission()`) on every
 team-creation path and lazily on the team's first `/organization/*` call, editable by the owner only, never
@@ -231,7 +233,8 @@ role-based (`requireTeamOwner`). Package server routes ask `requireCan(event, ac
 **Team roles** (#4106): Better Auth dynamic access control is on (`dynamicAccessControl: { enabled: true }`
 in `buildOrganizationConfig`, and on `organizationClient`). A team's own roles live in the `organizationRole`
 table (`server/database/schema/auth.ts`; every app with a `member` table has its own `NNNN_team_roles`
-migration, checked by `scripts/team-roles-migrations.test.mjs`) and count everywhere `can()` asks.
+migration, plus a `NNNN_admin_removed_actions` migration adding `organizationRole.removedActions` (#4283),
+both checked by `scripts/team-roles-migrations.test.mjs`) and count everywhere `can()` asks.
 `shared/utils/team-roles.ts` maps ticked actions ↔ the stored permission: `admin:access` is never stored
 (it comes with any other action), and a role with `team:manage` also stores Better Auth's
 `member`/`invitation`/`ac` rights so its own invite / change-role / role endpoints work. Better Auth enforces

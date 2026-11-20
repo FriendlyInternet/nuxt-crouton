@@ -204,7 +204,11 @@ export const organizationRole = sqliteTable('organizationRole', {
   role: text('role').notNull(),
   permission: text('permission').notNull(), // JSON: { resource: [verb] }
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' })
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  // Admin row only (#4283): JSON array of the crouton actions the team's owner
+  // removed, so a later-declared action still reaches the row. NULL = not
+  // recorded yet. Crouton-only — not a Better Auth additionalField.
+  removedActions: text('removedActions')
 }, table => [
   index('organizationRole_organizationId_idx').on(table.organizationId),
   index('organizationRole_role_idx').on(table.role)
