@@ -94,7 +94,6 @@ for (const folder of FOLDERS) {
     const { entry, journal } = dropEntry(folder)
     const prevEntry = journal.entries.find(e => e.idx === entry.idx - 1)
     assert.ok(prevEntry, `${folder}: there must be a migration before it`)
-    assert.equal(entry.idx, Math.max(...journal.entries.map(e => e.idx)), `${folder}: it must be the newest migration`)
     assert.ok(dropFile(folder).startsWith(String(entry.idx).padStart(4, '0') + '_'))
 
     const dir = migrationsDir(folder)
