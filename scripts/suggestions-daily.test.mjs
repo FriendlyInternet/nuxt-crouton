@@ -112,6 +112,17 @@ test('post --dry-run writes nothing even when there is something to post', () =>
   assert.ok(logs.some((m) => m.includes('would post') && m.includes('<!-- suggestions-daily:v1 date=2026-11-20')))
 })
 
+// covers: T4 (the plan check runs with no GitHub token)
+test('post --dry-run with no GitHub token → still previews (nothing to show), exit 0; a real post still fails', () => {
+  const noToken = () => { throw new Error('gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable.') }
+  const logs = []
+  const r = post(dirWith([]), { dryRun: true, gh: noToken, now: NOW, log: (m) => logs.push(m), repo: 'x/y' })
+  assert.equal(r.decision, 'clear')
+  assert.equal(r.number, null)
+  assert.ok(logs.includes('nothing to show'))
+  assert.throws(() => post(dirWith([]), { gh: noToken, now: NOW, log: () => {}, repo: 'x/y' }), /GH_TOKEN/)
+})
+
 test('post with no standing issue → label, issue, comment, then remove + add status:blocked and check it', () => {
   const f = fakeGh()
   const lines = [L('suggestions/2026-11-19/a.json'), L('suggestions/2026-11-19/b.json')]

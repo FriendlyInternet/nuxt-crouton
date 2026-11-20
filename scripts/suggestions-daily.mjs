@@ -156,8 +156,18 @@ export function post(dir, { dryRun = false, gh = (args) => run('gh', args), now 
   const { top, date, grouped, error } = plan(resolve(dir), now)
   if (error) log(`grouping failed: ${error}`)
   const body = renderComment(top, { date, grouped, repo })
-  const number = findStanding(gh, repo)
-  const decision = decidePost({ top, comments: readComments(gh, repo, number), date })
+  // A dry run is a read-only preview: without a GitHub token (e.g. a no-token CI check) it can't
+  // read the standing issue, so it previews as if there were none instead of failing.
+  let number = null
+  let comments = []
+  try {
+    number = findStanding(gh, repo)
+    comments = readComments(gh, repo, number)
+  } catch (e) {
+    if (!dryRun) throw e
+    log(`--dry-run: could not read the standing issue (${String(e.message).split('\n')[0]}) — previewing as if there is none`)
+  }
+  const decision = decidePost({ top, comments, date })
   log(`decision: ${decision}${number ? ` (standing issue #${number})` : ' (no standing issue yet)'}`)
   if (dryRun) {
     log(dryRunNote(decision, body))
