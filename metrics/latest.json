@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-20T07:23:01Z",
-  "data_commit": "2d5b0e24a3a5a3ee5160511d32ae5e7fdcf8b096",
+  "as_of": "2026-11-20T14:20:15Z",
+  "data_commit": "58e88141d702b2fbf23adcec348611095bc01678",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -2190,7 +2190,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 1761
+          "runs": 1841
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -2202,7 +2202,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 310
+          "runs": 325
         },
         "build-review.yml/Release parked tickets": {
           "failed": 0,
@@ -2214,19 +2214,19 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 38
+          "runs": 41
         },
         "build-review.yml/review": {
-          "failed": 15,
+          "failed": 18,
           "failed_alone": 0,
-          "failed_no_pr": 15,
+          "failed_no_pr": 18,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0484,
-          "runs": 310
+          "rate": 0.0554,
+          "runs": 325
         },
         "calendar-scroll-diag.yml/Calendar scroll diagnostics · PR": {
           "failed": 3,
@@ -2249,8 +2249,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0147,
-          "runs": 136
+          "rate": 0.014,
+          "runs": 143
         },
         "ci.yml/Build kassa (cloudflare-pages)": {
           "failed": 1,
@@ -2261,8 +2261,8 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0027,
-          "runs": 368
+          "rate": 0.0026,
+          "runs": 390
         },
         "ci.yml/Build kassa (node-server)": {
           "failed": 1,
@@ -2273,32 +2273,32 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0027,
-          "runs": 372
+          "rate": 0.0025,
+          "runs": 394
         },
         "ci.yml/Build packages": {
-          "failed": 22,
-          "failed_alone": 21,
+          "failed": 23,
+          "failed_alone": 22,
           "failed_no_pr": 1,
           "failed_with_others": 0,
-          "green_new_sha": 21,
+          "green_new_sha": 22,
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0481,
-          "runs": 457
+          "rate": 0.0476,
+          "runs": 483
         },
         "ci.yml/CI Gate": {
-          "failed": 183,
-          "failed_alone": 176,
+          "failed": 195,
+          "failed_alone": 184,
           "failed_no_pr": 1,
-          "failed_with_others": 6,
-          "green_new_sha": 171,
+          "failed_with_others": 10,
+          "green_new_sha": 185,
           "green_on_rerun": 0,
           "green_same_sha": 0,
-          "never_green": 11,
-          "rate": 0.2877,
-          "runs": 636
+          "never_green": 9,
+          "rate": 0.2915,
+          "runs": 669
         },
         "ci.yml/Compile changed .vue": {
           "failed": 6,
@@ -2309,8 +2309,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.012,
-          "runs": 501
+          "rate": 0.0113,
+          "runs": 530
         },
         "ci.yml/Conflict markers": {
           "failed": 0,
@@ -2322,7 +2322,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 205
+          "runs": 235
         },
         "ci.yml/Detect changes": {
           "failed": 0,
@@ -2334,7 +2334,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 614
+          "runs": 645
         },
         "ci.yml/Fallow Audit": {
           "failed": 23,
@@ -2345,8 +2345,8 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 4,
-          "rate": 0.0581,
-          "runs": 396
+          "rate": 0.0549,
+          "runs": 419
         },
         "ci.yml/MCP Server (typecheck + tests)": {
           "failed": 3,
@@ -2357,20 +2357,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0084,
-          "runs": 358
+          "rate": 0.008,
+          "runs": 375
         },
         "ci.yml/Node checks (docs, drift, sync, scripts tests, shellcheck)": {
-          "failed": 29,
-          "failed_alone": 25,
+          "failed": 32,
+          "failed_alone": 28,
           "failed_no_pr": 0,
           "failed_with_others": 4,
-          "green_new_sha": 28,
+          "green_new_sha": 31,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 1,
-          "rate": 0.0614,
-          "runs": 472
+          "rate": 0.0639,
+          "runs": 501
         },
         "ci.yml/Package Validation": {
           "failed": 3,
@@ -2381,20 +2381,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0064,
-          "runs": 466
+          "rate": 0.0061,
+          "runs": 495
         },
         "ci.yml/Plan checks": {
-          "failed": 27,
-          "failed_alone": 27,
+          "failed": 29,
+          "failed_alone": 29,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 24,
+          "green_new_sha": 26,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 3,
-          "rate": 0.0521,
-          "runs": 518
+          "rate": 0.0529,
+          "runs": 548
         },
         "ci.yml/Removed tests": {
           "failed": 3,
@@ -2405,20 +2405,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0056,
-          "runs": 533
+          "rate": 0.0054,
+          "runs": 558
         },
         "ci.yml/Test Suite": {
-          "failed": 8,
-          "failed_alone": 8,
+          "failed": 9,
+          "failed_alone": 9,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 8,
+          "green_new_sha": 9,
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0197,
-          "runs": 407
+          "rate": 0.0209,
+          "runs": 431
         },
         "ci.yml/Type Check Apps": {
           "failed": 4,
@@ -2429,8 +2429,8 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0098,
-          "runs": 409
+          "rate": 0.0092,
+          "runs": 434
         },
         "ci.yml/Type Check Packages": {
           "failed": 0,
@@ -2442,7 +2442,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 420
+          "runs": 444
         },
         "ci.yml/Typecheck POC": {
           "failed": 4,
@@ -2453,8 +2453,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0276,
-          "runs": 145
+          "rate": 0.0265,
+          "runs": 151
         },
         "db-counts.yml/counts": {
           "failed": 0,
@@ -2478,19 +2478,19 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 17
+          "runs": 18
         },
         "decompose-on-issue-pidev.yml/decompose-pi": {
-          "failed": 0,
+          "failed": 1,
           "failed_alone": 0,
-          "failed_no_pr": 0,
+          "failed_no_pr": 1,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0,
-          "runs": 17
+          "rate": 0.0556,
+          "runs": 18
         },
         "deploy-apps.yml/deploy (kassa, staging, https://kassa.pmcp.dev, https://kassa.friendlyinter.net, @fyit/crouton-co... / Deploy kassa (staging)": {
           "failed": 13,
@@ -2501,20 +2501,20 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 2,
-          "rate": 0.0512,
-          "runs": 254
+          "rate": 0.0492,
+          "runs": 264
         },
         "deploy-apps.yml/deploy (velo, staging, https://velo.pmcp.dev, https://velo.friendlyinter.net, @fyit/crouton-core ... / Deploy velo (staging)": {
           "failed": 41,
-          "failed_alone": 30,
+          "failed_alone": 34,
           "failed_no_pr": 7,
-          "failed_with_others": 4,
-          "green_new_sha": 28,
-          "green_on_rerun": 6,
+          "failed_with_others": 0,
+          "green_new_sha": 32,
+          "green_on_rerun": 7,
           "green_same_sha": 0,
-          "never_green": 6,
-          "rate": 0.1344,
-          "runs": 305
+          "never_green": 2,
+          "rate": 0.1269,
+          "runs": 323
         },
         "deploy-apps.yml/detect": {
           "failed": 0,
@@ -2526,7 +2526,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 369
+          "runs": 389
         },
         "deploy-apps.yml/report-bumped-preview": {
           "failed": 0,
@@ -2538,7 +2538,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 44
+          "runs": 47
         },
         "deploy-docs.yml/Deploy docs to Cloudflare Workers": {
           "failed": 0,
@@ -2550,19 +2550,19 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 180
+          "runs": 188
         },
         "deploy-pocs.yml/deploy (booking-demo, staging, https://booking-demo.pmcp.dev, @fyit/crouton-core @fyit/crouton-au... / Deploy booking-demo (staging)": {
-          "failed": 12,
-          "failed_alone": 12,
+          "failed": 11,
+          "failed_alone": 11,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 10,
-          "green_on_rerun": 2,
+          "green_new_sha": 11,
+          "green_on_rerun": 3,
           "green_same_sha": 0,
-          "never_green": 2,
-          "rate": 0.0446,
-          "runs": 269
+          "never_green": 0,
+          "rate": 0.0389,
+          "runs": 283
         },
         "deploy-pocs.yml/deploy (crate, staging, https://crate-staging.pmcp.dev, https://crate.pmcp.dev, @fyit/crouton-cor... / Deploy crate (staging)": {
           "failed": 6,
@@ -2573,32 +2573,32 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0273,
-          "runs": 220
+          "rate": 0.0265,
+          "runs": 226
         },
         "deploy-pocs.yml/deploy (crouton-builder, staging, https://crouton-builder.pmcp.dev, @fyit/crouton-core @fyit/crou... / Deploy crouton-builder (staging)": {
-          "failed": 10,
-          "failed_alone": 10,
+          "failed": 9,
+          "failed_alone": 9,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 8,
-          "green_on_rerun": 0,
+          "green_new_sha": 9,
+          "green_on_rerun": 1,
           "green_same_sha": 0,
-          "never_green": 2,
-          "rate": 0.0362,
-          "runs": 276
+          "never_green": 0,
+          "rate": 0.0309,
+          "runs": 291
         },
         "deploy-pocs.yml/deploy (gallery, staging, https://gallery-staging.pmcp.dev, https://gallery.pmcp.dev, @fyit/crout... / Deploy gallery (staging)": {
           "failed": 16,
           "failed_alone": 16,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 14,
-          "green_on_rerun": 3,
+          "green_new_sha": 15,
+          "green_on_rerun": 4,
           "green_same_sha": 0,
-          "never_green": 2,
-          "rate": 0.0525,
-          "runs": 305
+          "never_green": 1,
+          "rate": 0.0495,
+          "runs": 323
         },
         "deploy-pocs.yml/deploy (kdm, staging, https://kdm.pmcp.dev, @fyit/crouton-core @fyit/crouton-i18n @fyit/crouton-p... / Deploy kdm (staging)": {
           "failed": 0,
@@ -2621,8 +2621,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 1,
-          "rate": 0.0365,
-          "runs": 192
+          "rate": 0.0361,
+          "runs": 194
         },
         "deploy-pocs.yml/deploy (pins, staging, https://pins.pmcp.dev, @fyit/crouton-core @fyit/crouton-auth @fyit/crouton... / Deploy pins (staging)": {
           "failed": 9,
@@ -2633,8 +2633,8 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0404,
-          "runs": 223
+          "rate": 0.0391,
+          "runs": 230
         },
         "deploy-pocs.yml/deploy (snippets, staging, @fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n, false) / Deploy snippets (staging)": {
           "failed": 6,
@@ -2645,8 +2645,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0269,
-          "runs": 223
+          "rate": 0.0262,
+          "runs": 229
         },
         "deploy-pocs.yml/deploy (status, staging, https://status.pmcp.dev, @fyit/crouton-core @fyit/crouton-auth @fyit/cro... / Deploy status (staging)": {
           "failed": 6,
@@ -2657,8 +2657,8 @@
           "green_on_rerun": 1,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0231,
-          "runs": 260
+          "rate": 0.0226,
+          "runs": 266
         },
         "deploy-pocs.yml/detect": {
           "failed": 0,
@@ -2670,7 +2670,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 440
+          "runs": 463
         },
         "deploy-themes-playground.yml/Deploy themes playground to Cloudflare Workers": {
           "failed": 0,
@@ -2694,7 +2694,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 576
+          "runs": 602
         },
         "e2e.yml/E2E (minimal)": {
           "failed": 3,
@@ -2705,8 +2705,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0157,
-          "runs": 191
+          "rate": 0.0152,
+          "runs": 197
         },
         "e2e.yml/E2E (with-assets)": {
           "failed": 4,
@@ -2717,20 +2717,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0227,
-          "runs": 176
+          "rate": 0.022,
+          "runs": 182
         },
         "e2e.yml/E2E (with-bookings)": {
-          "failed": 5,
-          "failed_alone": 5,
+          "failed": 6,
+          "failed_alone": 6,
           "failed_no_pr": 0,
           "failed_with_others": 0,
           "green_new_sha": 5,
           "green_on_rerun": 0,
           "green_same_sha": 0,
-          "never_green": 0,
-          "rate": 0.0267,
-          "runs": 187
+          "never_green": 1,
+          "rate": 0.0299,
+          "runs": 201
         },
         "e2e.yml/E2E (with-collab)": {
           "failed": 6,
@@ -2741,8 +2741,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0328,
-          "runs": 183
+          "rate": 0.0317,
+          "runs": 189
         },
         "e2e.yml/E2E (with-devtools)": {
           "failed": 3,
@@ -2753,8 +2753,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0168,
-          "runs": 179
+          "rate": 0.0162,
+          "runs": 185
         },
         "e2e.yml/E2E (with-maps)": {
           "failed": 3,
@@ -2765,8 +2765,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0172,
-          "runs": 174
+          "rate": 0.0167,
+          "runs": 180
         },
         "e2e.yml/E2E (with-pages)": {
           "failed": 4,
@@ -2777,8 +2777,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0211,
-          "runs": 190
+          "rate": 0.0201,
+          "runs": 199
         },
         "e2e.yml/E2E (with-relations)": {
           "failed": 2,
@@ -2789,8 +2789,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0357,
-          "runs": 56
+          "rate": 0.0328,
+          "runs": 61
         },
         "e2e.yml/E2E (with-sales)": {
           "failed": 4,
@@ -2801,20 +2801,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0221,
-          "runs": 181
+          "rate": 0.0214,
+          "runs": 187
         },
         "e2e.yml/E2E Gate": {
-          "failed": 56,
-          "failed_alone": 56,
+          "failed": 61,
+          "failed_alone": 61,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 56,
+          "green_new_sha": 60,
           "green_on_rerun": 0,
           "green_same_sha": 0,
-          "never_green": 0,
-          "rate": 0.0944,
-          "runs": 593
+          "never_green": 1,
+          "rate": 0.0985,
+          "runs": 619
         },
         "e2e.yml/detect": {
           "failed": 0,
@@ -2826,7 +2826,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 244
+          "runs": 262
         },
         "epic-digest.yml/digest": {
           "failed": 0,
@@ -2841,16 +2841,16 @@
           "runs": 4
         },
         "fix-ci-on-failure.yml/Fix": {
-          "failed": 5,
+          "failed": 6,
           "failed_alone": 0,
-          "failed_no_pr": 5,
+          "failed_no_pr": 6,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0435,
-          "runs": 115
+          "rate": 0.0484,
+          "runs": 124
         },
         "fix-ci-on-failure.yml/Record run outcome": {
           "failed": 0,
@@ -2862,7 +2862,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 117
+          "runs": 126
         },
         "fix-ci-on-failure.yml/Review the diagnosis (round 1)": {
           "failed": 0,
@@ -2874,7 +2874,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 6
+          "runs": 8
         },
         "fix-ci-on-failure.yml/Review the diagnosis (round 2)": {
           "failed": 0,
@@ -2898,7 +2898,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 6
+          "runs": 8
         },
         "fix-ci-on-failure.yml/fixbot": {
           "failed": 0,
@@ -2910,7 +2910,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 117
+          "runs": 126
         },
         "guard-package-approval.yml/No committed approval file": {
           "failed": 0,
@@ -2922,7 +2922,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 378
+          "runs": 396
         },
         "handoff-sweep.yml/sweep": {
           "failed": 1,
@@ -2933,8 +2933,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0015,
-          "runs": 665
+          "rate": 0.0014,
+          "runs": 706
         },
         "housekeeping.yml/digest": {
           "failed": 0,
@@ -2969,8 +2969,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0052,
-          "runs": 381
+          "rate": 0.005,
+          "runs": 402
         },
         "labels.yml/labeler": {
           "failed": 0,
@@ -2994,7 +2994,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 35
+          "runs": 37
         },
         "loop-station-refresh.yml/redeploy": {
           "failed": 0,
@@ -3006,7 +3006,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 28
+          "runs": 29
         },
         "migration-guard.yml/App migrations present": {
           "failed": 5,
@@ -3017,8 +3017,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0442,
-          "runs": 113
+          "rate": 0.0424,
+          "runs": 118
         },
         "on-comment.yml/Read API allowance at start": {
           "failed": 0,
@@ -3030,7 +3030,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 487
+          "runs": 504
         },
         "on-comment.yml/Record plan-review run outcome": {
           "failed": 0,
@@ -3042,7 +3042,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 254
+          "runs": 267
         },
         "on-comment.yml/Record run outcome": {
           "failed": 0,
@@ -3066,7 +3066,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 16
+          "runs": 17
         },
         "on-comment.yml/approve-epic": {
           "failed": 0,
@@ -3090,7 +3090,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 98
+          "runs": 104
         },
         "on-comment.yml/explain-skipped-approval": {
           "failed": 0,
@@ -3153,16 +3153,16 @@
           "runs": 8
         },
         "on-comment.yml/plan-review": {
-          "failed": 0,
+          "failed": 1,
           "failed_alone": 0,
-          "failed_no_pr": 0,
+          "failed_no_pr": 1,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0,
-          "runs": 254
+          "rate": 0.0037,
+          "runs": 267
         },
         "on-comment.yml/receipt": {
           "failed": 0,
@@ -3186,7 +3186,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 20
+          "runs": 21
         },
         "on-comment.yml/resume": {
           "failed": 1,
@@ -3210,7 +3210,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 98
+          "runs": 99
         },
         "on-comment.yml/route": {
           "failed": 0,
@@ -3222,7 +3222,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 487
+          "runs": 504
         },
         "on-comment.yml/test-card": {
           "failed": 0,
@@ -3246,7 +3246,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 211
+          "runs": 221
         },
         "on-issue-close.yml/epic-ready-pr": {
           "failed": 1,
@@ -3257,8 +3257,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0047,
-          "runs": 212
+          "rate": 0.0045,
+          "runs": 222
         },
         "on-issue-close.yml/postmortem / auto-close": {
           "failed": 1,
@@ -3269,8 +3269,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0105,
-          "runs": 95
+          "rate": 0.0103,
+          "runs": 97
         },
         "on-issue-close.yml/postmortem / post": {
           "failed": 0,
@@ -3294,7 +3294,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 211
+          "runs": 221
         },
         "on-issue-close.yml/postmortem / write": {
           "failed": 0,
@@ -3318,7 +3318,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 211
+          "runs": 221
         },
         "on-issue-close.yml/release": {
           "failed": 4,
@@ -3329,8 +3329,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0097,
-          "runs": 412
+          "rate": 0.0093,
+          "runs": 430
         },
         "on-issue-close.yml/strip-status": {
           "failed": 0,
@@ -3342,7 +3342,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 211
+          "runs": 221
         },
         "on-pr-close.yml/cleanup-epic-branch": {
           "failed": 0,
@@ -3378,7 +3378,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 205
+          "runs": 215
         },
         "on-pr-close.yml/owner-quiz / post": {
           "failed": 0,
@@ -3390,7 +3390,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 35
         },
         "on-pr-close.yml/owner-quiz / target": {
           "failed": 0,
@@ -3402,7 +3402,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 102
+          "runs": 110
         },
         "on-pr-close.yml/owner-quiz / write": {
           "failed": 0,
@@ -3414,7 +3414,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 32
+          "runs": 35
         },
         "on-pr-close.yml/postmortem / auto-close": {
           "failed": 0,
@@ -3474,7 +3474,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 149
+          "runs": 158
         },
         "on-pr-close.yml/teardown-preview": {
           "failed": 0,
@@ -3486,7 +3486,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 199
+          "runs": 206
         },
         "packages-guard.yml/Packages edit declared": {
           "failed": 0,
@@ -3498,7 +3498,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 549
+          "runs": 575
         },
         "pi-key-canary.yml/canary": {
           "failed": 0,
@@ -3521,8 +3521,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0227,
-          "runs": 44
+          "rate": 0.0196,
+          "runs": 51
         },
         "pipeline-review.yml/count": {
           "failed": 0,
@@ -3570,7 +3570,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 29
+          "runs": 32
         },
         "post-test-card.yml/notice": {
           "failed": 0,
@@ -3582,7 +3582,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 36
+          "runs": 39
         },
         "postmortem.yml/auto-close": {
           "failed": 0,
@@ -3609,16 +3609,16 @@
           "runs": 7
         },
         "preview-screenshot.yml/Capture": {
-          "failed": 102,
+          "failed": 108,
           "failed_alone": 0,
-          "failed_no_pr": 102,
+          "failed_no_pr": 108,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 4,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.281,
-          "runs": 363
+          "rate": 0.2827,
+          "runs": 382
         },
         "qodo-second-opinion.yml/ask": {
           "failed": 3,
@@ -3629,8 +3629,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0113,
-          "runs": 265
+          "rate": 0.0107,
+          "runs": 280
         },
         "quality-digest.yml/gather": {
           "failed": 0,
@@ -3665,8 +3665,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 2,
-          "rate": 0.0297,
-          "runs": 101
+          "rate": 0.0273,
+          "runs": 110
         },
         "review.yml/diff": {
           "failed": 0,
@@ -3678,7 +3678,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 572
+          "runs": 592
         },
         "review.yml/frontend-review": {
           "failed": 63,
@@ -3689,8 +3689,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 20,
-          "rate": 0.2788,
-          "runs": 226
+          "rate": 0.2669,
+          "runs": 236
         },
         "review.yml/red-team": {
           "failed": 3,
@@ -3701,8 +3701,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 1,
-          "rate": 0.0175,
-          "runs": 171
+          "rate": 0.0163,
+          "runs": 184
         },
         "review.yml/simplify": {
           "failed": 7,
@@ -3713,8 +3713,8 @@
           "green_on_rerun": 2,
           "green_same_sha": 0,
           "never_green": 4,
-          "rate": 0.0249,
-          "runs": 281
+          "rate": 0.0236,
+          "runs": 296
         },
         "routing-registry.yml/check": {
           "failed": 0,
@@ -3726,7 +3726,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 174
+          "runs": 181
         },
         "schedule-waves.yml/retry": {
           "failed": 0,
@@ -3750,7 +3750,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 490
+          "runs": 513
         },
         "skill-freshness-pr.yml/advise": {
           "failed": 0,
@@ -3765,16 +3765,16 @@
           "runs": 24
         },
         "skills-doc.yml/check": {
-          "failed": 6,
-          "failed_alone": 6,
+          "failed": 7,
+          "failed_alone": 7,
           "failed_no_pr": 0,
           "failed_with_others": 0,
-          "green_new_sha": 6,
+          "green_new_sha": 7,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0261,
-          "runs": 230
+          "rate": 0.0297,
+          "runs": 236
         },
         "status.yml/board": {
           "failed": 0,
@@ -3786,7 +3786,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 1340
+          "runs": 1389
         },
         "status.yml/pr-comment": {
           "failed": 0,
@@ -3798,7 +3798,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 2735
+          "runs": 2877
         },
         "sync-changelogs.yml/sync": {
           "failed": 0,
@@ -3822,7 +3822,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 19
         },
         "ticket-review.yml/Record run outcome": {
           "failed": 0,
@@ -3882,7 +3882,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 503
+          "runs": 529
         },
         "warn-closes-blocked.yml/warn": {
           "failed": 0,
@@ -3894,7 +3894,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 233
+          "runs": 242
         },
         "weekly.yml/advisor": {
           "failed": 0,
@@ -3954,7 +3954,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 643
+          "runs": 672
         },
         "work-issue-pidev.yml/Release parked tickets": {
           "failed": 0,
@@ -3969,64 +3969,64 @@
           "runs": 65
         },
         "work-issue-pidev.yml/work-pi": {
-          "failed": 56,
+          "failed": 63,
           "failed_alone": 0,
-          "failed_no_pr": 56,
+          "failed_no_pr": 63,
           "failed_with_others": 0,
           "green_new_sha": 0,
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.089,
-          "runs": 629
+          "rate": 0.0957,
+          "runs": 658
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 17084,
-        "runs_with_jobs": 17084
+        "eligible_runs": 17904,
+        "runs_with_jobs": 17904
       },
       "lines": {
         "building": {
-          "failed": 352,
-          "runs": 5010,
+          "failed": 375,
+          "runs": 5235,
           "schedule_total": 4,
-          "workflow_rate": 0.0703
+          "workflow_rate": 0.0716
         },
         "deploys": {
           "failed": 68,
-          "runs": 954,
+          "runs": 1003,
           "schedule_total": 0,
-          "workflow_rate": 0.0713
+          "workflow_rate": 0.0678
         },
         "fixing": {
-          "failed": 5,
-          "runs": 627,
+          "failed": 6,
+          "runs": 662,
           "schedule_total": 0,
-          "workflow_rate": 0.008
+          "workflow_rate": 0.0091
         },
         "merging": {
           "failed": 1,
-          "runs": 6275,
+          "runs": 6578,
           "schedule_total": 129,
           "workflow_rate": 0.0002
         },
         "planning": {
-          "failed": 2,
-          "runs": 840,
+          "failed": 4,
+          "runs": 871,
           "schedule_total": 0,
-          "workflow_rate": 0.0024
+          "workflow_rate": 0.0046
         },
         "scheduled": {
           "failed": 1,
-          "runs": 131,
+          "runs": 141,
           "schedule_total": 87,
-          "workflow_rate": 0.0076
+          "workflow_rate": 0.0071
         },
         "tickets": {
           "failed": 6,
-          "runs": 1283,
+          "runs": 1338,
           "schedule_total": 4,
-          "workflow_rate": 0.0047
+          "workflow_rate": 0.0045
         },
         "unmapped": {
           "failed": 3,
@@ -4113,12 +4113,12 @@
         "automerge-epic-subpr.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 1761
+          "runs": 1841
         },
         "build-review.yml": {
-          "failed": 15,
-          "rate": 0.0484,
-          "runs": 310
+          "failed": 18,
+          "rate": 0.0554,
+          "runs": 325
         },
         "calendar-scroll-diag.yml": {
           "failed": 3,
@@ -4126,9 +4126,9 @@
           "runs": 3
         },
         "ci.yml": {
-          "failed": 89,
-          "rate": 0.1645,
-          "runs": 541
+          "failed": 94,
+          "rate": 0.1658,
+          "runs": 567
         },
         "db-counts.yml": {
           "failed": 0,
@@ -4136,24 +4136,24 @@
           "runs": 2
         },
         "decompose-on-issue-pidev.yml": {
-          "failed": 0,
-          "rate": 0,
-          "runs": 17
+          "failed": 1,
+          "rate": 0.0556,
+          "runs": 18
         },
         "deploy-apps.yml": {
           "failed": 46,
-          "rate": 0.1377,
-          "runs": 334
+          "rate": 0.1303,
+          "runs": 353
         },
         "deploy-docs.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 180
+          "runs": 188
         },
         "deploy-pocs.yml": {
           "failed": 22,
-          "rate": 0.0558,
-          "runs": 394
+          "rate": 0.053,
+          "runs": 415
         },
         "deploy-themes-playground.yml": {
           "failed": 0,
@@ -4161,9 +4161,9 @@
           "runs": 26
         },
         "e2e.yml": {
-          "failed": 7,
-          "rate": 0.0131,
-          "runs": 534
+          "failed": 8,
+          "rate": 0.0144,
+          "runs": 555
         },
         "epic-digest.yml": {
           "failed": 0,
@@ -4171,19 +4171,19 @@
           "runs": 4
         },
         "fix-ci-on-failure.yml": {
-          "failed": 5,
-          "rate": 0.0431,
-          "runs": 116
+          "failed": 6,
+          "rate": 0.048,
+          "runs": 125
         },
         "guard-package-approval.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 378
+          "runs": 396
         },
         "handoff-sweep.yml": {
           "failed": 1,
-          "rate": 0.0015,
-          "runs": 665
+          "rate": 0.0014,
+          "runs": 706
         },
         "housekeeping.yml": {
           "failed": 0,
@@ -4197,8 +4197,8 @@
         },
         "label-router.yml": {
           "failed": 2,
-          "rate": 0.0052,
-          "runs": 381
+          "rate": 0.005,
+          "runs": 402
         },
         "labels.yml": {
           "failed": 0,
@@ -4208,37 +4208,37 @@
         "loop-station-inventory.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 35
+          "runs": 37
         },
         "loop-station-refresh.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 28
+          "runs": 29
         },
         "migration-guard.yml": {
           "failed": 5,
-          "rate": 0.0442,
-          "runs": 113
+          "rate": 0.0424,
+          "runs": 118
         },
         "on-comment.yml": {
-          "failed": 2,
-          "rate": 0.0027,
-          "runs": 739
+          "failed": 3,
+          "rate": 0.0039,
+          "runs": 769
         },
         "on-issue-close.yml": {
           "failed": 4,
-          "rate": 0.0098,
-          "runs": 409
+          "rate": 0.0094,
+          "runs": 427
         },
         "on-pr-close.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 199
+          "runs": 206
         },
         "packages-guard.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 549
+          "runs": 575
         },
         "pi-key-canary.yml": {
           "failed": 0,
@@ -4247,8 +4247,8 @@
         },
         "pipeline-metrics.yml": {
           "failed": 1,
-          "rate": 0.0227,
-          "runs": 44
+          "rate": 0.0196,
+          "runs": 51
         },
         "pipeline-review.yml": {
           "failed": 0,
@@ -4258,7 +4258,7 @@
         "post-test-card.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 36
+          "runs": 39
         },
         "postmortem.yml": {
           "failed": 0,
@@ -4266,14 +4266,14 @@
           "runs": 7
         },
         "preview-screenshot.yml": {
-          "failed": 102,
-          "rate": 0.2818,
-          "runs": 362
+          "failed": 108,
+          "rate": 0.2835,
+          "runs": 381
         },
         "qodo-second-opinion.yml": {
           "failed": 3,
-          "rate": 0.0113,
-          "runs": 265
+          "rate": 0.0107,
+          "runs": 280
         },
         "quality-digest.yml": {
           "failed": 0,
@@ -4287,13 +4287,13 @@
         },
         "review.yml": {
           "failed": 69,
-          "rate": 0.1257,
-          "runs": 549
+          "rate": 0.1215,
+          "runs": 568
         },
         "routing-registry.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 174
+          "runs": 181
         },
         "schedule-waves.yml": {
           "failed": 0,
@@ -4303,7 +4303,7 @@
         "secret-scan.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 490
+          "runs": 513
         },
         "skill-freshness-pr.yml": {
           "failed": 0,
@@ -4311,14 +4311,14 @@
           "runs": 24
         },
         "skills-doc.yml": {
-          "failed": 6,
-          "rate": 0.0261,
-          "runs": 230
+          "failed": 7,
+          "rate": 0.0297,
+          "runs": 236
         },
         "status.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 3643
+          "runs": 3818
         },
         "sync-changelogs.yml": {
           "failed": 0,
@@ -4328,7 +4328,7 @@
         "teardown-on-removal.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 19
         },
         "ticket-review.yml": {
           "failed": 0,
@@ -4343,12 +4343,12 @@
         "verify-fix-evidence.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 503
+          "runs": 529
         },
         "warn-closes-blocked.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 233
+          "runs": 242
         },
         "weekly.yml": {
           "failed": 0,
@@ -4356,9 +4356,9 @@
           "runs": 1
         },
         "work-issue-pidev.yml": {
-          "failed": 56,
-          "rate": 0.089,
-          "runs": 629
+          "failed": 63,
+          "rate": 0.0957,
+          "runs": 658
         }
       }
     }
