@@ -11,7 +11,7 @@
 // (natural height + width, with min-height applied) and ResizeObserver are
 // stubbed.
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { computed, defineComponent, h, nextTick, onBeforeUnmount, onBeforeUpdate, ref, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onBeforeUpdate, ref } from 'vue'
 import type { Component } from 'vue'
 import { mount } from '@vue/test-utils'
 import { useHoldHeight } from '../app/composables/useHoldHeight'
@@ -92,8 +92,6 @@ beforeAll(async () => {
     ResizeObserver: FakeResizeObserver,
     ref,
     computed,
-    watch,
-    onBeforeUnmount,
     useHoldHeight,
     useT: () => ({ t: (k: string) => k }),
     useI18n: () => ({ locale: ref('en') }),
