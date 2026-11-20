@@ -1,8 +1,16 @@
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
+const bookingsDir = dirname(createRequire(import.meta.url).resolve('@fyit/crouton-bookings'))
+
+// The daily reminder timer runs ONLY on the deployed Cloudflare build (owner, #3930):
+// `$production` never applies to `nuxt dev`, and the preset check keeps a local
+// `nuxt build`/`nuxt preview` without NITRO_PRESET timer-free.
+// Must match the top-level triggers.crons in wrangler.jsonc.
+const cloudflareBuild = (process.env.NITRO_PRESET ?? '').startsWith('cloudflare')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -121,5 +129,17 @@ export default defineNuxtConfig({
       '@peculiar/x509': cfStubs,
       '@simplewebauthn/server': cfStubs
     }
-  }
+  },
+
+  $production: cloudflareBuild
+    ? {
+        nitro: {
+          experimental: { tasks: true },
+          tasks: {
+            'bookings:scheduled-emails': { handler: join(bookingsDir, 'server/tasks/bookings/scheduled-emails.ts') }
+          },
+          scheduledTasks: { '0 7 * * *': ['bookings:scheduled-emails'] }
+        }
+      }
+    : {}
 })

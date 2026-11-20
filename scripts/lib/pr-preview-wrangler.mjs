@@ -43,10 +43,11 @@ const BINDING_SECTIONS = [
 /**
  * Strip everything that ties the config to a REAL environment: the custom-domain route it
  * would otherwise fight staging for, and any nested `env` block that would smuggle staging's
- * bindings straight back in.
+ * bindings straight back in. Also `triggers`: a per-PR copy must not run scheduled jobs
+ * (the daily booking reminders, #3930) — it would mail customers from a preview.
  */
 function detachFromRealEnvs(out, changed) {
-  for (const key of ['routes', 'route', 'env']) {
+  for (const key of ['routes', 'route', 'env', 'triggers']) {
     if (out[key]) { delete out[key]; changed.push(`dropped ${key}`) }
   }
   // The workers.dev hostname IS the deliverable — without it there is no link to post.

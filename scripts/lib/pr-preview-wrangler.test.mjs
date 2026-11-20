@@ -56,6 +56,12 @@ test('any nested env block is dropped — it would smuggle the staging bindings 
   assert.ok(!('env' in config))
 })
 
+test('#3930: a cron trigger is dropped — a preview must never run the daily booking emails', () => {
+  const { config, changed } = toPrPreview({ ...built(), triggers: { crons: ['0 7 * * *'] } }, 'kassa', 2011)
+  assert.ok(!('triggers' in config))
+  assert.ok(changed.includes('dropped triggers'), 'the drop is reported, so it is visible in the log')
+})
+
 test('no staging identifier survives anywhere in the output', () => {
   // The blunt end-to-end assertion: if any real id or the staging DB name is still present,
   // the preview is not isolated, however tidy the individual fields look.
