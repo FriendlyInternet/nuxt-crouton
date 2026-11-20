@@ -39,6 +39,11 @@ export default defineMcpHandler({
     'keep it viable at 1280px (every block gets its minWidth — add_layout refuses otherwise), then add phone behaviour (breakpoints / collapse) for any 768 / 375 warnings add_layout returns.'
   ].join(' '),
   tools: [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks],
+  // Explicitly empty: a missing field makes the toolkit fall back to the shared
+  // pool (`defaultHandlerStrategy: 'orphans'`), which would hand every signed-in
+  // user the generic collection resources and the data-entry prompt.
+  resources: [],
+  prompts: [],
   middleware: async (event) => {
     const { data, error } = await resolveSignInAccess(signInRequest(event), await signInDeps(event))
     if (error) {

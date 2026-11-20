@@ -76,6 +76,14 @@ describe('/mcp page-tools handler definitions', () => {
   })
 
   // covers: T6
+  it('lists no resources and no prompts, so the shared pool (collection registry, data-entry) never falls through', () => {
+    const def = pagesHandler as unknown as { resources?: unknown, prompts?: unknown }
+    // The toolkit only skips its shared-pool fallback when the field is an array
+    expect(def.resources).toEqual([])
+    expect(def.prompts).toEqual([])
+  })
+
+  // covers: T6
   it('the old named handler folder is gone', () => {
     expect(existsSync(resolve(__dirname, '../server/mcp-pages/handlers'))).toBe(false)
   })
