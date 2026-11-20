@@ -349,9 +349,11 @@ throw createError({ statusCode: 404, statusMessage: 'Not found' })
 routeRules: {
   // ✅ Safe: static assets + specific prefixes OUTSIDE the generated collection API
   '/_nuxt/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
-  '/api/crouton-bookings/teams/*/availability': { swr: 300 }, // SWR: stale-while-revalidate
 
-  // ❌ NEVER add wildcard rules on the generated /api/teams/* prefix:
+  // ❌ NEVER add swr/isr/cache rules with a `*` segment on ANY parameterised API prefix
+  // (`/api/teams/*`, `/api/crouton-bookings/teams/*`) — Nuxt registers the renderer there and
+  // radix3 then shadows deeper `:id` routes (#4300); cache inside the handler with
+  // defineCachedEventHandler instead. Guard: scripts/lib/route-rules-shadow.test.mjs
   // '/api/teams/*/pages/**': { isr: 3600 }  // BROKEN — the wildcard conflicts with
   // radix3's :id routing and breaks ALL /api/teams/:id/* generated collection routes
   // (disabled with this warning in packages/crouton-pages/nuxt.config.ts and apps/velo/nuxt.config.ts)
