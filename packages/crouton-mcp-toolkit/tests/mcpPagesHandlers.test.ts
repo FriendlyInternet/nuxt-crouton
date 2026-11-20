@@ -1,15 +1,21 @@
 /**
- * #3982 T8 — the `/mcp/pages` handler files themselves (the ones
+ * #4097 — the `/mcp` page-tools handler files themselves (the ones
  * `mcp:definitions:paths` loads in production), not only the lib they call.
- * Rule A, handler side: no pages token → 401 at the handler middleware, and a
- * tool reached without access is refused before it touches a page or a room.
+ * Handler side: no sign-in token → 401 + `WWW-Authenticate` at the handler
+ * middleware, and a tool reached without access is refused before it touches a
+ * team, page or room.
  *
  * `defineMcpTool` / `defineMcpHandler` are @nuxtjs/mcp-toolkit auto-imports,
  * stubbed as identity so the real definitions can be imported. `lib/deps` is
- * mocked: its real collaborators run in crouton-collab's collabServerDoc.test.ts
- * and crouton-pages' page-live-source.test.ts, and here they must never be called.
+ * mocked: its real collaborators run in crouton-collab's collabServerDoc.test.ts,
+ * crouton-pages' page-live-source.test.ts and mcpPagesTeamLookup.test.ts, and
+ * here they must never be called. `signInDeps` is replaced by fixed deps (its
+ * real form needs crouton-auth's better-auth instance); `resolveSignInAccess`
+ * runs for real.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createApp, eventHandler, toWebHandler, type H3Event } from 'h3'
 
 const deps = vi.hoisted(() => {
@@ -21,6 +27,7 @@ const deps = vi.hoisted(() => {
   return {
     calls,
     pagesToolDeps: () => ({
+      teams: { findTeam: spy('findTeam'), canEditPages: spy('canEditPages'), listUserTeams: spy('listUserTeams') },
       pages: { listTeamPagesForMcp: spy('listTeamPagesForMcp'), getStoredPageContentForMcp: spy('getStoredPageContentForMcp') },
       room: { readCollabRoomDoc: spy('readCollabRoomDoc'), updateCollabRoomDoc: spy('updateCollabRoomDoc') },
       registry: {},
@@ -35,25 +42,54 @@ vi.mock('../server/mcp-pages/lib/deps', () => ({
   pagesAccess: deps.pagesAccess
 }))
 
-import pagesHandler from '../server/mcp-pages/handlers/pages/index'
-import listPages from '../server/mcp-pages/handlers/pages/tools/list-pages'
-import readPage from '../server/mcp-pages/handlers/pages/tools/read-page'
-import editPage from '../server/mcp-pages/handlers/pages/tools/edit-page'
-import addLayout from '../server/mcp-pages/handlers/pages/tools/add-layout'
-import listLayoutBlocks from '../server/mcp-pages/handlers/pages/tools/list-layout-blocks'
+vi.mock('../server/mcp-pages/lib/auth', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../server/mcp-pages/lib/auth')>()
+  return {
+    ...real,
+    signInDeps: async () => ({
+      origin: 'https://velo.test',
+      issuer: 'https://velo.test/api/auth',
+      jwks: async () => ({ keys: [] }),
+      findConsent: async () => { deps.calls.push('findConsent'); return null }
+    })
+  }
+})
 
-type Tool = { name: string, handler: (args: any) => Promise<{ isError?: boolean, content: { text: string }[] }> }
+import pagesHandler from '../server/mcp-pages/index'
+import listTeams from '../server/mcp-pages/tools/list-teams'
+import listPages from '../server/mcp-pages/tools/list-pages'
+import readPage from '../server/mcp-pages/tools/read-page'
+import editPage from '../server/mcp-pages/tools/edit-page'
+import addLayout from '../server/mcp-pages/tools/add-layout'
+import listLayoutBlocks from '../server/mcp-pages/tools/list-layout-blocks'
 
-describe('/mcp/pages handler definitions', () => {
-  // covers: T8
-  it('is the "pages" handler with exactly the five page tools', () => {
-    expect((pagesHandler as { name: string }).name).toBe('pages')
-    const names = [listPages, readPage, editPage, addLayout, listLayoutBlocks].map(t => (t as Tool).name).sort()
-    expect(names).toEqual(['add_layout', 'edit_page', 'list_layout_blocks', 'list_pages', 'read_page'])
+type Tool = { name: string, inputSchema: Record<string, unknown>, handler: (args: any) => Promise<{ isError?: boolean, content: { text: string }[] }> }
+const ALL = [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks] as unknown as Tool[]
+
+describe('/mcp page-tools handler definitions', () => {
+  // covers: T6
+  it('is the unnamed default handler with exactly the six page tools', () => {
+    const def = pagesHandler as unknown as { name?: string, tools: Tool[] }
+    expect(def.name).toBeUndefined()
+    expect(def.tools.map(t => t.name).sort()).toEqual(['add_layout', 'edit_page', 'list_layout_blocks', 'list_pages', 'list_teams', 'read_page'])
+    expect(def.tools).toEqual(ALL)
   })
 
-  // covers: T8
-  it('the handler middleware refuses a request with no pages token (401)', async () => {
+  // covers: T6
+  it('the old named handler folder is gone', () => {
+    expect(existsSync(resolve(__dirname, '../server/mcp-pages/handlers'))).toBe(false)
+  })
+
+  // covers: T6
+  it('every team-scoped tool takes a team argument; list_teams and list_layout_blocks do not', () => {
+    for (const tool of ALL) {
+      const wants = !['list_teams', 'list_layout_blocks'].includes(tool.name)
+      expect('team' in tool.inputSchema, tool.name).toBe(wants)
+    }
+  })
+
+  // covers: T6
+  it('the handler middleware answers 401 + WWW-Authenticate for /mcp with no token', async () => {
     const middleware = (pagesHandler as unknown as { middleware: (e: H3Event) => Promise<void> }).middleware
     let reached = false
     const app = createApp()
@@ -62,18 +98,19 @@ describe('/mcp/pages handler definitions', () => {
       reached = true
       return 'passed'
     }))
-    const res = await toWebHandler(app)(new Request('https://velo.test/mcp/pages'))
+    const res = await toWebHandler(app)(new Request('https://velo.test/mcp', { method: 'POST' }))
     expect(res.status).toBe(401)
+    expect(res.headers.get('www-authenticate')).toBe('Bearer resource_metadata="https://velo.test/.well-known/oauth-protected-resource/mcp", scope="pages offline_access"')
     expect(reached).toBe(false)
   })
 
-  // covers: T8
-  it('every tool without access is refused and touches no page or room', async () => {
-    const args = { pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [], layout: {} }
-    for (const tool of [listPages, readPage, editPage, addLayout, listLayoutBlocks] as Tool[]) {
+  // covers: T6
+  it('every tool without access is refused and touches no team, page or room', async () => {
+    const args = { team: 'team-a', pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [], layout: {} }
+    for (const tool of ALL) {
       const res = await tool.handler(args)
       expect(res.isError, tool.name).toBe(true)
-      expect(res.content[0]!.text, tool.name).toMatch(/Not authorised/)
+      expect(res.content[0]!.text, tool.name).toMatch(/Pas accès/)
     }
     expect(deps.calls).toEqual([])
   })

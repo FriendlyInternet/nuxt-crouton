@@ -109,7 +109,7 @@
       },
       {
         "path": "/mcp/pages",
-        "expectStatus": 401
+        "expectStatus": 404
       },
       {
         "path": "/mcp",

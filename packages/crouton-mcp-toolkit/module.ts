@@ -50,12 +50,7 @@ export default defineNuxtModule<CroutonMcpToolkitConfig>({
     const resolver = createResolver(import.meta.url)
     const config = defu(moduleConfig, defaults)
 
-    // Auto-detect: enabled in dev, disabled in prod (unless explicitly set).
-    // Pages handler (#3982): opt-in, and refused without crouton-pages + crouton-collab —
-    // decided before anything is installed so a misconfigured app fails the build.
-    const plan = resolveToolkitSetup(config, nuxt.options.dev, () =>
-      layerPackageNames(getLayerDirectories(nuxt).map(d => d.root))
-    )
+    const plan = planSetup(config, nuxt)
     if (!plan.enabled) return
 
     // nuxt-ai-ready's own MCP tools/resources default off (#3982) — see resolveAiReady
@@ -70,9 +65,9 @@ export default defineNuxtModule<CroutonMcpToolkitConfig>({
       name: config.name
     })
 
-    if (plan.pages) registerPagesHandler(nuxt)
+    if (plan.pagesAtRoot) registerPagesHandler(nuxt)
 
-    // 404 for /mcp and the toolkit's other routes; only named handlers like /mcp/pages pass
+    // 404 for the toolkit's routes under /mcp; /mcp itself passes only when it serves the page tools
     if (!plan.genericTools) {
       addServerHandler({
         middleware: true,
@@ -100,25 +95,43 @@ export default defineNuxtModule<CroutonMcpToolkitConfig>({
 })
 
 /**
+ * Auto-detect: enabled in dev, disabled in prod (unless explicitly set).
+ * Pages handler (#3982): opt-in, and refused without crouton-pages + crouton-collab —
+ * decided before anything is installed so a misconfigured app fails the build.
+ * Served at /mcp only with crouton-auth's sign-in on (`croutonAuth.mcpOAuth`, #4097).
+ * Prints the plan's warnings and, when enabled, sets `runtimeConfig.croutonMcpToolkit.pagesAtRoot`.
+ */
+function planSetup(config: CroutonMcpToolkitConfig, nuxt: Nuxt): ToolkitSetupPlan {
+  const mcpOAuth = (nuxt.options as { croutonAuth?: { mcpOAuth?: boolean } }).croutonAuth?.mcpOAuth === true
+  const plan = resolveToolkitSetup(config, nuxt.options.dev, () =>
+    layerPackageNames(getLayerDirectories(nuxt).map(d => d.root)), mcpOAuth
+  )
+  for (const warning of plan.warnings) console.warn(`🍞 crouton:mcp-toolkit ⚠ ${warning}`)
+  if (!plan.enabled) return plan
+  // Always set (even false): the /mcp gate reads it to decide whether /mcp itself passes
+  nuxt.options.runtimeConfig.croutonMcpToolkit = defu(
+    { pagesAtRoot: plan.pagesAtRoot },
+    nuxt.options.runtimeConfig.croutonMcpToolkit as Record<string, unknown> | undefined
+  )
+  return plan
+}
+
+/**
  * The pages handler sits outside server/mcp/ so the toolkit's scan never finds it on
- * its own; add its folder (relative — see PAGES_MCP_DIR) before definitions load, and
- * tell the mint endpoint it is served.
+ * its own; add its folder (relative — see PAGES_MCP_DIR) before definitions load. Its
+ * unnamed `index.ts` becomes the default handler, served at /mcp.
  */
 function registerPagesHandler(nuxt: Nuxt): void {
   const hook = nuxt.hook as unknown as (name: 'mcp:definitions:paths', fn: (paths: McpDefinitionPaths) => void) => void
   hook('mcp:definitions:paths', (paths) => {
     paths.handlers = [...(paths.handlers ?? []), PAGES_MCP_DIR]
   })
-  nuxt.options.runtimeConfig.croutonMcpToolkit = defu(
-    nuxt.options.runtimeConfig.croutonMcpToolkit as Record<string, unknown> | undefined,
-    { pages: true }
-  )
 }
 
 function logEndpoints(dev: boolean, plan: ToolkitSetupPlan): void {
   const lines = [
     plan.genericTools && '🍞 crouton:mcp-toolkit ✓ MCP endpoint available at /mcp',
-    plan.pages && '🍞 crouton:mcp-toolkit ✓ Pages tools available at /mcp/pages'
+    plan.pagesAtRoot && '🍞 crouton:mcp-toolkit ✓ Pages tools available at /mcp'
   ].filter(line => dev && line)
   for (const line of lines) console.log(line)
 }
