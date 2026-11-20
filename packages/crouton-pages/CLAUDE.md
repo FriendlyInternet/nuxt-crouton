@@ -43,6 +43,7 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/utils/content-detector.ts` | JSON vs HTML content detection |
 | `app/editor/extensions/page-blocks.ts` | TipTap extensions bundle |
 | `app/pages/[team]/[...slug].vue` | Public page catch-all route |
+| `app/utils/forward-locale.ts` | `resolveForwardLocale()` — the language a no-language address forwards to; reads only values present on server and browser (`useI18n()`, `runtimeConfig.public.i18n`), unit-tested in `test/forward-locale.test.ts` |
 | `server/plugins/single-team-rewrite.ts` | Config-driven single-team URL rewriter (Nitro plugin) |
 | `server/plugins/domain-resolver.ts` | Resolves custom domains to teams (Nitro plugin) |
 | `server/api/teams/[id]/pages.get.ts` | Get published pages for navigation (supports `?pageType=` filter) |
