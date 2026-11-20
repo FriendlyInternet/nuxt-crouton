@@ -8,8 +8,6 @@
     "**/server/routes/**/*.ts",
     "**/server/plugins/**/*.ts",
     "**/server/middleware/**/*.ts",
-    // Nitro tasks: scanned from server/tasks or registered by handler path (nitro.tasks), never imported (#3930)
-    "**/server/tasks/**/*.ts",
     // Generated collection components: auto-registered (BookingsBookingsList) and
     // resolved dynamically via the croutonCollections registry — invisible statically
     "**/layers/**/app/components/**/*.vue",

@@ -1,3 +1,5 @@
+// A Nitro task: the app registers it by handler path (nitro.tasks), so nothing imports it.
+// fallow-ignore-file unused-file
 /**
  * Daily reminder / follow-up emails (#3930).
  *
