@@ -1,5 +1,6 @@
 // The clock's inbox card sync (#4234): run `runCardsSync` for the owner's team with no browser session.
-// Called by onTick (clock-tick.ts) in the :00 and :30 slots. Owner = the user whose email is
+// Called by onTick (clock-tick.ts) in the :00 and :30 slots, and in any slot after a webhook marked a
+// change (#4309). Owner = the user whose email is
 // NUXT_STATUS_OWNER_EMAIL; team = the app's default team (`test1`); token = the Worker's GITHUB_TOKEN
 // (the owner's read token, not the Harness App token). Shares the endpoint's 60 s throttle key.
 // Never throws: every outcome is a CardsSyncRecord, which onTick writes to KV for the Clock tab.
