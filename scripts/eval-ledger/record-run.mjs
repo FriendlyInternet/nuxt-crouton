@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 import { validate } from './schema.mjs'
 import { classify, joinRuns, legacyClassifyComment } from '../lib/run-outcome.mjs'
 import { readRateLimit, diffRateLimit } from '../lib/rate-limit.mjs'
+import { noCommitReason } from '../lib/fix-bot-precheck.mjs'
 
 const BOT = 'nuxt-harness[bot]'
 export const DATA_BRANCH = 'pipeline-data'
@@ -156,6 +157,12 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
     api_calls_reason: rl.reason,
     token: env.TOKEN_KIND === 'app' ? 'app' : 'github_token',
     ref: `https://github.com/${repo}/actions/runs/${env.RUN_ID}`,
+  }
+  // #4317: a fixer run that pushed no fix names one reason; `precheck` is the still-red verdict.
+  if (env.STAGE === 'fix-ci') {
+    const needs = safeJson(env.NEEDS_JSON) || {}
+    record.no_commit_reason = noCommitReason(needs)
+    record.precheck = needs.fixbot?.outputs?.precheck || null
   }
   const res = validate(record)
   if (!res.ok) throw new Error(`record invalid: ${res.errors.join('; ')}`)

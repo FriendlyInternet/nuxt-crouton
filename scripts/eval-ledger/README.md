@@ -123,6 +123,7 @@ the run (`continue-on-error` + the script always exits 0).
 - **Also on `pipeline-data`:** `epics/<N>.json` — one numbers record per epic (runs, silent runs, rounds per child, time to main, owner touches), written by `postmortem.yml` `post` (#3253, `scripts/lib/epic-numbers.mjs`; overwritten on a hand retry via `writeRecord({ overwrite: true })`), read by the 10-epic review (#3254).
 - **What counts as output:** an agent-written comment, a review verdict, or a commit on the work branch
   inside the run's window. None → `produced: ["nothing"]` (never skipped).
+- **Why nothing (fix-ci only):** `no_commit_reason` names one code from `NO_COMMIT_REASONS` (`scripts/lib/fix-bot-precheck.mjs`) for every fixer run that pushed no fix, and `precheck` records the still-red check (`still-red`, `check-unreadable`, …) (#4317).
 - **What does not:** the workflow's own notes. Every one carries the hidden marker
   `<!-- pipeline-note -->` at its post site; `scripts/lib/pipeline-note-lint.test.mjs` fails CI for a
   new post site without it (allowlist = verdict comments, the interpreter's own comment, body files that
