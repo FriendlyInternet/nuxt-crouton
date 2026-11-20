@@ -75,6 +75,21 @@ export async function readTeamAdminRole(db: RawDb | null | undefined, orgId: str
   }
 }
 
+/**
+ * The team whose admin row a call should find seeded. Read calls
+ * (`list-roles`, `get-role`) name it in the query, as Better Auth reads it
+ * there; write calls in the body. Used for the seed only — seeding writes
+ * nothing but the template, and only when the team has no row — never for
+ * the guard (see `orgOf`).
+ */
+async function seedOrgOf(ctx: HookCtx): Promise<string | null> {
+  const fromBody = ctx.body?.organizationId
+  if (typeof fromBody === 'string' && fromBody) return fromBody
+  const fromQuery = ctx.query?.organizationId
+  if (typeof fromQuery === 'string' && fromQuery) return fromQuery
+  return (await sessionOf(ctx))?.session?.activeOrganizationId ?? null
+}
+
 // ----------------------------------------------------------------------------
 // The guard (Better Auth global `hooks.before`)
 // ----------------------------------------------------------------------------
@@ -86,6 +101,7 @@ interface Adapter {
 interface HookCtx {
   path?: string
   body?: Record<string, unknown> | null
+  query?: Record<string, unknown> | null
   headers?: Headers
   context: { adapter: Adapter }
 }
@@ -200,7 +216,8 @@ export function buildAuthHooks(access: Access, db?: RawDb | null) {
       if (!ctx.path?.startsWith('/organization/')) return
       const orgId = await orgOf(ctx)
       // A failed seed (e.g. an unknown team id) never fails the call: Better Auth answers it.
-      if (orgId && db) await seedTeamAdminRole(db, orgId, access)
+      const seedOrg = db ? await seedOrgOf(ctx) : null
+      if (seedOrg && db) await seedTeamAdminRole(db, seedOrg, access)
       await guardRoleCall(ctx, orgId)
     })
   }
