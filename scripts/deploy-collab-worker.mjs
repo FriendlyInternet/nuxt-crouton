@@ -50,18 +50,11 @@ const wrangler = (args, opts = {}) =>
 // API code 10007 — the upload lands, the follow-up call races it). The upload is idempotent, so
 // retry once. wrangler's stderr is inherited (not captured), so we can't match the code: any
 // first failure is retried, and a second failure throws.
-// The retry itself can then hit "Actor migration tag precondition failed" (code 10079) while the
-// first upload is still settling, so wait between attempts and allow a few of them.
 const deploy = () => wrangler(['deploy', '--config', cfgPath])
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-const ATTEMPTS = 4
 let out
-for (let attempt = 1; ; attempt++) {
-  try { out = deploy(); break } catch (e) {
-    if (attempt === ATTEMPTS) throw e
-    console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying (${attempt}/${ATTEMPTS - 1}).`)
-    sleep(attempt * 5000)
-  }
+try { out = deploy() } catch (e) {
+  console.warn(`::warning::collab Worker deploy failed (${e.message.split('\n')[0]}) — retrying once.`)
+  out = deploy()
 }
 process.stdout.write(out)
 let url
