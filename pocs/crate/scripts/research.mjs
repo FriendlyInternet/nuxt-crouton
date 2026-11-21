@@ -152,6 +152,9 @@ function promptFor(track, ctx) {
   }
 }
 
+/** The Claude CLI's wording when the subscription's usage window is used up. */
+const LIMIT_HIT = /usage limit|rate limit|limit reached|limit will reset/i
+
 function research(prompt) {
   return new Promise((resolve) => {
     const cli = ['-p', prompt, '--model', args.model, '--output-format', 'json', '--json-schema', SCHEMA, '--allowedTools', 'WebSearch,WebFetch']
@@ -159,7 +162,8 @@ function research(prompt) {
     execFile('claude', cli, { maxBuffer: 1e8, cwd: tmpdir(), timeout: 300_000 }, (err, out) => {
       let r = {}
       try { r = JSON.parse(out) } catch {}
-      resolve({ answer: r.structured_output ?? null, cost: r.total_cost_usd ?? 0, error: err?.message?.slice(0, 200) })
+      const limited = LIMIT_HIT.test(`${out ?? ''} ${err?.message ?? ''}`) && !r.structured_output
+      resolve({ answer: r.structured_output ?? null, cost: r.total_cost_usd ?? 0, limited, error: err?.message?.slice(0, 200) })
     })
   })
 }
@@ -183,6 +187,11 @@ function toTip(a, measured) {
 
 // ── Run ───────────────────────────────────────────────────────────────────────
 
+const missing = ['CRATE_EMAIL', 'CRATE_PASSWORD'].filter(k => !process.env[k])
+if (missing.length) {
+  console.error(`Missing ${missing.join(' and ')} — add them as repo secrets (a crate staging account).`)
+  process.exit(1)
+}
 const api = await login()
 const teams = await api('/api/auth/organization/list')
 const team = teams.find(t => !args.team || [t.slug, t.id].includes(args.team)) ?? teams[0]
@@ -200,7 +209,7 @@ if (args['dry-run']) {
   process.exit(0)
 }
 
-let uploaded = 0, cost = 0, failed = 0
+let uploaded = 0, cost = 0, failed = 0, limited = false
 const parallel = Number(args.parallel)
 for (let i = 0; i < queue.length; i += parallel) {
   const batch = queue.slice(i, i + parallel)
@@ -208,6 +217,7 @@ for (let i = 0; i < queue.length; i += parallel) {
     const { prompt, energy } = promptFor(t, ctx)
     const r = await research(prompt)
     cost += r.cost
+    if (r.limited) limited = true
     if (!r.answer) {
       failed++
       console.log(`  ✗ ${t.artist} – ${t.name}: ${r.error ?? 'no answer'}`)
@@ -219,5 +229,9 @@ for (let i = 0; i < queue.length; i += parallel) {
   const tips = answers.filter(Boolean)
   // Upload per batch, so a stopped run keeps what it already found.
   if (tips.length) uploaded += (await api(`${base}/tips`, { method: 'POST', body: JSON.stringify({ source: 'Agent', tips }) })).tipsMerged
+  if (limited) {
+    console.log('Subscription usage limit reached — stopping; tomorrow\'s run continues.')
+    break
+  }
 }
 console.log(`Researched ${uploaded} tracks, ${failed} failed · ~$${cost.toFixed(2)} of subscription usage`)
