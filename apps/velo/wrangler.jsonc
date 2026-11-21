@@ -30,6 +30,10 @@
     { "binding": "BLOB", "bucket_name": "velo-blob" }
   ],
 
+  // Daily booking reminders / follow-ups (#3930) — must match `scheduledTasks` in
+  // apps/velo/nuxt.config.ts (Cloudflare production build only).
+  "triggers": { "crons": ["0 7 * * *"] },
+
   // Staging environment — reuses the EXISTING velo-staging-db + velo-staging-blob.
   // Deploying `--env staging` creates a `velo-staging` worker bound to these on
   // velo.pmcp.dev. The env block is stripped from the generated .output config
@@ -37,6 +41,9 @@
   "env": {
     "staging": {
       "routes": [{ "pattern": "velo.pmcp.dev", "custom_domain": true }],
+      // Explicit empty list — Wrangler inherits top-level triggers into envs; staging
+      // stays timer-free until the per-team email switch (#3929) exists.
+      "triggers": { "crons": [] },
       // Public runtime vars (not secrets). Booking emails link back to staging, not
       // production (#2405). Wrangler does NOT inherit top-level vars into an env.
       "vars": {
