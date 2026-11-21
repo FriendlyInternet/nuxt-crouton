@@ -9,7 +9,7 @@ export const STRONG = 0.6
 export const WEAK = 0.3
 
 export function useCrateHints(crate: ReturnType<typeof useCrate>, track: Ref<CrateTrack | null>) {
-  const { data, status } = useAsyncData(
+  const { data, status, refresh } = useAsyncData(
     () => `crate-hints-${track.value?.id ?? 'none'}`,
     () => track.value ? $fetch<{ sources: HintSource[], scores: PileScore[] }>(crate.api(`/tracks/${track.value.id}/hints`)) : Promise.resolve({ sources: [], scores: [] }),
     { server: false, watch: [() => track.value?.id], default: () => ({ sources: [], scores: [] }) }
@@ -42,5 +42,5 @@ export function useCrateHints(crate: ReturnType<typeof useCrate>, track: Ref<Cra
   /** Looked up, and nothing came back — no genre words, no suggestions. */
   const empty = computed(() => status.value === 'success' && !sources.value.length && !suggestions.value.length)
 
-  return { sources, glow, suggestions, empty }
+  return { sources, glow, suggestions, empty, refresh }
 }

@@ -357,6 +357,8 @@ function startNewPile() {
     >
       <template #hints>
         <CrateHints
+          v-if="current"
+          :track="current"
           :sources="hints.sources.value"
           :suggestions="hints.suggestions.value"
           :path-label="pathLabel"
@@ -367,6 +369,7 @@ function startNewPile() {
           @hold="openListen"
           @listen="listener?.start()"
           @new="startNewPile"
+          @researched="hints.refresh()"
         />
       </template>
     </CrateDeck>
