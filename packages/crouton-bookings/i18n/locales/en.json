@@ -516,6 +516,8 @@
       "translations": "Translations",
       "statuses": "Statuses",
       "groups": "Age Groups",
+      "sendEmails": "Send emails",
+      "sendEmailsHint": "Off: booking emails are not sent, and each one is logged as skipped",
       "name": "Name",
       "subject": "Subject",
       "body": "Body",
@@ -559,7 +561,8 @@
     "emailStatus": {
       "pending": "Pending",
       "sent": "Sent",
-      "failed": "Failed"
+      "failed": "Failed",
+      "skipped": "Skipped"
     }
   }
 }
