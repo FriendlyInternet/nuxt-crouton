@@ -364,8 +364,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # --ignore-scripts (#3199): skip the workspace postinstalls (`nuxt prepare`), which were
+      # ~155 s of a ~171 s install; the finish step's app typecheck prepares the app itself.
+      # It also skips dependency build scripts, so rebuild the only one we allow to build
+      # (package.json pnpm.onlyBuiltDependencies) — same installed deps as before.
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild native deps skipped by --ignore-scripts
+        run: pnpm rebuild better-sqlite3
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
@@ -1134,7 +1140,7 @@ jobs:
               # (A scriptless fresh poc still can't be verified — no script to run prepare — but #1866
               # makes every scaffold emit the script, so that case is legacy-only.)
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
-                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile` (top of the job)
+                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile --ignore-scripts` (top of the job)
                 # ran BEFORE pi scaffolded this poc, so the new workspace member was never linked: no
                 # `pocs/<name>/node_modules`, no `.nuxt`. `nuxt typecheck` then can't resolve Nuxt
                 # auto-imports and reports ~37 bogus `TS2304: Cannot find name` on fine code — which the
