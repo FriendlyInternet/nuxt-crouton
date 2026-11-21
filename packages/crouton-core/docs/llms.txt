@@ -30,6 +30,8 @@
 - `CroutonImportButton`: Button to import CSV or JSON into a collection
 - `CroutonItemButtonsMini`: Compact view, edit and delete buttons for an item
 - `CroutonItemCardMini`: Compact card that fetches and shows a referenced item
+- `CroutonKanban`: Kanban board grouping collection items into drag-and-drop columns; optional read-only mode
+- `CroutonKanbanColumn`: One kanban column of draggable item cards
 - `CroutonOptionsFieldCardMini`: Shows options field values resolved from a settings collection
 - `CroutonQrCode`: Renders any string (typically a URL) as a scannable QR code
 - `CroutonRedirectsList`: List of team URL redirects
