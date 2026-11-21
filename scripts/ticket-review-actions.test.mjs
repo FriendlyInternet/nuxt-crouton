@@ -8,7 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, chmodSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { reviewActions } from './ticket-review-actions.mjs'
+import { reviewActions, retitleActions, shouldRetitle } from './ticket-review-actions.mjs'
 import { decide, renderComment } from './lib/ticket-verdict.mjs'
 import { normalizeSteps, renderSteps, stepsPending, HARNESS_BOT, PLAN_WRONG_MARKER, PLAN_GO_MARKER } from './lib/epic-steps.mjs'
 
@@ -236,6 +236,58 @@ test('ticket-review.yml has the subject input and runs the scripted hand-offs', 
   assert.match(t, /- name: Gather the epic and its tickets\n\s+id: gather\n/)
   assert.match(t, /- id: pi\n\s+if: \$\{\{ steps\.gather\.outputs\.held != 'true' \}\}/)
   assert.match(t, /- name: Post the verdict and release\n\s+if: \$\{\{ !cancelled\(\) && steps\.gather\.outputs\.held != 'true' \}\}/)
+})
+
+// ── #4353: the reviewer's suggested title renames a go ticket before it starts ──
+const BAD = 'velo: the bookings cancel route returns 404'
+const GOOD = 'Cancelling a booking works again'
+const titled = (n, suggestion, v = 'go', fail = '') => ticketSection(n, v, fail).replace(`## Ticket #${n}\n`, `## Ticket #${n}\nSuggested title: ${suggestion}\n`)
+
+test('T5: go + valid suggestion + rule-breaking title → a retitle line before the label, legacy and rolling', () => {
+  const legacySubs = [sub(1, 0, { title: BAD, body: 'Rule: x. Test: y.' })]
+  const ld = decide(legacySubs, verdictFile(titled(1, GOOD)))
+  assert.equal(ld.ok, true, String(ld.errors))
+  const legacy = reviewActions({ epic: 9, labels: ['epic'], decision: ld, comments: [], tickets: legacySubs })
+  const r1 = legacy.findIndex((l) => l.kind === 'retitle')
+  assert.deepEqual(legacy[r1], { kind: 'retitle', issue: 1, title: GOOD, seenTitle: BAD })
+  assert.ok(r1 < legacy.findIndex((l) => l.kind === 'label' && l.issue === 1))
+
+  const steps = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])
+  const subs = [sub(11, 0, { title: BAD })]
+  const rd = decide(subs, verdictFile(planSection(), titled(11, GOOD)), { subject: 'plan' })
+  const rolling = reviewActions({ epic: 9, subject: 'plan', labels: ROLLING, decision: rd, comments: [bot(renderSteps(steps))], tickets: subs, subIssues: subs, steps })
+  const r2 = rolling.findIndex((l) => l.kind === 'retitle')
+  assert.deepEqual(rolling[r2], { kind: 'retitle', issue: 11, title: GOOD, seenTitle: BAD })
+  const lab = rolling.findIndex((l) => l.kind === 'label' && l.issue === 11)
+  assert.ok(lab > r2, JSON.stringify(rolling))
+})
+
+test('T6: no retitle for a no-go ticket, a bad suggestion, or a title that already follows the rule', () => {
+  const subs = [sub(1, 0, { title: BAD, body: 'Rule: x. Test: y.' })]
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, GOOD, 'no-go', '3')))), [])
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, 'x'.repeat(141))))), [])
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, 'fix(velo): cancel works')))), [])
+  const fine = [sub(1, 0, { title: 'Bookings can be cancelled', body: 'Rule: x. Test: y.' })]
+  assert.deepEqual(retitleActions(decide(fine, verdictFile(titled(1, GOOD)))), [])
+})
+
+test('T7: rename only when the live title still equals the one the review saw (pure + CLI)', () => {
+  const a = { kind: 'retitle', issue: 1, title: GOOD, seenTitle: BAD }
+  assert.equal(shouldRetitle(a, BAD), true)
+  assert.equal(shouldRetitle(a, 'Someone renamed it'), false)
+  const cli = (live) => spawnSync('node', [new URL('./ticket-review-actions.mjs', import.meta.url).pathname, 'retitle-ok', JSON.stringify(a), live]).status
+  assert.equal(cli(BAD), 0)
+  assert.equal(cli('Someone renamed it'), 1)
+})
+
+test('T8: ticket-review.yml feeds the title check to the reviewer and runs the retitle line', () => {
+  const t = wf('ticket-review.yml')
+  assert.match(t, /node scripts\/lib\/title-rule\.mjs notes "\$D\/tickets\.json" >> "\$D\/epic\.md"/)
+  const c = t.match(/^\s+retitle\)[^\n]*$/m)?.[0] || ''
+  assert.match(c, /ticket-review-actions\.mjs retitle-ok "\$A" "\$LIVE"/)
+  assert.match(c, /gh issue edit "\$N" --title/)
+  // the notes run after tickets.json is written
+  assert.ok(t.indexOf('title-rule.mjs notes') > t.indexOf('> "$D/tickets.json"'))
 })
 
 test('ticket-revise.yml passes the subject on to the re-review', () => {
