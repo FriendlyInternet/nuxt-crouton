@@ -48,6 +48,7 @@
     "clean": "rm -rf node_modules packages/*/node_modules apps/*/node_modules",
     "changelog": "changelogithub",
     "check:publint": "publint ./packages/crouton-core",
+    "check:pack": "node scripts/pack-check.mjs",
     "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
