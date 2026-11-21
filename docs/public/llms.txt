@@ -12,15 +12,12 @@ Nuxt Crouton is a code generator and composable library that generates working C
 - Installation: /getting-started/installation
 - Your First Collection: /getting-started/first-collection
 
-## Core Concepts
+## Fundamentals
 
-- Collections: /core-concepts/collections
-- Generated vs Core Code: /core-concepts/generated-vs-core
-- Forms & Modals: /core-concepts/forms-modals
-- Data Operations: /core-concepts/data-operations
-- Querying Data: /core-concepts/querying-data
-- Caching Strategy: /core-concepts/caching
-- Package Architecture: /core-concepts/packages
+- Collections and layers: /fundamentals/collections
+- Architecture: /fundamentals/architecture
+- Data operations (reading, saving, opening the form, caching): /fundamentals/data-operations
+- Generated code (and regenerating): /fundamentals/generated-code
 
 ## Generators
 
