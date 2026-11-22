@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-22T07:20:16Z",
-  "data_commit": "264addb6708e9d6fd75a37faee3fab8f1eb9ed76",
+  "as_of": "2026-11-22T13:20:15Z",
+  "data_commit": "50549887d2df6c5eb3bf18671b54290d66bbbf77",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -2190,7 +2190,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 1890
+          "runs": 1896
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -2934,7 +2934,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0.0013,
-          "runs": 749
+          "runs": 755
         },
         "housekeeping.yml/digest": {
           "failed": 0,
@@ -3521,8 +3521,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0109,
-          "runs": 92
+          "rate": 0.0102,
+          "runs": 98
         },
         "pipeline-review.yml/count": {
           "failed": 0,
@@ -3982,8 +3982,8 @@
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 18089,
-        "runs_with_jobs": 18089
+        "eligible_runs": 18107,
+        "runs_with_jobs": 18107
       },
       "lines": {
         "building": {
@@ -4006,7 +4006,7 @@
         },
         "merging": {
           "failed": 1,
-          "runs": 6683,
+          "runs": 6695,
           "schedule_total": 129,
           "workflow_rate": 0.0001
         },
@@ -4018,9 +4018,9 @@
         },
         "scheduled": {
           "failed": 1,
-          "runs": 194,
+          "runs": 200,
           "schedule_total": 87,
-          "workflow_rate": 0.0052
+          "workflow_rate": 0.005
         },
         "tickets": {
           "failed": 6,
@@ -4113,7 +4113,7 @@
         "automerge-epic-subpr.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 1890
+          "runs": 1896
         },
         "build-review.yml": {
           "failed": 18,
@@ -4183,7 +4183,7 @@
         "handoff-sweep.yml": {
           "failed": 1,
           "rate": 0.0013,
-          "runs": 749
+          "runs": 755
         },
         "housekeeping.yml": {
           "failed": 0,
@@ -4247,8 +4247,8 @@
         },
         "pipeline-metrics.yml": {
           "failed": 1,
-          "rate": 0.0109,
-          "runs": 92
+          "rate": 0.0102,
+          "runs": 98
         },
         "pipeline-review.yml": {
           "failed": 0,
