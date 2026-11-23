@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-22T20:20:16Z",
-  "data_commit": "da5fa71dadcb41ff827c8c3bb0814bc89f869685",
+  "as_of": "2026-11-23T00:20:15Z",
+  "data_commit": "ba99d773945c1bf0624858b515a4d6f85fe3fc90",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -4359,6 +4359,78 @@
           "failed": 63,
           "rate": 0.0957,
           "runs": 658
+        }
+      }
+    },
+    "2026-W48": {
+      "jobs": {
+        "automerge-epic-subpr.yml/automerge": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        }
+      },
+      "jobs_coverage": {
+        "eligible_runs": 1,
+        "runs_with_jobs": 1
+      },
+      "lines": {
+        "building": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "deploys": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "fixing": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "merging": {
+          "failed": 0,
+          "runs": 1,
+          "schedule_total": 0,
+          "workflow_rate": 0
+        },
+        "planning": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "scheduled": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        },
+        "tickets": {
+          "failed": 0,
+          "runs": 0,
+          "schedule_total": 0,
+          "workflow_rate": null
+        }
+      },
+      "schedules": {},
+      "workflows": {
+        "automerge-epic-subpr.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
         }
       }
     }
