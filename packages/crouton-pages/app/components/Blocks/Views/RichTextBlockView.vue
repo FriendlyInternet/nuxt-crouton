@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// fallow-ignore-file unused-component-props -- TipTap passes updateAttributes to every node view; declaring it keeps it from falling through onto the DOM as an attribute, even though this read-only view never edits
 /**
  * Rich Text Block Editor View
  *
@@ -9,10 +8,13 @@
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import type { RichTextBlockAttrs } from '../../../types/blocks'
 
+// TipTap passes updateAttributes (and other props) to every node view; this
+// read-only view never edits, so keep undeclared props off the DOM instead.
+defineOptions({ inheritAttrs: false })
+
 defineProps<{
   node: { attrs: RichTextBlockAttrs }
   selected: boolean
-  updateAttributes: (attrs: Partial<RichTextBlockAttrs>) => void
   deleteNode: () => void
   getPos: () => number
 }>()
