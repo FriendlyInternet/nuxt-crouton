@@ -246,7 +246,7 @@ const crouton = useCrouton()
           <!-- Action buttons (show on hover) -->
           <div
             v-if="!readonly"
-            class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
+            class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100 transition-opacity">
             <CroutonItemButtonsMini
               delete
               update
