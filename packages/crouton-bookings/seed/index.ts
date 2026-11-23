@@ -9,7 +9,8 @@
  *   bike shed with two slots, a full-day choice and three products — each
  *   location lists the catalog seed's products it offers, with a stock each;
  * - a handful of bookings referencing those locations/slots, dated relative to
- *   seed time so the calendar always shows upcoming reservations.
+ *   seed time so the calendar always shows upcoming reservations — one of them
+ *   cancelled (tomorrow), so the "show cancelled" filter has something to show.
  *
  * Pure module: references the generated `bookings_*` table/column names as
  * strings, so it never imports the app's generated schema and loads cleanly
@@ -143,7 +144,9 @@ const BOOKINGS: SeedBooking[] = [
   { locationKey: 'park-court', slotIds: ['slot-1400'], inDays: 2, quantity: 1, status: 'pending', group: 'adults' },
   { locationKey: 'kayak-rental', slotIds: [], inDays: 3, quantity: 2, status: 'confirmed', group: null },
   // appended last: booking ids include the list index
-  { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' }
+  { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' },
+  // A cancelled booking tomorrow, so the "show cancelled" filter has something to show (#3651).
+  { locationKey: 'kayak-rental', slotIds: [], inDays: 1, quantity: 1, status: 'cancelled', group: null }
 ]
 
 function locationId(ctx: SeedContext, key: string): string {
