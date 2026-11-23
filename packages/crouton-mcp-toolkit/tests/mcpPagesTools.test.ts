@@ -205,3 +205,57 @@ describe('Rule B — edits go into the live room only', () => {
     expect(json(listLayoutBlocksTool(deps))).toContainEqual(expect.objectContaining({ id: 'bookings-list', minWidth: 320, config: ['limit'] }))
   })
 })
+
+/** The presence the tool handed the room for its latest edit, built on that room doc. */
+function lastPresence(room: ReturnType<typeof makeDeps>['room'], rooms: Map<string, Y.Doc>) {
+  const call = room.updateCollabRoomDoc.mock.calls.at(-1)! as any[]
+  const doc = rooms.get(`${call[0].teamId}:${call[0].roomType}:${call[0].roomId}`)!
+  return { presence: call[2]?.presence?.(doc), doc }
+}
+
+/** Which top-level block of `fragmentName` a caret JSON resolves inside. */
+function blockIndexOf(doc: Y.Doc, fragmentName: string, pos: unknown): number {
+  const abs = Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(pos), doc)!
+  const fragment = doc.getXmlFragment(fragmentName)
+  let type: any = abs.type
+  while (type.parent && type.parent !== fragment) type = type.parent
+  return fragment.toArray().indexOf(type)
+}
+
+// covers: T2
+describe('Claude presence sent with an edit (#4094)', () => {
+  it('edit_page insert at index 2 sends a presence whose caret resolves inside block 2 of that locale', async () => {
+    const { deps, room, rooms } = makeDeps()
+    await editPageTool(ctxA, { pageId: 'pA', locale: 'fr', action: 'insert', index: 1, blocks: [heading('one')] }, deps)
+    await editPageTool(ctxA, { pageId: 'pA', locale: 'fr', action: 'insert', index: 2, blocks: [heading('From Claude')] }, deps)
+
+    const { presence, doc } = lastPresence(room, rooms)
+    expect(presence).toMatchObject({
+      user: { id: 'mcp:tok1', name: 'Claude', color: '#d97757' },
+      fragment: 'content-fr',
+      block: { index: 2, type: 'heading' }
+    })
+    expect(blockIndexOf(doc, 'content-fr', presence.caret.anchor)).toBe(2)
+    expect(blockIndexOf(doc, 'content-fr', presence.caret.head)).toBe(2)
+    // Not the other locale's fragment
+    expect(doc.getXmlFragment('content-en').length).toBe(0)
+    expectNoRecordWrites()
+  })
+
+  it('the clientId is stable per pages token and differs between tokens', async () => {
+    const { deps, room, rooms } = makeDeps()
+    await editPageTool(ctxA, { pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [heading('a')] }, deps)
+    const first = lastPresence(room, rooms).presence.clientId
+    await editPageTool(ctxA, { pageId: 'pA', locale: 'fr', action: 'delete', index: 0 }, deps)
+    expect(lastPresence(room, rooms).presence.clientId).toBe(first)
+    await editPageTool({ teamId: 'team_A', tokenId: 'tok2' }, { pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [heading('b')] }, deps)
+    expect(lastPresence(room, rooms).presence.clientId).not.toBe(first)
+    expect(Number.isSafeInteger(first)).toBe(true)
+  })
+
+  it('add_layout puts the caret at the inserted pane block', async () => {
+    const { deps, room, rooms } = makeDeps()
+    await addLayoutTool(ctxA, { pageId: 'pA', locale: 'fr', index: 1, layout: calendarBesideBookings }, deps)
+    expect(lastPresence(room, rooms).presence.block).toEqual({ index: 1, type: 'paneBlock' })
+  })
+})

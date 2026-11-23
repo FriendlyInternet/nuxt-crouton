@@ -14,9 +14,11 @@
  */
 import type * as Y from 'yjs'
 import {
+  caretForFragmentEdit,
   editYFragment,
   hasFragmentContent,
   isTiptapElementNode,
+  seedClientId,
   seedYFragment,
   yFragmentToTiptap,
   type FragmentEditOp,
@@ -38,9 +40,22 @@ export interface PagesToolRoomRef {
   actorId: string
 }
 
+/** The editor's short-lived presence sent with an edit (#4094) — crouton-collab's `CollabServerPresence`. */
+export interface PagesToolPresence {
+  clientId: number
+  user: { id: string, name: string, color: string }
+  caret: { anchor: unknown, head: unknown } | null
+  fragment: string
+  block: { index: number, type: string } | null
+}
+
 export interface PagesToolRoom {
   readCollabRoomDoc: (ref: PagesToolRoomRef) => Promise<{ doc: Y.Doc | null, error: string | null }>
-  updateCollabRoomDoc: (ref: PagesToolRoomRef, mutate: (doc: Y.Doc) => void) => Promise<{ doc: Y.Doc | null, error: string | null }>
+  updateCollabRoomDoc: (
+    ref: PagesToolRoomRef,
+    mutate: (doc: Y.Doc) => void,
+    options?: { presence?: (doc: Y.Doc) => PagesToolPresence | null }
+  ) => Promise<{ doc: Y.Doc | null, error: string | null }>
 }
 
 export interface PagesToolBlockDefinition {
@@ -93,6 +108,26 @@ const DEFAULT_PANE_HEIGHT = 480
 
 function roomRef(ctx: PagesAccess, pageId: string): PagesToolRoomRef {
   return { teamId: ctx.teamId, roomType: PAGES_ROOM_TYPE, roomId: `${PAGES_ROOM_TYPE}-${pageId}`, actorId: `mcp:${ctx.tokenId}` }
+}
+
+/** Who the open editor shows while the tools edit (#4094): one name, one colour. */
+const CLAUDE_NAME = 'Claude'
+const CLAUDE_COLOR = '#d97757'
+
+/**
+ * Claude's presence after `op` ran on `fragmentName`: a stable clientId per pages
+ * token, and the caret at the edited block (see `caretForFragmentEdit`).
+ */
+export function claudePresence(ctx: PagesAccess, doc: Y.Doc, name: string, op: FragmentEditOp): PagesToolPresence {
+  const actorId = `mcp:${ctx.tokenId}`
+  const at = caretForFragmentEdit(doc.getXmlFragment(name), op)
+  return {
+    clientId: seedClientId(`presence:${actorId}`),
+    user: { id: actorId, name: CLAUDE_NAME, color: CLAUDE_COLOR },
+    caret: at?.caret ?? null,
+    fragment: name,
+    block: at?.block ?? null
+  }
 }
 
 /** The editor's fragment name for a locale (`fieldPrefix: 'content'`). */
@@ -150,7 +185,7 @@ async function editLive(
       if (content) seedYFragment(doc, name, content)
     }
     editYFragment(doc.getXmlFragment(name), op)
-  })
+  }, { presence: doc => claudePresence(ctx, doc, name, op) })
   if (out.error || !out.doc) return fail(out.error ?? 'live edit failed')
   return ok({
     blocks: blockList(yFragmentToTiptap(out.doc.getXmlFragment(name))),

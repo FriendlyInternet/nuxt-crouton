@@ -17,7 +17,7 @@ export function pagesToolDeps(): PagesToolDeps {
     pages: { listTeamPagesForMcp, getStoredPageContentForMcp },
     room: {
       readCollabRoomDoc: ref => readCollabRoomDoc(ref),
-      updateCollabRoomDoc: (ref, mutate) => updateCollabRoomDoc(ref, mutate)
+      updateCollabRoomDoc: (ref, mutate, options) => updateCollabRoomDoc(ref, mutate, { presence: options?.presence })
     },
     registry,
     checkLayout: checkLayoutForPlacement
