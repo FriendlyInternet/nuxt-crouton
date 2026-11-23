@@ -144,18 +144,29 @@ test('the prompt adds the migration step only for a migration conflict, naming t
   assert.ok(!buildPrompt({ base: 'main', files: ['scripts/fixtures/a.sql'], choiceFile: '/tmp/c.md' }).includes('MIGRATION FILES'))
 })
 
-// ── T5: the workflow runs a lone copy of the script, so it may import only node: built-ins ──
+// ── T5: the workflow runs a lone copy of the script, so it may import only node: built-ins plus
+// ./lib/log-tail.mjs, which the workflow copies beside it (#4374) ──
 const SRC = fileURLToPath(new URL('./conflict-resolution.mjs', import.meta.url))
+const LOG_TAIL = fileURLToPath(new URL('./lib/log-tail.mjs', import.meta.url))
+const importsOf = (file) => [...readFileSync(file, 'utf8').matchAll(/^\s*import\s[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1])
 
-test('T5a every import in conflict-resolution.mjs is a node: built-in', () => {
-  const specs = [...readFileSync(SRC, 'utf8').matchAll(/^\s*import\s[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1])
+test('T5a every import in conflict-resolution.mjs is a node: built-in or exactly ./lib/log-tail.mjs', () => {
+  const specs = importsOf(SRC)
   assert.ok(specs.length > 0)
-  for (const s of specs) assert.ok(s.startsWith('node:'), `non-node import: ${s}`)
+  for (const s of specs) assert.ok(s.startsWith('node:') || s === './lib/log-tail.mjs', `non-node import: ${s}`)
+})
+
+// covers: T13
+test('T13 the only non-node: import is ./lib/log-tail.mjs, and log-tail.mjs imports nothing', () => {
+  assert.deepEqual(importsOf(SRC).filter((s) => !s.startsWith('node:')), ['./lib/log-tail.mjs'])
+  assert.doesNotMatch(readFileSync(LOG_TAIL, 'utf8'), /^\s*import\s/m)
 })
 
 test('T5b a lone copy refuses a hand-merged snapshot mid-merge (no ERR_MODULE_NOT_FOUND)', () => {
   const lone = mkdtempSync(join(tmpdir(), 'lone-'))
   copyFileSync(SRC, join(lone, 'conflict-resolution.mjs'))
+  mkdirSync(join(lone, 'lib'))
+  copyFileSync(LOG_TAIL, join(lone, 'lib/log-tail.mjs'))
   const dir = mkdtempSync(join(tmpdir(), 'mig-lone-'))
   const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
   const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
