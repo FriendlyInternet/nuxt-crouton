@@ -168,6 +168,15 @@ const dashboardItem = computed<NavigationMenuItem | null>(() => {
 // pages this member can open (#4220). Called at setup, not inside the computed.
 const teamAdminPageList = useTeamAdminPages()
 
+// The Team group is only added once the sidebar is mounted in the browser. The
+// server can already know the member's rights while the browser's first render
+// does not yet, so drawing Team on the server made the two menus disagree; Vue
+// does not repair that, and the groups below Team (Bookings → Locations) were
+// left folded away (#4394). Both renders now leave Team out; it joins right
+// after mount, and `openGroups` below unfolds it.
+const isMounted = ref(false)
+onMounted(() => { isMounted.value = true })
+
 // Team group with sub-items (navigates to team section with horizontal tabs)
 const teamItem = computed<NavigationMenuItem | null>(() => {
   if (props.context === 'super') {
@@ -177,6 +186,8 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
 
   const teamParam = teamSlugRef.value || teamIdRef.value || ''
   if (!teamParam) return null
+
+  if (!isMounted.value) return null
 
   const children = toSidebarItems(teamAdminPageList.value, t, route.path)
   if (children.length === 0) return null
@@ -290,11 +301,24 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
   return [mainItems, bottomItems]
 })
 
-// Nuxt UI reads which groups start open (`defaultOpen`) only once, when the
-// menu mounts. Groups carry a fixed `value` above, and the menu is rebuilt when
-// the set of groups changes — e.g. the Team group arriving once the member's
-// rights load (#4394) — so every group gets its start-open setting again.
-const mainMenuKey = computed(() => navItems.value[0]!.map(item => item.value ?? item.label).join('|'))
+// Which groups are unfolded. Nuxt UI reads `defaultOpen` only once, when the
+// menu mounts, so a group that shows up later — the Team group once the
+// member's rights load (#4394) — or a menu that renders before its groups have
+// settled would leave a start-open group folded. So the sidebar holds the open
+// set itself: each group (by its fixed `value` above) opens the first time it
+// appears with `defaultOpen`, and after that the user's own fold/unfold wins.
+const openGroups = ref<string[]>([])
+const seenGroups = new Set<string>()
+watch(() => navItems.value[0]!, (items) => {
+  const added: string[] = []
+  for (const item of items) {
+    const value = item.value
+    if (typeof value !== 'string' || seenGroups.has(value)) continue
+    seenGroups.add(value)
+    if (item.defaultOpen) added.push(value)
+  }
+  if (added.length) openGroups.value = [...openGroups.value, ...added]
+}, { immediate: true })
 </script>
 
 <template>
@@ -338,9 +362,8 @@ const mainMenuKey = computed(() => navItems.value[0]!.map(item => item.value ?? 
     </template>
 
     <template #default="{ collapsed }">
-      <!-- runtime-cost-ok: key changes only when the set of nav groups changes (e.g. Team group arriving once member rights load, #4394); the menu must rebuild so each group gets its start-open setting again -->
       <UNavigationMenu
-        :key="mainMenuKey"
+        v-model="openGroups"
         :collapsed="collapsed"
         :items="navItems[0]"
         orientation="vertical"
