@@ -220,6 +220,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish result
+        id: publish
         if: ${{ always() && steps.check.outputs.id != '' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -236,3 +237,12 @@ jobs:
             || echo "::warning::could not publish the check result"
           echo "### Preview screenshot: ${C} — ${SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
           [ "$C" != failure ] || { echo "::error title=Preview screenshot::${SUMMARY}"; exit 1; }
+
+      # #4407: the check_suite of this App-posted check is skipped by automerge (#3501), so ask the
+      # merge step for this PR ourselves when the verdict is not red. The gate still decides.
+      - name: Ask the merge step again
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ steps.target.outputs.pr }}
+        run: node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$PR" '{issue:$i,workflow:"automerge-epic-subpr.yml",inputs:{pr:($i|tostring)}}')" || echo "::warning::could not ask the merge step for PR #${PR} (#4407)"
