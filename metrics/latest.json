@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-23T00:20:15Z",
-  "data_commit": "7a32a061ccf83b17635a8f7444e5493cd28be120",
+  "as_of": "2026-11-23T07:20:16Z",
+  "data_commit": "f8cffdba805039d93ea6161425e7e679bad700ef",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -4374,25 +4374,553 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
+          "runs": 18
+        },
+        "ci.yml/Build packages": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "ci.yml/CI Gate": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "ci.yml/Conflict markers": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "ci.yml/Detect changes": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "ci.yml/Plan checks": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "ci.yml/Removed tests": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "deploy-docs.yml/Deploy docs to Cloudflare Workers": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "deploy-pocs.yml/deploy (loop-station, staging, https://loop-station.pmcp.dev, @fyit/crouton-themes, false) / Deploy loop-station (staging)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "deploy-pocs.yml/detect": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "e2e.yml/Detect relevant changes": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 4
+        },
+        "e2e.yml/E2E (minimal)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-assets)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-bookings)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-collab)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-devtools)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-maps)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-pages)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-relations)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E (with-sales)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "e2e.yml/E2E Gate": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 4
+        },
+        "e2e.yml/detect": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "epic-digest.yml/digest": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "guard-package-approval.yml/No committed approval file": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "handoff-sweep.yml/sweep": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 10
+        },
+        "housekeeping.yml/digest": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "label-ready-epics.yml/label": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "loop-station-refresh.yml/redeploy": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "on-pr-close.yml/close-linked-issues": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "on-pr-close.yml/teardown-preview": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "packages-guard.yml/Packages edit declared": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "pi-key-canary.yml/canary": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "pipeline-metrics.yml/metrics": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 7
+        },
+        "pipeline-review.yml/count": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "quality-digest.yml/gather": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "review.yml/diff": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "secret-scan.yml/Secret scan (new commits)": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 6
+        },
+        "status.yml/board": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 6
+        },
+        "status.yml/pr-comment": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 5
+        },
+        "sync-changelogs.yml/sync": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "warn-closes-blocked.yml/warn": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "weekly.yml/advisor": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "weekly.yml/cleanup": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "weekly.yml/findings": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "weekly.yml/usage": {
+          "failed": 0,
+          "failed_alone": 0,
+          "failed_no_pr": 0,
+          "failed_with_others": 0,
+          "green_new_sha": 0,
+          "green_on_rerun": 0,
+          "green_same_sha": 0,
+          "never_green": 0,
+          "rate": 0,
           "runs": 1
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 1,
-        "runs_with_jobs": 1
+        "eligible_runs": 96,
+        "runs_with_jobs": 96
       },
       "lines": {
         "building": {
           "failed": 0,
-          "runs": 0,
+          "runs": 22,
           "schedule_total": 0,
-          "workflow_rate": null
+          "workflow_rate": 0
         },
         "deploys": {
           "failed": 0,
-          "runs": 0,
+          "runs": 4,
           "schedule_total": 0,
-          "workflow_rate": null
+          "workflow_rate": 0
         },
         "fixing": {
           "failed": 0,
@@ -4402,7 +4930,7 @@
         },
         "merging": {
           "failed": 0,
-          "runs": 1,
+          "runs": 42,
           "schedule_total": 0,
           "workflow_rate": 0
         },
@@ -4414,20 +4942,130 @@
         },
         "scheduled": {
           "failed": 0,
-          "runs": 0,
+          "runs": 16,
           "schedule_total": 0,
-          "workflow_rate": null
+          "workflow_rate": 0
         },
         "tickets": {
           "failed": 0,
-          "runs": 0,
+          "runs": 4,
           "schedule_total": 0,
-          "workflow_rate": null
+          "workflow_rate": 0
         }
       },
       "schedules": {},
       "workflows": {
         "automerge-epic-subpr.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 18
+        },
+        "ci.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "deploy-docs.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "deploy-pocs.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "e2e.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 4
+        },
+        "epic-digest.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "guard-package-approval.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "handoff-sweep.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 10
+        },
+        "housekeeping.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "label-ready-epics.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "loop-station-refresh.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 2
+        },
+        "on-pr-close.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "packages-guard.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "pi-key-canary.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "pipeline-metrics.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 7
+        },
+        "pipeline-review.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "quality-digest.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "review.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "secret-scan.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 6
+        },
+        "status.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 11
+        },
+        "sync-changelogs.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 1
+        },
+        "warn-closes-blocked.yml": {
+          "failed": 0,
+          "rate": 0,
+          "runs": 3
+        },
+        "weekly.yml": {
           "failed": 0,
           "rate": 0,
           "runs": 1
