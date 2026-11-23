@@ -458,9 +458,9 @@ jobs:
           gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
           FROM="$(gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .html_url)"
           git fetch origin "${REV_BRANCH}" --quiet
-          # The conflict helper (#2848) comes from the checked-out ref, copied aside BEFORE the PR
-          # branch replaces the tree — an old PR branch may not have it yet.
-          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs"
+          # Conflict helper (#2848) + its log-tail lib copied aside BEFORE the PR branch replaces the tree; dist_ref = the tree packages/*/dist was built from (#4374).
+          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs" && mkdir -p "$RUNNER_TEMP/lib" && cp scripts/lib/log-tail.mjs "$RUNNER_TEMP/lib/log-tail.mjs"
+          echo "dist_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           git checkout -f -B "${REV_BRANCH}" "origin/${REV_BRANCH}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
@@ -620,6 +620,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
+          PKG_DIST_REF: ${{ steps.revise.outputs.dist_ref }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}

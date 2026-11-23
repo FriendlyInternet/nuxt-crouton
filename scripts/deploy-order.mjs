@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * deploy-order.mjs — pick the order of "deploy the new code" and "migrate the
- * database" for one Cloudflare Workers deploy (#4319, pilot: pocs/pins).
+ * database" for one Cloudflare Workers deploy (#4319 pilot: pocs/pins; #4367: also booking-demo, crate,
+ * crouton-builder, gallery, notes, snippets, status — velo and kassa not yet).
  *
  *   migrate-first  the D1 database already exists (real database_id in the
  *                  chosen scope) → migrate, then deploy. A failed migration
