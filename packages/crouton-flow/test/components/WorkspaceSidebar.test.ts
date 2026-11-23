@@ -26,7 +26,8 @@ const stubs = {
   USkeleton: true,
   UIcon: true,
   UDropdownMenu: { template: '<div><slot /></div>' },
-  UButton: { inheritAttrs: false, template: '<button v-bind="$attrs"><slot /></button>' }
+  // Mirrors Nuxt UI's UButton, which renders a native <button type="button"> by default
+  UButton: { inheritAttrs: false, template: '<button type="button" v-bind="$attrs"><slot /></button>' }
 }
 
 async function mountSidebar(props: Record<string, any> = {}) {

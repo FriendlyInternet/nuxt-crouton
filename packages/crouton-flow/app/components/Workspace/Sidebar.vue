@@ -142,9 +142,10 @@ defineExpose({ focusSearch, refresh })
           class="group flex items-center pr-2 transition-colors"
           :class="rowClass(flow)"
         >
-          <button
-            type="button"
-            class="flex flex-1 min-w-0 items-center gap-2.5 px-4 py-3 text-left"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            class="flex-1 min-w-0 justify-start gap-2.5 px-4 py-3 text-left"
             :aria-current="isSelected(flow) || undefined"
             @click="emit('select', flow)"
           >
@@ -162,7 +163,7 @@ defineExpose({ focusSearch, refresh })
                 />
               </div>
             </div>
-          </button>
+          </UButton>
           <UDropdownMenu
             :items="flowMenuItems(flow)"
             :content="{ align: 'end' as const }"
