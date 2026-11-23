@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Read the OUTSIDE reviewer's answer on a PR (#4318) — the review asked by qodo-second-opinion.yml.
+ * Read the OUTSIDE reviewer's answer on a PR (#4318). The automatic ask (qodo-second-opinion.yml) was
+ * removed in #4360; this parser reads an outside review only if one is posted.
  *
  * The build review used to ignore it, so real bugs the outside reviewer named still merged. This
  * PURE parser turns a PR's comments into one state for the head commit:
