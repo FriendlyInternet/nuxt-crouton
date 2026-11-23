@@ -1,0 +1,13 @@
+{
+  // Standalone on purpose: docs/tsconfig.json extends the generated .nuxt/tsconfig.json,
+  // which doesn't exist when vitest runs without `nuxt prepare` (CI). The transform picks
+  // the nearest tsconfig, so tests don't depend on a Nuxt build.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  }
+}
