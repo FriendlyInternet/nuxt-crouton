@@ -24,6 +24,8 @@ interface Props {
   groupableFields?: string[]
   /** Show collaboration presence badges on cards */
   showCollabPresence?: boolean | CollabPresenceConfig
+  /** Cards can't be dragged; `move` is never emitted */
+  readonly?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -36,7 +38,8 @@ const props = withDefaults(defineProps<Props>(), {
   showCounts: true,
   showFieldSelector: false,
   groupableFields: undefined,
-  showCollabPresence: false
+  showCollabPresence: false,
+  readonly: false
 })
 
 const emit = defineEmits<{
@@ -161,6 +164,7 @@ function formatFieldLabel(field: string): string {
           :show-count="showCounts"
           :is-drop-target="isDropTarget(column.value)"
           :show-collab-presence="showCollabPresence"
+          :readonly="readonly"
           @move="handleMove"
           @select="handleSelect"
           @drag-start="handleDragStart"

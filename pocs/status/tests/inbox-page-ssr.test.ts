@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compileScript, parse } from '@vue/compiler-sfc'
-import { createSSRApp, defineComponent, h, ref, computed, onMounted } from 'vue'
+import { createSSRApp, defineComponent, h, ref, computed, onMounted, watch } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 
 // Server-renders the REAL pages/index.vue (compiled from source) and checks the first HTML the
@@ -53,6 +53,10 @@ async function renderPage(fetchCalls: unknown[]) {
   vi.stubGlobal('ref', ref)
   vi.stubGlobal('computed', computed)
   vi.stubGlobal('onMounted', onMounted)
+  vi.stubGlobal('watch', watch)
+  // VueUse (auto-imported via @vueuse/nuxt): the server render has no document and runs no timer (#4309).
+  vi.stubGlobal('useDocumentVisibility', () => ref('visible'))
+  vi.stubGlobal('useIntervalFn', () => ({ pause: () => {}, resume: () => {}, isActive: ref(false) }))
   vi.stubGlobal('definePageMeta', () => {})
   vi.stubGlobal('useTeamContext', () => ({ getTeamId: () => 'team1' }))
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(url === '/api/teams/team1/inbox-cards' ? [CARD] : null), error: ref(null) }))

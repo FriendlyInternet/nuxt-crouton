@@ -85,6 +85,13 @@
       "when": 1795081100791,
       "tag": "0011_drop_inventory_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795157790554,
+      "tag": "0012_wooden_proudstar",
+      "breakpoints": true
     }
   ]
 }

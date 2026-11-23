@@ -50,7 +50,7 @@ happen by accident or as a side effect of an agent flow.
 - **Local:** from the app dir:
   ```bash
   cd apps/{app}
-  pnpm cf:deploy   # build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote
+  pnpm cf:deploy   # velo, kassa: build → scripts/deploy-order.mjs; pins and the other pocs: build → sync:ids → scripts/deploy-order.mjs (#4367, #4389)
   # first bootstrap only — commit the written-back ids:
   git add apps/{app}/wrangler.jsonc && git commit -m "chore({app}): commit provisioned prod D1/KV ids"
   ```
@@ -62,6 +62,7 @@ happen by accident or as a side effect of an agent flow.
 ## After
 
 - Verify `<app>.friendlyinter.net` is live and the remote migration applied.
+- The log starts with `deploy order: …`; a failed migration stops the deploy and the live site stays unchanged.
 - Production is **never demo-seeded** — the demo team and the deploy's review login are
   staging/local-only and must never reach the prod DB.
 

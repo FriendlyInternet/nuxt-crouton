@@ -53,7 +53,8 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
     "@vueuse/core": "^11.0.0",
     "zod": "^3.0.0"
   }

@@ -6,82 +6,13 @@
  */
 
 import { defineNitroPlugin, useRuntimeConfig } from 'nitropack/runtime'
+// Nuxt's useAppConfig (via #imports) includes the layers' app.config.ts files, where
+// collections register; nitropack/runtime's only has the inline config (#3255).
+import { useAppConfig } from '#imports'
 import type { NitroApp } from 'nitropack'
 import { operationStore, type Operation } from '../utils/operationStore'
+import { buildApiPathIndex, classifyRequest, type TrackedPrefix } from '../utils/routeParse'
 import { systemOperationStore } from '../utils/systemOperationStore'
-
-/**
- * Extract collection name from API path
- */
-function extractCollectionName(path: string): string {
-  const match = path.match(/\/api\/crouton-collection\/([^/?]+)/)
-  return match?.[1] || 'unknown'
-}
-
-/**
- * Extract item ID from API path for get/update/delete operations
- * Path format: /api/crouton-collection/{collection}/{itemId}
- */
-function extractItemId(path: string): string | undefined {
-  // Match patterns like /api/crouton-collection/users/abc123
-  // where abc123 is the item ID (not a query param or search suffix)
-  const match = path.match(/\/api\/crouton-collection\/[^/]+\/([a-zA-Z0-9_-]+)(?:\?|$)/)
-  const itemId = match?.[1]
-
-  // Exclude known non-ID paths
-  if (itemId === 'search' || itemId === 'export') {
-    return undefined
-  }
-
-  return itemId
-}
-
-/**
- * Extract a human-readable label from a non-collection route path.
- * Strips the known prefix, UUIDs, and team IDs; returns the first meaningful segment.
- * e.g. '/api/crouton-bookings/teams/abc123/customer-bookings' → 'customer-bookings'
- */
-function extractRouteLabel(path: string, prefix: string): string {
-  const stripped = path.slice(prefix.length).replace(/\?.*$/, '')
-  const segments = stripped.split('/').filter(Boolean)
-  // Skip common path segments that are not meaningful labels
-  const SKIP = new Set(['teams', 'api'])
-  const meaningful = segments.filter(s => !SKIP.has(s) && !/^[a-f0-9-]{8,}$/i.test(s))
-  return meaningful[0] ?? segments[0] ?? 'unknown'
-}
-
-/**
- * Detect operation type from HTTP method and path
- */
-function detectOperation(method: string, path: string): Operation['operation'] {
-  const normalizedMethod = method.toUpperCase()
-
-  if (normalizedMethod === 'GET' && path.includes('/search')) {
-    return 'list'
-  }
-
-  if (normalizedMethod === 'GET' && /\/[a-z0-9-]+$/i.test(path)) {
-    return 'get'
-  }
-
-  if (normalizedMethod === 'GET') {
-    return 'list'
-  }
-
-  if (normalizedMethod === 'POST') {
-    return 'create'
-  }
-
-  if (normalizedMethod === 'PATCH' || normalizedMethod === 'PUT') {
-    return 'update'
-  }
-
-  if (normalizedMethod === 'DELETE') {
-    return 'delete'
-  }
-
-  return 'list'
-}
 
 /**
  * Generate unique ID for operation
@@ -98,21 +29,20 @@ export default defineNitroPlugin((nitroApp: NitroApp) => {
 
   // Build tracked prefix list: collection routes are always included;
   // additional prefixes come from croutonApps.*.apiRoutes via runtimeConfig.
-  const runtimePrefixes: Array<{ prefix: string, routeGroup: string }> =
+  const runtimePrefixes: TrackedPrefix[] =
     (useRuntimeConfig() as any).croutonDevtools?.apiRoutePrefixes ?? []
 
-  const TRACKED_PREFIXES: Array<{ prefix: string, routeGroup: string }> = [
+  const TRACKED_PREFIXES: TrackedPrefix[] = [
     { prefix: '/api/crouton-collection/', routeGroup: 'collection' },
     ...runtimePrefixes
   ]
 
-  /**
-   * Find the tracked prefix entry that matches a given path.
-   * Returns undefined if the path is not tracked.
-   */
-  function matchPrefix(path: string): { prefix: string, routeGroup: string } | undefined {
-    return TRACKED_PREFIXES.find(({ prefix }) => path.startsWith(prefix))
-  }
+  // #3255: generated collections are served at /api/teams/<teamId>/<apiPath>. Map each
+  // registered collection's apiPath → name, read from app config on first use (layers
+  // register collections in app.config.ts, so they're only complete at runtime).
+  let apiPathIndex: Map<string, string> | undefined
+  const getApiPathIndex = () =>
+    (apiPathIndex ??= buildApiPathIndex((useAppConfig() as any).croutonCollections ?? {}))
 
   // Track request timing
   const requestTimings = new Map<string, {
@@ -145,30 +75,12 @@ export default defineNitroPlugin((nitroApp: NitroApp) => {
     const path = event.path || event.node.req.url || ''
     const method = event.method || event.node.req.method || 'GET'
 
-    const matched = matchPrefix(path)
-    if (!matched) {
+    const tracked = classifyRequest(method, path, TRACKED_PREFIXES, getApiPathIndex())
+    if (!tracked) {
       return
     }
 
-    const id = generateId()
-    // For collection routes, extract the collection name from the path.
-    // For other routes, use the last meaningful path segment as the "collection" label.
-    const collection = matched.routeGroup === 'collection'
-      ? extractCollectionName(path)
-      : extractRouteLabel(path, matched.prefix)
-    const operation = detectOperation(method, path)
-    const itemId = matched.routeGroup === 'collection' ? extractItemId(path) : undefined
-
-    requestTimings.set(event.node.req as any, {
-      startTime: Date.now(),
-      id,
-      path,
-      method,
-      collection,
-      operation,
-      itemId,
-      routeGroup: matched.routeGroup
-    })
+    requestTimings.set(event.node.req as any, { startTime: Date.now(), id: generateId(), path, method, ...tracked })
   })
 
   // Hook: After response

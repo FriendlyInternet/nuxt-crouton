@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runStatus } from './pr-status-io.mjs'
+import { normalizeSteps, renderSteps, HARNESS_BOT, ROLLING_LABEL } from './epic-steps.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const STATUS_YML = path.join(ROOT, '.github/workflows/status.yml')
@@ -38,7 +39,8 @@ function fake(w = {}) {
   let nextId = 1
   const calls = { create: [], update: [] }
   const list = n => { if (!comments.has(n)) comments.set(n, []); return comments.get(n) }
-  for (const [n, bodies] of Object.entries(w.comments || {})) for (const body of bodies) list(+n).push({ id: nextId++, body })
+  // a comment is a body string, or `{ body, user }` when its author matters (the bot step list, #4316)
+  for (const [n, bodies] of Object.entries(w.comments || {})) for (const c of bodies) list(+n).push({ id: nextId++, ...(typeof c === 'string' ? { body: c } : c) })
   const prs = w.prs || {}
   const rest = {
     issues: {
@@ -238,6 +240,22 @@ test('i: a child issue closing refreshes its epic card (stage bar, child lines)'
     '- ✅ #21 one\n- ✅ #22 two\n- ⏸️ #23 three — held — needs your reply\n\n' +
     '_now: 1 of 3 in flight — reply here or on a PR to steer_\n\n' +
     `<sub>🤖 agent pipeline · live status (#1838) · updated ${NOW}</sub>`)
+})
+
+// covers: T1
+test('#4316: a rolling epic card counts steps from the bot step list; a not-planned child shows 🚫', async () => {
+  const stepList = { body: renderSteps(normalizeSteps([0, 1, 2, 3].map(i => ({ title: `S${i}`, goal: 'g', proves: 'p' })))), user: { login: HARNESS_BOT, type: 'Bot' } }
+  const subs = [
+    { number: 21, title: 'one', state: 'closed', state_reason: 'completed', labels: [], body: '<!-- pipeline: epic=12 step=0 -->' },
+    { number: 22, title: 'two', state: 'closed', state_reason: 'not_planned', labels: [], body: '<!-- pipeline: epic=12 step=1 -->' },
+  ]
+  const f = fake({ subs: { 12: subs }, issues: { 12: { title: 'Epic: Thing', labels: [{ name: ROLLING_LABEL }] } }, comments: { 12: [stepList] } })
+  await go(f, 'issues', { action: 'closed', issue: { number: 22, body: '<!-- pipeline: epic=12 -->' } })
+  const card = f.calls.create.find(c => c.body.includes('<!-- crouton-epic-rollup -->'))
+  assert.ok(card, 'card posted')
+  assert.ok(card.body.includes('## 🔨 Building — Thing  (1 of 4 steps built)'), card.body)
+  assert.ok(card.body.includes('- 🚫 #22 two — not planned'))
+  assert.ok(!card.body.includes('Assembled'))
 })
 
 test('j: sign-off hold pings once when the held PR is green; a visual PR with no capture is withheld', async () => {

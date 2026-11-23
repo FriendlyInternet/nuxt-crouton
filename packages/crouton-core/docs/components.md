@@ -477,6 +477,59 @@ File: `app/components/ItemCardMini.vue`
 | `id` | `string` | - | yes |  |
 | `collection` | `string` | - | yes |  |
 
+## CroutonKanban
+
+Kanban board grouping collection items into drag-and-drop columns; optional read-only mode
+
+File: `app/components/Kanban.vue`
+
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `rows` | `any[]` | `[]` | yes | Items to display in the kanban board |
+| `collection` | `string` | `""` | yes | Collection name |
+| `groupField` | `string` | `"status"` | no | Field to group items by |
+| `orderField` | `string` | `"order"` | no | Field for ordering within columns |
+| `columns` | `KanbanColumnConfig[]` | `undefined` | no | Static column configuration |
+| `cardComponent` | `Component \| null` | `null` | no | Card component to render |
+| `showCounts` | `boolean` | `true` | no | Show column item counts |
+| `showFieldSelector` | `boolean` | `false` | no | Allow user to select grouping field |
+| `groupableFields` | `string[]` | `undefined` | no | Fields available for grouping (auto-detected if not provided) |
+| `showCollabPresence` | `boolean \| CollabPresenceConfig` | `false` | no | Show collaboration presence badges on cards |
+| `readonly` | `boolean` | `false` | no | Cards can't be dragged; `move` is never emitted |
+
+| Event | Payload |
+| --- | --- |
+| `move` | `[payload: { id: string; newValue: string \| null; newOrder: number; }]` |
+| `select` | `[item: any]` |
+| `update:groupField` | `[field: string]` |
+
+## CroutonKanbanColumn
+
+One kanban column of draggable item cards
+
+File: `app/components/KanbanColumn.vue`
+
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `columnValue` | `string \| null` | - | yes | Unique identifier for this column (the groupField value) |
+| `label` | `string` | - | yes | Display label for the column |
+| `items` | `any[]` | `[]` | yes | Items in this column |
+| `collection` | `string` | - | yes | Collection name |
+| `color` | `string` | `undefined` | no | Optional color for column header |
+| `icon` | `string` | `undefined` | no | Optional icon for column header |
+| `cardComponent` | `Component \| null` | `null` | no | Card component to render for each item |
+| `showCount` | `boolean` | `true` | no | Show item count badge |
+| `isDropTarget` | `boolean` | `false` | no | Whether the column is currently the drop target |
+| `showCollabPresence` | `boolean \| CollabPresenceConfig` | `false` | no | Show collaboration presence badges on cards |
+| `readonly` | `boolean` | `false` | no | Cards can't be dragged; no Edit/Delete buttons on the default card |
+
+| Event | Payload |
+| --- | --- |
+| `move` | `[itemId: string, newColumnValue: string \| null, newOrder: number]` |
+| `select` | `[item: any]` |
+| `dragStart` | `[itemId: string]` |
+| `dragEnd` | `[]` |
+
 ## CroutonOptionsFieldCardMini
 
 Shows options field values resolved from a settings collection

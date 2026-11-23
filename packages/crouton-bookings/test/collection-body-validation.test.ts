@@ -140,4 +140,15 @@ describe('package collection body validation (#3377)', () => {
     await run(`../${E}/[emailtemplateId].patch`)
     expect(hoisted.update.mock.calls.at(-1)![3].locationId).toBeNull()
   })
+
+  // covers: T4
+  it('settings PATCH keeps sendEmails: false; POST rejects a non-boolean sendEmails (#3929)', async () => {
+    params = { settingId: 's1' }
+    body = { sendEmails: false }
+    await run(`../${S}/[settingId].patch`)
+    expect(hoisted.update.mock.calls.at(-1)![3]).toMatchObject({ sendEmails: false })
+    body = { sendEmails: 'no' }
+    await expect(run(`../${S}/index.post`)).rejects.toThrow()
+    expect(hoisted.create).not.toHaveBeenCalled()
+  })
 })

@@ -106,6 +106,75 @@ describe('onTick runs the inbox card sync', () => {
   })
 })
 
+describe('onTick syncs after a GitHub webhook marked a change (#4309)', () => {
+  const DIRTY = 'cards-sync:dirty-at'
+  const SYNCED = 'cards-sync:synced-from'
+  const okAt = (at: string): CardsSyncRecord => ({ ...OK, at })
+
+  // covers: T4
+  it('dirty at :20 → one sync, which advances synced-from, so :40 is clean again', async () => {
+    // Marked > 6 min (DIRTY_MARGIN_MS) before the sync starts, so one sync clears it.
+    await kv.setItem(DIRTY, '2026-11-18T11:12:00Z')
+    const run = vi.fn(async () => okAt('2026-11-18T11:20:01Z'))
+    await onTick(at('2026-11-18T11:20:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(await kv.getItem(SYNCED)).toBe('2026-11-18T11:20:01Z')
+    await onTick(at('2026-11-18T11:40:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  // covers: T4
+  // covers: T4
+  it('a mark within 6 min of the sync start costs at most one extra sync', async () => {
+    await kv.setItem(DIRTY, '2026-11-18T11:18:00Z')
+    let now = ''
+    const run = vi.fn(async () => okAt(now))
+    for (const m of ['20', '40', '50']) {
+      now = `2026-11-18T11:${m}:01Z`
+      await onTick(at(`2026-11-18T11:${m}:00Z`), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    }
+    expect(run).toHaveBeenCalledTimes(2) // :20, once more at :40, then clean at :50
+  })
+
+  it('nothing marked at :20 → no sync; :00 still syncs; dirty at :00 syncs once', async () => {
+    const run = vi.fn(async () => okAt('2026-11-18T11:00:01Z'))
+    await onTick(at('2026-11-18T11:20:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).not.toHaveBeenCalled()
+    await onTick(at('2026-11-18T11:00:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).toHaveBeenCalledTimes(1)
+    await kv.setItem(DIRTY, '2026-11-18T11:55:00Z')
+    await onTick(at('2026-11-18T12:00:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  // covers: T4
+  it('a throttled or failed sync leaves synced-from alone, so the next tick runs again', async () => {
+    await kv.setItem(DIRTY, '2026-11-18T11:15:00Z')
+    await kv.setItem(SYNCED, '2026-11-18T10:00:01Z')
+    const throttled = vi.fn(async () => ({ at: '2026-11-18T11:20:01Z', ok: true, throttled: true }))
+    await onTick(at('2026-11-18T11:20:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(throttled))
+    expect(throttled).toHaveBeenCalledTimes(1)
+    expect(await kv.getItem(SYNCED)).toBe('2026-11-18T10:00:01Z')
+    const failed = vi.fn(async () => ({ at: '2026-11-18T11:40:01Z', ok: false, error: 'x' }))
+    await onTick(at('2026-11-18T11:40:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(failed))
+    expect(failed).toHaveBeenCalledTimes(1)
+    expect(await kv.getItem(SYNCED)).toBe('2026-11-18T10:00:01Z')
+    const run = vi.fn(async () => okAt('2026-11-18T11:50:01Z'))
+    await onTick(at('2026-11-18T11:50:00Z'), { CLOCK_ENABLED: '1' }, vi.fn() as any, tickSync(run))
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  // covers: T4
+  it('CLOCK_ENABLED off reads no store, even when dirty', async () => {
+    await kv.setItem(DIRTY, '2026-11-18T11:15:00Z')
+    const store = vi.fn(() => kv)
+    const run = vi.fn(async () => OK)
+    await onTick(at('2026-11-18T11:20:00Z'), {}, vi.fn() as any, { run, store })
+    expect(store).not.toHaveBeenCalled()
+    expect(run).not.toHaveBeenCalled()
+  })
+})
+
 describe('clockCardsSync', () => {
   const owner = async () => ({ teamId: 'team1', userId: 'u1' })
   const out = { created: 2, updated: 1, stale: 0, answered: 0, stuck: { quiet: 1, draft: 0, epicSync: 0 } }

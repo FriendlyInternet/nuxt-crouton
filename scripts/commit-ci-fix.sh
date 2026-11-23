@@ -4,6 +4,7 @@
 # The fix agent only stages its files and writes its message to <message-file>; this script (loaded from a
 # trusted checkout of the default branch) commits the staged files with that message + `CI-Fix: true`,
 # under the fix-bot identity. No message file (or empty) -> nothing is committed. Nothing staged -> nothing.
+# A commit writes committed=true to $GITHUB_OUTPUT (#4317).
 set -euo pipefail
 MSG="${1:?usage: commit-ci-fix.sh <message-file>}"
 # Whatever the agent left behind (unstaged edits, untracked files) must never reach the push.
@@ -17,5 +18,7 @@ trap 'rm -f "$BODY"' EXIT
 # Drop any marker the agent wrote itself, then append exactly one as the trailer.
 grep -v -x -E '[[:space:]]*CI-Fix:[[:space:]]*true[[:space:]]*' "$MSG" > "$BODY" || true
 git commit -q -F "$BODY" --trailer "CI-Fix: true"
+# #4317: the run record tells "the model wrote no fix" from "the guard refused it".
+echo "committed=true" >> "${GITHUB_OUTPUT:-/dev/null}"
 clean
 git log -1 --format='Committed %h: %s'

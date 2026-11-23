@@ -888,7 +888,7 @@ reads that list instead:
 | Which packages' setup questions (manifest `configuration`) are asked | `lib/utils/manifest-configuration.ts` |
 | Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
 | Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
-| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package and, transitively, its manifest `dependencies` — named by feature key, package name `@fyit/crouton-x` or bare `crouton-x` — unless core bundles it; an unmatched dependency is skipped with a warning) | `lib/scaffold-app.ts` |
 
 The generator **never writes `extends`** from a features block any more (the hardcoded
 `framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with

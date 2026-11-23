@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  EPIC_SYNC_MARKER, SIGNOFF_PREVIEW_MARKER, cardKey, collectAsks, planSync, stuckCounts,
+  EPIC_SYNC_MARKER, SIGNOFF_PREVIEW_MARKER, cardKey, changesPayload, collectAsks, planSync, stuckCounts,
   type Ask, type EpicSyncItem, type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhUser, type QuizItem, type SyncItem
 } from '../server/utils/cards-sync-core'
 
@@ -534,5 +534,71 @@ describe('review card → payload.packages', () => {
   it('keeps the rest of the payload (build-review card keeps its review key)', () => {
     const { asks } = collectAsks({ items: [{ ...buildOwnerPr(), files: [{ filename: 'packages/crouton-core/a.ts' }], closedIssueBody: null }] })
     expect(asks[0]!.payload).toMatchObject({ review: 'needs-owner', packages: [{ name: 'crouton-core' }] })
+  })
+})
+
+// #4373 — a review card says how big the change is.
+describe('review card → payload.changes', () => {
+  const reviewAsk = (files: SyncItem['files']) => {
+    const { asks } = collectAsks({ items: [{ ...signoffPr(10, 11), files }] })
+    expect(asks).toHaveLength(1)
+    expect(asks[0]!.kind).toBe('review')
+    return asks[0]!
+  }
+
+  // covers: T1
+  it('three files → counts summed and top ordered largest first', () => {
+    const a = reviewAsk([
+      { filename: 'pocs/a.ts', additions: 5, deletions: 1 },
+      { filename: 'pocs/b.ts', additions: 100, deletions: 30 },
+      { filename: 'pocs/c.ts', additions: 15, deletions: 4 }
+    ])
+    expect(a.payload.changes).toEqual({ files: 3, added: 120, removed: 35, top: ['pocs/b.ts', 'pocs/c.ts', 'pocs/a.ts'] })
+  })
+
+  // covers: T2
+  it('a tie in size → ordered by name A→Z', () => {
+    const a = reviewAsk([
+      { filename: 'pocs/z.ts', additions: 3, deletions: 2 },
+      { filename: 'pocs/a.ts', additions: 4, deletions: 1 },
+      { filename: 'pocs/m.ts', additions: 1, deletions: 0 }
+    ])
+    expect((a.payload.changes as any).top).toEqual(['pocs/a.ts', 'pocs/z.ts', 'pocs/m.ts'])
+  })
+
+  // covers: T3
+  it('more than three files → top has three, files counts all', () => {
+    const files = [1, 2, 3, 4, 5].map(n => ({ filename: `pocs/f${n}.ts`, additions: n, deletions: 0 }))
+    const c = reviewAsk(files).payload.changes as any
+    expect(c.files).toBe(5)
+    expect(c.top).toEqual(['pocs/f5.ts', 'pocs/f4.ts', 'pocs/f3.ts'])
+  })
+
+  // covers: T4
+  it('files not read, or an empty list → no changes key', () => {
+    expect(reviewAsk(undefined).payload).not.toHaveProperty('changes')
+    expect(reviewAsk([]).payload).not.toHaveProperty('changes')
+    expect(changesPayload(signoffPr(10, 11))).toBeNull()
+  })
+
+  // covers: T5
+  it('missing additions or deletions count as 0 in the sums and the ranking', () => {
+    const a = reviewAsk([
+      { filename: 'pocs/a.ts', deletions: 2 },
+      { filename: 'pocs/b.ts', additions: 3 },
+      { filename: 'pocs/c.ts' }
+    ])
+    expect(a.payload.changes).toEqual({ files: 3, added: 3, removed: 2, top: ['pocs/b.ts', 'pocs/a.ts', 'pocs/c.ts'] })
+  })
+
+  it('the same files in another order give the same payload (stable for the sync compare)', () => {
+    const files = [
+      { filename: 'pocs/a.ts', additions: 2, deletions: 0 },
+      { filename: 'pocs/b.ts', additions: 1, deletions: 1 },
+      { filename: 'pocs/c.ts', additions: 9, deletions: 0 }
+    ]
+    const one = JSON.stringify(reviewAsk(files).payload.changes)
+    const two = JSON.stringify(reviewAsk([...files].reverse()).payload.changes)
+    expect(one).toBe(two)
   })
 })
