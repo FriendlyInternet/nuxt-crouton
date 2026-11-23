@@ -338,6 +338,7 @@ const mainMenuKey = computed(() => navItems.value[0]!.map(item => item.value ?? 
     </template>
 
     <template #default="{ collapsed }">
+      <!-- runtime-cost-ok: key changes only when the set of nav groups changes (e.g. Team group arriving once member rights load, #4394); the menu must rebuild so each group gets its start-open setting again -->
       <UNavigationMenu
         :key="mainMenuKey"
         :collapsed="collapsed"
