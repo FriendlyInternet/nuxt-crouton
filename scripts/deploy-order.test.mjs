@@ -111,15 +111,22 @@ test('T5 — a failing migrate stops migrate-first before deploy; deploy-first k
 
 // The cf:staging / cf:deploy scripts of `pocs/<dir>` (or `apps/<dir>`) route through deploy-order.mjs
 // after sync-wrangler-ids, with every `wrangler … deploy` inside the quoted --deploy argument.
-function assertGoesThroughDeployOrder (dir) {
+// `syncFirst: false` (velo, kassa — #4389): their ids are committed, so there is no pre-sync; instead the
+// --resync argument must run sync-wrangler-ids so a deploy-first fallback still writes the ids back.
+function assertGoesThroughDeployOrder (dir, { syncFirst = true } = {}) {
   const pkg = JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf8'))
   for (const name of ['cf:staging', 'cf:deploy']) {
     const s = pkg.scripts[name]
     assert.ok(typeof s === 'string', `${dir} ${name} exists`)
     const at = s.indexOf('scripts/deploy-order.mjs')
     assert.ok(at > 0, `${dir} ${name} calls deploy-order.mjs`)
-    const sync = s.indexOf('scripts/sync-wrangler-ids.mjs')
-    assert.ok(sync >= 0 && sync < at, `${dir} ${name} runs sync-wrangler-ids before deploy-order`)
+    if (syncFirst) {
+      const sync = s.indexOf('scripts/sync-wrangler-ids.mjs')
+      assert.ok(sync >= 0 && sync < at, `${dir} ${name} runs sync-wrangler-ids before deploy-order`)
+    } else {
+      const resync = s.match(/--resync "([^"]*)"/)?.[1]
+      assert.ok(resync && resync.includes('scripts/sync-wrangler-ids.mjs'), `${dir} ${name} --resync runs sync-wrangler-ids`)
+    }
     // every `wrangler … deploy` lives inside the quoted --deploy argument
     const deployArg = s.match(/--deploy "([^"]*)"/)?.[1]
     assert.ok(deployArg && /wrangler\b.*\bdeploy\b/.test(deployArg), `${dir} ${name} --deploy runs wrangler deploy`)
@@ -148,7 +155,8 @@ test('T7 — the real pins config: deploy-first as committed, migrate-first once
 
 // #4367 — the roll-out from the pins pilot to the other D1-backed Workers pocs.
 const ROLLOUT = ['booking-demo', 'crate', 'crouton-builder', 'gallery', 'notes', 'snippets', 'status']
-const NOT_YET = { 'apps/velo': 'own ticket', 'apps/kassa': 'own ticket' }
+// #4389 — velo and kassa, with real ids committed (no pre-sync).
+const APPS = ['velo', 'kassa']
 const DEPLOY_SCRIPTS = ['cf:staging', 'cf:deploy']
 const SWITCH_HINT = 'switch cf:staging/cf:deploy to scripts/deploy-order.mjs (copy pocs/pins/package.json) — the crouton init --poc scaffold still writes the old order'
 
@@ -177,19 +185,9 @@ test('T8 — the seven rolled-out pocs plus pins route cf:staging / cf:deploy th
 
 // covers: T2
 test('T9 — no pocs/ package.json migrates in cf:staging / cf:deploy outside --migrate', () => {
-  const pocs = oldOrderFolders().filter((f) => f.startsWith('pocs/'))
-  assert.deepEqual(pocs, [], `${pocs.join(', ')}: ${SWITCH_HINT}`)
-})
-
-// covers: T3
-test('T10 — only the named not-yet apps (velo, kassa) still deploy first, and they still exist in the old shape', () => {
+  // #4389: widened from pocs/ only to every folder under pocs/ and apps/
   const old = oldOrderFolders()
-  for (const f of old) assert.ok(f in NOT_YET, `${f}: ${SWITCH_HINT}`)
-  for (const [f, why] of Object.entries(NOT_YET)) {
-    assert.equal(why, 'own ticket')
-    assert.ok(existsSync(join(repo, f, 'package.json')), `${f} still exists — drop it from NOT_YET`)
-    assert.ok(old.includes(f), `${f} no longer uses the old order — drop it from NOT_YET`)
-  }
+  assert.deepEqual(old, [], `${old.join(', ')}: ${SWITCH_HINT}`)
 })
 
 // covers: T4
@@ -211,4 +209,33 @@ test('T11 — each rolled-out wrangler.jsonc: --migrate names the configured db,
     synced.env.staging.d1_databases[0].database_id = ID
     assert.deepEqual(decideOrder(synced, 'staging'), { order: 'migrate-first', database: stagingName }, `${app} synced`)
   }
+})
+
+// covers: T1
+test('T12 — velo and kassa cf:staging / cf:deploy go through deploy-order.mjs, with sync-wrangler-ids in --resync', () => {
+  for (const app of APPS) assertGoesThroughDeployOrder(`apps/${app}`, { syncFirst: false })
+})
+
+// covers: T2
+test('T13 — velo and kassa committed wrangler.jsonc: both scopes migrate first, and --migrate names the same dbs', () => {
+  for (const app of APPS) {
+    const dir = join(repo, 'apps', app)
+    const config = parseJsonc(readFileSync(join(dir, 'wrangler.jsonc'), 'utf8'))
+    const { scripts } = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    const stagingName = config.env.staging.d1_databases[0].database_name
+    const topName = config.d1_databases[0].database_name
+    assert.deepEqual(decideOrder(config, 'staging'), { order: 'migrate-first', database: stagingName }, `${app} staging`)
+    assert.deepEqual(decideOrder(config, undefined), { order: 'migrate-first', database: topName }, `${app} prod`)
+    assert.equal(migrateDb(scripts['cf:staging']), stagingName, `${app} cf:staging migrates ${stagingName}`)
+    assert.equal(migrateDb(scripts['cf:deploy']), topName, `${app} cf:deploy migrates ${topName}`)
+    for (const name of ['cf:staging', 'cf:deploy']) {
+      assert.doesNotMatch(scripts[name], /--migrate "[^"]*--config/, `${app} ${name} --migrate must not pass --config (#138)`)
+    }
+  }
+})
+
+// covers: T3
+test('T14 — no app or poc is left on the old order, and no "not yet" list remains', () => {
+  assert.deepEqual(oldOrderFolders(), [])
+  assert.doesNotMatch(readFileSync(fileURLToPath(import.meta.url), 'utf8'), new RegExp('NOT' + '_YET'))
 })

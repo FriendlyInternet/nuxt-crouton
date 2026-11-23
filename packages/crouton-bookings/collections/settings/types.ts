@@ -9,7 +9,7 @@
  * - Form data type: BookingsSettingFormData
  * - New item type: NewBookingsSetting
  * - Form props: BookingsSettingFormProps
- * - Fields: statuses, groups
+ * - Fields: statuses, groups, sendEmails
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -29,6 +29,7 @@ export interface BookingsSetting {
   owner: string
   statuses?: any[]
   groups?: any[]
+  sendEmails?: boolean
   createdAt: Date
   updatedAt: Date
   createdBy: string

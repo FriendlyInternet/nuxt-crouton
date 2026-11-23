@@ -6,6 +6,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { generatorsFor, withMarkers, verdict, buildPrompt, resolutionPaths, SCRIPTS_TEST_CMD, INSTALL_CMD } from './conflict-resolution.mjs'
 
+// A real conflict run sets PKG_DIST_REF for the tool, and it runs this suite as its check (#4374).
+// Every `verify` these tests start in a scratch repo would inherit it, try a package build there
+// and fail. Clear it once; the tests that are about it pass it explicitly.
+delete process.env.PKG_DIST_REF
+
 // A real conflicted merge: `base` and `side` both edit `file` from a common ancestor.
 function conflict(file, ancestor, base, side) {
   const dir = mkdtempSync(join(tmpdir(), 'conflict-'))
@@ -446,4 +451,9 @@ test('T12 verify (lone copy) reads PKG_DIST_REF: builds against the build tree, 
   assert.equal(without.v.status, 0, without.v.stderr)
   assert.ok(!without.calls.some((c) => c.includes('build:packages')), without.calls.join('\n'))
   assert.match(without.v.stderr, /package build skipped/)
+})
+
+// #4398: a conflict run runs this suite with PKG_DIST_REF set for the real tool.
+test('this suite never hands an inherited PKG_DIST_REF to the tool it starts', () => {
+  assert.equal(process.env.PKG_DIST_REF, undefined)
 })

@@ -2,7 +2,7 @@
 /**
  * deploy-order.mjs — pick the order of "deploy the new code" and "migrate the
  * database" for one Cloudflare Workers deploy (#4319 pilot: pocs/pins; #4367: also booking-demo, crate,
- * crouton-builder, gallery, notes, snippets, status — velo and kassa not yet).
+ * crouton-builder, gallery, notes, snippets, status; #4389: velo and kassa too).
  *
  *   migrate-first  the D1 database already exists (real database_id in the
  *                  chosen scope) → migrate, then deploy. A failed migration
@@ -11,8 +11,8 @@
  *                  deploy (wrangler auto-provisions it), re-sync ids, migrate.
  *   deploy-only    the scope has no D1 binding → just deploy.
  *
- * Run from the app dir, AFTER `scripts/sync-wrangler-ids.mjs` has written any
- * existing database's id into wrangler.jsonc:
+ * Run from the app dir, AFTER sync-wrangler-ids has written any existing
+ * database's id into wrangler.jsonc, or with real ids committed (velo, kassa):
  *
  *   node ../../scripts/deploy-order.mjs [--env <name>] --deploy "<cmd>" \
  *     --migrate "<cmd>" [--resync "<cmd>"] [--config ./wrangler.jsonc]
