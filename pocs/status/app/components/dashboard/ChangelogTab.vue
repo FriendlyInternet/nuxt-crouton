@@ -12,13 +12,11 @@ const showChores = defineModel<boolean>('showChores', { default: false })
 const groups = computed(() => groupByDay(props.rows))
 const KIND_WORD: Record<ChangelogRow['kind'], string> = { new: 'New', fix: 'Fix', change: 'Change', chore: 'Chore' }
 
-// Titles show two lines; tapping one toggles the full title. A new Set on each toggle keeps it reactive.
-const open = ref(new Set<number>())
+// Titles show two lines; tapping one toggles the full title.
+const open = reactive(new Set<number>())
 function toggle(n: number) {
-  const next = new Set(open.value)
-  if (next.has(n)) next.delete(n)
-  else next.add(n)
-  open.value = next
+  if (open.has(n)) open.delete(n)
+  else open.add(n)
 }
 </script>
 
@@ -44,15 +42,15 @@ function toggle(n: number) {
           </span>
           <div class="min-w-0 flex-1 space-y-1">
             <UBadge variant="subtle" color="neutral">{{ r.area }}</UBadge>
-            <button
-              type="button"
-              class="block w-full text-left text-sm"
-              :class="open.has(r.number) ? '' : 'line-clamp-2'"
+            <UButton
+              variant="link"
+              color="neutral"
+              class="block w-full p-0 text-left text-sm font-normal text-default"
               :aria-expanded="open.has(r.number)"
               @click="toggle(r.number)"
             >
-              {{ r.title }}
-            </button>
+              <span class="block" :class="open.has(r.number) ? '' : 'line-clamp-2'">{{ r.title }}</span>
+            </UButton>
           </div>
           <a :href="r.url" target="_blank" rel="noopener" class="shrink-0 text-sm text-primary">#{{ r.number }}</a>
         </li>
