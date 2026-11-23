@@ -105,6 +105,9 @@
     "card": {
       "activity": "Activité",
       "on": "le {date}",
+      "editBooking": "Modifier la réservation",
+      "showDayInCalendar": "Afficher le {date} dans le calendrier",
+      "emailPanel": "Statut des e-mails",
       "emailLabels": {
         "confirm": "Confirmation",
         "reminder": "Rappel",

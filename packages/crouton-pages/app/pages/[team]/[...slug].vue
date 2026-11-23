@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { rendersWithoutLocale } from '../../utils/public-routes'
 import { stripTeamPrefix } from '../../utils/custom-domain-path'
+import { resolveForwardLocale } from '../../utils/forward-locale'
 /**
  * Public Page Route without Locale
  *
@@ -51,11 +52,13 @@ const { hideLocaleInUrl, isTeamHost, resolvedTeamSlug } = useDomainContext()
 //
 // Prefer the live i18n locale when available; only when i18n is genuinely
 // unavailable (rare SSR contexts — the reason this is guarded) do we fall back
-// to config. croutonI18n.supportedLocales is driven by crouton.config.js, so a
-// single-locale app resolves to that locale (e.g. 'nl') rather than 'en'.
+// to config. The config fallback reads runtimeConfig.public.i18n, which exists
+// on both the server and the browser (the private croutonI18n key is server-only,
+// #4292), so a single-locale app resolves to that locale (e.g. 'nl') rather than
+// 'en' on a full load and a client-side navigation alike.
 const runtimeConfig = useRuntimeConfig()
 const pagesConfig = runtimeConfig.public?.croutonPages as { defaultLocale?: string } | undefined
-const i18nCfg = runtimeConfig.croutonI18n as { supportedLocales?: string[]; defaultLocale?: string } | undefined
+const publicI18n = runtimeConfig.public?.i18n as { locales?: Array<string | { code: string }>; defaultLocale?: string } | undefined
 
 let localeCode = ''
 let supportedLocales: string[] = []
@@ -72,22 +75,16 @@ try {
   }
 }
 
-// Discard a live locale that isn't actually supported by this app — e.g. a stale
-// `i18n_redirected` cookie left by another crouton app on the same host. Using it
-// would build an unreachable URL like /team/en/ for an nl-only app.
-if (localeCode && supportedLocales.length && !supportedLocales.includes(localeCode)) {
-  localeCode = ''
-}
-
-if (!localeCode) {
-  // Resolve the app's configured default — never hardcode 'en' for a non-en app.
-  localeCode = (supportedLocales.length === 1 ? supportedLocales[0]! : '')
-    || i18nDefaultLocale
-    || (i18nCfg?.supportedLocales?.length === 1 ? i18nCfg.supportedLocales[0]! : '')
-    || i18nCfg?.defaultLocale
-    || pagesConfig?.defaultLocale
-    || 'en'
-}
+// Drops a stale live locale (another app's cookie), then resolves the app's
+// configured default — never a hardcoded 'en' for a non-en app.
+localeCode = resolveForwardLocale({
+  live: localeCode,
+  liveLocales: supportedLocales,
+  liveDefault: i18nDefaultLocale,
+  configLocales: publicI18n?.locales,
+  configDefault: publicI18n?.defaultLocale,
+  pagesDefault: pagesConfig?.defaultLocale
+})
 
 // Get team slug from route params (not teamId — context may not be resolved during client-side nav)
 const team = route.params.team as string

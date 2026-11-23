@@ -49,6 +49,18 @@ await run('crouton://getting-started', async () => {
     && !t.includes('pnpm add nuxt-crouton') && !t.includes('products.yaml')
   check('crouton://getting-started serves the pages', ok, t)
 })
+// Section 2 (Fundamentals) of #3168: the assistant serves the rewritten pages and none of the
+// four deleted ones (forms-modals, querying, caching, packages).
+await run('get_page fundamentals', async () => {
+  const r = await call('get_page', { path: '/fundamentals/data-operations' })
+  check('get_page /fundamentals/data-operations', !r.isError && r.text.includes('useCollectionQuery') && !r.text.includes('Page not found'), r.text)
+})
+for (const gone of ['/fundamentals/forms-modals', '/fundamentals/querying', '/fundamentals/caching', '/fundamentals/packages']) {
+  await run(`get_page ${gone} gone`, async () => {
+    const r = await call('get_page', { path: gone })
+    check(`get_page ${gone} is gone`, !r.isError && r.text.includes('Page not found'), r.text)
+  })
+}
 await run('search_docs no match', async () => {
   const r = await call('search_docs', { query: 'zzqxnonsense123' })
   check('search_docs no match', !r.isError && r.text.includes('No documentation found'), r.text)
