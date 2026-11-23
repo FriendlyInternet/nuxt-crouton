@@ -67,6 +67,7 @@
       "pi-key-canary.yml",
       "pipeline-metrics.yml",
       "pipeline-review.yml",
+      "suggestions-daily.yml",
       "quality-digest.yml",
       "skills-digest.yml",
       "sync-changelogs.yml",

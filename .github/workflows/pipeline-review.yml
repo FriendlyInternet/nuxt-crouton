@@ -17,6 +17,9 @@ name: Pipeline review (every 10 closed epics)
 # GitHub + pipeline-data into a bundle, and the model step runs with NO GitHub token in env and no git
 # credentials. `post` runs no model, always runs, and posts the review or a skipped note with the run link.
 #
+# DAILY, whether or not a review is due, the `suggestions` job posts the top three suggestions
+# (suggestions-daily.yml, #4308). It lives here so the suggestions log keeps one reader (epic #4223).
+#
 # Workflow-change: new pipeline-review.yml (counter + read-only Opus review + separate post), #3254
 
 on:
@@ -161,3 +164,13 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             const d = `${process.env.RUNNER_TEMP}/review`
             await post({ github, context, core }, { issue: process.env.ISSUE, modelFile: `${d}/review.md`, gapsFile: `${d}/gaps.json`, runUrl, writeResult: process.env.WRITE_RESULT })
+
+  suggestions:
+    # (#4308) No `needs: count` — runs on every daily wake-up, review due or not.
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/suggestions-daily.yml
+    with:
+      dry_run: ${{ inputs.dry_run == true }}
+    secrets: inherit

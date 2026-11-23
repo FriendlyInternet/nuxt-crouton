@@ -150,6 +150,12 @@ function routePrApproval({ owner, collab, pr, out }) {
  * @returns {{kind:string, number:number, reason:string, blocked:boolean, starts?:string}}
  */
 export function routeComment(input = {}) {
+  // (#4308) The daily suggestions issue: no reply starts anything there — not `ok`, not a sentence —
+  // until promotion lands (#4223 step 2). First, before any other route.
+  if ((input.issue?.labels || []).includes('suggestions:daily')) {
+    const labels = input.issue.labels
+    return { kind: 'none', number: input.issue.number ?? 0, reason: 'a reply on the daily suggestions issue starts nothing (until promotion, #4223 step 2)', blocked: labels.includes('status:blocked') }
+  }
   const d = routeBase(input)
   if (d.kind === 'none' && isInterpretable(input)) return { ...d, kind: 'interpret', reason: 'an owner comment that matches no command' }
   return d

@@ -1,0 +1,91 @@
+name: Suggestions — daily list
+
+# (#4308, epic #4223 step 1) Once a day, read the suggestions log (`suggestions/` on pipeline-data,
+# written by scripts/suggest.mjs), group the same idea with a small model, and post the top three as one
+# comment on the one standing issue (label `suggestions:daily`), re-adding `status:blocked` so the inbox
+# shows a fresh card. No card when the list is empty or unchanged. Nothing here opens a ticket or starts
+# an agent run; replies on the standing issue route to nothing (scripts/comment-route.mjs).
+#
+# WHEN: called by pipeline-review.yml's daily run (job `suggestions`) — no timer and no concurrency block
+# of its own; the caller's `pipeline-review` group keeps runs from overlapping. The log keeps one reader.
+#
+# SPLIT BY TRUST (same as pipeline-review.yml): `gather-and-group` is read-only and its model step has no
+# GitHub token; `post` runs no model and writes with the workflow's own token (github-actions[bot]).
+# Decisions live in scripts/lib/suggestions-daily.mjs (pure, tested) + scripts/suggestions-daily.mjs (I/O).
+#
+# Workflow-change: new reusable suggestions-daily.yml, #4308
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Only print the decision and the comment - post nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gather-and-group:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      lines: ${{ steps.gather.outputs.lines }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no token in .git/config; the repo is public, so the fetch is anonymous
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # An empty or missing log → lines=0, "log is empty", and the model steps are skipped.
+      - name: Gather
+        id: gather
+        run: node scripts/suggestions-daily.mjs gather "$RUNNER_TEMP/suggestions"
+      - name: Set up pi + Claude CLI (subscription)
+        if: steps.gather.outputs.lines != '0'
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      # No GitHub token in this step: the model reads only the prompt and writes groups.json itself.
+      - name: Group the same idea (light model)
+        if: steps.gather.outputs.lines != '0'
+        timeout-minutes: 10
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          pi --print --approve --provider claude-bridge --model "$(node scripts/resolve-pipeline-model.mjs light)" < "$RUNNER_TEMP/suggestions/prompt.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suggestions-daily
+          path: |
+            ${{ runner.temp }}/suggestions/lines.json
+            ${{ runner.temp }}/suggestions/groups.json
+          if-no-files-found: ignore
+
+  post:
+    needs: gather-and-group
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # no artifact = gather failed; post then stops with an error and changes nothing
+        with:
+          name: suggestions-daily
+          path: ${{ runner.temp }}/suggestions
+      - name: Post today's list (or clear / skip)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/suggestions-daily.mjs post "$RUNNER_TEMP/suggestions" ${{ inputs.dry_run && '--dry-run' || '' }}
