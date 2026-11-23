@@ -24,7 +24,7 @@
     "@nuxt/scripts": "^1.2.1"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "nuxt": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {

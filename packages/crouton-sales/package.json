@@ -8,6 +8,7 @@
     "app",
     "collections",
     "server",
+    "shared",
     "schemas",
     "seed",
     "i18n",
@@ -73,8 +74,8 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*",
-    "@fyit/crouton-auth": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
+    "@fyit/crouton-auth": "workspace:0.x",
     "@nuxtjs/i18n": "^9.0.0 || ^10.0.0",
     "zod": "^3.0.0",
     "@tiptap/vue-3": "^3.0.0",

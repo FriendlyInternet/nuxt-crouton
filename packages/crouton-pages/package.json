@@ -54,8 +54,9 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
-    "@fyit/crouton-editor": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
+    "@fyit/crouton-editor": "workspace:0.x",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"
   },

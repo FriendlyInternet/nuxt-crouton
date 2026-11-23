@@ -691,6 +691,9 @@ importers:
 
   packages/crouton-admin:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../crouton-i18n
@@ -751,7 +754,7 @@ importers:
   packages/crouton-analytics:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/scripts':
         specifier: ^1.2.1
@@ -769,8 +772,11 @@ importers:
 
   packages/crouton-assets:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@vueuse/core':
         specifier: ^11.0.0
@@ -785,7 +791,7 @@ importers:
   packages/crouton-audio:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/icon':
         specifier: ^1.0.0
@@ -866,6 +872,9 @@ importers:
 
   packages/crouton-bookings:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-calendar':
         specifier: workspace:*
         version: link:../crouton-calendar
@@ -873,13 +882,13 @@ importers:
         specifier: workspace:*
         version: link:../crouton-catalog
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@fyit/crouton-editor':
         specifier: workspace:*
         version: link:../crouton-editor
       '@fyit/crouton-maps':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-maps
       '@internationalized/date':
         specifier: ^3.0.0
@@ -907,7 +916,7 @@ importers:
   packages/crouton-calendar:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/ui':
         specifier: ^4.11.3
@@ -932,7 +941,7 @@ importers:
   packages/crouton-catalog:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       nuxt:
         specifier: ^4.6.4
@@ -954,7 +963,7 @@ importers:
   packages/crouton-charts:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/ui':
         specifier: ^4.11.3
@@ -1033,8 +1042,11 @@ importers:
 
   packages/crouton-collab:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@vueuse/core':
         specifier: ^12.0.0
@@ -1159,7 +1171,7 @@ importers:
   packages/crouton-devtools:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@fyit/crouton-feedback':
         specifier: workspace:*
@@ -1209,7 +1221,7 @@ importers:
   packages/crouton-editor:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/icon':
         specifier: ^1.0.0
@@ -1266,8 +1278,11 @@ importers:
 
   packages/crouton-events:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/ui':
         specifier: ^4.11.3
@@ -1278,6 +1293,9 @@ importers:
 
   packages/crouton-feedback:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@nuxt/kit':
         specifier: ^4.0.0
         version: 4.6.1(@nuxt/schema@4.6.4)(confbox@0.3.2)(dotenv@17.4.2)(giget@3.3.0)(jiti@2.7.0)(magic-string@1.4.5)(mlly@1.8.2)(oxc-parser@0.153.0)(rolldown@1.2.14)(unplugin@3.7.0(esbuild@0.28.2)(rolldown@1.2.14)(rollup@3.30.0)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))(webpack@5.107.2(esbuild@0.28.2)(lightningcss@1.33.0)))
@@ -1313,11 +1331,14 @@ importers:
       '@dagrejs/dagre':
         specifier: ^1.1.4
         version: 1.1.8
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-collab':
         specifier: workspace:*
         version: link:../crouton-collab
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@vue-flow/background':
         specifier: ^1.3.0
@@ -1350,6 +1371,12 @@ importers:
 
   packages/crouton-i18n:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
+      '@fyit/crouton-core':
+        specifier: workspace:0.x
+        version: link:../crouton-core
       '@nuxtjs/i18n':
         specifier: ^10.6.0
         version: 10.6.0(@nuxt/schema@4.6.4)(@vue/compiler-dom@3.5.44)(db0@0.4.2)(dotenv@17.4.2)(esbuild@0.28.2)(eslint@9.39.2(jiti@2.7.0))(giget@3.3.0)(ioredis@5.11.1)(jiti@2.7.0)(rolldown@1.2.14)(rollup@4.68.4)(typescript@5.9.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))(vue@3.5.44(typescript@5.9.3))(webpack@5.107.2(esbuild@0.28.2)(lightningcss@1.33.0))
@@ -1369,10 +1396,10 @@ importers:
   packages/crouton-layout:
     dependencies:
       '@fyit/crouton-auth':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/ui':
         specifier: ^4.11.3
@@ -1418,7 +1445,7 @@ importers:
   packages/crouton-mcp:
     dependencies:
       '@fyit/crouton-cli':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-cli
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
@@ -1445,14 +1472,17 @@ importers:
 
   packages/crouton-mcp-toolkit:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-collab':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-collab
       '@fyit/crouton-layout':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-layout
       '@fyit/crouton-pages':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-pages
       defu:
         specifier: ^6.1.4
@@ -1488,11 +1518,14 @@ importers:
 
   packages/crouton-pages:
     dependencies:
+      '@fyit/crouton-auth':
+        specifier: workspace:0.x
+        version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@fyit/crouton-editor':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-editor
       '@fyit/crouton-i18n':
         specifier: workspace:*
@@ -1516,7 +1549,7 @@ importers:
   packages/crouton-printing:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@vueuse/core':
         specifier: ^13.3.0
@@ -1541,10 +1574,10 @@ importers:
   packages/crouton-sales:
     dependencies:
       '@fyit/crouton-auth':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-auth
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@fyit/crouton-i18n':
         specifier: workspace:*
@@ -1636,7 +1669,7 @@ importers:
   packages/crouton-three:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       '@nuxt/ui':
         specifier: ^4.11.3
