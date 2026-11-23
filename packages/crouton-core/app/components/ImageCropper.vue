@@ -82,6 +82,7 @@ const handleConfirm = async () => {
           variant="ghost"
           color="neutral"
           size="sm"
+          :aria-label="t('image.rotateLeft')"
           @click="rotate(-90)"
         />
         <UButton
@@ -89,6 +90,7 @@ const handleConfirm = async () => {
           variant="ghost"
           color="neutral"
           size="sm"
+          :aria-label="t('image.rotateRight')"
           @click="rotate(90)"
         />
       </div>
@@ -100,6 +102,7 @@ const handleConfirm = async () => {
           variant="ghost"
           color="neutral"
           size="sm"
+          :aria-label="t('image.zoomOut')"
           @click="zoom(-0.1)"
         />
         <UButton
@@ -107,6 +110,7 @@ const handleConfirm = async () => {
           variant="ghost"
           color="neutral"
           size="sm"
+          :aria-label="t('image.zoomIn')"
           @click="zoom(0.1)"
         />
       </div>
@@ -118,6 +122,7 @@ const handleConfirm = async () => {
         :items="aspectRatioOptions"
         size="sm"
         class="w-24"
+        :aria-label="t('image.aspectRatio')"
         @update:model-value="handleAspectRatioChange($event as AspectRatioPreset)"
       />
 
@@ -127,6 +132,7 @@ const handleConfirm = async () => {
         variant="ghost"
         color="neutral"
         size="sm"
+        :aria-label="t('image.reset')"
         @click="reset()"
       />
     </div>

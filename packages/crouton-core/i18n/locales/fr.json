@@ -147,7 +147,16 @@
     "cropImage": "Recadrer l'image",
     "cropApply": "Recadrer et appliquer",
     "cropPreview": "Aperçu du recadrage",
-    "preview": "Aperçu de l'image"
+    "preview": "Aperçu de l'image",
+    "upload": "Téléverser une image",
+    "change": "Changer l'image",
+    "remove": "Supprimer l'image",
+    "rotateLeft": "Pivoter à gauche",
+    "rotateRight": "Pivoter à droite",
+    "zoomOut": "Dézoomer",
+    "zoomIn": "Zoomer",
+    "reset": "Réinitialiser le recadrage",
+    "aspectRatio": "Forme"
   },
   "repeater": {
     "componentMissing": "Impossible d'afficher cet élément : le composant « {name} » est introuvable.",
