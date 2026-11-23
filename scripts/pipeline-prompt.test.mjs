@@ -55,6 +55,9 @@ test('pi-conflict-resolver, epic PR (#3002)', () => {
   // #3775: the owner's request runs after the merge (pi-request step), so it can't land inside it.
   assert.ok(!out.includes('Please rename `foo`'), 'the resolver prompt does not carry the owner comment')
   assert.ok(out.includes('Resolve the conflict and nothing else'))
+  // #4320: migrations are regenerated, never typed into
+  assert.ok(out.includes('MIGRATION FILES ARE NEVER HAND-MERGED'))
+  assert.ok(out.includes('db:generate'))
 })
 
 test('pi-conflict-resolver without a task is a hard error', () => {

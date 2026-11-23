@@ -154,6 +154,33 @@ import { buildEpicMainPr } from './epic-ready.mjs'
 const noCarry = { packagesPrs: [], approved: [], unapproved: [], line: null }
 const mk = o => buildEpicMainPr({ epicNumber: 7, epicBranch: 'epic/7-x', epicTitle: 'Epic: Thing', subIssues: [{ number: 1, title: 'a' }], carry: noCarry, declared: [], owner: 'pmcp', ...o })
 
+// ── #4316: the PR into main names what was built and what was dropped ──
+import { normalizeSteps, renderSteps, stepSummary, HARNESS_BOT, ROLLING_LABEL } from './lib/epic-steps.mjs'
+const kid = (number, reason, step = null) => ({ number, title: `t${number}`, state: 'closed', state_reason: reason, body: step === null ? '' : `<!-- pipeline: epic=7 step=${step} -->` })
+
+// covers: T2
+test('#4316 case 2: a rolling epic with a dropped step → body names the dropped ticket, never "all 3 children closed and merged"', () => {
+  const steps = normalizeSteps([0, 1, 2].map(i => ({ title: `S${i}`, goal: 'g', proves: 'p' })))
+  const subIssues = [kid(11, 'completed', 0), kid(12, 'not_planned', 1), kid(13, 'completed', 2)]
+  const comments = [{ body: renderSteps(steps), user: { login: HARNESS_BOT, type: 'Bot' } }]
+  const summary = stepSummary({ labels: [ROLLING_LABEL], comments, subIssues })
+  const { body } = mk({ subIssues, summary })
+  assert.ok(body.startsWith('Assembles epic #7 into `main` — built 2 of 3 steps, dropped 1 (not planned): #12.'), body)
+  assert.ok(!body.includes('all 3 children closed and merged'))
+  assert.ok(body.includes('- #12 t12 — not planned'))
+  assert.ok(body.includes('**Dropped steps (not planned, not built):** step 1 — #12'))
+})
+
+// covers: T5
+test('#4316 case 5: no step list, 1 of 3 children not planned → decideOpen still opens, body carries the counts line', () => {
+  const subIssues = [kid(11, 'completed'), kid(12, 'not_planned'), kid(13, 'completed')]
+  assert.equal(decideOpen({ subIssues, existingEpicMainPrs: [], changedFiles: 3, pendingSteps: 0 }).open, true)
+  const summary = stepSummary({ labels: [], comments: [], subIssues })
+  const { body } = mk({ subIssues, summary })
+  assert.ok(body.startsWith('Assembles epic #7 into `main` — 2 merged, 1 not planned: #12.'))
+  assert.ok(!body.includes('Dropped steps'))
+})
+
 test('buildEpicMainPr: no packages, no declared → plain body with footer', () => {
   const { title, body } = mk()
   assert.equal(title, 'Epic #7: Thing')

@@ -1,0 +1,24 @@
+[
+  {
+    "id": 7018779415,
+    "user": {
+      "login": "nuxt-harness[bot]",
+      "type": "Bot"
+    },
+    "created_at": "2026-11-19T18:50:51Z",
+    "updated_at": "2026-11-19T18:50:51Z",
+    "body": "/review\n\n<!-- qodo-asked-sha:bf4e3a93c011773806d7be9b22ed884fc354956e -->\n",
+    "html_url": "https://github.com/FriendlyInternet/nuxt-crouton/pull/4276#issuecomment-7018779415"
+  },
+  {
+    "id": 7018788619,
+    "user": {
+      "login": "qodo-code-review[bot]",
+      "type": "Bot"
+    },
+    "created_at": "2026-11-19T18:51:07Z",
+    "updated_at": "2026-11-19T18:51:07Z",
+    "body": "<!-- qodo:billing-blocked -->\n\n**ⓘ Qodo reviews are paused because your trial has ended.** Ask your workspace admin to add credits to resume reviews. [Manage billing](https://app.qodo.ai/account/billing/manage-subscription?traffic_source=pr_comment)",
+    "html_url": "https://github.com/FriendlyInternet/nuxt-crouton/pull/4276#issuecomment-7018788619"
+  }
+]

@@ -3,11 +3,12 @@
  * buttons via showProductPicker, slots with the number free, an amount box at every
  * location, and an edit that sends product + quantity. Reads the real
  * BookingCreateCard.vue and checks that shape (same style as calendar-single-popover.test.ts).
+ * #4314: also compiles the script and checks the form draws without waiting (no async setup).
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { parse } from 'vue/compiler-sfc'
+import { parse, compileScript } from 'vue/compiler-sfc'
 
 const file = resolve(__dirname, '../app/components/BookingCreateCard.vue')
 const source = readFileSync(file, 'utf8')
@@ -77,5 +78,24 @@ describe('BookingCreateCard.vue (#4112)', () => {
   it('shows product buttons through showProductPicker and saves an edit with editBookingBody', () => {
     expect(script).toContain('showProductPicker(')
     expect(script).toContain('editBookingBody(')
+  })
+})
+
+// #4314: pressing edit swapped the booking card for this form, and the form drew nothing until
+// an awaited product-list request answered (an async setup), so the booking vanished for a moment.
+describe('BookingCreateCard.vue draws at once (#4314)', () => {
+  // covers: T1
+  it('is not an async component: the compiled setup has no withAsyncContext / async setup(', () => {
+    const compiled = compileScript(descriptor, { id: 'booking-create-card' }).content
+    expect(compiled).not.toContain('withAsyncContext')
+    expect(compiled).not.toContain('async setup(')
+  })
+
+  // covers: T2
+  it('reads teamProducts from useBookingCart() and no longer calls useCollectionQuery', () => {
+    expect(script).not.toContain('useCollectionQuery')
+    const destructure = script.match(/const\s*\{([^}]*)\}\s*=\s*useBookingCart\(\)/)
+    expect(destructure).not.toBeNull()
+    expect(destructure![1]).toMatch(/\bteamProducts\b/)
   })
 })
