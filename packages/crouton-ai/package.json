@@ -13,6 +13,7 @@
   "scripts": {
     "typecheck": "nuxt prepare --extends ../crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
+    "test": "vitest run",
     "dev": "unbuild --stub",
     "prepack": "pnpm build"
   },
