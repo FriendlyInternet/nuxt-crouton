@@ -245,4 +245,5 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PR: ${{ steps.target.outputs.pr }}
-        run: node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$PR" '{issue:$i,workflow:"automerge-epic-subpr.yml",inputs:{pr:($i|tostring)}}')" || echo "::warning::could not ask the merge step for PR #${PR} (#4407)"
+        # No space-hash in this plain scalar: YAML reads it as a comment and cuts the line short.
+        run: node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$PR" '{issue:$i,workflow:"automerge-epic-subpr.yml",inputs:{pr:($i|tostring)}}')" || echo "::warning::could not ask the merge step for PR ${PR} (issue 4407)"

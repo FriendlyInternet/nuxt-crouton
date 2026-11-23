@@ -49,6 +49,8 @@ test('the step after Publish result asks automerge for this PR, only on a non-re
   assert.match(b, /PR: \$\{\{ steps\.target\.outputs\.pr \}\}/)
   const run = b.match(/^\s+run: (.*)$/m)?.[1]
   assert.ok(run && run !== '|' && run !== '>', 'run: is a single line')
+  // A plain YAML scalar ends at ` #` (comment) — that truncated this line and broke shellcheck.
+  assert.doesNotMatch(run, /\s#/, 'run: has no space-hash that YAML would read as a comment')
   assert.match(run, /node scripts\/handoff-exec\.mjs dispatch/)
   assert.match(run, /workflow:"automerge-epic-subpr\.yml"/)
   assert.match(run, /inputs:\{pr:\(\$i\|tostring\)\}/)
