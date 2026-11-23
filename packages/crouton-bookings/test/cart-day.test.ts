@@ -27,6 +27,7 @@ beforeEach(() => {
   g.useTeam = () => ({ currentTeam: ref({ id: 't1' }) })
   g.useT = () => ({ t: (k: string) => k })
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
+  g.useRemoteCollectionRefresh = () => {}
   g.useFetch = (url: any) => ({ data: ref(String(url?.() ?? '').includes('customer-locations') ? [{ id: 'l1', title: 'Studio', products: [{ product: 'p1', stock: 1 }] }] : null), status: ref('success'), refresh: async () => {} })
 })
 

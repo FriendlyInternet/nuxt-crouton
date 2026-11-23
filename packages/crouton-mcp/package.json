@@ -8,8 +8,14 @@
   "bin": {
     "crouton-mcp": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepack": "pnpm run build",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "snapshot": "jiti scripts/generate-field-types-snapshot.ts",
@@ -51,7 +57,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@fyit/crouton-cli": "workspace:*"
+    "@fyit/crouton-cli": "workspace:0.x"
   },
   "engines": {
     "node": ">=18.0.0"

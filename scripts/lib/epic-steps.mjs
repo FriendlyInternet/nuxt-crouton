@@ -193,8 +193,74 @@ export function pendingDetail({ labels = [], comments = [], subIssues = [] } = {
   // An unreadable step list never counts as finished: no epic → main PR, no postmortem.
   if (error) return { pending: 1, reason: `the step-list comment cannot be read: ${error}` }
   if (!steps) return { pending: 0, reason: 'rolling epic with no bot step list — every sub-issue closed is the finish line' }
-  const pending = steps.filter((s) => !stepClosed(s.step, steps, subIssues)).length
+  const pending = stepStates(steps, subIssues).filter(isPendingState).length
   return { pending, reason: `${pending} of ${steps.length} step(s) not finished` }
+}
+
+const isPendingState = (s) => s.state === 'open' || s.state === 'no-ticket'
+
+/**
+ * PURE (#4316). One ticket's outcome: 'open' | 'completed' | 'not_planned'. A close with
+ * `not_planned` or `duplicate` built nothing; a close with `completed` or no reason (GitHub records
+ * a reason-less close as completed) counts as built.
+ */
+export function ticketOutcome(issue) {
+  if (!issue || issue.state !== 'closed') return 'open'
+  const r = String(issue.state_reason ?? issue.stateReason ?? '').toLowerCase()
+  return r === 'not_planned' || r === 'duplicate' ? 'not_planned' : 'completed'
+}
+
+/**
+ * PURE (#4316). Each step's state — the same ticket set as ticketsOfStep (the listed ticket plus
+ * every `step=<k>` issue; a listed ticket missing from `issues` counts as open):
+ *   no-ticket (0 tickets) · open (any ticket open) · built (≥1 completed) · dropped (all not planned).
+ */
+export function stepStates(steps = [], issues = []) {
+  return (steps || []).map((s) => {
+    const mine = (issues || []).filter((i) => i.number === s.ticket || (i.step ?? stepOf(i.body)) === s.step)
+    const missing = s.ticket && !mine.some((i) => i.number === s.ticket)
+    const outcomes = mine.map(ticketOutcome)
+    if (missing) outcomes.push('open')
+    const tickets = [...(missing ? [s.ticket] : []), ...mine.map((i) => i.number)]
+    let state
+    if (!outcomes.length) state = 'no-ticket'
+    else if (outcomes.includes('open')) state = 'open'
+    else if (outcomes.includes('completed')) state = 'built'
+    else state = 'dropped'
+    return { step: s.step, title: s.title, state, tickets }
+  })
+}
+
+const refs = (ns) => ns.map((n) => `#${n}`).join(', ')
+
+/**
+ * PURE (#4316). What was built and what was dropped — for the status card, the PR into main and the
+ * postmortem. kind 'steps' only for a `tickets:rolling` epic with a readable bot step list (the gate
+ * pendingDetail uses); 'unreadable' for a step-list comment that cannot be read; else 'children'.
+ */
+export function stepSummary({ labels = [], comments = [], subIssues = [] } = {}) {
+  const subs = subIssues || []
+  const notPlanned = subs.filter((i) => ticketOutcome(i) === 'not_planned').map((i) => i.number)
+  const merged = subs.filter((i) => ticketOutcome(i) === 'completed').length
+  const base = { total: subs.length, built: merged, dropped: [], open: subs.length - merged - notPlanned.length, noTicket: 0, notPlanned, merged }
+  const childrenLine = `${merged} merged, ${notPlanned.length} not planned${notPlanned.length ? `: ${refs(notPlanned)}` : ''}`
+  if (isRolling(labels)) {
+    const { steps, error } = readSteps(comments)
+    if (error) return { ...base, kind: 'unreadable', line: `step list unreadable (${error}); ${childrenLine}` }
+    if (steps) {
+      const st = stepStates(steps, subs)
+      const built = st.filter((s) => s.state === 'built').length
+      const dropped = st.filter((s) => s.state === 'dropped').map((s) => ({ step: s.step, tickets: s.tickets }))
+      const open = st.filter((s) => s.state === 'open').length
+      const noTicket = st.filter((s) => s.state === 'no-ticket').length
+      const droppedRefs = dropped.flatMap((d) => d.tickets)
+      const line = `built ${built} of ${steps.length} steps, dropped ${dropped.length} (not planned)` +
+        (dropped.length ? `: ${refs(droppedRefs)}` : '') +
+        (open + noTicket > 0 ? `, ${open + noTicket} not built yet` : '')
+      return { kind: 'steps', total: steps.length, built, dropped, open, noTicket, notPlanned, merged, line }
+    }
+  }
+  return { ...base, kind: 'children', line: childrenLine }
 }
 
 /**

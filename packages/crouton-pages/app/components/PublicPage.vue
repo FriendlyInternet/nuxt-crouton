@@ -21,7 +21,7 @@
  * - Clicking it opens a side-by-side editor via the public layout
  * - Live preview updates as the admin edits translations
  */
-import { buildPagePath } from '../utils/page-path'
+import { buildPagePath, buildSeoUrl as buildSeoUrlFor, publicTeamSegment } from '../utils/page-path'
 
 const props = defineProps<{
   /** The page's locale code (from the URL, or the app's one locale when hidden). */
@@ -32,7 +32,7 @@ const props = defineProps<{
 const pageLayout = useState<'default' | 'full-height' | 'full-screen'>('pageLayout', () => 'default')
 
 const route = useRoute()
-const { teamId } = useTeamContext()
+const { teamId, teamSlug } = useTeamContext()
 const { t } = useT()
 const { getPageType } = usePageTypes()
 const { hideTeamInUrl, hideTeamInLinks, hideLocaleInUrl } = useDomainContext()
@@ -42,6 +42,14 @@ const { locale: i18nLocale, locales, setLocale } = useI18n()
 
 // Get team, locale, and slug
 const team = computed(() => teamId.value || null)
+// The team segment for public addresses (SEO links, home link): the slug the
+// visitor is on, never the signed-in team's id (#4293). `team` (the id) stays
+// for the API fetch.
+const publicTeam = computed(() => publicTeamSegment({
+  routeTeam: typeof route.params.team === 'string' ? route.params.team : null,
+  teamSlug: teamSlug.value,
+  teamId: teamId.value
+}))
 const urlLocale = computed(() => props.locale)
 const slug = computed(() => {
   const slugParts = route.params.slug
@@ -242,13 +250,15 @@ function toAbsoluteUrl(url: string | undefined | null, base: string): string | u
 // Canonical nested slug path for the current locale (e.g. "events/summer-fair"),
 // resolved server-side. Falls back to the leaf slug if meta is unavailable.
 const canonicalPath = computed(() => pageMeta.value?.fullPath ?? page.value?.slug ?? '')
-// `/{team?}/{locale?}` — the locale is left out when hideLocaleInUrl is on.
-const localePrefixFor = (loc: string) => {
-  const teamPrefix = hideTeamInUrl.value ? '' : `/${team.value}`
-  return hideLocaleInUrl.value ? teamPrefix : `${teamPrefix}/${loc}`
-}
-const buildSeoUrl = (loc: string, path: string) =>
-  `${siteUrl}${localePrefixFor(loc)}/${path}`.replace(/\/+$/, '') || `${siteUrl}${localePrefixFor(loc)}` || '/'
+// `${siteUrl}/{team?}/{locale?}/{path}` — the locale is left out when hideLocaleInUrl is on.
+const buildSeoUrl = (loc: string, path: string) => buildSeoUrlFor({
+  siteUrl,
+  hideTeamInUrl: hideTeamInUrl.value,
+  hideLocaleInUrl: hideLocaleInUrl.value,
+  team: publicTeam.value,
+  locale: loc,
+  path
+})
 
 // Home link on the not-found screen. A router link: it omits the team only in
 // locale/custom mode — on a connected domain the team-host history hides it (#4175).
@@ -257,7 +267,7 @@ const homePath = computed(() => hideTeamInLinks.value
   : buildPagePath({
       hideTeamInUrl: false,
       hideLocaleInUrl: hideLocaleInUrl.value,
-      team: team.value,
+      team: publicTeam.value,
       locale: urlLocale.value,
       slugPath: ''
     }))

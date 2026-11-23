@@ -97,6 +97,44 @@ export function buildPagePath(opts: BuildPagePathOptions): string {
 }
 
 /**
+ * The team segment for a public address (SEO links, router links). Prefers the
+ * address the visitor is on (`routeTeam`), then the team slug, then the id —
+ * the same order useNavigation/usePageLink use. Never the bare team id while a
+ * slug is known: a signed-in visitor's loaded team made SEO links read
+ * `/<team-id>/...` (#4293).
+ */
+export function publicTeamSegment(opts: {
+  routeTeam?: string | null
+  teamSlug?: string | null
+  teamId?: string | null
+}): string | null {
+  return opts.routeTeam || opts.teamSlug || opts.teamId || null
+}
+
+/**
+ * Canonical / og:url / hreflang URL: `${siteUrl}/{team?}/{locale?}/{path}`,
+ * trailing slashes trimmed. With team and locale hidden and an empty path it is
+ * `siteUrl` (or `/` when no siteUrl is set).
+ */
+export function buildSeoUrl(opts: {
+  siteUrl?: string
+  hideTeamInUrl: boolean
+  hideLocaleInUrl?: boolean
+  team: string | null
+  locale: string
+  path: string
+}): string {
+  const pagePath = buildPagePath({
+    hideTeamInUrl: opts.hideTeamInUrl,
+    hideLocaleInUrl: opts.hideLocaleInUrl,
+    team: opts.team,
+    locale: opts.locale,
+    slugPath: opts.path,
+  })
+  return `${opts.siteUrl || ''}${pagePath}`.replace(/\/+$/, '') || '/'
+}
+
+/**
  * The admin editor's fallback "open in public" link, used when the page isn't
  * in the link resolver's list yet. With the setting off it is exactly the
  * historic hand-built string — including the trailing slash for an empty slug

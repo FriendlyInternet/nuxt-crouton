@@ -180,7 +180,7 @@ describe('GET /api/status/clock — the inbox stuck check row (#4234)', () => {
     expect(res.data.slice(0, 13).map((r: any) => r.workflow)).toEqual(CLOCK_JOBS.map(j => j.workflow))
     expect(syncRow(res)).toEqual({
       workflow: 'inbox stuck check',
-      schedule: 'every 30 min',
+      schedule: 'every 30 min, and within 10 min of a change on GitHub',
       about: 'Checks GitHub for stuck tickets, idle drafts and other things waiting on you, and updates the inbox — even when you haven\'t opened it.',
       lastDue: '2026-11-19T10:30:00.000Z',
       nextDue: '2026-11-19T11:00:00.000Z',

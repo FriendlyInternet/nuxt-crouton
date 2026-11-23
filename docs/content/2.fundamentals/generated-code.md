@@ -1,110 +1,74 @@
 ---
-title: Generated vs Core Code
-description: Understanding the difference between generated code and core library
-icon: i-lucide-code
+title: Generated code
+description: What each generated file does, which files the generator keeps rewriting, and what running it again does to your edits.
+navigation:
+  icon: i-lucide-code
 ---
 
-## The Golden Rule
+The generator writes plain source files. Once written they are yours: read them, edit them, commit them. Nothing at runtime reads your field file; only the generated files count.
 
-The most important thing to understand is that generated code is your code—edit it freely. Once files are generated into your project, you own them and can customize them however you need. Just remember not to regenerate unless you're willing to lose your changes.
+## The files of one collection
 
-## Comparison
+For collection `products` in layer `shop`, in `layers/shop/collections/products/`:
 
-| Generated Code | Core Library |
-|----------------|--------------|
-| Lives in YOUR project | Lives in node_modules |
-| You customize freely | You don't edit |
-| Can diverge | Stays consistent |
-| Regenerate to update | npm update to update |
-| Forms, lists, types | Composables, utilities |
+| File | What it does |
+| --- | --- |
+| `app/components/_Form.vue` | the create/edit form, registered as `<ShopProductsForm>` |
+| `app/components/List.vue` | the list, registered as `<ShopProductsList>`; loads rows with `useCollectionQuery` and renders `<CroutonCollection>` |
+| `app/composables/useShopProducts.ts` | the Zod schema, default values, columns and `shopProductsConfig` (the registry entry) |
+| `server/api/teams/[id]/shop-products/index.get.ts` | list: all rows, `?ids=`, `?page=&pageSize=`, reference-field filters |
+| `server/api/teams/[id]/shop-products/index.post.ts` | create |
+| `server/api/teams/[id]/shop-products/[productId].patch.ts` | update (only the fields sent) |
+| `server/api/teams/[id]/shop-products/[productId].delete.ts` | delete |
+| `server/database/schema.ts` | the Drizzle table `shop_products` |
+| `server/database/queries.ts` | `getAllShopProducts`, `getShopProductsByIds`, `createShopProduct`, `updateShopProduct`, `deleteShopProduct` |
+| `types.ts` | the record type and `ShopProductsFormProps` |
+| `seed.json` | sample rows you can edit |
+| `nuxt.config.ts`, `README.md` | the collection's layer config and a short description |
 
-## Generated Code Location
+Every route checks team membership first (`resolveTeamAndCheckMembership`). Update and delete also check ownership; see [Who may change what](/fundamentals/data-operations#who-may-change-what). What the routes accept: [Data operations](/fundamentals/data-operations#passing-query-parameters).
+
+Most files start with a comment block (`@crouton-generated`, the collection, the API path, and the common changes for that file). It is there to help someone, or an agent, find their way in the file. Deleting it changes nothing.
+
+## Outside the collection folder
+
+A run also updates a few shared files. It **adds to** them rather than replacing them, and it does so on every run:
+
+- `nuxt.config.ts`: adds `./layers/shop` to `extends`
+- `app/app.config.ts`: adds `shopProducts` to `croutonCollections`
+- the app's database schema index: exports the new table
+- `server/db/migrations/`: a new migration when the tables changed
+
+## Regenerating
+
+Run `crouton config` again and the generator **skips every collection file that already exists**. It lists them at the end:
 
 ```
-layers/[layer]/
-  └── collections/
-      └── [collection]/
-          ├── app/
-          │   ├── components/
-          │   │   ├── List.vue                    # Generated
-          │   │   └── _Form.vue                   # Generated
-          │   └── composables/
-          │       └── use[Layer][Collection].ts    # Generated
-          │
-          ├── server/
-          │   ├── api/teams/[id]/
-          │   │   └── [layer]-[collection]/
-          │   │       ├── index.get.ts             # GET all / by IDs
-          │   │       ├── index.post.ts            # CREATE
-          │   │       ├── [collectionId].patch.ts  # UPDATE
-          │   │       └── [collectionId].delete.ts # DELETE
-          │   └── database/
-          │       ├── schema.ts                    # Drizzle schema
-          │       └── queries.ts                   # Database query functions
-          │
-          └── types.ts                             # Generated
+  ⏭ preserved 13 existing file(s) — use --force to overwrite:
+     · app/components/_Form.vue
+     ...
 ```
 
-## What Generated APIs Provide
+Files that don't exist yet are always written. So deleting one file and regenerating restores only that file.
 
-The generated API endpoints provide a working CRUD implementation:
-
-| Endpoint | Functionality |
-|----------|--------------|
-| `GET index.get.ts` | Fetch all items, or by IDs with `?ids=` |
-| `POST index.post.ts` | Create new item |
-| `PATCH [collectionId].patch.ts` | Update item by ID |
-| `DELETE [collectionId].delete.ts` | Delete item by ID |
-
-### Common Customizations
-
-The generated APIs are starting points. Common modifications include:
-
-- **Pagination** - Add `page` and `limit` query params ([Pagination Guide](/guides/pagination))
-- **Filtering** - Add date ranges, status filters, search
-- **Sorting** - Add `sortBy` and `sortDirection` params
-- **Validation** - Add Zod schemas for stricter input validation
-- **Permissions** - Add role-based access checks
-
-## Core Library Components
-
-The core library provides:
-- `useCrouton()` - Modal management
-- `useCollectionQuery()` - Data fetching
-- `useCollectionMutation()` - Data mutations
-- `CroutonCollection` - Collection component
-- `CroutonFormActionButton` - Submit button
-- Toast notifications
-- Cache invalidation
-
-## The Rails Scaffold Approach
-
-Nuxt Crouton works like Rails scaffolding:
+This means **a changed field file has no effect on an existing collection** until you overwrite:
 
 ```bash
-# Rails
-rails generate scaffold Post title:string body:text
-
-# Nuxt Crouton
-npx crouton-generate blog posts --fields-file post-schema.json
+npx crouton config --dry-run   # shows the plan, writes nothing
+npx crouton config --force     # rewrites every generated file, your edits included
+npx crouton config --only products --force   # the same, for one collection
 ```
 
-Both:
-1. Generate starting code
-2. You own it immediately
-3. Customize as needed
-4. Core framework stays stable
+`--force` replaces your edits in those files with no merge. Commit first, so you can bring your changes back from the diff. With `--force`, `schema.ts` is rewritten too, and the next migration changes the table to match.
 
-## When to Regenerate
+## Keeping your changes safe
 
-Regenerate when you're starting a new collection, want to update to the latest template, need to add a new field structure, or haven't made customizations yet. Don't regenerate if you've customized the generated files, added custom logic to forms, or modified validation—unless you use `--force` and accept losing your changes.
+- **Small changes, such as a column, a label or a query filter:** edit the generated file. A normal regenerate leaves it alone.
+- **A different form or list for good:** put `app/components/ShopProductsForm.vue` (or `ShopProductsList.vue`) in your app. A component in the app wins over the same name in a layer, and the generator never writes there, not even with `--force`. See [Eject](/customization/eject).
+- **Removing a collection:** `npx crouton rollback shop products --dry-run`, then without `--dry-run`. It removes the files and the registry, `extends` and schema entries, but not the table. Add `--drop-table` for a migration that drops it.
 
-## Best Practices
+## Related
 
-Customize the generated code freely since it's yours. Use version control to track your changes and add comments to document your customizations. When you update the core library, test your customizations to make sure everything still works. And always keep backups before regenerating with `--force`.
-
-## Related Topics
-
-- [Collections & Layers](/fundamentals/collections)
-- [Customizing Generated Code](/customization)
-- [Generator Commands](/generation/cli-commands)
+- [Architecture](/fundamentals/architecture): how these files use the core layer
+- [Schema format](/generation/schema-format): the field file
+- [CLI reference](/api-reference/cli): every command and flag

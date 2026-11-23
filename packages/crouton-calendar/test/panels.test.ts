@@ -7,6 +7,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { computed, defineComponent, h, ref } from 'vue'
 import type { Component } from 'vue'
 import { mount } from '@vue/test-utils'
+import { useHoldHeight } from '../app/composables/useHoldHeight'
 
 let built = 0
 
@@ -47,6 +48,7 @@ beforeAll(async () => {
   Object.assign(globalThis, {
     ref,
     computed,
+    useHoldHeight,
     useT: () => ({ t: (k: string) => k }),
     useI18n: () => ({ locale: ref('en') }),
     useSlideSwipe: () => ({ slide() {} }),

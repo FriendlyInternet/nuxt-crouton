@@ -105,6 +105,9 @@
     "card": {
       "activity": "Activiteit",
       "on": "op {date}",
+      "editBooking": "Boeking bewerken",
+      "showDayInCalendar": "Toon {date} in de kalender",
+      "emailPanel": "E-mailstatus",
       "emailLabels": {
         "confirm": "Bevestiging",
         "reminder": "Herinnering",
@@ -516,6 +519,8 @@
       "translations": "Vertalingen",
       "statuses": "Statussen",
       "groups": "Leeftijdsgroepen",
+      "sendEmails": "E-mails versturen",
+      "sendEmailsHint": "Uit: boekingsmails worden niet verstuurd en elk wordt gelogd als overgeslagen",
       "name": "Naam",
       "subject": "Onderwerp",
       "body": "Inhoud",
@@ -559,7 +564,8 @@
     "emailStatus": {
       "pending": "In afwachting",
       "sent": "Verzonden",
-      "failed": "Mislukt"
+      "failed": "Mislukt",
+      "skipped": "Overgeslagen"
     }
   }
 }

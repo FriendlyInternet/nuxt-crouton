@@ -46,7 +46,7 @@ export type CroutonAuthEmailPayload = {
 } & (
   | { type: 'verification', to: string, url: string, userName?: string }
   | { type: 'password-reset', to: string, url: string, userName?: string }
-  | { type: 'invitation', to: string, invitationId: string, organizationName: string, inviterName: string, inviterEmail: string, role: string, expiresAt: Date }
+  | { type: 'invitation', to: string, invitationId: string, organizationId?: string, organizationName: string, inviterName: string, inviterEmail: string, role: string, expiresAt: Date }
   | { type: 'magic-link', to: string, url: string }
 )
 

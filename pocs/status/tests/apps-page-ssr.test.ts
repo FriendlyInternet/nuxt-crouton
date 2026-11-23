@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compileScript, parse } from '@vue/compiler-sfc'
-import { computed, createSSRApp, defineComponent, h, ref } from 'vue'
+import { computed, createSSRApp, defineComponent, h, reactive, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { loginHrefFor } from '../app/utils/walk'
 
@@ -41,6 +41,11 @@ const ui = (tag: string) => defineComponent({
   inheritAttrs: false,
   setup: (_, { slots, attrs }) => () => h(tag, { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant }, [label(attrs), ...Object.values(slots).map(s => s?.())])
 })
+// UButton renders a real <button> and passes class/aria-expanded through, like the real one.
+const buttonStub = defineComponent({
+  inheritAttrs: false,
+  setup: (_, { slots, attrs }) => () => h('button', { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant, 'class': attrs.class, 'aria-expanded': attrs['aria-expanded'] }, [label(attrs), ...Object.values(slots).map(s => s?.())])
+})
 // UTabs prints each tab's label (data-tab) and its label class (data-tab-label) before every slot.
 const tabsStub = defineComponent({
   inheritAttrs: false,
@@ -55,6 +60,9 @@ const collapsibleStub = defineComponent({
   setup: (_, { slots, attrs }) => () => h('div', { 'data-open': String(!!attrs.open) }, [slots.default?.(), attrs.open ? slots.content?.() : null])
 })
 const replyButtons = defineComponent({ props: ['kind', 'number'], setup: p => () => h('reply', `${p.kind}:${p.number}`) })
+
+// Built from now so the changelog's "Today" header holds whenever the test runs.
+const TODAY_ISO = new Date().toISOString()
 
 const FIXTURES: Record<string, unknown> = {
   '/api/status/apps': {
@@ -81,7 +89,10 @@ const FIXTURES: Record<string, unknown> = {
     error: null
   },
   '/api/status/changelog': {
-    data: [{ date: '2026-11-12', number: 21, title: 'Inbox first', area: 'status', url: 'https://gh/21' }],
+    data: [
+      { date: TODAY_ISO.slice(0, 10), mergedAt: TODAY_ISO, number: 21, title: 'Inbox first', area: 'status', kind: 'fix', url: 'https://gh/21' },
+      { date: TODAY_ISO.slice(0, 10), mergedAt: TODAY_ISO, number: 22, title: 'Record context-budget inventory', area: 'Pipeline', kind: 'chore', url: 'https://gh/22' }
+    ],
     error: null
   },
   '/api/status/clock': {
@@ -97,12 +108,14 @@ const FIXTURES: Record<string, unknown> = {
 async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'success') {
   vi.stubGlobal('ref', ref)
   vi.stubGlobal('computed', computed)
+  vi.stubGlobal('reactive', reactive)
   vi.stubGlobal('loginHrefFor', loginHrefFor)
   vi.stubGlobal('definePageMeta', () => {})
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
   const Page = await compile(path)
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
-  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput']) app.component(n, ui('div'))
+  for (const n of ['UContainer', 'UAlert', 'UBadge', 'UCard', 'UInput', 'USwitch']) app.component(n, ui('div'))
+  app.component('UButton', buttonStub)
   app.component('UTabs', tabsStub)
   app.component('UCollapsible', collapsibleStub)
   app.component('ReplyButtons', replyButtons)
@@ -156,6 +169,17 @@ describe('apps dashboard page server render', () => {
     expect(html).not.toContain('No decisions yet.')
     expect(html).toContain('Inbox first')
     expect(html).toContain('data-c="status"') // area filter
+  })
+
+  // covers: T2 (#4352)
+  it('Changelog tab: day header, kind icon, two-line title button, chores hidden behind a switch', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('>Today<')
+    expect(html).toContain('🐞')
+    expect(html).toMatch(/<button[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*aria-expanded="false"[^>]*>\s*Inbox first/)
+    expect(html).toContain('data-c="Show chores"')
+    expect(html).not.toContain('Record context-budget inventory')
+    expect(html).not.toContain('data-c="Pipeline"') // the chips count only shown rows
   })
 
   it('loading and empty states', async () => {

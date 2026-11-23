@@ -29,3 +29,15 @@ test('T6 — the per-PR deploy branch migrates via pr-preview-migrate.mjs', () =
   const idAt = block.indexOf('scripts/pr-preview-db-id.mjs')
   assert.ok(idAt >= 0 && idAt < block.indexOf('scripts/pr-preview-migrate.mjs'), 'ids are resolved before migrating')
 })
+
+// covers: T1
+test('T1 — the per-PR deploy re-runs pr-preview-reuse.mjs inside the retry loop, before each deploy (#4354)', () => {
+  const block = perPrBranch()
+  const loopAt = block.indexOf('for attempt in 1 2 3; do')
+  const reuseAt = block.indexOf('scripts/pr-preview-reuse.mjs')
+  const deployAt = block.indexOf('npx wrangler deploy --config')
+  assert.ok(loopAt >= 0, 'retry loop exists')
+  assert.ok(loopAt < reuseAt, 'reuse runs inside the retry loop, not once before it')
+  assert.ok(reuseAt < deployAt, 'reuse runs before wrangler deploy')
+  assert.equal(block.split('scripts/pr-preview-reuse.mjs').length, 2, 'reuse is called exactly once in the block')
+})
