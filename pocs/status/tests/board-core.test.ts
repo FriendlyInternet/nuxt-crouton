@@ -90,6 +90,17 @@ describe('boardFromLists — what the card sync writes', () => {
     const plan = boardFromLists({ issues: [issue(12, ['status:blocked']), issue(13, ['epic', 'work-this'])], pulls: [], existing: [], waiting: none, complete: true, now: NOW })
     expect(plan).toEqual({ create: [], update: [], remove: [] })
   })
+  // covers: T2
+  it('a row in Working whose issue then gets the epic label leaves the board after the write', () => {
+    const prev = { id: 'r12', ...item({ title: 'Issue 12', url: 'https://gh/12', labels: 'work-this', stage: 'working', stageSince: new Date(NOW - HOUR), order: NOW - HOUR }) }
+    expect(boardView([prev], [], NOW).map(r => r.number)).toEqual([12])
+    const plan = boardFromLists({ issues: [issue(12, ['work-this', 'epic'])], pulls: [], existing: [prev], waiting: none, complete: true, now: NOW })
+    expect(plan.create).toEqual([])
+    expect(plan.update).toHaveLength(1)
+    expect(plan.update[0]).toMatchObject({ id: 'r12', patch: { labels: 'work-this,epic' } })
+    const after = { ...prev, ...plan.update[0]!.patch }
+    expect(boardView([after], [], NOW)).toEqual([])
+  })
   // covers: T4
   it('stageSince is unchanged when the stage is unchanged, and moves when it changes', () => {
     const since = new Date(NOW - 5 * HOUR)

@@ -212,9 +212,12 @@ function firstBy<T extends { number: number }>(list: T[]): Map<number, T> {
   return out
 }
 
-/** One listed row: epics are never written; a new row only when it has a column. */
+/**
+ * One listed row: an epic never gets a new row, but an existing row still takes its new labels (so
+ * `stageOf` drops it off the board); a new row only when it has a column.
+ */
 function planRow(plan: BoardPlan, prev: BoardItem | undefined, next: BoardItem, waiting: Set<number>, now: number) {
-  if (itemLabels(next).has('epic')) return
+  if (!prev && itemLabels(next).has('epic')) return
   const stage = stageOf(next, waiting, now)
   if (prev || stage) record(plan, prev, withStage(next, prev, stage, now))
 }
