@@ -865,11 +865,6 @@ jobs:
       # A plan Test line that starts a Nuxt app (nuxt prepare in a POC) needs every @fyit/* dist (#4074).
       - uses: ./.github/actions/warm-packages
         if: steps.plan.outputs.needs_install == 'true'
-      # A plan Test line can be a Playwright spec (e2e/*.smoke.spec.ts); the runner has no browser
-      # until one is installed, and the auth setup dies on "Executable doesn't exist" (#4386).
-      - name: Install Chromium for plan Test lines that drive a browser
-        if: steps.plan.outputs.needs_install == 'true'
-        run: pnpm exec playwright install chromium
       - name: Run the plan's Test lines (no token)
         if: steps.plan.outputs.has_plan == 'true'
         run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
