@@ -1,0 +1,1 @@
+ALTER TABLE `bookings_settings` ADD `sendEmails` integer DEFAULT true NOT NULL;

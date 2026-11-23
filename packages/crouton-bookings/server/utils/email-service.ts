@@ -18,6 +18,7 @@ import { useNitroApp } from 'nitropack/runtime'
 import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import { bookingsEmailtemplates } from '../../collections/emailtemplates/server/database/schema'
 import { bookingsEmaillogs } from '../../collections/emaillogs/server/database/schema'
+import { bookingsSettings } from '../../collections/settings/server/database/schema'
 import {
   isBookingEmailEnabled,
   getBookingEmailService,
@@ -84,6 +85,31 @@ export interface SendBookingEmailsResult {
   customerResult?: BookingEmailResult
   adminResult?: BookingEmailResult
   errors?: string[]
+  /** True when the team switched booking emails off: nothing was sent, each send was logged as skipped (#3929) */
+  skipped?: boolean
+}
+
+const TEAM_EMAILS_OFF = 'Booking emails are switched off in the booking settings'
+
+/**
+ * Is the team's "Send emails" switch on? (#3929)
+ *
+ * Off when ANY of the team's bookings_settings rows says off; no row means on.
+ * If the column/table is missing (migration not applied) this logs and returns
+ * true — the behaviour from before the switch existed.
+ */
+export async function isTeamBookingEmailOn(teamId: string): Promise<boolean> {
+  try {
+    const rows = await useDB()
+      .select({ sendEmails: bookingsSettings.sendEmails })
+      .from(bookingsSettings)
+      .where(eq(bookingsSettings.teamId as any, teamId))
+    return !rows.some((r: { sendEmails: unknown }) => r.sendEmails === false || r.sendEmails === 0)
+  }
+  catch (error) {
+    console.error('[booking-email] Could not read the team email switch:', error)
+    return true
+  }
 }
 
 /**
@@ -181,7 +207,7 @@ export async function logEmailSend(options: {
   templateId: string
   recipientEmail: string
   triggerType: string
-  status: 'pending' | 'sent' | 'failed'
+  status: 'pending' | 'sent' | 'failed' | 'skipped'
   error?: string
 }): Promise<string | null> {
   // Early return if email is not enabled
@@ -439,8 +465,65 @@ export async function sendBookingEmails(
     errors: []
   }
 
+  // The team's "Send emails" switch (#3929)
+  const teamOn = await isTeamBookingEmailOn(teamId)
+
   // Process each matching template
   for (const template of templates) {
+    // Team switched booking emails off: log each intended send as skipped, send nothing
+    if (!teamOn) {
+      const recipientType = template.recipientType || 'customer'
+      const customerEmail = options.recipientEmail || variables.customer_email
+      const recipients: Array<{ email: string, type: 'customer' | 'admin' }> = []
+      if ((recipientType === 'customer' || recipientType === 'both') && customerEmail) {
+        recipients.push({ email: customerEmail, type: 'customer' })
+      }
+      if ((recipientType === 'admin' || recipientType === 'both') && adminEmail) {
+        recipients.push({ email: adminEmail, type: 'admin' })
+      }
+      console.warn(`[booking-email] Skipping ${triggerType} (template ${template.id}): ${TEAM_EMAILS_OFF} (team: ${teamId})`)
+      for (const r of recipients) {
+        const logId = await logEmailSend({
+          teamId,
+          userId,
+          bookingId: booking.id,
+          templateId: template.id,
+          recipientEmail: r.email,
+          triggerType,
+          status: 'skipped',
+          error: TEAM_EMAILS_OFF
+        })
+        nitroApp.hooks.callHook('crouton:operation', {
+          type: 'booking:email-skipped',
+          source: 'crouton-bookings',
+          teamId,
+          userId,
+          metadata: {
+            bookingId: booking.id,
+            recipient: r.email,
+            recipientType: r.type,
+            template: triggerType,
+            status: 'skipped',
+            templateId: template.id,
+            emailLogId: logId || undefined,
+            error: TEAM_EMAILS_OFF,
+          },
+        }).catch(() => {})
+        const skippedResult = {
+          success: true,
+          sent: false,
+          skipped: true,
+          reason: 'team-emails-off',
+          templateId: template.id,
+          emailLogId: logId || undefined
+        }
+        if (r.type === 'customer') results.customerResult = skippedResult
+        else results.adminResult = skippedResult
+      }
+      results.skipped = true
+      continue
+    }
+
     // Resolve subject/body: customer language → default language → main field → any translation
     const tr = template.translations as Record<string, Record<string, string>> | null
     const resolvedSubject = resolveTranslatedField(template.subject, tr, 'subject', locale ?? defaultLocale, defaultLocale)

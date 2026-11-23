@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/bookings-settings
  * - Form component: BookingsSettingsForm
  * - List component: BookingsSettingsList
- * - Fields: statuses, groups
+ * - Fields: statuses, groups, sendEmails
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -28,12 +28,14 @@ import { z } from 'zod'
 // Keep schema outside of objects that might be serialized/cloned during SSR
 export const bookingsSettingSchema = z.object({
   statuses: z.array(z.any()).optional(),
-  groups: z.array(z.any()).optional()
+  groups: z.array(z.any()).optional(),
+  sendEmails: z.boolean().optional()
 })
 
 export const bookingsSettingsColumns = [
   { accessorKey: 'statuses', header: 'Statuses' },
-  { accessorKey: 'groups', header: 'Groups' }
+  { accessorKey: 'groups', header: 'Groups' },
+  { accessorKey: 'sendEmails', header: 'Send emails' }
 ]
 
 // Config object WITHOUT schema - safe for SSR serialization
@@ -43,7 +45,8 @@ const _bookingsSettingsConfig = {
   apiPath: 'bookings-settings',
   defaultValues: {
     statuses: [],
-    groups: []
+    groups: [],
+    sendEmails: true
   },
   columns: bookingsSettingsColumns,
   dependentFieldComponents: {
@@ -61,6 +64,12 @@ const _bookingsSettingsConfig = {
           "name": "groups",
           "type": "repeater",
           "label": "Age Groups",
+          "area": "main"
+      },
+      {
+          "name": "sendEmails",
+          "type": "boolean",
+          "label": "Send emails",
           "area": "main"
       }
   ],

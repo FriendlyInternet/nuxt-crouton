@@ -100,7 +100,7 @@ export interface EpicSyncItem {
   readError?: boolean
 }
 
-export interface GhFile { filename?: string, previous_filename?: string }
+export interface GhFile { filename?: string, previous_filename?: string, additions?: number, deletions?: number }
 
 export interface QuizItem {
   number: number
@@ -432,6 +432,32 @@ export function packagesPayload(i: SyncItem): PackageEntry[] {
   return names.map(name => ({ name, why, approval }))
 }
 
+export interface ChangesPayload { files: number, added: number, removed: number, top: string[] }
+
+const lineCount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+/**
+ * The "what changed" summary of a PR review card (#4373): file count, lines added/removed, and the
+ * three largest files (ties by name, code-point order so the payload is stable between syncs).
+ * Null when the file list was not read or is empty.
+ */
+export function changesPayload(i: SyncItem): ChangesPayload | null {
+  if (!i.files?.length) return null
+  let added = 0
+  let removed = 0
+  for (const f of i.files) {
+    added += lineCount(f.additions)
+    removed += lineCount(f.deletions)
+  }
+  const size = (f: GhFile) => lineCount(f.additions) + lineCount(f.deletions)
+  const top = i.files
+    .filter((f): f is GhFile & { filename: string } => typeof f.filename === 'string' && !!f.filename)
+    .sort((a, b) => size(b) - size(a) || (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0))
+    .slice(0, 3)
+    .map(f => f.filename)
+  return { files: i.files.length, added, removed, top }
+}
+
 // ---------------------------------------------------------------- collectAsks
 
 export interface CollectInput {
@@ -484,16 +510,21 @@ const validTime = (iso: string) => !!iso && !Number.isNaN(new Date(iso).getTime(
 const isBlocked = (i: { labels: string[] }) => i.labels.includes('status:blocked')
 const isDeliveryItem = (i: SyncItem) => !i.isPr && !i.readError && i.labels.includes('status:to-test')
 
+/** A PR review card also carries the packages it touches and the size of the change (#3785, #4373). */
+function addReviewPayload(ask: Ask, i: SyncItem) {
+  const packages = packagesPayload(i)
+  if (packages.length) ask.payload = { ...ask.payload, packages }
+  const changes = changesPayload(i)
+  if (changes) ask.payload = { ...ask.payload, changes }
+}
+
 /** True when the PR was claimed (a hold rule or link card) or unreadable. */
 function collectPr(i: SyncItem, sink: AskSink, closers: Set<number>): boolean {
   if (i.readError) sink.skip(i.number)
   else {
     const hit = holdRules(i) ?? (isBlocked(i) ? { ask: linkAsk(i) } : null)
     if (!hit) return false
-    if (hit.ask?.kind === 'review') {
-      const packages = packagesPayload(i)
-      if (packages.length) hit.ask.payload = { ...hit.ask.payload, packages }
-    }
+    if (hit.ask?.kind === 'review') addReviewPayload(hit.ask, i)
     sink.add(i.number, hit.ask)
   }
   if (i.closesIssue) closers.add(i.closesIssue)

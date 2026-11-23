@@ -20,5 +20,14 @@
       "area": "main",
       "group": "bookingOptions"
     }
+  },
+  "sendEmails": {
+    "type": "boolean",
+    "meta": {
+      "label": "Send emails",
+      "default": true,
+      "required": true,
+      "area": "main"
+    }
   }
 }

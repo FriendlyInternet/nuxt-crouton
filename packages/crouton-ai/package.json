@@ -19,6 +19,7 @@
   "files": [
     "app",
     "server",
+    "shared",
     "schemas",
     "dist",
     "nuxt.config.ts",

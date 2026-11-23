@@ -519,6 +519,8 @@
       "translations": "Vertalingen",
       "statuses": "Statussen",
       "groups": "Leeftijdsgroepen",
+      "sendEmails": "E-mails versturen",
+      "sendEmailsHint": "Uit: boekingsmails worden niet verstuurd en elk wordt gelogd als overgeslagen",
       "name": "Naam",
       "subject": "Onderwerp",
       "body": "Inhoud",
@@ -562,7 +564,8 @@
     "emailStatus": {
       "pending": "In afwachting",
       "sent": "Verzonden",
-      "failed": "Mislukt"
+      "failed": "Mislukt",
+      "skipped": "Overgeslagen"
     }
   }
 }
