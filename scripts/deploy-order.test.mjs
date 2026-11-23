@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -109,21 +109,28 @@ test('T5 — a failing migrate stops migrate-first before deploy; deploy-first k
   assert.equal(existsSync(marker), false)
 })
 
-test('T6 — pins cf:staging / cf:deploy go through deploy-order.mjs after sync-wrangler-ids', () => {
-  const pkg = JSON.parse(readFileSync(join(repo, 'pocs/pins/package.json'), 'utf8'))
+// The cf:staging / cf:deploy scripts of `pocs/<dir>` (or `apps/<dir>`) route through deploy-order.mjs
+// after sync-wrangler-ids, with every `wrangler … deploy` inside the quoted --deploy argument.
+function assertGoesThroughDeployOrder (dir) {
+  const pkg = JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf8'))
   for (const name of ['cf:staging', 'cf:deploy']) {
     const s = pkg.scripts[name]
+    assert.ok(typeof s === 'string', `${dir} ${name} exists`)
     const at = s.indexOf('scripts/deploy-order.mjs')
-    assert.ok(at > 0, `${name} calls deploy-order.mjs`)
+    assert.ok(at > 0, `${dir} ${name} calls deploy-order.mjs`)
     const sync = s.indexOf('scripts/sync-wrangler-ids.mjs')
-    assert.ok(sync >= 0 && sync < at, `${name} runs sync-wrangler-ids before deploy-order`)
+    assert.ok(sync >= 0 && sync < at, `${dir} ${name} runs sync-wrangler-ids before deploy-order`)
     // every `wrangler … deploy` lives inside the quoted --deploy argument
     const deployArg = s.match(/--deploy "([^"]*)"/)?.[1]
-    assert.ok(deployArg && /wrangler\b.*\bdeploy\b/.test(deployArg), `${name} --deploy runs wrangler deploy`)
+    assert.ok(deployArg && /wrangler\b.*\bdeploy\b/.test(deployArg), `${dir} ${name} --deploy runs wrangler deploy`)
     const rest = s.replace(/--deploy "[^"]*"/, '')
-    assert.doesNotMatch(rest, /wrangler[^&"]*\bdeploy\b/, `${name} has no wrangler deploy outside --deploy`)
-    assert.match(s, /--migrate "[^"]*d1 migrations apply[^"]*"/)
+    assert.doesNotMatch(rest, /wrangler[^&"]*\bdeploy\b/, `${dir} ${name} has no wrangler deploy outside --deploy`)
+    assert.match(s, /--migrate "[^"]*d1 migrations apply[^"]*"/, `${dir} ${name} has a --migrate argument`)
   }
+}
+
+test('T6 — pins cf:staging / cf:deploy go through deploy-order.mjs after sync-wrangler-ids', () => {
+  assertGoesThroughDeployOrder('pocs/pins')
 })
 
 test('T7 — the real pins config: deploy-first as committed, migrate-first once the staging id is synced', () => {
@@ -137,4 +144,71 @@ test('T7 — the real pins config: deploy-first as committed, migrate-first once
   assert.equal(decideOrder(synced, 'staging').order, 'deploy-first')
   synced.env.staging.d1_databases[0].database_id = ID
   assert.deepEqual(decideOrder(synced, 'staging'), { order: 'migrate-first', database: 'pins-preview-db' })
+})
+
+// #4367 — the roll-out from the pins pilot to the other D1-backed Workers pocs.
+const ROLLOUT = ['booking-demo', 'crate', 'crouton-builder', 'gallery', 'notes', 'snippets', 'status']
+const NOT_YET = { 'apps/velo': 'own ticket', 'apps/kassa': 'own ticket' }
+const DEPLOY_SCRIPTS = ['cf:staging', 'cf:deploy']
+const SWITCH_HINT = 'switch cf:staging/cf:deploy to scripts/deploy-order.mjs (copy pocs/pins/package.json) — the crouton init --poc scaffold still writes the old order'
+
+// Folders under pocs/ and apps/ whose cf:staging or cf:deploy still migrates outside a --migrate "…" argument.
+const migratesOutsideWrapper = (body) =>
+  typeof body === 'string' && /d1 migrations apply/.test(body.replace(/--migrate "[^"]*"/g, ''))
+
+function usesOldOrder (folder) {
+  const file = join(repo, folder, 'package.json')
+  if (!existsSync(file)) return false
+  const scripts = JSON.parse(readFileSync(file, 'utf8')).scripts ?? {}
+  return DEPLOY_SCRIPTS.some((s) => migratesOutsideWrapper(scripts[s]))
+}
+
+function oldOrderFolders () {
+  const folders = ['pocs', 'apps'].flatMap((top) => readdirSync(join(repo, top)).map((name) => `${top}/${name}`))
+  return folders.filter(usesOldOrder)
+}
+
+const migrateDb = (script) => script.match(/--migrate "[^"]*d1 migrations apply (\S+)[^"]*"/)?.[1]
+
+// covers: T1
+test('T8 — the seven rolled-out pocs plus pins route cf:staging / cf:deploy through deploy-order.mjs', () => {
+  for (const app of [...ROLLOUT, 'pins']) assertGoesThroughDeployOrder(`pocs/${app}`)
+})
+
+// covers: T2
+test('T9 — no pocs/ package.json migrates in cf:staging / cf:deploy outside --migrate', () => {
+  const pocs = oldOrderFolders().filter((f) => f.startsWith('pocs/'))
+  assert.deepEqual(pocs, [], `${pocs.join(', ')}: ${SWITCH_HINT}`)
+})
+
+// covers: T3
+test('T10 — only the named not-yet apps (velo, kassa) still deploy first, and they still exist in the old shape', () => {
+  const old = oldOrderFolders()
+  for (const f of old) assert.ok(f in NOT_YET, `${f}: ${SWITCH_HINT}`)
+  for (const [f, why] of Object.entries(NOT_YET)) {
+    assert.equal(why, 'own ticket')
+    assert.ok(existsSync(join(repo, f, 'package.json')), `${f} still exists — drop it from NOT_YET`)
+    assert.ok(old.includes(f), `${f} no longer uses the old order — drop it from NOT_YET`)
+  }
+})
+
+// covers: T4
+test('T11 — each rolled-out wrangler.jsonc: --migrate names the configured db, committed order as expected, synced id migrates first', () => {
+  for (const app of ROLLOUT) {
+    const dir = join(repo, 'pocs', app)
+    const config = parseJsonc(readFileSync(join(dir, 'wrangler.jsonc'), 'utf8'))
+    const { scripts } = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    const stagingName = config.env.staging.d1_databases[0].database_name
+    assert.equal(migrateDb(scripts['cf:staging']), stagingName, `${app} cf:staging migrates ${stagingName}`)
+    assert.equal(migrateDb(scripts['cf:deploy']), config.d1_databases[0].database_name, `${app} cf:deploy migrates the top-level db`)
+
+    const committed = config.env.staging.d1_databases[0].database_id
+    const expected = isRealDatabaseId(committed) ? 'migrate-first' : 'deploy-first'
+    assert.equal(decideOrder(config, 'staging').order, expected, `${app} committed order`)
+    if (app === 'crate') assert.equal(expected, 'migrate-first', 'crate commits a real staging id')
+
+    const synced = structuredClone(config)
+    synced.env.staging.d1_databases[0].database_id = ID
+    assert.deepEqual(decideOrder(synced, 'staging'), { order: 'migrate-first', database: stagingName }, `${app} synced`)
+  }
 })
