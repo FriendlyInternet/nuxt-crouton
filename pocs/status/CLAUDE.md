@@ -18,6 +18,9 @@ logic — keep in step).
 A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
 closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
 (`app/utils/package-lines.ts`, `app/components/cards/Packages.vue`).
+Every PR review card whose file list was read also carries `payload.changes = { files, added, removed, top }` (top = the
+3 largest files, ties by name); the card shows one muted "N files · +A −R · …" line with a "See the code changes" link
+(`app/utils/change-line.ts`, `app/components/cards/Changes.vue`).
 A card whose ticket is claimed by a chat (#4019) — directly, or via its parent epic up to 3 hops; a PR card uses its
 `Closes #N` issue — carries `payload.claim = { chat, name }` and shows a `<chat> · <name>` badge
 (`server/utils/claim-core.ts`, a copy of `activeClaim` from `scripts/lib/chat-claim.mjs` — keep in step;
