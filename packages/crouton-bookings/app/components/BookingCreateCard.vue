@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, useTemplateRef } from 'vue'
+import { ref, computed, watch, onMounted, useTemplateRef } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
 import { applyBookingToForm, editBookingBody, groupLabel, initialFormFromBooking } from '../utils/booking-form'
@@ -138,6 +138,12 @@ watch(localLocationId, (v) => {
   }
   localSlotIds.value = []
   formState.slotIds = []
+  localGroupId.value = null
+})
+
+// Setup is done: the user's first location switch must reset the form too (#4331)
+onMounted(() => {
+  isInitialEditSetup.value = false
 })
 
 // Sync local slots to form state
@@ -449,7 +455,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
           <!-- Amount: − booked/free +, + stops at the number free -->
           <div v-if="localLocationId" class="flex flex-col gap-1.5">
             <span class="text-sm font-medium text-default">{{ t('bookings.createCard.amount') }}</span>
-            <div class="relative w-32">
+            <div v-if="maxQuantity >= 1 || availabilityLoading" class="relative w-32">
               <UInputNumber
                 v-model="formState.quantity"
                 :min="1"
@@ -465,6 +471,15 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
                 class="pointer-events-none absolute inset-y-0 start-18 flex items-center text-xs text-muted"
               >/{{ maxQuantity }}</span>
             </div>
+            <UBadge
+              v-else
+              color="neutral"
+              variant="soft"
+              size="sm"
+              class="self-start"
+            >
+              {{ t('bookings.calendar.fullyBooked') }}
+            </UBadge>
           </div>
 
           <!-- No location selected -->
