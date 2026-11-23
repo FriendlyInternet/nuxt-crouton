@@ -31,9 +31,9 @@ export default defineNuxtConfig({
     '@fyit/crouton-mcp-toolkit',
   ],
 
-  // Claude edits a page live (#3982): only the /mcp/pages tools, never the generic
-  // collection CRUD + token tools at /mcp. Connect with a pages token
-  // (POST /api/teams/:id/mcp-tokens { scope: 'pages' } → url).
+  // Claude edits a page live (#3982): only the page tools, never the generic
+  // collection CRUD + token tools. Page tools are served at <origin>/mcp once
+  // croutonAuth.mcpOAuth is on (#4098); Claude signs in there, no key.
   croutonMcpToolkit: {
     enabled: true,
     genericTools: false,
