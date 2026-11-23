@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compileScript, parse } from '@vue/compiler-sfc'
-import { computed, createSSRApp, defineComponent, h, ref } from 'vue'
+import { computed, createSSRApp, defineComponent, h, reactive, ref } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { loginHrefFor } from '../app/utils/walk'
 
@@ -103,6 +103,7 @@ const FIXTURES: Record<string, unknown> = {
 async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'success') {
   vi.stubGlobal('ref', ref)
   vi.stubGlobal('computed', computed)
+  vi.stubGlobal('reactive', reactive)
   vi.stubGlobal('loginHrefFor', loginHrefFor)
   vi.stubGlobal('definePageMeta', () => {})
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
