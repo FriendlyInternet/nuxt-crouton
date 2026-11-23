@@ -941,7 +941,7 @@ importers:
   packages/crouton-catalog:
     dependencies:
       '@fyit/crouton-core':
-        specifier: workspace:*
+        specifier: workspace:0.x
         version: link:../crouton-core
       nuxt:
         specifier: ^4.6.4
