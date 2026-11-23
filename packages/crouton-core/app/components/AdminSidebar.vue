@@ -89,6 +89,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
       const fullPath = buildAdminUrl(app.landingRoute.path)
       const isExactMatch = route.path === fullPath || route.path === `${fullPath}/`
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: fullPath,
@@ -119,6 +120,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     if (routeItems.length === 1) {
       const singleRoute = routeItems[0]!
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: singleRoute.to,
@@ -128,6 +130,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     } else {
       // Multi-item apps get a group header
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         defaultOpen: true,
@@ -179,6 +182,7 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
   if (children.length === 0) return null
 
   return {
+    value: 'team',
     label: t('navigation.team') || 'Team',
     icon: 'i-lucide-users',
     defaultOpen: true,
@@ -196,6 +200,7 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
   const basePath = `/admin/${teamParam}/crouton`
 
   return collectionsByKind.value.map(group => ({
+    value: `collections:${group.kind}`,
     label: t(`navigation.${group.kind}`) || group.label,
     icon: group.icon,
     defaultOpen: group.kind === 'content',
@@ -284,6 +289,12 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
   return [mainItems, bottomItems]
 })
+
+// Nuxt UI reads which groups start open (`defaultOpen`) only once, when the
+// menu mounts. Groups carry a fixed `value` above, and the menu is rebuilt when
+// the set of groups changes — e.g. the Team group arriving once the member's
+// rights load (#4394) — so every group gets its start-open setting again.
+const mainMenuKey = computed(() => navItems.value[0]!.map(item => item.value ?? item.label).join('|'))
 </script>
 
 <template>
@@ -328,6 +339,7 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
     <template #default="{ collapsed }">
       <UNavigationMenu
+        :key="mainMenuKey"
         :collapsed="collapsed"
         :items="navItems[0]"
         orientation="vertical"
