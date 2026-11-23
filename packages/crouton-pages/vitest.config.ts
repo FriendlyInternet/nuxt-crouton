@@ -2,6 +2,14 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  plugins: [{
+    // Editor extensions import their .vue node views; the unit tests only need the schema (#4436)
+    name: 'stub-vue-node-views',
+    enforce: 'pre',
+    load(id) {
+      if (id.split('?')[0]!.endsWith('.vue')) return 'export default {}'
+    }
+  }],
   resolve: {
     alias: {
       // app-level schema is not part of this layer; tests use a stub

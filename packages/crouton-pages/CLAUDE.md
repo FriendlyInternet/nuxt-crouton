@@ -241,7 +241,7 @@ The package includes a block-based page editor using TipTap and Nuxt UI page com
 | `ctaBlock` | UPageCTA | Call-to-action banner |
 | `cardGridBlock` | UPageGrid + UPageCard | Grid of cards |
 | `separatorBlock` | USeparator | Visual divider |
-| `richTextBlock` | prose div | Standard text content |
+| `richTextBlock` | prose div | Standard text content. Editor node `editor/extensions/rich-text-block.ts` (#4436) keeps it intact through an editor save (read-only view; not offered in the insert menu). |
 | `qrCodeBlock` | CroutonQrCode | Scannable QR code linking to a CMS page (via the `page` field picker) or a custom URL. Resolves `pageId` → absolute public URL with `usePageLink().resolve()` + `useRequestURL().origin`. |
 | `paneBlock` | CroutonLayoutRenderer (render) / CroutonLayout (editor) | **Bridge block (#716, completed #706)** — hosts a *pane layout* inside the document flow. `attrs.layout` is a `LayoutTree` (the "layout is data" shape) + `attrs.height`. Public render delegates to crouton-core's `CroutonLayoutRenderer`; the **in-editor composer** (`Blocks/Views/PaneBlockView.vue`) hosts the editable `CroutonLayout` so authors arrange panes inline. The TipTap node (`editor/extensions/pane-block.ts`) round-trips `attrs.layout` through an editor save (serializes to `data-layout` JSON; JSON content storage preserves the object). The pane tree serializes into the page's existing `content` JSON — no new page type or table. `attrs.layout` is untrusted → `sanitizeLayoutTree` on render; the renderer allowlists each leaf `blockId`. |
 
