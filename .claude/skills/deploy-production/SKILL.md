@@ -50,7 +50,7 @@ happen by accident or as a side effect of an agent flow.
 - **Local:** from the app dir:
   ```bash
   cd apps/{app}
-  pnpm cf:deploy   # build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote
+  pnpm cf:deploy   # velo/kassa: build → wrangler deploy → sync:ids → d1 migrations apply --remote; pins, booking-demo, crate, crouton-builder, gallery, notes, snippets, status: build → sync:ids → scripts/deploy-order.mjs (#4367)
   # first bootstrap only — commit the written-back ids:
   git add apps/{app}/wrangler.jsonc && git commit -m "chore({app}): commit provisioned prod D1/KV ids"
   ```

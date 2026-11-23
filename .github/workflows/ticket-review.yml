@@ -136,6 +136,7 @@ jobs:
           # branch as a read-only second checkout (blank when it has none → the main checkout).
           node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json" || [ $? -eq 3 ]
           node scripts/lib/epic-steps.mjs narrow "$SUBJECT" "$D/subs.json" "$D/steps.json" > "$D/tickets.json"
+          node scripts/lib/title-rule.mjs notes "$D/tickets.json" >> "$D/epic.md"
           echo "EPIC_SRC=$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")" >> "$GITHUB_ENV"
           echo "tickets: $(jq length "$D/tickets.json") (subject: ${SUBJECT:-all})"
           node scripts/ticket-review-actions.mjs gather "$D/comments.json" "$D/epic.json" "$D/tickets.json" "$D/steps.json" --subject "$SUBJECT"
@@ -194,6 +195,7 @@ jobs:
               # || true: removing a label the epic does not carry (steps:approved never set) errors, and that is fine.
               unlabel) gh issue edit "$N" --remove-label "$(jq -r .label <<<"$A")" 2>/dev/null || true ;;
               block) gh issue edit "$N" --add-label "status:blocked" ;;
+              retitle) LIVE="$(gh issue view "$N" --json title --jq .title)"; if node scripts/ticket-review-actions.mjs retitle-ok "$A" "$LIVE"; then gh issue edit "$N" --title "$(jq -r .title <<<"$A")" && echo "retitle #$N"; else echo "retitle #$N skipped: title changed during review"; fi ;;
             esac
           done < "$D/actions.jsonl"
 

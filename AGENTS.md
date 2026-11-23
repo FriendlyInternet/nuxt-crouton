@@ -195,6 +195,8 @@ concern.)
 - **Status the moment you start** (`in-progress`), `blocked` when waiting, drop on close.
 - **Recurring chores are standalone**, never sub-issues of a deliverable epic (a never-closing child
   pins the epic open forever).
+- **Titles are plain sentences** — at most 140 characters, say what the owner will notice, no area
+  prefix (the component label shows the area).
 
 **Write as a hypothesis** (default; trivial chores opt out) — open the body with `## Hypothesis`:
 *We think that* if X then Y · *We'll do that by* … · *We'll be right if* … · *We'll know by* …

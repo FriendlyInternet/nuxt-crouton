@@ -45,6 +45,7 @@ signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
 `/apps` is the five-tab page (Apps, To test, Decisions, Changelog, Clock).
+The Changelog tags each merged PR from its linked issue's `app:`/`poc:`/`pkg:` label (one cached issue search in `changelog.get.ts`, rules in `server/utils/changelog-core.ts`; bookkeeping labels never decide a tag), groups rows by Brussels day and hides chores behind "Show chores".
 
 ## Clock
 
