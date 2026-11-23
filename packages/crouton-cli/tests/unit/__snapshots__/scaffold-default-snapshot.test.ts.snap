@@ -23,7 +23,9 @@ exports[`scaffoldApp default output is unchanged by --site (#4263) > app scaffol
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx wrangler d1 migrations apply demo-plain-db --local",
     "db:migrate:prod": "npx wrangler d1 migrations apply demo-plain-db --remote",
-    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote"
+    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote",
+    "db:seed": "crouton-seed --db demo-plain-db",
+    "db:seed:staging": "crouton-seed --db demo-plain-staging-db --remote"
   },
   "dependencies": {
     "@fyit/crouton-core": "workspace:*",
@@ -420,7 +422,9 @@ exports[`scaffoldApp default output is unchanged by --site (#4263) > poc scaffol
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx wrangler d1 migrations apply demo-plain-db --local",
     "db:migrate:prod": "npx wrangler d1 migrations apply demo-plain-db --remote",
-    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote"
+    "db:migrate:staging": "npx wrangler d1 migrations apply demo-plain-staging-db --env staging --remote",
+    "db:seed": "crouton-seed --db demo-plain-db",
+    "db:seed:staging": "crouton-seed --db demo-plain-staging-db --remote"
   },
   "dependencies": {
     "@fyit/crouton-core": "workspace:*",
