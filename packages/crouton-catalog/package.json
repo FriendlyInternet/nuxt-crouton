@@ -56,7 +56,7 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "zod": "^3.0.0"
   },
   "devDependencies": {

@@ -9,9 +9,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse } from '@vue/compiler-sfc'
-import { countHits, compare, parseNameStatus, checkChanged, summarize, formatRegression, GENERATED_HINT } from './check-runtime-cost.mjs'
+import { readFileSync } from 'node:fs'
+import { countHits, compare, parseNameStatus, checkChanged, summarize, formatRegression, GENERATED_HINT, F_HINT } from './check-runtime-cost.mjs'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-runtime-cost.mjs')
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dirs = []
 after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }) })
 
@@ -109,7 +111,7 @@ test('6 · removing a hit passes', () => {
 test('7 · without --base-ref it prints totals and exits 0', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
   assert.equal(r.status, 0, r.stdout)
-  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ allowed=\d+ unparsable=\d+$/m)
+  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ F=\d+ allowed=\d+ unparsable=\d+$/m)
   assert.match(r.stdout, /files=1 A=1 B=0/)
 })
 
@@ -148,7 +150,7 @@ test('countHits · at most one B hit per element', () => {
 
 // covers: T8
 test('countHits · a file without a template has no hits', () => {
-  assert.deepEqual(countHits('<script setup>\nconst a = 1\n</script>\n', parse), { A: [], B: [], C: [], D: [], E: [], allowed: 0, unparsable: false })
+  assert.deepEqual(countHits('<script setup>\nconst a = 1\n</script>\n', parse), { A: [], B: [], C: [], D: [], E: [], F: [], allowed: 0, unparsable: false })
 })
 
 test('parseNameStatus · keeps A/M/R .vue under the three roots, by new path', () => {
@@ -187,8 +189,8 @@ test('formatRegression · B lines and the generated-file note', () => {
 
 // covers: T8
 test('compare · rename maps to the old base count; a missing base is 0', () => {
-  const one = { A: [{ line: 1, tag: 'UPopover', under: 'v-for@1' }], B: [], C: [], D: [], E: [] }
-  const none = { A: [], B: [], C: [], D: [], E: [] }
+  const one = { A: [{ line: 1, tag: 'UPopover', under: 'v-for@1' }], B: [], C: [], D: [], E: [], F: [] }
+  const none = { A: [], B: [], C: [], D: [], E: [], F: [] }
   assert.deepEqual(compare({ 'old.vue': one }, { 'new.vue': one }, { 'new.vue': 'old.vue' }), [])
   assert.equal(compare({}, { 'n.vue': one })[0].base, 0)
   assert.deepEqual(compare({ 'a.vue': one }, { 'a.vue': none }), [])
@@ -282,10 +284,10 @@ test('T5 · a failure lists all hits of the kind under a label', () => {
 })
 
 // covers: T6
-test('T6 · the totals line carries all five kinds', () => {
+test('T6 · the totals line carries all six kinds', () => {
   const r = runCase({ head: { [`${C}/New.vue`]: POPOVER_LOOP }, args: [] })
   assert.equal(r.status, 0, r.stdout)
-  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ allowed=\d+ unparsable=\d+$/m)
+  assert.match(r.stdout, /^\[runtime-cost\] files=\d+ A=\d+ B=\d+ C=\d+ D=\d+ E=\d+ F=\d+ allowed=\d+ unparsable=\d+$/m)
 })
 
 // covers: T7
@@ -297,4 +299,43 @@ test('T7 · C going down while D goes up names only D', () => {
   assert.equal(r.status, 1, r.stdout)
   assert.match(r.stdout, /: D 0 → 1/)
   assert.doesNotMatch(r.stdout, /: C /)
+})
+
+// ── #4330: F sideways row that can scroll vertically ──
+
+// covers: #4330 T1
+test('#4330 T1 · F: a bare overflow-x-auto tab row is a hit; a y-stopped or bound one is not', () => {
+  const f = body => countHits(sfc(body), parse).F.length
+  assert.equal(f(`    <UTabs :items="t" :ui="{ list: 'overflow-x-auto', trigger: 'min-w-fit' }" />`), 1)
+  assert.equal(f(`    <UNavigationMenu :items="t" :ui="{ list: 'flex overflow-x-scroll' }" />`), 1)
+  assert.equal(f('    <ul role="tablist" class="flex gap-1 overflow-x-auto"><li /></ul>'), 1)
+  assert.equal(f(`    <UTabs :items="t" :ui="{ list: 'overflow-x-auto overflow-y-hidden' }" />`), 0)
+  assert.equal(f(`    <UTabs :items="t" :ui="{ list: SCROLL_ROW_X, trigger: 'min-w-fit' }" />`), 0)
+  assert.equal(f('    <ul role="tablist" class="flex gap-1" :class="SCROLL_ROW_X"><li /></ul>'), 0)
+  assert.equal(f('    <ul role="tablist" class="flex overflow-x-auto overflow-hidden"><li /></ul>'), 0)
+  assert.equal(f('    <div class="overflow-x-auto"><table /></div>'), 0)
+})
+
+// covers: #4330 T2
+test('#4330 T2 · corpus: the three fixed tab rows have no F hits', () => {
+  const files = [
+    'packages/crouton-bookings/app/components/BookingCreateCard.vue',
+    'packages/crouton-sales/app/components/Client/CategoryTabs.vue',
+    'packages/crouton-core/app/components/TabsPanel.vue',
+  ]
+  const total = files.reduce((n, f) => {
+    const c = countHits(readFileSync(join(REPO, f), 'utf8'), parse)
+    assert.equal(c.unparsable, false, f)
+    return n + c.F.length
+  }, 0)
+  assert.equal(total, 0)
+})
+
+// covers: #4330 T3
+test('#4330 T3 · CLI: a new bare tab row fails with F 0 → 1 and the hint', () => {
+  const r = runCase({ head: { [`${C}/Tabs.vue`]: sfc(`    <UTabs :ui="{ list: 'overflow-x-auto' }" />`) } })
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stdout, /Tabs\.vue: F 0 → 1/)
+  assert.ok(r.stdout.includes(F_HINT), r.stdout)
+  assert.match(r.stdout, / F=1 /)
 })

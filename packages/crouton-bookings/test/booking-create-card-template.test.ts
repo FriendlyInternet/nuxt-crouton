@@ -47,7 +47,7 @@ describe('BookingCreateCard.vue (#4112)', () => {
     const tabs = find('UTabs')
     expect(tabs).toHaveLength(1)
     const ui = bound(tabs[0]!.node, 'ui') ?? ''
-    expect(ui).toContain('overflow-x-auto')
+    expect(ui).toContain('SCROLL_ROW_X') // shared sideways-only scroll row classes (#4330)
     expect(ui).toContain('min-w-fit')
     expect(template).not.toContain('w-52')
   })
