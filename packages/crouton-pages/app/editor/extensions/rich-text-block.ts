@@ -84,5 +84,3 @@ export const RichTextBlock = Node.create<RichTextBlockOptions>({
     return VueNodeViewRenderer(RichTextBlockView as any)
   }
 })
-
-export default RichTextBlock

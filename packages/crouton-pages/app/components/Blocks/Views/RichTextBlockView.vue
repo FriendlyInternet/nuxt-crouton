@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// fallow-ignore-file unused-component-props -- TipTap passes updateAttributes to every node view; declaring it keeps it from falling through onto the DOM as an attribute, even though this read-only view never edits
 /**
  * Rich Text Block Editor View
  *

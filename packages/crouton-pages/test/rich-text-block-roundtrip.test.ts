@@ -8,11 +8,19 @@
  * back to an empty document (the blank page).
  */
 import { describe, it, expect } from 'vitest'
-import { getSchema } from '@tiptap/core'
-import Document from '@tiptap/extension-document'
-import Paragraph from '@tiptap/extension-paragraph'
-import Text from '@tiptap/extension-text'
+import { getSchema, Node } from '@tiptap/core'
 import { PageBlocks } from '../app/editor/extensions/page-blocks'
+
+// Minimal doc/paragraph/text nodes, so the test needs no extra @tiptap packages
+const Document = Node.create({ name: 'doc', topNode: true, content: 'block+' })
+const Paragraph = Node.create({
+  name: 'paragraph',
+  group: 'block',
+  content: 'inline*',
+  parseHTML: () => [{ tag: 'p' }],
+  renderHTML: () => ['p', 0]
+})
+const Text = Node.create({ name: 'text', group: 'inline' })
 
 const schema = getSchema([
   Document,
