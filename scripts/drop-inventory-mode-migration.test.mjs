@@ -94,6 +94,10 @@ for (const folder of FOLDERS) {
     const { entry, journal } = dropEntry(folder)
     const prevEntry = journal.entries.find(e => e.idx === entry.idx - 1)
     assert.ok(prevEntry, `${folder}: there must be a migration before it`)
+    assert.equal(journal.entries.filter(e => e.tag === entry.tag).length, 1, `${folder}: it must be in the journal exactly once`)
+    const sorted = [...journal.entries].sort((a, b) => a.idx - b.idx)
+    assert.equal(sorted[sorted.indexOf(entry) - 1], prevEntry, `${folder}: it must come right after its predecessor`)
+    assert.equal(entry.idx, prevEntry.idx + 1, `${folder}: its idx must be the predecessor's idx + 1`)
     assert.ok(dropFile(folder).startsWith(String(entry.idx).padStart(4, '0') + '_'))
 
     const dir = migrationsDir(folder)
