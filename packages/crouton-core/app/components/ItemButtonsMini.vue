@@ -5,9 +5,9 @@
       <!-- With tooltip (always show when disabled) -->
       <UTooltip
         v-if="effectiveViewTooltip.length > 0 || disabled"
-        :popper="{ placement: 'left', arrow: false }"
+        :content="{ side: 'left' }"
       >
-        <template #text>
+        <template #content>
           <span class="italic">{{ effectiveViewTooltip || t('table.previewOnly') }}</span>
         </template>
 
@@ -15,6 +15,7 @@
           :loading="viewLoading"
           :disabled="disabled"
           icon="i-lucide-eye"
+          :aria-label="viewLabel"
           color="neutral"
           variant="soft"
           size="xs"
@@ -29,6 +30,7 @@
         :loading="viewLoading"
         :disabled="disabled"
         icon="i-lucide-eye"
+        :aria-label="viewLabel"
         color="neutral"
         variant="soft"
         size="xs"
@@ -42,9 +44,9 @@
       <!-- With tooltip (always show when disabled) -->
       <UTooltip
         v-if="effectiveDeleteTooltip.length > 0 || disabled"
-        :popper="{ placement: 'left', arrow: false }"
+        :content="{ side: 'left' }"
       >
-        <template #text>
+        <template #content>
           <span class="italic">{{ effectiveDeleteTooltip || t('table.previewOnly') }}</span>
         </template>
 
@@ -52,6 +54,7 @@
           :loading="deleteLoading"
           :disabled="disabled"
           icon="i-lucide-trash-2"
+          :aria-label="deleteLabel"
           color="error"
           variant="soft"
           size="xs"
@@ -66,6 +69,7 @@
         :loading="deleteLoading"
         :disabled="disabled"
         icon="i-lucide-trash-2"
+        :aria-label="deleteLabel"
         color="error"
         variant="soft"
         size="xs"
@@ -79,15 +83,16 @@
       <!-- With tooltip (always show when disabled) -->
       <UTooltip
         v-if="effectiveUpdateTooltip.length > 0 || disabled"
-        :popper="{ placement: 'left', arrow: false }"
+        :content="{ side: 'left' }"
       >
-        <template #text>
+        <template #content>
           <span class="italic">{{ effectiveUpdateTooltip || t('table.previewOnly') }}</span>
         </template>
         <UButton
           :loading="updateLoading"
           :disabled="disabled"
           icon="i-lucide-pencil"
+          :aria-label="updateLabel"
           color="neutral"
           size="xs"
           :class="buttonClasses"
@@ -100,6 +105,7 @@
         :loading="updateLoading"
         :disabled="disabled"
         icon="i-lucide-pencil"
+        :aria-label="updateLabel"
         color="primary"
         variant="soft"
         size="xs"
@@ -165,8 +171,18 @@ const props = defineProps({
   disabledTooltip: {
     type: String,
     default: ''
+  },
+  itemName: {
+    type: String,
+    default: ''
   }
 })
+
+// Icon-only buttons need an accessible name; include the item name when given
+const label = (key: string) => props.itemName ? t('table.actionWithName', { action: t(key), name: props.itemName }) : t(key)
+const viewLabel = computed(() => label('common.view'))
+const updateLabel = computed(() => label('common.edit'))
+const deleteLabel = computed(() => label('common.delete'))
 
 // Use disabled tooltip when disabled, otherwise use button-specific tooltip
 const effectiveViewTooltip = computed(() => props.disabled && props.disabledTooltip ? props.disabledTooltip : props.viewTooltip)

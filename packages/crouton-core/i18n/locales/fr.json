@@ -28,6 +28,7 @@
     "create": "Créer",
     "edit": "Modifier",
     "delete": "Supprimer",
+    "view": "Voir",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "yes": "Oui",
@@ -199,6 +200,7 @@
   },
   "table": {
     "previewOnly": "Aperçu uniquement",
+    "actionWithName": "{action} {name}",
     "search": "Rechercher",
     "display": "Affichage",
     "selectAll": "Tout sélectionner",

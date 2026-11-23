@@ -28,6 +28,7 @@
     "create": "Aanmaken",
     "edit": "Bewerken",
     "delete": "Verwijderen",
+    "view": "Bekijken",
     "cancel": "Annuleren",
     "save": "Opslaan",
     "yes": "Ja",
@@ -199,6 +200,7 @@
   },
   "table": {
     "previewOnly": "Alleen voorbeeld",
+    "actionWithName": "{action} {name}",
     "search": "Zoeken",
     "display": "Weergave",
     "selectAll": "Alles selecteren",
