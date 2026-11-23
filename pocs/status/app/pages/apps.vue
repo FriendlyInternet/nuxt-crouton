@@ -60,11 +60,14 @@ const expanded = ref<string | null>(null)
 // --- Changelog ---
 const search = ref('')
 const areaFilter = ref<string | null>(null)
+const showChores = ref(false)
 const rows = computed(() => changelogRes.value?.data ?? [])
-const areas = computed(() => [...new Set(rows.value.map(r => r.area))].sort())
+// Chores are hidden unless "Show chores" is on; the area chips count only what is shown.
+const shownRows = computed(() => rows.value.filter(r => showChores.value || r.kind !== 'chore'))
+const areas = computed(() => [...new Set(shownRows.value.map(r => r.area))].sort())
 const filteredRows = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return rows.value.filter(r =>
+  return shownRows.value.filter(r =>
     (!areaFilter.value || r.area === areaFilter.value)
     && (!q || r.title.toLowerCase().includes(q) || r.area.toLowerCase().includes(q))
   )
@@ -85,7 +88,7 @@ const filteredRows = computed(() => {
         <DashboardDecisionsTab v-model:expanded="expanded" :error="decisionsRes?.error" :pending="decisionsStatus === 'pending'" :decisions="decisions" :open-questions="openQuestions" />
       </template>
       <template #changelog>
-        <DashboardChangelogTab v-model:search="search" v-model:area="areaFilter" :error="changelogRes?.error" :pending="changelogStatus === 'pending'" :areas="areas" :rows="filteredRows" />
+        <DashboardChangelogTab v-model:search="search" v-model:area="areaFilter" v-model:show-chores="showChores" :error="changelogRes?.error" :pending="changelogStatus === 'pending'" :areas="areas" :rows="filteredRows" />
       </template>
       <template #clock>
         <DashboardClockTab :error="clockRes?.error" :pending="clockStatus === 'pending'" :rows="clockRows" />

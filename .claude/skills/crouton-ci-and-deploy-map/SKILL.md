@@ -119,19 +119,21 @@ Concurrency: `deploy-<app>-<env>`, `cancel-in-progress: false` (a cancel mid-mig
 - **Two domains (#133)**: top-level `routes` → `<app>.friendlyinter.net` (prod, `custom_domain: true`); `env.staging.routes` → `<app>.pmcp.dev`.
 - **Bindings do not inherit across envs**: `env.staging` redeclares D1 (`<app>-staging-db`) and blob/KV with separate ids. Velo binds R2 as `BLOB` (no KV); other apps may bind `KV`.
 - **Id-less auto-provisioning**: wrangler auto-creates missing D1/KV on first deploy; each app's `scripts/sync-wrangler-ids.mjs` then writes the provisioned ids back into the source `wrangler.jsonc` (remote `d1 migrations apply` reads the SOURCE config and needs real ids). Rule: commit the synced ids.
-- **The nitro#3429 env-stripping workaround**: the build drops named environments from the generated config, so each app's `scripts/inject-wrangler-env.mjs` re-merges the `env` block. Velo's `cf:staging` runs inject **twice** — before deploy and again before migrate (sync:ids rewrites files in between).
+- **The nitro#3429 env-stripping workaround**: the build drops named environments from the generated config, so each app's `scripts/inject-wrangler-env.mjs` re-merges the `env` block. Velo's `cf:staging` runs inject right after the build, and again inside `deploy-order.mjs --resync` (after sync:ids rewrites files) only when the order falls back to deploy-first (#4389).
 
 Velo's exact scripts (verified in `apps/velo/package.json`):
 
 ```bash
 # cf:deploy (prod)
-NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy \
-  && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply velo-db --remote
+NITRO_PRESET=cloudflare_module nuxt build \
+  && node ../../scripts/deploy-order.mjs --deploy "npx wrangler --cwd .output deploy" \
+  --resync "node scripts/sync-wrangler-ids.mjs" \
+  --migrate "npx wrangler d1 migrations apply velo-db --remote"
 # cf:staging
 NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs \
-  && npx wrangler deploy --config .output/server/wrangler.json --env staging \
-  && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs \
-  && npx wrangler d1 migrations apply velo-staging-db --env staging --remote
+  && node ../../scripts/deploy-order.mjs --env staging --deploy "npx wrangler deploy --config .output/server/wrangler.json --env staging" \
+  --resync "node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs" \
+  --migrate "npx wrangler d1 migrations apply velo-staging-db --env staging --remote"
 ```
 
 The demo seed is **not** in the app script: `deploy-app.yml`'s *Seed collection + demo data* (#1370) step runs
@@ -140,7 +142,7 @@ The demo seed is **not** in the app script: `deploy-app.yml`'s *Seed collection 
 
 ### Migrations in CI + the #138 rule
 
-Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> [--env staging] --remote`. `migrations_dir: server/db/migrations/sqlite` is declared per-binding in `wrangler.jsonc`. **The #138 rule**: the `wrangler deploy` step may use `--config .output/server/wrangler.json`, but the `d1 migrations apply` step must NOT pass `--config .output/...` — it doubles the migrations path ("no migrations" symptom) and must read the source `wrangler.jsonc` (which is why sync:ids has to run first). Canonical wording lives only in root CLAUDE.md ("The pattern, end to end"); the `deploy` skill doesn't restate it. Local/"No schema files found" migration gotchas belong to the `db-migrations` skill.
+Flow for pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status (#4319, #4367): build → sync ids → `scripts/deploy-order.mjs`, which migrates first when the database already exists, else deploys first, re-syncs and then migrates. Flow for velo and kassa (#4389): build → (inject) → `scripts/deploy-order.mjs` — ids are committed, so no pre-sync. alexdeforce, kvr and sintlukas deploy to Pages and loop-station has no database, so neither applies. `migrations_dir: server/db/migrations/sqlite` is declared per-binding in `wrangler.jsonc`. **The #138 rule**: the `wrangler deploy` step may use `--config .output/server/wrangler.json`, but the `d1 migrations apply` step must NOT pass `--config .output/...` — it doubles the migrations path ("no migrations" symptom) and must read the source `wrangler.jsonc` (which is why sync:ids has to run first). Canonical wording lives only in root CLAUDE.md ("The pattern, end to end"); the `deploy` skill doesn't restate it. Local/"No schema files found" migration gotchas belong to the `db-migrations` skill.
 
 ## 3. Secrets / tokens / vars
 
@@ -253,7 +255,7 @@ for n in 1093 1094 1097 1036 1037; do gh issue view $n --json number,state -q '"
 The pattern, end to end:
 - **`wrangler.jsonc`** (Workers): **no** `pages_build_output_dir`; `compatibility_flags: ["nodejs_compat"]`; bindings `DB` (D1), `KV`/`BLOB` (R2) as needed — **id-less** so the first deploy auto-provisions them; plus an **`env.staging`** block with **separate** staging ids + a `<app>.pmcp.dev` custom-domain `route` (bindings do NOT inherit across envs). `name`/`main`/`assets` are injected by the preset at build.
 - **Build preset**: `NITRO_PRESET=cloudflare_module nuxt build` → output in `.output/`.
-- **Scripts**: `cf:deploy` (prod: build → `wrangler deploy` auto-provision → `sync:ids` → migrate `--remote`), `cf:staging` (build → `inject-wrangler-env` → `wrangler deploy --env staging` → `sync:ids` → migrate), `sync:ids` (writes provisioned ids back into `wrangler.jsonc`), `db:migrate*`. NB: the staging migrate step must **not** pass `--config .output/...` (doubles the path → "no migrations"; #138).
+- **Scripts**: `cf:deploy` (prod: build → `wrangler deploy` auto-provision → `sync:ids` → migrate `--remote`), `cf:staging` (build → `inject-wrangler-env` → `wrangler deploy --env staging` → `sync:ids` → migrate) — that is the CLI scaffold's order; pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status run `sync:ids → scripts/deploy-order.mjs` instead (#4367), and velo and kassa run `scripts/deploy-order.mjs` with their ids committed (#4389), `sync:ids` (writes provisioned ids back into `wrangler.jsonc`), `db:migrate*`. NB: the staging migrate step must **not** pass `--config .output/...` (doubles the path → "no migrations"; #138).
 - **CI** (`.github/workflows/deploy-apps.yml` — ONE generic workflow for all apps, #481/#638; the old per-app `deploy-<app>.yml` callers are retired): an app opts in with a `deploy.config.json` (`stagingUrl` / `productionUrl` / `layerPackages`); the `detect` job derives each app's watch paths from its `package.json` (app dir + lockfile + every `@fyit/*` dep, transitively — #2397, no hand-written `watchPaths` list) and fans out one reusable **`deploy-app.yml`** call per affected app. Merge to `main` / PR (path-filtered) → staging; manual `workflow_dispatch` env=production → prod (#347). Auth via **repo-level** secrets `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (the token needs **account** Workers Scripts/D1/KV/R2 Edit **and** **zone** Workers Routes + DNS Edit for custom-domain binding).
 - **First-time setup / migrating a Pages app**: run the **`/deploy` skill** — don't hand-roll it. Worker secrets do NOT transfer from Pages — re-set them (`wrangler secret bulk … --env staging`), pointing `BETTER_AUTH_URL` at the deployed URL.
 

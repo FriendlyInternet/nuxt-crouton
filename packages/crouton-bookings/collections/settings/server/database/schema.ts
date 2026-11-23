@@ -30,6 +30,8 @@ export const bookingsSettings = sqliteTable('bookings_settings', {
   order: integer('order').notNull().$default(() => 0),
   statuses: jsonColumn('statuses').$default(() => (null)),
   groups: jsonColumn('groups').$default(() => (null)),
+  // Team switch for booking emails (#3929) — a SQL default, so existing rows stay on
+  sendEmails: integer('sendEmails', { mode: 'boolean' }).notNull().default(true),
 
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),

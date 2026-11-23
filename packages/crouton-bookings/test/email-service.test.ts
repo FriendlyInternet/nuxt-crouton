@@ -7,11 +7,16 @@ vi.mock('nitropack/runtime', () => ({ useNitroApp: () => ({ hooks: { callHook: (
 const TEMPLATES = `CREATE TABLE bookings_emailtemplates (id text primary key, teamId text not null, owner text not null, "order" integer not null, name text not null, subject text not null, body text not null, fromEmail text not null, triggerType text not null, recipientType text not null, isActive integer, daysOffset integer, locationId text, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);`
 const LOGS = `CREATE TABLE bookings_emaillogs (id text primary key, teamId text not null, owner text not null, "order" integer not null, bookingId text, templateId text, recipientEmail text not null, triggerType text not null, status text not null, sentAt text, error text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);`
 
+const SETTINGS = `CREATE TABLE bookings_settings (id text primary key, teamId text not null, owner text not null, "order" integer not null, statuses text, groups text, sendEmails integer not null default 1, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);`
+
 let db: any
 const send = vi.fn()
 const tpl = (id: string, team: string, active: number, subject = 'Hi {{ customer_name }}', body = 'body', translations: Record<string, Record<string, string>> | null = null) =>
   db.$client.prepare(`insert into bookings_emailtemplates values (?,?,'u1',0,'n',?,?,'a@b.c','booking_created','customer',?,null,null,?,1,1,'u1','u1')`).run(id, team, subject, body, active, translations ? JSON.stringify(translations) : null)
 const logs = () => db.$client.prepare('select * from bookings_emaillogs').all()
+const setting = (id: string, team: string, sendEmails: number) =>
+  db.$client.prepare(`insert into bookings_settings (id,teamId,owner,"order",sendEmails,createdAt,updatedAt,createdBy,updatedBy) values (?,?,'u1',0,?,1,1,'u1','u1')`).run(id, team, sendEmails)
+const OFF = 'Booking emails are switched off in the booking settings'
 const booking = { id: 'b1', teamId: 't1', owner: 'u1', location: 'l1', date: '2026-11-09', slot: ['am'], status: 'active' }
 const opts = { booking, triggerType: 'booking_created', teamId: 't1', userId: 'u1', recipientEmail: 'a@example.com' } as any
 
@@ -124,5 +129,68 @@ describe('a booking email is never sent blank (#4244)', () => {
     expect(send).toHaveBeenCalledTimes(1)
     expect(send.mock.calls[0][0]).toMatchObject({ subject: 'Bonjour', html: 'Corps' })
     expect(logs()[0]).toMatchObject({ status: 'sent' })
+  })
+})
+
+describe('the team "Send emails" switch (#3929)', () => {
+  // covers: T1
+  it('switch off: nothing sent, one skipped row with the reason, success + skipped', async () => {
+    const m = await setup([TEMPLATES, LOGS, SETTINGS])
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tpl('a', 't1', 1)
+    setting('s1', 't1', 0)
+    const res = await m.sendBookingEmails(opts)
+    expect(send).not.toHaveBeenCalled()
+    expect(res).toMatchObject({ success: true, skipped: true })
+    expect(res.customerResult).toMatchObject({ success: true, sent: false, skipped: true, reason: 'team-emails-off', templateId: 'a' })
+    const rows = logs()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ status: 'skipped', error: OFF, recipientEmail: 'a@example.com', templateId: 'a', sentAt: null })
+  })
+
+  // covers: T3
+  it('the switch is per team: t1 off is skipped, t2 on still sends', async () => {
+    const m = await setup([TEMPLATES, LOGS, SETTINGS])
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tpl('a', 't1', 1)
+    tpl('b', 't2', 1)
+    setting('s1', 't1', 0)
+    setting('s2', 't2', 1)
+    const r1 = await m.sendBookingEmails(opts)
+    const r2 = await m.sendBookingEmails({ ...opts, teamId: 't2', booking: { ...booking, teamId: 't2' } })
+    expect(r1.skipped).toBe(true)
+    expect(r2.skipped).toBeUndefined()
+    expect(send).toHaveBeenCalledTimes(1)
+    const rows = logs()
+    expect(rows.find((r: any) => r.teamId === 't1')).toMatchObject({ status: 'skipped' })
+    expect(rows.find((r: any) => r.teamId === 't2')).toMatchObject({ status: 'sent' })
+  })
+
+  it('any off row wins: one row on and one row off for the team is off', async () => {
+    const m = await setup([TEMPLATES, LOGS, SETTINGS])
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tpl('a', 't1', 1)
+    setting('s1', 't1', 1)
+    setting('s2', 't1', 0)
+    const res = await m.sendBookingEmails(opts)
+    expect(send).not.toHaveBeenCalled()
+    expect(res.skipped).toBe(true)
+  })
+
+  it('no settings row for the team: still sends (default on)', async () => {
+    const m = await setup([TEMPLATES, LOGS, SETTINGS])
+    tpl('a', 't1', 1)
+    const res = await m.sendBookingEmails(opts)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(res.skipped).toBeUndefined()
+    expect(logs()[0]).toMatchObject({ status: 'sent' })
+  })
+
+  it('settings row inserted without sendEmails: the column default keeps it on', async () => {
+    const m = await setup([TEMPLATES, LOGS, SETTINGS])
+    tpl('a', 't1', 1)
+    db.$client.prepare(`insert into bookings_settings (id,teamId,owner,"order",createdAt,updatedAt,createdBy,updatedBy) values ('s1','t1','u1',0,1,1,'u1','u1')`).run()
+    await m.sendBookingEmails(opts)
+    expect(send).toHaveBeenCalledTimes(1)
   })
 })

@@ -402,7 +402,8 @@ export default defineEventHandler(async (event) => {
             locale,
             event
           )
-          return result.success ? 1 : 0
+          // A send held back by the team's switch is not "sent" (#3929)
+          return result.success && !result.skipped ? 1 : 0
         }
         catch (err) {
           console.error('[batch-bookings] Email trigger failed:', err)

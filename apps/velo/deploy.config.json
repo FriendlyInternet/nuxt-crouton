@@ -59,6 +59,7 @@
     },
     "required": true,
     "reads": [
+      { "path": "/api/teams/{teamId}/bookings-settings" },
       {
         "path": "/api/teams/{teamId}/crouton-layouts/default",
         "expectStatus": [200, 204]
