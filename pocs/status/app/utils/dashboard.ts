@@ -22,7 +22,16 @@ export type AppCardRow = AppRow & { toTest: ToTestItem[] }
 export interface ToTestGroup { app: string, list: ToTestItem[], stagingUrl: string | null }
 export interface Decision { date: string, epic: number, decision: string, why: string, rejected: string }
 export interface OpenQuestion { number: number, title: string, url: string }
-export interface ChangelogRow { date: string, number: number, title: string, area: string, url: string }
+/** Mirrors ChangelogRow in server/utils/changelog-core.ts. */
+export interface ChangelogRow {
+  date: string
+  mergedAt: string
+  number: number
+  title: string
+  area: string
+  kind: 'new' | 'fix' | 'chore' | 'change'
+  url: string
+}
 
 export const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
 
@@ -51,4 +60,31 @@ export function sortClockRows(rows: ClockRow[]): ClockRow[] {
 export function ownerTime(iso?: string | null): string {
   if (!iso) return '—'
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
+// Changelog day headers (#4352): the merge's calendar day in Europe/Brussels, like ownerTime.
+const brusselsDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels' }).format(d)
+
+/** The owner's (Europe/Brussels) day of a merge: "Today", "Yesterday", else e.g. "Fri 20 Nov". */
+export function dayHeader(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso)
+  const key = brusselsDay(d)
+  const today = brusselsDay(now)
+  if (key === today) return 'Today'
+  const y = new Date(`${today}T00:00:00Z`)
+  y.setUTCDate(y.getUTCDate() - 1)
+  if (key === y.toISOString().slice(0, 10)) return 'Yesterday'
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', weekday: 'short', day: 'numeric', month: 'short' }).format(d)
+}
+
+/** Rows (newest first) grouped under day headers, keeping their order. */
+export function groupByDay(rows: ChangelogRow[], now: Date = new Date()): Array<{ day: string, rows: ChangelogRow[] }> {
+  const groups: Array<{ day: string, rows: ChangelogRow[] }> = []
+  for (const r of rows) {
+    const day = dayHeader(r.mergedAt || r.date, now)
+    const last = groups[groups.length - 1]
+    if (last && last.day === day) last.rows.push(r)
+    else groups.push({ day, rows: [r] })
+  }
+  return groups
 }

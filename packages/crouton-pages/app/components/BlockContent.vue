@@ -194,8 +194,9 @@ function getBlockSizeClass(block: PageBlock): string | undefined {
 // ---------------------------------------------------------------------------
 // Block visibility
 //
-// The public page route is `swr: 3600` cached, so its HTML is shared between
-// visitors. Auth state must therefore never be read while rendering on the
+// The public page route's SSR HTML must be identical for every visitor (any
+// shared cache — a CDN or a future route rule — would serve one render to
+// everyone). Auth state must therefore never be read while rendering on the
 // server, or one visitor's session gets baked into the page everyone receives.
 //
 // So the two axes resolve differently:

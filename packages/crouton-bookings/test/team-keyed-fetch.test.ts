@@ -36,6 +36,7 @@ beforeEach(() => {
   g.useT = () => ({ t: (k: string) => k })
   g.useI18n = () => ({ locale: ref('en') })
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
+  g.useRemoteCollectionRefresh = () => {}
   g.useFetch = (url: any, opts: any = {}) => {
     const call: FetchCall = { url, opts, refreshArgs: [] }
     calls.push(call)
@@ -81,7 +82,7 @@ describe('bookings fetch keys carry the team id (#3751)', () => {
   it('refetches when the team arrives after mount — useBookingCart and useBookingOptions', async () => {
     const { useBookingCart, useBookingOptions } = await loadAll()
     useBookingCart()
-    expectKeysFollowTeam(3)
+    expectKeysFollowTeam(4)
     calls = []
     currentTeam.value = null
     useBookingOptions()
@@ -130,7 +131,7 @@ describe('shared bookings fetches join, not cancel (#3789)', () => {
       run()
       counts.push(calls.length - start)
     }
-    expect(counts).toEqual([3, 4, 3, 1])
+    expect(counts).toEqual([3, 4, 4, 1])
     expect(calls.every(c => c.opts.dedupe === 'defer')).toBe(true)
   })
 

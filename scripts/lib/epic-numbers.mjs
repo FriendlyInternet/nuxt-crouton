@@ -95,7 +95,7 @@ function tally(row, r) {
 
 const silentEntry = (r, child) => ({ ref: r.ref || null, workflow: r.workflow || r.flow || null, stage: r.stage || null, child })
 
-export function epicNumbers({ epic, epicCreatedAt, children = [], epicPrs = [], records = [], ownerComments = [], ownerLogin = 'pmcp' } = {}) {
+export function epicNumbers({ epic, epicCreatedAt, children = [], epicPrs = [], records = [], ownerComments = [], ownerLogin = 'pmcp', stepLine = null } = {}) {
   const epicN = num(epic)
   const childSet = new Set(children.map(c => num(c.number)))
   const prToIssue = buildPrToIssue(records, children)
@@ -120,7 +120,8 @@ export function epicNumbers({ epic, epicCreatedAt, children = [], epicPrs = [], 
     silent,
     perChild,
     timeToMainHours: timeToMain(epicCreatedAt, allPrs),
-    ownerTouches: ownerTouches(ownerComments, ownerLogin)
+    ownerTouches: ownerTouches(ownerComments, ownerLogin),
+    stepLine: stepLine || null
   }
 }
 
@@ -132,6 +133,8 @@ export function renderNumbers(n) {
   const ttm = n?.timeToMainHours == null ? 'not merged to main' : `${n.timeToMainHours} h`
   const touches = `owner touches beyond \`ok\`: ${t.typed} typed, ${t.viaAgent} via an agent session`
   const lines = ['### 📊 Numbers', '']
+  // #4316: what was built vs dropped (not planned) — first, in both branches.
+  if (n?.stepLine) lines.push(`Steps: ${n.stepLine}`, '')
   if (!n?.runs) {
     lines.push(`No run records for this epic (records start ${RECORDS_START}). Time to main: ${ttm} · ${touches}.`)
     return lines.join('\n')

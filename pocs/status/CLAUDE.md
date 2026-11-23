@@ -18,6 +18,9 @@ logic — keep in step).
 A review card on a PR that changes `packages/<name>/` carries `payload.packages = [{ name, why, approval }]` (why = the
 closed issue's 👤 For humans section, approval = its `Packages-approved:` line); the card shows one ⚠️ line per package
 (`app/utils/package-lines.ts`, `app/components/cards/Packages.vue`).
+Every PR review card whose file list was read also carries `payload.changes = { files, added, removed, top }` (top = the
+3 largest files, ties by name); the card shows one muted "N files · +A −R · …" line with a "See the code changes" link
+(`app/utils/change-line.ts`, `app/components/cards/Changes.vue`).
 A card whose ticket is claimed by a chat (#4019) — directly, or via its parent epic up to 3 hops; a PR card uses its
 `Closes #N` issue — carries `payload.claim = { chat, name }` and shows a `<chat> · <name>` badge
 (`server/utils/claim-core.ts`, a copy of `activeClaim` from `scripts/lib/chat-claim.mjs` — keep in step;
@@ -45,6 +48,7 @@ signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
 `/apps` is the five-tab page (Apps, To test, Decisions, Changelog, Clock).
+The Changelog tags each merged PR from its linked issue's `app:`/`poc:`/`pkg:` label (one cached issue search in `changelog.get.ts`, rules in `server/utils/changelog-core.ts`; bookkeeping labels never decide a tag), groups rows by Brussels day and hides chores behind "Show chores".
 
 ## Clock
 

@@ -7,7 +7,7 @@
  * Needs `gh` auth. Report-only: reads PRs and comments, writes one markdown file.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 const QODO = /qodo/i
@@ -32,11 +32,6 @@ export function qodoFindings(comments) {
 
 export function asked(comments) {
   return comments.some((c) => /<!-- qodo-asked-sha:[0-9a-f]+ -->/.test(c.body ?? ''))
-}
-
-/** True when this exact head SHA already carries our `/review` marker (once per commit). */
-export function askedAt(comments, sha) {
-  return comments.some((c) => (c.body ?? '').includes(`<!-- qodo-asked-sha:${sha} -->`))
 }
 
 /** Asked PRs where Qodo never answered — means it may ignore app-authored `/review` comments. */
@@ -65,12 +60,6 @@ function gh(args) {
 }
 
 function main() {
-  const argv0 = process.argv.slice(2)
-  if (argv0[0] === '--asked-at') {
-    // usage: --asked-at <comments.json> <sha> ; exit 0 when already asked
-    const raw = readFileSync(argv0[1], 'utf8').replace(/\]\s*\[/g, ',')
-    process.exit(askedAt(JSON.parse(raw || '[]'), argv0[2]) ? 0 : 1)
-  }
   const argv = process.argv.slice(2)
   const opt = (n, d) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : d)
   const limit = opt('--limit', '1000')

@@ -5,7 +5,10 @@
  * takes "did each Run: line run and pass on this commit" as FACT instead of re-deriving it.
  *
  *   node scripts/lib/build-review-prompt.mjs <persona.md> --vars <vars.json> \
- *     --comments <pr-comments.json> --sha <head sha>   → prompt on stdout
+ *     --comments <pr-comments.json> --sha <head sha> [--outside <outside.json>]   → prompt on stdout
+ *
+ * `--outside` is scripts/lib/outside-review.mjs's output (#4318): its High findings fill
+ * `{{outside_review}}`, and the reviewer must answer each one in `### Outside review`.
  *
  * Runs as a TRUSTED default-branch copy (the working tree is the PR head, #3696), next to a
  * trusted copy of ../pipeline-prompt.mjs. Not pipeline-prompt's renderPrompt: that prepends the
@@ -54,9 +57,17 @@ export function checksBlock(rows) {
   return out.join(' ')
 }
 
+/** The plain-text block that fills `{{outside_review}}` (#4318). */
+export function outsideBlock(outside) {
+  const high = outside?.state === 'answered' ? (outside.high || []) : []
+  if (!high.length) return 'No High findings from the outside reviewer — leave out `### Outside review`.'
+  const list = high.map((h) => `${h.id}: ${h.title}${h.file ? ` (${h.file})` : ''}`).join('; ')
+  return `The outside reviewer's High findings on this commit: ${list}. Answer every one in a \`### Outside review\` section: \`- Q<n>: fixed in <commit>\` (a commit on this PR that fixes it) or \`- Q<n>: not a problem because <reason>\`. A go with an unanswered finding is turned into no-go.`
+}
+
 /** Persona → prompt: frontmatter stripped, `{{key}}` filled from vars, `{{plan_checks}}` from the table. */
-export function renderPrompt(persona, vars = {}, checksBody = '') {
-  const all = { ...vars, plan_checks: checksBlock(parseChecksTable(checksBody)) }
+export function renderPrompt(persona, vars = {}, checksBody = '', outside = null) {
+  const all = { ...vars, plan_checks: checksBlock(parseChecksTable(checksBody)), outside_review: outsideBlock(outside) }
   return splitFrontmatter(persona).body.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in all ? String(all[k]) : m))
 }
 
@@ -65,11 +76,13 @@ const arg = (a, k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undef
 export function main(argv, { write = (s) => process.stdout.write(s) } = {}) {
   const [persona] = argv
   const varsPath = arg(argv, '--vars')
-  if (!persona || !varsPath) throw new Error('usage: build-review-prompt.mjs <persona.md> --vars <vars.json> [--comments <json>] [--sha <sha>]')
+  if (!persona || !varsPath) throw new Error('usage: build-review-prompt.mjs <persona.md> --vars <vars.json> [--comments <json>] [--sha <sha>] [--outside <json>]')
   const vars = JSON.parse(readFileSync(varsPath, 'utf8'))
   const commentsPath = arg(argv, '--comments')
   const comments = commentsPath ? JSON.parse(readFileSync(commentsPath, 'utf8') || '[]') : []
-  const prompt = renderPrompt(readFileSync(persona, 'utf8'), vars, findChecksTable(comments, arg(argv, '--sha')))
+  const outsidePath = arg(argv, '--outside')
+  const outside = outsidePath ? JSON.parse(readFileSync(outsidePath, 'utf8') || 'null') : null
+  const prompt = renderPrompt(readFileSync(persona, 'utf8'), vars, findChecksTable(comments, arg(argv, '--sha')), outside)
   write(prompt)
   return prompt
 }

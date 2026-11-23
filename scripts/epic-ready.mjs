@@ -70,6 +70,7 @@ export function decideOpen({ subIssues = [], existingEpicMainPrs = [], changedFi
 // ── Shared-code sign-off carry (#2494) ─────────────────────────────────────────────
 import { packagesTouched, ATTESTATION_RE } from './packages-guard.mjs'
 import { isApproval } from './approval.mjs'
+import { ticketOutcome } from './lib/epic-steps.mjs'
 
 /** `Closes #NN` in prose only — never inside code (the #1021 rule, same as schedule-waves). */
 export function closesNumbers(body = '') {
@@ -122,8 +123,9 @@ export { collectApprovalLines } from './packages-guard.mjs'
  * Build the epic→main PR title + body. PURE (#3619 — moved verbatim from the workflow).
  *   subIssues: [{ number, title }]; carry: packagesApprovalCarry() result;
  *   declared:  collectApprovalLines() result (the carry line is de-duplicated here).
+ *   summary:   optional epic-steps.mjs stepSummary() (#4316) — names what was built and dropped.
  */
-export function buildEpicMainPr({ epicNumber, epicBranch, epicTitle, subIssues = [], carry, declared = [], owner }) {
+export function buildEpicMainPr({ epicNumber, epicBranch, epicTitle, subIssues = [], carry, declared = [], owner, summary }) {
   const OWNER = owner
   declared = declared.filter(l => l !== carry.line)
   const declaredSection = declared.length ? `\n\n${declared.join('\n')}\n` : ''
@@ -134,15 +136,21 @@ export function buildEpicMainPr({ epicNumber, epicBranch, epicTitle, subIssues =
         `These sub-PRs changed \`packages/**\` without an approval from @${OWNER} on the PR or its issue: ` +
         `${carry.unapproved.map(n => `#${n}`).join(', ')}. The "Packages edit declared" check stays red until you ` +
         `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`)
-  const childList = subIssues.map(s => `- #${s.number} ${s.title}`).join('\n')
+  const childList = subIssues.map(s => `- #${s.number} ${s.title}${ticketOutcome(s) === 'not_planned' ? ' — not planned' : ''}`).join('\n')
+  const droppedLine = summary?.dropped?.length
+    ? `\n\n**Dropped steps (not planned, not built):** ${summary.dropped.map(d => `step ${d.step} — ${d.tickets.map(n => `#${n}`).join(', ')}`).join(', ')}`
+    : ''
+  const firstLine = summary
+    ? `Assembles epic #${epicNumber} into \`main\` — ${summary.line}.\n\n`
+    : `Assembles epic #${epicNumber} — all ${subIssues.length} children closed and merged into ` +
+      `\`${epicBranch}\`, ready for \`main\`.\n\n`
   const cleanTitle = epicTitle.replace(/^Epic:\s*/i, '')
   const title = `Epic #${epicNumber}: ${cleanTitle}`.slice(0, 250)
   const body =
-    `Assembles epic #${epicNumber} — all ${subIssues.length} children closed and merged into ` +
-    `\`${epicBranch}\`, ready for \`main\`.\n\n` +
+    firstLine +
     `> Referenced, not \`Closes\` — the epic closes via the \`/close-epic\` postmortem flow (#856), ` +
     `not on this merge.\n\n` +
-    `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}\n\n` +
+    `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}${droppedLine}\n\n` +
     `## 🧪 How to test\nReview the assembled \`${epicBranch}\` → \`main\` diff; CI runs on this PR. ` +
     `Reply \`ok\` and it merges itself once green — you are the review gate. (\`not ok: what's wrong\` sends it back.)` + carrySection + `\n\n` +
     `<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @${OWNER}</sub>`

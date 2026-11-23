@@ -115,10 +115,6 @@ export default defineNuxtConfig({
     }
   ],
 
-  experimental: {
-    inlineRouteRules: true
-  },
-
   // Route rules for ISR caching (Nuxt 4.3+)
   // NOTE: Wildcards like '/api/teams/*/pages/**' break layer route matching in Nitro 2.13.1
   // Use specific patterns to avoid conflicts with generated layer routes (/api/teams/[id]/pages-pages/**)
