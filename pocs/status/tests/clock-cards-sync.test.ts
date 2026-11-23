@@ -12,6 +12,9 @@ import type { CardsSyncDeps, CardsSyncRecord } from '../server/utils/cards-sync-
 vi.mock('../layers/inbox/collections/cards/server/database/queries', () => ({
   getAllInboxCards: vi.fn(async () => []), createInboxCard: vi.fn(), updateInboxCard: vi.fn()
 }))
+vi.mock('../layers/pipeline/collections/items/server/database/queries', () => ({
+  getAllPipelineItems: vi.fn(async () => []), createPipelineItem: vi.fn(), updatePipelineItem: vi.fn(), deletePipelineItem: vi.fn()
+}))
 
 let kv: ReturnType<typeof createStorage>
 const OK: CardsSyncRecord = { at: '2026-11-18T10:00:01Z', ok: true, counts: { created: 0, updated: 0, stale: 0, answered: 0, stuck: { quiet: 0, draft: 0, epicSync: 0 } }, readErrors: null }
