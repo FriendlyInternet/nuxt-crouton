@@ -38,7 +38,7 @@ export default defineMcpResource({
 **Solution**: Crouton only supports these types:
 - \`string\`, \`text\`, \`number\`, \`decimal\`, \`boolean\`, \`date\`, \`json\`, \`repeater\`, \`array\`
 
-For select/dropdown fields, use \`string\` type and handle options in the form component.
+For select/dropdown fields, use \`string\` type with \`meta.options\` and \`meta.displayAs: "optionsSelect"\` — without \`displayAs\` the field renders as a plain text input.
 
 ---
 

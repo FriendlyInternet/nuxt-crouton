@@ -448,7 +448,6 @@ lib/generators/
 
 ```json
 {
-  "id": { "type": "string", "meta": { "primaryKey": true } },
   "name": { "type": "string", "meta": { "required": true, "maxLength": 255, "translatable": true } },
   "price": { "type": "decimal", "meta": { "precision": 10, "scale": 2 } },
   "categoryId": { "type": "string", "refTarget": "categories" }
@@ -494,13 +493,14 @@ collection path and wrote an import to a `users` collection nobody created.
 
 ### Field Meta Properties
 
+`validateField` refuses any field-level key outside `ALLOWED_FIELD_KEYS` (`type`, `meta`, `refTarget`, `refScope`) and any `meta` key outside `ALLOWED_META_KEYS` (both in `lib/utils/load-fields.ts`, #3165). The docs connector's `validate_schema` imports the same two lists.
+
 | Property | Type | Description |
 |----------|------|-------------|
 | `required` | boolean | Field is required |
 | `maxLength` | number | Max string length |
 | `translatable` | boolean | Enable i18n translation support |
 | `default` | any | Default value |
-| `primaryKey` | boolean | Mark as primary key |
 | `label` | string | Human-readable label |
 | `area` | string | Form area: main/sidebar/meta |
 | `group` | string | Group fields together (creates tabs when multiple main groups) |

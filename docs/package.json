@@ -11,9 +11,11 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "check:worker-bundle": "node scripts/check-worker-bundle.mjs",
+    "test": "vitest run",
     "test:mcp": "node scripts/mcp-smoke.mjs"
   },
   "dependencies": {
+    "@fyit/crouton-cli": "workspace:*",
     "@iconify-json/lucide": "^1.2.68",
     "@iconify-json/simple-icons": "^1.2.53",
     "@iconify-json/vscode-icons": "^1.2.30",
@@ -30,6 +32,7 @@
     "@nuxt/eslint": "^1.9.0",
     "eslint": "^9.36.0",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "vue-tsc": "^3.1.0"
   },
   "version": "0.1.0"
