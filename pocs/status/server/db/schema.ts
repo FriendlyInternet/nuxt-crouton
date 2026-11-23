@@ -5,3 +5,4 @@
 export * from '@fyit/crouton-auth/server/database/schema/auth'
 export * from './translations-ui'
 export { inboxCards } from '../../layers/inbox/collections/cards/server/database/schema'
+export { pipelineItems } from '../../layers/pipeline/collections/items/server/database/schema'
