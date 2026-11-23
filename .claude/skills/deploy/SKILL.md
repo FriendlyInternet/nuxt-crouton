@@ -56,8 +56,8 @@ monorepo's convention, applied per app at its production cutover — #136 for tr
 The deploy logic lives in the app's **`package.json` scripts** — the same commands
 you run locally and that CI runs. Don't reinvent them step-by-step:
 
-- **`cf:deploy`** (production — run **only** via the `/deploy-production` skill): `build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote` (pilot `pocs/pins` instead runs `sync:ids → scripts/deploy-order.mjs`, which migrates first when the database already exists — #4319)
-- **`cf:staging`** (isolated staging env): `build → inject-wrangler-env → wrangler deploy --env staging → sync:ids → inject-wrangler-env → d1 migrations apply --env staging --remote` (pilot `pocs/pins` instead runs `sync:ids → scripts/deploy-order.mjs`, which migrates first when the database already exists — #4319)
+- **`cf:deploy`** (production — run **only** via the `/deploy-production` skill): `build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote` (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status instead run `sync:ids → scripts/deploy-order.mjs`, which migrates first when the database already exists — #4319, #4367. velo and kassa still deploy first; alexdeforce, kvr and sintlukas deploy to Pages and loop-station has no database, so the order does not apply to them)
+- **`cf:staging`** (isolated staging env): `build → inject-wrangler-env → wrangler deploy --env staging → sync:ids → inject-wrangler-env → d1 migrations apply --env staging --remote` (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status instead run `sync:ids → scripts/deploy-order.mjs`, which migrates first when the database already exists — #4319, #4367. velo and kassa still deploy first; alexdeforce, kvr and sintlukas deploy to Pages and loop-station has no database, so the order does not apply to them)
 - **`sync:ids`** — queries wrangler, writes provisioned ids back into `wrangler.jsonc`
 - **`db:migrate` / `db:migrate:prod` / `db:migrate:staging`** — D1 migrations (local / remote / staging-remote)
 
