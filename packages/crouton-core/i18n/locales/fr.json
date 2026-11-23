@@ -141,7 +141,8 @@
     "moveDown": "Déplacer vers le bas",
     "moveToRoot": "Déplacer à la racine",
     "add": "Ajouter",
-    "createFirstItem": "Créez votre premier élément pour voir l'arborescence."
+    "createFirstItem": "Créez votre premier élément pour voir l'arborescence.",
+    "toggleChildren": "Éléments enfants de {name} ({count})"
   },
   "image": {
     "cropImage": "Recadrer l'image",

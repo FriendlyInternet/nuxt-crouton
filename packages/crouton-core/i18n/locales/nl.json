@@ -141,7 +141,8 @@
     "moveDown": "Omlaag verplaatsen",
     "moveToRoot": "Naar hoofdniveau verplaatsen",
     "add": "Toevoegen",
-    "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien."
+    "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien.",
+    "toggleChildren": "Onderliggende items van {name} ({count})"
   },
   "image": {
     "cropImage": "Afbeelding bijsnijden",
