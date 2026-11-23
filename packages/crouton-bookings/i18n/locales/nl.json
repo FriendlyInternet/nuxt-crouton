@@ -105,6 +105,9 @@
     "card": {
       "activity": "Activiteit",
       "on": "op {date}",
+      "editBooking": "Boeking bewerken",
+      "showDayInCalendar": "Toon {date} in de kalender",
+      "emailPanel": "E-mailstatus",
       "emailLabels": {
         "confirm": "Bevestiging",
         "reminder": "Herinnering",
