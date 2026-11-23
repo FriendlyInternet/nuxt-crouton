@@ -56,6 +56,9 @@ const collapsibleStub = defineComponent({
 })
 const replyButtons = defineComponent({ props: ['kind', 'number'], setup: p => () => h('reply', `${p.kind}:${p.number}`) })
 
+// Built from now so the changelog's "Today" header holds whenever the test runs.
+const TODAY_ISO = new Date().toISOString()
+
 const FIXTURES: Record<string, unknown> = {
   '/api/status/apps': {
     data: [
@@ -81,7 +84,10 @@ const FIXTURES: Record<string, unknown> = {
     error: null
   },
   '/api/status/changelog': {
-    data: [{ date: '2026-11-12', number: 21, title: 'Inbox first', area: 'status', url: 'https://gh/21' }],
+    data: [
+      { date: TODAY_ISO.slice(0, 10), mergedAt: TODAY_ISO, number: 21, title: 'Inbox first', area: 'status', kind: 'fix', url: 'https://gh/21' },
+      { date: TODAY_ISO.slice(0, 10), mergedAt: TODAY_ISO, number: 22, title: 'Record context-budget inventory', area: 'Pipeline', kind: 'chore', url: 'https://gh/22' }
+    ],
     error: null
   },
   '/api/status/clock': {
@@ -102,7 +108,7 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
   const Page = await compile(path)
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
-  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput']) app.component(n, ui('div'))
+  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput', 'USwitch']) app.component(n, ui('div'))
   app.component('UTabs', tabsStub)
   app.component('UCollapsible', collapsibleStub)
   app.component('ReplyButtons', replyButtons)
@@ -156,6 +162,17 @@ describe('apps dashboard page server render', () => {
     expect(html).not.toContain('No decisions yet.')
     expect(html).toContain('Inbox first')
     expect(html).toContain('data-c="status"') // area filter
+  })
+
+  // covers: T2 (#4352)
+  it('Changelog tab: day header, kind icon, two-line title button, chores hidden behind a switch', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('>Today<')
+    expect(html).toContain('🐞')
+    expect(html).toMatch(/<button[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*aria-expanded="false"[^>]*>\s*Inbox first/)
+    expect(html).toContain('data-c="Show chores"')
+    expect(html).not.toContain('Record context-budget inventory')
+    expect(html).not.toContain('data-c="Pipeline"') // the chips count only shown rows
   })
 
   it('loading and empty states', async () => {
