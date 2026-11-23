@@ -487,6 +487,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # (#3393) Pack every public @fyit package the way `pnpm publish` would and check the tarball
+      # stands on its own. Runs BEFORE any build so no leftover dist/ hides a missing prepack build.
+      - name: Pack check (every public package)
+        run: node scripts/pack-check.mjs
+
       # publint runs on crouton-core since the @fyit/crouton meta package was deleted
       # (#2290). attw went with it: the meta module was the only package whose
       # declaration files resolved cleanly, so the check validated nothing else.
