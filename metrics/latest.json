@@ -1800,9 +1800,9 @@
       "lines": {
         "building": {
           "failed": 184,
-          "runs": 4281,
+          "runs": 4019,
           "schedule_total": 7,
-          "workflow_rate": 0.043
+          "workflow_rate": 0.0458
         },
         "deploys": {
           "failed": 26,
@@ -1842,9 +1842,9 @@
         },
         "unmapped": {
           "failed": 13,
-          "runs": 62,
+          "runs": 324,
           "schedule_total": 0,
-          "workflow_rate": 0.2097
+          "workflow_rate": 0.0401
         }
       },
       "schedules": {
@@ -3987,10 +3987,10 @@
       },
       "lines": {
         "building": {
-          "failed": 375,
-          "runs": 5251,
+          "failed": 372,
+          "runs": 4971,
           "schedule_total": 4,
-          "workflow_rate": 0.0714
+          "workflow_rate": 0.0748
         },
         "deploys": {
           "failed": 68,
@@ -4029,10 +4029,10 @@
           "workflow_rate": 0.0045
         },
         "unmapped": {
-          "failed": 3,
-          "runs": 3,
+          "failed": 6,
+          "runs": 283,
           "schedule_total": 0,
-          "workflow_rate": 1
+          "workflow_rate": 0.0212
         }
       },
       "schedules": {
