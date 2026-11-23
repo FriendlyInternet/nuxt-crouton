@@ -3,6 +3,7 @@
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback @fyit/crouton-layout",
   "smoke": {
     "reads": [
+      { "path": "/api/teams/{teamId}/bookings-settings" },
       {
         "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings",
         "expectIncludes": "\"id\""
