@@ -41,6 +41,11 @@ const ui = (tag: string) => defineComponent({
   inheritAttrs: false,
   setup: (_, { slots, attrs }) => () => h(tag, { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant }, [label(attrs), ...Object.values(slots).map(s => s?.())])
 })
+// UButton renders a real <button> and passes class/aria-expanded through, like the real one.
+const buttonStub = defineComponent({
+  inheritAttrs: false,
+  setup: (_, { slots, attrs }) => () => h('button', { 'data-c': label(attrs), 'data-href': attrs.href, 'data-color': attrs.color, 'data-variant': attrs.variant, 'class': attrs.class, 'aria-expanded': attrs['aria-expanded'] }, [label(attrs), ...Object.values(slots).map(s => s?.())])
+})
 // UTabs prints each tab's label (data-tab) and its label class (data-tab-label) before every slot.
 const tabsStub = defineComponent({
   inheritAttrs: false,
@@ -109,7 +114,8 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
   const Page = await compile(path)
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
-  for (const n of ['UContainer', 'UButton', 'UAlert', 'UBadge', 'UCard', 'UInput', 'USwitch']) app.component(n, ui('div'))
+  for (const n of ['UContainer', 'UAlert', 'UBadge', 'UCard', 'UInput', 'USwitch']) app.component(n, ui('div'))
+  app.component('UButton', buttonStub)
   app.component('UTabs', tabsStub)
   app.component('UCollapsible', collapsibleStub)
   app.component('ReplyButtons', replyButtons)

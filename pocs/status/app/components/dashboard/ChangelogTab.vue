@@ -46,11 +46,10 @@ function toggle(n: number) {
               variant="link"
               color="neutral"
               class="block w-full p-0 text-left text-sm font-normal text-default"
+              :class="open.has(r.number) ? '' : 'line-clamp-2'"
               :aria-expanded="open.has(r.number)"
               @click="toggle(r.number)"
-            >
-              <span class="block" :class="open.has(r.number) ? '' : 'line-clamp-2'">{{ r.title }}</span>
-            </UButton>
+            >{{ r.title }}</UButton>
           </div>
           <a :href="r.url" target="_blank" rel="noopener" class="shrink-0 text-sm text-primary">#{{ r.number }}</a>
         </li>
