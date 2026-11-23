@@ -163,3 +163,17 @@ test('the subject marker is written only for a subject review; the legacy marker
   assert.match(c, /<!-- ticket-review-subject:1 -->/)
   assert.match(c, /<!-- ticket-review-verdict:go -->/)
 })
+
+test('T4 (#4353): a Suggested title line is carried through and never changes the verdict or the rubric', () => {
+  const tickets = set('clean.json').map((t, i) => (i === 0 ? { ...t, title: 'velo: the bookings cancel route returns 404' } : t))
+  const base = decide(tickets, fx('clean.verdict.md'))
+  const withTitle = fx('clean.verdict.md').replace('## Ticket #1\n', '## Ticket #1\nSuggested title: Cancelling a booking works again\n')
+  const d = decide(tickets, withTitle)
+  assert.equal(d.ok, true, String(d.errors))
+  assert.equal(d.verdict, base.verdict)
+  assert.equal(d.tickets[0].verdict, 'go')
+  assert.deepEqual(d.tickets[0].items, base.tickets[0].items)
+  assert.equal(d.tickets[0].suggestedTitle, 'Cancelling a booking works again')
+  assert.equal(d.tickets[1].suggestedTitle, '')
+  assert.match(renderComment(d), /💡 Suggested title: Cancelling a booking works again/)
+})

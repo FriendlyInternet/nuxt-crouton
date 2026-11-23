@@ -13,6 +13,9 @@
  *   - 3: PASS|FAIL — one line of evidence          (ids: 3 4 5 6 7 8 9 10)
  *   ### Question          (only for needs-owner: ONE yes/no question)
  *
+ * Optionally, directly under `## Ticket #N`: `Suggested title: …` (#4353) — carried through as
+ * `suggestedTitle` for ticket-review-actions.mjs to rename the ticket; it never affects a verdict.
+ *
  * Rolling epics (#3846) add an optional `## Plan` section — the step list graded once on P1–P4
  * (coverage, order, size, no owner decision; no file-and-line item) — and a 4th ticket verdict,
  * `plan-wrong` (needs a `### Why`), for a ticket that shows the step list itself is wrong. With
@@ -135,7 +138,9 @@ export function parseVerdicts(body, { subject = '' } = {}) {
       if (!items[id]) errors.push(`#${n}: rubric item ${id} missing a PASS/FAIL line`)
       else if (!items[id].evidence) errors.push(`#${n}: rubric item ${id} has no evidence`)
     }
-    tickets[n] = { stated, items, question: section(chunk, 'Question'), why }
+    // Optional `Suggested title:` line under the heading (#4353) — never part of the verdict or any rubric item.
+    const suggestedTitle = (chunk.match(/^\s*\**Suggested title:?\**:?\s*(.+)$/im)?.[1] || '').trim()
+    tickets[n] = { stated, items, question: section(chunk, 'Question'), why, suggestedTitle }
   }
   // A plan review may grade the step list alone (step 0's ticket already closed, #3846); any other
   // review must grade at least one ticket.
@@ -173,7 +178,7 @@ export function decide(tickets, verdictBody, { subject = '' } = {}) {
     const verdict = r.stated === 'plan-wrong' ? 'plan-wrong' : hard.length ? 'no-go' : !items['7'].pass ? 'needs-owner' : !items['10'].pass ? 'no-go' : 'go'
     if (r.stated === 'go' && verdict !== 'go' && !Object.keys(floor).length) errors.push(`#${t.number}: reviewer said go but its own rubric fails: ${failed.join(', ')}`)
     if (verdict === 'needs-owner' && !r.question) errors.push(`#${t.number}: needs-owner needs a Question section`)
-    per.push({ number: t.number, title: t.title, body: t.body, verdict, items, failed, question: r.question, why: r.why })
+    per.push({ number: t.number, title: t.title, body: t.body, verdict, items, failed, question: r.question, why: r.why, suggestedTitle: r.suggestedTitle })
   }
   if (errors.length) return { ok: false, errors }
   const all = [...(plan ? [plan.verdict] : []), ...per.map((p) => p.verdict)]
@@ -225,7 +230,8 @@ function renderTicketDetail(tickets) {
   return tickets.map((t) => {
     const lines = RUBRIC.map((r) => `- ${t.items[r.id].pass ? '✅' : '❌'} **${r.id}. ${r.name}** — ${t.items[r.id].evidence}`).join('\n')
     const why = t.why ? `\n\n**Why the step list is wrong:** ${t.why}` : ''
-    return `#### ${t.verdict === 'go' ? '✅' : '❌'} #${t.number} ${t.title} — ${t.verdict}\n\n${lines}${why}`
+    const retitle = t.suggestedTitle ? `\n- 💡 Suggested title: ${t.suggestedTitle}` : ''
+    return `#### ${t.verdict === 'go' ? '✅' : '❌'} #${t.number} ${t.title} — ${t.verdict}\n\n${lines}${retitle}${why}`
   }).join('\n\n')
 }
 
