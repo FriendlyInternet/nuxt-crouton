@@ -169,6 +169,14 @@ export default defineEventHandler(async (event) => {
     event
   })
 
+  // The team switched booking emails off: the skipped log row is the record (#3929)
+  if (result.skipped) {
+    throw createError({
+      status: 409,
+      statusText: 'Booking emails are switched off in the booking settings'
+    })
+  }
+
   if (!result.success) {
     throw createError({
       status: 500,
