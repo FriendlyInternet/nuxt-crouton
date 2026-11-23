@@ -13,15 +13,18 @@ const NAMED_ENTITIES: Record<string, string> = {
   Tab: '\t', NewLine: '\n', nbsp: '\u00a0',
 }
 
+const ENTITY = /&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|([a-zA-Z][a-zA-Z0-9]*));?/g
+
+/** A numeric reference (hex or decimal) as its character; '' when out of range. */
+function decodeCodePoint(hex: string | undefined, dec: string | undefined): string {
+  const cp = hex ? parseInt(hex, 16) : parseInt(dec as string, 10)
+  return cp > 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : ''
+}
+
 /** Decode HTML character references the way a browser does in attribute values. */
 export function decodeEntities(text: string): string {
-  return text.replace(/&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|([a-zA-Z][a-zA-Z0-9]*));?/g, (m, hex, dec, name) => {
-    if (hex || dec) {
-      const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10)
-      return cp > 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : ''
-    }
-    return NAMED_ENTITIES[name] ?? m
-  })
+  return text.replace(ENTITY, (m, hex, dec, name) =>
+    hex || dec ? decodeCodePoint(hex, dec) : (NAMED_ENTITIES[name] ?? m))
 }
 
 /** Strict allow-list: returns the url when it is https/http/mailto/tel/relative-root/#/?, else undefined. */
@@ -49,6 +52,23 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
+const SAFE_TARGETS = new Set(['_blank', '_self'])
+
+/** `_blank` / `_self` pass; any other link target becomes ''. */
+function safeTarget(value: unknown): string {
+  return SAFE_TARGETS.has(value as string) ? (value as string) : ''
+}
+
+function isUrlAttr(name: string): boolean {
+  return name === 'href' || name === 'src'
+}
+
+/** The escaped url when it is safe, else ''. */
+function cleanUrlAttr(value: string): string {
+  const url = safeAttrUrl(value)
+  return url === undefined ? '' : escapeHtml(url)
+}
+
 const filter = new FilterXSS({
   whiteList: {
     p: [], br: [], strong: [], b: [], em: [], i: [], u: [], s: [], code: [], pre: [], mark: [],
@@ -62,18 +82,14 @@ const filter = new FilterXSS({
   },
   stripIgnoreTagBody: ['script', 'style'],
   css: false,
-  safeAttrValue(tag, name, value, cssFilter) {
-    if (name === 'href' || name === 'src') {
-      const url = safeAttrUrl(value)
-      return url === undefined ? '' : escapeHtml(url)
-    }
-    if (name === 'target') return value === '_blank' || value === '_self' ? value : ''
+  safeAttrValue(_tag, name, value) {
+    if (isUrlAttr(name)) return cleanUrlAttr(value)
+    if (name === 'target') return safeTarget(value)
     return escapeHtml(value)
   },
-  onTagAttr(tag, name, value) {
+  onTagAttr(_tag, name, value) {
     // Drop href/src entirely when the url is unsafe
-    if ((name === 'href' || name === 'src') && safeAttrUrl(value) === undefined) return ''
-    return undefined
+    return isUrlAttr(name) && safeAttrUrl(value) === undefined ? '' : undefined
   },
 })
 
@@ -100,12 +116,14 @@ const MARK_TAGS: Record<string, string> = {
   highlight: 'mark',
 }
 
+/** ` name="value"` (value escaped), or '' when there is no value. */
+function attr(name: string, value: string | undefined): string {
+  return value ? ` ${name}="${escapeHtml(value)}"` : ''
+}
+
 function linkToHtml(text: string, attrs: any): string {
-  const href = safeUrl(attrs?.href)
-  const target = attrs?.target === '_blank' || attrs?.target === '_self' ? attrs.target : undefined
-  const hrefAttr = href ? ` href="${escapeHtml(href)}"` : ''
-  const targetAttr = target ? ` target="${target}"` : ''
-  return `<a${hrefAttr}${targetAttr}>${text}</a>`
+  const a = attrs ?? {}
+  return `<a${attr('href', safeUrl(a.href))}${attr('target', safeTarget(a.target))}>${text}</a>`
 }
 
 function applyMark(text: string, mark: any): string {
@@ -114,10 +132,13 @@ function applyMark(text: string, mark: any): string {
   return tag ? `<${tag}>${text}</${tag}>` : text
 }
 
+function textNodeToHtml(node: any): string {
+  return (node.marks || []).reduce(applyMark, escapeHtml(node.text || ''))
+}
+
 function inlineNodeToHtml(node: any): string {
   if (node.type === 'hardBreak') return '<br>'
-  if (node.type !== 'text') return ''
-  return (node.marks || []).reduce(applyMark, escapeHtml(node.text || ''))
+  return node.type === 'text' ? textNodeToHtml(node) : ''
 }
 
 /**
