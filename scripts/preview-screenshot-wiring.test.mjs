@@ -47,10 +47,14 @@ test('the step after Publish result asks automerge for this PR, only on a non-re
   assert.notEqual(ifLine.replace(/\s/g, ''), '${{always()}}', 'must not be a bare always()')
   assert.match(b, /GH_TOKEN: \$\{\{ steps\.token\.outputs\.token \}\}/)
   assert.match(b, /PR: \$\{\{ steps\.target\.outputs\.pr \}\}/)
-  const run = b.match(/^\s+run: (.*)$/m)?.[1]
-  assert.ok(run && run !== '|' && run !== '>', 'run: is a single line')
-  // A plain YAML scalar ends at ` #` (comment) — that truncated this line and broke shellcheck.
-  assert.doesNotMatch(run, /\s#/, 'run: has no space-hash that YAML would read as a comment')
+  // A plain YAML scalar ends at ` #` (comment) — that truncated this line and broke shellcheck,
+  // so run: must be a block scalar carrying the one command on the next line.
+  const runLines = b.split('\n')
+  const runAt = runLines.findIndex((l) => /^\s+run:/.test(l))
+  assert.ok(runAt >= 0, 'ask step has a run:')
+  assert.match(runLines[runAt], /^\s+run: \|$/, 'run: is a block scalar (run: |)')
+  const run = runLines.slice(runAt + 1).map((l) => l.trim()).filter(Boolean).join('\n')
+  assert.equal(run.split('\n').length, 1, 'block holds a single command')
   assert.match(run, /node scripts\/handoff-exec\.mjs dispatch/)
   assert.match(run, /workflow:"automerge-epic-subpr\.yml"/)
   assert.match(run, /inputs:\{pr:\(\$i\|tostring\)\}/)
