@@ -465,6 +465,7 @@ File: `app/components/ItemButtonsMini.vue`
 | `updateLoading` | `boolean` | `false` | no |  |
 | `deleteLoading` | `boolean` | `false` | no |  |
 | `disabledTooltip` | `string` | `''` | no |  |
+| `itemName` | `string` | `''` | no |  |
 
 ## CroutonItemCardMini
 
