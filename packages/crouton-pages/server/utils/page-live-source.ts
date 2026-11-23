@@ -1,12 +1,6 @@
-/**
- * Read-only page data for the MCP pages tools (#3982).
- *
- * Every query is scoped by `teamId` — a page id from another team reads as
- * not found. This module only SELECTs: the tools edit the live collab room and
- * the owner saves, so nothing here can write a page record.
- */
 import { and, eq } from 'drizzle-orm'
 import { pagesPages } from '../../collections/pages/server/database/schema'
+import { randomUUID } from 'crypto'
 
 type Translations = Record<string, { title?: string, slug?: string, content?: unknown } | undefined>
 
@@ -23,6 +17,15 @@ export interface McpStoredPageContent {
   locale: string
   /** The saved TipTap doc for that locale, or null when it has none. */
   content: unknown | null
+}
+
+export interface CreateMcpPageInput {
+  teamId: string
+  pageType?: string
+  parentId?: string | null
+  visibility?: string
+  seo?: Record<string, any>
+  translations: Record<string, { title: string; slug: string; content?: unknown }>
 }
 
 function parseContent(content: unknown): unknown | null {
@@ -91,4 +94,45 @@ export async function getStoredPageContentForMcp(
   const row = (rows as Array<{ id: string, translations: Translations | null }>)[0]
   if (!row) return null
   return { id: row.id, locale, content: parseContent(row.translations?.[locale]?.content) }
+}
+
+/**
+ * Creates a new page as a draft with all requested settings (except publishing).
+ */
+export async function createPageForMcp(input: CreateMcpPageInput): Promise<{ id: string }> {
+  const db = useDB()
+  const id = randomUUID()
+  const now = new Date()
+
+  const locales = Object.keys(input.translations)
+  const defaultLocale = locales[0] || 'en'
+  const defaultTranslation = input.translations[defaultLocale] || { title: 'Untitled', slug: 'untitled' }
+
+  const formattedTranslations: Record<string, any> = {}
+  for (const [locale, t] of Object.entries(input.translations)) {
+    formattedTranslations[locale] = {
+      title: t.title,
+      slug: t.slug,
+      content: t.content !== undefined ? t.content : null
+    }
+  }
+
+  const pageData: Record<string, any> = {
+    id,
+    teamId: input.teamId,
+    pageType: input.pageType || 'page',
+    status: 'draft',
+    parentId: input.parentId || null,
+    visibility: input.visibility || 'public',
+    seo: input.seo || {},
+    title: defaultTranslation.title,
+    slug: defaultTranslation.slug,
+    translations: formattedTranslations,
+    createdAt: now,
+    updatedAt: now
+  }
+
+  await (db as any).insert(pagesPages).values(pageData)
+
+  return { id }
 }
