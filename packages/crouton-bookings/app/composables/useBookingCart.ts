@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import type { LocationData, SlotItem, BookingData, SettingsData, CartItem } from '../types/booking'
 import { isBlockedByFullDay, FULL_DAY_ID } from '../utils/full-day'
@@ -20,6 +21,43 @@ import { useBookingAvailability } from './useBookingAvailability'
  *   - useBookingCartStorage   — localStorage persistence, cart CRUD, submit/cancel/delete
  *   - useBookingMonthlyLimit  — monthly booking limit tracking per location
  */
+/**
+ * What the booking form picks from: the locations the user may book, and the team's products
+ * for the product buttons (#4314). Neither is awaited — the form must draw at once and fill in
+ * when these answer. Every key carries the team (#3751); the products key keeps the
+ * `collection:catalogProducts:` prefix so useCollectionMutation's refresh still finds it.
+ */
+function useCartCatalog(teamId: Ref<string | undefined>) {
+  const { data: locations, status: locationsStatus, refresh: rawRefreshLocations } = useFetch<LocationData[]>(
+    () => teamId.value
+      ? `/api/crouton-bookings/teams/${teamId.value}/customer-locations`
+      : null as any,
+    {
+      key: () => `crouton-booking-cart-locations-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
+      server: false,
+      default: () => [],
+    },
+  )
+  const refreshLocations = () => rawRefreshLocations({ dedupe: 'cancel' })
+
+  const { data: teamProducts, refresh: rawRefreshTeamProducts } = useFetch<any[]>(
+    () => teamId.value
+      ? `/api/teams/${teamId.value}/catalog-products`
+      : null as any,
+    {
+      key: () => `collection:catalogProducts:team-${teamId.value ?? 'none'}`,
+      dedupe: 'defer',
+      server: false,
+      default: () => [],
+    },
+  )
+  // Another user changed a product → re-fetch (what useCollectionQuery did for the card)
+  useRemoteCollectionRefresh('catalogProducts', () => rawRefreshTeamProducts({ dedupe: 'cancel' }))
+
+  return { locations, locationsStatus, refreshLocations, teamProducts }
+}
+
 export function useBookingCart() {
   const { currentTeam } = useTeam()
   const { t } = useT()
@@ -126,20 +164,8 @@ export function useBookingCart() {
     set editingBookingId(v: string | null) { formStateRef.value.editingBookingId = v },
   })
 
-  // Fetch allowed locations
-  const { data: locations, status: locationsStatus, refresh: rawRefreshLocations } = useFetch<LocationData[]>(
-    () => teamId.value
-      ? `/api/crouton-bookings/teams/${teamId.value}/customer-locations`
-      : null as any,
-    {
-      key: () => `crouton-booking-cart-locations-${teamId.value ?? 'none'}`,
-      dedupe: 'defer',
-      server: false,
-      default: () => [],
-    },
-  )
-
-  const refreshLocations = () => rawRefreshLocations({ dedupe: 'cancel' })
+  // Fetch allowed locations + the team's products (#4314), neither awaited
+  const { locations, locationsStatus, refreshLocations, teamProducts } = useCartCatalog(teamId)
 
   // Selected location object
   const selectedLocation = computed(() => {
@@ -583,6 +609,8 @@ export function useBookingCart() {
     // Locations
     locations,
     locationsStatus,
+    // Team products (#4314)
+    teamProducts,
     refreshLocations,
     selectedLocation,
     allSlots,

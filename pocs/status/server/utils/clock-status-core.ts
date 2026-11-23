@@ -183,7 +183,7 @@ export function cardsSyncStatus(record: CardsSyncRecord | null, now: Date, clock
   const slot = Math.floor(now.getTime() / SYNC_SLOT_MS) * SYNC_SLOT_MS
   const base = {
     workflow: 'inbox stuck check',
-    schedule: 'every 30 min',
+    schedule: 'every 30 min, and within 10 min of a change on GitHub',
     about: 'Checks GitHub for stuck tickets, idle drafts and other things waiting on you, and updates the inbox — even when you haven\'t opened it.',
     lastDue: new Date(slot).toISOString(),
     nextDue: new Date(slot + SYNC_SLOT_MS).toISOString(),

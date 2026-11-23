@@ -1523,7 +1523,12 @@ jobs:
           PI_MINUTES: ${{ steps.budget.outputs.pi_minutes }}
         with:
           script: |
-            const { artifactGate } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')).href)
+            // #4078: only the `baseline` step makes the $RUNNER_TEMP copy. When setup fails before it,
+            // fall back to the checkout's scripts/lib so the gate names the cause instead of crashing.
+            const path = require('path'), fs = require('fs')
+            const tmp = path.join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')
+            const gate = fs.existsSync(tmp) ? tmp : path.join(process.env.GITHUB_WORKSPACE, 'scripts/lib/artifact-gate.mjs')
+            const { artifactGate } = await import(require('url').pathToFileURL(gate).href)
             await artifactGate({ github, context, core })
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────

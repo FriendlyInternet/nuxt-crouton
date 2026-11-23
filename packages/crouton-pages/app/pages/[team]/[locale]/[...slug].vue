@@ -43,12 +43,6 @@ definePageMeta({
   }
 })
 
-// Cache public pages for 1 hour (SWR: serve stale while regenerating in background)
-// Nuxt 4.3: payload extraction means SPA navigation also uses cached payload
-// The cache varies by host: the app host and a connected domain render the same
-// path with different hrefs (with and without the team, #4175).
-defineRouteRules({ swr: 3600, cache: { varies: ['host', 'x-forwarded-host'] } })
-
 const route = useRoute()
 const { hideTeamInLinks, hideLocaleInUrl, isTeamHost, resolvedTeamSlug } = useDomainContext()
 const { locales, defaultLocale: i18nDefaultLocale } = useI18n()

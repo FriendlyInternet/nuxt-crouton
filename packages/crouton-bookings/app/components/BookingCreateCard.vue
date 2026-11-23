@@ -34,6 +34,7 @@ const {
   formState,
   locations,
   locationsStatus,
+  teamProducts,
   selectedLocation,
   allSlots,
   isSlotDisabled,
@@ -201,8 +202,8 @@ useResizeObserver(tabsWrap, revealActiveTab)
 watch(localLocationId, revealActiveTab, { flush: 'post' })
 
 // === Products (#4112) ===
-// The team's products give titles + the active flag; the location lists which it offers
-const { items: teamProducts } = await useCollectionQuery('catalogProducts')
+// The team's products give titles + the active flag; the location lists which it offers.
+// They come from the cart, not awaited, so the card draws at once (#4314).
 const { t: entityT } = useEntityTranslations()
 
 type TeamProduct = { id: string, active?: boolean | null, title?: string }

@@ -59,6 +59,7 @@ beforeEach(() => {
   g.useT = () => ({ t: (k: string) => k })
   g.useNotify = () => ({ success() {}, warning() {}, error() {}, info() {} })
   g.useNuxtApp = () => ({ $i18n: { locale: ref('en') } })
+  g.useRemoteCollectionRefresh = () => {}
   g.useState = (k: string, init: () => any) => { if (!states.has(k)) states.set(k, ref(init())); return states.get(k) }
   g.useFetch = (url: any) => ({
     data: String(url?.() ?? '').includes('customer-locations') ? locations : ref(null),

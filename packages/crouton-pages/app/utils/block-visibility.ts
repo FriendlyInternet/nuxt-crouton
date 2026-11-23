@@ -7,12 +7,13 @@
  * enforcement pass could call them unchanged.
  *
  * Two axes, resolved by two different mechanisms, for one reason: the public
- * page route is `swr: 3600` cached, so its HTML is shared across visitors.
+ * page's SSR HTML must be identical for every visitor, so any shared cache can
+ * serve it.
  *
  * - **viewport** → CSS classes. Resolves per-device in the browser, so it is
  *   cache-safe, needs no JS, and cannot flicker.
  * - **audience/roles** → evaluated after hydration only. Reading auth state
- *   during SSR would bake one visitor's session into the shared cached HTML.
+ *   during SSR would bake one visitor's session into the shared HTML.
  *
  * NOT a security boundary. Every unusable value fails *open* (block shown) —
  * a corrupt attr should never blank a page. Gate sensitive content with the

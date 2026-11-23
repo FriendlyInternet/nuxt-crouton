@@ -1,7 +1,7 @@
 // The inbox card sync (#4234): read GitHub live and upsert one inbox card per ask that waits on the owner.
 // → { created, updated, stale, answered, stuck: { quiet, draft, epicSync }, error?, skipped? }
 // Needs no request: it takes the GitHub token, the team and the owner, so both POST /api/cards/sync
-// (the inbox page on load) and the clock (server/utils/cards-sync-clock.ts, :00 and :30) run it.
+// (the inbox page on load) and the clock (server/utils/cards-sync-clock.ts, :00 and :30, or after a GitHub change) run it.
 // Rules: server/utils/cards-sync-core.ts. A failed GitHub read never changes a card: the item is
 // skipped (listed in `skipped`) and the next sync tries again. A card whose ticket a chat claimed
 // carries `payload.claim` (#4019, server/utils/claim-core.ts).

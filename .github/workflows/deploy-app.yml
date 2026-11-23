@@ -100,6 +100,9 @@ on:
       # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
       STATUS_GITHUB_TOKEN:
         required: false
+      # Repo-level secret the status app checks GitHub webhook signatures with (#4309); status Worker only.
+      STATUS_WEBHOOK_SECRET:
+        required: false
       # Read by steps below but never declared (actionlint, #2970): declare every secret a
       # reusable workflow reads rather than relying on it arriving undeclared.
       RESEND_API_KEY:
@@ -530,6 +533,7 @@ jobs:
         env:
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          STATUS_WEBHOOK_SECRET: ${{ secrets.STATUS_WEBHOOK_SECRET }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM: ${{ vars.RESEND_FROM }}
           OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
@@ -564,6 +568,7 @@ jobs:
           push NUXT_EMAIL_RESEND_API_KEY "$RESEND_API_KEY" RESEND_API_KEY
           push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
           push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
+          push GITHUB_WEBHOOK_SECRET "$STATUS_WEBHOOK_SECRET" STATUS_WEBHOOK_SECRET
           # The clock (#4133): shared staging only, never a PR preview or production.
           if [ "$DEPLOY_ENV" = "staging" ] && [ -z "$PR_NUM" ]; then
             [ -n "$CLOCK_INSTALLATION_ID" ] || { echo "::error::Harness App installation id is empty — the status clock cannot start jobs."; exit 1; }
@@ -823,7 +828,12 @@ jobs:
               echo "::notice::No email key on the Worker — pushing NUXT_EMAIL_RESEND_API_KEY from the RESEND_API_KEY repo secret."
               printf '%s' "$RESEND_API_KEY" | npx wrangler secret put NUXT_EMAIL_RESEND_API_KEY $TARGET
             fi
-            LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+            # The secret list can lag the put by a few seconds on a fresh PR Worker — retry, don't fail on the first read.
+            for _ in 1 2 3 4 5; do
+              LIST=$(npx wrangler secret list --format json $TARGET 2>/dev/null || true)
+              echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key && break
+              sleep 5
+            done
           fi
           if ! echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-probe.mjs" has-key; then
             echo "::error::email key missing — ${{ inputs.app }} uses @fyit/crouton-email but its Worker has no NUXT_EMAIL_RESEND_API_KEY (set the RESEND_API_KEY repo secret, or add it to WORKER_SECRETS_JSON)"

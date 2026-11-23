@@ -9,7 +9,8 @@
 # and the pi worker is re-run with the CI failure as feedback (the revise path, #2446).
 #
 # Env: PRE (head before the fix) · BASE · BRANCH · PR · ISSUE · RUN_URL · RUN_NAME · GH_TOKEN ·
-#      RUNNER_TEMP (holds failed-job-logs.md) · GITHUB_OUTPUT (gets refused=true on a refusal).
+#      RUNNER_TEMP (holds failed-job-logs.md) · GITHUB_OUTPUT (gets refused=true on a refusal,
+#      pushed=true after a push, #4317).
 set -euo pipefail
 : "${PRE:?}" "${BASE:?}" "${BRANCH:?}" "${PR:?}" "${RUNNER_TEMP:?}"
 ISSUE="${ISSUE:-}"; RUN_URL="${RUN_URL:-}"; RUN_NAME="${RUN_NAME:-}"
@@ -48,7 +49,7 @@ node -e '
   })
 ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
 if [ "$ok" = 1 ]; then
-  if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; fi
+  if [ "$HEAD_NOW" != "$PRE" ]; then node scripts/git-push-retry.mjs origin "HEAD:$BRANCH"; echo "pushed=true" >> "$GITHUB_OUTPUT"; fi
   exit 0
 fi
 

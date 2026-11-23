@@ -5,7 +5,7 @@
 // Functions take the github-script `{ github, context, core }` (same shape as wave-release.mjs).
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers, collectApprovalLines, buildEpicMainPr } from './epic-ready.mjs'
-import { stepsPending } from './lib/epic-steps.mjs'
+import { stepsPending, stepSummary } from './lib/epic-steps.mjs'
 
 /**
  * Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
@@ -138,7 +138,8 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
     changedFiles = (cmp.files || []).length
   } catch (e) { core.warning(`compare main...${epicBranch}: ${e.message}`); return }
 
-  const pendingSteps = stepsPending({ labels: (epic.labels || []).map(l => (typeof l === 'string' ? l : l.name)), comments: epicComments, subIssues })
+  const epicLabels = (epic.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+  const pendingSteps = stepsPending({ labels: epicLabels, comments: epicComments, subIssues })
   const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, changedFiles, pendingSteps })
   core.info(`epic #${epicNumber} (${epicBranch}): ${open ? 'OPEN' : 'skip'} — ${reason}`)
   if (!open) return
@@ -162,7 +163,9 @@ export async function runEpicReadyPr({ github, context, core }, { ownerLogin, di
   const declared = collectApprovalLines([epicBody, ...subIssues.map(s => s.body)])
 
   // Reference the epic WITHOUT closing it (postmortem gate, #856).
-  const { title, body } = buildEpicMainPr({ epicNumber, epicBranch, epicTitle: epic.title, subIssues, carry, declared, owner: OWNER })
+  // #4316: the body names what was built and what was dropped (not planned), never "all merged".
+  const summary = stepSummary({ labels: epicLabels, comments: epicComments, subIssues })
+  const { title, body } = buildEpicMainPr({ epicNumber, epicBranch, epicTitle: epic.title, subIssues, carry, declared, owner: OWNER, summary })
 
   let pr
   try {
