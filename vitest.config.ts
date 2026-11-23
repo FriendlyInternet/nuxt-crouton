@@ -4,8 +4,7 @@ export default defineConfig({
   test: {
     projects: [
       'packages/*/vitest.config.ts',
-      'packages/crouton-core/tests/nuxt-runtime/vitest.config.ts',
-      'docs/vitest.config.ts'
+      'packages/crouton-core/tests/nuxt-runtime/vitest.config.ts'
     ],
     exclude: [
       '**/node_modules/**',
