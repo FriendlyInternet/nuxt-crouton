@@ -106,6 +106,70 @@ test('the revise step copies log-tail beside the lone copy and records dist_ref 
   assert.ok(YML.slice(at, end).some((l) => l.trim() === 'PKG_DIST_REF: ${{ steps.revise.outputs.dist_ref }}'), 'conflict env sets PKG_DIST_REF')
 })
 
+// ── The conflict tool's tests under the conflict step's own env (#4406) ──
+// CI runs the scripts suite with none of the names the conflict step sets, so #4374 (a new
+// PKG_DIST_REF) went green while breaking every real conflict run. These tests run the tool's
+// suite with every name from the step's `env:` block set to a stand-in.
+
+/** Names set by the `env:` block of the step `- id: <id>`, in order. */
+const indentOf = (l) => l.match(/^ */)[0].length
+
+/** The lines of step `- id: <id>` up to (not including) its `run: |`. */
+function stepHead(lines, id) {
+  const at = lines.findIndex((l) => l.trim() === `- id: ${id}`)
+  assert.ok(at >= 0, `step ${id}`)
+  const end = lines.findIndex((l, n) => n > at && (/^\s+run: \|/.test(l) || (l.trim() !== '' && indentOf(l) <= indentOf(lines[at]))))
+  return lines.slice(at + 1, end < 0 ? lines.length : end)
+}
+
+function stepEnvNames(lines, id = 'conflict') {
+  const head = stepHead(lines, id)
+  const env = head.findIndex((l) => /^\s+env:\s*$/.test(l))
+  if (env < 0) return []
+  const body = head.slice(env + 1).filter((l) => l.trim() !== '')
+  const stop = body.findIndex((l) => indentOf(l) <= indentOf(head[env]))
+  return body.slice(0, stop < 0 ? body.length : stop)
+    .map((l) => l.match(/^\s+([A-Za-z_][A-Za-z0-9_]*):/)?.[1])
+    .filter(Boolean)
+}
+
+/** A harmless value for a step env name: no real token, no real ref. */
+function standIn(name) {
+  if (name === 'PKG_DIST_REF') return '0123456789abcdef0123456789abcdef01234567' // 40 hex, not a real commit
+  if (name === 'GH_TOKEN') return 'stand-in-not-a-token'
+  if (name === 'ISSUE') return '1'
+  return 'stand-in'
+}
+
+// covers: T1
+// The child runs only these two files; neither imports or runs this file, so it can't start
+// itself again — keep it that way.
+test("the conflict tool's tests pass with every name the conflict step's env sets (#4406)", () => {
+  const names = stepEnvNames(YML)
+  assert.ok(names.includes('PKG_DIST_REF'), `conflict step env names: ${names.join(', ')}`)
+  const env = { ...process.env, ...Object.fromEntries(names.map((n) => [n, standIn(n)])) }
+  delete env.NODE_TEST_CONTEXT
+  const repoRoot = new URL('..', import.meta.url).pathname
+  const r = spawnSync(process.execPath, ['--test', 'scripts/conflict-resolution.test.mjs', 'scripts/conflict-resolution-migrations.test.mjs'], { cwd: repoRoot, encoding: 'utf8', env })
+  const failed = (r.stdout || '').split('\n').filter((l) => /^not ok /.test(l))
+  assert.equal(r.status, 0, `with ${names.join(', ')} set:\n${failed.join('\n') || r.stderr}`)
+})
+
+// covers: T2
+test('a name added to the conflict step env is picked up without editing the test (#4406)', () => {
+  const fixture = [...YML]
+  const at = fixture.findIndex((l) => l.trim() === '- id: conflict')
+  const ref = fixture.findIndex((l, n) => n > at && l.trim().startsWith('PKG_DIST_REF:'))
+  assert.ok(ref > at, 'PKG_DIST_REF line in the conflict step')
+  fixture.splice(ref + 1, 0, '          NEW_SETTING_4406: x')
+  const names = stepEnvNames(fixture)
+  assert.ok(names.includes('NEW_SETTING_4406'), names.join(', '))
+  for (const n of ['GH_TOKEN', 'ISSUE', 'PKG_DIST_REF', 'EPIC_BRANCH', 'BASE', 'REV_BRANCH']) assert.ok(names.includes(n), n)
+  assert.ok(!names.includes('FEEDBACK_ID'), 'the revise step env is not mixed in')
+  assert.ok(stepEnvNames(fixture, 'revise').includes('FEEDBACK_ID'))
+  assert.ok(!stepEnvNames(fixture, 'revise').includes('NEW_SETTING_4406'))
+})
+
 // ── Artifact-gate skips ──
 import { artifactGate } from './lib/artifact-gate.mjs'
 
