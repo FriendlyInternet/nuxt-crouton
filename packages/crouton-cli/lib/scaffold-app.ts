@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
-import { loadModules } from './module-registry.ts'
+import { findModuleKey, loadModules } from './module-registry.ts'
 import { findPackagesDir } from './utils/manifest-loader.ts'
 
 // crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
@@ -37,26 +37,32 @@ async function readTemplate(name: string): Promise<string> {
 
 /**
  * Resolve features list against module registry, validating each one
- * and resolving transitive dependencies.
+ * and resolving transitive dependencies to feature keys (#4291) — a manifest
+ * dependency may be a key, `@fyit/crouton-x` or bare `crouton-x`; one that
+ * matches no package is skipped with a warning.
  */
-// fallow-ignore-next-line complexity — pre-existing (unchanged by this PR); flagged only by diff-by-file scope
 function resolveFeatures(featureNames: string[], modules: Record<string, any>): string[] {
   const resolved = new Set<string>()
-  const errors: string[] = []
+  const visiting = new Set<string>()
+  const errors = featureNames.filter(name => !modules[name])
 
-  for (const name of featureNames) {
-    const mod = modules[name]
-    if (!mod) {
-      errors.push(name)
-      continue
-    }
-    // Add transitive dependencies first
-    if (mod.dependencies) {
-      for (const dep of mod.dependencies) {
-        resolved.add(dep)
+  const visit = (key: string): void => {
+    if (resolved.has(key) || visiting.has(key)) return
+    visiting.add(key)
+    for (const dep of modules[key].dependencies ?? []) {
+      const depKey = findModuleKey(dep, modules)
+      if (!depKey) {
+        consola.warn(`Feature "${key}": dependency "${dep}" matches no crouton package — skipped`)
+        continue
       }
+      visit(depKey)
     }
-    resolved.add(name)
+    visiting.delete(key)
+    resolved.add(key)
+  }
+
+  if (errors.length === 0) {
+    for (const name of featureNames) visit(name)
   }
 
   if (errors.length > 0) {
@@ -107,6 +113,12 @@ interface ScaffoldVars {
   depVersion: string
   /** Optional CF zone — emits <name>.<domain> / <name>-staging.<domain> routes. */
   domain?: string
+  /** Target dir is under `pocs/` (same rule as `.crouton.json` kind) — a POC has no production. */
+  poc: boolean
+  /** The `assets` feature is on (resolved) — the app needs R2 buckets bound as BLOB. */
+  blob: boolean
+  /** `--site` (#4263): one team (`test1`), one locale (`en`) with plain addresses. */
+  site: boolean
   modules: Record<string, any>
 }
 
@@ -218,6 +230,33 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 `
     : ''
 
+  // --site (#4263): both fragments are '' without it, so a plain scaffold is unchanged.
+  const teamsBlock = vars.site
+    ? `,
+    // One site, one team. \`test1\` is the team every preview deploy seeds and
+    // attaches the review login to (scripts/seed-review-login.mjs), so the
+    // app's single team must be that same team. The slug never shows publicly.
+    teams: {
+      defaultTeamSlug: 'test1',
+      allowCreate: false,
+      showSwitcher: false,
+      showManagement: false
+    }`
+    : ''
+  const pagesRuntimeBlock = vars.site
+    ? `
+  // One-language public site: plain addresses (/about, not /en/about).
+  runtimeConfig: {
+    public: {
+      croutonPages: {
+        hideLocaleInUrl: true,
+        // Domains this app itself runs on (not treated as a team's connected domain), e.g. ['myapp.com']
+        appDomains: []
+      }
+    }
+  },`
+    : ''
+
   return `${cfImports}// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@fyit/crouton-devtools'],
@@ -239,19 +278,27 @@ ${emailBlock}
   croutonAuth: {
     methods: {
       passkeys: false
-    }
-  },
+    }${teamsBlock}
+  },${pagesRuntimeBlock}
 ${nitroBlock}
 })
 `
 }
 
 function tmplCroutonConfig(vars: ScaffoldVars): string {
+  const localesBlock = vars.site
+    ? `  // One language: the site is not translated, so the editor shows no language
+  // selector and, with hideLocaleInUrl, public addresses carry no locale.
+  locales: ['en'],
+  defaultLocale: 'en',
+
+`
+    : ''
   return `export default {
   // Which crouton packages this app uses is decided by \`extends\` in nuxt.config.ts
   // (#2286). A package's prompted configuration lands under \`features.<alias>\`.
 
-  // Collections to generate (add your collections here)
+${localesBlock}  // Collections to generate (add your collections here)
   // Example:
   // collections: [
   //   { name: 'products', fieldsFile: './schemas/products.json' }
@@ -278,9 +325,14 @@ function tmplCroutonConfig(vars: ScaffoldVars): string {
 // there is no route, so the Worker serves at *.workers.dev: we leave stagingUrl EMPTY and the
 // deploy resolves the real published URL (#1369) instead of advertising an alias that was never
 // bound. Note the staging subdomain is `<name>-staging.<zone>` (matches the route), NOT `<name>`.
+// #4142: a POC (target under `pocs/`) has NO production — its only route is the env.staging
+// `<name>.<zone>`, so stagingUrl is `https://<name>.<zone>` and no productionUrl is written. That
+// is also what scripts/scaffold-poc-deploy.mjs derives from the route, so the two tools agree.
 export function tmplDeployConfig(vars: ScaffoldVars): string {
   const config: Record<string, string> = {}
-  if (vars.domain) {
+  if (vars.poc && vars.domain) {
+    config.stagingUrl = `https://${vars.name}.${vars.domain}`
+  } else if (vars.domain) {
     config.stagingUrl = `https://${vars.name}-staging.${vars.domain}`
     config.productionUrl = `https://${vars.name}.${vars.domain}`
   } else {
@@ -290,15 +342,24 @@ export function tmplDeployConfig(vars: ScaffoldVars): string {
   return JSON.stringify(config, null, 2) + '\n'
 }
 
-function tmplWranglerJsonc(vars: ScaffoldVars): string {
+export function tmplWranglerJsonc(vars: ScaffoldVars): string {
   // Workers (static-assets), id-LESS so the first `pnpm cf:deploy` auto-provisions D1+KV;
   // `sync-wrangler-ids.mjs` writes the ids back (bootstrap → committed). With `--domain`,
   // custom-domain routes auto-bind `<name>.<zone>` / `<name>-staging.<zone>` on deploy.
-  const prodRoute = vars.domain
+  // #4142: a POC has no production → no top-level route, and staging binds `<name>.<zone>`.
+  const prodRoute = vars.domain && !vars.poc
     ? `\n  "routes": [{ "pattern": "${vars.name}.${vars.domain}", "custom_domain": true }],\n`
     : ''
+  const stagingHost = vars.poc ? `${vars.name}.${vars.domain}` : `${vars.name}-staging.${vars.domain}`
   const stagingRoute = vars.domain
-    ? `\n      "routes": [{ "pattern": "${vars.name}-staging.${vars.domain}", "custom_domain": true }],`
+    ? `\n      "routes": [{ "pattern": "${stagingHost}", "custom_domain": true }],`
+    : ''
+  // #4142: the `assets` feature uploads to hub.blob → named R2 buckets (same shape as pocs/crate).
+  const prodBlob = vars.blob
+    ? `,\n  "r2_buckets": [\n    { "binding": "BLOB", "bucket_name": "${vars.name}-blob" }\n  ]`
+    : ''
+  const stagingBlob = vars.blob
+    ? `,\n      "r2_buckets": [\n        { "binding": "BLOB", "bucket_name": "${vars.name}-staging-blob" }\n      ]`
     : ''
   return `{
   // Cloudflare WORKERS (static assets) config for ${vars.name}.
@@ -322,7 +383,7 @@ ${prodRoute}
   ],
   "kv_namespaces": [
     { "binding": "KV" }
-  ],
+  ]${prodBlob},
 
   // Staging environment — its OWN isolated D1 + KV, also id-less so they
   // auto-provision on the first \`pnpm cf:staging\`. The env block is stripped
@@ -339,7 +400,7 @@ ${prodRoute}
       ],
       "kv_namespaces": [
         { "binding": "KV" }
-      ]
+      ]${stagingBlob}
     }
   }
 }
@@ -566,7 +627,7 @@ export const passkeyClient = () => ({
 
 export async function scaffoldApp(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, dryRun?: boolean, outDir?: string, cwd?: string } = {}
+  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, site?: boolean, dryRun?: boolean, outDir?: string, cwd?: string } = {}
 ): Promise<{ files: ScaffoldFile[], appDir: string, cf: boolean, standalone: boolean }> {
   const { dryRun = false, outDir, cwd = process.cwd() } = options
   // Outside the crouton monorepo the app installs from npm (#3392): `./<name>`,
@@ -574,7 +635,7 @@ export async function scaffoldApp(
   const standalone = !(await isCroutonMonorepo(cwd))
   const cf = options.cf ?? !standalone
   const depVersion = standalone ? `^${CROUTON_CLI_VERSION}` : 'workspace:*'
-  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion })
+  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion, outDir })
   const files = await buildScaffoldFiles(ctx, outDir, cf)
   const appDir = outDir || (standalone ? name : join('apps', name))
 
@@ -594,14 +655,16 @@ interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], fea
 // fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
 async function resolveScaffoldContext(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string }
+  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, site?: boolean, outDir?: string }
 ): Promise<ScaffoldContext> {
-  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain } = options
+  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain, site, outDir } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
   const modules = await loadModules()
-  const features = resolveFeatures(featureNames, modules)
+  // --site needs crouton-pages (#4263); without it the feature list is untouched.
+  const names = site && !featureNames.includes('pages') ? [...featureNames, 'pages'] : featureNames
+  const features = resolveFeatures(names, modules)
   // Core always; every other resolved feature by its manifest's package name, unless
   // core already bundles it (#2286 — the manifest is the package's self-description).
   const frameworkPackages = ['@fyit/crouton-core']
@@ -614,7 +677,9 @@ async function resolveScaffoldContext(
   if (!frameworkPackages.includes('@fyit/crouton-i18n')) {
     frameworkPackages.splice(frameworkPackages.indexOf('@fyit/crouton-core') + 1, 0, '@fyit/crouton-i18n')
   }
-  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, modules }
+  const poc = (outDir || '').startsWith('pocs/')
+  const blob = features.includes('assets')
+  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, site: !!site, modules }
   return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
 }
 

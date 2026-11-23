@@ -74,6 +74,8 @@ export function failureList(causes) {
   return { names, list }
 }
 
+const EXIT_MESSAGE = /^Process completed with exit code \d+\.?$/
+
 /**
  * The distilled failure (#2015). Takes [{name, annotations}] and keeps FAILURE-level ones (#2029):
  * `listAnnotations` returns notice/warning/failure together, noise first. Falls back to any level
@@ -82,7 +84,10 @@ export function failureList(causes) {
 export function failureExcerpts(entries) {
   const excerpts = []
   for (const { name, annotations } of entries) {
-    const hard = annotations.filter(a => a.annotation_level === 'failure')
+    // The runner's closing "Process completed with exit code N." is in every failed job and names
+    // nothing; the log-tail block carries the real cause.
+    const hard = annotations.filter(a => a.annotation_level === 'failure' && !EXIT_MESSAGE.test(String(a.message || '').trim()))
+    if (!hard.length && annotations.some(a => a.annotation_level === 'failure')) continue
     const use = hard.length ? hard : annotations
     const label = hard.length ? name : `${name} (no error annotation — showing context)`
     for (const a of use.slice(0, 2)) {
@@ -163,22 +168,20 @@ export function stageBar(total, done) {
   return stages.map((s, i) => i === curIdx ? `**${s}** ◀` : i < curIdx ? `${s} ✓` : s).join(' → ')
 }
 
-/** The epic card: `needsSignoffCheck` is true for an epic with 0 children that is blocked. */
-export function epicCard({ title, epicBlocked, subs, childLines, now }) {
+/**
+ * The epic card: `needsSignoffCheck` is true for an epic with 0 children that is blocked.
+ * `summary` (optional, #4316) = epic-steps.mjs stepSummary(): a rolling epic counts STEPS, not
+ * tickets, and a not-planned ticket is named as dropped — never counted as merged. Absent ⇒ the
+ * children count computed from `subs` (today's card).
+ */
+export function epicCard({ title, epicBlocked, subs, childLines, now, summary }) {
   const total = subs.length
   const done = subs.filter(s => s.state === 'closed').length
-  const bar = stageBar(total, done)
-  let head, activity
-  if (total === 0) {
-    head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
-    activity = epicBlocked ? '_now: waiting for your `ok` / answer on the design_' : '_now: the decomposer is planning this epic_'
-  } else if (done < total) {
-    head = `## 🔨 Building — ${title}  (${done}/${total})`
-    activity = `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`
-  } else {
-    head = `## ✅ Assembled — ${title}  (${total}/${total})`
-    activity = '_now: all children merged — the epic→main PR opens for your review next_'
-  }
+  const { head, activity, bar } = total === 0
+    ? emptyCardHead(title, epicBlocked)
+    : summary?.kind === 'unreadable' ? unreadableCardHead(title, total, done)
+    : summary?.kind === 'steps' ? stepsCardHead(title, summary)
+    : childrenCardHead(title, total, done, summary)
   const body =
     `${EPIC_ROLLUP}\n` +
     `${head}\n\n` +
@@ -187,6 +190,61 @@ export function epicCard({ title, epicBlocked, subs, childLines, now }) {
     `${activity}\n\n` +
     `<sub>🤖 agent pipeline · live status (#1838) · updated ${now}</sub>`
   return { body, needsSignoffCheck: total === 0 && epicBlocked }
+}
+
+/** 0 children: waiting on the design sign-off, or still decomposing. */
+function emptyCardHead(title, epicBlocked) {
+  return {
+    bar: stageBar(0, 0),
+    head: epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`,
+    activity: epicBlocked ? '_now: waiting for your `ok` / answer on the design_' : '_now: the decomposer is planning this epic_',
+  }
+}
+
+/** An unreadable step list never reads as Assembled (#4316). */
+function unreadableCardHead(title, total, done) {
+  return {
+    bar: stageBar(total, Math.min(done, total - 1)),
+    head: `## 🔨 Building — ${title}  (step list unreadable)`,
+    activity: '_now: the step-list comment cannot be read — fix it before this epic can finish_',
+  }
+}
+
+/** A rolling epic with a readable step list counts steps: built + dropped, never tickets (#4316). */
+function stepsCardHead(title, summary) {
+  const dropped = summary.dropped.length
+  const left = summary.open + summary.noTicket
+  const bar = stageBar(summary.total, summary.built + dropped)
+  if (left > 0) {
+    return {
+      bar,
+      head: `## 🔨 Building — ${title}  (${summary.built} of ${summary.total} steps built)`,
+      activity: `_now: ${left} of ${summary.total} steps not built yet — reply here or on a PR to steer_`,
+    }
+  }
+  return {
+    bar,
+    head: `## ✅ Assembled — ${title}  (${summary.built} built, ${dropped} dropped)`,
+    activity: `_now: every step built or dropped — ${summary.line} — the epic→main PR opens for your review next_`,
+  }
+}
+
+/** No step list: count children; a not-planned child is named, never called merged (#4316). */
+function childrenCardHead(title, total, done, summary) {
+  const bar = stageBar(total, done)
+  if (done < total) {
+    return {
+      bar,
+      head: `## 🔨 Building — ${title}  (${done}/${total})`,
+      activity: `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`,
+    }
+  }
+  const what = summary?.notPlanned?.length ? `all children closed — ${summary.line}` : 'all children merged'
+  return {
+    bar,
+    head: `## ✅ Assembled — ${title}  (${total}/${total})`,
+    activity: `_now: ${what} — the epic→main PR opens for your review next_`,
+  }
 }
 
 /** Head SHA of whichever check-ish event fired — workflow_run first (#1884). */

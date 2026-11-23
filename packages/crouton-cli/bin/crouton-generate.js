@@ -171,8 +171,9 @@ const initCmd = defineCommand({
     layout: { type: 'boolean', default: true, description: 'Add the crouton-layout engine (default on; --no-layout to leave it out)' },
     cf: { type: 'boolean', description: 'Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force' },
     noCf: { type: 'boolean', description: 'Deprecated alias for --no-cf' },
-    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
+    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
+    site: { type: 'boolean', description: 'Small public site: one team (test1), one locale (en) with hideLocaleInUrl, an appDomains list to fill in; adds @fyit/crouton-pages' },
     out: { type: 'string', description: 'Explicit target directory (overrides --poc; default apps/<name> in the monorepo, ./<name> elsewhere)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
@@ -195,6 +196,7 @@ const initCmd = defineCommand({
       dialect: args.dialect,
       cf: args.noCf ? false : args.cf,
       domain: args.domain,
+      site: args.site,
       out,
       dryRun: args.dryRun,
     })
@@ -351,7 +353,7 @@ const scaffoldAppCmd = defineCommand({
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     cf: { type: 'boolean', description: 'Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force' },
     noCf: { type: 'boolean', description: 'Deprecated alias for --no-cf' },
-    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
+    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {

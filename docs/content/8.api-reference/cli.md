@@ -57,8 +57,9 @@ Create a new crouton app end-to-end (scaffold → generate → doctor → summar
 | `--layout` | boolean |  | `true` | Add the crouton-layout engine (default on; --no-layout to leave it out) |
 | `--cf` | boolean |  |  | Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force |
 | `--noCf` | boolean |  |  | Deprecated alias for --no-cf |
-| `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev) |
+| `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev) |
 | `--poc` | boolean |  |  | Scaffold into pocs/<name> (the incubator) instead of apps/<name> |
+| `--site` | boolean |  |  | Small public site: one team (test1), one locale (en) with hideLocaleInUrl, an appDomains list to fill in; adds @fyit/crouton-pages |
 | `--out` | string |  |  | Explicit target directory (overrides --poc; default apps/<name> in the monorepo, ./<name> elsewhere) |
 | `--dryRun` | boolean |  |  | Preview what will be generated without writing files |
 
@@ -118,7 +119,7 @@ Create a new crouton app with all boilerplate files
 | `--dialect` | string | `-d` | `sqlite` | Database dialect (only sqlite is supported) |
 | `--cf` | boolean |  |  | Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force |
 | `--noCf` | boolean |  |  | Deprecated alias for --no-cf |
-| `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev) |
+| `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev) |
 | `--dryRun` | boolean |  |  | Preview what will be generated without writing files |
 
 ## db-pull

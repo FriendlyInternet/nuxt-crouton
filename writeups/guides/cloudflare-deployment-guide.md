@@ -333,9 +333,15 @@ Several patterns that work in SPA mode break under SSR on Cloudflare:
 // BAD — breaks all /api/teams/:id/* routes
 '/api/teams/*/pages/**': { swr: 600 },
 
-// GOOD — target specific public endpoints
+// ALSO BAD — a `*` rule on any prefix that also has `[id]` handlers shadows the
+// deeper ones (#4300: velo's bookings update/cancel/charts all 404'd)
 '/api/crouton-bookings/teams/*/availability': { swr: 300 },
+
+// GOOD — cache in the handler instead
+export default defineCachedEventHandler(async (event) => { /* … */ }, { maxAge: 300 })
 ```
+
+`scripts/lib/route-rules-shadow.test.mjs` fails CI on any such rule in an `apps/`, `pocs/` or `packages/` `nuxt.config.ts`.
 
 ### 10. @nuxthub/core Version Conflicts
 

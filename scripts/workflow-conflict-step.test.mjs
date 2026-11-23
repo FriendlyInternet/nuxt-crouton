@@ -91,6 +91,21 @@ test('clean verify: one two-parent commit, no failure comment, no flags', () => 
   assert.doesNotMatch(x.outputs, /failed=1|asked=1/)
 })
 
+// covers: T8
+test('the revise step copies log-tail beside the lone copy and records dist_ref before the checkout; conflict gets PKG_DIST_REF (#4374)', () => {
+  const rev = block('- id: revise', 'run').split('\n')
+  const checkout = rev.findIndex((l) => l.includes('git checkout -f -B'))
+  const copy = rev.findIndex((l) => l.includes('cp scripts/lib/log-tail.mjs "$RUNNER_TEMP/lib/log-tail.mjs"'))
+  const ref = rev.findIndex((l) => /^echo "dist_ref=\$\(git rev-parse HEAD\)" >> "\$GITHUB_OUTPUT"$/.test(l.trim()))
+  assert.ok(checkout >= 0, 'checkout line')
+  assert.ok(copy >= 0 && copy < checkout, `log-tail copied before the checkout (${copy} < ${checkout})`)
+  assert.ok(rev[copy].includes('mkdir -p "$RUNNER_TEMP/lib"'), rev[copy])
+  assert.ok(ref >= 0 && ref < checkout, `dist_ref written before the checkout (${ref} < ${checkout})`)
+  const at = YML.findIndex((l) => l.trim() === '- id: conflict')
+  const end = YML.findIndex((l, n) => n > at && /^\s+run: \|/.test(l))
+  assert.ok(YML.slice(at, end).some((l) => l.trim() === 'PKG_DIST_REF: ${{ steps.revise.outputs.dist_ref }}'), 'conflict env sets PKG_DIST_REF')
+})
+
 // ── Artifact-gate skips ──
 import { artifactGate } from './lib/artifact-gate.mjs'
 

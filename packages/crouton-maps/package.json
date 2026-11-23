@@ -1,11 +1,14 @@
 {
   "name": "@fyit/crouton-maps",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required",
   "type": "module",
   "main": "./nuxt.config.ts",
   "files": [
     "app",
+    "server",
+    "shared",
+    "!**/__tests__",
     "nuxt.config.ts",
     "README.md",
     "docs/llms.txt",

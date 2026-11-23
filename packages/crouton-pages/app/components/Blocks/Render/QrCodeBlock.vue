@@ -16,13 +16,16 @@ interface Props {
 const props = defineProps<Props>()
 
 const { resolve } = usePageLink()
+const router = useRouter()
 
 // Origin to turn a resolved page path into the absolute URL a phone camera needs.
 const origin = useRequestURL().origin
 
 const href = computed(() => {
   const path = props.attrs.pageId ? resolve(props.attrs.pageId) : undefined
-  if (path) return new URL(path, origin).toString()
+  // router.resolve().href goes through the history's createHref, so on a
+  // connected domain the team prefix is stripped (#4175).
+  if (path) return new URL(router.resolve(path).href, origin).toString()
   // Custom URL fallback — assumed absolute.
   return props.attrs.url || ''
 })

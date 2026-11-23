@@ -232,10 +232,11 @@ crouton init <name>                            # → apps/<name>   (a launched a
 crouton init <name> --out <dir>                # explicit target directory
 crouton init <name> --features bookings,pages --theme ko -d sqlite   # options
 crouton init <name> --poc --dry-run            # preview, writes nothing
+crouton init <name> --site --poc               # a small one-team, one-language public site
 ```
 
 Flags: `--poc` (→ `pocs/<name>`) · `--out <dir>` · `--features a,b,c` · `--theme <t>` · `-d sqlite|pg`
-· `--cf`/`--no-cf` (default: on in the monorepo, off elsewhere) · `--domain <zone>` · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
+· `--cf`/`--no-cf` (default: on in the monorepo, off elsewhere) · `--domain <zone>` (with `--poc`: staging route `<name>.<zone>`; a POC preview uses `--poc --domain pmcp.dev`) · `--site` (one team, one locale `en`, plain addresses via `hideLocaleInUrl`, empty `appDomains`; adds crouton-pages — see `packages/crouton-pages/CLAUDE.md`) · `--dry-run` · `--no-layout`. If a `crouton.config.js` already exists in the target,
 init also generates its collections. **This is the command a POC-scaffold task runs — it is not
 undocumented; don't read `init-app.ts`/`scaffold-app.ts` to figure it out (that's the #1213/#1223
 30-min timeout).** Adding a collection to an *existing* app is the separate `crouton config` /

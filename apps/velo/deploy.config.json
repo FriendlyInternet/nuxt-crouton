@@ -59,6 +59,7 @@
     },
     "required": true,
     "reads": [
+      { "path": "/api/teams/{teamId}/bookings-settings" },
       {
         "path": "/api/teams/{teamId}/crouton-layouts/default",
         "expectStatus": [200, 204]
@@ -78,7 +79,16 @@
         "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-status"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
         "path": "/api/teams/{teamId}/bookings-emaillogs"
+      },
+      {
+        "path": "/api/teams/{teamId}/catalog-products"
       },
       {
         "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"

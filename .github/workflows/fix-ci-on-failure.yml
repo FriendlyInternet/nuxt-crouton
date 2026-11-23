@@ -15,6 +15,7 @@ run-name: "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}',
 #   - The counter only counts while the head is the fix-bot's own commit, or while the same line is red again after a refused fix hand-back or an approved diagnosis (then the count carries, so the loop ends at the cap, #3668); a stuck head pages the owner once (#3277).
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
 #     it, the agent stops and blocks instead (same as the auto-merge guard, #339).
+#   - Nothing to fix: already green on the same commit, or the head moved → stop before the model (#4317, scripts/lib/fix-bot-precheck.mjs).
 #   - The label also feeds the #337 sticky status note ("🔧 Auto-fix attempts: N").
 #
 # Jobs (#3668): fixbot (gate, logs, base check, round-1 diagnosis) → review-1 (read-only model
@@ -85,6 +86,8 @@ jobs:
       rl_start: ${{ steps.rl-start.outputs.rl_start }}
       mode: ${{ steps.gate.outputs.mode }}
       proceed: ${{ steps.gate.outputs.proceed }}
+      skip_reason: ${{ steps.gate.outputs.skip_reason }}
+      precheck: ${{ steps.gate.outputs.precheck }}
       packages_allowed: ${{ steps.gate.outputs.packages_allowed }}
       packages_names: ${{ steps.gate.outputs.packages_names }}
       run_id: ${{ steps.gate.outputs.run_id }}
@@ -131,7 +134,7 @@ jobs:
                 pr = list.data[0]
               }
             }
-            if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('proceed', 'false'); return }
+            if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('skip_reason', 'not-eligible'); core.setOutput('proceed', 'false'); return }
 
             const full = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data
             // #2157/#3105: the decision (pipeline head, open, an epic → main PR's standing owner ok) lives in
@@ -157,7 +160,7 @@ jobs:
               const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
                 { owner, repo, head_sha: full.head.sha, per_page: 100 })
               failed = pickFailedRun(runs)
-              if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion }
+              if (failed) run = { id: failed.id, name: failed.name, html_url: failed.html_url, head_branch: full.head.ref, conclusion: failed.conclusion, head_sha: failed.head_sha }
             }
             // #3373 one "will the bot try?" decision (shared with status.yml); #3277 the head commit (or #3668 the same failing line after a hand-back, `carry`) keeps the try count.
             const failures = run ? [{ workflow: run.name, conclusion: run.conclusion }] : []
@@ -168,11 +171,14 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
                 '<!-- pipeline-note -->\n' + `🔴 **No failed CI run found for \`${full.head.sha.slice(0, 7)}\`** — the fix-bot has nothing to read, so it did not start.` +
                 `\n\n<sub>🤖 Claude Code · fix-bot (#3105)</sub>` })
-              core.setOutput('proceed', 'false'); return
+              core.setOutput('skip_reason', 'no-failed-run'); core.setOutput('proceed', 'false'); return
             }
             if (d.who === 'owner') {
-              core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('proceed', 'false'); return
+              core.info(`Not fixing #${pr.number}: ${d.reason}.`); core.setOutput('skip_reason', d.code); core.setOutput('proceed', 'false'); return
             }
+            // #4317: nothing to fix when the red check has since passed on this commit, or the head moved. No comment.
+            const pre = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-precheck.mjs`)).stillRed({ github, owner, repo, run, headSha: full.head.sha })
+            core.setOutput('precheck', pre.reason); if (!pre.run) { core.info(`Nothing to fix on #${pr.number}: ${pre.reason}.`); core.setOutput('skip_reason', pre.reason); core.setOutput('proceed', 'false'); return }
             const attempts = d.attempts
             // The linked issue (from the pi worker's `work-<n>` branch) is the resume surface for resume-on-comment.
             const m = /^(?:work-|epic\/)(\d+)/.exec(full.head.ref)
@@ -185,42 +191,28 @@ jobs:
             core.setOutput('attempts', String(attempts))
 
             // #3277: the page itself is the next step (`Page the owner once`), at most once per head.
-            if (d.who === 'gave-up') { core.setOutput('gave_up', 'true'); core.setOutput('proceed', 'false'); return }
+            if (d.who === 'gave-up') { core.setOutput('gave_up', 'true'); core.setOutput('skip_reason', 'gave-up'); core.setOutput('proceed', 'false'); return }
 
             // #3667 diagnose mode: one 🩺 diagnosis per (head sha, check) — a job re-run never posts a second.
             if (d.mode === 'diagnose') {
               const { hasDiagnosis } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/diagnosis-marker.mjs`)
               const cs = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 })
-              if (hasDiagnosis(cs, { sha: full.head.sha, check: run.name })) { core.info(`Diagnosis already posted for ${run.name} on ${full.head.sha.slice(0, 7)}.`); core.setOutput('proceed', 'false'); return }
+              if (hasDiagnosis(cs, { sha: full.head.sha, check: run.name })) { core.info(`Diagnosis already posted for ${run.name} on ${full.head.sha.slice(0, 7)}.`); core.setOutput('skip_reason', 'already-diagnosed'); core.setOutput('proceed', 'false'); return }
             }
 
-            // #2163 (the #2157 packages/ follow-up): normally the fix-bot's prompt STOPS at a
-            // packages/ change (the shared-code HARD GATE). But when the linked issue is a `pkg:*`
-            // issue, the owner already approved shared-code work by dispatching it — so the bot MAY
-            // fix packages/ (the PR still holds for a human merge behind the packages guard, #339).
-            // Resolve the package name(s) from the ISSUE's labels so the prompt can unlock exactly
-            // those and no others.
-            let packagesAllowed = 'false', pkgNames = ''
-            // An epic head is never a `pkg:*` leaf: packages/ stays off-limits for it.
-            if (issueNumber && !/^epic\//.test(full.head.ref)) {
-              try {
-                const iss = (await github.rest.issues.get({ owner, repo, issue_number: issueNumber })).data
-                const pkgs = (iss.labels || [])
-                  .map(l => (typeof l === 'string' ? l : l.name))
-                  .filter(n => /^pkg:/.test(n)).map(n => n.slice(4))
-                if (pkgs.length) { packagesAllowed = 'true'; pkgNames = pkgs.join(' ') }
-              } catch (e) { core.warning(`pkg-label check #${issueNumber}: ${e.message}`) }
-            }
+            // #2163: a `pkg:*` linked issue (never an epic head) unlocks packages/ for exactly those packages
+            // (the PR still holds for a human merge behind the packages guard, #339). Logic: fix-bot-precheck.mjs.
+            const pkg = await (await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/fix-bot-precheck.mjs`)).packagesAllowedFor({ github, owner, repo, issueNumber, head: full.head.ref, warn: core.warning })
 
             core.setOutput('proceed', 'true')
             core.setOutput('head_branch', full.head.ref)
             core.setOutput('base_ref', full.base.ref)
             core.setOutput('attempt_label', d.attemptLabel || '')
             core.setOutput('run_id', String(run.id))
-            core.setOutput('packages_allowed', packagesAllowed)
-            core.setOutput('packages_names', pkgNames)
+            core.setOutput('packages_allowed', pkg.allowed)
+            core.setOutput('packages_names', pkg.names)
             core.setOutput('mode', d.mode)
-            core.info(`Mode ${d.mode}; ${attempts}/${FIX_BOT_MAX_ATTEMPTS} tries so far for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
+            core.info(`Mode ${d.mode}; ${attempts}/${FIX_BOT_MAX_ATTEMPTS} tries so far for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${pkg.allowed} (${pkg.names || 'none'}).`)
 
       # #3277: one page per stuck head. CI and E2E both red on one head start two runs; the re-list
       # right before posting sees the first run's marker (they land ≥ 22 s apart on #3192).
@@ -429,7 +421,7 @@ jobs:
       # (copied from the default branch above). Round 1 of the review loop (#3668).
       - name: Diagnose the repeat red
         if: steps.gate.outputs.proceed == 'true' && steps.gate.outputs.mode == 'diagnose' && steps.base.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -694,7 +686,7 @@ jobs:
           echo "model: $MODEL (from .claude/pipeline-models.json)"
       - name: Diagnose round 2
         if: steps.route1.outputs.next == 'redo'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -868,6 +860,13 @@ jobs:
       id-token: write
       # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
       actions: write
+    # #4317: what record-outcome needs to name why a run pushed no fix (noCommitReason, fix-bot-precheck.mjs).
+    outputs:
+      go: ${{ steps.fixgo.outputs.go }}
+      moved: ${{ steps.head.outputs.moved }}
+      refused: ${{ steps.guard.outputs.refused }}
+      committed: ${{ steps.commit.outputs.committed }}
+      pushed: ${{ steps.guard.outputs.pushed }}
     steps:
       # App-token push so CI re-runs on the fix (see job fixbot for why, #626).
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -1042,11 +1041,11 @@ jobs:
 
       # ── The fix attempt ─────────────────────────────────────────────────────────
       # AUTH: headless/unattended → MUST use an API key (never a subscription OAuth token;
-      # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
+      # Anthropic terms). Pinned to the same SHA as every other claude-code-action step (scripts/workflow-action-pins.test.mjs checks it) — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - name: Fix attempt
         if: steps.fixgo.outputs.go == 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           # Pipeline PRs are pushed by the harness bot, and the action refuses a bot-initiated
           # run unless the bot is allow-listed — without this the fixer never ran on any
@@ -1116,6 +1115,7 @@ jobs:
       # branch (trusted — the PR branch can't alter it) and commits what the agent staged with the
       # agent's message + `CI-Fix: true`, under the fix-bot identity. No message file -> no commit.
       - name: Commit the staged fix
+        id: commit
         if: steps.fixgo.outputs.go == 'true'
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

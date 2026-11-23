@@ -95,7 +95,6 @@
       "signIn": "Sign in"
     },
     "calendar": {
-      "units": "Units",
       "noBookings": "No bookings",
       "bookingCount": "{count} booking | {count} bookings",
       "closed": "Closed",
@@ -106,6 +105,9 @@
     "card": {
       "activity": "Activity",
       "on": "on {date}",
+      "editBooking": "Edit booking",
+      "showDayInCalendar": "Show {date} in the calendar",
+      "emailPanel": "Email status",
       "emailLabels": {
         "confirm": "Confirm",
         "reminder": "Reminder",
@@ -144,10 +146,10 @@
     "createCard": {
       "editBookingFor": "Edit booking for",
       "newBookingFor": "New booking for",
-      "howMany": "How many do you need?",
-      "pickTimeSlot": "Pick a time slot",
-      "left": "left",
-      "ofAvailable": "of {count} available",
+      "product": "Product",
+      "time": "Time",
+      "amount": "Amount",
+      "amountLabel": "{booked} of {free} available",
       "selectLocation": "Select a location",
       "sure": "sure?",
       "cancel": "Delete",
@@ -201,13 +203,17 @@
       "allTeamMembers": "All team members",
       "bookingRules": "Booking Rules",
       "bookingRulesHint": "Control how bookings work at this location.",
-      "bookingMode": "Booking Mode",
-      "timeSlots": "Time Slots",
-      "timeSlotsDescription": "Book specific named time slots per day",
-      "inventory": "Inventory",
-      "inventoryDescription": "Book from a pool of available units",
-      "availableUnits": "Available Units",
-      "availableUnitsHelp": "Number of units available for booking at the same time.",
+      "products": "Products",
+      "productsHint": "What can be booked here, and how many of each at the same time.",
+      "product": "Product",
+      "stock": "Stock",
+      "addProduct": "Add product",
+      "removeProduct": "Remove product",
+      "pickProduct": "Pick a product",
+      "productInactive": "Inactive",
+      "productRemoved": "Removed",
+      "productsNone": "This location gets a product of its own when saved.",
+      "productsEmpty": "This location cannot be booked until a product is added.",
       "maxBookingsPerMonth": "Max Bookings Per Month",
       "maxBookingsPerMonthHelp": "Limit how many bookings a single user can make per calendar month. Leave empty for unlimited.",
       "unlimited": "Unlimited",
@@ -508,12 +514,13 @@
       "openDays": "Open Days",
       "slotSchedule": "Slot Schedule",
       "blockedDates": "Blocked Dates",
-      "inventoryMode": "Inventory Mode",
       "maxBookingsPerMonth": "Max Bookings Per Month",
       "allowedMemberIds": "Allowed Members",
       "translations": "Translations",
       "statuses": "Statuses",
       "groups": "Age Groups",
+      "sendEmails": "Send emails",
+      "sendEmailsHint": "Off: booking emails are not sent, and each one is logged as skipped",
       "name": "Name",
       "subject": "Subject",
       "body": "Body",
@@ -557,7 +564,8 @@
     "emailStatus": {
       "pending": "Pending",
       "sent": "Sent",
-      "failed": "Failed"
+      "failed": "Failed",
+      "skipped": "Skipped"
     }
   }
 }

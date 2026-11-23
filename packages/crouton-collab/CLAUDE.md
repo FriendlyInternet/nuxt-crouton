@@ -257,7 +257,7 @@ NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-app-collab.workers.dev
 
 ```bash
 npx wrangler d1 execute <DB_NAME> --remote \
-  --file=./packages/nuxt-crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
+  --file=./packages/crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
 ```
 
 ### 5. Deploy Order
@@ -697,18 +697,7 @@ This package is part of a 7-phase collaboration implementation:
 ## Testing
 
 ```bash
-# MANDATORY after any changes
-cd packages/nuxt-crouton-collab
-npx nuxt typecheck
-
-# Alternative: Verify specific files compile
-npx tsc --noEmit --skipLibCheck \
-  app/types/collab.ts \
-  app/composables/useCollabConnection.ts \
-  app/composables/useCollabSync.ts \
-  app/composables/useCollabPresence.ts \
-  app/composables/useCollabEditor.ts \
-  app/composables/useCollabRoomUsers.ts
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```
 
 ## CroutonCollection Integration

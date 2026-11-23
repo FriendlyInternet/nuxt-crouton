@@ -43,7 +43,7 @@ const logs = computed(() => {
 })
 
 // Status badge config
-const statusConfig: Record<string, { color: 'success' | 'warning' | 'error'; icon: string }> = {
+const statusConfig: Record<string, { color: 'success' | 'warning' | 'error' | 'neutral'; icon: string }> = {
   sent: {
     color: 'success',
     icon: 'i-lucide-check-circle'
@@ -55,6 +55,11 @@ const statusConfig: Record<string, { color: 'success' | 'warning' | 'error'; ico
   failed: {
     color: 'error',
     icon: 'i-lucide-x-circle'
+  },
+  // The team switched booking emails off (#3929)
+  skipped: {
+    color: 'neutral',
+    icon: 'i-lucide-ban'
   }
 }
 

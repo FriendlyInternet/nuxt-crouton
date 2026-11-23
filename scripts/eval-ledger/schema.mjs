@@ -94,7 +94,7 @@ export function validate(rec) {
   return { ok: true, record: withDefaults }
 }
 
-const RUN_STR = ['stage', 'run_id', 'attempt', 'workflow', 'started_at', 'ended_at', 'conclusion', 'attribution', 'source', 'rule', 'api_calls_reason', 'token']
+const RUN_STR = ['stage', 'run_id', 'attempt', 'workflow', 'started_at', 'ended_at', 'conclusion', 'attribution', 'source', 'rule', 'api_calls_reason', 'token', 'no_commit_reason', 'precheck']
 const RUN_ARR = ['produced', 'produced_ids', 'overlap']
 
 // Optional per-run fields: copied only when present, so legacy rows keep their exact shape.

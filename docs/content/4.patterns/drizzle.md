@@ -235,7 +235,7 @@ const product = await db.query.shopProducts.findFirst({
 - ✅ Quick prototypes
 
 ::callout{type="tip" icon="i-lucide-book-open"}
-**Query Examples**: For complete `useCollectionQuery` patterns, see [Querying Data](/fundamentals/querying).
+**Query Examples**: For complete `useCollectionQuery` patterns, see [Data operations](/fundamentals/data-operations#reading-a-list).
 ::
 
 ```vue

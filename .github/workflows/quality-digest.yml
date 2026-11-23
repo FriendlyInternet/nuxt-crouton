@@ -2,13 +2,17 @@ name: quality-digest
 
 # Weekly deterministic gather of what the pipeline merged (#3063/#3065) — no LLM. Writes
 # writeups/reports/quality-digest-YYYYMMDD.json and uploads it as an artifact. Cadence lives in
-# .github/digests.yml (weekly:mon); the daily cron is a cheap wake-up that schedule.mjs gates.
+# .github/digests.yml (weekly:mon); the status app's daily clock run (06:30 UTC, `clock: true`) is a
+# cheap wake-up that schedule.mjs gates.
 
 on:
-  schedule:
-    - cron: '30 6 * * *'
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       since:
         description: 'Window start (YYYY-MM-DD); default 7 days before until'
         required: false
@@ -43,7 +47,7 @@ jobs:
       - name: Decide if today is a send day
         id: gate
         env:
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && !inputs.clock && '1' || '0' }}
         run: node .claude/skills/housekeeping/schedule.mjs quality-digest
 
       - name: Gather

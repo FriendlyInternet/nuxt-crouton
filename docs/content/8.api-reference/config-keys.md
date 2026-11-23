@@ -17,7 +17,7 @@ Answers land in `crouton.config.js → features.<alias>` and `runtimeConfig.crou
 | Key | Type | Default | Runtime config | Options | Description |
 | --- | --- | --- | --- | --- | --- |
 | `email.enabled` | boolean | `false` |  |  | Send booking confirmations, reminders, and follow-ups via email. |
-| `bookingModes` | multiselect | `["slots"]` |  | `slots`, `inventory` | How resources can be booked. |
+| `bookingModes` | multiselect | `["slots"]` |  | `slots` | How resources can be booked. |
 
 ## crouton-maps
 

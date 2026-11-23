@@ -126,6 +126,16 @@ test('extractTicketSteps: bullets under 🤖 For agents and 🧪 How to test; ot
 })
 
 // The CLI the workflow runs, with a fake `gh` (no network in CI's node --test job).
+// covers: T7
+test('#4316: renderNumbers prints the Steps: line right after the heading, with and without run records', () => {
+  const stepLine = 'built 2 of 3 steps, dropped 1 (not planned): #12'
+  const none = renderNumbers(epicNumbers({ epic: 1, stepLine })).split('\n')
+  assert.deepEqual(none.slice(0, 3), ['### 📊 Numbers', '', `Steps: ${stepLine}`])
+  const withRuns = renderNumbers({ ...epicNumbers({ epic: 1, stepLine }), runs: 2, perChild: [] }).split('\n')
+  assert.deepEqual(withRuns.slice(0, 3), ['### 📊 Numbers', '', `Steps: ${stepLine}`])
+  assert.ok(!renderNumbers(epicNumbers({ epic: 1 })).includes('Steps:'))
+})
+
 function fakeGh() {
   const calls = []
   const gh = args => {
@@ -164,6 +174,8 @@ test('CLI: real records + gh → numbers.json, numbers.md, steps.md; a mention-o
   assert.equal(n.timeToMainHours, 12)
   assert.deepEqual(n.ownerTouches, { typed: 1, viaAgent: 0, links: ['c1'] })
   assert.match(readFileSync(join(out, 'numbers.md'), 'utf8'), /\*\*8 runs\*\*/)
+  // covers: T7 — #4316, through the real gather: the not-planned child is named, never counted as merged
+  assert.match(readFileSync(join(out, 'numbers.md'), 'utf8'), /^Steps: 1 merged, 1 not planned: #3716$/m)
   const steps = readFileSync(join(out, 'steps.md'), 'utf8')
   assert.match(steps, /## #3715 — quiz \(closed\)\nPRs: #3719 \(merged → main\)/)
   assert.match(steps, /- \[Do 2\] two/)

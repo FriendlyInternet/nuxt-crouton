@@ -185,4 +185,23 @@ test('(i,l) CLI from a mirrored layout resolves its import; shared-folder runs a
   assert.equal(lines[0].cost.usd, r6(2 * costForPiUsage(U, 'claude-sonnet-5')))
 })
 
+test('#4161 T1: two tool calls (bash, write) trace two kind:tool events, name + ts only, no arguments', () => {
+  const d = tmp()
+  const call = (ts, name, args) => JSON.stringify({ type: 'message', timestamp: ts, message: { role: 'assistant', content: [{ type: 'toolCall', id: 'x', name, arguments: args }] } })
+  fs.writeFileSync(path.join(d, 's.jsonl'), [
+    mainLine(U),
+    call('2026-11-18T10:00:00.000Z', 'bash', { command: 'echo SECRET-COMMAND-TEXT' }),
+    call('2026-11-18T10:00:05.000Z', 'write', { path: 'a.txt', content: 'SECRET-FILE-BODY' }),
+    '',
+  ].join('\n'))
+  const t = buildPiTrace(d, { sessionDir: d })
+  const tools = t.events.filter((e) => e.kind === 'tool')
+  assert.equal(t.events.length, 2)
+  assert.deepEqual(tools.map((e) => e.name), ['bash', 'write'])
+  assert.deepEqual(tools[0], { ts: '2026-11-18T10:00:00.000Z', kind: 'tool', name: 'bash', parent: 'root', depth: 0 })
+  assert.equal(t.meta.eventCount, 2)
+  const blob = JSON.stringify(t)
+  assert.ok(!/SECRET-COMMAND-TEXT|SECRET-FILE-BODY|a\.txt/.test(blob), 'no tool arguments may reach the trace')
+})
+
 console.log(`\npi-telemetry adapter: ${passed} tests passed`)

@@ -1,23 +1,13 @@
 /**
  * Enriched events query composable
  * Extends standard collection query with user JOIN support
+ *
+ * `options` may be a plain object, a ref or a getter — the query re-runs when it changes.
  */
+import type { MaybeRefOrGetter } from 'vue'
+import type { EventQueryOptions } from '../utils/event-display'
 
-interface UseCroutonEventsOptions {
-  teamId?: string
-  enrichUserData?: boolean // If true, JOINs with users table
-  filters?: {
-    collectionName?: string
-    operation?: 'create' | 'update' | 'delete'
-    userId?: string
-    dateFrom?: Date
-    dateTo?: Date
-  }
-  pagination?: {
-    page?: number
-    pageSize?: number
-  }
-}
+type UseCroutonEventsOptions = EventQueryOptions
 
 interface EnrichedEvent {
   id: string
@@ -39,49 +29,20 @@ interface EnrichedEvent {
   }
 }
 
-export function useCroutonEvents(options: UseCroutonEventsOptions = {}) {
+export function useCroutonEvents(options: MaybeRefOrGetter<UseCroutonEventsOptions> = {}) {
   const { getTeamId } = useTeamContext()
-  const teamId = options.teamId || getTeamId()
+  const teamId = toValue(options).teamId || getTeamId()
 
   if (!teamId) {
     throw new Error('[useCroutonEvents] Team context required')
   }
 
-  // Build query parameters
-  const queryParams: any = {
-    teamId
-  }
-
-  if (options.filters) {
-    if (options.filters.collectionName) {
-      queryParams.collectionName = options.filters.collectionName
-    }
-    if (options.filters.operation) {
-      queryParams.operation = options.filters.operation
-    }
-    if (options.filters.userId) {
-      queryParams.userId = options.filters.userId
-    }
-    if (options.filters.dateFrom) {
-      queryParams.dateFrom = options.filters.dateFrom.toISOString()
-    }
-    if (options.filters.dateTo) {
-      queryParams.dateTo = options.filters.dateTo.toISOString()
-    }
-  }
-
-  if (options.pagination) {
-    queryParams.page = options.pagination.page || 1
-    queryParams.pageSize = options.pagination.pageSize || 50
-  }
-
-  if (options.enrichUserData) {
-    queryParams.enrichUserData = true
-  }
+  // Reactive: useFetch re-runs whenever the computed query changes (filters, page)
+  const query = computed(() => buildEventQuery({ ...toValue(options), teamId }))
 
   const { data, pending, error, refresh } = useFetch<EnrichedEvent[]>(
     `/api/teams/${teamId}/crouton-events`,
-    { query: queryParams }
+    { query }
   )
 
   return {

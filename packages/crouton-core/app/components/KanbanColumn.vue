@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, computed, onMounted, nextTick, onBeforeUnmount, resolveComponent, inject, type Component } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, resolveComponent, inject, type Component } from 'vue'
 import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
 import type SortableType from 'sortablejs'
 import type { SortableEvent, MoveEvent } from 'sortablejs'
@@ -26,6 +26,8 @@ interface Props {
   isDropTarget?: boolean
   /** Show collaboration presence badges on cards */
   showCollabPresence?: boolean | CollabPresenceConfig
+  /** Cards can't be dragged; no Edit/Delete buttons on the default card */
+  readonly?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,7 +37,8 @@ const props = withDefaults(defineProps<Props>(), {
   cardComponent: null,
   showCount: true,
   isDropTarget: false,
-  showCollabPresence: false
+  showCollabPresence: false,
+  readonly: false
 })
 
 const emit = defineEmits<{
@@ -53,7 +56,7 @@ const columnRef = ref<HTMLElement | null>(null)
 let sortableInstance: SortableType | null = null
 
 async function initSortable() {
-  if (!import.meta.client || !columnRef.value) return
+  if (props.readonly || !columnRef.value) return
   if (sortableInstance) return
 
   try {
@@ -110,6 +113,15 @@ onBeforeUnmount(() => {
 onMounted(async () => {
   await nextTick()
   initSortable()
+})
+
+watch(() => props.readonly, (ro) => {
+  if (ro) {
+    sortableInstance?.destroy()
+    sortableInstance = null
+  } else {
+    initSortable()
+  }
 })
 
 // Badge color mapping
@@ -203,7 +215,8 @@ const crouton = useCrouton()
         v-for="item in items"
         :key="item.id"
         :data-id="item.id"
-        class="kanban-card cursor-grab active:cursor-grabbing relative"
+        class="kanban-card relative"
+        :class="readonly ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'"
         @click="emit('select', item)"
       >
         <!-- Use custom card component if provided -->
@@ -231,7 +244,9 @@ const crouton = useCrouton()
           </div>
 
           <!-- Action buttons (show on hover) -->
-          <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
+          <div
+            v-if="!readonly"
+            class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
             <CroutonItemButtonsMini
               delete
               update
@@ -257,7 +272,7 @@ const crouton = useCrouton()
 
       <!-- Empty state -->
       <div
-        v-if="items.length === 0"
+        v-if="items.length === 0 && !readonly"
         class="flex items-center justify-center h-20 text-muted text-sm border-2 border-dashed border-muted/30 rounded-lg"
       >
         {{ t('kanban.dropItemsHere') }}

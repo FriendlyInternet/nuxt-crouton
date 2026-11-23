@@ -73,7 +73,7 @@ Work lands via a PR on a feature branch (`/commit`, `(#NN)`, `Closes #NN` in the
 - interactive agent (`add_issue_comment`, posts as the human account): `> 🤖 **Claude Code** · interactive agent · chat <id> · posted from `@pmcp`'s account (not Maarten) · _<context>_` — the handle is backticked so it doesn't ping; `<id>` is the chat id printed at session start (the hook requires it, #3996).
 - pipeline (bot account): `> 🤖 **Claude Code** · agent pipeline (CI) · _<context>_` — no human disclaimer.
 
-**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop.
+**A change request for a pipeline worker names it:** a line starting `**Worker:** <what to change>` re-runs the pi worker (#2453, `scripts/revise-route.mjs`); other 🤖 comments are ignored by the revision loop — except the owner's first answer to a worker's open question (a `worker-question` reply record, #4192), which re-runs the worker whether typed or relayed by a chat whose header says `owner answer`/`owner decision`.
 
 ### Task Decomposition Pipeline (`/task-decompose`)
 
@@ -210,7 +210,7 @@ session catches what the PR would, not after:
    --filter './apps/*' --filter @fyit/crouton-cli typecheck`; CI runs it in full only on a push
    or an infra change). Changed a package? Also run `pnpm typecheck:packages` — it lists every
    `packages/*` package as `run` or `skip (#ticket)` and checks the `gate` list in
-   `scripts/typecheck-packages.json` (6 packages today; the other 23 are skipped under #3871).
+   `scripts/typecheck-packages.json` (6 packages today; the other 24 are skipped under #3871).
    CI's `Type Check Packages` job runs the same script on every PR that touches a package.
    Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces
    thousands of false positives. Fix errors immediately. Never skip.
@@ -349,9 +349,11 @@ throw createError({ statusCode: 404, statusMessage: 'Not found' })
 routeRules: {
   // ✅ Safe: static assets + specific prefixes OUTSIDE the generated collection API
   '/_nuxt/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
-  '/api/crouton-bookings/teams/*/availability': { swr: 300 }, // SWR: stale-while-revalidate
 
-  // ❌ NEVER add wildcard rules on the generated /api/teams/* prefix:
+  // ❌ NEVER add swr/isr/cache rules with a `*` segment on ANY parameterised API prefix
+  // (`/api/teams/*`, `/api/crouton-bookings/teams/*`) — Nuxt registers the renderer there and
+  // radix3 then shadows deeper `:id` routes (#4300); cache inside the handler with
+  // defineCachedEventHandler instead. Guard: scripts/lib/route-rules-shadow.test.mjs
   // '/api/teams/*/pages/**': { isr: 3600 }  // BROKEN — the wildcard conflicts with
   // radix3's :id routing and breaks ALL /api/teams/:id/* generated collection routes
   // (disabled with this warning in packages/crouton-pages/nuxt.config.ts and apps/velo/nuxt.config.ts)

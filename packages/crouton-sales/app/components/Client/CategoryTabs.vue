@@ -8,7 +8,7 @@
     :model-value="modelValue ?? fallbackValue"
     :items="tabItems"
     :content="false"
-    :ui="{ list: 'overflow-x-auto', trigger: 'flex-1 min-w-fit' }"
+    :ui="{ list: SCROLL_ROW_X, trigger: 'flex-1 min-w-fit' }"
     @update:model-value="onTabChange"
   />
 
@@ -20,7 +20,8 @@
     v-else
     ref="listEl"
     role="tablist"
-    class="flex w-full items-center gap-1 rounded-lg bg-elevated p-1 overflow-x-auto"
+    class="flex w-full items-center gap-1 rounded-lg bg-elevated p-1"
+    :class="SCROLL_ROW_X"
   >
     <li
       v-for="cat in orderedCategories"

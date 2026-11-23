@@ -12,6 +12,7 @@
 import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import {
   isBookingEmailEnabled,
   resolveTranslatedField,
@@ -118,10 +119,13 @@ export default defineEventHandler(async (event) => {
   const teamMetadata = (team.metadata || {}) as Record<string, string>
   const ld = booking.locationData as any
   const tr = ld?.translations as Record<string, Record<string, string>> | null
-  const locationTitle = resolveTranslatedField(ld?.title, tr, 'title', locale) || 'Location'
-  const locationStreet = resolveTranslatedField(ld?.street, tr, 'street', locale)
-  const locationCity = resolveTranslatedField(ld?.city, tr, 'city', locale)
-  const locationContent = resolveTranslatedField(ld?.content, tr, 'content', locale)
+  // App default language: location fields fall back to it (#4244)
+  const i18nCfg = (useRuntimeConfig(event) as any)?.croutonI18n ?? {}
+  const defaultLocale = requiredLocale(i18nCfg.supportedLocales ?? [], i18nCfg.defaultLocale)
+  const locationTitle = resolveTranslatedField(ld?.title, tr, 'title', locale, defaultLocale) || 'Location'
+  const locationStreet = resolveTranslatedField(ld?.street, tr, 'street', locale, defaultLocale)
+  const locationCity = resolveTranslatedField(ld?.city, tr, 'city', locale, defaultLocale)
+  const locationContent = resolveTranslatedField(ld?.content, tr, 'content', locale, defaultLocale)
 
   // Resolve slot IDs to human-readable labels
   const slotLabel = resolveSlotLabels(booking.slot, ld?.slots as any, locale)
@@ -164,6 +168,14 @@ export default defineEventHandler(async (event) => {
     locale,
     event
   })
+
+  // The team switched booking emails off: the skipped log row is the record (#3929)
+  if (result.skipped) {
+    throw createError({
+      status: 409,
+      statusText: 'Booking emails are switched off in the booking settings'
+    })
+  }
 
   if (!result.success) {
     throw createError({

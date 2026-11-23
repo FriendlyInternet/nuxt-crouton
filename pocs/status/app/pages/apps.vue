@@ -1,20 +1,33 @@
 <script setup lang="ts">
-// The dashboard: Apps · To test · Decisions · Changelog. The page fetches and owns the filter
+// The dashboard: Apps · To test · Decisions · Changelog · Clock. The page fetches and owns the filter
 // state (so it survives switching tabs); each tab is its own component in components/dashboard/.
-import type { AppRow, ChangelogRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
+import { sortClockRows } from '~/utils/dashboard'
+import type { AppRow, ChangelogRow, ClockRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
 
 definePageMeta({ middleware: 'auth' })
 
-const tabs = [
+const TABS = [
   { label: 'Apps', slot: 'apps', icon: 'i-lucide-layout-grid' },
   { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
   { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
-  { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' }
+  { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' },
+  { label: 'Clock', slot: 'clock', icon: 'i-lucide-clock' }
 ]
+// On a phone (below sm) the tabs show their icon only, plus the label on the selected tab.
+const activeTab = ref('apps')
+const tabs = computed(() => TABS.map(t => ({
+  ...t,
+  value: t.slot,
+  ui: { label: t.slot === activeTab.value ? '' : 'hidden sm:inline' }
+})))
 
 const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
+const { data: clockRes, status: clockStatus } = await useFetch<{ data: ClockRow[] | null, error: string | null }>('/api/status/clock', { lazy: true })
+
+// --- Clock ---
+const clockRows = computed(() => sortClockRows(clockRes.value?.data ?? []))
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
@@ -47,11 +60,14 @@ const expanded = ref<string | null>(null)
 // --- Changelog ---
 const search = ref('')
 const areaFilter = ref<string | null>(null)
+const showChores = ref(false)
 const rows = computed(() => changelogRes.value?.data ?? [])
-const areas = computed(() => [...new Set(rows.value.map(r => r.area))].sort())
+// Chores are hidden unless "Show chores" is on; the area chips count only what is shown.
+const shownRows = computed(() => rows.value.filter(r => showChores.value || r.kind !== 'chore'))
+const areas = computed(() => [...new Set(shownRows.value.map(r => r.area))].sort())
 const filteredRows = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return rows.value.filter(r =>
+  return shownRows.value.filter(r =>
     (!areaFilter.value || r.area === areaFilter.value)
     && (!q || r.title.toLowerCase().includes(q) || r.area.toLowerCase().includes(q))
   )
@@ -61,7 +77,7 @@ const filteredRows = computed(() => {
 <template>
   <UContainer class="py-4 sm:py-6">
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left" label="Inbox" class="mb-2" />
-    <UTabs :items="tabs" class="w-full">
+    <UTabs v-model="activeTab" :items="tabs" class="w-full">
       <template #apps>
         <DashboardAppsTab :error="appsRes?.error" :pending="appsStatus === 'pending'" :cards="appCards" />
       </template>
@@ -72,7 +88,10 @@ const filteredRows = computed(() => {
         <DashboardDecisionsTab v-model:expanded="expanded" :error="decisionsRes?.error" :pending="decisionsStatus === 'pending'" :decisions="decisions" :open-questions="openQuestions" />
       </template>
       <template #changelog>
-        <DashboardChangelogTab v-model:search="search" v-model:area="areaFilter" :error="changelogRes?.error" :pending="changelogStatus === 'pending'" :areas="areas" :rows="filteredRows" />
+        <DashboardChangelogTab v-model:search="search" v-model:area="areaFilter" v-model:show-chores="showChores" :error="changelogRes?.error" :pending="changelogStatus === 'pending'" :areas="areas" :rows="filteredRows" />
+      </template>
+      <template #clock>
+        <DashboardClockTab :error="clockRes?.error" :pending="clockStatus === 'pending'" :rows="clockRows" />
       </template>
     </UTabs>
   </UContainer>

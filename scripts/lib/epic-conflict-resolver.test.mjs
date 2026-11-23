@@ -83,3 +83,34 @@ test('bot PR whose branch is not epic/… → not started (also via replyIfConfl
   await replyIfConflicting({ github: f.github, owner: 'o', repo: 'r', pull_number: 5, handoffGuard: guard, say: async m => said.push(m), sleep: async () => {} })
   assert.equal(f.calls.dispatch.length, 0); assert.match(said[0], /resolve the conflict by hand/)
 })
+
+// #4260: a single-ticket pipeline PR straight into main gets the same fixer.
+const leaf = { user: { login: 'nuxt-harness[bot]' }, head: { sha: 'abc', ref: 'work-5' }, base: { ref: 'main' } }
+test('bot PR work-<N> → main, dirty → note + dispatch on the normal revise path (no branch input)', async () => {
+  const f = fake(); f.pr = leaf
+  const r = await go(f)
+  assert.equal(r.status, 'started')
+  assert.match(f.calls.comments[0], /epic-conflict-resolve:abc/)
+  assert.match(f.calls.comments[0], /merging `main` into `work-5`/)
+  assert.deepEqual(f.calls.dispatch, [{ issue: '5', feedback: '99' }])
+})
+test('work-<N> PR: only into main, only an exact work-<digits> name, only from the bot', async () => {
+  const not = async (p) => { const f = fake(); f.pr = p; assert.equal((await go(f)).status, 'not-pipeline', JSON.stringify(p.head)); assert.equal(f.calls.dispatch.length, 0) }
+  await not({ ...leaf, base: { ref: 'epic/12-x' } })
+  await not({ ...leaf, base: undefined })
+  for (const ref of ['work-5; id', 'work-', 'work-5-x', 'xwork-5', 'work-5\nx']) await not({ ...leaf, head: { sha: 'abc', ref } })
+  await not({ ...leaf, user: { login: 'rando' } })
+})
+test('work-<N> PR: same once-per-head and 30-minute guards as an epic PR', async () => {
+  const now = Date.now()
+  const same = fake({ comments: [{ body: '<!-- epic-conflict-resolve:abc -->', created_at: new Date(now - 3 * 3600e3).toISOString() }] }); same.pr = leaf
+  assert.equal((await go(same, 'dirty', now)).status, 'already')
+  const recent = fake({ comments: [{ body: '<!-- epic-conflict-resolve:old -->', created_at: new Date(now - 60e3).toISOString() }] }); recent.pr = leaf
+  assert.equal((await go(recent, 'dirty', now)).status, 'recent')
+  const clean = fake(); clean.pr = leaf
+  assert.equal((await go(clean, 'clean')).status, 'not-dirty')
+})
+test('the sweep starts the fixer for a work-<N> → main PR too (real YAML)', () => {
+  const y = readFileSync(new URL('../../.github/workflows/automerge-epic-subpr.yml', import.meta.url), 'utf8')
+  assert.match(y, /if \(\(epicToMain \|\| leafToMain\) && state === 'dirty'\)/)
+})
