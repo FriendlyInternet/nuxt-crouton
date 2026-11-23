@@ -10,6 +10,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appDirOf, checkMigrationResolution, isMigrationFile, migrationDirOf, buildPrompt } from './conflict-resolution.mjs'
 
+// A real conflict run sets PKG_DIST_REF for the tool, and it runs this suite as its check (#4374).
+// Every `verify` these tests start in a scratch repo would inherit it, try a package build there
+// and fail. Clear it once; the tests that are about it pass it explicitly.
+delete process.env.PKG_DIST_REF
+
 const D = 'apps/velo/server/db/migrations/sqlite'
 const J = `${D}/meta/_journal.json`
 const entry = (idx, tag) => ({ idx, version: '6', when: 1000 + idx, tag, breakpoints: true })
