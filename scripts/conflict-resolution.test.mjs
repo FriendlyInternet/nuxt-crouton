@@ -182,12 +182,20 @@ test('stale branch with base .gitattributes seeded in info/attributes: merge=uni
 import { copyFileSync, existsSync, rmSync } from 'node:fs'
 
 const MIG = 'apps/x/server/db/migrations/sqlite'
+
+// The workflow's lone copy: the script plus lib/log-tail.mjs beside it (#4320, #4374).
+function loneCopy() {
+  const lone = mkdtempSync(join(tmpdir(), 'lone-'))
+  copyFileSync(CLI, join(lone, 'conflict-resolution.mjs'))
+  mkdirSync(join(lone, 'lib'))
+  copyFileSync(fileURLToPath(new URL('./lib/log-tail.mjs', import.meta.url)), join(lone, 'lib/log-tail.mjs'))
+  return lone
+}
 const jrnl = (tags) => JSON.stringify({ version: '7', dialect: 'sqlite', entries: tags.map((tag, idx) => ({ idx, version: '6', when: idx, tag, breakpoints: true })) }, null, 2) + '\n'
 
 // Both sides add migration 0001 to apps/x: the snapshot (add/add) and the journal conflict.
 function migMerge() {
-  const lone = mkdtempSync(join(tmpdir(), 'lone-'))
-  copyFileSync(CLI, join(lone, 'conflict-resolution.mjs'))
+  const lone = loneCopy()
   const dir = mkdtempSync(join(tmpdir(), 'verify-mig-'))
   const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
   const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
@@ -258,4 +266,184 @@ test('T2 resolutionPaths keeps untracked generator output in the conflicted migr
     resolutionPaths({ modified: [`${MIG}/0001_side.sql`, 'x.md'], conflicted, untracked: [`${MIG}/0002_new.sql`, `${MIG}/meta/0002_snapshot.json`, 'stray.md'] }),
     [`${MIG}/0001_side.sql`, `${MIG}/0002_new.sql`, `${MIG}/meta/0002_snapshot.json`],
   )
+})
+
+// ── #4374: rebuild the packages after the merge, and name the failed tests ──
+import { runChecks, needsPackageBuild, failedTestsNote, changedSinceBuild, BUILD_CMD } from './conflict-resolution.mjs'
+import { chmodSync } from 'node:fs'
+
+/** A fake runner: records each command; `fail` maps a command to the output it fails with. */
+function fakeRun(fail = {}) {
+  const calls = []; const logs = []
+  const run = (cmd) => { calls.push(cmd); return cmd in fail ? { ok: false, output: fail[cmd] } : { ok: true, output: '' } }
+  return { calls, logs, run, log: (l) => logs.push(l) }
+}
+
+// covers: T1
+test('T1 a merge that changed the auth schema: install → build → scripts tests, in that order', () => {
+  const f = fakeRun()
+  const r = runChecks({ changed: ['packages/crouton-auth/server/database/schema/auth.ts'], conflicted: ['.github/workflows/deploy-app.yml'], run: f.run, log: f.log })
+  assert.deepEqual(r, { ok: true })
+  assert.deepEqual(f.calls, [INSTALL_CMD, BUILD_CMD, SCRIPTS_TEST_CMD])
+  assert.ok(f.logs.some((l) => l === 'package build: packages/crouton-auth/server/database/schema/auth.ts'), f.logs.join('\n'))
+})
+
+// covers: T2
+test('T2 a merge with nothing under packages/: no install, no build, tests run, skip logged', () => {
+  const f = fakeRun()
+  const r = runChecks({ changed: ['.github/workflows/deploy-app.yml', 'apps/kassa/app/pages/index.vue'], conflicted: ['.github/workflows/deploy-app.yml'], run: f.run, log: f.log })
+  assert.deepEqual(r, { ok: true })
+  assert.deepEqual(f.calls, [SCRIPTS_TEST_CMD])
+  const log = f.logs.join('\n')
+  assert.match(log, /package build skipped/)
+  assert.match(log, /nothing under packages\//)
+})
+
+// covers: T3
+test('T3 a lockfile-only change needs the build', () => {
+  assert.equal(needsPackageBuild(['pnpm-lock.yaml']).build, true)
+  const f = fakeRun()
+  runChecks({ changed: ['pnpm-lock.yaml'], conflicted: ['pnpm-lock.yaml'], run: f.run, log: f.log })
+  assert.ok(f.calls.includes(BUILD_CMD), f.calls.join('\n'))
+})
+
+// covers: T4
+test('T4 a failed build stops with the build error, and the tests never run', () => {
+  const f = fakeRun({ [BUILD_CMD]: 'building…\nERR_PNPM_RECURSIVE_RUN_FIRST_FAIL @fyit/crouton-auth build: exit 1\n' })
+  const r = runChecks({ changed: ['packages/a/x.ts'], conflicted: [], run: f.run, log: f.log })
+  assert.equal(r.ok, false)
+  assert.match(r.errors[0], /^package build failed after the merge/)
+  assert.ok(r.errors.some((e) => e.includes('ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL')), r.errors.join('\n'))
+  assert.ok(!f.calls.includes(SCRIPTS_TEST_CMD))
+})
+
+// covers: T5
+test('T5 failing scripts tests are named; passing and TODO tests are not', () => {
+  const tap = ['TAP version 13', 'ok 1 - gamma', 'not ok 3 - alpha works', '  ---', 'not ok 5 - delta # TODO later', 'not ok 7 - beta works', '# fail 2'].join('\n')
+  const f = fakeRun({ [SCRIPTS_TEST_CMD]: tap })
+  const r = runChecks({ changed: [], conflicted: [], run: f.run, log: f.log })
+  assert.equal(r.ok, false)
+  assert.deepEqual(r.errors, ['scripts tests fail after resolution: 2 failed', '  ✖ alpha works', '  ✖ beta works'])
+})
+
+// covers: T6
+test('T6 six failures → five names and "and 1 more"; no failing line still says more than the bare line', () => {
+  const tap = [1, 2, 3, 4, 5, 6].map((n) => `not ok ${n} - case ${n}`).join('\n')
+  const note = failedTestsNote(tap)
+  assert.equal(note.length, 7)
+  assert.equal(note[0], 'scripts tests fail after resolution: 6 failed')
+  assert.equal(note[5], '  ✖ case 5')
+  assert.equal(note[6], '  and 1 more')
+  const bare = failedTestsNote('nothing useful here\n')
+  assert.ok(bare.join('\n').length > 'scripts tests fail after resolution'.length, bare)
+  assert.notDeepEqual(bare, ['scripts tests fail after resolution'])
+})
+
+/** A fake `pnpm` on PATH that only records its arguments. */
+function fakePnpm() {
+  const bin = mkdtempSync(join(tmpdir(), 'shim-'))
+  const log = join(bin, 'pnpm.log')
+  writeFileSync(join(bin, 'pnpm'), '#!/bin/sh\necho "$@" >> "$SHIM_LOG"\n')
+  chmodSync(join(bin, 'pnpm'), 0o755)
+  writeFileSync(log, '')
+  return { bin, log }
+}
+
+/** The env for a nested verify: no inherited test-runner context, so its `node --test` prints TAP. */
+function cliEnv(extra) {
+  const env = { ...process.env, ...extra }
+  delete env.NODE_TEST_CONTEXT
+  for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k]
+  return env
+}
+
+const passing = (name) => `import { test } from 'node:test'\ntest(${JSON.stringify(name)}, () => {})\n`
+
+// covers: T7
+test('T7 verify (lone copy): a failing scripts test is named in an ::error:: line', () => {
+  const lone = loneCopy(); const shim = fakePnpm()
+  const dir = mkdtempSync(join(tmpdir(), 'verify-names-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put('scripts/lib/b.test.mjs', passing('b ok')); put('scripts/a.test.mjs', passing('a0'))
+  git('add', '-A'); git('commit', '-qm', 'b0')
+  git('checkout', '-qb', 'work'); put('scripts/a.test.mjs', passing('a side')); git('commit', '-qam', 'side')
+  git('checkout', '-q', 'main'); put('scripts/a.test.mjs', passing('a base')); git('commit', '-qam', 'base')
+  git('checkout', '-q', 'work')
+  assert.notEqual(git('merge', '--no-edit', 'main').status, 0, 'expected a conflict')
+  put('scripts/a.test.mjs', "import { test } from 'node:test'\ntest('stale build canary', () => { throw new Error('stale') })\n")
+  const v = spawnSync('node', [join(lone, 'conflict-resolution.mjs'), 'verify', join(dir, 'none.md')], {
+    cwd: dir, encoding: 'utf8', env: cliEnv({ PATH: `${shim.bin}:${process.env.PATH}`, SHIM_LOG: shim.log, PKG_DIST_REF: undefined }),
+  })
+  assert.doesNotMatch(v.stderr, /ERR_MODULE_NOT_FOUND/)
+  assert.equal(v.status, 1, v.stderr)
+  assert.ok(v.stderr.split('\n').some((l) => l.startsWith('::error::') && l.includes('stale build canary')), v.stderr)
+})
+
+/** Commit A (the build tree), then P on top changing packages/p/a.ts — the PR #4333 shape. */
+function buildTreeRepo() {
+  const dir = mkdtempSync(join(tmpdir(), 'dist-ref-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put('packages/p/a.ts', 'export const a = 1\n'); put('apps/x/page.vue', '<template />\n')
+  put('scripts/lib/b.test.mjs', passing('b ok')); put('scripts/a.test.mjs', passing('a0'))
+  git('add', '-A'); git('commit', '-qm', 'A')
+  const A = git('rev-parse', 'HEAD').stdout.trim()
+  put('packages/p/a.ts', 'export const a = 2\n'); git('commit', '-qam', 'P')
+  return { dir, git, put, A }
+}
+
+// covers: T10
+test('T10 changedSinceBuild compares with the build tree, so a package change already on HEAD still builds', () => {
+  const r = buildTreeRepo()
+  r.put('apps/x/page.vue', '<template><div /></template>\n')
+  const since = changedSinceBuild({ distRef: r.A, cwd: r.dir })
+  assert.ok(since.files.includes('packages/p/a.ts'), since.files.join(','))
+  assert.equal(since.against, r.A)
+  assert.equal(needsPackageBuild(since.files).build, true)
+  const head = changedSinceBuild({ cwd: r.dir })
+  assert.deepEqual(head.files, ['apps/x/page.vue'])
+  assert.equal(head.against, 'HEAD')
+  assert.ok(head.note)
+  assert.equal(needsPackageBuild(head.files).build, false)
+})
+
+// covers: T11
+test('T11 an unreadable build ref builds to be safe, never a quiet fallback to HEAD', () => {
+  const r = buildTreeRepo()
+  const ref = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+  const since = changedSinceBuild({ distRef: ref, cwd: r.dir })
+  assert.equal(needsPackageBuild(since.files).build, true)
+  assert.ok(since.note.includes(ref), since.note)
+  assert.match(since.note, /building to be safe/)
+})
+
+// covers: T12
+test('T12 verify (lone copy) reads PKG_DIST_REF: builds against the build tree, skips without it', () => {
+  const lone = loneCopy()
+  const r = buildTreeRepo()
+  r.git('checkout', '-qb', 'work'); r.put('scripts/a.test.mjs', passing('a side')); r.git('commit', '-qam', 'side')
+  r.git('checkout', '-qb', 'epic', 'main'); r.put('scripts/a.test.mjs', passing('a base')); r.git('commit', '-qam', 'base')
+  r.git('checkout', '-q', 'work')
+  assert.notEqual(r.git('merge', '--no-edit', 'epic').status, 0, 'expected a conflict')
+  r.put('scripts/a.test.mjs', passing('a both'))
+  const verify = (ref) => {
+    const shim = fakePnpm()
+    const v = spawnSync('node', [join(lone, 'conflict-resolution.mjs'), 'verify', join(r.dir, 'none.md')], {
+      cwd: r.dir, encoding: 'utf8', env: cliEnv({ PATH: `${shim.bin}:${process.env.PATH}`, SHIM_LOG: shim.log, PKG_DIST_REF: ref }),
+    })
+    return { v, calls: readFileSync(shim.log, 'utf8').split('\n').filter(Boolean) }
+  }
+  const withRef = verify(r.A)
+  assert.equal(withRef.v.status, 0, withRef.v.stderr)
+  assert.equal(withRef.calls.length, 2, withRef.calls.join('\n'))
+  assert.match(withRef.calls[0], /^install /)
+  assert.equal(withRef.calls[1], 'run --if-present build:packages')
+  assert.match(withRef.v.stderr, /package build: packages\/p\/a\.ts/)
+  const without = verify(undefined)
+  assert.equal(without.v.status, 0, without.v.stderr)
+  assert.ok(!without.calls.some((c) => c.includes('build:packages')), without.calls.join('\n'))
+  assert.match(without.v.stderr, /package build skipped/)
 })

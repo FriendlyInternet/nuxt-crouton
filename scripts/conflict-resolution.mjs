@@ -15,6 +15,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { failingLines } from './lib/log-tail.mjs'
 
 /** The scripts suite — must match ci.yml's. `node --test scripts/` treats the dir as a module path and fails on Node 22. */
 export const SCRIPTS_TEST_CMD = 'node --test scripts/*.test.mjs scripts/lib/*.test.mjs'
@@ -22,13 +23,86 @@ export const SCRIPTS_TEST_CMD = 'node --test scripts/*.test.mjs scripts/lib/*.te
 /** A conflicted package's tests. `--if-present` must come BEFORE the script name — after it, pnpm passes it to the script (#3900). */
 export function packageTestCmd(p) { return `pnpm --filter "./packages/${p}" run --if-present test` }
 
-/** Package tests need the merged branch's workspace links, not main's (#4155); `--ignore-scripts` because they don't need the apps' `nuxt prepare`. */
+/**
+ * Package tests need the merged branch's workspace links, not main's (#4155); `--ignore-scripts` because they don't need the apps' `nuxt prepare`
+ * — and its package builds too: `BUILD_CMD` runs after it when the merge changed packages/ or the lockfile compared with the tree the
+ * builds came from (PKG_DIST_REF, #4374).
+ */
 export const INSTALL_CMD = 'pnpm install --frozen-lockfile --prefer-offline --ignore-scripts'
+
+/** The repo's own package build. `--if-present`: a workspace without the script (the temp-repo tests) does nothing (#4374). */
+export const BUILD_CMD = 'pnpm run --if-present build:packages'
+
+/** Does the merge need fresh `packages/*\/dist` builds? Yes when it changed anything under packages/ or the lockfile (#4374). */
+export function needsPackageBuild(changed) {
+  const hit = changed.find((f) => f.startsWith('packages/') || f === 'pnpm-lock.yaml')
+  return hit
+    ? { build: true, reason: hit }
+    : { build: false, reason: 'the merge changed nothing under packages/ or pnpm-lock.yaml' }
+}
+
+/**
+ * The files the build decision judges: the working tree against the ref the package builds came from (#4374).
+ * A set but unreadable ref builds to be safe — never a quiet fallback to HEAD, which would skip the build.
+ */
+export function changedSinceBuild({ distRef, cwd } = {}) {
+  const diff = (ref) => {
+    const r = spawnSync('git', ['diff', '--name-only', ref], { cwd, encoding: 'utf8' })
+    return r.status === 0 ? r.stdout.split('\n').filter(Boolean) : null
+  }
+  if (!distRef) return { files: diff('HEAD') ?? [], against: 'HEAD', note: 'PKG_DIST_REF not set: comparing with HEAD for the package build' }
+  const files = diff(distRef)
+  if (files) return { files, against: distRef, note: null }
+  return {
+    files: [`packages/ (build ref ${distRef} unreadable)`],
+    against: distRef,
+    note: `the package build ref ${distRef} could not be read — building to be safe`,
+  }
+}
+
+/** The scripts-test failure, naming up to `max` failed tests — never the bare line alone (#4374). */
+export function failedTestsNote(output, { max = 5 } = {}) {
+  const head = 'scripts tests fail after resolution'
+  const found = failingLines(output, { max: Infinity })
+  const notOk = /^\s*not ok \d+ - /
+  const names = found.filter((l) => notOk.test(l.text)).map((l) => l.text.replace(notOk, ''))
+  if (names.length) {
+    const more = names.length > max ? [`  and ${names.length - max} more`] : []
+    return [`${head}: ${names.length} failed`, ...names.slice(0, max).map((n) => `  ✖ ${n}`), ...more]
+  }
+  if (found.length) return [head, ...found.slice(0, max).map((l) => `  ${l.text}`)]
+  return [`${head} (no failing line found in the test output — see the run log)`]
+}
+
+/**
+ * The build + test tail of `verify` (#4374). `run(cmd)` → `{ ok, output }`; `log(line)` writes to stderr.
+ * `changed` is the build-decision list (changedSinceBuild); `conflicted` picks the packages whose tests run.
+ */
+export function runChecks({ changed, conflicted, run, log }) {
+  const need = needsPackageBuild(changed)
+  let installed = false
+  if (need.build) {
+    if (!run(INSTALL_CMD).ok) return { ok: false, errors: ['install for the merged branch failed — package build not run'] }
+    installed = true
+    const b = run(BUILD_CMD)
+    if (!b.ok) return { ok: false, errors: ['package build failed after the merge — tests not run', ...failingLines(b.output, { max: 5 }).map((l) => `  ${l.text}`)] }
+    log(`package build: ${need.reason}`)
+  } else {
+    log(`package build skipped: ${need.reason}`)
+  }
+  const t = run(SCRIPTS_TEST_CMD)
+  if (!t.ok) return { ok: false, errors: failedTestsNote(t.output) }
+  const pkgs = [...new Set(conflicted.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
+  if (pkgs.length && !installed && !run(INSTALL_CMD).ok) return { ok: false, errors: ['install for the merged branch failed — package tests not run'] }
+  for (const p of pkgs) if (!run(packageTestCmd(p)).ok) return { ok: false, errors: [`${p} tests fail after resolution`] }
+  return { ok: true }
+}
 
 /**
  * Files a generator produces are regenerated, never hand-merged. `inputs` + `outputs` are exact paths or prefixes.
  * Migrations are a per-app generator too, handled by checkMigrationResolution below (the app is found from the path,
- * so it is not in this list). Keep this file's imports node:-only: the workflow runs it as a lone copy (#4320).
+ * so it is not in this list). Keep this file's imports node:-only, plus exactly ./lib/log-tail.mjs (itself import-free), which the
+ * workflow copies beside the lone copy (#4320; exception added by #4374 to reuse failingLines — guarded by T5a/T13).
  */
 export const GENERATORS = [
   {
@@ -222,17 +296,20 @@ The merge is IN PROGRESS in the working tree (do not run git merge --abort, git 
 ${gens}
 3. If both sides change the SAME logic in incompatible ways (same lines, different intent), do NOT pick one. Write the choice to ${choiceFile} instead: name side A's intent and side B's intent in one line each, then your recommendation. Leave the files as they are. Making no file change and writing no choice is a FAILED run.
 4. When every conflict is resolved, no \`<<<<<<<\`, \`=======\` or \`>>>>>>>\` line may remain in any file.${mig}
-Once every conflict (including pnpm-lock.yaml) is resolved, run \`${INSTALL_CMD}\`, then the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
+Once every conflict (including pnpm-lock.yaml) is resolved, run \`${INSTALL_CMD}\`, then \`${BUILD_CMD}\` if the merge touched packages/ or pnpm-lock.yaml, then the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
 }
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
 const conflicted = () => sh('git', ['diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean)
 
 function run(cmd) {
-  // stdout -> stderr: `verify` stdout is the file list the workflow captures, so a child's
+  // Output -> stderr: `verify` stdout is the file list the workflow captures, so a child's
   // test output on stdout would flood it (#2954: 126 "Argument list too long" on git commit).
-  const r = spawnSync(cmd, { shell: true, stdio: ['inherit', 2, 2] })
-  return r.status === 0
+  // Captured too, so a failure can name the failed tests (#4374).
+  const r = spawnSync(cmd, { shell: true, stdio: ['inherit', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+  const output = `${r.stdout || ''}${r.stderr || ''}`
+  process.stderr.write(output)
+  return { ok: r.status === 0, output }
 }
 
 const tryShow = (path) => { try { return execFileSync('git', ['show', `MERGE_HEAD:${path}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return null } }
@@ -305,11 +382,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
     // Only the conflicted files: mid-merge the index holds the whole base diff, whose own whitespace is not ours to judge.
     try { if (files.length) sh('git', ['diff', '--cached', '--check', '--', ...files]) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
-    for (const g of generatorsFor(files)) if (g.check && !run(g.check)) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
-    if (!run(SCRIPTS_TEST_CMD)) { console.error('::error::scripts tests fail after resolution'); process.exit(1) }
-    const pkgs = [...new Set(files.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
-    if (pkgs.length && !run(INSTALL_CMD)) { console.error('::error::install for the merged branch failed — package tests not run'); process.exit(1) }
-    for (const p of pkgs) if (!run(packageTestCmd(p))) { console.error(`::error::${p} tests fail after resolution`); process.exit(1) }
+    for (const g of generatorsFor(files)) if (g.check && !run(g.check).ok) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
+    // #4374: the package builds came from PKG_DIST_REF's tree (main), not this merge — rebuild when that differs.
+    const since = changedSinceBuild({ distRef: process.env.PKG_DIST_REF })
+    if (since.note) console.error(since.note)
+    const checks = runChecks({ changed: since.files, conflicted: files, run, log: (l) => console.error(l) })
+    if (!checks.ok) { for (const e of checks.errors) console.error(`::error::${e}`); process.exit(1) }
     console.log(files.join('\n'))
   } else {
     console.error('usage: conflict-resolution.mjs prompt <base> <choice-file> | verify <choice-file>')
