@@ -4,10 +4,16 @@ name: Deploy App (reusable, Cloudflare Workers)
 #
 # Per-app callers stay tiny — they just say which app + environment and pass
 # secrets (see deploy-three-demo.yml for the reference caller). All the real work
-# lives in the app's own `cf:deploy` / `cf:staging` scripts (build → deploy →
-# auto-provision id-less D1/KV → sync ids back into wrangler.jsonc → remote D1
-# migrate), so the pipeline has ONE source of truth: package.json. CI only adds
-# the environment, the workspace layer builds, and the PR staging-URL comment.
+# lives in the app's own `cf:deploy` / `cf:staging` scripts (for the current
+# apps: build → scripts/deploy-order.mjs, which runs remote D1 migrate THEN
+# deploy when the D1 database already has an id, so new code never goes live on
+# an old schema; only a very first deploy runs deploy → auto-provision id-less
+# D1/KV → sync ids back into wrangler.jsonc → migrate. A freshly scaffolded app
+# still deploys first until its scripts adopt deploy-order.mjs), so the pipeline
+# has ONE source of truth: package.json. PR previews are the exception: CI
+# builds, deploys a PR-scoped Worker, then migrates its own database (see the
+# Deploy step). CI only adds the environment, the workspace layer builds, and
+# the PR staging-URL comment.
 #
 # Domain convention (#133): production → friendlyinter.net, staging → pmcp.dev.
 #
@@ -322,7 +328,7 @@ jobs:
           LIST=$(npx wrangler secret list --format json 2>/dev/null || true)
           echo "$LIST" | node "$GITHUB_WORKSPACE/scripts/email-key-check.mjs" before deploy.config.json
 
-      - name: Deploy (build → provision → sync ids → migrate)
+      - name: Deploy (build → migrate/deploy in the app's order; PR previews deploy then migrate)
         id: deploy
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
