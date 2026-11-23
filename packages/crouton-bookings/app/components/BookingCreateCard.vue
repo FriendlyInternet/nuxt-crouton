@@ -364,7 +364,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
             :content="false"
             variant="link"
             size="sm"
-            :ui="{ list: 'overflow-x-auto', trigger: 'min-w-fit' }"
+            :ui="{ list: SCROLL_ROW_X, trigger: 'min-w-fit' }"
             @update:model-value="v => localLocationId = String(v)"
           >
             <template #leading="{ item }">
