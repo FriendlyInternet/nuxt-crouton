@@ -118,7 +118,7 @@ const CLAUDE_COLOR = '#d97757'
  * Claude's presence after `op` ran on `fragmentName`: a stable clientId per pages
  * token, and the caret at the edited block (see `caretForFragmentEdit`).
  */
-export function claudePresence(ctx: PagesAccess, doc: Y.Doc, name: string, op: FragmentEditOp): PagesToolPresence {
+function claudePresence(ctx: PagesAccess, doc: Y.Doc, name: string, op: FragmentEditOp): PagesToolPresence {
   const actorId = `mcp:${ctx.tokenId}`
   const at = caretForFragmentEdit(doc.getXmlFragment(name), op)
   return {
