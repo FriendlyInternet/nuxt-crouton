@@ -30,6 +30,16 @@ useBlockEditRequest(innerRef: Ref<HTMLElement | null>)
 
 _Source: `packages/crouton-core/app/composables/useBlockEditRequest.ts`_
 
+## useCollectionCacheKeys
+
+The ONE place that names collection cache slots (#4506).
+
+```ts
+useCollectionCacheKeys(collection: string): CollectionCacheKeys
+```
+
+_Source: `packages/crouton-core/app/composables/useCollectionCacheKeys.ts`_
+
 ## useCollectionExport
 
 Collection export composable
