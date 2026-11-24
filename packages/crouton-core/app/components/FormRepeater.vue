@@ -199,6 +199,7 @@ onMounted(() => {
         </div>
 
         <!-- Row menu: Move up / Move down / Remove -->
+        <!-- runtime-cost-ok: repeater rows are a short, user-built list; the menu items are per-row (move/remove by index) -->
         <UDropdownMenu
           :items="rowMenuItems(index)"
           :content="{ align: 'end', onCloseAutoFocus: (e: Event) => onMenuCloseAutoFocus(e, index) }"
