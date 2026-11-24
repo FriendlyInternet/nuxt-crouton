@@ -62,6 +62,14 @@ describe('filters', () => {
     expect(s.hasActiveFilters.value).toBe(false)
   })
 
+  // #4471 — one location at a time, like the tab row
+  it('tapping location A then B on the map leaves only B', () => {
+    const s = setup()
+    s.toggleLocation('a')
+    s.toggleLocation('b')
+    expect(s.filters.value.locations).toEqual(['b'])
+  })
+
   it('starts from the filters the page asks for', () => {
     const bookings = ref([])
     const s = createBookingsStore({ bookings, calendarBookings: bookings, locations: ref([]), readOnly: ref(false), initialFilters: { showCancelled: true } })

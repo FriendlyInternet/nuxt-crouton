@@ -1,4 +1,5 @@
 import type { Booking } from '../types/booking'
+import { pickOne } from '../utils/location-tabs'
 
 export interface BookingsLayoutFilterState {
   statuses: string[]
@@ -32,12 +33,9 @@ export function useBookingsLayoutFilters() {
     || filters.value.showCancelled,
   )
 
+  // One location or none (#4471) — the same rule as the location tab row
   function toggleLocation(locationId: string) {
-    const current = [...filters.value.locations]
-    const i = current.indexOf(locationId)
-    if (i === -1) current.push(locationId)
-    else current.splice(i, 1)
-    filters.value.locations = current
+    filters.value.locations = pickOne(filters.value.locations, locationId)
   }
 
   /** Apply the shared filter to a bookings array — mirrors Panel's `filteredBookings`. */

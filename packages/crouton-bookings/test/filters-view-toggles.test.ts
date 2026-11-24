@@ -28,12 +28,18 @@ describe('viewToggles', () => {
     expect(filters).toMatch(/viewToggles:\s*true/)
   })
 
-  it('Week/Month, Today, fold button, Map, Location cards and cards row are all guarded', () => {
+  it('Week/Month, Today, fold button and Map are all guarded', () => {
     expect(filters).toMatch(/v-if="viewToggles && showCalendar"/g)
     expect(filters.match(/v-if="viewToggles && showCalendar"/g)?.length).toBe(2)
     expect(filters).toMatch(/v-if="viewToggles"/)
     expect(filters).toMatch(/props\.viewToggles && props\.hasLocationsWithCoordinates/)
-    expect(filters).toMatch(/props\.viewToggles && locationItems\.length > 0/)
-    expect(filters).toMatch(/v-if="viewToggles && showLocations/)
+  })
+
+  // #4471 — location cards and their cog toggle are gone; composed pages get the tab row
+  it('no location cards toggle; composed pages keep a location picker', () => {
+    expect(filters).not.toMatch(/showLocations/)
+    expect(filters).not.toMatch(/locationCards/)
+    expect(filters).toMatch(/v-if="!viewToggles && locations\.length > 0"/)
+    expect(panel).not.toMatch(/show-locations/)
   })
 })

@@ -1,6 +1,7 @@
 import { computed, inject, provide, ref, type InjectionKey, type Ref } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
 import { isDayFullyBooked } from '../utils/day-availability'
+import { pickOne } from '../utils/location-tabs'
 
 /**
  * The bookings screen's shared state, in one place (#2561).
@@ -88,9 +89,9 @@ export function createBookingsStore(src: BookingsStoreSources) {
     )
   })
 
+  // One location or none (#4471): picking another replaces it, picking it again clears it
   function toggleLocation(locationId: string) {
-    const current = filters.value.locations
-    filters.value.locations = current.includes(locationId) ? current.filter(id => id !== locationId) : [...current, locationId]
+    filters.value.locations = pickOne(filters.value.locations, locationId)
   }
 
   // ── Days, hover, navigation ────────────────────────────────────────────────

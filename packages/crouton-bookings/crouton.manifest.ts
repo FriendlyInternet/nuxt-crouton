@@ -124,6 +124,7 @@ export default defineCroutonManifest({
       { name: 'CroutonBookingsBookingCard', description: 'Individual booking display card' },
       { name: 'CroutonBookingsSlotIndicator', description: 'Visual slot availability indicator' },
       { name: 'CroutonBookingsDateBadge', description: 'Date display badge' },
+      { name: 'CroutonBookingsLocationTabs', description: 'One sideways-scrolling row of location tabs (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form' },
       { name: 'CroutonBookingsLayoutList', description: 'The bookings list as a placeable layout block' },
       { name: 'CroutonBookingsLayoutCalendar', description: 'The bookings calendar as a placeable layout block' }
     ],
