@@ -7,7 +7,8 @@
     "sidebar": {
       "search": "Search flows...",
       "noResults": "No flows match your search",
-      "empty": "No flows yet"
+      "empty": "No flows yet",
+      "flowMenu": "Actions for {name}"
     },
     "actions": {
       "create": "Create flow",

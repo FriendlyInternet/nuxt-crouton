@@ -55,7 +55,7 @@ function handleOpen() {
             </span>
             <slot name="meta" />
           </div>
-          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <slot name="actions" />
             <UButton
               color="neutral"

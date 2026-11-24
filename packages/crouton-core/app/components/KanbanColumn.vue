@@ -180,6 +180,29 @@ const { t } = useT()
 // Crouton for actions
 const itemAction = inject(CROUTON_ITEM_ACTION_KEY, undefined)
 const crouton = useCrouton()
+
+// Template bindings live in script so the template stays simple (fallow complexity)
+function itemLabel(item: any): string {
+  return item.name || item.title || item.label || item.id
+}
+
+function runItemAction(action: 'delete' | 'update', id: string) {
+  if (itemAction) return itemAction(action, [id])
+  crouton?.open(action, props.collection, [id])
+}
+
+function showCollabBadge(item: any): boolean {
+  return Boolean(collabEditingBadgeComponent.value && item.id)
+}
+
+const collabBadgeProps = computed(() => ({
+  roomType: collabConfig.value.roomType || props.collection,
+  currentUserId: collabConfig.value.currentUserId,
+  pollInterval: collabConfig.value.pollInterval || 5000,
+  showSelf: collabConfig.value.showSelf
+}))
+
+const showEmptyState = computed(() => props.items.length === 0 && !props.readonly)
 </script>
 
 <template>
@@ -234,7 +257,7 @@ const crouton = useCrouton()
           class="hover:shadow-md transition-shadow group relative"
         >
           <div class="text-sm">
-            {{ item.name || item.title || item.label || item.id }}
+            {{ itemLabel(item) }}
           </div>
           <div
             v-if="item.description"
@@ -246,25 +269,22 @@ const crouton = useCrouton()
           <!-- Action buttons (show on hover) -->
           <div
             v-if="!readonly"
-            class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
+            class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100 transition-opacity">
             <CroutonItemButtonsMini
               delete
               update
-              @delete.stop="itemAction ? itemAction('delete', [item.id]) : crouton?.open('delete', collection, [item.id])"
-              @update.stop="itemAction ? itemAction('update', [item.id]) : crouton?.open('update', collection, [item.id])"
+              @delete.stop="runItemAction('delete', item.id)"
+              @update.stop="runItemAction('update', item.id)"
             />
           </div>
         </UCard>
 
         <!-- Collab presence badge overlay -->
         <component
-          v-if="collabEditingBadgeComponent && item.id"
+          v-if="showCollabBadge(item)"
           :is="collabEditingBadgeComponent"
           :room-id="getCollabRoomId(item)"
-          :room-type="collabConfig.roomType || collection"
-          :current-user-id="collabConfig.currentUserId"
-          :poll-interval="collabConfig.pollInterval || 5000"
-          :show-self="collabConfig.showSelf"
+          v-bind="collabBadgeProps"
           size="sm"
           class="absolute top-2 right-2"
         />
@@ -272,7 +292,7 @@ const crouton = useCrouton()
 
       <!-- Empty state -->
       <div
-        v-if="items.length === 0 && !readonly"
+        v-if="showEmptyState"
         class="flex items-center justify-center h-20 text-muted text-sm border-2 border-dashed border-muted/30 rounded-lg"
       >
         {{ t('kanban.dropItemsHere') }}

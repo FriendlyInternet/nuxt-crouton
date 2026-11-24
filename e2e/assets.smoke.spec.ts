@@ -46,8 +46,8 @@ test.describe('assets upload', () => {
     }).toPass({ timeout: FIRST_HIT })
 
     const chooser = page.waitForEvent('filechooser', { timeout: 60000 })
-    // The image drop zone is the dialog's only button without an aria-label (close has one)
-    await dialog.locator('button[type="button"]:not([aria-label])').first().click({ timeout: 60000 })
+    // The image drop zone is named by its aria-label (`image.upload`, in en/nl/fr)
+    await dialog.getByRole('button', { name: /upload image|afbeelding uploaden|téléverser une image/i }).first().click({ timeout: 60000 })
     await (await chooser).setFiles({ name: filename, mimeType: 'image/png', buffer: PNG })
 
     // The crop step only shows for some images; skip it when it does.
