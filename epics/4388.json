@@ -1,0 +1,101 @@
+{
+  "epic": 4388,
+  "runs": 62,
+  "epicRuns": 12,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45238561512",
+      "workflow": "decompose-on-issue-pidev.yml",
+      "stage": "decompose",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45246179371",
+      "workflow": "work-issue-pidev.yml",
+      "stage": "work",
+      "child": 4391
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45265153303",
+      "workflow": "ticket-revise.yml",
+      "stage": "ticket-revise",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45358212555",
+      "workflow": "fix-ci-on-failure.yml",
+      "stage": "fix-ci",
+      "child": 4391
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45382989681",
+      "workflow": "fix-ci-on-failure.yml",
+      "stage": "fix-ci",
+      "child": 4481
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45386847505",
+      "workflow": "fix-ci-on-failure.yml",
+      "stage": "fix-ci",
+      "child": 4481
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 4391,
+      "runs": 12,
+      "planRounds": 2,
+      "buildRounds": 2,
+      "revises": 1,
+      "silent": 2
+    },
+    {
+      "issue": 4415,
+      "runs": 6,
+      "planRounds": 2,
+      "buildRounds": 1,
+      "revises": 0,
+      "silent": 0
+    },
+    {
+      "issue": 4419,
+      "runs": 7,
+      "planRounds": 1,
+      "buildRounds": 2,
+      "revises": 2,
+      "silent": 0
+    },
+    {
+      "issue": 4480,
+      "runs": 6,
+      "planRounds": 1,
+      "buildRounds": 2,
+      "revises": 1,
+      "silent": 0
+    },
+    {
+      "issue": 4481,
+      "runs": 19,
+      "planRounds": 2,
+      "buildRounds": 5,
+      "revises": 7,
+      "silent": 2
+    }
+  ],
+  "timeToMainHours": null,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 6,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/4388#issuecomment-7128595620",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4462#issuecomment-7115972097",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4484#issuecomment-7130032791",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4484#issuecomment-7130526452",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4484#issuecomment-7131250478",
+      "https://github.com/FriendlyInternet/nuxt-crouton/pull/4484#issuecomment-7131986742"
+    ]
+  },
+  "stepLine": "built 5 of 5 steps, dropped 0 (not planned)",
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45400406969",
+  "stored_at": "2026-11-24T13:14:36.831Z"
+}
