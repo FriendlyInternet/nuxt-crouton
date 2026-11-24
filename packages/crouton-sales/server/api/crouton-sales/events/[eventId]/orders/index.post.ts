@@ -2,7 +2,6 @@ import { eq, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { requireScopedEvent } from '../../../../../utils/require-scoped-event'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
-import { salesEvents } from '../../../../../../collections/events/server/database/schema'
 import { salesOrders } from '../../../../../../collections/orders/server/database/schema'
 import { salesOrderitems } from '../../../../../../collections/orderitems/server/database/schema'
 import { generateAndInsertPrintQueues } from '../../../../../utils/generate-print-queues'
@@ -29,20 +28,14 @@ interface CreateOrderBody {
 }
 
 export default defineEventHandler(async (event) => {
-  const { eventId, access, db } = await requireScopedEvent(event)
-
-  const [eventWithTeam] = await db
-    .select({ event: salesEvents, team: organization })
-    .from(salesEvents)
-    .leftJoin(organization, eq(salesEvents.teamId, organization.id))
-    .where(eq(salesEvents.id, eventId))
+  // The helper loads the event scoped to the token's team (404 otherwise).
+  const { eventId, access, db, salesEvent } = await requireScopedEvent(event)
+  const [team] = await db
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, salesEvent.teamId))
     .limit(1)
 
-  if (!eventWithTeam?.event) {
-    throw createError({ status: 404, statusText: 'Event not found' })
-  }
-
-  const salesEvent = eventWithTeam.event
   const body = await readBody<CreateOrderBody>(event)
 
   if (!body.items || body.items.length === 0) {
@@ -136,7 +129,7 @@ export default defineEventHandler(async (event) => {
       clientName: body.clientName || undefined,
       orderNotes: body.overallRemarks || undefined,
       locationRemarks: body.locationRemarks || undefined,
-      teamName: eventWithTeam.team?.name || 'POS',
+      teamName: team?.name || 'POS',
       eventName: salesEvent.title,
       currency: salesEvent.currency || undefined,
       isPersonnel: body.isPersonnel || false
