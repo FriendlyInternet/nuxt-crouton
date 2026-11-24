@@ -83,7 +83,11 @@
     "percentComplete": "{percent}% voltooid",
     "itemsCreated": "{count} items aangemaakt",
     "itemsFailed": "{count} items mislukt",
-    "rowsSkipped": "{count} rijen overgeslagen (validatiefouten)"
+    "rowsSkipped": "{count} rijen overgeslagen (validatiefouten)",
+    "readFailed": "Het bestand kon niet worden gelezen",
+    "noFields": "Deze collectie heeft geen velden om in te importeren",
+    "rowFailed": "Rij {row}: {error}",
+    "moreFailed": "…en nog {count}"
   },
   "errors": {
     "checkConnection": "Controleer je verbindingsstatus.",

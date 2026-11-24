@@ -83,7 +83,11 @@
     "percentComplete": "{percent}% complete",
     "itemsCreated": "{count} items created",
     "itemsFailed": "{count} items failed",
-    "rowsSkipped": "{count} rows skipped (validation errors)"
+    "rowsSkipped": "{count} rows skipped (validation errors)",
+    "readFailed": "Could not read the file",
+    "noFields": "This collection has no fields to import into",
+    "rowFailed": "Row {row}: {error}",
+    "moreFailed": "…and {count} more"
   },
   "errors": {
     "checkConnection": "Check your connection status.",

@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, toRaw } from 'vue'
 import type { Ref } from 'vue'
 
 /**
@@ -64,7 +64,7 @@ export interface UseCollectionImportReturn {
   /** Validate rows against mapped fields */
   validateRows: (rows: Record<string, any>[], mappings: ImportColumnMapping[], fields: ImportField[]) => ImportRowValidation[]
   /** Execute the import (POST rows in batches) */
-  executeImport: (validRows: Record<string, any>[]) => Promise<ImportResult>
+  executeImport: (validRows: Record<string, any>[], rowIndexes?: number[]) => Promise<ImportResult>
   /** Whether an import is in progress */
   isImporting: Ref<boolean>
   /** Import progress (0-100) */
@@ -82,6 +82,52 @@ function toCamelCase(str: string): string {
     .trim()
     .replace(/[-_\s]+(.)?/g, (_, c) => (c ? c.toUpperCase() : ''))
     .replace(/^[A-Z]/, c => c.toLowerCase())
+}
+
+/**
+ * The collection schema's shape, or null. Read through toRaw: the generated
+ * schema is a non-configurable property, and reading it through the reactive
+ * app-config proxy throws (#4511).
+ */
+function schemaShape(config: unknown): Record<string, any> | null {
+  return (toRaw(config) as any)?.schema?.shape ?? null
+}
+
+interface FieldEntry { name?: unknown; label?: string; type?: string; required?: boolean }
+
+/** A generated `fields` entry is a name string or `{ name, type, label }` */
+function asFieldEntry(f: unknown): FieldEntry {
+  return typeof f === 'string' ? { name: f } : ((f as FieldEntry) ?? {})
+}
+
+function hasName(e: FieldEntry): e is FieldEntry & { name: string } {
+  return typeof e.name === 'string' && e.name !== ''
+}
+
+/** Required comes from the schema when reachable, else from the entry */
+function isRequired(e: FieldEntry & { name: string }, shape: Record<string, any> | null): boolean {
+  return shape ? !shape[e.name]?.isOptional?.() : !!e.required
+}
+
+function toImportField(e: FieldEntry & { name: string }, shape: Record<string, any> | null): ImportField {
+  return {
+    key: e.name,
+    label: e.label || humanise(e.name),
+    required: isRequired(e, shape),
+    type: e.type || 'string'
+  }
+}
+
+/** The server's message for a failed POST, or the fallback */
+function failureMessage(reason: any, fallback: string): string {
+  return reason?.data?.message || reason?.message || fallback
+}
+
+/**
+ * Turn a field name into a readable label: "sourceType" → "Source Type"
+ */
+function humanise(name: string): string {
+  return name.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim()
 }
 
 /**
@@ -109,6 +155,7 @@ function toCamelCase(str: string): string {
  * // 4. Import valid rows
  * const validRows = results.filter(r => r.valid).map(r => r.data)
  * const result = await executeImport(validRows)
+ * // optional: executeImport(rows, rowIndexes) so failures report the file's row number
  * ```
  */
 export function useCollectionImport(collection: string): UseCollectionImportReturn {
@@ -184,27 +231,26 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
   function getCollectionFields(): ImportField[] {
     if (!config) return []
 
-    // Check if collection config has a schema definition
-    const schema = (config as any).schema
-    if (schema && typeof schema === 'object' && schema.shape) {
-      return Object.entries(schema.shape).map(([key, zodField]: [string, any]) => ({
-        key,
-        label: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim(),
-        required: !zodField?.isOptional?.(),
-        type: zodField?._def?.typeName || 'string'
-      }))
-    }
+    const shape = schemaShape(config)
 
-    // Fallback: use fields from config if available
+    // The generator writes `fields: [{ name, type, label }]` — the field list
+    // and labels come from there; the schema (when reachable) only says
+    // which fields are required.
     const fields = (config as any).fields
     if (Array.isArray(fields)) {
-      return fields.map((f: any) => ({
-        key: typeof f === 'string' ? f : f.key,
-        label: typeof f === 'string'
-          ? f.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim()
-          : (f.label || f.key),
-        required: typeof f === 'object' ? !!f.required : false,
-        type: typeof f === 'object' ? (f.type || 'string') : 'string'
+      return fields
+        .map(asFieldEntry)
+        .filter(hasName)
+        .map(e => toImportField(e, shape))
+    }
+
+    // No field list: fall back to the schema's keys
+    if (shape) {
+      return Object.entries(shape).map(([key, zodField]: [string, any]) => ({
+        key,
+        label: humanise(key),
+        required: !zodField?.isOptional?.(),
+        type: zodField?._def?.typeName || 'string'
       }))
     }
 
@@ -216,9 +262,18 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
    */
   function autoMapColumns(csvColumns: string[], fields: ImportField[]): ImportColumnMapping[] {
     const fieldIndex = new Map<string, string>()
+    const add = (k: string, key: string) => {
+      if (k && !fieldIndex.has(k)) fieldIndex.set(k, key)
+    }
+    // Names first, so a name match beats a label match
     for (const field of fields) {
-      fieldIndex.set(toCamelCase(field.key), field.key)
-      fieldIndex.set(field.key.toLowerCase(), field.key)
+      add(toCamelCase(field.key), field.key)
+      add(field.key.toLowerCase(), field.key)
+    }
+    for (const field of fields) {
+      if (!field.label) continue
+      add(toCamelCase(field.label), field.key)
+      add(field.label.trim().toLowerCase(), field.key)
     }
 
     return csvColumns.map((col) => {
@@ -272,7 +327,7 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
   /**
    * Execute the import by POSTing rows in batches to the collection endpoint
    */
-  async function executeImport(validRows: Record<string, any>[]): Promise<ImportResult> {
+  async function executeImport(validRows: Record<string, any>[], rowIndexes?: number[]): Promise<ImportResult> {
     isImporting.value = true
     progress.value = 0
 
@@ -301,17 +356,17 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
           )
         )
 
-        for (const batchResult of batchResults) {
+        batchResults.forEach((batchResult, batchIndex) => {
           if (batchResult.status === 'fulfilled') {
             result.created++
           } else {
             result.failed++
             result.errors.push({
-              rowIndex: i,
-              error: batchResult.reason?.data?.message || batchResult.reason?.message || t('mutations.creationFailed')
+              rowIndex: rowIndexes?.[i + batchIndex] ?? i + batchIndex,
+              error: failureMessage(batchResult.reason, t('mutations.creationFailed'))
             })
           }
-        }
+        })
 
         progress.value = Math.round(((i + batch.length) / totalRows) * 100)
       }

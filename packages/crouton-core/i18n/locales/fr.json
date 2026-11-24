@@ -83,7 +83,11 @@
     "percentComplete": "{percent}% terminé",
     "itemsCreated": "{count} éléments créés",
     "itemsFailed": "{count} éléments échoués",
-    "rowsSkipped": "{count} lignes ignorées (erreurs de validation)"
+    "rowsSkipped": "{count} lignes ignorées (erreurs de validation)",
+    "readFailed": "Impossible de lire le fichier",
+    "noFields": "Cette collection n'a aucun champ à importer",
+    "rowFailed": "Ligne {row} : {error}",
+    "moreFailed": "…et {count} de plus"
   },
   "errors": {
     "checkConnection": "Vérifiez l'état de votre connexion.",
