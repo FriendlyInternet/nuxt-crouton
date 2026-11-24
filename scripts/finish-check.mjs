@@ -29,7 +29,9 @@ const COVERAGE_FILE = 'coverage/coverage-final.json';
 const COVERAGE_NOTE = 'no coverage file — CRAP results can differ from CI';
 const BASELINE_FILES = new Set(['.fallow-health-baseline.json', '.fallow-dead-code-baseline.json', '.fallow-dupes-baseline.json']);
 const NODE_TEST_RE = /^scripts\/(lib\/|metrics\/)?[^/]+\.test\.mjs$/;
-const VITEST_RE = /^packages\/[^/]+\/.+\.(test|spec)\.[cm]?[jt]sx?$/;
+// apps/* tests too: an app whose vitest config is in the root `projects` list (velo, #4098)
+// is matched by `vitest list`; one that is not falls through to "not matched".
+const VITEST_RE = /^(packages|apps)\/[^/]+\/.+\.(test|spec)\.[cm]?[jt]sx?$/;
 const TEST_LIKE_RE = /[.-](test|spec)\.[cm]?[jt]sx?$/;
 const IGNORE_RE = new RegExp('fallow' + '-ignore');
 const PARKED_RE = /\b(it|test|describe)\.(skip|todo)\b/;
