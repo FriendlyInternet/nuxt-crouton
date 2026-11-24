@@ -113,11 +113,20 @@
       },
       {
         "path": "/mcp/pages",
-        "expectStatus": 401
+        "expectStatus": 404
       },
       {
         "path": "/mcp",
-        "expectStatus": 404
+        "expectStatus": 401
+      },
+      {
+        "path": "/.well-known/oauth-authorization-server"
+      },
+      {
+        "path": "/.well-known/oauth-protected-resource"
+      },
+      {
+        "path": "/api/auth/oauth2/get-consents"
       },
       {
         "path": "/api/teams/{teamId}/mcp-tokens"

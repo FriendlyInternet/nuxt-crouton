@@ -453,6 +453,111 @@ test('T12 verify (lone copy) reads PKG_DIST_REF: builds against the build tree, 
   assert.match(without.v.stderr, /package build skipped/)
 })
 
+// ── #4487: the migration regenerate check runs AFTER the package build ──
+
+/** fakeRun plus a regenerate that records `regenerate(<app>)` into the same call list. */
+function fakeRunWithRegen(fail = {}, regenFail = {}) {
+  const f = fakeRun(fail)
+  f.regenerate = (app) => { f.calls.push(`regenerate(${app})`); return regenFail[app] ?? null }
+  return f
+}
+
+// covers: T1
+test('#4487 T1 migrations conflicted + a package changed: install → build → regenerate → scripts tests, build once', () => {
+  const f = fakeRunWithRegen()
+  const r = runChecks({
+    changed: ['packages/crouton-auth/server/database/schema/auth.ts'], conflicted: ['apps/velo/server/db/migrations/sqlite/meta/_journal.json'],
+    run: f.run, log: f.log, migApps: ['apps/velo'], regenerate: f.regenerate,
+  })
+  assert.deepEqual(r, { ok: true })
+  assert.deepEqual(f.calls, [INSTALL_CMD, BUILD_CMD, 'regenerate(apps/velo)', SCRIPTS_TEST_CMD])
+  assert.equal(f.calls.filter((c) => c === BUILD_CMD).length, 1)
+})
+
+// covers: T2
+test('#4487 T2 migration apps but nothing under packages/: no install, no build, regenerate still runs before the tests', () => {
+  const f = fakeRunWithRegen()
+  const r = runChecks({
+    changed: ['apps/velo/server/db/migrations/sqlite/meta/_journal.json'], conflicted: ['apps/velo/server/db/migrations/sqlite/meta/_journal.json'],
+    run: f.run, log: f.log, migApps: ['apps/velo'], regenerate: f.regenerate,
+  })
+  assert.deepEqual(r, { ok: true })
+  assert.deepEqual(f.calls, ['regenerate(apps/velo)', SCRIPTS_TEST_CMD])
+  assert.match(f.logs.join('\n'), /package build skipped/)
+})
+
+// covers: T3
+test('#4487 T3 a regenerate error stops the run with that error, and the scripts tests never run', () => {
+  const err = 'the migration in apps/velo/server/db/migrations/sqlite does not match the schema — run pnpm --filter ./apps/velo db:generate and keep what it writes'
+  const f = fakeRunWithRegen({}, { 'apps/velo': err })
+  const r = runChecks({ changed: ['packages/p/a.ts'], conflicted: [], run: f.run, log: f.log, migApps: ['apps/velo', 'apps/kassa'], regenerate: f.regenerate })
+  assert.deepEqual(r, { ok: false, errors: [err] })
+  assert.ok(!f.calls.includes(SCRIPTS_TEST_CMD), f.calls.join('\n'))
+  assert.ok(!f.calls.includes('regenerate(apps/kassa)'), 'stops on the first error')
+})
+
+/** A fake `pnpm` that logs each call and answers `db:generate` the way drizzle-kit does when nothing changed. */
+function fakePnpmGenerate() {
+  const s = fakePnpm()
+  writeFileSync(join(s.bin, 'pnpm'), '#!/bin/sh\necho "$@" >> "$SHIM_LOG"\ncase "$*" in *db:generate*) echo "No schema changes, nothing to migrate";; esac\n')
+  return s
+}
+
+/** The migMerge conflict, plus a packages/ change on the branch since the build tree A (= PKG_DIST_REF). */
+function migMergeWithPackage() {
+  const dir = mkdtempSync(join(tmpdir(), 'verify-mig-pkg-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => { mkdirSync(join(dir, f, '..'), { recursive: true }); writeFileSync(join(dir, f), t) }
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put('apps/x/package.json', JSON.stringify({ name: 'x' }) + '\n')
+  put('packages/p/a.ts', 'export const a = 1\n')
+  put('scripts/lib/b.test.mjs', passing('b ok')); put('scripts/a.test.mjs', passing('a0'))
+  put(`${MIG}/0000_a.sql`, 'a\n'); put(`${MIG}/meta/0000_snapshot.json`, '{"v":0}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a']))
+  git('add', '-A'); git('commit', '-qm', 'A')
+  const A = git('rev-parse', 'HEAD').stdout.trim()
+  git('checkout', '-qb', 'work')
+  put('packages/p/a.ts', 'export const a = 2\n')
+  put(`${MIG}/0001_side.sql`, 'side\n'); put(`${MIG}/meta/0001_snapshot.json`, '{"v":"side"}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_side']))
+  git('add', '-A'); git('commit', '-qm', 'side')
+  git('checkout', '-q', 'main')
+  put(`${MIG}/0001_base.sql`, 'base\n'); put(`${MIG}/meta/0001_snapshot.json`, '{"v":"base"}\n'); put(`${MIG}/meta/_journal.json`, jrnl(['0000_a', '0001_base']))
+  git('add', '-A'); git('commit', '-qm', 'base')
+  git('checkout', '-q', 'work')
+  assert.notEqual(git('merge', '--no-edit', 'main').status, 0, 'expected a conflict')
+  return { dir, git, put, A }
+}
+
+// covers: T4
+test('#4487 T4 verify (lone copy): build:packages runs BEFORE the app\'s db:generate, and once', () => {
+  const lone = loneCopy(); const shim = fakePnpmGenerate()
+  const r = migMergeWithPackage()
+  // the rule-5 resolution: base snapshot + journal, the branch's own migration deleted
+  r.git('checkout', '--theirs', '--', `${MIG}/meta/0001_snapshot.json`, `${MIG}/meta/_journal.json`)
+  rmSync(join(r.dir, `${MIG}/0001_side.sql`))
+  const v = spawnSync('node', [join(lone, 'conflict-resolution.mjs'), 'verify', join(r.dir, 'none.md')], {
+    cwd: r.dir, encoding: 'utf8', env: cliEnv({ PATH: `${shim.bin}:${process.env.PATH}`, SHIM_LOG: shim.log, PKG_DIST_REF: r.A }),
+  })
+  assert.equal(v.status, 0, v.stderr)
+  const calls = readFileSync(shim.log, 'utf8').split('\n').filter(Boolean)
+  const build = calls.indexOf('run --if-present build:packages')
+  const gen = calls.indexOf('--filter ./apps/x db:generate')
+  assert.ok(build >= 0, calls.join('\n'))
+  assert.ok(gen >= 0, calls.join('\n'))
+  assert.ok(build < gen, `build must come before db:generate:\n${calls.join('\n')}`)
+  assert.equal(calls.filter((c) => c === 'run --if-present build:packages').length, 1)
+})
+
+// Issue #4487 case 5 — a guard (passes on main too): a COMMITTED branch .sql the base journal does not list.
+test('#4487 verify (lone copy) refuses a leftover tracked branch .sql the base journal does not list, naming it', () => {
+  const r = migMerge()
+  r.git('checkout', '--theirs', '--', `${MIG}/meta/0001_snapshot.json`, `${MIG}/meta/_journal.json`)
+  assert.ok(r.git('ls-files', '--', `${MIG}/0001_side.sql`).stdout.trim(), 'the branch .sql is tracked')
+  const v = r.verify()
+  assert.equal(v.status, 1, v.stderr)
+  assert.match(v.stderr, /migration file not in the journal: apps\/x\/server\/db\/migrations\/sqlite\/0001_side\.sql/)
+  assert.ok(!existsSync(join(r.dir, 'apps/x/GENERATED')), 'refused before any db:generate')
+})
+
 // #4398: a conflict run runs this suite with PKG_DIST_REF set for the real tool.
 test('this suite never hands an inherited PKG_DIST_REF to the tool it starts', () => {
   assert.equal(process.env.PKG_DIST_REF, undefined)

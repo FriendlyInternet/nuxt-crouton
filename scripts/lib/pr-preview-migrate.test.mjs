@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 import { decide, sortMigrationNames, guardDbName, migrate } from './pr-preview-migrate.mjs'
-import { dropTablesSql, isUserTable, LIST_TABLES_SQL } from './wrangler-d1.mjs'
+import { dropTablesSql, isUserTable, LIST_FKS_SQL, LIST_TABLES_SQL, orderForDrop } from './wrangler-d1.mjs'
 
 const cfg = (name, extra = {}) => ({ d1_databases: [{ binding: 'DB', database_name: name, migrations_dir: '/abs/migrations', ...extra }] })
 
@@ -22,6 +22,7 @@ function standIns({ recorded = null, files = [], tables = [], applyStatus = 0 } 
         if (sql.includes("name='d1_migrations'")) return recorded === null ? [] : [{ name: 'd1_migrations' }]
         if (sql.includes('FROM "d1_migrations"')) return (recorded ?? []).map(name => ({ name }))
         if (sql === LIST_TABLES_SQL) return tables.map(name => ({ name }))
+        if (sql.includes('pragma_foreign_key_list')) return []
         throw new Error(`unexpected sql: ${sql}`)
       },
       exec: async (name, sql) => { calls.push(['exec', name, sql]) },
@@ -72,11 +73,11 @@ test('T3 — on a real sqlite file with foreign keys on, the drop empties every 
   try {
     const db = new DatabaseSync(join(dir, 'd1.sqlite'))
     db.exec('PRAGMA foreign_keys = ON;')
-    db.exec('CREATE TABLE parent (id INTEGER PRIMARY KEY);')
-    db.exec('CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id));')
+    db.exec('CREATE TABLE zparent (id INTEGER PRIMARY KEY);')
+    db.exec('CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES zparent(id));')
     db.exec('CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT);')
     db.exec('CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, value BLOB);')
-    db.exec("INSERT INTO parent (id) VALUES (1); INSERT INTO child (id, parent_id) VALUES (1, 1);")
+    db.exec("INSERT INTO zparent (id) VALUES (1); INSERT INTO child (id, parent_id) VALUES (1, 1);")
     db.exec("INSERT INTO d1_migrations (name) VALUES ('0007_brave_gorgon.sql');")
 
     const logs = []
@@ -98,6 +99,25 @@ test('T3 — on a real sqlite file with foreign keys on, the drop empties every 
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('LIST_FKS_SQL never reaches Cloudflare/SQLite internal tables (D1 answers SQLITE_AUTH 7500 for _cf_KV)', () => {
+  // the filter has to be in the SQL itself — D1 refuses the query before JS could filter rows
+  assert.match(LIST_FKS_SQL, /m\.name NOT LIKE '\\_cf\\_%' ESCAPE '\\'/)
+  assert.match(LIST_FKS_SQL, /m\.name NOT LIKE 'sqlite\\_%' ESCAPE '\\'/)
+  const db = new DatabaseSync(':memory:')
+  db.exec('CREATE TABLE zparent (id INTEGER PRIMARY KEY);')
+  db.exec('CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES zparent(id));')
+  db.exec('CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, ref INTEGER REFERENCES zparent(id));')
+  db.exec('CREATE TABLE xcfy (id INTEGER PRIMARY KEY, ref INTEGER REFERENCES zparent(id));') // `_` must be literal
+  const edges = db.prepare(LIST_FKS_SQL).all().map(r => ({ ...r }))
+  assert.deepEqual(edges.sort((a, b) => a.child.localeCompare(b.child)), [{ child: 'child', parent: 'zparent' }, { child: 'xcfy', parent: 'zparent' }])
+  db.close()
+})
+
+test('orderForDrop puts children before the parents they reference', () => {
+  assert.deepEqual(orderForDrop(['session', 'user', 'org'], [{ child: 'session', parent: 'user' }, { child: 'user', parent: 'org' }]), ['session', 'user', 'org'])
+  assert.deepEqual(orderForDrop(['user', 'session'], [{ child: 'session', parent: 'user' }]), ['session', 'user'])
 })
 
 test('T4 — the guard refuses any database but this PR\'s preview, before any I/O', async () => {

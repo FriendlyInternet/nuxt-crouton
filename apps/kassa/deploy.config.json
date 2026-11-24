@@ -61,6 +61,14 @@
         "path": "/api/teams/{teamId}/sales-events"
       },
       {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/order-data",
+        "expectStatus": [401]
+      },
+      {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/orders/smoke-none/print-status",
+        "expectStatus": [401]
+      },
+      {
         "path": "/api/crouton-sales/teams/{teamId}/devices"
       },
       {

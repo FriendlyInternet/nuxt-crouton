@@ -1,7 +1,9 @@
 /**
- * #3982 T12 — the import boundary, checked on the real files.
+ * #3982 / #4097 — the import boundary, checked on the real files.
  *
- * - The pages handler (index + five tools) lives in server/mcp-pages/.
+ * - The pages handler (index + six tools) lives in server/mcp-pages/; the old
+ *   named `handlers/pages/` folder is gone.
+ * - No page-key text is left (`/mcp/pages?token`, `scope: 'pages'`, `mcp-pages'`).
  * - Nothing the toolkit loads in EVERY app (server/mcp, utils, api, handlers)
  *   imports crouton-pages / crouton-collab / crouton-layout.
  * - Domain packages do not import crouton-layout (crouton-pages, crouton-collab
@@ -37,15 +39,24 @@ const importsOf = (file: string, pkgs: string[]) => {
 
 const THREE = ['@fyit/crouton-pages', '@fyit/crouton-collab', '@fyit/crouton-layout']
 
-// covers: T12
 describe('pages handler boundary (#3982)', () => {
-  it('the handler index and the five tools exist under server/mcp-pages/handlers/pages/', () => {
-    const dir = join(pkgDir, 'server/mcp-pages/handlers/pages')
-    for (const f of ['index.ts', 'tools/list-pages.ts', 'tools/read-page.ts', 'tools/edit-page.ts', 'tools/list-layout-blocks.ts', 'tools/add-layout.ts']) {
+  // covers: T6
+  it('the handler index and the six tools exist under server/mcp-pages/, handlers/ is gone', () => {
+    const dir = join(pkgDir, 'server/mcp-pages')
+    for (const f of ['index.ts', 'tools/list-teams.ts', 'tools/list-pages.ts', 'tools/read-page.ts', 'tools/edit-page.ts', 'tools/list-layout-blocks.ts', 'tools/add-layout.ts']) {
       expect(existsSync(join(dir, f)), f).toBe(true)
     }
+    expect(existsSync(join(dir, 'handlers'))).toBe(false)
   })
 
+  // covers: T12
+  it('no page-key text is left in server/ or velo\'s config', () => {
+    const scanned = [...files(join(pkgDir, 'server')), resolve(packagesDir, '../apps/velo/nuxt.config.ts')]
+    const stale = /scope: 'pages'|mcp-pages'|mcp\/pages\?token|pages token/
+    expect(scanned.filter(f => stale.test(readFileSync(f, 'utf8')))).toEqual([])
+  })
+
+  // covers: T12
   it('nothing under server/mcp, server/utils, server/api or server/handlers imports the three packages', () => {
     const scanned = ['server/mcp', 'server/utils', 'server/api', 'server/handlers'].flatMap(d => files(join(pkgDir, d)))
     expect(scanned.length).toBeGreaterThan(5)
@@ -53,11 +64,13 @@ describe('pages handler boundary (#3982)', () => {
     expect(offenders).toEqual([])
   })
 
+  // covers: T12
   it('the pages tools do import them (the scan would catch a real import)', () => {
     const lib = files(join(pkgDir, 'server/mcp-pages'))
     expect(lib.flatMap(f => importsOf(f, THREE)).sort()).toEqual(expect.arrayContaining(THREE))
   })
 
+  // covers: T12
   it('no domain package imports @fyit/crouton-layout', () => {
     const domain = ['crouton-bookings', 'crouton-sales', 'crouton-events', 'crouton-calendar', 'crouton-maps', 'crouton-printing']
     const scanned = domain.flatMap(d => files(join(packagesDir, d)))
@@ -66,6 +79,7 @@ describe('pages handler boundary (#3982)', () => {
     expect(offenders).toEqual([])
   })
 
+  // covers: T12
   it('the toolkit lists the three as optional peers', () => {
     const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'))
     for (const name of THREE) {
@@ -74,11 +88,13 @@ describe('pages handler boundary (#3982)', () => {
     }
   })
 
+  // covers: T12
   it('crouton-collab publishes shared/', () => {
     const pkg = JSON.parse(readFileSync(join(packagesDir, 'crouton-collab/package.json'), 'utf8'))
     expect(pkg.files).toContain('shared')
   })
 
+  // covers: T12
   it('module.ts does not read nuxt.options._layers', () => {
     const src = readFileSync(join(pkgDir, 'module.ts'), 'utf8')
     expect(src).not.toContain('_layers')

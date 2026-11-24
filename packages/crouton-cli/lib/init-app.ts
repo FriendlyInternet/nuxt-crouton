@@ -30,6 +30,25 @@ export function initFeatures(features: string[] = [], layout = true): string[] {
 }
 
 /**
+ * What init's step 2 (generate) and step 3 (migrations) report (#4377). "No collections"
+ * is said only when the config really has none; a thrown error is reported as a failure.
+ */
+export function describeGenerateStep({ collectionCount, error }: { collectionCount: number, error?: unknown }): { generated: boolean, step2: string, step3: string } {
+  if (collectionCount === 0) {
+    return { generated: false, step2: 'Step 2/4 — Generate skipped (no collections in config yet)', step3: 'Step 3/4 — No collections generated, skipping migrations' }
+  }
+  if (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      generated: false,
+      step2: `Step 2/4 — Generate failed (${collectionCount} collections): ${message}`,
+      step3: 'Step 3/4 — Generate failed — skipping migrations (fix the error above, then run `crouton config` and `pnpm db:generate`)'
+    }
+  }
+  return { generated: true, step2: 'Step 2/4 — Collections generated', step3: '' }
+}
+
+/**
  * Run the full init pipeline: scaffold -> generate -> doctor -> summary.
  */
 export async function initApp(name: string, options: InitAppOptions = {}): Promise<void> {
@@ -73,28 +92,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   const appPath = resolve(appDir)
 
   // ── Step 2: generate (config-based) ───────────────────────────────────
-  const configPath = join(appPath, 'crouton.config.js')
-  const hasConfig = await access(configPath).then(() => true).catch(() => false)
-  let collectionsGenerated = false
-
-  if (hasConfig) {
-    consola.start('Step 2/4 — Generating collections from config...')
-    const callerCwd = process.cwd()
-    try {
-      const { runConfig } = await import('./generate-collection.ts')
-      // generated files land in cwd, so generate from inside the app
-      process.chdir(appPath)
-      await runConfig({ configPath })
-      collectionsGenerated = true
-      consola.success('Step 2/4 — Collections generated')
-    } catch (error) {
-      consola.warn('Step 2/4 — Generate skipped (no collections in config yet)')
-    } finally {
-      process.chdir(callerCwd)
-    }
-  } else {
-    console.log('  Step 2/4 — No crouton.config.js found, skipping generate')
-  }
+  const { migrate: collectionsGenerated, step3Skip } = await runGenerateStep(appPath)
 
   // ── Step 3: migrations (build-first) ──────────────────────────────────
   // A scaffold ships a Drizzle schema but no migrations, so the first deploy
@@ -117,7 +115,8 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
       if (result.detail) console.log(`   ${result.detail}`)
     }
   } else {
-    console.log('  Step 3/4 — No collections generated, skipping migrations')
+    if (step3Skip.includes('Generate failed')) consola.warn(step3Skip)
+    else console.log(`  ${step3Skip}`)
   }
 
   // ── Step 4: doctor ────────────────────────────────────────────────────
@@ -133,6 +132,44 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
 
   // ── Summary ───────────────────────────────────────────────────────────
   printSummary(name, appDir, resolvedCf, needsManualMigrations)
+}
+
+/**
+ * Step 2: generate from the app's crouton.config.js. Returns whether migrations should run
+ * and the step-3 line to print when they don't (#4377).
+ */
+async function runGenerateStep(appPath: string): Promise<{ migrate: boolean, step3Skip: string }> {
+  const configPath = join(appPath, 'crouton.config.js')
+  if (!await access(configPath).then(() => true).catch(() => false)) {
+    console.log('  Step 2/4 — No crouton.config.js found, skipping generate')
+    return { migrate: false, step3Skip: 'Step 3/4 — No collections generated, skipping migrations' }
+  }
+  consola.start('Step 2/4 — Generating collections from config...')
+  const { loadCroutonConfig } = await import('./doctor.ts')
+  const config = await loadCroutonConfig(appPath)
+  const collectionCount = Array.isArray(config?.collections) ? config!.collections.length : 0
+  const error = await runConfigInApp(appPath, configPath)
+  const step = describeGenerateStep({ collectionCount, error })
+  if (step.generated) consola.success(step.step2)
+  else consola.warn(step.step2)
+  // A config with no collections still migrates the base schema (auth, translations-ui)
+  // when generate ran cleanly (#523) — only a thrown error skips migrations.
+  return { migrate: !error, step3Skip: step.step3 }
+}
+
+/** Run generate from inside the app (generated files land in cwd); the thrown error, if any. */
+async function runConfigInApp(appPath: string, configPath: string): Promise<unknown> {
+  const callerCwd = process.cwd()
+  try {
+    const { runConfig } = await import('./generate-collection.ts')
+    process.chdir(appPath)
+    await runConfig({ configPath })
+    return undefined
+  } catch (e) {
+    return e ?? new Error('unknown error')
+  } finally {
+    process.chdir(callerCwd)
+  }
 }
 
 function printSummary(name: string, appDir: string, cf: boolean, needsManualMigrations = false): void {

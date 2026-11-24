@@ -92,24 +92,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { sanitizeHtml } from '../utils/sanitize-html'
 import type { EditorVariable } from '../types/editor'
-
-/**
- * Minimal XSS sanitizer — strips <script> tags and on* event handler attributes.
- * SSR-safe: returns the original string unchanged when running server-side.
- */
-function sanitizeHtml(html: string): string {
-  if (typeof window === 'undefined') return html
-  const div = document.createElement('div')
-  div.innerHTML = html
-  div.querySelectorAll('script').forEach(el => el.remove())
-  div.querySelectorAll('*').forEach(el => {
-    ;[...el.attributes].forEach(attr => {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
-    })
-  })
-  return div.innerHTML
-}
 
 // Render TipTap JSON document to simple HTML for preview
 function renderTipTapToHtml(node: any): string {
@@ -137,14 +121,15 @@ function renderTipTapToHtml(node: any): string {
     const src = node.attrs?.src || ''
     const alt = escapeHtml(node.attrs?.alt || '')
     const caption = node.attrs?.caption
-    let html = `<img src="${escapeHtml(src)}" alt="${alt}" style="max-width:100%;border-radius:0.375rem;" />`
-    if (caption) html += `<p style="font-size:0.75rem;color:var(--ui-text-muted);margin-top:0.25rem;">${escapeHtml(caption)}</p>`
+    let html = `<img src="${escapeHtml(src)}" alt="${alt}" />`
+    if (caption) html += `<p>${escapeHtml(caption)}</p>`
     return html
   }
   if (node.type === 'embedBlock') {
-    const src = node.attrs?.src || ''
-    const height = node.attrs?.height || 300
-    return `<iframe src="${escapeHtml(src)}" style="width:100%;height:${height}px;border:0;border-radius:0.375rem;" allowfullscreen></iframe>`
+    // Shown as a plain link: the shared cleaner drops <iframe>, and the
+    // pages embed node stores its address in `url` (older docs used `src`).
+    const url = node.attrs?.url ?? node.attrs?.src ?? ''
+    return url ? `<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>` : ''
   }
   if (node.type === 'hardBreak') return '<br>'
 
@@ -270,10 +255,15 @@ const renderedContent = computed(() => {
     return sanitizeHtml(renderTipTapToHtml(tiptapDoc))
   }
 
-  // Decode HTML entities first, then interpolate variables (with styled
-  // placeholder fallback for undefined ones)
+  // Decode brace entities, clean the author's HTML, THEN interpolate: the
+  // values are escaped and the warning chip is added after cleaning, so it
+  // keeps its classes while no value can inject markup.
   const decoded = decodeEntities(props.content as string)
-  let result = interpolate(decoded, mergedValues.value, undefinedVarPlaceholder)
+  const clean = sanitizeHtml(decoded)
+  const escaped = Object.fromEntries(
+    Object.entries(mergedValues.value).map(([k, v]) => [k, escapeHtml(String(v ?? ''))])
+  )
+  let result = interpolate(clean, escaped, undefinedVarPlaceholder)
 
   // If content doesn't have block-level HTML tags, convert line breaks to <br>
   // This handles plain text content or content with only inline formatting
@@ -282,7 +272,7 @@ const renderedContent = computed(() => {
     result = result.replace(/\n/g, '<br>')
   }
 
-  return sanitizeHtml(result)
+  return result
 })
 
 /**
