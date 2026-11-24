@@ -16,11 +16,7 @@ const HELPER = resolve(__dirname, '../server/utils/require-scoped-event.ts')
 
 const EXCEPTIONS = [
   // Public: resolves an event by slug before anyone has a token.
-  'by-slug/[slug].get.ts',
-  // Kitchen screen — until #4388 step 2
-  'display-jobs/index.get.ts',
-  // Kitchen screen — until #4388 step 2
-  'kds-bump.post.ts'
+  'by-slug/[slug].get.ts'
 ]
 
 function listTs(dir: string): string[] {
@@ -34,16 +30,19 @@ function listTs(dir: string): string[] {
 const files = listTs(ROOT).map(path => relative(ROOT, path).split('\\').join('/'))
 
 describe('events/[eventId]/* endpoints use requireScopedEvent', () => {
+  // covers: T1
   it('finds the endpoint files (a moved folder must not pass by finding nothing)', () => {
     expect(files.length).toBeGreaterThan(EXCEPTIONS.length)
   })
 
+  // covers: T1
   it('every listed exception still exists', () => {
     for (const exception of EXCEPTIONS) {
       expect(existsSync(join(ROOT, exception)), exception).toBe(true)
     }
   })
 
+  // covers: T1
   it('every non-exempt endpoint imports and calls requireScopedEvent', () => {
     const missing = files
       .filter(file => !EXCEPTIONS.includes(file))
@@ -55,6 +54,7 @@ describe('events/[eventId]/* endpoints use requireScopedEvent', () => {
     expect(missing).toEqual([])
   })
 
+  // covers: T1
   it('no endpoint imports requireScopedAccessToResource directly', () => {
     const direct = files
       .filter(file => !EXCEPTIONS.includes(file))
@@ -62,6 +62,7 @@ describe('events/[eventId]/* endpoints use requireScopedEvent', () => {
     expect(direct).toEqual([])
   })
 
+  // covers: T1
   it('the helper passes the token\'s team into the event lookup', () => {
     const src = readFileSync(HELPER, 'utf8')
     expect(src).toMatch(/findTeamEvent\(\s*db\s*,\s*salesEvents\s*,\s*eventId\s*,\s*access\.organizationId\s*\)/)
