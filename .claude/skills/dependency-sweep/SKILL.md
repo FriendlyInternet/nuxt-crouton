@@ -48,10 +48,11 @@ issue and hold the floor. Don't force a red bump into the safe PR.
 ## Step 3 — Bump the single dial
 
 - Edit **only** the `catalog:` block in `pnpm-workspace.yaml`. Never per-package.
-- Transitive singletons that no package declares directly (`vue`, `zod`,
+- Transitive singletons that no package declares directly (`zod`,
   `@tiptap/*`) live in root `package.json` → `pnpm.overrides`, not the catalog
-  (#140). If you bump `vue`/`nuxt`, bump their `pnpm.overrides` floor to match so
-  the lockfile actually moves.
+  (#140). `vue`, `nuxt`, `@nuxt/schema`, `@nuxt/nitro-server` and `@nuxt/ui`
+  overrides point at `catalog:` (#4496), so bumping the catalog line moves the
+  override too — never put a number back in `pnpm.overrides` for them.
 - Keep package **peer** ranges wide (`^3 || ^4`) — untouched.
 - **`@playwright/test` is special — sync the E2E container tag.** If you bump it,
   also bump the CI image tag in `.github/workflows/e2e.yml`
@@ -131,8 +132,9 @@ standing deliberate/wait items each sweep — open `deps` issues
 - Several packages pin **drizzle** directly instead of via `catalog:`, so old
   copies linger after a bump. Catalog-ising those is a separate cleanup.
 - `vitest` / `@vitest/coverage-v8` / `@vitest/ui` / `happy-dom` are cataloged
-  since #2291. `@nuxt/kit|schema` are still **not** cataloged (version spreads
-  need a real migration — #141).
+  since #2291. Packages' own `@nuxt/kit|schema` pins are still **not** cataloged
+  (version spreads need a real migration — #141); the catalog's `@nuxt/schema`
+  line only feeds the root override (#4496).
 
 ## Quick commands (moved from root CLAUDE.md, #3350)
 
