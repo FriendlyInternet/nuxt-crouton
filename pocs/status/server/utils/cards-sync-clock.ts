@@ -29,7 +29,7 @@ export interface CardsSyncDeps {
 }
 
 /** The owner's user, the default team, and the owner's membership of it — or null if any is missing. */
-async function findOwnerTeam(email: string): Promise<{ teamId: string, userId: string } | null> {
+export async function findOwnerTeam(email: string): Promise<{ teamId: string, userId: string } | null> {
   if (!email) return null
   const [{ eq }, { user, organization }, { getOrganizationMembershipDirect }] = await Promise.all([
     import('drizzle-orm'),

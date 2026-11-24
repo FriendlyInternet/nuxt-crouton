@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// The dashboard: Apps · To test · Decisions · Changelog · Clock. The page fetches and owns the filter
+// The dashboard: Apps · To test · Decisions · Changelog · Clock · Pipeline. The page fetches and owns the filter
 // state (so it survives switching tabs); each tab is its own component in components/dashboard/.
 import { sortClockRows } from '~/utils/dashboard'
-import type { AppRow, ChangelogRow, ClockRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
+import { REREAD_MS, rereadDue } from '~/utils/inbox-core'
+import type { AppRow, BoardRow, ChangelogRow, ClockRow, Decision, OpenQuestion, ToTestGroup, ToTestItem } from '~/utils/dashboard'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -11,7 +12,8 @@ const TABS = [
   { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
   { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
   { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' },
-  { label: 'Clock', slot: 'clock', icon: 'i-lucide-clock' }
+  { label: 'Clock', slot: 'clock', icon: 'i-lucide-clock' },
+  { label: 'Pipeline', slot: 'pipeline', icon: 'i-lucide-square-kanban' }
 ]
 // On a phone (below sm) the tabs show their icon only, plus the label on the selected tab.
 const activeTab = ref('apps')
@@ -28,6 +30,22 @@ const { data: clockRes, status: clockStatus } = await useFetch<{ data: ClockRow[
 
 // --- Clock ---
 const clockRows = computed(() => sortClockRows(clockRes.value?.data ?? []))
+
+// --- Pipeline (#4349) --- re-read every 30 s while the page is visible, as the inbox does (D1 only, no GitHub).
+const { data: boardRes, status: boardStatus, refresh: refreshBoard } = await useFetch<{ data: BoardRow[] | null, error: string | null }>('/api/status/board', { lazy: true })
+const boardRows = computed(() => boardRes.value?.data ?? [])
+const boardUpdatedAt = ref<number | null>(null)
+watch(boardRes, () => { boardUpdatedAt.value = Date.now() })
+onMounted(() => { if (boardRes.value) boardUpdatedAt.value = Date.now() })
+const visibility = useDocumentVisibility()
+function rereadBoard() {
+  if (!rereadDue({ visible: visibility.value === 'visible', busy: boardStatus.value === 'pending' })) return
+  refreshBoard()
+}
+useIntervalFn(rereadBoard, REREAD_MS)
+watch(visibility, (v) => {
+  if (v === 'visible') rereadBoard()
+})
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
@@ -92,6 +110,9 @@ const filteredRows = computed(() => {
       </template>
       <template #clock>
         <DashboardClockTab :error="clockRes?.error" :pending="clockStatus === 'pending'" :rows="clockRows" />
+      </template>
+      <template #pipeline>
+        <DashboardPipelineTab :error="boardRes?.error" :pending="boardStatus === 'pending'" :rows="boardRows" :updated-at="boardUpdatedAt" />
       </template>
     </UTabs>
   </UContainer>
