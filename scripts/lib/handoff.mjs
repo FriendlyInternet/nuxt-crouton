@@ -43,7 +43,8 @@ export const RUN_NAME = {
     "${{ github.event_name == 'workflow_dispatch' && format('build-review #{0}', inputs.pr) || 'Build review (workflow run)' }}",
   'fix-ci-on-failure.yml':
     "${{ github.event_name == 'workflow_dispatch' && format('fix-ci #{0}', inputs.pr) || 'Fix CI on failure (workflow run)' }}",
-  'ticket-review.yml': 'ticket-review #${{ inputs.epic }}',
+  // #4456: a review of one ticket names it, so ticket-review-gate.mjs can see that review is running.
+  'ticket-review.yml': "ticket-review #${{ inputs.epic }}${{ inputs.subject != '' && format(' · {0}', inputs.subject) || '' }}",
   'ticket-revise.yml': 'ticket-revise #${{ inputs.epic }}',
   'automerge-epic-subpr.yml':
     "${{ github.event_name == 'workflow_dispatch' && inputs.pr && format('automerge #{0}', inputs.pr) || 'Auto-merge epic sub-PRs' }}",
@@ -62,7 +63,7 @@ export function handoffRunTitle(workflow, inputs = {}) {
       return `#${i.issue} · ${i.mode || 'build'}${i.feedback ? ' · revise' : ''}`
     case 'build-review.yml': return `build-review #${i.pr}`
     case 'fix-ci-on-failure.yml': return `fix-ci #${i.pr}`
-    case 'ticket-review.yml': return `ticket-review #${i.epic}`
+    case 'ticket-review.yml': return `ticket-review #${i.epic}${i.subject ? ` · ${i.subject}` : ''}`
     case 'ticket-revise.yml': return `ticket-revise #${i.epic}`
     case 'automerge-epic-subpr.yml': return `automerge #${i.pr}`
     case 'postmortem.yml': return `postmortem #${i.epic}`
