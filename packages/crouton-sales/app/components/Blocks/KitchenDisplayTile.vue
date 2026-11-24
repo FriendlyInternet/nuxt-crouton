@@ -75,6 +75,7 @@ function onTap() {
 
     <!-- Armed state: full-card confirm overlay (#2115) -->
     <Transition name="confirm-overlay">
+      <!-- eslint-disable-next-line vue/no-restricted-html-elements -- moved unchanged from KitchenDisplayRender.vue; full-card tap target, a UButton would change the tile's look -->
       <button
         v-if="armed"
         type="button"
