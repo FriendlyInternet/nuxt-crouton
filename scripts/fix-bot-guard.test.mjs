@@ -61,6 +61,7 @@ test('no fix commit → exit 0, nothing pushed, no comment when there is no issu
   const r = guard(s)
   assert.equal(r.status, 0, r.stderr)
   assert.match(r.stdout, /No fix commit/)
+  assert.doesNotMatch(r.output, /pushed=true/)
   assert.equal(git(s.work, 'rev-parse', 'origin/feature'), s.pre)
   assert.equal(r.gh, '')
 })
@@ -74,6 +75,8 @@ test('a fix that only adds lines → pushed to the PR branch, not refused', () =
   assert.equal(r.status, 0, r.stderr)
   assert.equal(git(s.work, 'ls-remote', 'origin', 'refs/heads/feature').split('\t')[0], head)
   assert.doesNotMatch(r.output, /refused=true/)
+  // #4317: the run record tells a pushed fix from "the model changed nothing".
+  assert.match(r.output, /^pushed=true$/m)
 })
 
 test('a fix that deletes a worker-added line → refused, reset to PRE, hand-back lists the line', () => {
@@ -83,6 +86,7 @@ test('a fix that deletes a worker-added line → refused, reset to PRE, hand-bac
   const r = guard(s)
   assert.equal(r.status, 0, r.stderr)
   assert.match(r.output, /refused=true/)
+  assert.doesNotMatch(r.output, /pushed=true/, 'a refused fix is never reported as pushed (#4317)')
   assert.equal(git(s.work, 'rev-parse', 'HEAD'), s.pre, 'local branch reset to the pre-fix head')
   assert.equal(git(s.work, 'ls-remote', 'origin', 'refs/heads/feature').split('\t')[0], s.pre, 'nothing pushed')
   const hb = readFileSync(join(s.temp, 'handback.md'), 'utf8')

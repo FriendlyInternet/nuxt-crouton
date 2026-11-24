@@ -37,6 +37,7 @@ pages/editor code.
 | `with-collab` | + `@fyit/crouton-collab`; surface = realtime collab UI mounts single-client (spike) | crouton-collab |
 | `with-maps` | + `@fyit/crouton-maps`; a `venues` collection with address+coordinate fields — MapLibre map mounts in the generated form, `/api/maps/geocode` proxies live Nominatim | crouton-maps |
 | `with-sales` | + `@fyit/crouton-sales` + `@fyit/crouton-printing`; two-tier POS smoke — order placed, print job pending→done against an in-test fake `:9100` ESC/POS printer | crouton-sales, crouton-printing |
+| `with-relations` | core only; `categories` ← `products.categoryId` (`refTarget`) — CRUD both + `CroutonFormReferenceSelect` mounts against the parent collection | generator relation handling (`refTarget`, multi-collection migration), `CroutonFormReferenceSelect` |
 | `with-devtools` | + `@fyit/crouton-devtools` + `@fyit/crouton-feedback`; surface = the feedback "glasses" launcher mounts via devtools `installModule` | crouton-devtools, crouton-feedback |
 
 If unsure which fixture covers the change, grep the fixtures for the affected

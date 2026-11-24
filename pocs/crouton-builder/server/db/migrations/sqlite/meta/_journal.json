@@ -57,6 +57,48 @@
       "when": 1794486209097,
       "tag": "0007_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794846020889,
+      "tag": "0008_bent_madame_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794860591722,
+      "tag": "0009_gray_scrambler",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794860604086,
+      "tag": "0010_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081100791,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795157790554,
+      "tag": "0012_wooden_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795511789875,
+      "tag": "0013_aberrant_paper_doll",
+      "breakpoints": true
     }
   ]
 }

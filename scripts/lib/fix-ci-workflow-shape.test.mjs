@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { execFileSync, spawnSync } from 'node:child_process'
 
 const YML = readFileSync(new URL('../../.github/workflows/fix-ci-on-failure.yml', import.meta.url), 'utf8')
@@ -71,13 +72,23 @@ export const jobOutputs = (jobText) => blockOf(jobText, 'outputs').map(l => l.sp
 // `uses:` actions whose outputs we read, and what they set. A new one must be added here on purpose.
 const ACTION_OUTPUTS = { 'actions/create-github-app-token': ['token'] }
 
-/** The outputs a step sets: setOutput('x' / echo "x=…" >> "$GITHUB_OUTPUT" / an allow-listed action. */
-export function stepSets(step) {
-  const set = new Set()
-  for (const m of step.text.matchAll(/setOutput\(\s*['"]([\w-]+)['"]/g)) set.add(m[1])
-  for (const line of step.text.split('\n').filter(l => l.includes('GITHUB_OUTPUT'))) {
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
+const echoed = (text, set) => {
+  for (const line of text.split('\n').filter(l => l.includes('GITHUB_OUTPUT'))) {
     for (const m of line.matchAll(/echo "([\w-]+)=/g)) set.add(m[1])
   }
+}
+const readOr = (root, path) => { try { return readFileSync(join(root, path), 'utf8') } catch { return '' } }
+
+/**
+ * The outputs a step sets: setOutput('x' / echo "x=…" >> "$GITHUB_OUTPUT" in its text or in a
+ * `scripts/*.sh` it names (read from `root`; a missing file sets nothing, #4317) / an allow-listed action.
+ */
+export function stepSets(step, root = REPO_ROOT) {
+  const set = new Set()
+  for (const m of step.text.matchAll(/setOutput\(\s*['"]([\w-]+)['"]/g)) set.add(m[1])
+  echoed(step.text, set)
+  for (const p of new Set([...step.text.matchAll(/scripts\/[\w./-]+\.sh/g)].map(m => m[0]))) echoed(readOr(root, p), set)
   const action = step.uses.split('@')[0]
   for (const x of ACTION_OUTPUTS[action] || []) set.add(x)
   return { set, known: !step.uses || action === 'actions/github-script' || action in ACTION_OUTPUTS }
@@ -88,10 +99,10 @@ export function stepSets(step) {
 const outputReads = (text, kind) => [...new Map([...text.matchAll(new RegExp(`${kind}\\.([\\w-]+)\\.outputs\\.([\\w-]+)`, 'g'))].map(x => [x[0], x])).values()]
 
 /** Why one `steps.<id>.outputs.<x>` read is undeclared, or null. */
-function stepReadMiss(steps, [m, id, x]) {
+function stepReadMiss(steps, [m, id, x], root) {
   const s = steps.find(st => st.id === id)
   if (!s) return `${m} — no step with id ${id} in this job`
-  const { set, known } = stepSets(s)
+  const { set, known } = stepSets(s, root)
   if (!known) return `${m} — step ${id} uses ${s.uses.split('@')[0]}, outputs unknown (add it to ACTION_OUTPUTS)`
   return set.has(x) ? null : `${m} — step ${id} never sets ${x}`
 }
@@ -102,14 +113,14 @@ function needsReadMiss(jobs, needs, [m, other, x]) {
   return jobs[other] && jobOutputs(jobs[other]).includes(x) ? null : `${m} — not declared on ${other}`
 }
 
-export function undeclaredOutputs(yml) {
+export function undeclaredOutputs(yml, root = REPO_ROOT) {
   const jobs = splitJobs(yml)
   const missing = []
   for (const [job, text] of Object.entries(jobs)) {
     const steps = stepsOf(text)
     const needs = needsOf(text)
     const why = [
-      ...outputReads(text, 'steps').map(r => stepReadMiss(steps, r)),
+      ...outputReads(text, 'steps').map(r => stepReadMiss(steps, r, root)),
       ...outputReads(text, 'needs').map(r => needsReadMiss(jobs, needs, r)),
     ]
     for (const w of why) if (w) missing.push(`${job}: ${w}`)
@@ -286,4 +297,54 @@ test('the gate no longer bumps the counter or posts the gave-up page; the one-pa
   assert.ok(!gate.includes('gave up after'), 'no gave-up page in the gate')
   assert.match(step('fixbot', 'Page the owner once (gave up)').text, /gaveUpPosted\(/)
   assert.match(ifOf(step('fixbot', 'Page the owner once (gave up)')), /steps\.gate\.outputs\.gave_up == 'true'/)
+})
+
+// ── #4317: outputs a step's script writes, the precheck, and one reason per no-commit run ──
+const scriptRoot = () => {
+  const root = mkdtempSync(join(tmpdir(), 'shape-root-'))
+  mkdirSync(join(root, 'scripts'))
+  writeFileSync(join(root, 'scripts/sets-x.sh'), 'set -e\necho "x=1" >> "$GITHUB_OUTPUT"\n')
+  return root
+}
+const runsScript = (file) => `      - name: Run it
+        id: sx
+        run: |
+          bash scripts/${file}
+      - name: Read
+        run: echo \${{ steps.sx.outputs.x }}
+`
+test('checker: an output written by a scripts/*.sh the step runs counts as set', () => {
+  const m = undeclaredOutputs(mini('      proceed: ${{ steps.gate.outputs.proceed }}', runsScript('sets-x.sh')), scriptRoot())
+  assert.deepEqual(m, [])
+})
+test('checker: a scripts/*.sh the checker cannot read sets nothing', () => {
+  const m = undeclaredOutputs(mini('      proceed: ${{ steps.gate.outputs.proceed }}', runsScript('none.sh')), scriptRoot())
+  assert.deepEqual(m, ['fix: steps.sx.outputs.x — step sx never sets x'])
+})
+
+test('the gate runs the still-red precheck before the first Resolve model step', () => {
+  const gate = stepsOf(jobs.fixbot).find(s => s.id === 'gate').text
+  assert.match(gate, /scripts\/lib\/fix-bot-precheck\.mjs`\)\)\.stillRed\(\{[^\n]*headSha: full\.head\.sha \}\)/)
+  assert.match(gate, /if \(!pre\.run\) \{[^\n]*core\.setOutput\('skip_reason', pre\.reason\)[^\n]*core\.setOutput\('proceed', 'false'\); return \}/)
+  assert.ok(gate.indexOf('stillRed(') < gate.indexOf("core.setOutput('proceed', 'true')"), 'precheck before the go')
+  const fbSteps = stepsOf(jobs.fixbot)
+  const model = fbSteps.findIndex(s => s.name === 'Resolve model')
+  assert.ok(model > 0 && fbSteps.findIndex(s => s.id === 'gate') < model, 'gate before the first Resolve model')
+  // The precheck posts nothing on the PR: its stop line has no createComment.
+  const stopLine = gate.split('\n').find(l => l.includes('if (!pre.run)'))
+  assert.ok(!/createComment/.test(stopLine))
+})
+
+test('every gate line that stops the run (proceed false) also names its skip_reason', () => {
+  const gate = stepsOf(jobs.fixbot).find(s => s.id === 'gate').text
+  const stops = gate.split('\n').filter(l => l.includes("core.setOutput('proceed', 'false')"))
+  assert.ok(stops.length >= 6, `found ${stops.length} stop lines`)
+  for (const l of stops) assert.match(l, /core\.setOutput\('skip_reason', /, l.trim())
+})
+
+test('job fix declares go/moved/refused/committed/pushed; fixbot declares skip_reason and precheck', () => {
+  for (const x of ['go', 'moved', 'refused', 'committed', 'pushed']) assert.ok(jobOutputs(jobs.fix).includes(x), `fix: ${x}`)
+  for (const x of ['skip_reason', 'precheck']) assert.ok(jobOutputs(jobs.fixbot).includes(x), `fixbot: ${x}`)
+  assert.equal(step('fix', 'Commit the staged fix').id, 'commit')
+  assert.deepEqual(needsOf(jobs['record-outcome']), ['fixbot', 'review-1', 'round-2', 'review-2', 'fix'], 'the record sees both jobs')
 })

@@ -296,6 +296,14 @@ _Source: `packages/crouton-auth/server/utils/database.ts`_
 
 **Also exported from `packages/crouton-auth/server/utils/database.ts`:** `eq`, `and`, `or`, `ne`, `not`, `lt`, `gt`, `asc`, `desc`, `count`, `inArray`, `sql` (re-exported from `drizzle-orm`), `tables`
 
+## teamEmailLogScope
+
+```ts
+teamEmailLogScope(db: any, teamId: string): SQL
+```
+
+_Source: `packages/crouton-auth/server/utils/email-log-scope.ts`_
+
 ## mintPairingCode
 
 Mint a single-use pairing code for an org.
@@ -829,6 +837,28 @@ Get organization membership directly from database
 
 ```ts
 getOrganizationMembershipDirect(organizationId: string, userId: string): Promise<{ role: 'owner' | 'admin' | 'member' } | null>
+```
+
+_Source: `packages/crouton-auth/server/utils/team.ts`_
+
+## canEditPages
+
+The single page-edit rule (#4097): may this user edit this team's pages?
+Today: team `admin` or `owner`. No session needed (MCP sign-in tokens have none).
+
+```ts
+canEditPages(teamId: string, userId: string): Promise<boolean>
+```
+
+_Source: `packages/crouton-auth/server/utils/team.ts`_
+
+## getUserTeamsDirect
+
+The teams a user belongs to, read straight from the database (#4097) — for
+callers with no session (an MCP sign-in token). `{ id, slug, name, role }` per team.
+
+```ts
+getUserTeamsDirect(userId: string): Promise<Array<{ id: string, slug: string, name: string, role: 'owner' | 'admin' | 'member' }>>
 ```
 
 _Source: `packages/crouton-auth/server/utils/team.ts`_

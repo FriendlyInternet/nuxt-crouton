@@ -10,11 +10,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  extends: [
-    '@fyit/crouton-core',
-    '@fyit/crouton-i18n',
-    '@fyit/crouton-email'
-  ],
+  extends: ['@fyit/crouton-core', '@fyit/crouton-i18n', '@fyit/crouton-email', './layers/inbox', './layers/pipeline'],
   hub: {
     db: 'sqlite',
     kv: true
@@ -28,6 +24,8 @@ export default defineNuxtConfig({
   croutonAuth: {
     // Signed-out visitors land on the status-only /signin (not /auth/*: the shared auth modal grabs those)
     ui: { redirects: { unauthenticated: '/signin' } },
+    // One-team mode on the team every deploy seeds (seed:org:test1); the owner joins it on sign-in (#3786)
+    teams: { defaultTeamSlug: 'test1', allowCreate: false, showSwitcher: false },
     methods: {
       password: false,
       passkeys: false,
@@ -50,6 +48,8 @@ export default defineNuxtConfig({
     // The one email allowed to sign in. Set ONLY as the Worker var NUXT_STATUS_OWNER_EMAIL
     // (never committed; public repo). Empty = nobody can sign in.
     statusOwnerEmail: '',
+    // The only repo whose webhook events mark the inbox for a sync (#4309, NUXT_GITHUB_REPO).
+    githubRepo: 'FriendlyInternet/nuxt-crouton',
     // Seed the review-login passwords derive from. Pushed to the Worker by the staging deploy
     // (deploy-app.yml, status app only) as NUXT_REVIEW_SEED_SECRET; never committed.
     reviewSeedSecret: '',

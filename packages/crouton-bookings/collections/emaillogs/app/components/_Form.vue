@@ -112,7 +112,8 @@ const { t: $t } = useI18n()
 const statusOptions = computed(() => [
   { label: $t('bookings.emailStatus.pending'), value: 'pending' },
   { label: $t('bookings.emailStatus.sent'), value: 'sent' },
-  { label: $t('bookings.emailStatus.failed'), value: 'failed' }
+  { label: $t('bookings.emailStatus.failed'), value: 'failed' },
+  { label: $t('bookings.emailStatus.skipped'), value: 'skipped' }
 ])
 
 

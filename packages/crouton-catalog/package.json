@@ -1,0 +1,67 @@
+{
+  "name": "@fyit/crouton-catalog",
+  "version": "0.1.0",
+  "description": "Shared team product list for nuxt-crouton: what a team offers, used by bookings (stock) and later sales (price)",
+  "type": "module",
+  "main": "./nuxt.config.ts",
+  "exports": {
+    ".": "./nuxt.config.ts",
+    "./crouton.manifest": "./crouton.manifest.ts",
+    "./required-locale": "./required-locale.ts",
+    "./seed": {
+      "import": "./seed/index.ts",
+      "types": "./seed/index.ts"
+    },
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
+  },
+  "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "files": [
+    "app",
+    "server",
+    "collections",
+    "i18n",
+    "seed",
+    "products-schema.json",
+    "crouton.manifest.ts",
+    "required-locale.ts",
+    "nuxt.config.ts",
+    "README.md",
+    "docs/llms.txt"
+  ],
+  "keywords": [
+    "nuxt",
+    "nuxt-layer",
+    "catalog",
+    "products"
+  ],
+  "author": "FYIT",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FriendlyInternet/nuxt-crouton.git",
+    "directory": "packages/crouton-catalog"
+  },
+  "bugs": {
+    "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues"
+  },
+  "homepage": "https://github.com/FriendlyInternet/nuxt-crouton#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "nuxt": "^4.0.0",
+    "@fyit/crouton-core": "workspace:0.x",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "catalog:",
+    "vitest": "catalog:"
+  }
+}

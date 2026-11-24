@@ -21,7 +21,7 @@ const FOLDERS = [
   'pocs/alexdeforce', 'pocs/booking-demo', 'pocs/crate', 'pocs/crouton-builder', 'pocs/gallery',
   'pocs/kvr', 'pocs/notes', 'pocs/pins', 'pocs/sintlukas', 'pocs/snippets', 'pocs/status',
   'fixtures/minimal', 'fixtures/with-assets', 'fixtures/with-bookings', 'fixtures/with-collab',
-  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-pages', 'fixtures/with-sales'
+  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-mcp-oauth', 'fixtures/with-pages', 'fixtures/with-relations', 'fixtures/with-sales'
 ]
 
 const migrationsDir = folder => path.join(ROOT, folder, 'server/db/migrations/sqlite')
@@ -47,9 +47,18 @@ for (const folder of FOLDERS) {
     const file = backfillFile(folder)
     const dir = migrationsDir(folder)
     const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8'))
-    const last = journal.entries.find(e => e.tag === file.replace(/\.sql$/, ''))
-    assert.ok(last, `${folder}: backfill must be a journal entry`)
+    // The backfill was the newest migration when it landed (#3141); schema migrations added
+    // later (e.g. pocs/status 0005_thin_the_spike #3776, kassa/velo #3956) may follow it.
+    // What must hold: it is a journal entry, directly after its predecessor, and data-only.
+    const pos = journal.entries.findIndex(e => e.tag === file.replace(/\.sql$/, ''))
+    assert.ok(pos !== -1, `${folder}: backfill must be a journal entry`)
+    assert.ok(pos > 0, `${folder}: backfill must be in the journal, after the schema migrations`)
+    const last = journal.entries[pos]
     assert.ok(last.idx > 0)
+    assert.equal(last.idx, journal.entries[pos - 1].idx + 1)
+    if (pos < journal.entries.length - 1) {
+      assert.equal(journal.entries[pos + 1].idx, last.idx + 1, `${folder}: journal idx must stay contiguous`)
+    }
 
     const nnnn = String(last.idx).padStart(4, '0')
     const prevNnnn = String(last.idx - 1).padStart(4, '0')

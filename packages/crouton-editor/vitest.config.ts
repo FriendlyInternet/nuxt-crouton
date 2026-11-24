@@ -1,8 +1,11 @@
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  plugins: [vue()],
   test: {
-    include: ['tests/**/*.test.ts'],
+    // tests/ (unit, DOM) and test/ (server-path; files pin `@vitest-environment node`)
+    include: ['tests/**/*.test.ts', 'test/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

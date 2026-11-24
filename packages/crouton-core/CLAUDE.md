@@ -54,15 +54,19 @@ export default defineNuxtConfig({
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
 | `app/composables/useCollectionMutation.ts` | Create/update/delete with auto cache invalidation |
 | `app/composables/useCollections.ts` | Collection config registry from `app.config.croutonCollections` |
+| `app/theme/disabled-button.ts` | Shared disabled `UButton` look (#4329): `ui.button.compoundVariants` in `app/app.config.ts` make a disabled button of any colour neutral (`bg-elevated`, `text-muted`, grey ring) for the six standard variants only; loading buttons and themes' named variants keep their own look |
 | `app/composables/useCroutonShortcuts.ts` | Keyboard shortcuts for CRUD operations |
 | `app/composables/useCollectionSelection.ts` | Which record of a collection is open, and where (#2598). Pure `createCollectionSelections({ open, containerFor })` (one selection per collection: `itemId`/`mode`/`sessionKey`, `act`, `attachEditor`, `saved`/`deleted`/`cancelled`) + Nuxt glue: `provideCollectionSelections()` (call once per page), `useCollectionSelections()` (inject, or a private set = overlay behaviour), `provideSelectionItemActions(collection)` (route child rows' actions to it). A mounted editor `attachEditor()`s → rows open in it; none → the collection's overlay; delete always a modal. Used by `CollectionViewer` (inline mode) and crouton-layout's List/Form blocks |
 | `app/composables/useCollectionExport.ts` | CSV/JSON export for collection data |
 | `app/composables/useCollectionImport.ts` | CSV/JSON import with column mapping, validation, and batched POST |
 | `app/composables/useDisplayConfig.ts` | Resolves display config (title/subtitle/image/badge/description) with auto-inference |
 | `app/components/Collection.vue` | Multi-layout display (table, list, grid, tree, kanban) |
+| `app/components/Kanban.vue` | `CroutonKanban` — kanban layout (one `CroutonKanbanColumn` per group, SortableJS drag). `readonly` (default off, #4348): no dragging, no `move`, no Edit/Delete on default cards; clicks still emit `select` |
+| `app/components/FormRepeater.vue` | `CroutonFormRepeater` — repeatable rows (SortableJS drag). Each row has a ⋮ menu with Move up / Move down / Remove; drag and menu share one `moveItem`, focus returns to the moved row's menu, and a hidden `aria-live` line announces the new position (#4470) |
 | `app/components/CollectionSkeleton.vue` | `CroutonCollectionSkeleton` — layout-aware shimmer (table/list/grid) used as the `<Suspense>` fallback in `CollectionViewer` so the viewer reveals the populated result at once instead of flashing a loader + filling in row-by-row |
 | `app/components/Form.vue` | Main CRUD form handler with nested modal support. Resolves the form by canonical name `<Layer><Plural>Form` (`app/utils/form-resolver.ts`, lazy via the build-time map) — no per-collection setting. To replace one, add `app/components/<Layer><Plural>Form.vue` (or `…List.vue`) in the app; it wins, delete it to revert (docs: `5.customization/2.eject.md`) |
 | `app/utils/init-form-state.ts` | `initFormState(defaultValue, activeItem)` — builds an edit form's initial state, coercing a nullable column's loaded `null` back to the form default so it never reaches the narrow client schema and silently blocks submit (#1498; the hand-written form analog of the generator's #1415 coercion). Used by `RedirectsForm` + `crouton-sales`'s `useSalesCollectionForm`. |
+| `app/utils/scroll-row.ts` | `SCROLL_ROW_X` (auto-imported) — the classes for a row that scrolls sideways only (tab bars, chip strips). Use it instead of a bare `overflow-x-auto`, which also scrolls vertically; `scripts/check-runtime-cost.mjs` kind F flags a new bare tab row (#4330). Used by `TabsPanel`, crouton-bookings `BookingCreateCard`, crouton-sales `CategoryTabs`. |
 | `app/components/Detail.vue` | `CroutonDetail` — Generic detail view using display config and runtime field metadata |
 | `app/components/DefaultCard.vue` | `CroutonDefaultCard` — Display-aware card (title/image/badge from display config) |
 | `app/components/ItemCardMini.vue` | `CroutonItemCardMini` — Display-aware mini card for references and lists |
@@ -97,7 +101,7 @@ export default defineNuxtConfig({
 > **`app/utils/layout-tree.ts` — `sanitizeLayoutTree`** (auto-imported): the pure shape gate that validates an untrusted `LayoutTree` (from a page's embedded `paneBlock`) before render, or returns `null`. It lives HERE (paired with the `layout.ts` types), not in crouton-layout, so `crouton-pages`' `PaneBlock` validates an embedded layout WITHOUT the app extending crouton-layout (#1618 — was in layout since #756; moved back when crouton-pages became a consumer). crouton-layout re-imports it from `@fyit/crouton-core/app/utils/layout-tree`. It keeps a leaf's `source` string and a tree's `sources` map (#3650).
 
 > **Layout stores (#3650)** — `app/utils/layout-stores.ts` `collectLayoutStores(tree)` (pure, auto-imported; also `@fyit/crouton-core/app/utils/layout-stores`): every store copy a layout needs (leaf sources + `sources` keys across root, breakpoint roots and nested sub-layouts; outer options win; sorted). `app/utils/layout-store-registry.ts` `defineCroutonLayoutStore({ id, setup, feeds })` — **call from a Nuxt plugin**; one registry per Nuxt app (so per server request), re-registering the same definition is silent, a different one under a taken id warns in dev. Read with `useCroutonLayoutStoreRegistry()` (`get`/`list`). A domain package registers stores with only a core dependency; the scope + binding live in crouton-layout.
-| `app/components/BlockFrame.vue` | `<CroutonBlockFrame>` (#2414) — shared chrome for editor-block NodeViews: selected border, label row, edit/delete (hover on desktop, always on `pointer-coarse`), double-click opens panel. Props `node`, `getPos`, `selected`, `icon`, `label`, `tapToOpen` (default false); emits `delete`; slots default, `#actions`, `#meta`. The block keeps its own `<NodeViewWrapper>` (tiptap stays out of core) |
+| `app/components/BlockFrame.vue` | `<CroutonBlockFrame>` (#2414) — shared chrome for editor-block NodeViews: selected border, label row, edit/delete (shown on hover, on keyboard focus and while a menu is open; always on `pointer-coarse`), double-click opens panel. Props `node`, `getPos`, `selected`, `icon`, `label`, `tapToOpen` (default false); emits `delete`; slots default, `#actions`, `#meta`. The block keeps its own `<NodeViewWrapper>` (tiptap stays out of core) |
 | `app/composables/useBlockEditRequest.ts` | `findEditorId` + `useBlockEditRequest(ref).openPanel(node, pos)` — dispatches the bubbling `block-edit-request`. Import explicitly in NodeViews (composables aren't auto-imported there) |
 | `app/composables/useCroutonRedirects.ts` | Built-in redirects collection config, Zod schema, columns |
 | `app/components/RedirectsList.vue` | `CroutonRedirectsList` — Admin list with path display and status badge |
@@ -393,8 +397,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 ### Add a new component
 1. Create file in `app/components/{Name}.vue`
-2. Use `<script setup lang="ts">`
-3. Auto-imports as `Crouton{Name}`
+2. Auto-imports as `Crouton{Name}`
 
 ### Modify team-auth logic
 1. Team auth is now in `@crouton/auth` package
@@ -482,6 +485,6 @@ Delete actions always use modal overlay regardless of container type.
 ## Testing
 
 ```bash
-pnpm typecheck  # MANDATORY after changes (checks this package only)
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 pnpm build          # Verify build works
 ```

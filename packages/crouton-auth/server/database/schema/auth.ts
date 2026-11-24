@@ -7,6 +7,9 @@
  * - Organization Plugin: organization, member, invitation
  * - Passkey Plugin: passkey
  * - Two-Factor Plugin: twoFactor
+ * - JWT + MCP OAuth provider (#4096): jwks, oauthClient, oauthResource,
+ *   oauthClientResource, oauthRefreshToken, oauthAccessToken, oauthConsent,
+ *   oauthClientAssertion
  * - Stripe Plugin: subscription
  *
  * @see https://www.better-auth.com/docs/concepts/database
@@ -25,6 +28,13 @@ export type { User, NewUser } from './user'
 export { userProfile, userProfileRelations } from './user-profile'
 export type { UserProfileRecord, NewUserProfileRecord } from './user-profile'
 
+// createdAt (set on insert) + updatedAt (set on every update) — the pair most tables below carry.
+// A function, not a shared object: each table needs its own column builders.
+const timestamps = () => ({
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+})
+
 // ============================================================================
 // Core Tables
 // ============================================================================
@@ -42,8 +52,7 @@ export const session = sqliteTable('session', {
   expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
   ipAddress: text('ipAddress'),
   userAgent: text('userAgent'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),
+  ...timestamps(),
   // Organization extension - tracks active team context
   activeOrganizationId: text('activeOrganizationId'),
   // Impersonation extension (crouton-admin package)
@@ -74,8 +83,7 @@ export const account = sqliteTable('account', {
   scope: text('scope'),
   idToken: text('idToken'),
   password: text('password'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('account_user_idx').on(table.userId),
   index('account_provider_idx').on(table.providerId, table.accountId)
@@ -91,8 +99,7 @@ export const verification = sqliteTable('verification', {
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
   expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('verification_identifier_idx').on(table.identifier)
 ])
@@ -119,7 +126,7 @@ export const rateLimit = sqliteTable('rateLimit', {
  *
  * Stores organization (team) data. Configuration flags control behavior:
  * - teams.allowCreate=true: Users can create multiple organizations
- * - teams.defaultTeamSlug: All users join this org on signup (isDefault = true)
+ * - teams.defaultTeamSlug: All users join this org on sign-up and sign-in (isDefault = true)
  * - teams.autoCreateOnSignup: Auto-create personal workspace (personal = true)
  */
 export const organization = sqliteTable('organization', {
@@ -227,11 +234,181 @@ export const twoFactor = sqliteTable('twoFactor', {
   secret: text('secret').notNull(),
   backupCodes: text('backupCodes'), // JSON array of { code, used } objects
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('two_factor_user_idx').on(table.userId)
 ])
+
+// ============================================================================
+// JWT + MCP OAuth provider tables (#4096)
+// ============================================================================
+//
+// Used only when `croutonAuth.mcpOAuth` is on (sign-in for Claude and other
+// MCP apps). Columns copied from better-auth@1.7.7 `plugins/jwt/schema` and
+// @better-auth/oauth-provider@1.7.7's schema. string[] and json fields are
+// stored as text (the adapter encodes them on SQLite). Every `clientId`
+// reference points at the public `oauthClient.clientId`, not the row id.
+// Where the provider declares no onDelete we use `cascade` — what Better
+// Auth's own migration generator fills in — so a client or user delete
+// doesn't fail on D1, which enforces foreign keys.
+
+/** JWKS table - signing keys for the jwt() plugin (access tokens, /jwks) */
+export const jwks = sqliteTable('jwks', {
+  id: text('id').primaryKey(),
+  publicKey: text('publicKey').notNull(),
+  privateKey: text('privateKey').notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }),
+  alg: text('alg'),
+  crv: text('crv')
+})
+
+/** OAuth client - one row per registered MCP app (DCR) */
+export const oauthClient = sqliteTable('oauthClient', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().unique(),
+  clientSecret: text('clientSecret'),
+  clientDiscoveryId: text('clientDiscoveryId'),
+  disabled: integer('disabled', { mode: 'boolean' }).default(false),
+  skipConsent: integer('skipConsent', { mode: 'boolean' }),
+  enableEndSession: integer('enableEndSession', { mode: 'boolean' }),
+  subjectType: text('subjectType'),
+  scopes: text('scopes'),
+  clientCredentialsScopes: text('clientCredentialsScopes'),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: integer('createdAt', { mode: 'timestamp' }),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  name: text('name'),
+  uri: text('uri'),
+  icon: text('icon'),
+  contacts: text('contacts'),
+  tos: text('tos'),
+  policy: text('policy'),
+  softwareId: text('softwareId'),
+  softwareVersion: text('softwareVersion'),
+  softwareStatement: text('softwareStatement'),
+  redirectUris: text('redirectUris').notNull(),
+  postLogoutRedirectUris: text('postLogoutRedirectUris'),
+  backchannelLogoutUri: text('backchannelLogoutUri'),
+  backchannelLogoutSessionRequired: integer('backchannelLogoutSessionRequired', { mode: 'boolean' }),
+  tokenEndpointAuthMethod: text('tokenEndpointAuthMethod'),
+  applicationType: text('applicationType'),
+  jwks: text('jwks'),
+  jwksUri: text('jwksUri'),
+  grantTypes: text('grantTypes'),
+  responseTypes: text('responseTypes'),
+  requirePKCE: integer('requirePKCE', { mode: 'boolean' }),
+  dpopBoundAccessTokens: integer('dpopBoundAccessTokens', { mode: 'boolean' }).default(false),
+  referenceId: text('referenceId'),
+  metadata: text('metadata')
+}, table => [
+  index('oauth_client_user_idx').on(table.userId)
+])
+
+/** OAuth resource - the protected resource tokens are bound to (`<baseURL>/mcp`) */
+export const oauthResource = sqliteTable('oauthResource', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull().unique(),
+  name: text('name').notNull(),
+  accessTokenTtl: integer('accessTokenTtl'),
+  refreshTokenTtl: integer('refreshTokenTtl'),
+  signingAlgorithm: text('signingAlgorithm'),
+  signingKeyId: text('signingKeyId'),
+  allowedScopes: text('allowedScopes'),
+  customClaims: text('customClaims'),
+  dpopBoundAccessTokensRequired: integer('dpopBoundAccessTokensRequired', { mode: 'boolean' }).default(false),
+  disabled: integer('disabled', { mode: 'boolean' }).default(false),
+  createdAt: integer('createdAt', { mode: 'timestamp' }),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  policyVersion: integer('policyVersion').default(1),
+  metadata: text('metadata')
+})
+
+/** Client ↔ resource link (composite unique, as the provider requires) */
+export const oauthClientResource = sqliteTable('oauthClientResource', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  resourceId: text('resourceId').notNull().references(() => oauthResource.identifier, { onDelete: 'cascade' }),
+  metadata: text('metadata'),
+  createdAt: integer('createdAt', { mode: 'timestamp' })
+}, table => [
+  uniqueIndex('oauth_client_resource_unique_idx').on(table.clientId, table.resourceId),
+  index('oauth_client_resource_resource_idx').on(table.resourceId)
+])
+
+/** Refresh tokens (issued only when the client asks for `offline_access`) */
+export const oauthRefreshToken = sqliteTable('oauthRefreshToken', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  sessionId: text('sessionId').references(() => session.id, { onDelete: 'set null' }),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  authorizationCodeId: text('authorizationCodeId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  revoked: integer('revoked', { mode: 'timestamp' }),
+  rotatedAt: integer('rotatedAt', { mode: 'timestamp' }),
+  rotationReplayResponse: text('rotationReplayResponse'),
+  rotationReplayExpiresAt: integer('rotationReplayExpiresAt', { mode: 'timestamp' }),
+  authTime: integer('authTime', { mode: 'timestamp' }),
+  confirmation: text('confirmation'),
+  scopes: text('scopes').notNull()
+}, table => [
+  index('oauth_refresh_token_client_idx').on(table.clientId),
+  index('oauth_refresh_token_session_idx').on(table.sessionId),
+  index('oauth_refresh_token_user_idx').on(table.userId),
+  index('oauth_refresh_token_code_idx').on(table.authorizationCodeId)
+])
+
+/** Access tokens (opaque ones; JWT access tokens are not stored) */
+export const oauthAccessToken = sqliteTable('oauthAccessToken', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  sessionId: text('sessionId').references(() => session.id, { onDelete: 'set null' }),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  authorizationCodeId: text('authorizationCodeId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  refreshId: text('refreshId').references(() => oauthRefreshToken.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  revoked: integer('revoked', { mode: 'timestamp' }),
+  confirmation: text('confirmation'),
+  scopes: text('scopes').notNull()
+}, table => [
+  index('oauth_access_token_client_idx').on(table.clientId),
+  index('oauth_access_token_session_idx').on(table.sessionId),
+  index('oauth_access_token_user_idx').on(table.userId),
+  index('oauth_access_token_code_idx').on(table.authorizationCodeId),
+  index('oauth_access_token_refresh_idx').on(table.refreshId)
+])
+
+/** Consent - one row per user + client after the user clicks Autoriser (no team) */
+export const oauthConsent = sqliteTable('oauthConsent', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  scopes: text('scopes').notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull()
+}, table => [
+  index('oauth_consent_client_idx').on(table.clientId),
+  index('oauth_consent_user_idx').on(table.userId)
+])
+
+/** Client assertions seen (replay protection for private_key_jwt) */
+export const oauthClientAssertion = sqliteTable('oauthClientAssertion', {
+  id: text('id').primaryKey(),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull()
+})
 
 // ============================================================================
 // Stripe Plugin Table
@@ -256,8 +433,7 @@ export const subscription = sqliteTable('subscription', {
   seats: integer('seats'),
   trialStart: integer('trialStart', { mode: 'timestamp' }),
   trialEnd: integer('trialEnd', { mode: 'timestamp' }),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('subscription_reference_idx').on(table.referenceId),
   index('subscription_stripe_idx').on(table.stripeSubscriptionId),
@@ -282,8 +458,7 @@ export const domain = sqliteTable('domain', {
   verificationToken: text('verificationToken').notNull(),
   verifiedAt: integer('verifiedAt', { mode: 'timestamp' }),
   isPrimary: integer('isPrimary', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('domain_org_idx').on(table.organizationId),
   index('domain_domain_idx').on(table.domain),
@@ -334,8 +509,7 @@ export const scopedAccessToken = sqliteTable('scopedAccessToken', {
   lastActiveAt: integer('lastActiveAt', { mode: 'timestamp' }),
   /** Additional metadata (JSON) */
   metadata: text('metadata'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('scoped_access_token_idx').on(table.token),
   index('scoped_access_org_idx').on(table.organizationId),
@@ -389,8 +563,7 @@ export const scopedAccessGrant = sqliteTable('scopedAccessGrant', {
   tokenTtl: integer('tokenTtl').notNull().default(8 * 60 * 60 * 1000),
   /** Additional metadata (JSON) */
   metadata: text('metadata'),
-  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
-  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date())
+  ...timestamps()
 }, table => [
   index('scoped_grant_resource_idx').on(table.resourceType, table.resourceId),
   index('scoped_grant_org_idx').on(table.organizationId),

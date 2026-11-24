@@ -203,9 +203,10 @@ export interface TeamsConfig {
   autoCreateOnSignup?: boolean
 
   /**
-   * Default team slug that all users join on signup
+   * Default team slug that every user joins — on sign-up and on every sign-in
    *
-   * When set, all new users are automatically added to this team.
+   * When set, users are added to this team when they sign up and whenever they
+   * sign in (accounts made before the setting included).
    * The team is auto-created on first boot if it doesn't exist.
    *
    * Use case: Company apps where everyone belongs to one team.
@@ -408,6 +409,20 @@ export interface SessionConfig {
  * ```
  */
 export interface CroutonAuthConfig {
+  /**
+   * Sign-in for Claude and other MCP apps (#4096)
+   *
+   * When `true`, the app becomes an OAuth 2.1 sign-in server for MCP clients
+   * (Better Auth `jwt()` + `mcp()`): discovery at `/.well-known/*`, open
+   * client registration (DCR, 10 per minute per IP), and a consent screen at
+   * `/auth/consent`. The access token is for `<baseURL>/mcp`, names the user
+   * and the agreed scopes, and carries no team. Off by default: every OAuth
+   * route answers 404.
+   *
+   * @default false
+   */
+  mcpOAuth?: boolean
+
   /**
    * Application name
    *

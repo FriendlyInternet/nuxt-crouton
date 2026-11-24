@@ -4,7 +4,7 @@
 // bindings file". This reads ci.yml and checks the wiring on the real workflow text.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 // Same slicer as scripts/plan-checks.test.mjs.
@@ -41,10 +41,38 @@ test('plan-checks job rebuilds better-sqlite3 after install, before the plan run
 })
 
 // covers: T1
+test('plan-checks job builds the @fyit/* packages (warm-packages) after install, before the plan run, same if: (#4074)', () => {
+  const j = job('plan-checks')
+  const install = j.indexOf('pnpm install --frozen-lockfile --ignore-scripts')
+  const warmStart = j.indexOf('\n      - uses: ./.github/actions/warm-packages')
+  const run = j.indexOf('plan-checks.mjs run')
+  assert.ok(warmStart >= 0, 'warm-packages step present in plan-checks (#4074)')
+  assert.ok(install >= 0 && run >= 0, 'install and plan run steps present')
+  assert.ok(install < warmStart && warmStart < run, 'order: install < warm-packages < run')
+  // The warm-packages step's own block: from its `- uses:` line to the next step.
+  const rest = j.slice(warmStart + 1)
+  const next = rest.slice(1).search(/\n {6}- (name|uses):/)
+  const warmBlock = next < 0 ? rest : rest.slice(0, next + 1)
+  const installBlock = stepBlock(j, 'pnpm install --frozen-lockfile --ignore-scripts')
+  assert.equal(ifLine(warmBlock), "if: steps.plan.outputs.needs_install == 'true'")
+  assert.equal(ifLine(warmBlock), ifLine(installBlock), 'warm-packages shares the install condition')
+})
+
+// covers: T1
 test('test job keeps its better-sqlite3 rebuild after pnpm install', () => {
   const j = job('test')
   const install = j.indexOf('pnpm install')
   const rebuild = j.indexOf('run: pnpm rebuild better-sqlite3')
   assert.ok(install >= 0, 'test job installs')
   assert.ok(rebuild > install, 'test job rebuilds better-sqlite3 after install (#1880)')
+})
+
+// A failed native rebuild must stop its job with its own error. deploy-app.yml and deploy-pocs.yml
+// ran it as `… 2>/dev/null || true`, so a failure surfaced later as an unrelated build error.
+test('no workflow swallows a failed better-sqlite3 rebuild', () => {
+  const dir = new URL('../.github/workflows/', import.meta.url)
+  const hits = readdirSync(dir).filter(f => f.endsWith('.yml')).flatMap(f =>
+    readFileSync(new URL(f, dir), 'utf8').split('\n')
+      .filter(l => !l.trim().startsWith('#') && /pnpm rebuild better-sqlite3.*(\|\| true|2>\/dev\/null)/.test(l)).map(l => `${f}: ${l.trim()}`))
+  assert.deepEqual(hits, [])
 })

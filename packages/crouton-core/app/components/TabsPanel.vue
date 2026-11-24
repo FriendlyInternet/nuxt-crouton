@@ -64,12 +64,11 @@ const panelUi = computed(() => ({
 
         <template #trailing>
           <!-- Full bar height so the active underline sits on the bar's bottom edge.
-               Scrolls sideways instead of truncating labels. overflow-y-hidden is required:
-               overflow-x-auto makes y auto too, and UNavigationMenu's (unused) dropdown
-               viewport sits below the tabs, so the row could be dragged vertically (#2399). -->
+               Scrolls sideways only — SCROLL_ROW_X (app/utils/scroll-row.ts, #2399/#4330). -->
           <div
             ref="tabsEl"
-            class="flex-1 min-w-0 self-stretch overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex-1 min-w-0 self-stretch [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            :class="SCROLL_ROW_X"
           >
             <UNavigationMenu
               :items="tabs"

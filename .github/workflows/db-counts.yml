@@ -1,7 +1,7 @@
 name: db-counts
 
 # Read-only D1 inspection from the GitHub app (#384):
-# Actions → "db-counts" → Run workflow → pick app / env.
+# Actions → "db-counts" → Run workflow → pick app / env (/ optional check).
 #
 # Prints the row count of every table in the chosen database to the run summary.
 # It only runs SELECTs — nothing is written or overwritten — so it's the safe way
@@ -34,6 +34,14 @@ on:
           - staging
           - prod
           - preview
+      check:
+        description: 'Extra read-only check after the counts'
+        required: false
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - booking-quantity
 
 jobs:
   counts:
@@ -44,6 +52,7 @@ jobs:
     env:
       APP: ${{ inputs.app }}
       DB_ENV: ${{ inputs.env }}
+      CHECK: ${{ inputs.check }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
@@ -58,4 +67,4 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: node scripts/db-counts.mjs --app "$APP" --env "$DB_ENV"
+        run: node scripts/db-counts.mjs --app "$APP" --env "$DB_ENV" --check "$CHECK"

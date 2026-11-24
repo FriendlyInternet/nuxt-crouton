@@ -7,7 +7,8 @@ import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { main, renderPrompt, findChecksTable, parseChecksTable } from './build-review-prompt.mjs'
+import { main, renderPrompt, findChecksTable, parseChecksTable, outsideBlock } from './build-review-prompt.mjs'
+import { outsideReview } from './outside-review.mjs'
 import { renderComment } from '../plan-checks.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -72,7 +73,7 @@ test('T4: apart from {{plan_checks}}, main() matches the legacy awk+sed renderin
   const out = render([])
   const legacy = execFileSync('bash', ['-c', `awk '/^---$/ && n < 2 { n++; next } n >= 2' "$1" | sed -e "s#{{issue}}#3196#g" -e "s#{{pr}}#42#g" -e "s#{{verdict_file}}#/t/verdict.md#g" -e "s#{{issue_file}}#/t/issue.md#g" -e "s#{{plan_file}}#/t/plan.md#g" -e "s#{{diff_file}}#/t/diff.patch#g"`, '_', PERSONA_PATH], { encoding: 'utf8' })
   const block = renderPrompt('{{plan_checks}}', {}, '')
-  assert.equal(out, legacy.replace('{{plan_checks}}', block))
+  assert.equal(out, legacy.replace('{{plan_checks}}', block).replace('{{outside_review}}', outsideBlock(null)))
   for (const v of Object.values(VARS)) assert.ok(out.includes(v), v)
   assert.ok(!out.startsWith('---'))
 })
@@ -83,9 +84,52 @@ test('T5: persona item 1 carries {{plan_checks}}; workflow renders via trusted d
   assert.ok(item1 && item1.includes('{{plan_checks}}'), 'item 1 has the slot')
   assert.equal(PERSONA.split('{{plan_checks}}').length, 2, 'exactly one slot')
   const pi = WORKFLOW.slice(WORKFLOW.indexOf('      - id: pi\n'), WORKFLOW.indexOf('- name: Post the verdict'))
-  assert.match(pi, /git show "\$DEF:scripts\/lib\/build-review-prompt\.mjs" > "\$RUNNER_TEMP\/trusted\/scripts\/lib\/build-review-prompt\.mjs"/)
-  assert.match(pi, /git show "\$DEF:scripts\/pipeline-prompt\.mjs" > "\$RUNNER_TEMP\/trusted\/scripts\/pipeline-prompt\.mjs"/)
+  assert.match(pi, /git archive "\$DEF" scripts \| tar -x -C "\$RUNNER_TEMP\/trusted"/)
   assert.match(pi, /node "\$RUNNER_TEMP\/trusted\/scripts\/lib\/build-review-prompt\.mjs"[^\n]*\\\n[^\n]*--sha "\$SHA"/)
   assert.doesNotMatch(pi, /\bawk\b/)
   assert.match(WORKFLOW, /issues\/\$\{PR\}\/comments\?per_page=100" > "\$D\/pr-comments\.json"/)
+})
+
+// #4318 — the reviewer is given the outside reviewer's High findings and must answer each one.
+const renderOutside = (outside) => {
+  const { vars, com } = fixture([])
+  const o = join(dirname(com), 'outside.json'); writeFileSync(o, JSON.stringify(outside))
+  let out = ''
+  main([PERSONA_PATH, '--vars', vars, '--comments', com, '--sha', SHA, '--outside', o], { write: (s) => { out = s } })
+  return out
+}
+const ORFX = (n) => JSON.parse(readFileSync(join(ROOT, 'scripts/lib/__fixtures__/outside-review', `${n}.json`), 'utf8'))
+
+// covers: T4
+test('#4318 T4: main --outside with the #3885 review lists Q1/Q2 and the answer instruction', () => {
+  const out = renderOutside(outsideReview(ORFX('pr3885'), { sha: '0f44b7836eb93afa2aff2d0775de2044746c9de9' }))
+  assert.ok(out.includes('Q1: Manual-only plans fail build review (.claude/agents/build-reviewer.md)'))
+  assert.ok(out.includes('Q2: PR body hides historical plan rejections (scripts/lib/plan-shape.mjs)'))
+  assert.match(out, /Answer every one in a `### Outside review` section: `- Q<n>: fixed in <commit>`/)
+  assert.match(out, /A go with an unanswered finding is turned into no-go\./)
+  assert.doesNotMatch(out, /\{\{\w+\}\}/)
+})
+
+// covers: T4
+test('#4318 T4: paused, none or no --outside → the "leave out" text; the persona holds exactly one slot', () => {
+  const leave = /No High findings from the outside reviewer — leave out `### Outside review`\./
+  assert.match(renderOutside(outsideReview(ORFX('pr4240'), { sha: 'c7c592914a62e064befea979c83d21b46f9a5467' })), leave)
+  assert.match(renderOutside({ state: 'none', high: [] }), leave)
+  assert.match(render([]), leave)
+  assert.equal(PERSONA.split('{{outside_review}}').length, 2, 'exactly one slot')
+  assert.match(PERSONA, /^### Outside review$/m)
+})
+
+// covers: T2
+test('doc-mentions (#4064) T2: item 7 (c) fails a missing fixed line and passes Debt, none, could not run and no comment', () => {
+  const out = render([])
+  const line = out.split('\n').find((l) => l.startsWith('7. Docs:'))
+  assert.ok(line, 'rendered prompt has item 7')
+  assert.ok(line.includes('(c)'), 'item 7 has a part (c)')
+  const c = line.slice(line.indexOf('(c)'))
+  assert.ok(c.includes('<!-- doc-mentions -->'))
+  assert.match(c, /Each line marked `fixed` must be edited in the diff, or FAIL/)
+  assert.match(c, /A `Debt:` line, `none` or `could not run` passes/)
+  assert.match(c, /No such comment → this part passes/)
+  assert.doesNotMatch(c, /Debt:[^.]*FAIL/)
 })

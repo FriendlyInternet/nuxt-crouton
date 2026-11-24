@@ -52,6 +52,8 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       # docs/** or packages/** changed (#3166): runs the doc checks, even on a docs-only PR.
       docs: ${{ steps.filter.outputs.docs }}
+      # Run the scripts/*.test.mjs suites: code changes or any CI-file change (#4139).
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,6 +65,7 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
@@ -73,7 +76,7 @@ jobs:
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
           else
-            files="$(git show --name-only --pretty=format: HEAD)"
+            files="$(node scripts/ci-detect.mjs --list-files)"
           fi
           echo "changed files:"; echo "$files" | sed 's/^/  /'
           FILES="$files" node scripts/ci-detect.mjs
@@ -484,6 +487,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # (#3393) Pack every public @fyit package the way `pnpm publish` would and check the tarball
+      # stands on its own. Runs BEFORE any build so no leftover dist/ hides a missing prepack build.
+      - name: Pack check (every public package)
+        run: node scripts/pack-check.mjs
+
       # publint runs on crouton-core since the @fyit/crouton meta package was deleted
       # (#2290). attw went with it: the meta module was the only package whose
       # declaration files resolved cleanly, so the check validated nothing else.
@@ -562,7 +570,8 @@ jobs:
       # The pure scripts/*.mjs helpers carry `node --test` contracts next to them — most
       # load-bearingly the #1685 WS4 loop-guard. Node core only, so no install.
       - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
-        if: env.IS_CODE == 'true'
+        # Also on a workflow-only PR (#4139): #4135 broke a scripts/lib suite with nothing red.
+        if: needs.changes.outputs.scripts == 'true'
         # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
         run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs scripts/metrics/*.test.mjs
 
@@ -811,12 +820,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: trusted
           persist-credentials: false
+      # A plan Test line like `changeset status` asks git where HEAD diverged from `main`;
+      # a PR checkout has no local `main` branch, so point one at the fetched default branch.
+      - name: Give the plan's Test lines a local base branch
+        env:
+          BASE: ${{ github.event.repository.default_branch }}
+        run: git update-ref "refs/heads/$BASE" "refs/remotes/origin/$BASE"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
@@ -846,6 +862,15 @@ jobs:
       - name: Build better-sqlite3's native binding
         if: steps.plan.outputs.needs_install == 'true'
         run: pnpm rebuild better-sqlite3
+      # A plan Test line that starts a Nuxt app (nuxt prepare in a POC) needs every @fyit/* dist (#4074).
+      - uses: ./.github/actions/warm-packages
+        if: steps.plan.outputs.needs_install == 'true'
+      # A plan Test line can be a Playwright spec (e2e/*.smoke.spec.ts); the runner has no browser
+      # until one is installed, and the auth setup dies on "Executable doesn't exist" (#4386, #4096).
+      # Installed unconditionally: a smoke spec can be named without `test:e2e` in the line.
+      - name: Install Chromium for plan Test lines that drive a browser
+        if: steps.plan.outputs.needs_install == 'true'
+        run: pnpm exec playwright install chromium
       - name: Run the plan's Test lines (no token)
         if: steps.plan.outputs.has_plan == 'true'
         run: node trusted/scripts/plan-checks.mjs run --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/results.json" --cwd "$GITHUB_WORKSPACE"
@@ -857,6 +882,19 @@ jobs:
           [ -f "$RUNNER_TEMP/results.json" ] || echo '[]' > "$RUNNER_TEMP/results.json"
           node trusted/scripts/plan-checks.mjs report --plan "$RUNNER_TEMP/plan.json" --results "$RUNNER_TEMP/results.json"
 
+  # (#4180) A stray conflict-marker line sat on main for months (#1373). No `if:` on purpose:
+  # node-checks skips docs/POC/root-file PRs, and a marker can land in any file.
+  conflict-markers:
+    name: Conflict markers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: node scripts/check-conflict-markers.mjs
+
   # THE required check (#1698). Everything above may legitimately skip; this never does,
   # so branch protection has one status that always reports. It fails when any job
   # failed/was cancelled, and passes when every job either succeeded or was skipped.
@@ -866,7 +904,7 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, typecheck-packages, build-kassa, compile-check,
-            test, package-check, node-checks, removed-tests, actionlint, fallow-audit, plan-checks]
+            test, package-check, node-checks, removed-tests, actionlint, fallow-audit, plan-checks, conflict-markers]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

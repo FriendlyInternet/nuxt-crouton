@@ -5,6 +5,50 @@ import {
   tallyCi, stamp, failureList, failureExcerpts, logTailBlock, fixBotFailures, stageBar, epicCard,
   prSourceSha, epicFromIssue, signoffPingBody, withheldBody,
 } from './pr-status.mjs'
+import { normalizeSteps, renderSteps, stepSummary, HARNESS_BOT, ROLLING_LABEL } from './epic-steps.mjs'
+
+// ── #4316: the card counts steps for a rolling epic and names dropped tickets ──
+const stepList = (n, tickets = {}) => ({
+  body: renderSteps(normalizeSteps(Array.from({ length: n }, (_, i) => ({ title: `S${i}`, goal: 'g', proves: 'p', ticket: tickets[i] })))),
+  user: { login: HARNESS_BOT, type: 'Bot' },
+})
+const kid = (number, state, reason = null, step = null) => ({ number, state, state_reason: reason, body: step === null ? '' : `<!-- pipeline: epic=9 step=${step} -->` })
+const cardFor = ({ labels = [ROLLING_LABEL], comments, subs }) =>
+  epicCard({ title: 'T', epicBlocked: false, subs, childLines: [], now: 'now', summary: stepSummary({ labels, comments, subIssues: subs }) }).body
+
+// covers: T1
+test('#4316 case 1: 4 steps, only step 0 built → "1 of 4 steps built", never Assembled', () => {
+  const body = cardFor({ comments: [stepList(4, { 0: 11 })], subs: [kid(11, 'closed', 'completed', 0)] })
+  assert.ok(body.includes('## 🔨 Building — T  (1 of 4 steps built)'), body)
+  assert.ok(body.includes('3 of 4 steps not built yet'))
+  assert.ok(!body.includes('Assembled'))
+})
+
+// covers: T2
+test('#4316 case 2: built / dropped / built → Assembled "2 built, 1 dropped", not "all children merged"', () => {
+  const subs = [kid(11, 'closed', 'completed', 0), kid(12, 'closed', 'not_planned', 1), kid(13, 'closed', 'completed', 2)]
+  const body = cardFor({ comments: [stepList(3)], subs })
+  assert.ok(body.includes('## ✅ Assembled — T  (2 built, 1 dropped)'), body)
+  assert.ok(body.includes('dropped 1 (not planned): #12'))
+  assert.ok(!body.includes('all children merged'))
+})
+
+// covers: T5
+test('#4316 case 5: no step list, 3 closed children with 1 not planned → Assembled (3/3) with the counts line', () => {
+  const subs = [kid(11, 'closed', 'completed'), kid(12, 'closed', 'not_planned'), kid(13, 'closed', 'completed')]
+  const body = cardFor({ labels: [], comments: [], subs })
+  assert.ok(body.includes('## ✅ Assembled — T  (3/3)'))
+  assert.ok(body.includes('_now: all children closed — 2 merged, 1 not planned: #12 —'))
+  assert.ok(!body.includes('all children merged'))
+})
+
+// covers: T6
+test('#4316 case 6: an unreadable step list → Building (step list unreadable), never Assembled', () => {
+  const broken = { body: '<!-- epic-steps:v1 -->\n```json\n[nope\n```', user: { login: HARNESS_BOT, type: 'Bot' } }
+  const body = cardFor({ comments: [broken], subs: [kid(11, 'closed', 'completed')] })
+  assert.ok(body.includes('## 🔨 Building — T  (step list unreadable)'))
+  assert.ok(!body.includes('Assembled'))
+})
 
 const done = (name, conclusion, extra = {}) => ({ name, status: 'completed', conclusion, id: 1, check_suite: { id: 9 }, ...extra })
 
@@ -121,4 +165,15 @@ test('epicFromIssue: itself if it has sub-issues, else the epic=N marker, else n
 test('sign-off bodies carry their one-shot markers', () => {
   assert.ok(signoffPingBody({ epicNumber: 3, owner: 'o', title: 'T' }).startsWith('<!-- signoff-ping:3 -->'))
   assert.ok(withheldBody({ epicNumber: 3, prNumber: 8, title: 'T' }).startsWith('<!-- signoff-withheld-nocapture:3 -->'))
+})
+
+// 7 of 16 red notes on 18–19 Nov said only "<check>: Process completed with exit code 1." under
+// "what failed" (PRs #4148, #4149, #4150, #4152, #4203, #4144). That line is in every failed job
+// and names nothing; the log-tail block below it carries the real cause.
+test('failureExcerpts: the runner\'s "exit code" line alone is not "what failed"', () => {
+  const exit = { annotation_level: 'failure', message: 'Process completed with exit code 1.' }
+  assert.equal(failureExcerpts([{ name: 'Node checks', annotations: [exit] }]), '')
+  const out = failureExcerpts([{ name: 'frontend-review', annotations: [exit, { annotation_level: 'failure', message: 'frontend-review did not run — failing closed.' }] }])
+  assert.ok(out.includes('frontend-review: frontend-review did not run — failing closed.'))
+  assert.ok(!out.includes('exit code 1'))
 })

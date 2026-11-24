@@ -20,7 +20,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | Flag | Purpose | Default |
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
-| `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
+| `defaultTeamSlug` | Everyone joins this team on sign-up and on every sign-in, so accounts made before the setting join too (first member → `owner`, rest → `member`) | undefined |
 | `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
@@ -154,6 +154,8 @@ import {
 } from '@crouton/auth/server'
 ```
 
+`canEditPages(teamId, userId)` (`server/utils/team.ts`) is the single page-edit rule — today team admin or owner; it becomes `can(…, 'pages:edit')` with #4103. `getUserTeamsDirect(userId)` lists a user's teams (`{ id, slug, name, role }`) with no session — both used by the MCP page tools (#4097).
+
 ## Middleware
 
 | Middleware | Purpose |
@@ -232,6 +234,7 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
 - `rateLimit` - better-auth rate-limit counters (key = ip|path), shared across instances
+- `jwks`, `oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`, `oauthClientAssertion` - sign-in for Claude / MCP apps (#4096; used only with `mcpOAuth: true`, but every app that imports this file gets them on its next `db:generate`)
 
 ### Sign-up & password reset (#3141)
 
@@ -248,7 +251,7 @@ E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.
 | `/api/teams/[id]/email-logs` | GET | Admin | List email logs (filter by `type`, `status`; paginate with `limit`, `offset`) |
 | `/api/teams/[id]/email-logs/stats` | GET | Admin | Aggregate stats (total, sent, failed, pending, by type) |
 
-Logs are scoped to team member email addresses. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission.
+Both endpoints scope with `teamEmailLogScope()` (`server/utils/email-log-scope.ts`, #3546): a team sees rows with its own `organizationId` (invitations, even to non-members), never another team's, and team-less rows (verification, password reset, magic link, pre-#3546 rows) only when the recipient is a current member. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission, storing `organizationId` for invitations (both send sites pass it: `lib/auth.ts` and the resend endpoint).
 
 ### Team Settings Table
 
@@ -370,6 +373,20 @@ export default defineNuxtConfig({
 - Minimum TTL is 60 seconds (NuxtHub KV limitation)
 - See [nuxthub-ratelimit docs](https://github.com/fayazara/nuxthub-ratelimit)
 
+## Sign-in for Claude (MCP OAuth)
+
+With `croutonAuth: { mcpOAuth: true }` (default off) the app becomes an OAuth 2.1 sign-in server for MCP apps (Claude, ChatGPT, …), so they can act for a signed-in user on `<baseURL>/mcp` (#4096). Built from Better Auth's own plugins, no home-made OAuth: `jwt()` (signs access tokens, serves `/api/auth/jwks`) + `mcp()` from `@better-auth/mcp` (it *is* the provider — never add a second `oauthProvider()`). Options live in `buildMcpOAuthOptions()` (`server/lib/auth.ts`).
+
+- **Scopes**: `offline_access` + the tool scopes in `server/lib/mcp-scopes.ts` (today `pages`). A package that adds MCP tools adds its scope there. Without `offline_access` no refresh token is issued and the connection dies after the 1-hour token.
+- **The token carries no team.** It names the user (`sub`), the audience `<baseURL>/mcp` and the agreed scopes. No `postLogin`, no `consentReferenceId`, no team claim; `/mcp` checks the team on every call against the user's own rights. Consent is per user + client.
+- **Routes** (all 404 with the flag off): `/api/auth/oauth2/*` (authorize, token, register, consent, public-client, …); root discovery `/.well-known/oauth-authorization-server`, `/.well-known/oauth-authorization-server/api/auth`, `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp`, answered by the server middleware `server/middleware/mcp-oauth-discovery.ts` before `@nuxtjs/mcp-toolkit`'s own 404 handlers on those paths. `openid-configuration` is not served. A signed-in user lists and revokes their own connections with `GET /api/auth/oauth2/get-consents` and `POST /api/auth/oauth2/delete-consent { id }` (velo's Assistants IA page, `apps/velo/app/pages/admin/[team]/assistants.vue`, #4098).
+- **Registration**: open dynamic registration (DCR) without login, because Claude is a public client. Limited to 10 per minute per IP (`rateLimit.register`, kept per `cf-connecting-ip` by the `'/**'` rule). On each registration `mcpClientCleanup()` (`server/lib/mcp-oauth.ts`) deletes anonymous clients older than 24 h that have no consent and no token (a revoked connection keeps its tokens and is left alone). No cron.
+- **No CIMD**: `@better-auth/cimd`'s pinned fetch can't run on Workers (#4120), so clients register through DCR only.
+- **Sign-in resumes the flow**: the provider sends the user to `/auth/login?…&sig=…`; `login.vue` keeps that query, `oauthProviderClient()` (added in `auth-client.client.ts` with the flag on) sends it with the sign-in as `oauth_query`, and better-auth's redirect plugin follows the `{ redirect, url }` answer (`useAuth().login` then never resolves, so the modal doesn't redirect too). Email + password resumes. Passkey, magic link and social sign-in are **not** wired for this flow.
+- **Consent page** `app/pages/auth/consent.vue`: "<client> veut accéder à vos équipes" (the client's `client_name`, or "Une application"), the host of its redirect URI (from the signed query, already matched against the client record), the scopes in plain words, Autoriser / Refuser → `POST /api/auth/oauth2/consent { accept, oauth_query }` and one page load to the returned `url`. No team picker.
+- `mcp()` refuses a non-https `resource` except on localhost, so an app turning this on needs an https `BETTER_AUTH_URL`.
+- Tests: `tests/unit/server/mcp-oauth.test.ts` (real better-auth + SQLite built from `auth.ts`, foreign keys on).
+
 ## Scoped Access Tokens & Grants
 
 Provides lightweight, resource-scoped authentication for scenarios where full user accounts aren't needed:
@@ -382,7 +399,7 @@ Two halves: **tokens** (the bearer credential a holder uses after login) and **g
 
 ### Transport Convention
 
-The canonical header for scoped tokens is **`x-scoped-token`** (exported as `SCOPED_TOKEN_HEADER`); the canonical cookie is **`scoped-access-token`** (set by `useScopedAccess`, the redeem/mint endpoints, and read during SSR — e.g. by crouton-pages' scoped visibility). `validateScopedTokenFromEvent` checks, in order: `x-scoped-token` header → cookie → `Authorization: Bearer`. All consumers use these — there are no package-specific names.
+The canonical header for scoped tokens is **`x-scoped-token`** (exported as `SCOPED_TOKEN_HEADER`); the canonical cookie is **`scoped-access-token`** (set by `useScopedAccess`, the redeem endpoint, and read during SSR — e.g. by crouton-pages' scoped visibility). `validateScopedTokenFromEvent` checks, in order: `x-scoped-token` header → cookie → `Authorization: Bearer`. All consumers use these — there are no package-specific names.
 
 ### Grants (credential → token)
 
@@ -497,19 +514,18 @@ const access = useScopedAccess('booking')
 await access.redeem({ teamId, resourceId: bookingId, secret: pin, displayName: 'Guest' })
 ```
 
-Sessions persist in a client-readable cookie keyed **per resource type** (`scoped-access-session-${resourceType}`), so every consumer of the same resource type lands on the same session (the pages gate and `useEventAccess` share `scoped-access-session-event`). The session cookie's `maxAge` follows the token's real `expiresAt` (not a fixed 8h), keeping the client session honest when a grant uses a custom `tokenTtl`. The httpOnly `scoped-access-token` cookie (server-set by redeem/mint) is for SSR validation only — client writes to it are silent no-ops and client code must never depend on reading it. Because JS can't clear an httpOnly cookie, **logout must go through the server**: `useScopedAccess().logout()` / `useEventAccess().logout()` **await** the `/api/auth/scoped-access/logout` POST (no longer fire-and-forget) so the clearing `Set-Cookie` lands before any reload — otherwise SSR keeps honoring a live cookie and a "logged-out" user still sees gated content.
+Sessions persist in a client-readable cookie keyed **per resource type** (`scoped-access-session-${resourceType}`), so every consumer of the same resource type lands on the same session (the pages gate and `useEventAccess` share `scoped-access-session-event`). The session cookie's `maxAge` follows the token's real `expiresAt` (not a fixed 8h), keeping the client session honest when a grant uses a custom `tokenTtl`. The httpOnly `scoped-access-token` cookie (server-set by redeem) is for SSR validation only — client writes to it are silent no-ops and client code must never depend on reading it. Because JS can't clear an httpOnly cookie, **logout must go through the server**: `useScopedAccess().logout()` / `useEventAccess().logout()` **await** the `/api/auth/scoped-access/logout` POST (no longer fire-and-forget) so the clearing `Set-Cookie` lands before any reload — otherwise SSR keeps honoring a live cookie and a "logged-out" user still sees gated content.
 
 ### API Endpoints
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/api/auth/scoped-access/redeem` | POST | Public (the secret is the auth) | Present credential (PIN) → token; 429 + Retry-After when locked, 410 when exhausted, 401 otherwise (not_found and invalid_secret are indistinguishable) |
-| `/api/auth/scoped-access/mint` | POST | Team member session | Delegation: mint a scoped token directly (no secret) |
 | `/api/auth/scoped-access/validate` | POST | — | Validate a token |
 | `/api/auth/scoped-access/logout` | POST | — | Revoke a token (read from the body **or** the `scoped-access-token` cookie) **and** clear that httpOnly cookie via `Set-Cookie`, so the next SSR request re-gates. No body required — the cookie alone is enough |
 | `/api/auth/scoped-access/refresh` | POST | — | Extend token expiration |
 
-Both redeem and mint also set the `scoped-access-token` cookie (httpOnly) so SSR can validate.
+Redeem also sets the `scoped-access-token` cookie (httpOnly) so SSR can validate.
 
 ### Database Schema
 
@@ -548,7 +564,7 @@ emailed to the owner). Never write a password into a seed: this repo is public.
 
 - **Extends**: None (standalone module/layer)
 - **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
-- **Core deps**: better-auth, @better-auth/passkey
+- **Core deps**: better-auth, @better-auth/passkey, @better-auth/mcp + @better-auth/oauth-provider (pinned `1.7.7`, the same line as better-auth; used only when `mcpOAuth` is on)
 - **Optional**: nuxthub-ratelimit (extra per-route limits; auth endpoints are already limited by better-auth's database store)
 
 ## Testing

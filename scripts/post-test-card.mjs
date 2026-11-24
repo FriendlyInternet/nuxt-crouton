@@ -10,13 +10,14 @@
  * contained in DEPLOYED_SHA (compare API) → one card per epic (marker-guarded), plus one fresh card
  * after a `not ok` fix's merge commit is in DEPLOYED_SHA (#4039) + `status:to-test`. The decision
  * itself is the pure decideTestCard() in test-card.mjs.
+ * The card also lists each completed child's merged sub-PR + its last ✅ closing note (#3882).
  *
  * Env: GITHUB_TOKEN (required) · DEPLOYED_SHA (required) · DIGEST_REPO · APPLY
  */
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
-import { decideTestCard, buildCard, buildTestMail, extractChecks, extractSummary, deriveApps } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, extractSummary, deriveApps, buildEvidence } from './test-card.mjs'
 import { loadApps } from './deploy-detect.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
@@ -39,6 +40,15 @@ async function gh(path, init) {
   if (!res.ok) throw new Error(`GitHub ${res.status} on ${path}: ${await res.text()}`)
   return res.status === 204 ? null : res.json()
 }
+// Every page of a list endpoint (path must already carry `per_page=100`).
+async function ghAll(path) {
+  const all = []
+  for (let page = 1; ; page++) {
+    const items = await gh(`${path}${path.includes('?') ? '&' : '?'}page=${page}`)
+    all.push(...(items || []))
+    if (!items || items.length < 100) return all
+  }
+}
 const labelNames = it => (it.labels || []).map(l => (typeof l === 'string' ? l : l.name))
 
 // Is the epic's merged epic→main PR contained in the deployed commit?
@@ -51,6 +61,20 @@ async function mergedEpicPr(epicNumber) {
 async function isContained(sha) {
   const cmp = await gh(`/repos/${OWNER}/${NAME}/compare/${sha}...${SHA()}`)
   return cmp.status === 'ahead' || cmp.status === 'identical'
+}
+
+// What the pipeline already checked (#3882): each completed child's merged sub-PR + closing note.
+async function gatherEvidence(e, subIssues) {
+  const epicPr = await mergedEpicPr(e.number)
+  if (!epicPr) return []
+  const mergedPrs = (await ghAll(`/repos/${OWNER}/${NAME}/pulls?state=closed&base=${encodeURIComponent(epicPr.head.ref)}&per_page=100`))
+    .filter(p => p.merged_at)
+  const commentsByIssue = {}
+  for (const s of subIssues.filter(s => s.state === 'closed' && s.state_reason === 'completed')) {
+    commentsByIssue[s.number] = (await ghAll(`/repos/${OWNER}/${NAME}/issues/${s.number}/comments?per_page=100`))
+      .map(c => ({ login: c.user?.login, body: c.body, created_at: c.created_at }))
+  }
+  return buildEvidence({ subIssues, mergedPrs, commentsByIssue })
 }
 
 async function isDeployed(epicNumber) {
@@ -172,8 +196,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     const hasApp = labels.some(n => n.startsWith('app:') || n.startsWith('poc:'))
     const info = appInfo(hasApp ? labels : [...labels, ...await derivedAppLabel(e).catch(() => [])])
     const checks = extractChecks(e.body || '')
-    const body = buildCard({ epicNumber: e.number, title: e.title, ...info, checks, ...(d.retest ? { fixIssue } : {}) })
-    console.log(`  #${e.number} ${APPLY ? 'POST' : 'would post'} test card — ${d.reason}`)
+    const evidence = await gatherEvidence(e, subIssues).catch(err => { console.warn(`::warning::evidence skipped: ${err.message}`); return [] })
+    const body = buildCard({ epicNumber: e.number, title: e.title, ...info, checks, evidence, ...(d.retest ? { fixIssue } : {}) })
+    console.log(`  #${e.number} ${APPLY ? 'POST' : 'would post'} test card — ${d.reason} · evidence: ${evidence.length} entries`)
     if (APPLY) {
       await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/comments`, { method: 'POST', body: JSON.stringify({ body }) })
       if (d.retest) {
@@ -185,7 +210,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
       await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/labels`, { method: 'POST', body: JSON.stringify({ labels: ['status:to-test'] }) })
       await sendMail(buildTestMail({
         epicNumber: e.number, title: e.title, app: info.app, summary: extractSummary(e.body || ''),
-        checks, loginUrl: loginLink(info), epicUrl: e.html_url
+        checks, loginUrl: loginLink(info), epicUrl: e.html_url, evidence
       })).catch(err => console.warn(`::warning::test mail failed: ${err.message}`))
     }
     posted++

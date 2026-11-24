@@ -5,17 +5,20 @@ name: epic-digest
 # email-safe HTML + a plain-text mirror, and emails it. See
 # .claude/skills/epic-digest/ (gather.mjs → render.mjs).
 #
-# Cadence-as-data (#637/#1139): the cron fires DAILY (cheap wake-up); the `gate`
-# step reads .github/digests.yml via schedule.mjs and exits the run early on
-# non-send days. Change the cadence in digests.yml — never this cron. A manual
-# workflow_dispatch always sends (FORCE).
+# Cadence-as-data (#637/#1139): the status app's clock starts this DAILY at 05:00 UTC
+# (cheap wake-up, `clock: true`); the `gate` step reads .github/digests.yml via
+# schedule.mjs and exits the run early on non-send days. Change the cadence in
+# digests.yml — never the clock row. A manual workflow_dispatch (no `clock`) always
+# sends (FORCE).
 
 on:
-  schedule:
-    # Daily wake-up ~06:00 Europe/Brussels (UTC cron can't track DST); the real
-    # send day comes from .github/digests.yml via the gate step below.
-    - cron: '0 5 * * *'
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_dispatch:
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,7 +42,7 @@ jobs:
       - name: Schedule gate
         id: gate
         env:
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && !inputs.clock && '1' || '0' }}
         run: node .claude/skills/housekeeping/schedule.mjs epic-digest
 
       - name: Gather the issue tree

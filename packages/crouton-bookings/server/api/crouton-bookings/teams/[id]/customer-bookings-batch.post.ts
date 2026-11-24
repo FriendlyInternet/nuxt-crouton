@@ -18,10 +18,10 @@
  */
 import { eq, and, gte, lte, sum, sql, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
-import { fullDayConflict } from '../../../../../app/utils/full-day'
 import { fitsCapacity } from '../../../../../app/utils/capacity'
 import { dayRange, validateSelection, guardSql, guardedInsert, runAtomic, parseSlots, type Selection } from '../../../../utils/booking-capacity'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
@@ -43,8 +43,9 @@ interface CartItem {
   slotLabels?: string[]
   groupId?: string | null
   groupLabel?: string | null
-  quantity?: number // For inventory mode
-  isInventoryMode?: boolean
+  quantity?: number // How many units of the product (#4061)
+  /** Catalog product; the location's only product when absent (#4044) */
+  productId?: string
 }
 
 interface BatchRequestBody {
@@ -110,9 +111,8 @@ export default defineEventHandler(async (event) => {
           translations: bookingsLocations.translations,
           slots: bookingsLocations.slots,
           maxBookingsPerMonth: bookingsLocations.maxBookingsPerMonth,
-          quantity: bookingsLocations.quantity,
           offerFullDay: bookingsLocations.offerFullDay,
-          inventoryMode: bookingsLocations.inventoryMode,
+          products: bookingsLocations.products,
         })
         .from(bookingsLocations)
         .where(
@@ -130,10 +130,13 @@ export default defineEventHandler(async (event) => {
     if (!dbLocation) {
       throw createError({ status: 404, statusText: 'Location not found' })
     }
-    const sel = validateSelection(dbLocation, item.slotIds, item.quantity)
+    // The body is untyped: a productId that is sent must be a non-empty string (#4044)
+    if (item.productId != null && (typeof item.productId !== 'string' || item.productId === '')) {
+      throw createError({ status: 400, statusText: 'Invalid product' })
+    }
+    const sel = validateSelection(dbLocation, item.slotIds, item.quantity, item.productId)
     selections.set(item, sel)
     item.quantity = sel.quantity
-    item.isInventoryMode = sel.inventory
     item.slotIds = sel.slot ?? []
   }
 
@@ -264,7 +267,7 @@ export default defineEventHandler(async (event) => {
     location: item.locationId,
     date: new Date(item.date),
     slot: item.slotIds?.length && !item.slotIds.includes('inventory') ? item.slotIds : null, // Array for JSON column
-    quantity: item.isInventoryMode ? (item.quantity ?? 1) : 1,
+    quantity: selections.get(item)!.quantity, // validated: a whole number ≥ 1 at every location (#4061)
     group: item.groupId || null,
     status: 'active',
     createdAt: now,
@@ -276,22 +279,23 @@ export default defineEventHandler(async (event) => {
   try {
   // Read-only pre-check so the 409 can name the location and date. It counts the
   // cart's own earlier items too. The SQL guard below is what holds under races.
-  const dayCache = new Map<string, { quantity: number, slotIds: string[] }[]>()
+  const dayCache = new Map<string, { product: string | null, quantity: number, slotIds: string[] }[]>()
   for (const item of body.bookings) {
     const r = ranges.get(item)!
     const sel = selections.get(item)!
     const dbLocation = dbLocationMap.get(item.locationId) as any
     const key = `${item.locationId}|${r.dayStartTs}`
     if (!dayCache.has(key)) {
-      const found = await db.all(sql`SELECT quantity, slot FROM bookings_bookings WHERE teamId = ${team.id} AND location = ${item.locationId} AND date >= ${r.dayStartTs} AND date < ${r.dayEndTs} AND status <> 'cancelled'`) as { quantity: number, slot: string }[]
-      dayCache.set(key, found.map(f => ({ quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
+      const found = await db.all(sql`SELECT product, quantity, slot FROM bookings_bookings WHERE teamId = ${team.id} AND location = ${item.locationId} AND date >= ${r.dayStartTs} AND date < ${r.dayEndTs} AND status <> 'cancelled'`) as { product: string | null, quantity: number, slot: string }[]
+      dayCache.set(key, found.map(f => ({ product: f.product, quantity: f.quantity, slotIds: parseSlots(f.slot) as unknown as string[] })))
     }
     const taken = dayCache.get(key)!
-    const clash = !sel.inventory && fullDayConflict(sel.slotIds, taken.flatMap(t => t.slotIds ?? []).filter(Boolean))
-    if (clash || !fitsCapacity(sel.plan, taken, sel.quantity)) {
+    // Per product, per slot, against its stock (#4061); an empty `slots` list = no slots (#4172)
+    const capLocation = { slots: parseSlots(dbLocation.slots), products: dbLocation.products }
+    if (!fitsCapacity(capLocation, sel.product, sel.slotIds, taken, sel.quantity)) {
       throw createError({ status: 409, statusText: `No room left at "${dbLocation.title}" on ${item.day || item.date}` })
     }
-    taken.push({ quantity: sel.quantity, slotIds: sel.slotIds })
+    taken.push({ product: sel.product, quantity: sel.quantity, slotIds: sel.slotIds })
   }
 
   // One atomic batch: every row goes in through a statement that checks capacity
@@ -307,7 +311,7 @@ export default defineEventHandler(async (event) => {
     const guard = guardSql({ teamId: team.id, locationId: item.locationId, range: ranges.get(item)!, selection: sel })
     return guardedInsert({
       id, teamId: team.id, owner: user.id, location: row.location, storedTs: ranges.get(item)!.storedTs,
-      slot: sel.slot, group: row.group, quantity: row.quantity, status: row.status, by: user.id, nowTs,
+      slot: sel.slot, group: row.group, quantity: row.quantity, status: row.status, product: sel.product, by: user.id, nowTs,
     }, guard)
   })
   await runAtomic(db, statements, 'No room left for one of the bookings; nothing was booked')
@@ -343,6 +347,9 @@ export default defineEventHandler(async (event) => {
         body.bookings.map(item => [item.locationId, item])
       )
       const teamMetadata = (team.metadata || {}) as Record<string, string>
+      // App default language: location fields fall back to it (#4244)
+      const i18nCfg = (useRuntimeConfig(event) as any)?.croutonI18n ?? {}
+      const defaultLocale = requiredLocale(i18nCfg.supportedLocales ?? [], i18nCfg.defaultLocale)
 
       // Send emails in background - don't block checkout
       const emailPromises = created.map(async (booking: any) => {
@@ -351,10 +358,10 @@ export default defineEventHandler(async (event) => {
         // Build booking context with DB location data — resolve translations
         const dbLocation = dbLocationMap.get(booking.location) as any
         const tr = dbLocation?.translations as Record<string, Record<string, string>> | null
-        const locationTitle = resolveTranslatedField(dbLocation?.title, tr, 'title', locale) || cartItem?.locationTitle || 'Location'
-        const locationStreet = resolveTranslatedField(dbLocation?.street, tr, 'street', locale)
-        const locationCity = resolveTranslatedField(dbLocation?.city, tr, 'city', locale)
-        const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale)
+        const locationTitle = resolveTranslatedField(dbLocation?.title, tr, 'title', locale, defaultLocale) || cartItem?.locationTitle || 'Location'
+        const locationStreet = resolveTranslatedField(dbLocation?.street, tr, 'street', locale, defaultLocale)
+        const locationCity = resolveTranslatedField(dbLocation?.city, tr, 'city', locale, defaultLocale)
+        const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale, defaultLocale)
 
         // Resolve slot IDs to human-readable labels
         const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any, locale)
@@ -395,7 +402,8 @@ export default defineEventHandler(async (event) => {
             locale,
             event
           )
-          return result.success ? 1 : 0
+          // A send held back by the team's switch is not "sent" (#3929)
+          return result.success && !result.skipped ? 1 : 0
         }
         catch (err) {
           console.error('[batch-bookings] Email trigger failed:', err)

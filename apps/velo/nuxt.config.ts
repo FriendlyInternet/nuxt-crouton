@@ -28,7 +28,17 @@ export default defineNuxtConfig({
     '@fyit/crouton-maps',
     '@fyit/crouton-events',
     '@fyit/crouton-collab',
+    '@fyit/crouton-mcp-toolkit',
   ],
+
+  // Claude edits a page live (#3982): only the page tools, never the generic
+  // collection CRUD + token tools. Page tools are served at <origin>/mcp
+  // (croutonAuth.mcpOAuth is on below); Claude signs in there, no key.
+  croutonMcpToolkit: {
+    enabled: true,
+    genericTools: false,
+    pages: true
+  },
   hub: {
     blob: true,
     db: 'sqlite'
@@ -76,20 +86,31 @@ export default defineNuxtConfig({
     teams: { allowCreate: 'superAdmin' },
     methods: {
       passkeys: false
-    }
+    },
+    // Claude / ChatGPT sign in to <origin>/mcp (#4096/#4098)
+    mcpOAuth: true
+  },
+
+  // Velo's own strings (the Assistants IA page, #4098) — merged with the layers'
+  i18n: {
+    locales: [
+      { code: 'fr', name: 'Français', file: 'fr.json' },
+      { code: 'nl', name: 'Nederlands', file: 'nl.json' },
+      { code: 'en', name: 'English', file: 'en.json' }
+    ],
+    langDir: '../i18n/locales'
   },
 
   routeRules: {
     // Static assets — immutable cache (hashed filenames)
     '/_nuxt/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
 
-    // Booking public APIs — SWR 5min (availability changes frequently)
-    '/api/crouton-bookings/teams/*/availability': { swr: 300 },
-    '/api/crouton-bookings/teams/*/locations': { swr: 600 },
-
-    // NOTE: Do NOT add '/api/teams/*/pages' SWR rules here — the wildcard
-    // conflicts with radix3's :id parameter routing and breaks ALL
-    // /api/teams/:id/* generated collection routes (bookings-settings, etc.)
+    // NOTE: Do NOT add swr/isr/cache rules with a '*' segment on any
+    // parameterised API prefix (/api/teams/*, /api/crouton-bookings/teams/*, …).
+    // Nuxt registers its page renderer on the rule's path, so radix3 then sees
+    // two ':param' children and sends deeper routes to "Page Not Found" (#4300).
+    // To cache an endpoint, do it in its handler (defineCachedEventHandler).
+    // Guarded by scripts/lib/route-rules-shadow.test.mjs.
 
     // Auth pages — prerender (static, no data) + no caching fallback
     '/auth/login': { prerender: true },

@@ -150,16 +150,19 @@ describe('starting a new booking on a date', () => {
   })
 
   it('refuses a day that is fully booked everywhere — counting the whole team, not just mine', () => {
-    const slots = [{ id: 'am', capacity: 1 }, { id: 'pm', capacity: 1 }]
-    const team = [booking('x', '2026-11-02', { slot: '["am"]' }), booking('y', '2026-11-02', { slot: '["pm"]' })]
-    const s = setup({ bookings: [], calendar: team, locations: [loc('a', { slots })] })
+    // the location's product stock (1) is what counts (#4061)
+    const slots = [{ id: 'am' }, { id: 'pm' }]
+    const products = [{ product: 'loc-a', stock: 1 }]
+    const team = [booking('x', '2026-11-02', { slot: '["am"]', product: 'loc-a' }), booking('y', '2026-11-02', { slot: '["pm"]', product: 'loc-a' })]
+    const s = setup({ bookings: [], calendar: team, locations: [loc('a', { slots, products })] })
     expect(s.startCreate(day('2026-11-02'))).toBe('full')
     expect(s.creatingAt.value).toBeNull()
   })
 
   it('a cancelled booking frees its slot again', () => {
-    const team = [booking('x', '2026-11-02', { status: 'cancelled' })]
-    expect(setup({ calendar: team }).startCreate(day('2026-11-02'))).toBe('started')
+    const team = [booking('x', '2026-11-02', { status: 'cancelled', product: 'loc-a' })]
+    const locations = [loc('a', { products: [{ product: 'loc-a', stock: 1 }] })]
+    expect(setup({ calendar: team, locations }).startCreate(day('2026-11-02'))).toBe('started')
   })
 
   it('cancelling closes the form', () => {

@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./nuxt.config.ts",
   "scripts": {
-    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit"
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
+    "test": "vitest run"
   },
   "files": [
     "app",
@@ -37,7 +38,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "@nuxt/icon": "^1.0.0",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"
@@ -45,9 +46,11 @@
   "dependencies": {
     "@tiptap/extension-collaboration": "^3.15.3",
     "@tiptap/y-tiptap": "^3.0.1",
+    "xss": "1.0.15",
     "yjs": "^13.6.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
     "happy-dom": "catalog:",
     "vitest": "catalog:"
   }

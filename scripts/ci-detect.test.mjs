@@ -1,9 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detect } from './ci-detect.mjs'
+import { detect, pushDiffArgs } from './ci-detect.mjs'
 import { loadStages } from './harness-stages.mjs'
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 const model = await loadStages()
 const apps = [
@@ -82,6 +84,63 @@ test('ci.yml: a docs-only PR runs the doc checks in the Build packages job (#316
   assert.match(prepare.match(/^ {4}if: (.*)$/m)[1], /needs\.changes\.outputs\.docs == 'true'/)
   assert.match(prepare, /run: node scripts\/check-doc-claims\.mjs/)
   assert.doesNotMatch(job(yml, 'node-checks'), /check-doc-claims/, 'bare Node job has no typescript: the check would not run')
+})
+
+// #4139 T1 — a workflow-only PR still runs the scripts suites.
+test('scripts flag: poc + workflow PR (#4135) runs them, docs-only does not, app change does', () => {
+  const pr4135 = ['.github/workflows/automerge-epic-subpr.yml', '.github/workflows/deploy-app.yml', 'docs/pipeline/how-it-works.md', 'pocs/status/CLAUDE.md']
+  const r = run(pr4135)
+  assert.equal(r.stage, 'poc')
+  assert.equal(r.scripts, true)
+  assert.equal(run(['docs/x.md']).scripts, false)
+  assert.equal(run(['apps/velo/app/pages/index.vue']).scripts, true)
+})
+
+// #4139 T2 — which git command lists a push's files.
+test('pushDiffArgs: before..HEAD, HEAD^1..HEAD for a merge/one commit or bad before, git show for a root', () => {
+  const sha = 'a'.repeat(40)
+  assert.deepEqual(pushDiffArgs({ before: sha, beforeExists: true, parents: 2 }), ['diff', '--name-only', sha, 'HEAD'])
+  assert.deepEqual(pushDiffArgs({ before: '', parents: 2 }), ['diff', '--name-only', 'HEAD^1', 'HEAD'])
+  assert.deepEqual(pushDiffArgs({ before: '0'.repeat(40), beforeExists: true, parents: 1 }), ['diff', '--name-only', 'HEAD^1', 'HEAD'])
+  assert.deepEqual(pushDiffArgs({ before: sha, beforeExists: false, parents: 1 }), ['diff', '--name-only', 'HEAD^1', 'HEAD'])
+  assert.deepEqual(pushDiffArgs({ parents: 0 }), ['show', '--name-only', '--pretty=format:', 'HEAD'])
+})
+
+// #4139 T3 — real git: a --no-ff merge commit lists the merged files.
+test('--list-files on a real merge commit prints the merged files', () => {
+  const script = resolve('scripts/ci-detect.mjs')
+  const dir = mkdtempSync(join(tmpdir(), 'ci-detect-'))
+  try {
+    const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    g('init', '-q', '-b', 'main')
+    g('config', 'user.email', 't@t'); g('config', 'user.name', 't'); g('config', 'commit.gpgsign', 'false')
+    writeFileSync(join(dir, 'README.md'), 'x\n'); g('add', '.'); g('commit', '-q', '-m', 'root')
+    g('checkout', '-q', '-b', 'feat')
+    mkdirSync(join(dir, 'scripts')); writeFileSync(join(dir, 'scripts/a.mjs'), 'x\n'); g('add', '.'); g('commit', '-q', '-m', 'feat')
+    g('checkout', '-q', 'main')
+    writeFileSync(join(dir, 'other.md'), 'y\n'); g('add', '.'); g('commit', '-q', '-m', 'main moves')
+    g('merge', '-q', '--no-ff', '-m', 'Merge feat', 'feat')
+    assert.equal(g('show', '--name-only', '--pretty=format:', 'HEAD').trim(), '', 'precondition: git show lists nothing for a merge')
+    const env = { ...process.env }; delete env.BEFORE
+    const out = execFileSync('node', [script, '--list-files'], { cwd: dir, encoding: 'utf8', env })
+    assert.match(out, /^scripts\/a\.mjs$/m)
+    assert.doesNotMatch(out, /other\.md/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// #4139 T4 — the workflow wiring.
+test('ci.yml: push lists files via --list-files and the scripts suites gate on the scripts output', () => {
+  const yml = readFileSync('.github/workflows/ci.yml', 'utf8')
+  const changes = job(yml, 'changes')
+  assert.match(changes, /scripts: \$\{\{ steps\.filter\.outputs\.scripts \}\}/)
+  assert.match(changes, /node scripts\/ci-detect\.mjs --list-files/)
+  assert.match(changes, /BEFORE: \$\{\{ github\.event\.before \}\}/)
+  assert.doesNotMatch(changes, /git show --name-only --pretty=format: HEAD/)
+  const nodeChecks = job(yml, 'node-checks')
+  const step = nodeChecks.slice(nodeChecks.indexOf('- name: Run scripts/*.test.mjs'))
+  assert.match(step.match(/^ {8}if: (.*)$/m)[1], /^needs\.changes\.outputs\.scripts == 'true'$/)
 })
 
 test('pipeline map edit runs node-checks', () => {

@@ -15,6 +15,10 @@
  *     on a ticket whose `Blocked-by:` issue is still open.
  * `scripts/claim.mjs` (CLI + GitHub lookups) and `.claude/hooks/require-unclaimed.mjs` gather the
  * facts and call these.
+ *
+ * `activeClaim` + STALE_MS are COPIED into pocs/status/server/utils/claim-core.ts (the Status
+ * inbox's chat-claim badge, #4019 — its Worker cannot import scripts/). Keep in step;
+ * pocs/status/tests/claim-core.test.ts checks the two agree.
  */
 
 export const STALE_MS = 24 * 60 * 60 * 1000

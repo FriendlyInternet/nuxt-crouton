@@ -153,6 +153,8 @@ jobs:
           PR_NUMBER: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+        # --team is the team the deploy seeded (preview-meta `team`, #4141) — this checkout is main, so its
+        # manifest can miss a reviewTeam the PR adds. Empty (older record) → the capture falls back to the manifest.
         run: |
           set -o pipefail
           # Changed files drive which page is shot when the PR declares no review-surface (#2698).
@@ -175,7 +177,7 @@ jobs:
               AUTH=(--preview-token "$TOKEN")
             fi
             node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
-              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
+              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --team "$(jq -r '.team // ""' "$META")" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
           done < <(find "$RUNNER_TEMP/records" -name meta.json)
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
           shopt -s nullglob; PNGS=("$OUT"/*.png)
@@ -218,6 +220,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish result
+        id: publish
         if: ${{ always() && steps.check.outputs.id != '' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -234,3 +237,14 @@ jobs:
             || echo "::warning::could not publish the check result"
           echo "### Preview screenshot: ${C} — ${SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
           [ "$C" != failure ] || { echo "::error title=Preview screenshot::${SUMMARY}"; exit 1; }
+
+      # #4407: the check_suite of this App-posted check is skipped by automerge (#3501), so ask the
+      # merge step for this PR ourselves when the verdict is not red. The gate still decides.
+      - name: Ask the merge step again
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ steps.target.outputs.pr }}
+        # Block scalar on purpose: in a plain scalar ` #` starts a YAML comment and cuts the line short.
+        run: |
+          node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$PR" '{issue:$i,workflow:"automerge-epic-subpr.yml",inputs:{pr:($i|tostring)}}')" || echo "::warning::could not ask the merge step for PR #${PR} (#4407)"

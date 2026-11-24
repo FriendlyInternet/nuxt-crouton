@@ -33,6 +33,8 @@ Real-time collaboration infrastructure for Nuxt Crouton using Yjs CRDTs. This pa
 | `app/composables/useCollabRoomUsers.ts` | Poll room users via HTTP (Phase 6) |
 | `app/components/CollabEditingBadge.vue` | "X editing" badge for list items (Phase 6) |
 | `server/utils/collabRoomStore.ts` | Shared in-memory room storage for local dev |
+| `server/utils/collabServerDoc.ts` | `readCollabRoomDoc` / `updateCollabRoomDoc` (#3982) — read or edit a live room from the app server. Worker mode signs a 60 s room token, `GET /state`, runs the edit, `POST /update` with only the diff; local mode edits the in-process room and pushes to its peers; production with no worker URL returns `{ error }` (never writes the record). Exported as `@fyit/crouton-collab/server/utils/collabServerDoc` |
+| `shared/tiptap-yjs.ts` | TipTap JSON ⇄ `Y.XmlFragment` converter in y-prosemirror's encoding (attributes kept raw, marks as text formatting), `seedYFragment` (the deterministic seed, #3983), `hasFragmentContent`, `editYFragment` (insert / replace / delete blocks at an index). Used by `useCollabLocalizedContent` and the server; exported as `@fyit/crouton-collab/shared/tiptap-yjs` |
 | `server/routes/api/collab/[roomId]/users.get.ts` | HTTP endpoint for room users |
 | `wrangler.example.toml` | Cloudflare configuration template |
 
@@ -97,7 +99,7 @@ NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-collab-worker.workers.dev
 
 1. **Connection**: Client connects via WebSocket with `type` and `roomId` params
 2. **Initial Sync**: CollabRoom sends full Y.Doc state to new client
-3. **Updates**: Clients send Yjs binary updates, CollabRoom applies and broadcasts
+3. **Updates**: Clients send Yjs binary updates, CollabRoom applies and broadcasts; the app server can also push one through `updateCollabRoomDoc` (worker `/update` in production, the in-process room locally)
 4. **Awareness**: JSON messages track cursor positions, selections, presence
 5. **Persistence**: Debounced (1s) save to both DO storage and D1
 
@@ -254,7 +256,7 @@ NUXT_PUBLIC_COLLAB_WORKER_URL=https://my-app-collab.workers.dev
 
 ```bash
 npx wrangler d1 execute <DB_NAME> --remote \
-  --file=./packages/nuxt-crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
+  --file=./packages/crouton-collab/server/database/migrations/0001_yjs_collab_states.sql
 ```
 
 ### 5. Deploy Order
@@ -303,7 +305,8 @@ const {
   connect,      // () => void
   disconnect,   // () => void
   send,         // (data) => void
-  sendAwareness // (state) => void
+  sendAwareness, // (state) => void
+  awareness     // y-protocols-style Awareness for TipTap carets (getStates/setLocalStateField/on/off/setEditorSelection) — #3984
 } = useCollabConnection({
   roomId: 'room-123',
   roomType: 'page',
@@ -386,7 +389,7 @@ const {
   user, users, otherUsers,
 
   // For TipTap Collaboration extension
-  provider,       // { awareness: { setLocalStateField, ... } }
+  provider,       // { awareness } — the connection's awareness; works with y-tiptap yCursorPlugin
 
   // Actions
   connect, disconnect,
@@ -400,20 +403,19 @@ const {
 
 // Use with TipTap
 import { Collaboration } from '@tiptap/extension-collaboration'
-import { CollaborationCursor } from '@tiptap/extension-collaboration-cursor'
+import { yCursorPlugin } from '@tiptap/y-tiptap'
 
+provider.awareness.setLocalStateField('user', { name: 'Alice' })
 const editor = useEditor({
   extensions: [
-    Collaboration.configure({
-      document: ydoc,
-      field: 'content'
-    }),
-    CollaborationCursor.configure({
-      provider,
-      user: { name: 'Alice', color: '#ff0000' }
+    Collaboration.configure({ fragment: yxmlFragment }),
+    Extension.create({
+      name: 'collabCaret',
+      addProseMirrorPlugins: () => [yCursorPlugin(provider.awareness)]
     })
   ]
 })
+// CroutonEditorBlocks does this for you when given `collab-provider` (any connection).
 ```
 
 ## UI Components Reference
@@ -584,6 +586,25 @@ Raw Uint8Array containing Yjs update data.
   }
 }
 
+// Rich-text editor awareness (#3984) — sent by the connection's `awareness` adapter.
+// Only the FOCUSED editor writes fragment/selection/block/text, so a second editor on
+// the same connection (i18n side-by-side) never overwrites them. States without
+// `clientId` (crouton-flow, scripts) are not drawn as carets.
+{
+  type: 'awareness',
+  userId: 'user-123',
+  state: {
+    user: { id: 'user-123', name: 'Alice', color: '#28bd28' }, // colour always #rrggbb
+    clientId: 123456,                        // Y.Doc clientID
+    cursor: null,                            // mouse cursor unused by editors
+    caret: { anchor: {...}, head: {...} },   // Yjs relative-position JSON
+    fragment: 'content-fr',                  // which language field
+    selection: { anchor: 14, head: 19 },     // absolute ProseMirror positions
+    block: { index: 1, type: 'paragraph' },  // top-level block of the anchor
+    text: 'world'                            // selected text, ≤500 chars, null if empty
+  }
+}
+
 // Ping/Pong for connection health
 { type: 'ping' }
 { type: 'pong' }
@@ -602,6 +623,7 @@ Raw Uint8Array containing Yjs update data.
 | `/api/collab/[roomId]/ws?type=X` | GET | WebSocket upgrade |
 | `/api/collab/[roomId]/users?type=X` | GET | Get current users (Phase 6) |
 | `/state` (via DO) | GET | Get current Yjs state as binary |
+| `/update` (via DO) | POST | Apply a raw Yjs update from the app server (room token); broadcast to everyone + persist |
 | `/users` (via DO) | GET | Get current users JSON |
 
 ### Users Endpoint Response
@@ -633,6 +655,12 @@ interface CollabAwarenessState {
   selection?: { anchor: number; head: number } | null
   selectedNodeId?: string | null
   ghostNode?: { id: string; position: { x: number; y: number } } | null
+  // Rich-text editor fields (#3984)
+  clientId?: number
+  caret?: { anchor: unknown; head: unknown } | null
+  fragment?: string | null
+  block?: { index: number; type: string } | null
+  text?: string | null
   [key: string]: unknown  // Extensible
 }
 
@@ -668,18 +696,7 @@ This package is part of a 7-phase collaboration implementation:
 ## Testing
 
 ```bash
-# MANDATORY after any changes
-cd packages/nuxt-crouton-collab
-npx nuxt typecheck
-
-# Alternative: Verify specific files compile
-npx tsc --noEmit --skipLibCheck \
-  app/types/collab.ts \
-  app/composables/useCollabConnection.ts \
-  app/composables/useCollabSync.ts \
-  app/composables/useCollabPresence.ts \
-  app/composables/useCollabEditor.ts \
-  app/composables/useCollabRoomUsers.ts
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```
 
 ## CroutonCollection Integration

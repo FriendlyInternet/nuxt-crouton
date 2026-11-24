@@ -7,7 +7,8 @@
     "sidebar": {
       "search": "Flows zoeken...",
       "noResults": "Geen flows gevonden",
-      "empty": "Nog geen flows"
+      "empty": "Nog geen flows",
+      "flowMenu": "Acties voor {name}"
     },
     "actions": {
       "create": "Flow aanmaken",

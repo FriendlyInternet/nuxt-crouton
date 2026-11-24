@@ -25,6 +25,7 @@ name: On comment
 #   test-card       test-card                test-card-reply.yml
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #   (unrouted)      plan-review              plan-review.yml (#3313; a BOT's plan comment — own `if:`)
+#   (unrouted)      receipt                  NEW (#4207): one plain line on the question saying how the reply was read
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
@@ -102,17 +103,22 @@ jobs:
       kind: ${{ steps.route.outputs.kind }}
       number: ${{ steps.route.outputs.number }}
       blocked: ${{ steps.route.outputs.blocked }}
+      starts: ${{ steps.route.outputs.starts }}
+      record_comment: ${{ steps.route.outputs.record_comment }}
+      reason: ${{ steps.route.outputs.reason }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
       - id: route
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { routeComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-route.mjs`)
             const { sourceIssueFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-screens.mjs`)
-            const { planHeldFor } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
+            const { holdFacts } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/plan-held.mjs`)
             const i = context.payload.issue
             const c = context.payload.comment
             const isPr = Boolean(i.pull_request)
@@ -123,16 +129,59 @@ jobs:
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
               pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state, sourceIssue: await sourceIssueFor({ comment, prBody: p.body, getIssue }) }
             }
+            // One comments read gives both the twice-rejected fact and the open reply record (#4145).
+            const facts = await holdFacts({ github, repo: context.repo, issue: i })
             const d = routeComment({
-              comment,
+              comment, owner: process.env.OWNER_LOGIN,
               issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)),
-                planHeld: await planHeldFor({ github, repo: context.repo, issue: i }) },
+                planHeld: facts.planHeld },
               pr,
+              record: facts.record,
             })
-            core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
+            core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} starts=${d.starts || ''} (${d.reason})`)
             core.setOutput('kind', d.kind)
+            core.setOutput('starts', d.starts || '')
             core.setOutput('number', String(d.number))
             core.setOutput('blocked', String(d.blocked))
+            core.setOutput('record_comment', facts.recordComment ? String(facts.recordComment) : '')
+            core.setOutput('reason', d.reason || '')
+
+  # The reply receipt (#4207): edit one plain line onto the question the reply answered, saying how
+  # the router read it. Runs beside the acting jobs and never blocks them; the edit fires no
+  # workflow (this file listens only to `created`). Every value goes through env, never into run:.
+  receipt:
+    needs: route
+    if: needs.route.outputs.record_comment != ''
+    concurrency:
+      group: reply-receipt-${{ needs.route.outputs.record_comment }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true # the receipt is advisory (#4207): a failed token must never block the reply's real work
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: scripts
+      - name: Write the receipt on the question
+        continue-on-error: true # the receipt is advisory (#4207): a failed edit must never block the reply's real work
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          COMMENT_ID: ${{ needs.route.outputs.record_comment }}
+          KIND: ${{ needs.route.outputs.kind }}
+          STARTS: ${{ needs.route.outputs.starts }}
+          REASON: ${{ needs.route.outputs.reason }}
+          REPLY_URL: ${{ github.event.comment.html_url }}
+          REPLY_AT: ${{ github.event.comment.created_at }}
+        run: node scripts/lib/reply-receipt.mjs
 
   automerge-go:
     needs: route
@@ -231,7 +280,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
       # #3105: start the CI fix-bot (workflow_dispatch) when the PR is red.
       actions: write
     steps:
@@ -383,7 +432,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     steps:
       # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
       # `nuxt-harness[bot]`. That makes the dispatched decompose run App-actored, which passes
@@ -485,6 +534,8 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -596,12 +647,13 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_TOKEN: ${{ github.token }}
+          STARTS: ${{ needs.route.outputs.starts }}
         with:
           script: |
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name), starts: process.env.STARTS })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.
@@ -679,30 +731,42 @@ jobs:
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Re-plan a held plan from the owner's reply (#3116) ───────────────────────
-      # An issue held after the plan reviewer rejected twice (the plan-review job) is not a gate PR or a
-      # design-hold, so the claude resume below only posted "still iterating" and nothing re-planned.
-      # Detect the hold the way the plan-review job makes it (two no-go verdicts, newest a no-go; the job
-      # guard already requires status:blocked) and re-run the planner with the reply as feedback.
-      # The block stays on — the plan reviewer decides the next verdict. If the dispatch fails, say so.
+      # An issue held after the plan reviewer rejected twice, or on a plan-review question (needs-owner),
+      # is not a gate PR or a design-hold, so the claude resume below only posted "still iterating".
+      # Detect the hold the way the plan-review job makes it and re-run the planner with the reply as
+      # feedback. On a needs-owner question the owner's bare `ok` is first written into the ticket's
+      # `## Decisions` as the answer "yes" (#4082). When the route job read the reply against the
+      # question's reply record it passes `starts`, and this step follows it instead of reading the
+      # reply again (replanFromReply, #4145). The block stays on — the plan reviewer decides the
+      # next verdict. If the dispatch fails, say so.
       - name: Re-plan a held plan from the reply
         id: replan
         if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true' && steps.piredispatch.outputs.redispatch != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_TOKEN: ${{ github.token }}
+          STARTS: ${{ needs.route.outputs.starts }}
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { pathToFileURL } = require('node:url')
-            const { isPlanHold, replanDispatch } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href)
+            const { replanFromReply, replanDispatch } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/plan-hold.mjs`).href), { appendDecision } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`).href)
             const issue_number = context.payload.issue.number
             const comments = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 }))
               .map(c => ({ body: c.body, userType: c.user && c.user.type }))
             const labels = (context.payload.issue.labels || []).map(l => typeof l === 'string' ? l : l.name)
-            // An `ok` is an approval (the resume path explains it), and `plan:approved` means the plan
-            // already passed — neither is feedback to re-plan from.
-            if (!isPlanHold({ comments, labels, replyBody: context.payload.comment.body })) { core.setOutput('replan', 'false'); core.info('Not a held plan — the claude resume path handles it.'); return }
+            // On a twice-rejected plan an `ok` is an approval (the router asks for a reason); on a needs-owner
+            // question the owner's `ok` is the answer yes and re-plans (#4082). `plan:approved` = already passed.
+            const c = context.payload.comment
+            const r = replanFromReply({ starts: process.env.STARTS, comments, labels, comment: { body: c.body, date: c.created_at, url: c.html_url, authorAssociation: c.author_association, userType: c.user && c.user.type, userLogin: c.user && c.user.login, owner: process.env.OWNER_LOGIN } })
+            core.info(r.followed ? `replan: followed route starts=${process.env.STARTS}` : "replan: no starts, today's check")
+            if (!r.replan) { core.setOutput('replan', 'false'); core.info('Not a held plan — the claude resume path handles it.'); return }
             core.setOutput('replan', 'true')
             core.setOutput('dispatched', 'false')
+            const line = r.line
+            let noted = !!line
+            if (line) try { const { data: is } = await github.rest.issues.get({ ...context.repo, issue_number }), body = appendDecision(is.body, line, c.html_url)
+              if (body !== is.body) await github.rest.issues.update({ ...context.repo, issue_number, body }) } catch (e) { noted = false; core.warning(`Decisions write failed: ${e.message}`) }
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             try {
               const { handoffGuard } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`).href)
@@ -722,7 +786,8 @@ jobs:
             core.setOutput('dispatched', 'true')
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '<!-- pipeline-note -->\n' + '> 🤖 **pi.dev harness** · agent pipeline (CI) · _resume of a held plan (#3116)_\n\n'
-                + `🔁 **Re-planning from your reply.** The planner is re-running with your comment as guidance; the block stays on until the plan review decides. 🔗 [Run log](${runUrl})` })
+                + (line ? `🔁 **Re-planning from your \`ok\`** — taken as yes to the plan review's question; the block stays on until the plan review decides.${noted ? '' : ' (I could not write your answer into the ticket\'s Decisions.)'}`
+                  : '🔁 **Re-planning from your reply.** The planner is re-running with your comment as guidance; the block stays on until the plan review decides.') + ` 🔗 [Run log](${runUrl})` })
 
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
       # The owner may answer in the medium the question came in — a top-level reply, an
@@ -751,7 +816,7 @@ jobs:
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "model: $MODEL (from .claude/pipeline-models.json)"
 
-      # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
+      # Pinned to the same SHA as every other claude-code-action step (scripts/workflow-action-pins.test.mjs checks it) — keep in sync when bumping.
       # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
       # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
       # on the owner's instruction that Anthropic now permits subscription auth for
@@ -761,11 +826,14 @@ jobs:
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
         if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true' && steps.replan.outputs.replan != 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # A 📐/🎯 owner-screen comment is posted by the Harness App (#3691) — without this the action refuses the bot actor.
           allowed_bots: "nuxt-harness[bot]"
+          # v1.0.282+ denies node/npx/pnpm when the comment is on a [bot]-authored PR; the resume
+          # runs /task-decompose (node scripts/…), so keep today's behaviour (#4169).
+          restrict_untrusted_prs: "false"
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
             The owner has replied to a blocking question. Their answer may be in the medium the
@@ -809,7 +877,7 @@ jobs:
       # next workstream (a GITHUB_TOKEN merge does NOT cascade — #572).
       - name: Merge the gate PR on approval
         id: mergegate
-        if: always()
+        if: always() && steps.replan.outputs.replan != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -1190,13 +1258,15 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { parseDecision, decisionLine, appendDecision } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/decision-line.mjs`)
             const c = context.payload.comment
             const number = context.payload.issue.number
             const held = (context.payload.issue.labels || []).some(l => (l.name ?? l) === 'status:blocked')
-            const text = parseDecision({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, held })
+            const text = parseDecision({ body: c.body, userLogin: c.user.login, owner: process.env.OWNER_LOGIN, userType: c.user.type, held })
             if (!text) return core.info('not a decision')
             // Re-read the body: the payload copy may be stale if two decisions land together.
             const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number: number })

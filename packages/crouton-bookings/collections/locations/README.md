@@ -16,7 +16,7 @@
 ## Features
 
 - Multi-language support for: title, street, zip, city, content
-- Repeater fields: slots, blockedDates
+- Repeater fields: slots, products, blockedDates
 
 ## File Structure
 
@@ -56,11 +56,11 @@ collections/locations/
 | content | text | No |
 | allowedMemberIds | array | No |
 | slots | repeater | No |
+| products | json (`[{ product, stock }]`) | No |
+| offerFullDay | boolean | No |
 | openDays | array | No |
 | slotSchedule | json | No |
 | blockedDates | repeater | No |
-| inventoryMode | boolean | No |
-| quantity | number | No |
 | maxBookingsPerMonth | number | No |
 | createdAt | timestamp | Auto |
 | updatedAt | timestamp | Auto |

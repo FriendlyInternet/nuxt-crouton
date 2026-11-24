@@ -1,29 +1,13 @@
 {
+  "kind": "health",
   "finding_counts": {
-    "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
     "docs/app/components/AppHeader.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
     "docs/app/pages/[...slug].vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -40,69 +24,13 @@
         "count": 1
       }
     },
-    "packages/crouton-admin/app/components/Admin/Dashboard.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/components/Admin/StatsCard.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/components/Admin/TeamList.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/components/Admin/UserList.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/components/TeamColorSwatchPicker.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-admin/app/components/TeamDomainSettings.vue": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-admin/app/components/TeamFaviconSettings.vue": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/components/TeamSiteInfoSettings.vue": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-admin/app/components/TeamThemeSettings.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -145,46 +73,16 @@
         "count": 1
       }
     },
-    "packages/crouton-admin/app/pages/admin/[team]/index.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-admin/app/pages/admin/[team]/team.vue": {
       "crap_high": {
         "count": 1
       }
     },
-    "packages/crouton-admin/app/pages/admin/[team]/team/domains.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-admin/app/pages/admin/[team]/team/email-templates.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
       },
       "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-admin/app/pages/admin/[team]/team/look-and-feel.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/pages/admin/[team]/team/redirects.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/pages/admin/[team]/team/settings.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/pages/admin/[team]/team/site-info.vue": {
-      "crap_moderate": {
         "count": 1
       }
     },
@@ -196,23 +94,16 @@
         "count": 1
       }
     },
-    "packages/crouton-admin/app/pages/super-admin/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/pages/super-admin/teams.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-admin/app/pages/super-admin/users.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-admin/app/plugins/team-theme.ts": {
       "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-admin/app/utils/theme-override.ts": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -270,26 +161,8 @@
         "count": 1
       }
     },
-    "packages/crouton-ai/app/components/AIPageGenerator.vue": {
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-ai/app/components/AITranslateButton.vue": {
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-ai/app/components/Chatbox.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-ai/app/components/Message.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -327,6 +200,14 @@
         "count": 1
       }
     },
+    "packages/crouton-ai/server/api/ai/generate-seo.post.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "packages/crouton-ai/server/api/ai/translate-blocks.post.ts": {
       "complexity_critical": {
         "count": 1
@@ -359,56 +240,38 @@
         "count": 1
       }
     },
-    "packages/crouton-assets/app/components/AssetTile.vue": {
+    "packages/crouton-analytics/app/utils/analytics-core.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-analytics/app/utils/d1-sink.ts": {
       "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-assets/app/components/Card.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-assets/app/components/Form.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-assets/app/components/FormUpdate.vue": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-assets/app/components/Picker.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-assets/app/components/Uploader.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-assets/app/composables/useAssetUpload.ts": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -418,11 +281,6 @@
       }
     },
     "packages/crouton-assets/crouton.manifest.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-audio/app/components/Controls.vue": {
       "crap_high": {
         "count": 1
       }
@@ -438,248 +296,122 @@
         "count": 1
       }
     },
-    "packages/crouton-auth/app/components/Account/DeleteAccount.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-auth/app/components/Account/LinkedAccounts.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Account/PasskeyManager.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Account/PasswordForm.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Account/ProfileForm.vue": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
       }
     },
     "packages/crouton-auth/app/components/Account/Sessions.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Account/Settings.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-auth/app/components/Account/TwoFactorSetup.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Admin/EmailLogs.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Auth/ForgotPasswordForm.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Auth/LoginForm.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Auth/OAuthButtons.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Auth/RegisterForm.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-auth/app/components/Auth/RouteModal.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-auth/app/components/Auth/TwoFactorForm.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Error/AuthErrorAlert.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Loading/AuthGuard.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Loading/AuthSkeleton.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Sidebar/AuthSidebar.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Sidebar/TeamSection.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Sidebar/UserMenu.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Team/CreateForm.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Team/DeleteConfirm.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Team/Invitations.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/components/Team/MemberRow.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
       }
     },
     "packages/crouton-auth/app/components/Team/Members.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Team/Settings.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/components/Team/Switcher.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-auth/app/composables/useAuth.ts": {
-      "complexity_high": {
+      "complexity_critical": {
         "count": 1
       },
-      "crap_high": {
+      "crap_critical": {
         "count": 2
       },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-auth/app/composables/useScopedAccess.ts": {
+    "packages/crouton-auth/app/composables/useAuthConfig.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/app/composables/useAuthError.ts": {
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/app/composables/usePasskeys.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-auth/app/composables/usePasswordReset.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-auth/app/composables/useScopedAccess.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-auth/app/composables/useSession.ts": {
       "crap_critical": {
-        "count": 2
+        "count": 6
       },
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
       }
     },
     "packages/crouton-auth/app/composables/useTeam.ts": {
-      "complexity_high": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
         "count": 1
       },
       "crap_high": {
-        "count": 1
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 9
       }
     },
     "packages/crouton-auth/app/composables/useTeamContext.ts": {
-      "complexity_high": {
+      "complexity_critical": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/composables/useUserMenuItems.ts": {
       "crap_critical": {
         "count": 1
       },
       "crap_moderate": {
+        "count": 4
+      }
+    },
+    "packages/crouton-auth/app/composables/useTwoFactor.ts": {
+      "crap_high": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-auth/app/composables/useUserMenuItems.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -702,23 +434,17 @@
       }
     },
     "packages/crouton-auth/app/pages/auth/accept-invitation/[id].vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-auth/app/pages/auth/magic-link.vue": {
       "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "packages/crouton-auth/app/pages/auth/verify-email.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       },
       "crap_high": {
@@ -749,6 +475,17 @@
       }
     },
     "packages/crouton-auth/app/utils/errors.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-auth/app/utils/magicLinkCallback.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -792,11 +529,6 @@
         "count": 1
       }
     },
-    "packages/crouton-auth/server/api/auth/scoped-access/mint.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
     "packages/crouton-auth/server/api/auth/scoped-access/redeem.post.ts": {
       "crap_critical": {
         "count": 1
@@ -823,8 +555,19 @@
       }
     },
     "packages/crouton-auth/server/lib/auth.ts": {
-      "crap_moderate": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
         "count": 5
+      },
+      "crap_moderate": {
+        "count": 11
+      }
+    },
+    "packages/crouton-auth/server/lib/session-org.ts": {
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-auth/server/middleware/team-context.ts": {
@@ -833,8 +576,11 @@
       }
     },
     "packages/crouton-auth/server/plugins/auth-email-logger.ts": {
+      "crap_high": {
+        "count": 2
+      },
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "packages/crouton-auth/server/plugins/auth-init.ts": {
@@ -847,8 +593,96 @@
         "count": 1
       }
     },
-    "packages/crouton-auth/server/utils/team.ts": {
+    "packages/crouton-auth/server/utils/auth.ts": {
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/server/utils/pairing-code.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/server/utils/scoped-access.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/server/utils/team.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/server/utils/useServerAuth.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/shared/utils/auth.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/composables/useScopedAccess.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/composables/useSession.signal.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/auth-hardening.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/auth-lib.test.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/default-team-session.test.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/scoped-access.test.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/scoped-grants.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/tests/unit/server/signup-gate.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/types/connector.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -858,183 +692,60 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-bookings/app/components/BlockedDateInput.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-bookings/app/components/Blocks/BookingBlockRender.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-bookings/app/components/Blocks/BookingBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-bookings/app/components/BookingCard.vue": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
       },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-bookings/app/components/BookingCreateCard.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-bookings/app/components/Calendar.vue": {
       "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-bookings/app/components/Layout/Locations.vue": {
-      "crap_high": {
-        "count": 2
       }
     },
     "packages/crouton-bookings/app/components/List.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-bookings/app/components/LocationCard.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-bookings/app/components/OpenDaysPicker.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-bookings/app/components/Panel.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-bookings/app/components/PanelFilters.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-bookings/app/components/PanelMap.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-bookings/app/components/ScheduleGrid.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-bookings/app/components/Slot/Indicator.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-calendar/app/components/Week.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "packages/crouton-bookings/app/composables/useBookingAvailability.ts": {
       "crap_high": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-bookings/app/composables/useBookingCart.ts": {
       "crap_critical": {
-        "count": 3
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
       },
       "crap_moderate": {
-        "count": 2
+        "count": 7
       }
     },
     "packages/crouton-bookings/app/composables/useBookingCartStorage.ts": {
@@ -1067,6 +778,14 @@
         "count": 3
       }
     },
+    "packages/crouton-bookings/app/composables/useBookingsStore.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
     "packages/crouton-bookings/app/composables/useScheduleRules.ts": {
       "complexity_critical": {
         "count": 1
@@ -1078,17 +797,12 @@
         "count": 3
       }
     },
-    "packages/crouton-bookings/app/pages/admin/[team]/bookings/email-logs.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-bookings/app/pages/admin/[team]/bookings/email-templates.vue": {
       "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
-        "count": 3
+        "count": 2
       },
       "crap_high": {
         "count": 3
@@ -1096,8 +810,31 @@
     },
     "packages/crouton-bookings/app/pages/admin/[team]/bookings/index.vue": {
       "crap_high": {
-        "count": 2
+        "count": 1
       },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/app/utils/booking-form.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/app/utils/full-day.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/app/utils/location-products-edit.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/collections/emailtemplates/app/composables/useBookingsEmailtemplates.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -1116,7 +853,7 @@
       }
     },
     "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/bookings/[bookingId]/index.patch.ts": {
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -1135,7 +872,7 @@
       "crap_critical": {
         "count": 2
       },
-      "crap_high": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -1154,6 +891,14 @@
         "count": 1
       }
     },
+    "packages/crouton-bookings/server/utils/booking-capacity.ts": {
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 7
+      }
+    },
     "packages/crouton-bookings/server/utils/email-service.ts": {
       "complexity_critical": {
         "count": 4
@@ -1168,29 +913,57 @@
         "count": 3
       }
     },
-    "packages/crouton-charts/app/components/Blocks/ChartBlockRender.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-charts/app/components/Blocks/ChartBlockView.vue": {
+    "packages/crouton-bookings/server/utils/location-products.ts": {
       "crap_high": {
         "count": 1
       },
       "crap_moderate": {
-        "count": 3
+        "count": 2
+      }
+    },
+    "packages/crouton-bookings/server/utils/product-in-use.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/server/utils/sender-domain.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/test/bookings-store.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/test/calendar-single-popover.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-bookings/test/run-atomic-d1.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-calendar/app/components/Week.vue": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-catalog/required-locale.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
       }
     },
     "packages/crouton-charts/app/components/Blocks/ChartPresetPicker.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-charts/app/components/Widget.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -1202,23 +975,17 @@
         "count": 2
       }
     },
+    "packages/crouton-charts/app/utils/chart-constants.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-cli/bin/crouton-generate.js": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
       "crap_high": {
         "count": 1
       },
       "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-cli/lib/add-events.ts": {
-      "crap_high": {
-        "count": 2
+        "count": 4
       }
     },
     "packages/crouton-cli/lib/add-module.ts": {
@@ -1229,6 +996,11 @@
         "count": 1
       },
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/compose-layout.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -1246,15 +1018,7 @@
         "count": 1
       }
     },
-    "packages/crouton-cli/lib/deploy-check.ts": {
-      "crap_critical": {
-        "count": 3
-      }
-    },
     "packages/crouton-cli/lib/doctor.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "crap_critical": {
         "count": 1
       },
@@ -1267,21 +1031,35 @@
     },
     "packages/crouton-cli/lib/generate-collection.ts": {
       "complexity_critical": {
-        "count": 6
+        "count": 3
       },
       "crap_critical": {
-        "count": 16
+        "count": 12
       },
       "crap_high": {
         "count": 10
       },
       "crap_moderate": {
-        "count": 9
+        "count": 11
+      }
+    },
+    "packages/crouton-cli/lib/generators/api-endpoints.ts": {
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-cli/lib/generators/api-test.ts": {
-      "complexity_moderate": {
+      "complexity_critical": {
         "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/generators/collection-readme.ts": {
@@ -1290,21 +1068,30 @@
       }
     },
     "packages/crouton-cli/lib/generators/collection-seed-fixture.ts": {
-      "complexity_critical": {
+      "crap_critical": {
         "count": 1
       },
-      "crap_critical": {
+      "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-cli/lib/generators/collection-test.ts": {
+      "crap_high": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-cli/lib/generators/collection-types-registry.ts": {
-      "crap_high": {
+    "packages/crouton-cli/lib/generators/composable.ts": {
+      "crap_critical": {
         "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/generators/database-queries.ts": {
@@ -1312,10 +1099,10 @@
         "count": 1
       },
       "crap_high": {
-        "count": 1
+        "count": 2
       },
       "crap_moderate": {
-        "count": 3
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/generators/database-schema.ts": {
@@ -1324,6 +1111,9 @@
       },
       "crap_critical": {
         "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
       }
     },
     "packages/crouton-cli/lib/generators/field-components.ts": {
@@ -1334,31 +1124,38 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/generators/form-component.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
+        "count": 2
       },
       "crap_critical": {
-        "count": 1
+        "count": 3
       },
       "crap_high": {
-        "count": 1
+        "count": 4
       },
       "crap_moderate": {
-        "count": 2
+        "count": 8
       }
     },
     "packages/crouton-cli/lib/generators/list-component.ts": {
       "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/generators/seed-data.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/generators/types.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -1370,34 +1167,12 @@
         "count": 1
       }
     },
-    "packages/crouton-cli/lib/install-crouton.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-cli/lib/install-modules.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
     "packages/crouton-cli/lib/rollback-bulk.ts": {
       "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
+        "count": 3
       }
     },
     "packages/crouton-cli/lib/rollback-collection.ts": {
@@ -1405,7 +1180,7 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 1
+        "count": 2
       },
       "crap_high": {
         "count": 2
@@ -1414,42 +1189,23 @@
         "count": 2
       }
     },
-    "packages/crouton-cli/lib/rollback-interactive.ts": {
+    "packages/crouton-cli/lib/scaffold-app.ts": {
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
       }
     },
     "packages/crouton-cli/lib/seed-app.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-cli/lib/seed-translations.ts": {
       "complexity_critical": {
-        "count": 3
+        "count": 1
       },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-cli/lib/templates/deploy-workflow.ts": {
       "crap_critical": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 5
       }
     },
     "packages/crouton-cli/lib/templates/wrangler/sync-wrangler-ids.mjs": {
@@ -1466,17 +1222,9 @@
         "count": 1
       }
     },
-    "packages/crouton-cli/lib/utils/config-builder.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-cli/lib/utils/css-setup.ts": {
       "crap_high": {
-        "count": 2
+        "count": 1
       },
       "crap_moderate": {
         "count": 1
@@ -1487,24 +1235,29 @@
         "count": 2
       }
     },
-    "packages/crouton-cli/lib/utils/dialects.ts": {
-      "complexity_high": {
+    "packages/crouton-cli/lib/utils/duplicate-tables.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/utils/extended-packages.ts": {
+      "crap_high": {
         "count": 1
       },
-      "crap_high": {
+      "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-cli/lib/utils/generate-migrations.ts": {
-      "crap_critical": {
+      "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-cli/lib/utils/helpers.ts": {
-      "complexity_high": {
+      "complexity_critical": {
         "count": 1
       },
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -1522,9 +1275,6 @@
       },
       "crap_high": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-cli/lib/utils/layer-discovery.ts": {
@@ -1532,9 +1282,28 @@
         "count": 1
       }
     },
+    "packages/crouton-cli/lib/utils/list-fields.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-cli/lib/utils/load-fields.ts": {
+      "crap_critical": {
+        "count": 3
+      },
       "crap_high": {
         "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/utils/manifest-configuration.ts": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/utils/manifest-loader.ts": {
@@ -1548,32 +1317,29 @@
         "count": 1
       },
       "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-cli/lib/utils/manifest-configuration.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 4
       }
     },
     "packages/crouton-cli/lib/utils/module-detector.ts": {
       "complexity_critical": {
-        "count": 3
+        "count": 1
       },
       "crap_critical": {
         "count": 3
       },
       "crap_high": {
-        "count": 2
+        "count": 1
       },
       "crap_moderate": {
         "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/utils/owned-collections.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/utils/parse-app-config.ts": {
@@ -1587,7 +1353,36 @@
         "count": 1
       },
       "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-cli/lib/utils/paths.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/utils/prune-dangling-collections.ts": {
+      "crap_critical": {
         "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-cli/lib/utils/schema-sources.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      }
+    },
+    "packages/crouton-cli/lib/utils/system-fields.ts": {
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-cli/lib/utils/update-app-config.ts": {
@@ -1603,7 +1398,7 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 3
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/utils/update-schema-index.ts": {
@@ -1619,57 +1414,42 @@
         "count": 1
       }
     },
-    "packages/crouton-collab/app/components/CollabCursors.vue": {
+    "packages/crouton-cli/lib/utils/validate-ref-targets.ts": {
       "crap_critical": {
         "count": 1
       }
     },
-    "packages/crouton-collab/app/components/CollabEditingBadge.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
+    "packages/crouton-cli/tests/unit/build-schema-export-names.test.ts": {
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/tests/unit/utils/manifest-runtime-config-keys.test.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/tests/unit/utils/schema-sources.test.ts": {
+      "crap_critical": {
         "count": 1
       }
     },
     "packages/crouton-collab/app/components/CollabPresence.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-collab/app/components/CollabStatus.vue": {
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-collab/app/composables/useCollabConnection.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-collab/app/composables/useCollabEditor.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-collab/app/composables/useCollabLocalizedContent.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "crap_critical": {
         "count": 1
       },
-      "crap_high": {
-        "count": 2
-      },
       "crap_moderate": {
-        "count": 2
+        "count": 4
+      }
+    },
+    "packages/crouton-collab/app/composables/useCollabLocalizedContent.ts": {
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-collab/app/composables/useCollabPresence.ts": {
@@ -1677,6 +1457,19 @@
         "count": 1
       },
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/app/composables/useCollabRoomUsers.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/app/composables/useCollabSync.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -1689,22 +1482,34 @@
       }
     },
     "packages/crouton-collab/app/composables/useFormCollabPresence.ts": {
-      "crap_critical": {
-        "count": 1
-      },
       "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-collab/app/utils/avatar.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-collab/app/utils/collabAwareness.ts": {
+      "crap_critical": {
         "count": 1
       },
       "crap_moderate": {
         "count": 2
       }
     },
-    "packages/crouton-collab/server/durable-objects/CollabRoom.ts": {
-      "crap_critical": {
+    "packages/crouton-collab/server/api/_crouton/operation.post.ts": {
+      "crap_moderate": {
         "count": 1
-      },
+      }
+    },
+    "packages/crouton-collab/server/durable-objects/CollabRoom.ts": {
       "crap_high": {
-        "count": 2
+        "count": 1
       },
       "crap_moderate": {
         "count": 1
@@ -1723,6 +1528,60 @@
         "count": 4
       }
     },
+    "packages/crouton-collab/server/utils/collabServerDoc.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-collab/server/utils/collabTeamAccess.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/server/utils/collabToken.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/server/utils/internalSignature.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/server/utils/resolveWsHooks.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/shared/tiptap-yjs.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "packages/crouton-collab/tests/collabServerDoc.test.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-collab/tests/components/CollabStatus.test.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-collab/tests/useCollabRoomUsers.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-collab/worker-template/src/index.ts": {
       "crap_moderate": {
         "count": 1
@@ -1738,409 +1597,90 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "packages/crouton-core/app/components/AdminStatusBar.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/AppearanceSwitcher.vue": {
-      "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/Calendar.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/Collection.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "packages/crouton-core/app/components/CollectionViewer.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/ConfirmButton.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ContentArticle.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ContentPage.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/components/DefaultCard.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/DeleteButton.vue": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/components/DependentFieldCardMini.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/Detail.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-core/app/components/DetailLayout.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/DraggableItem.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/DraggableList.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/DropZone.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ExportButton.vue": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/components/Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormActionButton.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormColorPicker.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormDependentButtonGroup.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormDependentSelectOption.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/FormDynamicLoader.vue": {
       "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormExpandableSlideOver.vue": {
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/FormLayout.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/FormOptionsSelect.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/FormReferenceSelect.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/FormRepeater.vue": {
-      "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/FormTranslatableOptionItem.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
       }
     },
     "packages/crouton-core/app/components/IconPicker.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/ImportPreviewModal.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/components/ItemButtonsMini.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/ItemCardMini.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ItemCardSmall.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ItemDependentField.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/Kanban.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/KanbanColumn.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/Loading.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/OptionsFieldCardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/RedirectsForm.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/SetupDashboard/CollectionCard.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/SetupDashboard/ConfigViewer.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/SetupDashboard/Index.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/ShortcutHint.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/Table.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/TableHeader.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/Tree.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-core/app/components/TreeNode.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-core/app/components/TreeView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/UsersAvatarUpload.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/UsersCardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/components/Workspace.vue": {
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-core/app/components/WorkspaceEditor.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/WorkspaceLayout.vue": {
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-core/app/components/WorkspaceSidebar.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
+      }
+    },
+    "packages/crouton-core/app/composables/__tests__/useCollectionItem.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useCollectionExport.ts": {
       "crap_critical": {
         "count": 1
       },
@@ -2149,29 +1689,6 @@
       },
       "crap_moderate": {
         "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/stubs/CroutonEditorPreview.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/components/stubs/CroutonMapsPreview.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/composables/useAdminStatusBar.ts": {
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/composables/useCollectionExport.ts": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/composables/useCollectionImport.ts": {
@@ -2185,10 +1702,34 @@
         "count": 2
       }
     },
+    "packages/crouton-core/app/composables/useCollectionItem.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "packages/crouton-core/app/composables/useCollectionMutation.ts": {
-      "complexity_high": {
+      "complexity_critical": {
         "count": 1
       },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useCollectionQuery.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-core/app/composables/useCollectionSelection.ts": {
       "crap_high": {
         "count": 1
       }
@@ -2211,6 +1752,11 @@
         "count": 1
       }
     },
+    "packages/crouton-core/app/composables/useCroutonMutate.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-core/app/composables/useCroutonShortcuts.ts": {
       "crap_high": {
         "count": 2
@@ -2219,8 +1765,21 @@
         "count": 1
       }
     },
-    "packages/crouton-core/app/composables/useDisplayConfig.ts": {
+    "packages/crouton-core/app/composables/useCroutonStatus.ts": {
+      "crap_critical": {
+        "count": 1
+      },
       "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useDependentFieldResolver.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useDisplayConfig.ts": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -2249,8 +1808,34 @@
       }
     },
     "packages/crouton-core/app/composables/useTableColumns.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useTableData.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/composables/useTeamContext.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-core/app/composables/useTreeDrag.ts": {
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-core/app/composables/useTreeMutation.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-core/app/error.vue": {
@@ -2261,22 +1846,48 @@
         "count": 1
       }
     },
-    "packages/crouton-core/app/pages/admin/[team]/crouton/[collection].vue": {
+    "packages/crouton-core/app/types/layout.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-core/app/pages/index.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
+    "packages/crouton-core/app/utils/error-text.ts": {
       "crap_critical": {
         "count": 1
       }
     },
-    "packages/crouton-core/app/plugins/component-warmup.client.ts": {
+    "packages/crouton-core/app/utils/form-resolver.ts": {
       "crap_high": {
         "count": 1
+      }
+    },
+    "packages/crouton-core/app/utils/init-form-state.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/app/utils/layout-stores.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "packages/crouton-core/app/utils/layout-tree.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-core/app/utils/status-feed.ts": {
+      "crap_moderate": {
+        "count": 3
       }
     },
     "packages/crouton-core/modules/ensure-hub-blob.ts": {
@@ -2289,29 +1900,8 @@
         "count": 1
       }
     },
-    "packages/crouton-core/nuxt.config.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/scripts/sync-stub.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/server/api/crouton/setup/stats.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
     "packages/crouton-core/server/api/teams/[id]/settings/site.get.ts": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -2322,6 +1912,11 @@
     },
     "packages/crouton-core/server/api/teams/[id]/settings/theme.get.ts": {
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/server/api/upload-image.delete.ts": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -2336,12 +1931,12 @@
       }
     },
     "packages/crouton-core/server/middleware/redirects.ts": {
-      "crap_moderate": {
-        "count": 1
+      "crap_high": {
+        "count": 3
       }
     },
-    "packages/crouton-core/server/utils/createExternalCollectionHandler.ts": {
-      "crap_moderate": {
+    "packages/crouton-core/server/routes/images/[...pathname].get.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -2355,15 +1950,51 @@
         "count": 1
       }
     },
+    "packages/crouton-core/server/utils/redirectValidation.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/server/utils/teamRefs.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
     "packages/crouton-core/server/utils/tiptap-renderer.ts": {
       "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
-        "count": 1
+        "count": 2
       },
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/shared/seed/runner.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/shared/seed/sql.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/shared/utils/d1.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-core/tests/team-route-param-name.test.ts": {
+      "crap_high": {
+        "count": 2
       }
     },
     "packages/crouton-devtools/src/module.ts": {
@@ -2389,10 +2020,7 @@
       }
     },
     "packages/crouton-devtools/src/runtime/client/template.html": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -2433,14 +2061,8 @@
       }
     },
     "packages/crouton-devtools/src/runtime/server/plugins/operationTracker.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "packages/crouton-devtools/src/runtime/server/plugins/reviewAlias.ts": {
@@ -2453,48 +2075,30 @@
         "count": 1
       }
     },
+    "packages/crouton-devtools/src/runtime/server/utils/routeParse.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "packages/crouton-devtools/src/runtime/server/utils/systemOperationStore.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "packages/crouton-editor/app/components/Blocks.vue": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 3
-      }
-    },
     "packages/crouton-editor/app/components/Preview.vue": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-editor/app/components/Simple.vue": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-editor/app/components/Variables.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-editor/app/components/WithPreview.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
         "count": 1
       }
     },
@@ -2503,14 +2107,27 @@
         "count": 1
       }
     },
-    "packages/crouton-email/server/emails/TeamInvite.vue": {
+    "packages/crouton-email/server/api/webhooks/resend.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
+    "packages/crouton-email/server/emails/primitives.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "packages/crouton-email/server/plugins/auth-email-listener.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
       "crap_critical": {
         "count": 1
+      }
+    },
+    "packages/crouton-email/server/utils/delivery-events.ts": {
+      "crap_critical": {
+        "count": 2
       }
     },
     "packages/crouton-email/server/utils/email.ts": {
@@ -2539,46 +2156,14 @@
         "count": 1
       }
     },
-    "packages/crouton-events/app/components/CroutonActivityFilters.vue": {
-      "crap_high": {
-        "count": 1
-      },
+    "packages/crouton-events/app/components/__tests__/activity-filters-phone.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-events/app/components/CroutonActivityLog.vue": {
+    "packages/crouton-events/app/components/__tests__/activity-ui.test.ts": {
       "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-events/app/components/CroutonActivityTimeline.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-events/app/components/CroutonActivityTimelineItem.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-events/app/components/CroutonEventChangesTable.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-events/app/components/CroutonEventDetail.vue": {
-      "crap_high": {
-        "count": 1
+        "count": 2
       }
     },
     "packages/crouton-events/app/composables/useCroutonEventTracker.ts": {
@@ -2592,16 +2177,16 @@
         "count": 1
       }
     },
-    "packages/crouton-events/app/composables/useCroutonEvents.ts": {
-      "complexity_critical": {
+    "packages/crouton-events/app/composables/useCroutonEventsExport.ts": {
+      "crap_critical": {
         "count": 1
       },
-      "crap_critical": {
+      "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-events/app/composables/useCroutonEventsExport.ts": {
-      "crap_critical": {
+    "packages/crouton-events/app/pages/__tests__/activity-page.test.ts": {
+      "crap_high": {
         "count": 1
       },
       "crap_moderate": {
@@ -2614,6 +2199,30 @@
       }
     },
     "packages/crouton-events/app/utils/event-display.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-events/server/__tests__/collection-events-write.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-events/server/__tests__/helpers/teamFixture.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-events/server/api/teams/[id]/crouton-collection-events/index.post.ts": {
+      "crap_critical": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
@@ -2648,73 +2257,122 @@
       "crap_critical": {
         "count": 1
       },
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
-      }
-    },
-    "packages/crouton-feedback/src/runtime/components/AnnotateOverlay.vue": {
+      },
       "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-feedback/src/runtime/components/ChangelogOverlay.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
-    "packages/crouton-feedback/src/runtime/components/FeedbackLauncher.vue": {
-      "crap_moderate": {
+    "packages/crouton-feedback/src/runtime/components/PlanOverlay.vue": {
+      "complexity_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/components/SpecWalkOverlay.vue": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-feedback/src/runtime/composables/useAnnotate.ts": {
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       },
       "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-feedback/src/runtime/composables/useSpecWalk.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/overlay/capture.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/overlay/envProfile.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
         "count": 2
       }
     },
     "packages/crouton-feedback/src/runtime/server/api/feedback.post.ts": {
       "crap_critical": {
         "count": 1
-      }
-    },
-    "packages/crouton-flow/app/components/Flow.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 5
       },
       "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 9
+        "count": 1
       }
     },
-    "packages/crouton-flow/app/components/Node.vue": {
+    "packages/crouton-feedback/src/runtime/server/sinks/discord.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/server/sinks/github.ts": {
       "crap_critical": {
         "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/server/sinks/slack.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/server/sinks/webhook.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/tools/console-capture.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-feedback/src/runtime/tools/plan-data.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
       },
       "crap_moderate": {
         "count": 2
       }
     },
-    "packages/crouton-flow/app/components/PageNode.vue": {
+    "packages/crouton-feedback/src/runtime/tools/specwalk-data.ts": {
+      "crap_critical": {
+        "count": 2
+      },
       "crap_high": {
-        "count": 1
+        "count": 2
       },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-flow/app/components/Workspace/Sidebar.vue": {
+    "packages/crouton-feedback/src/runtime/transform/sourceStamp.ts": {
       "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-flow/app/components/Flow.vue": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -2723,6 +2381,11 @@
         "count": 1
       },
       "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-flow/app/composables/useFlowData.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -2748,8 +2411,14 @@
       }
     },
     "packages/crouton-flow/app/composables/useFlowLayout.ts": {
-      "crap_moderate": {
+      "crap_critical": {
         "count": 3
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-flow/app/composables/useFlowPositionStore.ts": {
@@ -2763,23 +2432,29 @@
       }
     },
     "packages/crouton-flow/app/composables/useFlowSync.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-flow/app/composables/useFlowSyncBridge.ts": {
-      "complexity_high": {
+      "crap_critical": {
         "count": 1
       },
-      "crap_high": {
+      "crap_moderate": {
         "count": 2
       }
     },
-    "packages/crouton-flow/app/pages/admin/[team]/flows.vue": {
+    "packages/crouton-flow/app/composables/useFlowSyncBridge.ts": {
       "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-flow/app/pages/admin/[team]/flows.vue": {
+      "complexity_high": {
         "count": 1
       },
       "crap_high": {
@@ -2804,74 +2479,50 @@
         "count": 1
       }
     },
-    "packages/crouton-i18n/app/components/DevModeToggle.vue": {
+    "packages/crouton-flow/test/composables/useFlowSyncBridge.test.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-flow/test/integration/flow-sync.test.ts": {
       "crap_high": {
+        "count": 2
+      }
+    },
+    "packages/crouton-i18n/app/collection-components/UiList.vue": {
+      "complexity_high": {
         "count": 1
+      },
+      "crap_high": {
+        "count": 2
       },
       "crap_moderate": {
         "count": 2
       }
     },
     "packages/crouton-i18n/app/components/Display.vue": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
       }
     },
     "packages/crouton-i18n/app/components/Input.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-i18n/app/components/InputWithEditor.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
-    "packages/crouton-i18n/app/components/LanguageSwitcherIsland.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-i18n/app/components/ListCards.vue": {
+    "packages/crouton-i18n/app/components/__tests__/input-tabs-fill.test.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "packages/crouton-i18n/app/collection-components/UiForm.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-i18n/app/collection-components/UiList.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 1
-      },
+    "packages/crouton-i18n/app/composables/uiTranslationKeys.ts": {
       "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "packages/crouton-i18n/app/composables/useAiTranslation.ts": {
@@ -2882,6 +2533,11 @@
         "count": 3
       },
       "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-i18n/app/composables/useEntityTranslations.ts": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -2896,7 +2552,7 @@
       }
     },
     "packages/crouton-i18n/app/composables/useLocaleLayout.ts": {
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       },
       "crap_moderate": {
@@ -2904,11 +2560,14 @@
       }
     },
     "packages/crouton-i18n/app/composables/useT.ts": {
+      "crap_critical": {
+        "count": 3
+      },
       "crap_high": {
         "count": 2
       },
       "crap_moderate": {
-        "count": 1
+        "count": 4
       }
     },
     "packages/crouton-i18n/app/composables/useTranslationFields.ts": {
@@ -2933,6 +2592,11 @@
     "packages/crouton-i18n/config-utils.ts": {
       "crap_moderate": {
         "count": 2
+      }
+    },
+    "packages/crouton-i18n/server/__tests__/helpers/teamFixture.ts": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "packages/crouton-i18n/server/api/seed/translations-ui.post.ts": {
@@ -2976,78 +2640,56 @@
     "packages/crouton-layout/app/components/Layout.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "packages/crouton-layout/app/components/LayoutBreakpointAuthor.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
-    "packages/crouton-layout/app/components/LayoutComposeCanvas.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-layout/app/components/LayoutComposePane.vue": {
-      "crap_high": {
+    "packages/crouton-layout/app/components/LayoutCollectionData.vue": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/components/LayoutEditorPane.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/components/LayoutRenderer.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/components/LayoutResponsiveRenderer.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/components/LayoutZoomShell.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
+      }
+    },
+    "packages/crouton-layout/app/composables/__tests__/useCroutonSemanticZoom.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/composables/useCroutonComposeGestures.ts": {
-      "complexity_high": {
+      "complexity_critical": {
         "count": 1
       },
-      "crap_high": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/composables/useCroutonLayoutBlocks.ts": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -3056,26 +2698,92 @@
         "count": 1
       }
     },
+    "packages/crouton-layout/app/composables/useCroutonSemanticZoom.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
     "packages/crouton-layout/app/composables/useLayoutFlip.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
+    "packages/crouton-layout/app/composables/useLayoutLeafBinding.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/composables/useLayoutStoreScope.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/__tests__/layout-edit.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-compose-bridge.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-compose.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-edit.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 7
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-flip.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-placement-check.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-responsive.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
     "packages/crouton-layout/app/utils/layout-serialize.ts": {
-      "complexity_moderate": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-layout/app/utils/layout-snap.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/utils/layout-tree.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
         "count": 1
       },
       "crap_critical": {
@@ -3083,58 +2791,29 @@
       },
       "crap_high": {
         "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-splitter-items.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-ticket.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-viability.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
       }
     },
     "packages/crouton-maps/app/components/Blocks/CollectionMapBlockRender.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 2
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-maps/app/components/Blocks/CollectionMapBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-maps/app/components/Blocks/MapBlockRender.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-maps/app/components/Blocks/MapBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-maps/app/components/Map.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-maps/app/components/Marker.vue": {
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-maps/app/components/Popup.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-maps/app/components/Preview.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-maps/app/composables/useGeocode.ts": {
@@ -3160,9 +2839,24 @@
         "count": 2
       }
     },
-    "packages/crouton-mcp-toolkit/server/api/teams/[id]/mcp-tokens/index.post.ts": {
+    "packages/crouton-mcp-toolkit/lib/pages-handler.ts": {
       "crap_moderate": {
         "count": 1
+      }
+    },
+    "packages/crouton-mcp-toolkit/server/api/teams/[id]/mcp-tokens/index.post.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-mcp-toolkit/server/mcp-pages/lib/auth.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-mcp-toolkit/server/mcp-pages/lib/tools.ts": {
+      "crap_moderate": {
+        "count": 3
       }
     },
     "packages/crouton-mcp-toolkit/server/mcp/resources/collection-schema.ts": {
@@ -3181,11 +2875,21 @@
       }
     },
     "packages/crouton-mcp-toolkit/server/utils/mcp-auth.ts": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
     "packages/crouton-mcp-toolkit/server/utils/mcp-collections.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-mcp-toolkit/tests/mcpPagesAccess.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-mcp-toolkit/tests/mcpPagesBoundary.test.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -3211,7 +2915,10 @@
       }
     },
     "packages/crouton-mcp/src/tools/validate-schema.ts": {
-      "complexity_high": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
         "count": 1
       }
     },
@@ -3228,478 +2935,119 @@
         "count": 2
       }
     },
-    "packages/crouton-pages/app/components/BlockContent.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      },
+    "packages/crouton-pages/app-page-segments.ts": {
       "crap_moderate": {
-        "count": 3
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/app/components/BlockContent.vue": {
+      "complexity_high": {
+        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Properties/ButtonRowEditor.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Properties/CardsEditor.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Properties/FileEditor.vue": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Properties/ImageEditor.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Properties/LinksEditor.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Properties/LogosEditor.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Properties/TeamMemberPicker.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Properties/VideoEditor.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Render/ButtonRowBlock.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/CardGridBlock.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/CollectionBlock.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Render/ContactBlock.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/EmbedBlock.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/FaqBlock.vue": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Render/GalleryBlock.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/HeroBlock.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/ImageBlock.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Render/LogoBlock.vue": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/MailingBlock.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/PaneBlock.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Render/StatsBlock.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/TwoColumnBlock.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Render/VideoBlock.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/AddonBlockView.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/ButtonRowBlockView.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/CTABlockView.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/CardGridBlockView.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/CollectionBlockView.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Views/ContactBlockView.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/EmbedBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/FaqBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/FileBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/GalleryBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/HeroBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/ImageBlockView.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Blocks/Views/LogoBlockView.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/MailingBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/QrCodeBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/SectionBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/SeparatorBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/StatsBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/TwoColumnBlockView.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Blocks/Views/VideoBlockView.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Card.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/CollectionBinderRenderer.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 7
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/CollectionPageRenderer.vue": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Editor/BlockEditor.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Editor/BlockEditorWithPreview.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 2
       }
     },
     "packages/crouton-pages/app/components/Editor/BlockPropertyPanel.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Editor/BlockToolbar.vue": {
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-pages/app/components/Editor/LayoutPicker.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Editor/PageTypePicker.vue": {
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Editor/SeoPreview.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Editor/SettingsPanel.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Editor/Toolbar.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/Footer.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-pages/app/components/FooterRenderer.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Nav.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-pages/app/components/Renderer.vue": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-pages/app/components/ScopedAccessGate.vue": {
-      "crap_high": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-pages/app/components/Workspace/Editor.vue": {
-      "complexity_critical": {
-        "count": 4
-      },
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 6
-      },
-      "crap_high": {
-        "count": 5
-      },
-      "crap_moderate": {
-        "count": 9
-      }
-    },
-    "packages/crouton-pages/app/components/Workspace/Sidebar.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
       }
     },
     "packages/crouton-pages/app/composables/useDomainContext.ts": {
@@ -3740,6 +3088,14 @@
       },
       "crap_moderate": {
         "count": 1
+      }
+    },
+    "packages/crouton-pages/app/composables/usePageRecord.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-pages/app/composables/usePageTypes.ts": {
@@ -3786,18 +3142,20 @@
     },
     "packages/crouton-pages/app/layouts/public.vue": {
       "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "packages/crouton-pages/app/pages/[team]/[locale]/[...slug].vue": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/app/utils/block-visibility.ts": {
       "crap_critical": {
         "count": 1
       },
       "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 5
+        "count": 1
       }
     },
     "packages/crouton-pages/app/utils/content-detector.ts": {
@@ -3811,13 +3169,42 @@
         "count": 2
       }
     },
+    "packages/crouton-pages/app/utils/custom-domain-path.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-pages/app/utils/page-path.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-pages/app/utils/page-submit-data.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/app/utils/public-routes.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-pages/app/utils/sanitize-html.ts": {
+      "crap_high": {
+        "count": 3
+      },
       "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-pages/nuxt.config.ts": {
-      "crap_critical": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -3827,9 +3214,6 @@
       }
     },
     "packages/crouton-pages/server/api/public/[team]/[collection].get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "crap_critical": {
         "count": 1
       },
@@ -3885,6 +3269,32 @@
         "count": 2
       }
     },
+    "packages/crouton-pages/server/utils/page-live-source.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/server/utils/strip-internal-fields.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/test/custom-domain-one-language.test.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-pages/test/public-routes-corpus.test.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "packages/crouton-printing/server/api/crouton-printing/events/[eventId]/browser-print-jobs/[jobId]/fail.post.ts": {
       "crap_moderate": {
         "count": 1
@@ -3905,12 +3315,41 @@
         "count": 1
       }
     },
+    "packages/crouton-printing/server/utils/drainer-gate.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-printing/server/utils/escpos-drainer.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
     "packages/crouton-printing/server/utils/print-job-queue.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-printing/server/utils/print-queue-service.ts": {
+      "crap_critical": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-printing/server/utils/print-server-auth.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-printing/server/utils/print-transport.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -3921,303 +3360,93 @@
       },
       "crap_critical": {
         "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/ChartBlockRender.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/ChartBlockView.vue": {
+      },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-sales/app/components/Blocks/ClientsView.vue": {
+    "packages/crouton-printing/test/fanout-realsocket.integration.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-sales/app/components/Blocks/EventWorkspaceLauncherCards.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/EventWorkspaceRender.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/EventWorkspaceView.vue": {
+    "packages/crouton-printing/test/parallel-drain.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/Blocks/KitchenDisplayRender.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/KitchenDisplayView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/LiveDashboardRender.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/LiveDashboardView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/OrdersView.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/Blocks/PrintBridgeRender.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/PrintBridgeView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/ProductMatrixRender.vue": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Blocks/ProductMatrixView.vue": {
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/Client/Cart.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-sales/app/components/Client/CategoryTabs.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/Client/OrderHistory.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "packages/crouton-sales/app/components/Client/OrderInterface.vue": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Client/OrderLineItem.vue": {
-      "crap_moderate": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/Client/ProductList.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Client/ProductOptionsSelect.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Client/Selector.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Dashboard/SalesSummary.vue": {
-      "crap_moderate": {
-        "count": 2
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/ClientsPanel.vue": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/OrderItems.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 5
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/PaneHost.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/EventWorkspace/PrintersTab.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/ProductsTab.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/SettingsListCard.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/SettingsTab.vue": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
       }
     },
     "packages/crouton-sales/app/components/EventWorkspace/Shell.vue": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Pos/OrdersList.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Pos/Panel.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-sales/app/components/PrintqueuesCard.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-sales/app/components/Settings/PrintPreviewModal.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/app/components/Sync/Status.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
         "count": 1
       }
     },
@@ -4242,11 +3471,36 @@
         "count": 1
       }
     },
-    "packages/crouton-sales/server/api/crouton-sales/events/[eventId]/display-jobs/index.get.ts": {
-      "complexity_critical": {
+    "packages/crouton-sales/app/utils/parse-product-paste.ts": {
+      "crap_high": {
         "count": 1
       },
-      "crap_critical": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-sales/app/utils/printer-led.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-sales/app/utils/test-print-outcome.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/collections/products/SalesProducts.api.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/api/crouton-sales/devices/claim.post.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/api/crouton-sales/events/[eventId]/display-jobs/index.get.ts": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -4270,16 +3524,6 @@
         "count": 1
       }
     },
-    "packages/crouton-sales/server/api/crouton-sales/teams/[id]/charts/product-day-matrix.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/server/api/crouton-sales/teams/[id]/charts/units-per-product-day.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-sales/server/api/crouton-sales/teams/[id]/events/[eventId]/clients/[clientId]/end-receipt.post.ts": {
       "complexity_critical": {
         "count": 1
@@ -4296,13 +3540,8 @@
         "count": 1
       }
     },
-    "packages/crouton-sales/server/api/crouton-sales/teams/[id]/events/[eventId]/printqueues/retry-failed.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-sales/server/api/crouton-sales/teams/[id]/events/[eventId]/receipt-settings.get.ts": {
-      "crap_moderate": {
+    "packages/crouton-sales/server/api/crouton-sales/teams/[id]/events/[eventId]/printers/[printerId]/preview.get.ts": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -4316,11 +3555,21 @@
         "count": 2
       }
     },
-    "packages/crouton-sales/server/utils/client-tab.ts": {
-      "complexity_critical": {
+    "packages/crouton-sales/server/utils/cancel-order.ts": {
+      "crap_high": {
         "count": 1
       },
-      "crap_critical": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/client-tab.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/cloud-sync-auth.ts": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -4330,35 +3579,133 @@
       },
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/config-capture.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "packages/crouton-sales/server/utils/config-conflict.ts": {
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-sales/server/utils/generate-print-queues.ts": {
       "crap_critical": {
         "count": 2
       },
+      "crap_high": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-sales/server/utils/printing-reactions.ts": {
-      "complexity_moderate": {
+    "packages/crouton-sales/server/utils/kds-tickets.ts": {
+      "crap_high": {
         "count": 1
       }
     },
-    "packages/crouton-sales/server/utils/sync-ingest.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
+    "packages/crouton-sales/server/utils/my-orders-shape.ts": {
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/option-labels.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/per-product-totals.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/plan-product-import.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "packages/crouton-sales/server/utils/plan-requeue.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/preview-receipt.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/printing-reactions.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/product-category-filter.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/product-day-matrix.ts": {
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "packages/crouton-sales/server/utils/sync-ingest.ts": {
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-sales/server/utils/sync-outbox.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/server/utils/sync-pull.ts": {
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-sales/server/utils/sync-status.ts": {
       "crap_high": {
         "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-sales/server/utils/test-print.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/test/per-product-totals.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-sales/test/plan-product-import.test.ts": {
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-themes/braun/components/Knob.vue": {
@@ -4374,16 +3721,8 @@
         "count": 5
       }
     },
-    "packages/crouton-themes/themes/components/ThemeCompactPicker.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-themes/themes/components/ThemeSwitcher.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -4397,574 +3736,9 @@
         "count": 1
       }
     },
-    "packages/crouton-three/app/components/Blocks/ModelBlockView.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
     "packages/crouton-three/app/composables/useThreeControls.ts": {
       "crap_critical": {
         "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/AiConfig.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/app/components/Blocks/TriageBlockRender.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/Blocks/TriageBlockView.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/FeedItem.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/Panel.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 6
-      }
-    },
-    "packages/crouton-triage/app/components/PipelineBuilder.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-triage/app/components/flows/AccountManager.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-triage/app/components/flows/AccountPicker.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/app/components/flows/InputManager.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "packages/crouton-triage/app/components/flows/OutputManager.vue": {
-      "complexity_critical": {
-        "count": 3
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 5
-      }
-    },
-    "packages/crouton-triage/app/components/shared/DomainPicker.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/FigmaUserDiscovery.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/NotionUserDiscovery.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/NotionUserPicker.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/SlackUserDiscovery.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/UserMappingDrawer.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/components/usermappings/UserMappingTable.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriageConnectedAccounts.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriageFeed.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriageFieldMapping.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriageNotionSchema.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriageOAuth.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/composables/useTriagePromptPreview.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/pages/admin/[team]/triage.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/app/pages/admin/[team]/triage/inbox.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 6
-      }
-    },
-    "packages/crouton-triage/app/pages/admin/[team]/triage/jobs.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/adapters/figma.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 3
-      }
-    },
-    "packages/crouton-triage/server/adapters/notion.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/adapters/slack.ts": {
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 4
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/oauth/slack/callback.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/oauth/slack/install.get.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/accounts/[accountId]/verify.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/accounts/connect.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/ai/suggest-icons.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/discussions/[discussionId]/retry.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/discussions/process.post.ts": {
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/notion/schema/[databaseId].get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/notion/test-connection.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/notion/users.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/slack/users.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/user-mappings/bulk-import.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/figma-email.post.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/notion-input.post.ts": {
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/notion.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/resend.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/slack.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/services/ai.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/services/notion.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 7
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/services/processor.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 9
-      },
-      "crap_high": {
-        "count": 8
-      },
-      "crap_moderate": {
-        "count": 10
-      }
-    },
-    "packages/crouton-triage/server/services/reply-generator.ts": {
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/services/userMapping.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/utils/emailClassifier.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/emailParser.ts": {
-      "complexity_high": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/utils/emoji-converter.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/field-mapping.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/logger.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/rateLimit.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/resendEmail.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/retry.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/securityCheck.ts": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/server/utils/tokenResolver.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-triage/server/utils/webhookSecurity.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-triage/shared/utils/field-mapping.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton/src/module.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
       }
     },
     "pocs/alexdeforce/server/api/seed/content.post.ts": {
@@ -5002,11 +3776,18 @@
         "count": 3
       }
     },
-    "pocs/crouton-builder/app/pages/builder/[pageId].vue": {
+    "pocs/crouton-builder/app/components/BuilderBlockNode.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
+      }
+    },
+    "pocs/crouton-builder/app/pages/builder/[pageId].vue": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "pocs/crouton-builder/app/pages/builder/outline/[pageId].vue": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -5030,7 +3811,7 @@
       }
     },
     "pocs/loop-station/app/components/InventoryTable.vue": {
-      "complexity_moderate": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -5043,10 +3824,7 @@
       }
     },
     "pocs/loop-station/app/pages/index.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -5084,6 +3862,24 @@
         "count": 1
       }
     },
+    "pocs/status/server/api/status/login/[app].get.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "pocs/status/server/utils/totest-core.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "scripts/app-preview.mjs": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "scripts/db-clone.mjs": {
       "complexity_critical": {
         "count": 1
@@ -5092,11 +3888,6 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 1
-      }
-    },
-    "scripts/eval-ledger/schema.mjs": {
-      "complexity_moderate": {
         "count": 1
       }
     },
@@ -5116,6 +3907,11 @@
         "count": 2
       }
     },
+    "scripts/pi-edited-files.mjs": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
     "scripts/seed-review-login.mjs": {
       "complexity_critical": {
         "count": 1
@@ -5130,28 +3926,20 @@
       }
     },
     "scripts/smoke-deployed.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "scripts/teardown-app.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "scripts/validate-field-types-sync.mjs": {
       "complexity_high": {
-        "count": 2
-      }
-    },
-    "packages/crouton-auth/app/composables/useTwoFactor.ts": {
-      "crap_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
         "count": 1
       }
     }
@@ -5159,132 +3947,207 @@
   "runtime_coverage_findings": [],
   "target_keys": [
     "packages/crouton-pages/app/editor/extensions/page-blocks.ts:dead code",
-    "packages/crouton-pages/app/composables/useNavigation.ts:high impact",
-    "packages/crouton-triage/server/adapters/index.ts:dead code",
-    "packages/crouton-triage/server/services/reply-generator.ts:dead code",
-    "packages/crouton-pages/app/editor/extensions/block-commands.ts:dead code",
-    "packages/crouton-triage/server/services/userMapping.ts:dead code",
-    "packages/crouton-themes/lib/subtractive.ts:high impact",
-    "packages/crouton-i18n/app/composables/useEntityTranslations.ts:high impact",
-    "packages/crouton-pages/app/composables/usePageLink.ts:high impact",
-    "scripts/lib/wrangler-d1.mjs:high impact",
-    "packages/crouton-i18n/app/components/ListCards.vue:untested risk",
-    "packages/crouton-pages/app/composables/useFooterPage.ts:untested risk",
-    "packages/crouton-core/app/utils/layout-tree.ts:high impact",
-    "packages/crouton-core/app/composables/useCrouton.ts:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/ProductsTab.vue:untested risk",
-    "packages/crouton-bookings/app/composables/useScheduleRules.ts:untested risk",
-    "packages/crouton-triage/server/adapters/figma.ts:dead code",
-    "packages/crouton-pages/app/components/CollectionBinderRenderer.vue:complexity",
-    "packages/crouton-bookings/app/composables/useBookingsList.ts:high impact",
-    "packages/crouton-assets/app/utils/asset.ts:high impact",
-    "packages/crouton-cli/lib/utils/helpers.ts:high impact",
-    "packages/crouton-cli/lib/generators/database-schema.ts:complexity",
-    "packages/crouton-core/server/utils/tiptap-renderer.ts:complexity",
-    "packages/crouton-triage/app/composables/useTriageFeed.ts:untested risk",
-    "packages/crouton-layout/app/utils/layout-responsive.ts:high impact",
-    "packages/crouton-layout/app/components/LayoutRenderer.vue:complexity",
-    "packages/crouton-bookings/app/composables/useBookingSlots.ts:high impact",
-    "scripts/lib/session-cost.mjs:untested risk",
-    "packages/crouton-triage/server/adapters/notion.ts:dead code",
-    "packages/crouton-bookings/app/components/BookingCreateCard.vue:complexity",
-    "apps/fanfare/app/pages/index.vue:untested risk",
-    "packages/crouton-sales/app/components/PrintqueuesCard.vue:untested risk",
-    "pocs/loop-station/app/composables/useLoopData.ts:high impact",
-    "packages/crouton-triage/server/services/ai.ts:dead code",
-    "packages/crouton-pages/app/components/Blocks/Views/ContactBlockView.vue:untested risk",
-    "packages/crouton-admin/app/components/TeamDomainSettings.vue:complexity",
-    "packages/crouton-pages/app/components/Nav.vue:complexity",
-    "scripts/lib/sync-wrangler-ids.mjs:complexity",
-    "pocs/crouton-builder/app/pages/builder/[pageId].vue:complexity",
-    "packages/crouton-pages/app/components/Workspace/Editor.vue:complexity",
-    "packages/crouton-core/app/components/Detail.vue:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/OrderItems.vue:complexity",
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/pages.get.ts:untested risk",
-    "packages/crouton-auth/app/middleware/team-context.global.ts:complexity",
-    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post.ts:complexity",
-    "packages/crouton-printing/server/utils/receipt-formatter.ts:complexity",
-    "packages/crouton-editor/app/components/Preview.vue:complexity",
-    "packages/crouton-sales/app/components/Client/Cart.vue:complexity",
-    "packages/crouton-bookings/app/components/BookingCard.vue:complexity",
-    "packages/crouton-bookings/app/components/LocationForm.vue:complexity",
-    "packages/crouton-bookings/server/utils/email-service.ts:complexity",
-    "packages/crouton-i18n/app/components/Input.vue:complexity",
-    "packages/crouton-maps/app/components/Blocks/CollectionMapBlockRender.vue:untested risk",
-    "scripts/lib/excalidraw.mjs:complexity",
+    "scripts/comment-route.mjs:high impact",
+    "scripts/lib/plan-shape.mjs:high impact",
+    "scripts/lib/pr-merge-gate.mjs:high impact",
+    "packages/crouton-core/app/composables/useCroutonStatus.ts:high impact",
+    "packages/crouton-auth/app/components/Crouton/UserPill.vue:high impact",
     "packages/crouton-pages/app/components/Blocks/Views/LogoBlockView.vue:complexity",
-    "packages/crouton-bookings/app/components/ScheduleGrid.vue:complexity",
-    "pocs/sintlukas/server/api/seed/images.post.ts:complexity",
-    "scripts/harness-stages.mjs:untested risk",
-    "packages/crouton-layout/app/components/LayoutResponsiveRenderer.vue:complexity",
-    "packages/crouton-mcp/src/tools/validate-schema.ts:complexity",
-    "packages/crouton-sales/app/components/Client/OrderInterface.vue:complexity",
-    "packages/crouton-collab/app/components/CollabEditingBadge.vue:complexity",
-    "packages/crouton-flow/app/components/Flow.vue:complexity",
-    "packages/crouton-auth/app/components/Team/Members.vue:complexity",
-    "packages/crouton-auth/app/components/Auth/RouteModal.vue:complexity",
+    "scripts/lib/handoff.mjs:high impact",
+    "scripts/lib/required-check-state.mjs:high impact",
+    "scripts/ui-touched.mjs:high impact",
+    "scripts/lib/fix-bot-dispatch.mjs:high impact",
+    "scripts/apply-decompose-plan.mjs:high impact",
+    "pocs/status/server/utils/cards-sync-run.ts:high impact",
+    "scripts/epic-auto-close.mjs:high impact",
+    "scripts/traffic-control.mjs:high impact",
+    "scripts/lib/reply-record.mjs:high impact",
+    "packages/crouton-cli/lib/generators/collection-seed-fixture.ts:high impact",
+    "packages/crouton-pages/app/composables/useNavigation.ts:high impact",
+    "scripts/plan-held.mjs:high impact",
+    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post.ts:complexity",
+    "pocs/crouton-builder/app/utils/board-empty.ts:high impact",
+    "scripts/lib/ticket-verdict.mjs:high impact",
+    "scripts/test-card.mjs:high impact",
+    "packages/crouton-sales/server/utils/sync-pull.ts:complexity",
+    "pocs/status/server/utils/live-apps-core.ts:high impact",
+    "pocs/status/server/utils/totest-core.ts:high impact",
+    "scripts/lib/smoke-crud.mjs:high impact",
+    "scripts/reply-replay.mjs:high impact",
+    "pocs/crate/app/composables/useCrateHints.ts:high impact",
+    "scripts/eval-ledger/record-run.mjs:high impact",
+    "scripts/gen-api-reference.mjs:high impact",
+    "scripts/plan-hold.mjs:high impact",
+    "pocs/crouton-builder/app/utils/board-target.ts:high impact",
+    "pocs/status/app/utils/delivery-core.ts:high impact",
+    "pocs/status/app/utils/quiz-core.ts:high impact",
+    "packages/crouton-bookings/app/composables/useBookingCart.ts:high impact",
+    "scripts/lib/epic-steps.mjs:high impact",
+    "scripts/handoff-exec.mjs:high impact",
+    "packages/crouton-pages/app/editor/extensions/block-commands.ts:dead code",
+    "pocs/status/server/utils/review-login.ts:high impact",
+    "packages/crouton-core/tests/team-route-param-name.test.ts:untested risk",
+    "packages/crouton-themes/lib/subtractive.ts:high impact",
+    "pocs/crate/app/composables/useCrate.ts:high impact",
+    "scripts/lib/signoff-route.mjs:high impact",
+    "scripts/lib/chat-claim.mjs:high impact",
+    "scripts/lib/owner-merge-go.mjs:high impact",
+    "packages/crouton-pages/app/components/CollectionBinderRenderer.vue:complexity",
+    "packages/crouton-feedback/src/runtime/composables/useSpecWalk.ts:high impact",
+    "scripts/migration-guard.mjs:high impact",
+    "scripts/lib/plan-verdict.mjs:high impact",
+    "packages/crouton-pages/app/utils/sanitize-html.ts:high impact",
+    "pocs/status/server/utils/clock-status-core.ts:high impact",
+    "packages/crouton-feedback/src/runtime/overlay/envProfile.ts:untested risk",
+    "packages/crouton-pages/app/composables/usePageLink.ts:high impact",
+    "scripts/lib/decision-line.mjs:high impact",
+    "scripts/lib/review-captures.mjs:high impact",
+    "pocs/crouton-builder/app/pages/builder/outline/[pageId].vue:complexity",
+    "packages/crouton-i18n/app/composables/useEntityTranslations.ts:high impact",
+    "packages/crouton-collab/server/utils/collabTeamAccess.ts:untested risk",
+    "packages/crouton-feedback/src/runtime/tools/specwalk-data.ts:high impact",
+    "scripts/lib/rate-limit.mjs:high impact",
+    "packages/crouton-core/app/utils/status-feed.ts:high impact",
+    "scripts/lib/diagnosis-review.mjs:high impact",
+    "scripts/lib/run-outcome.mjs:high impact",
+    "scripts/owner-quiz.mjs:high impact",
+    "packages/crouton-bookings/server/utils/booking-capacity.ts:high impact",
+    "packages/crouton-core/app/utils/layout-tree.ts:high impact",
+    "scripts/lib/pr-merge-gate-io.mjs:high impact",
+    "packages/crouton-cli/lib/rollback-collection.ts:complexity",
+    "scripts/eval-ledger/backfill.mjs:complexity",
+    "scripts/lib/read-manifest.mjs:high impact",
+    "packages/crouton-core/app/composables/useCrouton.ts:complexity",
+    "scripts/pi-finish.mjs:high impact",
+    "packages/crouton-layout/app/components/LayoutRenderer.vue:complexity",
+    "packages/crouton-core/server/middleware/redirects.ts:untested risk",
+    "scripts/lib/artifact-gate.mjs:complexity",
+    "packages/crouton-cli/lib/utils/load-fields.ts:high impact",
+    "packages/crouton-cli/lib/utils/helpers.ts:high impact",
+    "packages/crouton-bookings/app/composables/useBookingsStore.ts:high impact",
+    "packages/crouton-email/server/utils/delivery-events.ts:high impact",
+    "scripts/conflict-resolution.mjs:high impact",
+    "scripts/pipeline-prompt.mjs:high impact",
+    "packages/crouton-cli/lib/utils/prune-dangling-collections.ts:untested risk",
+    "packages/crouton-pages/app/composables/useFooterPage.ts:untested risk",
+    "pocs/status/server/utils/github.ts:high impact",
+    "scripts/harness-stages.mjs:high impact",
+    "packages/crouton-bookings/app/composables/useBookingsList.ts:high impact",
+    "scripts/epic-ready.mjs:high impact",
     "packages/crouton-cli/lib/utils/module-detector.ts:complexity",
+    "scripts/lib/plan-route.mjs:high impact",
+    "scripts/pi-edited-files.mjs:complexity",
+    "pocs/status/app/utils/walk.ts:high impact",
+    "packages/crouton-bookings/server/utils/product-in-use.ts:untested risk",
+    "packages/crouton-collab/server/utils/internalSignature.ts:high impact",
+    "scripts/ticket-revise.mjs:high impact",
+    "packages/crouton-bookings/app/utils/capacity.ts:high impact",
+    "packages/crouton-events/app/pages/__tests__/activity-page.test.ts:untested risk",
+    "pocs/crouton-builder/app/utils/palette-groups.ts:high impact",
+    "packages/crouton-core/app/utils/layout-stores.ts:high impact",
+    "pocs/status/app/utils/inbox-core.ts:high impact",
+    "scripts/packages-guard.mjs:high impact",
+    "packages/crouton-bookings/app/composables/useScheduleRules.ts:untested risk",
+    "packages/crouton-bookings/app/utils/full-day.ts:high impact",
+    "pocs/crouton-builder/app/utils/board-groups.ts:high impact",
+    "scripts/lib/epic-numbers.mjs:high impact",
+    "packages/crouton-catalog/required-locale.ts:high impact",
+    "pocs/status/server/utils/cards-sync-core.ts:high impact",
+    "packages/crouton-pages/app/components/Nav.vue:complexity",
+    "scripts/postmortem.mjs:high impact",
+    "packages/crouton-cli/lib/utils/team-ref-fields.ts:high impact",
+    "packages/crouton-catalog/test/setup-db.ts:high impact",
+    "scripts/lib/owner-screens.mjs:high impact",
+    "packages/crouton-layout/app/utils/layout-responsive.ts:high impact",
+    "scripts/lib/wrangler-d1.mjs:high impact",
+    "packages/crouton-events/server/api/teams/[id]/crouton-collection-events/index.post.ts:untested risk",
+    "packages/crouton-bookings/app/composables/useBookingSlots.ts:high impact",
+    "packages/crouton-events/app/utils/event-display.ts:high impact",
+    "packages/crouton-bookings/server/utils/email-service.ts:complexity",
+    "packages/crouton-collab/shared/tiptap-yjs.ts:high impact",
+    "packages/crouton-core/server/utils/tiptap-renderer.ts:complexity",
+    "scripts/plan-checks.mjs:high impact",
+    "packages/crouton-assets/app/utils/asset.ts:high impact",
+    "packages/crouton-collab/server/utils/collabToken.ts:high impact",
+    "packages/crouton-feedback/src/runtime/tools/plan-data.ts:high impact",
+    "packages/crouton-pages/app/composables/useDomainContext.ts:high impact",
+    "scripts/review-team.mjs:high impact",
+    "packages/crouton-pages/app/components/BlockContent.vue:complexity",
     "packages/crouton-layout/app/components/Layout.vue:complexity",
-    "packages/crouton-cli/lib/add-module.ts:complexity",
     "packages/crouton-cli/lib/utils/validate-config.ts:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue:complexity",
-    "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue:complexity",
-    "docs/app/pages/[...slug].vue:untested risk",
-    "packages/crouton-cli/lib/utils/manifest-configuration.ts:complexity",
-    "packages/crouton-assets/app/components/FormUpdate.vue:complexity",
-    "packages/crouton-bookings/app/components/List.vue:complexity",
-    "packages/crouton-cli/lib/utils/layer-config.ts:complexity",
-    "packages/crouton-sales/app/components/Client/ProductList.vue:complexity",
-    "packages/crouton-core/app/components/Collection.vue:complexity",
-    "packages/crouton-triage/server/api/crouton-triage/oauth/slack/callback.get.ts:complexity",
-    "packages/crouton-admin/app/pages/admin/index.vue:complexity",
-    "packages/crouton-core/app/components/DefaultCard.vue:complexity",
-    "pocs/sintlukas/server/api/seed/content.post.ts:complexity",
-    "packages/crouton-core/app/components/stubs/CroutonEditorPreview.vue:untested risk",
-    "packages/crouton-layout/app/components/LayoutBreakpointAuthor.vue:complexity",
-    "packages/crouton-admin/app/middleware/team-admin.ts:complexity",
+    "pocs/loop-station/app/composables/useLoopData.ts:high impact",
+    "packages/crouton-i18n/app/composables/uiTranslationKeys.ts:untested risk",
+    "scripts/lib/sync-wrangler-ids.mjs:complexity",
+    "scripts/seed-review-login.mjs:high impact",
+    "packages/crouton-layout/app/composables/useLayoutLeafBinding.ts:untested risk",
+    "packages/crouton-core/app/components/Detail.vue:complexity",
+    "packages/crouton-printing/server/utils/receipt-formatter.ts:complexity",
+    "packages/crouton-auth/app/middleware/team-context.global.ts:complexity",
+    "packages/crouton-pages/server/plugins/domain-resolver.ts:complexity",
+    "packages/crouton-i18n/app/components/Input.vue:complexity",
     "packages/crouton-pages/server/api/teams/[id]/pages.get.ts:complexity",
+    "packages/crouton-pages/test/public-routes-corpus.test.ts:untested risk",
+    "packages/crouton-layout/app/components/LayoutCollectionData.vue:complexity",
+    "packages/crouton-bookings/app/components/List.vue:complexity",
+    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/availability.get.ts:complexity",
+    "packages/crouton-sales/app/components/Client/Cart.vue:complexity",
+    "pocs/sintlukas/server/api/seed/images.post.ts:complexity",
+    "pocs/crouton-builder/app/components/BuilderBlockNode.vue:complexity",
+    "packages/crouton-bookings/app/components/Calendar.vue:complexity",
+    "packages/crouton-cli/lib/generators/field-components.ts:complexity",
+    "packages/crouton-layout/app/components/LayoutResponsiveRenderer.vue:complexity",
+    "packages/crouton-auth/app/components/Auth/RouteModal.vue:complexity",
+    "packages/crouton-editor/app/components/Preview.vue:complexity",
+    "packages/crouton-core/app/components/Collection.vue:complexity",
+    "packages/crouton-events/app/components/__tests__/activity-ui.test.ts:untested risk",
+    "packages/crouton-i18n/app/composables/useLocaleLayout.ts:untested risk",
+    "packages/crouton-bookings/app/components/BookingCreateCard.vue:complexity",
+    "packages/crouton-admin/app/components/TeamDomainSettings.vue:complexity",
+    "packages/crouton-i18n/app/components/__tests__/input-tabs-fill.test.ts:untested risk",
+    "packages/crouton-mcp/src/tools/validate-schema.ts:complexity",
+    "packages/crouton-admin/app/components/TeamThemeSettings.vue:complexity",
+    "packages/crouton-flow/app/components/Flow.vue:complexity",
+    "packages/crouton-feedback/src/runtime/components/PlanOverlay.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/OrderItems.vue:complexity",
+    "packages/crouton-auth/app/components/Team/Members.vue:complexity",
+    "pocs/sintlukas/server/api/seed/content.post.ts:complexity",
+    "packages/crouton-feedback/src/runtime/components/SpecWalkOverlay.vue:complexity",
+    "packages/crouton-core/app/components/DefaultCard.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue:complexity",
+    "packages/crouton-layout/app/components/LayoutBreakpointAuthor.vue:complexity",
     "pocs/alexdeforce/server/api/seed/fix-image-nodes.post.ts:complexity",
-    "packages/crouton-bookings/app/components/ActivityTimeline.vue:complexity",
-    "packages/crouton-triage/app/components/PipelineBuilder.vue:complexity",
+    "packages/crouton-bookings/app/components/ScheduleGrid.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/LogosEditor.vue:complexity",
     "pocs/alexdeforce/server/api/seed/images.post.ts:complexity",
+    "packages/crouton-i18n/app/components/InputWithEditor.vue:complexity",
     "pocs/alexdeforce/server/api/seed/pages.post.ts:complexity",
-    "scripts/teardown-app.mjs:complexity",
-    "packages/crouton-triage/app/pages/admin/[team]/triage/jobs.vue:complexity",
-    "scripts/smoke-deployed.mjs:untested risk",
-    "packages/crouton-triage/app/components/Panel.vue:complexity",
+    "packages/crouton-pages/app/components/Editor/BlockPropertyPanel.vue:complexity",
+    "packages/crouton-sales/app/components/Client/OrderInterface.vue:complexity",
+    "packages/crouton-core/app/components/Form.vue:complexity",
     "packages/crouton-devtools/src/runtime/server-rpc/eventsHealth.ts:complexity",
     "pocs/alexdeforce/server/api/seed/content.post.ts:complexity",
+    "packages/crouton-admin/app/middleware/team-admin.ts:complexity",
+    "packages/crouton-sales/app/components/Client/CategoryTabs.vue:complexity",
+    "packages/crouton-bookings/app/components/ActivityTimeline.vue:complexity",
     "packages/crouton-core/app/components/ImportPreviewModal.vue:complexity",
-    "scripts/seed-review-login.mjs:complexity",
-    "packages/crouton-bookings/app/components/Calendar.vue:complexity",
-    "packages/crouton-pages/app/components/Editor/BlockPropertyPanel.vue:complexity",
-    "packages/crouton-i18n/app/components/InputWithEditor.vue:complexity",
-    "packages/crouton-triage/app/components/flows/OutputManager.vue:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/Shell.vue:complexity",
+    "packages/crouton-pages/app/components/Blocks/Render/ContactBlock.vue:complexity",
+    "scripts/lib/excalidraw.mjs:complexity",
+    "packages/crouton-sales/app/components/Client/OrderHistory.vue:complexity",
+    "packages/crouton-assets/app/components/FormUpdate.vue:complexity",
+    "packages/crouton-bookings/app/components/BookingCard.vue:complexity",
     "scripts/db-clone.mjs:complexity",
-    "packages/crouton-events/app/components/CroutonEventChangesTable.vue:complexity",
-    "packages/crouton-pages/app/components/Blocks/Properties/ButtonRowEditor.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/ImageEditor.vue:complexity",
-    "packages/crouton-bookings/app/pages/admin/[team]/bookings/email-templates.vue:complexity",
     "docs/server/mcp/tools/validate-schema.ts:complexity",
     "packages/crouton-cli/lib/templates/wrangler/sync-wrangler-ids.mjs:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/ClientsPanel.vue:complexity",
-    "packages/crouton-bookings/app/components/PanelFilters.vue:complexity",
-    "packages/crouton-pages/app/components/Blocks/Render/ContactBlock.vue:complexity",
-    "packages/crouton/src/module.ts:complexity",
-    "packages/crouton-triage/app/pages/admin/[team]/triage/inbox.vue:complexity",
-    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/availability.get.ts:complexity",
+    "packages/crouton-pages/app/components/Blocks/Properties/ButtonRowEditor.vue:complexity",
+    "packages/crouton-admin/app/pages/admin/index.vue:complexity",
+    "packages/crouton-i18n/app/collection-components/UiList.vue:complexity",
+    "packages/crouton-sales/app/components/Client/ProductList.vue:complexity",
     "pocs/kvr/server/utils/send-werkvergunning-email.ts:complexity",
-    "packages/crouton-sales/app/components/Blocks/PrintBridgeRender.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/VideoEditor.vue:complexity",
-    "scripts/validate-field-types-sync.mjs:complexity",
-    "packages/crouton-triage/server/api/crouton-triage/teams/[id]/notion/schema/[databaseId].get.ts:complexity",
-    "packages/crouton-triage/app/components/usermappings/SlackUserDiscovery.vue:complexity",
-    "packages/crouton-triage/app/components/usermappings/NotionUserDiscovery.vue:complexity",
-    "packages/crouton-triage/app/components/flows/InputManager.vue:complexity",
-    "packages/crouton-cli/lib/seed-translations.ts:complexity",
-    "packages/crouton-i18n/app/collection-components/UiList.vue:complexity"
+    "packages/crouton-sales/app/components/EventWorkspace/ClientsPanel.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/SettingsTab.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/Shell.vue:complexity",
+    "packages/crouton-bookings/app/pages/admin/[team]/bookings/email-templates.vue:complexity"
   ]
 }

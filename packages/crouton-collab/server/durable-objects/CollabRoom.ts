@@ -35,6 +35,26 @@ interface Session {
  * belongs to the consumer (e.g., crouton-pages, crouton-flow) who can
  * observe Y.Doc changes and sync to their own tables.
  */
+/**
+ * App-server edit (#3982, the MCP pages tools): POST /update carries a raw Yjs update.
+ * The room token checked in fetch proves the caller may write this exact room — a WS
+ * client with the same token can already send updates. Origin 'server' is not a
+ * socket, so the update listener broadcasts to EVERY session and schedules the save.
+ */
+export async function applyServerUpdate(ydoc: Y.Doc, request: Request): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } })
+  }
+  const update = new Uint8Array(await request.arrayBuffer())
+  if (update.byteLength === 0) return new Response('Empty update', { status: 400 })
+  try {
+    Y.applyUpdate(ydoc, update, 'server')
+  } catch {
+    return new Response('Invalid update', { status: 400 })
+  }
+  return new Response('ok', { status: 200 })
+}
+
 export class CollabRoom implements DurableObject {
   private ydoc: Y.Doc
   private sessions: Map<WebSocket, Session> = new Map()
@@ -249,6 +269,8 @@ export class CollabRoom implements DurableObject {
         headers: { 'Content-Type': 'application/octet-stream' }
       })
     }
+
+    if (url.pathname === '/update') return applyServerUpdate(this.ydoc, request)
 
     if (url.pathname === '/users') {
       // HTTP endpoint to get current users (for Phase 6 global presence)

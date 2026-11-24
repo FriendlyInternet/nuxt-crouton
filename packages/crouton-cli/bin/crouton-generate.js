@@ -169,10 +169,12 @@ const initCmd = defineCommand({
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     layout: { type: 'boolean', default: true, description: 'Add the crouton-layout engine (default on; --no-layout to leave it out)' },
-    noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
-    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
+    cf: { type: 'boolean', description: 'Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force' },
+    noCf: { type: 'boolean', description: 'Deprecated alias for --no-cf' },
+    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
-    out: { type: 'string', description: 'Explicit target directory (overrides --poc; default apps/<name>)' },
+    site: { type: 'boolean', description: 'Small public site: one team (test1), one locale (en) with hideLocaleInUrl, an appDomains list to fill in; adds @fyit/crouton-pages' },
+    out: { type: 'string', description: 'Explicit target directory (overrides --poc; default apps/<name> in the monorepo, ./<name> elsewhere)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
@@ -192,8 +194,9 @@ const initCmd = defineCommand({
       layout: args.layout,
       theme: args.theme,
       dialect: args.dialect,
-      cf: !args.noCf,
+      cf: args.noCf ? false : args.cf,
       domain: args.domain,
+      site: args.site,
       out,
       dryRun: args.dryRun,
     })
@@ -205,7 +208,6 @@ const initCmd = defineCommand({
 const addCmd = defineCommand({
   meta: { name: 'add', description: 'Add Crouton modules or features to your project' },
   args: {
-    skipMigrations: { type: 'boolean', description: 'Skip migration generation and application' },
     skipInstall: { type: 'boolean', description: 'Skip package installation (assume already installed)' },
     dryRun: { type: 'boolean', description: 'Preview what will be done without making changes' },
     force: { type: 'boolean', description: 'Force reinstall even if already installed' },
@@ -231,7 +233,6 @@ const addCmd = defineCommand({
 
       const result = await addModules(modules, {
         skipInstall: args.skipInstall,
-        skipMigrations: args.skipMigrations,
         dryRun: args.dryRun,
         force: args.force,
       })
@@ -350,8 +351,9 @@ const scaffoldAppCmd = defineCommand({
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
-    noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
-    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
+    cf: { type: 'boolean', description: 'Cloudflare Workers config (wrangler.jsonc, CF stubs). Default: on inside the crouton monorepo, off elsewhere; --cf / --no-cf to force' },
+    noCf: { type: 'boolean', description: 'Deprecated alias for --no-cf' },
+    domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
@@ -367,7 +369,7 @@ const scaffoldAppCmd = defineCommand({
       features,
       theme: args.theme,
       dialect: args.dialect,
-      cf: !args.noCf,
+      cf: args.noCf ? false : args.cf,
       domain: args.domain,
       dryRun: args.dryRun,
     })

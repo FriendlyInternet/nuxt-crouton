@@ -50,6 +50,48 @@
       "when": 1794486206747,
       "tag": "0006_verify_existing_users",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794846019601,
+      "tag": "0007_absurd_captain_cross",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794860590670,
+      "tag": "0008_mushy_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794860603124,
+      "tag": "0009_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795081099480,
+      "tag": "0010_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795157789214,
+      "tag": "0011_certain_falcon",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795511788796,
+      "tag": "0012_smooth_logan",
+      "breakpoints": true
     }
   ]
 }

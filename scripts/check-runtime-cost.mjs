@@ -2,7 +2,7 @@
 /**
  * Runtime-cost check (#3910 part 1, #3936 part 2, epic #3896).
  *
- * Counts five patterns in every `.vue` template under packages/, apps/, pocs/. "Per item"
+ * Counts six patterns in every `.vue` template under packages/, apps/, pocs/. "Per item"
  * means under a `v-for` (on itself or an ancestor) or under a per-item slot (`#…-cell`,
  * `#day`, `#week-day`, `#item…`, `#option…`, `#row…`, `#cell…`).
  *   A · overlay per item — a UPopover/UTooltip/UModal/USlideover/UDrawer/UDropdownMenu/
@@ -17,11 +17,17 @@
  *       TransitionGroup / KeepAlive. A changing key rebuilds the whole subtree.
  *   E · composable in the template — `useXxx(` in an interpolation or a directive
  *       expression (event handlers `@…` excluded). One hit per expression.
+ *   F · sideways row that can scroll vertically (#4330) — a `UTabs`/`UNavigationMenu` whose
+ *       bound `:ui` has a `list:` string literal with `overflow-x-auto`/`overflow-x-scroll`
+ *       but no `overflow-y-hidden`/`overflow-y-clip`/`overflow-hidden`/`overflow-clip`, or a
+ *       static `role="tablist"` element whose static class has the same gap. `overflow-x-auto`
+ *       alone makes overflow-y auto too, so the row can be dragged up and down. Bound
+ *       references (e.g. `SCROLL_ROW_X`) are never hits.
  *
  * On a PR (`--base-ref <branch>`) it fails when a changed `.vue` file has more hits of a
  * kind at HEAD than the same file (or its pre-rename path) had at the merge-base. Without
  * a base ref it only prints totals. Always prints
- * `[runtime-cost] files=… A=… B=… C=… D=… E=… allowed=… unparsable=…`.
+ * `[runtime-cost] files=… A=… B=… C=… D=… E=… F=… allowed=… unparsable=…`.
  *
  * Allow comment: `<!-- runtime-cost-ok: <reason, ≥10 chars> -->` as the hit's previous
  * sibling (for an E hit in an interpolation: the previous sibling of its parent element,
@@ -43,7 +49,11 @@ const HEAVY = new Set([
 ])
 const KEY_PARENTS_OK = new Set(['Transition', 'TransitionGroup', 'KeepAlive'])
 const COMPOSABLE_RE = /\buse[A-Z]\w*\(/
-export const KINDS = ['A', 'B', 'C', 'D', 'E']
+export const KINDS = ['A', 'B', 'C', 'D', 'E', 'F']
+const SCROLL_TAB_TAGS = new Set(['UTabs', 'UNavigationMenu'])
+const X_SCROLL_RE = /(^|\s)overflow-x-(auto|scroll)(\s|$)/
+const Y_STOP_RE = /(^|\s)overflow-(y-hidden|y-clip|hidden|clip)(\s|$)/
+const UI_LIST_RE = /\blist\s*:\s*(['"`])((?:(?!\1).)*)\1/
 const NODE_ELEMENT = 1
 const NODE_TEXT = 2
 const NODE_COMMENT = 3
@@ -68,7 +78,8 @@ export const B_HINT = 'Add a pointer-coarse: class or a tap/focus path.'
 export const C_HINT = 'Create one shared instance, or show a light preview per item, or add <!-- runtime-cost-ok: <reason> --> on the line above.'
 export const D_HINT = 'A changing key rebuilds this element and everything under it. Update it in place, or add <!-- runtime-cost-ok: <what changes the key and why a rebuild is needed> --> on the line above.'
 export const E_HINT = 'Call the composable once in <script setup> and use its result in the template.'
-const HINTS = { A: A_HINT, B: B_HINT, C: C_HINT, D: D_HINT, E: E_HINT }
+export const F_HINT = 'Use SCROLL_ROW_X (crouton-core app/utils/scroll-row.ts) — overflow-x-auto alone also scrolls vertically.'
+const HINTS = { A: A_HINT, B: B_HINT, C: C_HINT, D: D_HINT, E: E_HINT, F: F_HINT }
 /** The text after `<file>:<line> ` in a failure's hit list, per kind. */
 const HIT_LINE = {
   A: h => `${h.tag} under ${h.under}`,
@@ -76,6 +87,7 @@ const HIT_LINE = {
   C: h => `${h.tag} under ${h.under}`,
   D: h => `${h.tag} :key="${h.key}"`,
   E: h => `${h.tag} ${h.call}()`,
+  F: h => `${h.tag} ${h.why}`,
 }
 export const GENERATED_HINT = 'generated file: change the generator template, then regenerate'
 
@@ -161,6 +173,25 @@ function rebuildingKey(node, parent) {
   return (key.exp?.content ?? '').slice(0, 60)
 }
 
+/** True when a class list scrolls sideways without stopping the vertical axis. */
+function scrollsBothWays(cls) {
+  return X_SCROLL_RE.test(cls) && !Y_STOP_RE.test(cls)
+}
+
+/** Why a node is a sideways row that can also scroll vertically (F), or null. */
+export function verticalScrollRowReason(node) {
+  if (SCROLL_TAB_TAGS.has(node.tag)) {
+    const ui = node.props.find(p => p.type === PROP_DIR && p.name === 'bind' && p.arg?.isStatic && p.arg.content === 'ui')
+    const m = ui?.exp?.content.match(UI_LIST_RE)
+    if (m && scrollsBothWays(m[2])) return `list '${m[2]}' scrolls vertically too`
+  }
+  if (staticAttr(node, 'role')?.value?.content === 'tablist') {
+    const cls = staticAttr(node, 'class')?.value?.content
+    if (cls && scrollsBothWays(cls)) return 'role="tablist" class has overflow-x without overflow-y-hidden'
+  }
+  return null
+}
+
 /** The composables called from the element's directive expressions (event handlers excluded). */
 function directiveCalls(node) {
   return node.props
@@ -181,6 +212,8 @@ function elementHits(node, scope, parent) {
   const key = rebuildingKey(node, parent)
   if (key !== null) hits.push(['D', { line, tag, key }])
   for (const call of directiveCalls(node)) hits.push(['E', { line, tag, call }])
+  const rowWhy = verticalScrollRowReason(node)
+  if (rowWhy) hits.push(['F', { line, tag, why: rowWhy }])
   return hits
 }
 
@@ -188,10 +221,11 @@ function elementHits(node, scope, parent) {
  * Count one file's hits. `parse` is `@vue/compiler-sfc`'s parse.
  * @returns {{ A: {line:number,tag:string,under:string}[], B: {line:number,tag:string,why:string}[],
  *   C: {line:number,tag:string,under:string}[], D: {line:number,tag:string,key:string}[],
- *   E: {line:number,tag:string,call:string}[], allowed: number, unparsable: boolean }}
+ *   E: {line:number,tag:string,call:string}[], F: {line:number,tag:string,why:string}[],
+ *   allowed: number, unparsable: boolean }}
  */
 export function countHits(source, parse) {
-  const out = { A: [], B: [], C: [], D: [], E: [], allowed: 0, unparsable: false }
+  const out = { A: [], B: [], C: [], D: [], E: [], F: [], allowed: 0, unparsable: false }
   const { descriptor, errors } = parse(source, { templateParseOptions: { comments: true } })
   if (errors && errors.length > 0) {
     out.unparsable = true

@@ -16,8 +16,8 @@ vi.mock('../server/utils/email-service', () => ({ triggerBookingCreatedEmail: as
 
 // Same tables as test/customer-bookings-batch.test.ts (copied: importing that file would run its suite).
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer);
-CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 
 const BOUND = Symbol('bound')
@@ -61,10 +61,11 @@ function fakeD1(sqlite: Database.Database) {
 let sqlite: Database.Database
 let db: any
 const rows = () => sqlite.prepare('select * from bookings_bookings').all() as any[]
-const row = (id: string, ts: number) => ({ id, teamId: 't1', owner: 'u1', location: 'L', storedTs: ts, slot: null, group: null, quantity: 1, status: 'pending', by: 'u1', nowTs: 1 })
-const loc = (id: string, over: Record<string, unknown> = {}) => {
-  const l = { id, teamId: 't1', title: id, slots: null, quantity: null, inventoryMode: 0, offerFullDay: 0, ...over }
-  sqlite.prepare('insert into bookings_locations (id,teamId,title,slots,quantity,inventoryMode,offerFullDay) values (@id,@teamId,@title,@slots,@quantity,@inventoryMode,@offerFullDay)').run(l)
+const row = (id: string, ts: number) => ({ id, teamId: 't1', owner: 'u1', location: 'L', storedTs: ts, slot: null, group: null, quantity: 1, status: 'pending', product: 'loc-L', by: 'u1', nowTs: 1 })
+const loc = (id: string, over: Record<string, unknown> = {}, stock = 1) => {
+  // every location lists one product (#4044); its stock is what counts (#4061)
+  const l = { id, teamId: 't1', title: id, slots: null, offerFullDay: 0, products: JSON.stringify([{ product: `loc-${id}`, stock }]), ...over }
+  sqlite.prepare('insert into bookings_locations (id,teamId,title,slots,offerFullDay,products) values (@id,@teamId,@title,@slots,@offerFullDay,@products)').run(l)
 }
 
 beforeEach(() => {
@@ -92,7 +93,7 @@ describe('runAtomic on D1 (#3968)', () => {
     vi.stubGlobal('useDB', () => db)
     vi.stubGlobal('useRuntimeConfig', () => ({}))
     const handler = (await import('../server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post')).default as any
-    loc('inv', { inventoryMode: 1, quantity: 5 })
+    loc('inv', {}, 5)
     const bookings = ['2026-11-10T00:00:00.000Z', '2026-11-11T00:00:00.000Z']
       .map(date => ({ id: 'c', locationId: 'inv', locationTitle: 'inv', date }))
     vi.stubGlobal('readBody', async () => ({ bookings }))
