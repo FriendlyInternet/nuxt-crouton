@@ -304,13 +304,13 @@ describe('useCollectionMutation', () => {
     it('refreshes referenced collection caches', async () => {
       mockPayloadData = {
         'collection:posts:{}': [],
-        'collection-item:users:author-1': { id: 'author-1' }
+        'collection-item:users:team-a:author-1': { id: 'author-1' }
       }
 
       const { create } = useCollectionMutation('posts')
       await create({ title: 'Post', authorId: 'author-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:author-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:author-1')
     })
   })
 
@@ -368,14 +368,29 @@ describe('useCollectionMutation', () => {
     it('invalidates both item and collection cache', async () => {
       mockPayloadData = {
         'collection:products:{}': [{ id: 'prod-1' }],
-        'collection-item:products:prod-1': { id: 'prod-1' }
+        'collection-item:products:team-a:prod-1': { id: 'prod-1' }
       }
 
       const { update } = useCollectionMutation('products')
       await update('prod-1', { name: 'Updated' })
 
       expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:prod-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:prod-1')
+    })
+
+    it('refreshes only the exact id, not an id that merely starts with it (#4489)', async () => {
+      mockPayloadData = {
+        'collection:products:{}': [],
+        'collection-item:products:team-a:id1': { id: 'id1' },
+        'collection-item:products:team-a:id10': { id: 'id10' }
+      }
+
+      const { update } = useCollectionMutation('products')
+      await update('id1', { name: 'Updated' })
+
+      const refreshCalls = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(refreshCalls).toContain('collection-item:products:team-a:id1')
+      expect(refreshCalls).not.toContain('collection-item:products:team-a:id10')
     })
 
     it('shows error toast on failure', async () => {
@@ -397,13 +412,13 @@ describe('useCollectionMutation', () => {
     it('refreshes referenced collection caches on update', async () => {
       mockPayloadData = {
         'collection:posts:{}': [],
-        'collection-item:categories:cat-1': { id: 'cat-1' }
+        'collection-item:categories:team-a:cat-1': { id: 'cat-1' }
       }
 
       const { update } = useCollectionMutation('posts')
       await update('post-1', { categoryId: 'cat-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:cat-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:team-a:cat-1')
     })
   })
 
@@ -486,16 +501,16 @@ describe('useCollectionMutation', () => {
     it('invalidates item caches for deleted ids', async () => {
       mockPayloadData = {
         'collection:products:{}': [{ id: 'id1' }, { id: 'id2' }],
-        'collection-item:products:id1': { id: 'id1' },
-        'collection-item:products:id2': { id: 'id2' }
+        'collection-item:products:team-a:id1': { id: 'id1' },
+        'collection-item:products:team-a:id2': { id: 'id2' }
       }
 
       const { deleteItems } = useCollectionMutation('products')
       await deleteItems(['id1', 'id2'])
 
       expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:id1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:id2')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:id1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:id2')
     })
 
     it('shows error toast on failure', async () => {
@@ -602,8 +617,8 @@ describe('useCollectionMutation', () => {
     it('handles array references', async () => {
       mockPayloadData = {
         'collection:posts:{}': [],
-        'collection-item:users:user-1': {},
-        'collection-item:users:user-2': {}
+        'collection-item:users:team-a:user-1': {},
+        'collection-item:users:team-a:user-2': {}
       }
 
       // Add a collection with array reference
@@ -614,8 +629,8 @@ describe('useCollectionMutation', () => {
       const { create } = useCollectionMutation('comments')
       await create({ text: 'Hello', mentionedUserIds: ['user-1', 'user-2'] })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:user-1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:user-2')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:user-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:user-2')
     })
 
     it('skips refresh when no matching keys', async () => {
