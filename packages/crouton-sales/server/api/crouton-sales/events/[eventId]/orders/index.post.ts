@@ -4,13 +4,15 @@ import { requireScopedEvent } from '../../../../../utils/require-scoped-event'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
 import { salesOrders } from '../../../../../../collections/orders/server/database/schema'
 import { salesOrderitems } from '../../../../../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../../../../../collections/products/server/database/schema'
+import { salesClients } from '../../../../../../collections/clients/server/database/schema'
+import { priceOrderItems, orderClient } from '../../../../../utils/price-order-items'
 import { generateAndInsertPrintQueues } from '../../../../../utils/generate-print-queues'
 import { recordOutboxEvents } from '../../../../../utils/sync-outbox'
 
 interface OrderItemInput {
   productId: string
   quantity: number
-  price: number
   productName?: string
   remarks?: string
   selectedOptions?: Record<string, unknown>
@@ -18,7 +20,6 @@ interface OrderItemInput {
 
 interface CreateOrderBody {
   items: OrderItemInput[]
-  total: number
   clientId?: string
   clientName?: string
   overallRemarks?: string
@@ -42,6 +43,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'Order must have at least one item' })
   }
 
+  // The server decides who the client is and what everything costs (#4481) —
+  // the body's client name, product ids and prices are never stored as sent.
+  // Both run before any insert, so a bad request writes nothing.
+  const client = await orderClient(db, {
+    clients: salesClients,
+    teamId: salesEvent.teamId,
+    clientId: body.clientId,
+    clientName: body.clientName
+  })
+  const priced = await priceOrderItems(db, {
+    products: salesProducts,
+    eventId,
+    teamId: salesEvent.teamId,
+    items: body.items
+  })
+
   const [orderCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(salesOrders)
@@ -57,8 +74,8 @@ export default defineEventHandler(async (event) => {
       teamId: salesEvent.teamId,
       owner: access.displayName,
       eventId,
-      clientId: body.clientId,
-      clientName: body.clientName,
+      clientId: client.clientId,
+      clientName: client.clientName,
       eventOrderNumber,
       overallRemarks: body.overallRemarks,
       locationRemarks: body.locationRemarks || null,
@@ -70,17 +87,17 @@ export default defineEventHandler(async (event) => {
     .returning()
 
   const orderItems = await Promise.all(
-    body.items.map(async (item) => {
+    body.items.map(async (item, i) => {
       const [orderItem] = await db
         .insert(salesOrderitems)
         .values({
           teamId: salesEvent.teamId,
           owner: access.displayName,
           orderId,
-          productId: item.productId,
-          quantity: String(item.quantity),
-          unitPrice: item.price,
-          totalPrice: item.price * item.quantity,
+          productId: priced[i]!.productId,
+          quantity: String(priced[i]!.quantity),
+          unitPrice: priced[i]!.unitPrice,
+          totalPrice: priced[i]!.totalPrice,
           remarks: item.remarks,
           selectedOptions: item.selectedOptions || {},
           createdBy: access.id,
@@ -126,7 +143,7 @@ export default defineEventHandler(async (event) => {
       helperDisplayName: access.displayName,
       helperId: access.id,
       orderNumber: eventOrderNumber,
-      clientName: body.clientName || undefined,
+      clientName: client.clientName || undefined,
       orderNotes: body.overallRemarks || undefined,
       locationRemarks: body.locationRemarks || undefined,
       teamName: team?.name || 'POS',
